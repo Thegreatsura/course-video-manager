@@ -69,6 +69,11 @@ export type SuggestionsPanelProps = {
   clips: Clip[];
   insertionPoint: FrontendInsertionPoint;
   files: FileMetadata[];
+  onSuggestionStateChange?: (state: {
+    suggestionText: string;
+    isStreaming: boolean;
+    enabled: boolean;
+  }) => void;
 };
 
 const SUGGESTIONS_ENABLED_KEY = "suggestions-enabled";
@@ -153,6 +158,15 @@ export function SuggestionsPanel(props: SuggestionsPanelProps) {
     }
     lastTranscribedClipIdRef.current = props.lastTranscribedClipId;
   }, [enabled, props.lastTranscribedClipId, triggerSuggestion]);
+
+  // Notify parent of suggestion state changes for inline display
+  useEffect(() => {
+    props.onSuggestionStateChange?.({
+      suggestionText,
+      isStreaming,
+      enabled,
+    });
+  }, [suggestionText, isStreaming, enabled, props.onSuggestionStateChange]);
 
   const handleEnabledChange = (checked: boolean) => {
     setEnabled(checked);

@@ -2,6 +2,7 @@ import { InsertionPointIndicator, BeatIndicator } from "./timeline-indicators";
 import { ClipItem } from "./clip-item";
 import { ClipSectionItem } from "./clip-section-item";
 import { PreRecordingChecklist } from "./pre-recording-checklist";
+import { InlineSuggestion } from "./inline-suggestion";
 import { isClipSection } from "../clip-utils";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
@@ -129,6 +130,9 @@ export const ClipTimeline = () => {
             {insertionPoint.type === "end" && <InsertionPointIndicator />}
           </>
         )}
+
+        {/* Inline suggestion display at the bottom of the timeline */}
+        <InlineSuggestion />
       </div>
     </div>
   );

@@ -18,6 +18,12 @@ export type FileMetadata = {
   defaultEnabled: boolean;
 };
 
+export type SuggestionState = {
+  suggestionText: string;
+  isStreaming: boolean;
+  enabled: boolean;
+};
+
 export type VideoEditorContextType = {
   // From videoStateReducer
   runningState: "playing" | "paused";
@@ -96,6 +102,10 @@ export type VideoEditorContextType = {
   onAddNoteFromClipboard: () => void;
   isRenameVideoModalOpen: boolean;
   setIsRenameVideoModalOpen: (value: boolean) => void;
+
+  // Suggestion state for inline display
+  suggestionState: SuggestionState;
+  setSuggestionState: (state: SuggestionState) => void;
 };
 
 export const VideoEditorContext = createContext<VideoEditorContextType>(null!);

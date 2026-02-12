@@ -18,8 +18,11 @@ import { PreloadableClipManager } from "../preloadable-clip";
 import { AlertTriangleIcon, ChevronLeftIcon } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { useContextSelector } from "use-context-selector";
-import { VideoEditorContext } from "../video-editor-context";
-import { useState, useMemo } from "react";
+import {
+  VideoEditorContext,
+  type SuggestionState,
+} from "../video-editor-context";
+import { useState, useMemo, useCallback } from "react";
 
 /**
  * Video player panel component displaying video preview, controls, and metadata.
@@ -192,6 +195,19 @@ export const VideoPlayerPanel = () => {
 
   const [activeTab, setActiveTab] = useState<"suggestions" | "toc">(
     "suggestions"
+  );
+
+  // Suggestion state from context (shared with ClipTimeline)
+  const setSuggestionState = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.setSuggestionState
+  );
+
+  const handleSuggestionStateChange = useCallback(
+    (state: SuggestionState) => {
+      setSuggestionState(state);
+    },
+    [setSuggestionState]
   );
 
   // Get the last clip with text (transcription completed) for suggestions trigger
@@ -405,6 +421,7 @@ export const VideoPlayerPanel = () => {
                   clips={clips}
                   insertionPoint={insertionPoint}
                   files={files}
+                  onSuggestionStateChange={handleSuggestionStateChange}
                 />
               )}
 

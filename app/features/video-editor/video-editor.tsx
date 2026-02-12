@@ -167,6 +167,13 @@ export const VideoEditor = (props: {
   const [isRenameVideoModalOpen, setIsRenameVideoModalOpen] = useState(false);
   const revalidator = useRevalidator();
 
+  // Suggestion state for sharing between SuggestionsPanel and ClipTimeline
+  const [suggestionState, setSuggestionState] = useState({
+    suggestionText: "",
+    isStreaming: false,
+    enabled: false,
+  });
+
   // State for clip section naming modal
   const [clipSectionNamingModal, setClipSectionNamingModal] =
     useState<ClipSectionNamingModal>(null);
@@ -412,6 +419,10 @@ export const VideoEditor = (props: {
       onAddNoteFromClipboard: () => setIsPasteModalOpen(true),
       isRenameVideoModalOpen,
       setIsRenameVideoModalOpen,
+
+      // Suggestion state for inline display
+      suggestionState,
+      setSuggestionState,
     }),
     [
       state,
@@ -460,6 +471,8 @@ export const VideoEditor = (props: {
       setIsAddVideoModalOpen,
       isRenameVideoModalOpen,
       setIsRenameVideoModalOpen,
+      suggestionState,
+      setSuggestionState,
       onAddIntroSection,
       onEditSection,
       onAddSectionBefore,
