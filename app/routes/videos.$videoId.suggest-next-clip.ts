@@ -97,6 +97,8 @@ export const action = async (args: Route.ActionArgs) => {
       })
       .filter((example) => example.clipTranscripts.length >= 2);
 
+    console.log(fewShotExamples);
+
     const systemPrompt = generateSuggestNextClipPrompt({
       code: videoContext.textFiles,
       transcript,
@@ -112,7 +114,7 @@ export const action = async (args: Route.ActionArgs) => {
       messages: [
         {
           role: "user",
-          content: "Suggest what I should say next.",
+          content: "Go.",
         },
       ],
     });
