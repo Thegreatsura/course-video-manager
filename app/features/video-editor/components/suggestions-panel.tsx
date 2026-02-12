@@ -112,7 +112,7 @@ export function SuggestionsPanel(props: SuggestionsPanelProps) {
     ? partsToText(lastAssistantMessage.parts)
     : "";
 
-  const isStreaming = status === "streaming";
+  const isStreaming = status === "submitted" || status === "streaming";
 
   const triggerSuggestion = useCallback(() => {
     // Cancel any in-flight suggestion before starting a new one
