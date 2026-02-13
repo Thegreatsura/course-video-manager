@@ -8,6 +8,7 @@ export const generateInterviewPrepPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -33,6 +34,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a friendly production assistant helping prepare for an interview. Before the interview goes "live," you need to have a quick pre-interview chat with the subject (the user) to agree on what the interview will cover.
@@ -44,7 +55,7 @@ The purpose of this pre-interview is to:
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Have a brief, informal conversation with the interviewee to plan what the interview will cover. Your approach should be:

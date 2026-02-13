@@ -22,6 +22,7 @@ export const generateArticlePrompt = (opts: {
   transcript: string;
   images: string[];
   sectionNames?: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -45,12 +46,22 @@ Use these section names as inspiration for your own section headings. You should
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 You are a helpful assistant being asked to format a transcript of a video to accompany it for easier reading. The video is a screencast from a coding lesson, where the viewer can see the code.
 
 ## Documents
 
-${transcriptSection}${sectionNamesSection}Here is the code for the video.
+${transcriptSection}${sectionNamesSection}${courseStructureSection}Here is the code for the video.
 
 <code>
 ${opts.code

@@ -10,6 +10,7 @@ export const refineProjectWithStyleGuidePrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   // Find the README.md file in the code context
@@ -33,6 +34,16 @@ ${opts.transcript}
 `
     : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to refine an existing project lesson README to match our style guide and formatting standards.
@@ -48,7 +59,7 @@ Here is the existing README content that needs to be refined:
 ${readmeFile.content}
 </existing-readme>
 
-${transcriptSection}Here is the code for the video (for reference):
+${transcriptSection}${courseStructureSection}Here is the code for the video (for reference):
 
 <code>
 ${opts.code

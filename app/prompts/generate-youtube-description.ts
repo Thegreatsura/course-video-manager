@@ -7,6 +7,7 @@ export const generateYoutubeDescriptionPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   youtubeChapters: { timestamp: string; name: string }[];
   links: GlobalLink[];
 }) => {
@@ -44,6 +45,16 @@ ${opts.youtubeChapters.map((chapter) => `${chapter.timestamp} ${chapter.name}`).
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to generate a YouTube video description for a coding lesson video.
@@ -52,7 +63,7 @@ YouTube descriptions appear below the video and should provide context, include 
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}${chaptersSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}${chaptersSection}</documents>
 
 <the-ask>
 Generate a YouTube video description for this coding lesson.

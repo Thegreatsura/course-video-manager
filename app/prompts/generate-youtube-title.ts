@@ -7,6 +7,7 @@ export const generateYoutubeTitlePrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -32,6 +33,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to generate a compelling YouTube title for a coding lesson video.
@@ -40,7 +51,7 @@ YouTube titles should be attention-grabbing, clickable, and clearly communicate 
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Generate 10 different engaging YouTube titles for this coding lesson, each using a different framing device.

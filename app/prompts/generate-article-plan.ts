@@ -8,6 +8,7 @@ export const generateArticlePlanPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -33,6 +34,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a content strategist helping to plan the structure of an educational article. Your goal is to create a clear, focused outline that builds understanding for the reader in the most effective way possible.
@@ -41,7 +52,7 @@ The purpose of this article plan is to distill raw information (transcripts, cod
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Create an article plan with the following characteristics:

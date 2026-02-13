@@ -9,6 +9,7 @@ export const generateNewsletterPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -34,6 +35,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are writing a newsletter for the AI Hero audience. This newsletter is a preview/teaser of the actual article, giving readers just a taste of what they'll discover inside.
@@ -42,7 +53,7 @@ The purpose is to entice readers to click through and read the full article.
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Write a friendly, informal newsletter preview for this coding lesson.

@@ -7,6 +7,7 @@ export const generateSeoDescriptionPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -32,6 +33,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to generate an SEO description for a coding lesson video.
@@ -40,7 +51,7 @@ SEO descriptions appear in search engine results and should be compelling, accur
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Generate a concise SEO description (meta description) for this coding lesson.

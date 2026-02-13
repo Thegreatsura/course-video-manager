@@ -10,6 +10,7 @@ export const generateStepsToCompleteForProjectPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -22,6 +23,16 @@ ${opts.transcript}
 `
     : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to turn a git commit diff and video transcript into a list of steps to recreate the work done in the commit. The user will be following these steps to complete the lesson.
@@ -29,7 +40,7 @@ You are a helpful assistant being asked to turn a git commit diff and video tran
 
 ## Documents
 
-${transcriptSection}Here is the code for the video, which includes the git diff and commit message:
+${transcriptSection}${courseStructureSection}Here is the code for the video, which includes the git diff and commit message:
 
 <code>
 ${opts.code

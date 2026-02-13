@@ -7,6 +7,7 @@ export const generateYoutubeThumbnailPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -32,6 +33,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a helpful assistant being asked to generate compelling YouTube thumbnail + title pairs for a coding lesson video.
@@ -40,7 +51,7 @@ YouTube thumbnails and titles work together to drive click-through rates. The ti
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Consider the following 10 framing devices, then generate the top 5 most effective YouTube thumbnail + title pairs for this coding lesson.

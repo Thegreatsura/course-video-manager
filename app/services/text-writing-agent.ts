@@ -59,6 +59,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "skill-building":
@@ -66,6 +67,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "style-guide-skill-building":
@@ -73,6 +75,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "style-guide-project":
@@ -80,6 +83,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "seo-description":
@@ -87,6 +91,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "youtube-title":
@@ -94,6 +99,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "youtube-thumbnail":
@@ -101,6 +107,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "youtube-description":
@@ -108,6 +115,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           youtubeChapters: props.youtubeChapters || [],
           links,
         });
@@ -116,6 +124,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "interview-prep":
@@ -123,6 +132,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "interview":
@@ -130,6 +140,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "brainstorming":
@@ -137,6 +148,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "article-plan":
@@ -144,6 +156,7 @@ export const createTextWritingAgent = (props: {
           code: props.code,
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
+          courseStructure: props.courseStructure,
           links,
         });
       case "article":
@@ -153,18 +166,15 @@ export const createTextWritingAgent = (props: {
           transcript: props.transcript,
           images: props.imageFiles.map((file) => file.path),
           sectionNames: props.sectionNames,
+          courseStructure: props.courseStructure,
           links,
         });
     }
   })();
 
-  const fullSystemPrompt = props.courseStructure
-    ? `${systemPrompt}\n\n## Course Structure\nThis lesson is part of a larger course. Here is the full structure:\n<course-structure>\n${props.courseStructure}\n</course-structure>`
-    : systemPrompt;
-
   return new Agent({
     model: props.model,
-    system: fullSystemPrompt,
+    system: systemPrompt,
   });
 };
 

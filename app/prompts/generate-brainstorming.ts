@@ -8,6 +8,7 @@ export const generateBrainstormingPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -33,6 +34,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are a creative brainstorming facilitator helping to explore and develop ideas for new content. Your goal is to help the user generate, expand, and refine ideas in a free-flowing, exploratory way.
@@ -41,7 +52,7 @@ The purpose of this brainstorming session is to take raw ideas and develop them 
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Facilitate a brainstorming session with the user. Your approach should be:

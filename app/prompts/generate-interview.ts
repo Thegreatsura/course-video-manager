@@ -8,6 +8,7 @@ export const generateInterviewPrompt = (opts: {
   }[];
   transcript: string;
   images: string[];
+  courseStructure?: string;
   links: GlobalLink[];
 }) => {
   const transcriptSection = opts.transcript
@@ -33,6 +34,16 @@ ${opts.code
 `
       : "";
 
+  const courseStructureSection = opts.courseStructure
+    ? `This lesson is part of a larger course. Here is the full structure:
+
+<course-structure>
+${opts.courseStructure}
+</course-structure>
+
+`
+    : "";
+
   return `
 <role-context>
 You are an interviewer conducting a friendly, conversational interview about a technical topic. Your goal is to help the interviewee (the user) articulate their thoughts and knowledge in a natural, conversational way.
@@ -41,7 +52,7 @@ The purpose of this interview is to generate written content that can later be u
 </role-context>
 
 <documents>
-${transcriptSection}${codeSection}</documents>
+${transcriptSection}${courseStructureSection}${codeSection}</documents>
 
 <the-ask>
 Interview the user about this topic. Your approach should be:
