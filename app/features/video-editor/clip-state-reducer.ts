@@ -36,8 +36,6 @@ export type DatabaseInsertionPoint =
 
 /**
  * A narrower type for insertion points that can be sent to the backend API.
- * The backend currently doesn't understand clip sections, so we only send
- * "start" or "after-clip".
  */
 export type ApiInsertionPoint =
   | {
@@ -46,6 +44,10 @@ export type ApiInsertionPoint =
   | {
       type: "after-clip";
       databaseClipId: DatabaseId;
+    }
+  | {
+      type: "after-clip-section";
+      clipSectionId: DatabaseId;
     };
 
 export type ClipOnDatabase = {

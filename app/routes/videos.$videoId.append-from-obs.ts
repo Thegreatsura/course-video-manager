@@ -13,6 +13,10 @@ const InsertionPointSchema = Schema.Union(
   Schema.Struct({
     type: Schema.Literal("after-clip"),
     databaseClipId: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("after-clip-section"),
+    clipSectionId: Schema.String,
   })
 );
 

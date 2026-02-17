@@ -235,6 +235,7 @@ export class DBService extends Effect.Service<DBService>()("DBService", {
       insertionPoint:
         | { type: "start" }
         | { type: "after-clip"; databaseClipId: string }
+        | { type: "after-clip-section"; clipSectionId: string }
     ) {
       // Get all non-archived clips and clip sections for this video, ordered
       const allClips = yield* makeDbCall(() =>
@@ -290,6 +291,27 @@ export class DBService extends Effect.Service<DBService>()("DBService", {
         prevOrder = insertAfterItem?.order ?? null;
 
         const nextItem = allItems[insertAfterClipIndex + 1];
+        nextOrder = nextItem?.order ?? null;
+      } else if (insertionPoint.type === "after-clip-section") {
+        // Insert after specific clip section
+        const insertAfterSectionIndex = allItems.findIndex(
+          (item) =>
+            item.type === "clip-section" &&
+            item.id === insertionPoint.clipSectionId
+        );
+
+        if (insertAfterSectionIndex === -1) {
+          return yield* new NotFoundError({
+            type: "createClipSectionAtInsertionPoint",
+            params: { videoId, insertionPoint },
+            message: `Could not find a clip section to insert after`,
+          });
+        }
+
+        const insertAfterItem = allItems[insertAfterSectionIndex];
+        prevOrder = insertAfterItem?.order ?? null;
+
+        const nextItem = allItems[insertAfterSectionIndex + 1];
         nextOrder = nextItem?.order ?? null;
       }
 
@@ -889,6 +911,27 @@ export class DBService extends Effect.Service<DBService>()("DBService", {
 
           // Get the next item (could be a clip OR a section)
           const nextItem = allItems[insertAfterClipIndex + 1];
+          nextOrder = nextItem?.order;
+        } else if (insertionPoint.type === "after-clip-section") {
+          // Insert after specific clip section
+          const insertAfterSectionIndex = allItems.findIndex(
+            (item) =>
+              item.type === "clip-section" &&
+              item.id === insertionPoint.clipSectionId
+          );
+
+          if (insertAfterSectionIndex === -1) {
+            return yield* new NotFoundError({
+              type: "appendClips",
+              params: { videoId, insertionPoint },
+              message: `Could not find a clip section to insert after`,
+            });
+          }
+
+          const insertAfterItem = allItems[insertAfterSectionIndex];
+          prevOrder = insertAfterItem?.order;
+
+          const nextItem = allItems[insertAfterSectionIndex + 1];
           nextOrder = nextItem?.order;
         }
 

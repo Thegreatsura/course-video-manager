@@ -660,13 +660,21 @@ const toDatabaseInsertionPoint = (
       throw new Error("Clip section not found");
     }
 
-    // Find the last database clip before or at this clip section
+    const section = items[frontendClipSectionIndex]!;
+
+    // If the section is persisted, use the new after-clip-section API type
+    if (section.type === "clip-section-on-database") {
+      return {
+        type: "after-clip-section",
+        clipSectionId: section.databaseId,
+      };
+    }
+
+    // Optimistic section (no DB ID yet) — fall back to last DB clip before it
     const previousDatabaseClipId = items
       .slice(0, frontendClipSectionIndex + 1)
       .findLast((c) => c.type === "on-database")?.databaseId;
 
-    // For now, the backend doesn't understand clip sections,
-    // so we return the last database clip or start
     if (!previousDatabaseClipId) {
       return { type: "start" };
     }
@@ -675,13 +683,26 @@ const toDatabaseInsertionPoint = (
   }
 
   if (insertionPoint.type === "end") {
-    const lastDatabaseClipId = items.findLast(
-      (c) => c.type === "on-database"
-    )?.databaseId;
-    if (!lastDatabaseClipId) {
+    // Find the last persisted item (clip or section)
+    const lastPersistedItem = items.findLast(
+      (c) => c.type === "on-database" || c.type === "clip-section-on-database"
+    );
+
+    if (!lastPersistedItem) {
       return { type: "start" };
     }
-    return { type: "after-clip", databaseClipId: lastDatabaseClipId };
+
+    if (lastPersistedItem.type === "clip-section-on-database") {
+      return {
+        type: "after-clip-section",
+        clipSectionId: lastPersistedItem.databaseId,
+      };
+    }
+
+    return {
+      type: "after-clip",
+      databaseClipId: lastPersistedItem.databaseId,
+    };
   }
 
   throw new Error("Invalid insertion point");
