@@ -6,6 +6,7 @@ import { asc, eq, and } from "drizzle-orm";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
+import { pushSchema } from "drizzle-kit/api";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -15,44 +16,6 @@ vi.mock("@/db/db", () => ({
     return testDb;
   },
 }));
-
-const createTables = async () => {
-  await pglite.exec(`
-    CREATE TABLE IF NOT EXISTS "course-video-manager_video" (
-      "id" varchar(255) PRIMARY KEY NOT NULL,
-      "lesson_id" varchar(255),
-      "path" text NOT NULL,
-      "original_footage_path" text NOT NULL DEFAULT '',
-      "archived" boolean NOT NULL DEFAULT false,
-      "created_at" timestamp with time zone
-    );
-
-    CREATE TABLE IF NOT EXISTS "course-video-manager_clip" (
-      "id" varchar(255) PRIMARY KEY NOT NULL,
-      "video_id" varchar(255) NOT NULL REFERENCES "course-video-manager_video"("id") ON DELETE CASCADE,
-      "video_filename" text NOT NULL,
-      "source_start_time" double precision NOT NULL,
-      "source_end_time" double precision NOT NULL,
-      "created_at" timestamp with time zone,
-      "order" varchar(255) COLLATE "C" NOT NULL,
-      "archived" boolean NOT NULL DEFAULT false,
-      "text" text NOT NULL,
-      "transcribed_at" timestamp with time zone,
-      "scene" varchar(255),
-      "profile" varchar(255),
-      "beat_type" varchar(255) NOT NULL DEFAULT 'none'
-    );
-
-    CREATE TABLE IF NOT EXISTS "course-video-manager_clip_section" (
-      "id" varchar(255) PRIMARY KEY NOT NULL,
-      "video_id" varchar(255) NOT NULL REFERENCES "course-video-manager_video"("id") ON DELETE CASCADE,
-      "name" text NOT NULL,
-      "order" varchar(255) COLLATE "C" NOT NULL,
-      "archived" boolean NOT NULL DEFAULT false,
-      "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-};
 
 const TEST_VIDEO_ID = "test-video-1";
 
@@ -126,7 +89,8 @@ describe("appendClips", () => {
   beforeEach(async () => {
     pglite = new PGlite();
     testDb = drizzle(pglite, { schema });
-    await createTables();
+    const { apply } = await pushSchema(schema, testDb as any);
+    await apply();
     await seedVideo();
   });
 
