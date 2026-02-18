@@ -919,4 +919,73 @@ describe("clipStateReducer", () => {
       });
     });
   });
+
+  describe("Adding clip section after optimistic clip section", () => {
+    it("Should add a clip section after an optimistically added clip section", () => {
+      const tester = new ReducerTester(clipStateReducer, createInitialState());
+
+      // Add first section via add-clip-section (creates an optimistically added section)
+      const stateWithFirstSection = tester
+        .send({
+          type: "add-clip-section",
+          name: "Section 1",
+        })
+        .getState();
+
+      expect(stateWithFirstSection.items).toHaveLength(1);
+      expect(stateWithFirstSection.items[0]).toMatchObject({
+        type: "clip-section-optimistically-added",
+        name: "Section 1",
+      });
+
+      const firstSectionId = stateWithFirstSection.items[0]!.frontendId;
+
+      // Now add another section after the optimistic section via add-clip-section-at
+      const stateWithSecondSection = tester
+        .send({
+          type: "add-clip-section-at",
+          name: "Section 2",
+          position: "after",
+          itemId: firstSectionId,
+        })
+        .getState();
+
+      // Should have both sections
+      expect(stateWithSecondSection.items).toHaveLength(2);
+      expect(stateWithSecondSection.items).toMatchObject([
+        { name: "Section 1" },
+        { name: "Section 2" },
+      ]);
+    });
+
+    it("Should add a clip section before an optimistically added clip section", () => {
+      const tester = new ReducerTester(clipStateReducer, createInitialState());
+
+      // Add first section
+      const stateWithFirstSection = tester
+        .send({
+          type: "add-clip-section",
+          name: "Section 1",
+        })
+        .getState();
+
+      const firstSectionId = stateWithFirstSection.items[0]!.frontendId;
+
+      // Add section before the optimistic section
+      const stateWithSecondSection = tester
+        .send({
+          type: "add-clip-section-at",
+          name: "Section 0",
+          position: "before",
+          itemId: firstSectionId,
+        })
+        .getState();
+
+      expect(stateWithSecondSection.items).toHaveLength(2);
+      expect(stateWithSecondSection.items).toMatchObject([
+        { name: "Section 0" },
+        { name: "Section 1" },
+      ]);
+    });
+  });
 });

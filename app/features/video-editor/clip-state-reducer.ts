@@ -922,20 +922,6 @@ export const clipStateReducer: EffectReducer<
         insertionOrder: state.insertionOrder + 1,
       };
 
-      // Determine database ID and type of target item
-      let targetDatabaseId: DatabaseId | undefined;
-      let targetItemType: "clip" | "clip-section";
-      if (targetItem.type === "on-database") {
-        targetDatabaseId = targetItem.databaseId;
-        targetItemType = "clip";
-      } else if (targetItem.type === "clip-section-on-database") {
-        targetDatabaseId = targetItem.databaseId;
-        targetItemType = "clip-section";
-      } else {
-        // Can't add relative to optimistically added items
-        return state;
-      }
-
       // Insert at the correct position
       let newItems: TimelineItem[];
       if (action.position === "before") {
@@ -953,14 +939,66 @@ export const clipStateReducer: EffectReducer<
         ];
       }
 
-      exec({
-        type: "create-clip-section-at",
-        frontendId: newFrontendId,
-        name: action.name,
-        position: action.position,
-        targetItemId: targetDatabaseId,
-        targetItemType: targetItemType,
-      });
+      // Fire the appropriate effect based on whether the target has a database ID
+      if (
+        targetItem.type === "on-database" ||
+        targetItem.type === "clip-section-on-database"
+      ) {
+        const targetDatabaseId = targetItem.databaseId;
+        const targetItemType: "clip" | "clip-section" =
+          targetItem.type === "on-database" ? "clip" : "clip-section";
+        exec({
+          type: "create-clip-section-at",
+          frontendId: newFrontendId,
+          name: action.name,
+          position: action.position,
+          targetItemId: targetDatabaseId,
+          targetItemType: targetItemType,
+        });
+      } else {
+        // For optimistically added items, calculate the insertion point
+        let insertionPoint: FrontendInsertionPoint;
+        if (action.position === "after") {
+          if (targetItem.type === "clip-section-optimistically-added") {
+            insertionPoint = {
+              type: "after-clip-section",
+              frontendClipSectionId: targetItem.frontendId,
+            };
+          } else {
+            insertionPoint = {
+              type: "after-clip",
+              frontendClipId: targetItem.frontendId,
+            };
+          }
+        } else {
+          // "before" - use the item before the target as insertion point
+          if (targetIndex === 0) {
+            insertionPoint = { type: "start" };
+          } else {
+            const prevItem = state.items[targetIndex - 1]!;
+            if (
+              prevItem.type === "on-database" ||
+              prevItem.type === "optimistically-added"
+            ) {
+              insertionPoint = {
+                type: "after-clip",
+                frontendClipId: prevItem.frontendId,
+              };
+            } else {
+              insertionPoint = {
+                type: "after-clip-section",
+                frontendClipSectionId: prevItem.frontendId,
+              };
+            }
+          }
+        }
+        exec({
+          type: "create-clip-section",
+          frontendId: newFrontendId,
+          name: action.name,
+          insertionPoint,
+        });
+      }
 
       // Don't scroll when adding section via context menu - user is organizing content
       // and doesn't expect to be scrolled around
