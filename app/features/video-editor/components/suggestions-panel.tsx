@@ -1,6 +1,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { FileTree } from "@/components/FileTree";
+import { FilePreviewModal } from "@/components/file-preview-modal";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -67,6 +68,7 @@ export type SuggestionsPanelProps = {
   clips: Clip[];
   insertionPoint: FrontendInsertionPoint;
   files: FileMetadata[];
+  isStandalone: boolean;
   onSuggestionStateChange?: (state: SuggestionState) => void;
 };
 
@@ -192,6 +194,14 @@ export function SuggestionsPanel(props: SuggestionsPanelProps) {
     );
   };
 
+  const [previewFilePath, setPreviewFilePath] = useState("");
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  const handleFileClick = (filePath: string) => {
+    setPreviewFilePath(filePath);
+    setIsPreviewModalOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -211,9 +221,17 @@ export function SuggestionsPanel(props: SuggestionsPanelProps) {
             files={props.files}
             enabledFiles={enabledFiles}
             onEnabledFilesChange={handleEnabledFilesChange}
+            onFileClick={handleFileClick}
           />
         </div>
       )}
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
+        videoId={props.videoId}
+        filePath={previewFilePath}
+        isStandalone={props.isStandalone}
+      />
     </div>
   );
 }

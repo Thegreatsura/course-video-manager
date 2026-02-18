@@ -421,6 +421,7 @@ export const VideoPlayerPanel = () => {
                   clips={clips}
                   insertionPoint={insertionPoint}
                   files={files}
+                  isStandalone={!lessonId}
                   onSuggestionStateChange={handleSuggestionStateChange}
                 />
               )}
