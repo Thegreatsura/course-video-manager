@@ -141,9 +141,13 @@ const preloadSelectedClips = (
     state.clipIdsPreloaded.add(nextNextClip);
   }
 
-  const newClipIdsPreloaded = state.clipIdsPreloaded
-    .add(state.currentClipId)
-    .union(state.selectedClipsSet);
+  // Add currentClipId to preloaded set, then union with selectedClipsSet
+  // Note: Using spread instead of Set.union() for Node 20 compatibility
+  state.clipIdsPreloaded.add(state.currentClipId);
+  const newClipIdsPreloaded = new Set([
+    ...state.clipIdsPreloaded,
+    ...state.selectedClipsSet,
+  ]);
 
   return {
     ...state,
