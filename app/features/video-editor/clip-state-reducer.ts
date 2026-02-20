@@ -168,6 +168,11 @@ export namespace clipStateReducer {
         itemId: FrontendId;
       }
     | {
+        type: "clip-section-created";
+        frontendId: FrontendId;
+        databaseId: DatabaseId;
+      }
+    | {
         type: "effect-failed";
         effectType: string;
         message: string;
@@ -979,6 +984,27 @@ export const clipStateReducer: EffectReducer<
         items: newItems,
         insertionOrder: state.insertionOrder + 1,
         // Don't move insertion point - user is just organizing content via context menu
+      };
+    }
+    case "clip-section-created": {
+      return {
+        ...state,
+        items: state.items.map((item) => {
+          if (
+            item.frontendId === action.frontendId &&
+            item.type === "clip-section-optimistically-added"
+          ) {
+            const onDatabase: ClipSectionOnDatabase = {
+              type: "clip-section-on-database",
+              frontendId: item.frontendId,
+              databaseId: action.databaseId,
+              name: item.name,
+              insertionOrder: item.insertionOrder,
+            };
+            return onDatabase;
+          }
+          return item;
+        }),
       };
     }
     case "effect-failed": {

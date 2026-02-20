@@ -1522,4 +1522,94 @@ describe("clipStateReducer", () => {
       });
     });
   });
+
+  describe("Clip section lifecycle (optimistic → on-database)", () => {
+    it("Should transition an optimistic clip section to on-database when clip-section-created is dispatched", () => {
+      const tester = new ReducerTester(clipStateReducer, createInitialState());
+
+      // Add an optimistic section
+      const stateWithSection = tester
+        .send({
+          type: "add-clip-section",
+          name: "Section 1",
+        })
+        .getState();
+
+      expect(stateWithSection.items[0]).toMatchObject({
+        type: "clip-section-optimistically-added",
+        name: "Section 1",
+      });
+
+      const frontendId = stateWithSection.items[0]!.frontendId;
+
+      // Simulate the DB responding with the created section
+      const stateAfterCreated = tester
+        .send(
+          fromPartial({
+            type: "clip-section-created",
+            frontendId,
+            databaseId: "db-s1",
+          })
+        )
+        .getState();
+
+      // Should now be on-database
+      expect(stateAfterCreated.items[0]).toMatchObject({
+        type: "clip-section-on-database",
+        frontendId,
+        databaseId: "db-s1",
+        name: "Section 1",
+      });
+    });
+
+    it("Should fire reorder-clip-section effect when moving a section that was optimistic but has been persisted", () => {
+      const tester = new ReducerTester(
+        clipStateReducer,
+        createInitialState({
+          items: [
+            fromPartial({
+              type: "on-database",
+              frontendId: "fe-1" as FrontendId,
+              databaseId: "db-1" as DatabaseId,
+              scene: "Clip 1",
+              insertionOrder: null,
+            }),
+          ],
+        })
+      );
+
+      // Add an optimistic section after Clip 1
+      const stateWithSection = tester
+        .send({
+          type: "add-clip-section",
+          name: "Section 1",
+        })
+        .getState();
+
+      const sectionFrontendId = stateWithSection.items[1]!.frontendId;
+
+      // Simulate DB response - section now has a database ID
+      tester.send(
+        fromPartial({
+          type: "clip-section-created",
+          frontendId: sectionFrontendId,
+          databaseId: "db-s1",
+        })
+      );
+
+      // Move the section up past Clip 1
+      tester.send({
+        type: "move-clip",
+        clipId: sectionFrontendId,
+        direction: "up",
+      });
+
+      // The reorder effect should have fired with the database ID
+      expect(tester.getExec()).toHaveBeenCalledWith({
+        type: "reorder-clip-section",
+        clipSectionId: "db-s1",
+        direction: "up",
+      });
+    });
+  });
 });

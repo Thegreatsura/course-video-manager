@@ -369,6 +369,13 @@ export const ComponentInner = (props: Route.ComponentProps) => {
             insertionPoint: effect.insertionPoint,
             items: state.items,
           })
+          .then((clipSection) => {
+            dispatch({
+              type: "clip-section-created",
+              frontendId: effect.frontendId,
+              databaseId: clipSection.id as DatabaseId,
+            });
+          })
           .catch((error) => {
             dispatch({
               type: "effect-failed",
@@ -402,6 +409,13 @@ export const ComponentInner = (props: Route.ComponentProps) => {
             position: effect.position,
             targetItemId: effect.targetItemId,
             targetItemType: effect.targetItemType,
+          })
+          .then((clipSection) => {
+            dispatch({
+              type: "clip-section-created",
+              frontendId: effect.frontendId,
+              databaseId: clipSection.id as DatabaseId,
+            });
           })
           .catch((error) => {
             dispatch({

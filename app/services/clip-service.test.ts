@@ -592,6 +592,210 @@ describe("ClipService", () => {
         { type: "clip", id: clip!.id },
       ]);
     });
+
+    it("preserves ordering when moving a section up past another section", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+
+      // Build timeline: [SectionA, Clip1, SectionB, Clip2, SectionC]
+      const sectionA = await clipService.createClipSectionAtInsertionPoint({
+        videoId: video.id,
+        name: "Section A",
+        insertionPoint: start,
+        items: [],
+      });
+
+      const [clip1] = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: afterSection(sectionA.id),
+        items: await getItems(video.id),
+        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
+      });
+
+      const sectionB = await clipService.createClipSectionAtInsertionPoint({
+        videoId: video.id,
+        name: "Section B",
+        insertionPoint: afterClip(clip1!.id),
+        items: await getItems(video.id),
+      });
+
+      const [clip2] = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: afterSection(sectionB.id),
+        items: await getItems(video.id),
+        clips: [{ inputVideo: "test.mp4", startTime: 10, endTime: 20 }],
+      });
+
+      const sectionC = await clipService.createClipSectionAtInsertionPoint({
+        videoId: video.id,
+        name: "Section C",
+        insertionPoint: afterClip(clip2!.id),
+        items: await getItems(video.id),
+      });
+
+      // Move SectionB up (past Clip1, which puts it next to SectionA)
+      // Expected: [SectionA, SectionB, Clip1, Clip2, SectionC]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline = await clipService.getTimeline(video.id);
+      expect(timeline.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip", id: clip1!.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip-section", id: sectionC.id },
+      ]);
+
+      // Now move SectionB up again (past SectionA)
+      // Expected: [SectionB, SectionA, Clip1, Clip2, SectionC]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline2 = await clipService.getTimeline(video.id);
+      expect(timeline2.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip", id: clip1!.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip-section", id: sectionC.id },
+      ]);
+    });
+
+    it("moves a section up past an adjacent section (no clips between)", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+
+      // Build timeline: [Clip1, SectionA, SectionB, Clip2]
+      const [clip1] = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: start,
+        items: [],
+        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
+      });
+
+      const sectionA = await clipService.createClipSectionAtInsertionPoint({
+        videoId: video.id,
+        name: "Section A",
+        insertionPoint: afterClip(clip1!.id),
+        items: await getItems(video.id),
+      });
+
+      const sectionB = await clipService.createClipSectionAtInsertionPoint({
+        videoId: video.id,
+        name: "Section B",
+        insertionPoint: afterSection(sectionA.id),
+        items: await getItems(video.id),
+      });
+
+      const [clip2] = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: afterSection(sectionB.id),
+        items: await getItems(video.id),
+        clips: [{ inputVideo: "test.mp4", startTime: 10, endTime: 20 }],
+      });
+
+      // Move SectionB up (past SectionA)
+      // Expected: [Clip1, SectionB, SectionA, Clip2]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline = await clipService.getTimeline(video.id);
+      expect(timeline.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip", id: clip1!.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip", id: clip2!.id },
+      ]);
+    });
+
+    it("preserves ordering when sections created via createClipSectionAtPosition are moved", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+
+      // Create clips first: [Clip1, Clip2, Clip3, Clip4]
+      const allClips = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: start,
+        items: [],
+        clips: [
+          { inputVideo: "test.mp4", startTime: 0, endTime: 10 },
+          { inputVideo: "test.mp4", startTime: 10, endTime: 20 },
+          { inputVideo: "test.mp4", startTime: 20, endTime: 30 },
+          { inputVideo: "test.mp4", startTime: 30, endTime: 40 },
+        ],
+      });
+
+      const [clip1, clip2, clip3, clip4] = allClips;
+
+      // Add sections using createClipSectionAtPosition (context menu style)
+      // Add SectionA before Clip2: [Clip1, SectionA, Clip2, Clip3, Clip4]
+      const sectionA = await clipService.createClipSectionAtPosition({
+        videoId: video.id,
+        name: "Section A",
+        position: "before",
+        targetItemId: clip2!.id,
+        targetItemType: "clip",
+      });
+
+      // Add SectionB before Clip4: [Clip1, SectionA, Clip2, Clip3, SectionB, Clip4]
+      const sectionB = await clipService.createClipSectionAtPosition({
+        videoId: video.id,
+        name: "Section B",
+        position: "before",
+        targetItemId: clip4!.id,
+        targetItemType: "clip",
+      });
+
+      // Verify initial timeline
+      const initialTimeline = await clipService.getTimeline(video.id);
+      expect(
+        initialTimeline.map((t) => ({ type: t.type, id: t.data.id }))
+      ).toEqual([
+        { type: "clip", id: clip1!.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip", id: clip3!.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip", id: clip4!.id },
+      ]);
+
+      // Move SectionB up (past Clip3)
+      // Expected: [Clip1, SectionA, Clip2, SectionB, Clip3, Clip4]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline1 = await clipService.getTimeline(video.id);
+      expect(timeline1.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip", id: clip1!.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip", id: clip3!.id },
+        { type: "clip", id: clip4!.id },
+      ]);
+
+      // Move SectionB up again (past Clip2)
+      // Expected: [Clip1, SectionA, SectionB, Clip2, Clip3, Clip4]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline2 = await clipService.getTimeline(video.id);
+      expect(timeline2.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip", id: clip1!.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip", id: clip3!.id },
+        { type: "clip", id: clip4!.id },
+      ]);
+
+      // Move SectionB up again (past SectionA)
+      // Expected: [Clip1, SectionB, SectionA, Clip2, Clip3, Clip4]
+      await clipService.reorderClipSection(sectionB.id, "up");
+
+      const timeline3 = await clipService.getTimeline(video.id);
+      expect(timeline3.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
+        { type: "clip", id: clip1!.id },
+        { type: "clip-section", id: sectionB.id },
+        { type: "clip-section", id: sectionA.id },
+        { type: "clip", id: clip2!.id },
+        { type: "clip", id: clip3!.id },
+        { type: "clip", id: clip4!.id },
+      ]);
+    });
   });
 
   describe("appendFromObs", () => {
