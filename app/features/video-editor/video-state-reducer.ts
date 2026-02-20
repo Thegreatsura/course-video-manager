@@ -345,43 +345,38 @@ export const makeVideoEditorReducer =
             selectedClipsSet: newSelectedClipsSet,
           });
         } else if (action.shiftKey) {
-          const mostRecentClipId = Array.from(state.selectedClipsSet).pop();
+          const mostRecentItemId = Array.from(state.selectedClipsSet).pop();
 
-          if (!mostRecentClipId) {
+          if (!mostRecentItemId) {
             return preloadSelectedClips(clipIds, {
               ...state,
               selectedClipsSet: new Set([action.clipId]),
             });
           }
 
-          const mostRecentClipIndex = clipIds.findIndex(
-            (clipId) => clipId === mostRecentClipId
+          const mostRecentItemIndex = itemIds.findIndex(
+            (itemId) => itemId === mostRecentItemId
           );
 
-          if (mostRecentClipIndex === -1) {
+          if (mostRecentItemIndex === -1) {
             return state;
           }
 
-          const newClipIndex = clipIds.findIndex(
-            (clipId) => clipId === action.clipId
+          const newItemIndex = itemIds.findIndex(
+            (itemId) => itemId === action.clipId
           );
 
-          if (newClipIndex === -1) {
+          if (newItemIndex === -1) {
             return state;
           }
-          const firstIndex = Math.min(mostRecentClipIndex, newClipIndex);
-          const lastIndex = Math.max(mostRecentClipIndex, newClipIndex);
+          const firstIndex = Math.min(mostRecentItemIndex, newItemIndex);
+          const lastIndex = Math.max(mostRecentItemIndex, newItemIndex);
 
-          const clipsBetweenMostRecentClipIndexAndNewClipIndex = clipIds.slice(
-            firstIndex,
-            lastIndex + 1
-          );
+          const itemsBetween = itemIds.slice(firstIndex, lastIndex + 1);
 
           return preloadSelectedClips(clipIds, {
             ...state,
-            selectedClipsSet: new Set(
-              clipsBetweenMostRecentClipIndexAndNewClipIndex.map((clip) => clip)
-            ),
+            selectedClipsSet: new Set(itemsBetween),
           });
         } else {
           if (state.selectedClipsSet.size > 1) {
