@@ -405,7 +405,7 @@ export default function PostPage(props: Route.ComponentProps) {
   }, [youtubeVideoId, videoId]);
 
   const generateContent = async (
-    mode: "youtube-title" | "youtube-description"
+    mode: "youtube-title" | "youtube-title-single" | "youtube-description"
   ) => {
     const transcriptEnabled =
       clipSections.length > 0 ? enabledSections.size > 0 : includeTranscript;
@@ -436,7 +436,7 @@ export default function PostPage(props: Route.ComponentProps) {
   const handleGenerateTitle = async () => {
     setIsGeneratingTitle(true);
     try {
-      const generatedText = await generateContent("youtube-title");
+      const generatedText = await generateContent("youtube-title-single");
       if (title.trim()) {
         // Show confirmation dialog
         setPendingGeneratedText(generatedText);

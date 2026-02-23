@@ -2,6 +2,7 @@ import { DBFunctionsService } from "@/services/db-service";
 import { runtimeLive } from "@/services/layer";
 import { acquireTextWritingContext } from "@/services/text-writing-agent";
 import { generateYoutubeTitlePrompt } from "@/prompts/generate-youtube-title";
+import { generateSingleYoutubeTitlePrompt } from "@/prompts/generate-single-youtube-title";
 import { generateYoutubeDescriptionPrompt } from "@/prompts/generate-youtube-description";
 import { Console, Effect, Schema } from "effect";
 import type { Route } from "./+types/api.videos.$videoId.generate";
@@ -11,6 +12,7 @@ import { data } from "react-router";
 
 const generateModeSchema = Schema.Union(
   Schema.Literal("youtube-title"),
+  Schema.Literal("youtube-title-single"),
   Schema.Literal("youtube-description")
 );
 
@@ -91,14 +93,22 @@ export const action = async (args: Route.ActionArgs) => {
             courseStructure: courseStructureText,
             links,
           })
-        : generateYoutubeDescriptionPrompt({
-            code: videoContext.textFiles,
-            transcript: videoContext.transcript,
-            images: videoContext.imageFiles.map((file) => file.path),
-            courseStructure: courseStructureText,
-            youtubeChapters: videoContext.youtubeChapters,
-            links,
-          });
+        : mode === "youtube-title-single"
+          ? generateSingleYoutubeTitlePrompt({
+              code: videoContext.textFiles,
+              transcript: videoContext.transcript,
+              images: videoContext.imageFiles.map((file) => file.path),
+              courseStructure: courseStructureText,
+              links,
+            })
+          : generateYoutubeDescriptionPrompt({
+              code: videoContext.textFiles,
+              transcript: videoContext.transcript,
+              images: videoContext.imageFiles.map((file) => file.path),
+              courseStructure: courseStructureText,
+              youtubeChapters: videoContext.youtubeChapters,
+              links,
+            });
 
     // Use Claude Haiku for fast generation
     const result = yield* Effect.tryPromise(() =>
