@@ -146,7 +146,7 @@ export function CaptureCameraModal({
       videoRef.current.srcObject = mediaStream;
       videoRef.current.play();
     }
-  }, [mediaStream]);
+  }, [mediaStream, capturedImage]);
 
   // Reset captured image when modal closes
   useEffect(() => {
