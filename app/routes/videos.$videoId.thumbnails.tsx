@@ -11,7 +11,9 @@ import {
   ClipboardIcon,
   XIcon,
   Trash2Icon,
+  PencilIcon,
 } from "lucide-react";
+import type { ThumbnailLayers } from "@/services/thumbnail-schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,6 +21,15 @@ import { CaptureCameraModal } from "@/components/capture-camera-modal";
 
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 export const loader = async (args: Route.LoaderArgs) => {
   const { videoId } = args.params;
@@ -75,6 +86,10 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
   const [diagramPosition, setDiagramPosition] = useState(50);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingThumbnailId, setEditingThumbnailId] = useState<string | null>(
+    null
+  );
+  const [loadingEdit, setLoadingEdit] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const revalidator = useRevalidator();
 
@@ -165,6 +180,46 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  const handleEdit = async (thumbnailId: string) => {
+    const thumbnail = thumbnails.find((t) => t.id === thumbnailId);
+    if (!thumbnail) return;
+
+    setLoadingEdit(thumbnailId);
+    try {
+      const layers = thumbnail.layers as unknown as ThumbnailLayers;
+
+      // Fetch background photo as data URL
+      const bgResponse = await fetch(`/api/thumbnails/${thumbnailId}/layer/bg`);
+      if (!bgResponse.ok) throw new Error("Failed to load background image");
+      const bgBlob = await bgResponse.blob();
+      const bgDataUrl = await blobToDataUrl(bgBlob);
+
+      // Fetch diagram if it exists
+      let diagDataUrl: string | null = null;
+      let diagPos = 50;
+      if (layers.diagram) {
+        const diagResponse = await fetch(
+          `/api/thumbnails/${thumbnailId}/layer/diagram`
+        );
+        if (diagResponse.ok) {
+          const diagBlob = await diagResponse.blob();
+          diagDataUrl = await blobToDataUrl(diagBlob);
+          diagPos = layers.diagram.horizontalPosition;
+        }
+      }
+
+      // Load into editor state
+      setCapturedPhoto(bgDataUrl);
+      setDiagramImage(diagDataUrl);
+      setDiagramPosition(diagPos);
+      setEditingThumbnailId(thumbnailId);
+    } catch (error) {
+      console.error("Failed to load thumbnail for editing:", error);
+    } finally {
+      setLoadingEdit(null);
+    }
+  };
+
   const handleSave = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !capturedPhoto) return;
@@ -193,6 +248,7 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
       setCapturedPhoto(null);
       setDiagramImage(null);
       setDiagramPosition(50);
+      setEditingThumbnailId(null);
       revalidator.revalidate();
     } catch (error) {
       console.error("Failed to save thumbnail:", error);
@@ -216,7 +272,7 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
       {capturedPhoto && (
         <div className="mb-6">
           <h3 className="mb-2 text-sm font-medium text-gray-400">
-            Canvas Preview
+            {editingThumbnailId ? "Editing Thumbnail" : "Canvas Preview"}
           </h3>
           <div className="inline-block overflow-hidden rounded-lg border">
             <canvas
@@ -302,7 +358,12 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
               {thumbnails.map((thumbnail) => (
                 <div
                   key={thumbnail.id}
-                  className="group relative border rounded-lg overflow-hidden"
+                  className={`group relative rounded-lg overflow-hidden cursor-pointer transition-all ${
+                    editingThumbnailId === thumbnail.id
+                      ? "ring-2 ring-blue-500 border border-blue-500"
+                      : "border hover:border-gray-400"
+                  }`}
+                  onClick={() => handleEdit(thumbnail.id)}
                 >
                   {thumbnail.filePath ? (
                     <img
@@ -315,8 +376,19 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
                       Not rendered
                     </div>
                   )}
+                  {loadingEdit === thumbnail.id && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <Loader2Icon className="size-6 animate-spin text-white" />
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 rounded-md bg-black/60 p-1.5 text-gray-300 opacity-0 transition-opacity group-hover:opacity-100">
+                    <PencilIcon className="size-4" />
+                  </div>
                   <button
-                    onClick={() => handleDelete(thumbnail.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(thumbnail.id);
+                    }}
                     disabled={deleting === thumbnail.id}
                     className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 text-gray-300 opacity-0 transition-opacity hover:bg-red-600 hover:text-white group-hover:opacity-100 disabled:opacity-50"
                   >
