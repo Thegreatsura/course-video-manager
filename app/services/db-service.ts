@@ -2384,6 +2384,33 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
 
           return thumbnail;
         }),
+        updateThumbnail: Effect.fn("updateThumbnail")(function* (
+          thumbnailId: string,
+          params: {
+            layers: unknown;
+            filePath: string | null;
+          }
+        ) {
+          const [updated] = yield* makeDbCall(() =>
+            db
+              .update(thumbnails)
+              .set({
+                layers: params.layers,
+                filePath: params.filePath,
+              })
+              .where(eq(thumbnails.id, thumbnailId))
+              .returning()
+          );
+
+          if (!updated) {
+            return yield* new NotFoundError({
+              type: "updateThumbnail",
+              params: { thumbnailId },
+            });
+          }
+
+          return updated;
+        }),
         deleteThumbnail: Effect.fn("deleteThumbnail")(function* (
           thumbnailId: string
         ) {

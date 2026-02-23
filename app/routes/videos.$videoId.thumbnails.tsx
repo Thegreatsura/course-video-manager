@@ -12,6 +12,7 @@ import {
   XIcon,
   Trash2Icon,
   PencilIcon,
+  PlusIcon,
 } from "lucide-react";
 import type { ThumbnailLayers } from "@/services/thumbnail-schema";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -229,22 +230,35 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
       // Export canvas to data URL
       const exportDataUrl = canvas.toDataURL("image/png");
 
-      const response = await fetch("/api/thumbnails/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoId,
-          imageDataUrl: exportDataUrl,
-          diagramDataUrl: diagramImage,
-          diagramPosition: diagramImage ? diagramPosition : undefined,
-        }),
-      });
+      const payload = {
+        videoId,
+        imageDataUrl: exportDataUrl,
+        diagramDataUrl: diagramImage,
+        diagramPosition: diagramImage ? diagramPosition : undefined,
+      };
+
+      let response: Response;
+      if (editingThumbnailId) {
+        // Update existing thumbnail
+        response = await fetch(`/api/thumbnails/${editingThumbnailId}/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Create new thumbnail
+        response = await fetch("/api/thumbnails/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!response.ok) {
         throw new Error("Failed to save thumbnail");
       }
 
-      // Clear state and revalidate to show new thumbnail
+      // Clear state and revalidate to show updated/new thumbnail
       setCapturedPhoto(null);
       setDiagramImage(null);
       setDiagramPosition(50);
@@ -255,6 +269,13 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleNewThumbnail = () => {
+    setCapturedPhoto(null);
+    setDiagramImage(null);
+    setDiagramPosition(50);
+    setEditingThumbnailId(null);
   };
 
   return (
@@ -329,11 +350,21 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
             )}
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 flex gap-2">
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
-              {saving ? "Saving..." : "Save Thumbnail"}
+              {saving
+                ? "Saving..."
+                : editingThumbnailId
+                  ? "Update Thumbnail"
+                  : "Save Thumbnail"}
             </Button>
+            {editingThumbnailId && (
+              <Button variant="outline" onClick={handleNewThumbnail}>
+                <PlusIcon />
+                New Thumbnail
+              </Button>
+            )}
           </div>
         </div>
       )}
