@@ -4,6 +4,7 @@ import { acquireTextWritingContext } from "@/services/text-writing-agent";
 import { generateYoutubeTitlePrompt } from "@/prompts/generate-youtube-title";
 import { generateSingleYoutubeTitlePrompt } from "@/prompts/generate-single-youtube-title";
 import { generateYoutubeDescriptionPrompt } from "@/prompts/generate-youtube-description";
+import { generateSocialCaptionPrompt } from "@/prompts/generate-social-caption";
 import { Console, Effect, Schema } from "effect";
 import type { Route } from "./+types/api.videos.$videoId.generate";
 import { anthropic } from "@ai-sdk/anthropic";
@@ -13,7 +14,8 @@ import { data } from "react-router";
 const generateModeSchema = Schema.Union(
   Schema.Literal("youtube-title"),
   Schema.Literal("youtube-title-single"),
-  Schema.Literal("youtube-description")
+  Schema.Literal("youtube-description"),
+  Schema.Literal("social-caption")
 );
 
 const courseStructureSchema = Schema.Struct({
@@ -84,31 +86,25 @@ export const action = async (args: Route.ActionArgs) => {
     }
 
     // Build the system prompt based on mode
+    const commonOpts = {
+      code: videoContext.textFiles,
+      transcript: videoContext.transcript,
+      images: videoContext.imageFiles.map((file) => file.path),
+      courseStructure: courseStructureText,
+      links,
+    };
+
     const systemPrompt =
       mode === "youtube-title"
-        ? generateYoutubeTitlePrompt({
-            code: videoContext.textFiles,
-            transcript: videoContext.transcript,
-            images: videoContext.imageFiles.map((file) => file.path),
-            courseStructure: courseStructureText,
-            links,
-          })
+        ? generateYoutubeTitlePrompt(commonOpts)
         : mode === "youtube-title-single"
-          ? generateSingleYoutubeTitlePrompt({
-              code: videoContext.textFiles,
-              transcript: videoContext.transcript,
-              images: videoContext.imageFiles.map((file) => file.path),
-              courseStructure: courseStructureText,
-              links,
-            })
-          : generateYoutubeDescriptionPrompt({
-              code: videoContext.textFiles,
-              transcript: videoContext.transcript,
-              images: videoContext.imageFiles.map((file) => file.path),
-              courseStructure: courseStructureText,
-              youtubeChapters: videoContext.youtubeChapters,
-              links,
-            });
+          ? generateSingleYoutubeTitlePrompt(commonOpts)
+          : mode === "social-caption"
+            ? generateSocialCaptionPrompt(commonOpts)
+            : generateYoutubeDescriptionPrompt({
+                ...commonOpts,
+                youtubeChapters: videoContext.youtubeChapters,
+              });
 
     // Use Claude Haiku for fast generation
     const result = yield* Effect.tryPromise(() =>
