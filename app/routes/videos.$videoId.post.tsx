@@ -5,8 +5,10 @@ import { sortByOrder } from "@/lib/sort-by-order";
 import { runtimeLive } from "@/services/layer";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
 import { Array as EffectArray, Console, Effect } from "effect";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { data, Link, useFetcher, useRevalidator } from "react-router";
+import { toast } from "sonner";
+import { UploadContext } from "@/features/upload-manager/upload-context";
 import type { Route } from "./+types/videos.$videoId.post";
 import path from "path";
 import { FileSystem } from "@effect/platform";
@@ -396,30 +398,41 @@ export default function PostPage(props: Route.ComponentProps) {
     "unlisted"
   );
 
-  // Upload state
-  const hasStoredYoutubeVideoId =
-    typeof localStorage !== "undefined" &&
-    !!localStorage.getItem(YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId));
-  const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "uploading" | "success" | "error"
-  >(hasStoredYoutubeVideoId ? "success" : "idle");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState<string>("");
-  const [youtubeVideoId, setYoutubeVideoId] = useState<string>(() => {
-    if (typeof localStorage !== "undefined") {
-      return localStorage.getItem(YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId)) ?? "";
-    }
-    return "";
-  });
+  // Upload state from global context
+  const { uploads, startUpload: globalStartUpload } = useContext(UploadContext);
 
+  // Find active upload for this video in global context
+  const activeUpload = Object.values(uploads).find(
+    (u) => u.videoId === videoId
+  );
+
+  // Historical youtubeVideoId from localStorage (persists across page refreshes)
+  const storedYoutubeVideoId =
+    typeof localStorage !== "undefined"
+      ? (localStorage.getItem(YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId)) ?? "")
+      : "";
+
+  // Save youtubeVideoId to localStorage when upload succeeds in global context
   useEffect(() => {
-    if (typeof localStorage !== "undefined") {
+    if (activeUpload?.status === "success" && activeUpload.youtubeVideoId) {
       localStorage.setItem(
         YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId),
-        youtubeVideoId
+        activeUpload.youtubeVideoId
       );
     }
-  }, [youtubeVideoId, videoId]);
+  }, [activeUpload?.status, activeUpload?.youtubeVideoId, videoId]);
+
+  // Derive upload display state
+  const uploadStatus: "idle" | "uploading" | "success" | "error" = activeUpload
+    ? activeUpload.status === "retrying"
+      ? "uploading"
+      : activeUpload.status
+    : storedYoutubeVideoId
+      ? "success"
+      : "idle";
+  const uploadProgress = activeUpload?.progress ?? 0;
+  const uploadError = activeUpload?.errorMessage ?? "";
+  const youtubeVideoId = activeUpload?.youtubeVideoId ?? storedYoutubeVideoId;
 
   // Thumbnail selection
   const [selectingThumbnailId, setSelectingThumbnailId] = useState<
@@ -529,74 +542,12 @@ export default function PostPage(props: Route.ComponentProps) {
 
   const selectedThumbnail = thumbnails.find((t) => t.selectedForUpload);
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (!title.trim() || !description.trim() || !selectedThumbnail) return;
-
-    setUploadStatus("uploading");
-    setUploadProgress(0);
-    setUploadError("");
-
-    let finalStatus: "success" | "error" | null = null;
-
-    try {
-      const response = await fetch(`/api/videos/${videoId}/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description,
-          privacyStatus,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        setUploadStatus("error");
-        setUploadError("Failed to start upload");
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        let eventType = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7);
-          } else if (line.startsWith("data: ") && eventType) {
-            const eventData = JSON.parse(line.slice(6));
-            if (eventType === "progress") {
-              setUploadProgress(eventData.percentage);
-            } else if (eventType === "complete") {
-              setYoutubeVideoId(eventData.videoId);
-              setUploadStatus("success");
-              finalStatus = "success";
-            } else if (eventType === "error") {
-              setUploadStatus("error");
-              setUploadError(eventData.message);
-              finalStatus = "error";
-            }
-            eventType = "";
-          }
-        }
-      }
-
-      if (!finalStatus) {
-        setUploadStatus("error");
-        setUploadError("Upload connection closed unexpectedly");
-      }
-    } catch (error) {
-      setUploadStatus("error");
-      setUploadError(error instanceof Error ? error.message : "Upload failed");
-    }
+    globalStartUpload(videoId, title, description, privacyStatus);
+    toast("Upload started", {
+      description: `"${title}" is uploading to YouTube`,
+    });
   };
 
   const handleDisconnect = async () => {
@@ -845,7 +796,7 @@ export default function PostPage(props: Route.ComponentProps) {
                 <Button
                   onClick={handleUpload}
                   disabled={
-                    uploadStatus === "uploading" ||
+                    !!activeUpload ||
                     !title.trim() ||
                     !description.trim() ||
                     !selectedThumbnail
