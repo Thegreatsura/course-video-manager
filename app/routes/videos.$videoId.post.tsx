@@ -527,8 +527,10 @@ export default function PostPage(props: Route.ComponentProps) {
     setPendingGeneratedText("");
   };
 
+  const selectedThumbnail = thumbnails.find((t) => t.selectedForUpload);
+
   const handleUpload = async () => {
-    if (!title.trim() || !description.trim()) return;
+    if (!title.trim() || !description.trim() || !selectedThumbnail) return;
 
     setUploadStatus("uploading");
     setUploadProgress(0);
@@ -845,7 +847,8 @@ export default function PostPage(props: Route.ComponentProps) {
                   disabled={
                     uploadStatus === "uploading" ||
                     !title.trim() ||
-                    !description.trim()
+                    !description.trim() ||
+                    !selectedThumbnail
                   }
                   className="w-full"
                   size="lg"
@@ -862,6 +865,14 @@ export default function PostPage(props: Route.ComponentProps) {
                     </>
                   )}
                 </Button>
+
+                {!selectedThumbnail && uploadStatus !== "uploading" && (
+                  <p className="text-sm text-muted-foreground text-center">
+                    {thumbnails.length === 0
+                      ? "Create and select a thumbnail before uploading."
+                      : "Select a thumbnail above before uploading."}
+                  </p>
+                )}
 
                 {/* Progress bar */}
                 {uploadStatus === "uploading" && (

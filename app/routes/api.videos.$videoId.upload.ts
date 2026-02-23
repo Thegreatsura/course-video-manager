@@ -24,6 +24,21 @@ export const action = async (args: Route.ActionArgs) => {
     );
   }
 
+  // Validate that a thumbnail is selected
+  const selectedThumbnail = await Effect.gen(function* () {
+    const db = yield* DBFunctionsService;
+    const thumbnails = yield* db.getThumbnailsByVideoId(videoId);
+    return thumbnails.find((t) => t.selectedForUpload) ?? null;
+  }).pipe(runtimeLive.runPromise);
+
+  if (!selectedThumbnail?.filePath) {
+    return Response.json(
+      { error: "A thumbnail must be selected before uploading" },
+      { status: 400 }
+    );
+  }
+
+  const thumbnailFilePath = selectedThumbnail.filePath;
   const filePath = getVideoPath(videoId);
 
   // Set up SSE stream
@@ -37,7 +52,6 @@ export const action = async (args: Route.ActionArgs) => {
       };
 
       const program = Effect.gen(function* () {
-        const db = yield* DBFunctionsService;
         const accessToken = yield* getValidAccessToken;
 
         const result = yield* uploadVideoToYouTube({
@@ -51,17 +65,12 @@ export const action = async (args: Route.ActionArgs) => {
           },
         });
 
-        // Set selected thumbnail on YouTube if one exists
-        const thumbnails = yield* db.getThumbnailsByVideoId(videoId);
-        const selected = thumbnails.find((t) => t.selectedForUpload);
-
-        if (selected?.filePath) {
-          yield* setYouTubeThumbnail({
-            accessToken,
-            youtubeVideoId: result.videoId,
-            thumbnailFilePath: selected.filePath,
-          });
-        }
+        // Set the selected thumbnail on YouTube (validated before stream)
+        yield* setYouTubeThumbnail({
+          accessToken,
+          youtubeVideoId: result.videoId,
+          thumbnailFilePath,
+        });
 
         sendEvent("complete", { videoId: result.videoId });
       });
