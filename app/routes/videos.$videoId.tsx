@@ -154,7 +154,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* Child route content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>
     </div>
