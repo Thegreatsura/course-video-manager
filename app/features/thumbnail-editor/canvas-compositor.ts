@@ -57,8 +57,10 @@ function drawScaledLayer(
 ) {
   const scale = CANVAS_HEIGHT / img.naturalHeight;
   const scaledWidth = img.naturalWidth * scale;
-  const maxOffset = CANVAS_WIDTH - scaledWidth;
-  const x = maxOffset * (horizontalPosition / 100);
+  // Allow moving 80% off-screen in either direction (20% always visible)
+  const minX = -0.8 * scaledWidth;
+  const maxX = CANVAS_WIDTH - 0.2 * scaledWidth;
+  const x = minX + (maxX - minX) * (horizontalPosition / 100);
   ctx.drawImage(img, x, 0, scaledWidth, CANVAS_HEIGHT);
 }
 
