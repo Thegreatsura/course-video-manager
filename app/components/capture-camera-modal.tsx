@@ -190,6 +190,21 @@ export function CaptureCameraModal({
     setCapturedImage(canvas.toDataURL("image/png"));
   }, []);
 
+  // Spacebar to capture photo
+  useEffect(() => {
+    if (!open || !mediaStream || capturedImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleCapture();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, mediaStream, capturedImage, handleCapture]);
+
   const handleRetake = useCallback(() => {
     setCapturedImage(null);
   }, []);
