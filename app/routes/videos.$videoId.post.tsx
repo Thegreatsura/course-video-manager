@@ -6,7 +6,7 @@ import { runtimeLive } from "@/services/layer";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
 import { Array as EffectArray, Console, Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
-import { data, useFetcher } from "react-router";
+import { data, Link, useFetcher, useRevalidator } from "react-router";
 import type { Route } from "./+types/videos.$videoId.post";
 import path from "path";
 import { FileSystem } from "@effect/platform";
@@ -47,6 +47,8 @@ import { DeleteStandaloneFileModal } from "@/components/delete-standalone-file-m
 import { LessonFilePasteModal } from "@/components/lesson-file-paste-modal";
 import {
   CheckCircle2Icon,
+  CheckIcon,
+  ImageIcon,
   Loader2Icon,
   SparklesIcon,
   UploadIcon,
@@ -79,6 +81,9 @@ export const loader = async (args: Route.LoaderArgs) => {
     const youtubeAuth = yield* db.getYoutubeAuth();
     const isYoutubeAuthenticated = youtubeAuth !== null;
     const globalLinks = yield* db.getLinks();
+
+    // Load thumbnails for this video
+    const videoThumbnails = yield* db.getThumbnailsByVideoId(videoId);
 
     const lesson = video.lesson;
 
@@ -199,6 +204,7 @@ export const loader = async (args: Route.LoaderArgs) => {
         links: globalLinks,
         courseStructure: null as CourseStructure | null,
         isYoutubeAuthenticated,
+        thumbnails: videoThumbnails,
       };
     }
 
@@ -277,6 +283,7 @@ export const loader = async (args: Route.LoaderArgs) => {
       links: globalLinks,
       courseStructure,
       isYoutubeAuthenticated,
+      thumbnails: videoThumbnails,
     };
   }).pipe(
     Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),
@@ -312,6 +319,7 @@ export default function PostPage(props: Route.ComponentProps) {
     links,
     courseStructure,
     isYoutubeAuthenticated,
+    thumbnails,
   } = props.loaderData;
 
   // Title and description with localStorage persistence
@@ -411,6 +419,32 @@ export default function PostPage(props: Route.ComponentProps) {
       );
     }
   }, [youtubeVideoId, videoId]);
+
+  // Thumbnail selection
+  const [selectingThumbnailId, setSelectingThumbnailId] = useState<
+    string | null
+  >(null);
+  const { revalidate } = useRevalidator();
+
+  const handleSelectThumbnail = async (thumbnailId: string) => {
+    const isCurrentlySelected = thumbnails.find(
+      (t) => t.id === thumbnailId
+    )?.selectedForUpload;
+
+    setSelectingThumbnailId(thumbnailId);
+    try {
+      const endpoint = isCurrentlySelected ? "deselect" : "select";
+      const response = await fetch(
+        `/api/thumbnails/${thumbnailId}/${endpoint}`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        revalidate();
+      }
+    } finally {
+      setSelectingThumbnailId(null);
+    }
+  };
 
   const generateContent = async (
     mode: "youtube-title" | "youtube-title-single" | "youtube-description"
@@ -740,6 +774,54 @@ export default function PostPage(props: Route.ComponentProps) {
                     <SelectItem value="public">Public</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Thumbnail selection */}
+              <div className="space-y-2">
+                <Label>Thumbnail</Label>
+                {thumbnails.length === 0 ? (
+                  <div className="border border-dashed rounded-lg p-6 text-center text-muted-foreground">
+                    <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No thumbnails created yet.</p>
+                    <Link
+                      to={`/videos/${videoId}/thumbnails`}
+                      className="text-sm text-primary hover:underline mt-1 inline-block"
+                    >
+                      Create a thumbnail
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {thumbnails.map((thumbnail) => (
+                      <button
+                        key={thumbnail.id}
+                        onClick={() => handleSelectThumbnail(thumbnail.id)}
+                        disabled={selectingThumbnailId !== null}
+                        className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
+                          thumbnail.selectedForUpload
+                            ? "border-primary ring-2 ring-primary/30"
+                            : "border-transparent hover:border-muted-foreground/30"
+                        }`}
+                      >
+                        <img
+                          src={`/api/thumbnails/${thumbnail.id}/image`}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+                        {thumbnail.selectedForUpload && (
+                          <div className="absolute top-1 right-1 bg-primary text-primary-foreground rounded-full p-0.5">
+                            <CheckIcon className="h-3 w-3" />
+                          </div>
+                        )}
+                        {selectingThumbnailId === thumbnail.id && (
+                          <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                            <Loader2Icon className="h-5 w-5 animate-spin" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Upload section */}

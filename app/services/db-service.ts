@@ -2411,6 +2411,42 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
 
           return updated;
         }),
+        selectThumbnailForUpload: Effect.fn("selectThumbnailForUpload")(
+          function* (thumbnailId: string, videoId: string) {
+            // Deselect all thumbnails for this video
+            yield* makeDbCall(() =>
+              db
+                .update(thumbnails)
+                .set({ selectedForUpload: false })
+                .where(eq(thumbnails.videoId, videoId))
+            );
+            // Select the chosen one
+            const [updated] = yield* makeDbCall(() =>
+              db
+                .update(thumbnails)
+                .set({ selectedForUpload: true })
+                .where(eq(thumbnails.id, thumbnailId))
+                .returning()
+            );
+            if (!updated) {
+              return yield* new NotFoundError({
+                type: "selectThumbnailForUpload",
+                params: { thumbnailId },
+              });
+            }
+            return updated;
+          }
+        ),
+        deselectAllThumbnails: Effect.fn("deselectAllThumbnails")(function* (
+          videoId: string
+        ) {
+          yield* makeDbCall(() =>
+            db
+              .update(thumbnails)
+              .set({ selectedForUpload: false })
+              .where(eq(thumbnails.videoId, videoId))
+          );
+        }),
         deleteThumbnail: Effect.fn("deleteThumbnail")(function* (
           thumbnailId: string
         ) {
