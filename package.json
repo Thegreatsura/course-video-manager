@@ -22,6 +22,7 @@
     "@ai-sdk/react": "2.0.93",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@effect/cluster": "^0.46.4",
     "@effect/platform": "^0.90.0",
     "@effect/platform-node": "^0.94.0",
     "@icons-pack/react-simple-icons": "^13.6.0",

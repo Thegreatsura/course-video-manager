@@ -52,7 +52,13 @@
       "mcp__ide__getDiagnostics",
       "Bash(git -C /home/mattpocock/repos/matt/course-video-manager add app/features/video-editor/clip-state-reducer.ts app/features/video-editor/clip-state-reducer.test.ts)",
       "Bash(git -C:*)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "WebFetch(domain:developers.google.com)",
+      "WebFetch(domain:buffer.com)",
+      "WebFetch(domain:support.buffer.com)",
+      "WebFetch(domain:zapier.com)",
+      "WebFetch(domain:developers.buffer.com)",
+      "WebFetch(domain:community.zapier.com)"
     ],
     "deny": [],
     "ask": []

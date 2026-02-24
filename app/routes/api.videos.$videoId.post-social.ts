@@ -1,13 +1,10 @@
 import { getVideoPath } from "@/lib/get-video";
 import { runtimeLive } from "@/services/layer";
+import { Command } from "@effect/platform";
 import { Data, Effect } from "effect";
 import * as fs from "fs";
 import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import type { Route } from "./+types/api.videos.$videoId.post-social";
-
-const execFileAsync = promisify(execFile);
 
 class SocialPostError extends Data.TaggedError("SocialPostError")<{
   message: string;
@@ -110,19 +107,23 @@ const waitForDropboxSync = (opts: {
         });
       }
 
-      const result = yield* Effect.tryPromise({
-        try: async () => {
-          const { stdout } = await execFileAsync("dropbox", [
-            "filestatus",
-            opts.filePath,
-          ]);
-          return stdout.trim();
-        },
-        catch: (e) =>
-          new SocialPostError({
-            message: `Failed to check Dropbox file status: ${e instanceof Error ? e.message : String(e)}`,
-          }),
-      });
+      const command = Command.make(
+        "dropbox",
+        "filestatus",
+        path.basename(opts.filePath)
+      ).pipe(Command.workingDirectory(path.dirname(opts.filePath)));
+
+      const result = yield* Command.string(command).pipe(
+        Effect.catchAllCause((e) =>
+          Effect.fail(
+            new SocialPostError({
+              message: `Failed to execute Dropbox filestatus command: ${e instanceof Error ? e.message : String(e)}`,
+            })
+          )
+        )
+      );
+
+      yield* Effect.log(`[dropbox filestatus] ${opts.filePath}: ${result}`);
 
       opts.onStatus(result);
 
@@ -150,7 +151,7 @@ const sendZapierWebhook = (opts: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           caption: opts.caption,
-          dropboxFilePath: opts.dropboxFilePath,
+          dropboxFilePath: path.basename(opts.dropboxFilePath),
         }),
       });
 
@@ -158,6 +159,7 @@ const sendZapierWebhook = (opts: {
         const errorText = await res.text();
         throw new Error(`Zapier webhook failed (${res.status}): ${errorText}`);
       }
+      console.log("[sendZapierWebhook]", await res.text());
     },
     catch: (e) =>
       new SocialPostError({
