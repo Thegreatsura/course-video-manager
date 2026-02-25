@@ -96,6 +96,12 @@ const searchShortLinks = (opts: {
  * Find an existing short link by matching on description, or create a new one.
  * Returns the short link URL in the format https://aihero.dev/s/{slug}.
  */
+/**
+ * When true, search for an existing short link before creating.
+ * Disabled because the search API is currently broken and it's a low-value check.
+ */
+const ENABLE_SHORTLINK_SEARCH = false;
+
 export const findOrCreateShortLink = (opts: {
   url: string;
   description: string;
@@ -104,17 +110,19 @@ export const findOrCreateShortLink = (opts: {
     const baseUrl = yield* Config.string("AI_HERO_BASE_URL");
     const accessToken = yield* getAiHeroAccessToken;
 
-    // Search for existing short link with matching description
-    const existing = yield* searchShortLinks({
-      baseUrl,
-      accessToken,
-      query: opts.description,
-    });
+    if (ENABLE_SHORTLINK_SEARCH) {
+      // Search for existing short link with matching description
+      const existing = yield* searchShortLinks({
+        baseUrl,
+        accessToken,
+        query: opts.description,
+      });
 
-    const match = existing.find((sl) => sl.description === opts.description);
+      const match = existing.find((sl) => sl.description === opts.description);
 
-    if (match) {
-      return { shortLinkUrl: `https://aihero.dev/s/${match.slug}` };
+      if (match) {
+        return { shortLinkUrl: `https://aihero.dev/s/${match.slug}` };
+      }
     }
 
     // Create a new short link
