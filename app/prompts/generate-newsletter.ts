@@ -11,6 +11,7 @@ export const generateNewsletterPrompt = (opts: {
   images: string[];
   courseStructure?: string;
   links: GlobalLink[];
+  aiHeroUrl?: string;
 }) => {
   const transcriptSection = opts.transcript
     ? `Here is the transcript of the video:
@@ -67,7 +68,7 @@ The newsletter should:
 - Make readers curious to read the full article
 - Feel free to use images, especially diagrams
 - Sign off with: "Matt"
-
+${opts.aiHeroUrl ? `- Include a call-to-action linking readers to the full article at ${opts.aiHeroUrl}` : ""}
 ${getImageInstructions(opts.images)}
 
 ${getLinkInstructions(opts.links)}

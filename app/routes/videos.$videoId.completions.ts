@@ -56,6 +56,7 @@ const chatSchema = Schema.Struct({
     default: () => [],
   }),
   courseStructure: Schema.optional(courseStructureSchema),
+  aiHeroUrl: Schema.optional(Schema.String),
 });
 
 export const action = async (args: Route.ActionArgs) => {
@@ -118,6 +119,7 @@ export const action = async (args: Route.ActionArgs) => {
       sectionNames: videoContext.sectionNames,
       links,
       courseStructure: courseStructureText,
+      aiHeroUrl: parsed.aiHeroUrl,
     });
 
     const result = agent.stream({

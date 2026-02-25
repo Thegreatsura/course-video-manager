@@ -53,6 +53,7 @@ export const createTextWritingAgent = (props: {
   sectionNames?: string[];
   links?: GlobalLink[];
   courseStructure?: string;
+  aiHeroUrl?: string;
 }) => {
   const links = props.links ?? [];
   const systemPrompt = (() => {
@@ -129,6 +130,7 @@ export const createTextWritingAgent = (props: {
           images: props.imageFiles.map((file) => file.path),
           courseStructure: props.courseStructure,
           links,
+          aiHeroUrl: props.aiHeroUrl,
         });
       case "interview-prep":
         return generateInterviewPrepPrompt({
