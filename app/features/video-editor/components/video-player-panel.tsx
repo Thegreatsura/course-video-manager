@@ -23,7 +23,8 @@ import {
   VideoEditorContext,
   type SuggestionState,
 } from "../video-editor-context";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useContext } from "react";
+import { UploadContext } from "@/features/upload-manager/upload-context";
 
 /**
  * Video player panel component displaying video preview, controls, and metadata.
@@ -120,10 +121,7 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.allClipsHaveText
   );
-  const exportVideoClipsFetcher = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.exportVideoClipsFetcher
-  );
+  const { startExportUpload } = useContext(UploadContext);
   const exportToDavinciResolveFetcher = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.exportToDavinciResolveFetcher
@@ -322,7 +320,7 @@ export const VideoPlayerPanel = () => {
               <ActionsDropdown
                 allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
                 allClipsHaveText={allClipsHaveText}
-                exportVideoClipsFetcher={exportVideoClipsFetcher}
+                onExport={() => startExportUpload(videoId, videoId)}
                 exportToDavinciResolveFetcher={exportToDavinciResolveFetcher}
                 videoId={videoId}
                 lessonId={lessonId}

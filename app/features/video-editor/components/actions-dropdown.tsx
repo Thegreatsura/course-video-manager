@@ -34,8 +34,8 @@ export const ActionsDropdown = (props: {
   allClipsHaveSilenceDetected: boolean;
   /** Whether transcription has completed for all clips */
   allClipsHaveText: boolean;
-  /** Fetcher for exporting video clips */
-  exportVideoClipsFetcher: FetcherWithComponents<unknown>;
+  /** Callback to start export via upload manager */
+  onExport: () => void;
   /** Fetcher for exporting to DaVinci Resolve */
   exportToDavinciResolveFetcher: FetcherWithComponents<unknown>;
   /** Video ID for navigation and actions */
@@ -79,8 +79,7 @@ export const ActionsDropdown = (props: {
                 variant="secondary"
                 disabled={!props.allClipsHaveSilenceDetected}
               >
-                {props.exportVideoClipsFetcher.state === "submitting" ||
-                props.exportToDavinciResolveFetcher.state === "submitting" ? (
+                {props.exportToDavinciResolveFetcher.state === "submitting" ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : null}
                 Actions
@@ -177,8 +176,7 @@ export const ActionsDropdown = (props: {
         <ExportModal
           isOpen={props.isExportModalOpen}
           setIsOpen={props.setIsExportModalOpen}
-          exportVideoClipsFetcher={props.exportVideoClipsFetcher}
-          videoId={props.videoId}
+          onExport={props.onExport}
           youtubeChapters={props.youtubeChapters}
           isChaptersCopied={props.isChaptersCopied}
           copyYoutubeChaptersToClipboard={props.copyYoutubeChaptersToClipboard}

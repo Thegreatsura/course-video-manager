@@ -188,7 +188,6 @@ export const VideoEditor = (props: {
 
   const currentClipId = state.currentClipId;
 
-  const exportVideoClipsFetcher = useFetcher();
   const exportToDavinciResolveFetcher = useFetcher();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
@@ -412,7 +411,6 @@ export const VideoEditor = (props: {
       isChaptersCopied,
 
       // Modal state (local useState, passed through context for access)
-      exportVideoClipsFetcher,
       exportToDavinciResolveFetcher,
       isExportModalOpen,
       setIsExportModalOpen,
@@ -469,7 +467,6 @@ export const VideoEditor = (props: {
       youtubeChapters,
       isCopied,
       isChaptersCopied,
-      exportVideoClipsFetcher,
       exportToDavinciResolveFetcher,
       isExportModalOpen,
       setIsExportModalOpen,

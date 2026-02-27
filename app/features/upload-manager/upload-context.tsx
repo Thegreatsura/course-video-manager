@@ -10,6 +10,7 @@ import { uploadReducer, createInitialUploadState } from "./upload-reducer";
 import { startSSEUpload } from "./sse-upload-client";
 import { startSSESocialPost } from "./sse-social-client";
 import { startSSEAiHeroPost } from "./sse-ai-hero-client";
+import { startSSEExport } from "./sse-export-client";
 
 export interface UploadContextType {
   uploads: uploadReducer.State["uploads"];
@@ -31,6 +32,7 @@ export interface UploadContextType {
     description: string,
     slug: string
   ) => string;
+  startExportUpload: (videoId: string, title: string) => string;
   dismissUpload: (uploadId: string) => void;
 }
 
@@ -204,6 +206,46 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const initiateSSEExportConnection = useCallback(
+    (uploadId: string, videoId: string) => {
+      const existing = abortControllersRef.current.get(uploadId);
+      if (existing) {
+        existing.abort();
+      }
+
+      const abortController = startSSEExport(
+        { videoId },
+        {
+          onStageChange: (stage) => {
+            dispatch({
+              type: "UPDATE_EXPORT_STAGE",
+              uploadId,
+              stage,
+            });
+          },
+          onComplete: () => {
+            dispatch({
+              type: "UPLOAD_SUCCESS",
+              uploadId,
+            });
+            abortControllersRef.current.delete(uploadId);
+          },
+          onError: (message) => {
+            dispatch({
+              type: "UPLOAD_ERROR",
+              uploadId,
+              errorMessage: message,
+            });
+            abortControllersRef.current.delete(uploadId);
+          },
+        }
+      );
+
+      abortControllersRef.current.set(uploadId, abortController);
+    },
+    []
+  );
+
   const startUpload = useCallback(
     (
       videoId: string,
@@ -290,6 +332,25 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     [initiateSSEAiHeroConnection]
   );
 
+  const startExportUpload = useCallback(
+    (videoId: string, title: string) => {
+      const uploadId = generateUploadId();
+
+      dispatch({
+        type: "START_UPLOAD",
+        uploadId,
+        videoId,
+        title,
+        uploadType: "export",
+      });
+
+      initiateSSEExportConnection(uploadId, videoId);
+
+      return uploadId;
+    },
+    [initiateSSEExportConnection]
+  );
+
   const dismissUpload = useCallback((uploadId: string) => {
     const abortController = abortControllersRef.current.get(uploadId);
     if (abortController) {
@@ -367,6 +428,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               // Silently ignore errors (including duplicate URL conflicts)
             });
           }
+        } else if (upload.uploadType === "export") {
+          toast.success(`"${upload.title}" exported successfully`);
         }
       }
 
@@ -419,6 +482,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               params.slug
             );
           }
+        } else if (upload.uploadType === "export") {
+          initiateSSEExportConnection(uploadId, upload.videoId);
         }
       }
     }
@@ -429,6 +494,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     initiateSSEConnection,
     initiateSSESocialConnection,
     initiateSSEAiHeroConnection,
+    initiateSSEExportConnection,
   ]);
 
   // Clean up abort controllers on unmount
@@ -447,6 +513,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         startUpload,
         startSocialUpload,
         startAiHeroUpload,
+        startExportUpload,
         dismissUpload,
       }}
     >

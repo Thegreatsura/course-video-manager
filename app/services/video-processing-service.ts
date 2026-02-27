@@ -132,18 +132,23 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           beatType: BeatType;
         }[];
         shortsDirectoryOutputName: string | undefined;
+        onStageChange?: (
+          stage: "concatenating-clips" | "normalizing-audio"
+        ) => void;
       }) {
         const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
           "FINISHED_VIDEOS_DIRECTORY"
         );
 
         // Create concatenated video using native FFmpeg
+        opts.onStageChange?.("concatenating-clips");
         const concatenatedPath =
           yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
             opts.clips
           );
 
         // Normalize audio
+        opts.onStageChange?.("normalizing-audio");
         const normalizedPath =
           yield* ffmpegCommands.normalizeAudio(concatenatedPath);
 

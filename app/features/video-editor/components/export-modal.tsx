@@ -7,13 +7,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckIcon, CopyIcon, DownloadIcon, Loader2 } from "lucide-react";
-import type { FetcherWithComponents } from "react-router";
+import { CheckIcon, CopyIcon, DownloadIcon } from "lucide-react";
 
 /**
- * Modal for exporting video clips to file, with optional YouTube/TikTok short title.
+ * Modal for exporting video clips to file.
  * Also displays YouTube chapters (generated from clip sections) with copy button.
  */
 export const ExportModal = (props: {
@@ -21,10 +19,8 @@ export const ExportModal = (props: {
   isOpen: boolean;
   /** Callback to set modal open state */
   setIsOpen: (isOpen: boolean) => void;
-  /** Fetcher for submitting the export request */
-  exportVideoClipsFetcher: FetcherWithComponents<unknown>;
-  /** Video ID to export */
-  videoId: string;
+  /** Callback to start the export via upload manager */
+  onExport: () => void;
   /** YouTube chapters generated from clip sections (timestamp + name) */
   youtubeChapters: { timestamp: string; name: string }[];
   /** Whether chapters have been copied to clipboard (for showing feedback) */
@@ -49,28 +45,7 @@ export const ExportModal = (props: {
         <DialogHeader>
           <DialogTitle>Export</DialogTitle>
         </DialogHeader>
-        <props.exportVideoClipsFetcher.Form
-          method="post"
-          action={`/api/videos/${props.videoId}/export`}
-          className="space-y-4 py-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await props.exportVideoClipsFetcher.submit(e.currentTarget);
-            props.setIsOpen(false);
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="shorts-directory-output-name">Short Title</Label>
-            <Input
-              id="shorts-directory-output-name"
-              placeholder="Leave empty for normal export only..."
-              name="shortsDirectoryOutputName"
-            />
-            <p className="text-xs text-muted-foreground">
-              If provided, the video will be queued for YouTube and TikTok under
-              the given title.
-            </p>
-          </div>
+        <div className="space-y-4 py-4">
           {props.youtubeChapters.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -107,16 +82,17 @@ export const ExportModal = (props: {
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {props.exportVideoClipsFetcher.state === "submitting" ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-              ) : (
-                <DownloadIcon className="w-4 h-4 mr-1" />
-              )}
+            <Button
+              onClick={() => {
+                props.onExport();
+                props.setIsOpen(false);
+              }}
+            >
+              <DownloadIcon className="w-4 h-4 mr-1" />
               Export
             </Button>
           </div>
-        </props.exportVideoClipsFetcher.Form>
+        </div>
       </DialogContent>
     </Dialog>
   );

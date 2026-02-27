@@ -97,7 +97,6 @@ export type VideoEditorContextType = {
   isChaptersCopied: boolean;
 
   // Modal state (local useState, passed through context for access)
-  exportVideoClipsFetcher: FetcherWithComponents<unknown>;
   exportToDavinciResolveFetcher: FetcherWithComponents<unknown>;
   isExportModalOpen: boolean;
   setIsExportModalOpen: (value: boolean) => void;
