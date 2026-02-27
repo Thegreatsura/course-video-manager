@@ -1,7 +1,8 @@
 export namespace uploadReducer {
   export type UploadStatus = "uploading" | "retrying" | "success" | "error";
-  export type UploadType = "youtube" | "buffer" | "ai-hero";
+  export type UploadType = "youtube" | "buffer" | "ai-hero" | "export";
   export type BufferStage = "copying" | "syncing" | "sending-webhook";
+  export type ExportStage = "concatenating-clips" | "normalizing-audio";
 
   interface BaseUploadEntry {
     uploadId: string;
@@ -28,10 +29,16 @@ export namespace uploadReducer {
     aiHeroSlug: string | null;
   }
 
+  export interface ExportUploadEntry extends BaseUploadEntry {
+    uploadType: "export";
+    exportStage: ExportStage | null;
+  }
+
   export type UploadEntry =
     | YouTubeUploadEntry
     | BufferUploadEntry
-    | AiHeroUploadEntry;
+    | AiHeroUploadEntry
+    | ExportUploadEntry;
 
   export interface State {
     uploads: Record<string, UploadEntry>;
@@ -50,6 +57,11 @@ export namespace uploadReducer {
         type: "UPDATE_BUFFER_STAGE";
         uploadId: string;
         stage: BufferStage;
+      }
+    | {
+        type: "UPDATE_EXPORT_STAGE";
+        uploadId: string;
+        stage: ExportStage;
       }
     | {
         type: "UPLOAD_SUCCESS";
@@ -90,6 +102,13 @@ export const uploadReducer = (
           break;
         case "ai-hero":
           entry = { ...base, uploadType: "ai-hero", aiHeroSlug: null };
+          break;
+        case "export":
+          entry = {
+            ...base,
+            uploadType: "export",
+            exportStage: "concatenating-clips",
+          };
           break;
         default:
           entry = { ...base, uploadType: "youtube", youtubeVideoId: null };
@@ -137,6 +156,22 @@ export const uploadReducer = (
       };
     }
 
+    case "UPDATE_EXPORT_STAGE": {
+      const upload = state.uploads[action.uploadId];
+      if (!upload || upload.uploadType !== "export") return state;
+
+      return {
+        ...state,
+        uploads: {
+          ...state.uploads,
+          [action.uploadId]: {
+            ...upload,
+            exportStage: action.stage,
+          },
+        },
+      };
+    }
+
     case "UPLOAD_SUCCESS": {
       const upload = state.uploads[action.uploadId];
       if (!upload) return state;
@@ -166,6 +201,9 @@ export const uploadReducer = (
             uploadType: "ai-hero",
             aiHeroSlug: action.aiHeroSlug ?? null,
           };
+          break;
+        case "export":
+          entry = { ...base, uploadType: "export", exportStage: null };
           break;
       }
 
@@ -234,6 +272,13 @@ export const uploadReducer = (
           break;
         case "ai-hero":
           entry = { ...base, uploadType: "ai-hero", aiHeroSlug: null };
+          break;
+        case "export":
+          entry = {
+            ...base,
+            uploadType: "export",
+            exportStage: "concatenating-clips",
+          };
           break;
         default:
           entry = {

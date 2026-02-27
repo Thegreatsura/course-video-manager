@@ -56,6 +56,21 @@ const createAiHeroEntry = (
   ...overrides,
 });
 
+const createExportEntry = (
+  overrides: Partial<Omit<uploadReducer.ExportUploadEntry, "uploadType">> = {}
+): uploadReducer.ExportUploadEntry => ({
+  uploadId: "upload-1",
+  videoId: "video-1",
+  title: "Test Video",
+  progress: 0,
+  status: "uploading",
+  uploadType: "export",
+  exportStage: "concatenating-clips",
+  errorMessage: null,
+  retryCount: 0,
+  ...overrides,
+});
+
 describe("uploadReducer", () => {
   describe("START_UPLOAD", () => {
     it("should add a new youtube upload entry", () => {
@@ -170,6 +185,28 @@ describe("uploadReducer", () => {
         retryCount: 0,
       });
     });
+
+    it("should set uploadType to export and initialize exportStage to concatenating-clips", () => {
+      const state = reduce(createState(), {
+        type: "START_UPLOAD",
+        uploadId: "upload-1",
+        videoId: "video-1",
+        title: "Export Video",
+        uploadType: "export",
+      });
+
+      expect(state.uploads["upload-1"]).toEqual({
+        uploadId: "upload-1",
+        videoId: "video-1",
+        title: "Export Video",
+        progress: 0,
+        status: "uploading",
+        uploadType: "export",
+        exportStage: "concatenating-clips",
+        errorMessage: null,
+        retryCount: 0,
+      });
+    });
   });
 
   describe("UPDATE_PROGRESS", () => {
@@ -272,6 +309,54 @@ describe("uploadReducer", () => {
         type: "UPDATE_BUFFER_STAGE",
         uploadId: "upload-1",
         stage: "syncing",
+      });
+
+      expect(state).toBe(initial);
+    });
+  });
+
+  describe("UPDATE_EXPORT_STAGE", () => {
+    it("should update export stage for existing upload", () => {
+      const state = reduce(
+        createState({
+          uploads: {
+            "upload-1": createExportEntry({
+              exportStage: "concatenating-clips",
+            }),
+          },
+        }),
+        {
+          type: "UPDATE_EXPORT_STAGE",
+          uploadId: "upload-1",
+          stage: "normalizing-audio",
+        }
+      );
+
+      const upload = state.uploads["upload-1"]!;
+      expect(upload.uploadType === "export" && upload.exportStage).toBe(
+        "normalizing-audio"
+      );
+    });
+
+    it("should not modify state for non-existent upload", () => {
+      const initial = createState();
+      const state = reduce(initial, {
+        type: "UPDATE_EXPORT_STAGE",
+        uploadId: "non-existent",
+        stage: "normalizing-audio",
+      });
+
+      expect(state).toBe(initial);
+    });
+
+    it("should not modify state for non-export upload", () => {
+      const initial = createState({
+        uploads: { "upload-1": createYouTubeEntry() },
+      });
+      const state = reduce(initial, {
+        type: "UPDATE_EXPORT_STAGE",
+        uploadId: "upload-1",
+        stage: "normalizing-audio",
       });
 
       expect(state).toBe(initial);
@@ -395,6 +480,28 @@ describe("uploadReducer", () => {
         "my-post~abc123"
       );
       expect(upload.errorMessage).toBeNull();
+    });
+
+    it("should clear exportStage on success for export uploads", () => {
+      const state = reduce(
+        createState({
+          uploads: {
+            "upload-1": createExportEntry({
+              exportStage: "normalizing-audio",
+            }),
+          },
+        }),
+        {
+          type: "UPLOAD_SUCCESS",
+          uploadId: "upload-1",
+        }
+      );
+
+      const upload = state.uploads["upload-1"]!;
+      expect(upload.status).toBe("success");
+      expect(upload.progress).toBe(100);
+      expect(upload.uploadType).toBe("export");
+      expect(upload.uploadType === "export" && upload.exportStage).toBeNull();
     });
   });
 
@@ -1427,6 +1534,90 @@ describe("uploadReducer", () => {
       expect(state.uploads["ah-1"]!.status).toBe("error");
       expect(state.uploads["ah-1"]!.retryCount).toBe(3);
       expect(state.uploads["ah-1"]!.errorMessage).toBe("Error 3");
+    });
+  });
+
+  describe("export upload lifecycle", () => {
+    it("should progress through all export stages to success", () => {
+      let state = createState();
+
+      // Start export
+      state = reduce(state, {
+        type: "START_UPLOAD",
+        uploadId: "exp-1",
+        videoId: "video-1",
+        title: "Export Video",
+        uploadType: "export",
+      });
+      const started = state.uploads["exp-1"]!;
+      expect(started.uploadType === "export" && started.exportStage).toBe(
+        "concatenating-clips"
+      );
+
+      // Transition to normalizing-audio
+      state = reduce(state, {
+        type: "UPDATE_EXPORT_STAGE",
+        uploadId: "exp-1",
+        stage: "normalizing-audio",
+      });
+      const normalizing = state.uploads["exp-1"]!;
+      expect(
+        normalizing.uploadType === "export" && normalizing.exportStage
+      ).toBe("normalizing-audio");
+
+      // Success
+      state = reduce(state, {
+        type: "UPLOAD_SUCCESS",
+        uploadId: "exp-1",
+      });
+      const success = state.uploads["exp-1"]!;
+      expect(success.status).toBe("success");
+      expect(success.uploadType === "export" && success.exportStage).toBeNull();
+      expect(success.progress).toBe(100);
+    });
+
+    it("should reset exportStage to concatenating-clips on retry", () => {
+      let state = reduce(createState(), {
+        type: "START_UPLOAD",
+        uploadId: "exp-1",
+        videoId: "video-1",
+        title: "Retrying Export",
+        uploadType: "export",
+      });
+
+      // Advance to normalizing-audio then error
+      state = reduce(state, {
+        type: "UPDATE_EXPORT_STAGE",
+        uploadId: "exp-1",
+        stage: "normalizing-audio",
+      });
+      state = reduce(state, {
+        type: "UPLOAD_ERROR",
+        uploadId: "exp-1",
+        errorMessage: "FFmpeg crashed",
+      });
+
+      expect(state.uploads["exp-1"]!.status).toBe("retrying");
+
+      // Retry resets to concatenating-clips
+      state = reduce(state, { type: "RETRY", uploadId: "exp-1" });
+      const retried = state.uploads["exp-1"]!;
+      expect(retried.status).toBe("uploading");
+      expect(retried.uploadType === "export" && retried.exportStage).toBe(
+        "concatenating-clips"
+      );
+      expect(retried.progress).toBe(0);
+    });
+
+    it("should dismiss export upload", () => {
+      let state = createState({
+        uploads: {
+          "exp-1": createExportEntry({ uploadId: "exp-1" }),
+        },
+      });
+
+      state = reduce(state, { type: "DISMISS", uploadId: "exp-1" });
+      expect(state.uploads["exp-1"]).toBeUndefined();
     });
   });
 });

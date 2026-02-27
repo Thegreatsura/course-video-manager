@@ -9,6 +9,7 @@ import {
   Cloud,
   Send,
   Copy,
+  Film,
 } from "lucide-react";
 import { Link } from "react-router";
 import { UploadContext } from "./upload-context";
@@ -171,6 +172,9 @@ function StatusIcon({ upload }: { upload: uploadReducer.UploadEntry }) {
             return <Copy className="size-4 text-blue-500 shrink-0" />;
         }
       }
+      if (upload.uploadType === "export") {
+        return <Film className="size-4 text-blue-500 shrink-0" />;
+      }
       return <Upload className="size-4 text-blue-500 shrink-0" />;
     case "retrying":
       return (
@@ -187,6 +191,11 @@ const BUFFER_STAGE_LABELS: Record<uploadReducer.BufferStage, string> = {
   copying: "Copying to Dropbox",
   syncing: "Syncing to Dropbox",
   "sending-webhook": "Sending to Zapier",
+};
+
+const EXPORT_STAGE_LABELS: Record<uploadReducer.ExportStage, string> = {
+  "concatenating-clips": "Concatenating clips",
+  "normalizing-audio": "Normalizing audio",
 };
 
 function UploadStatusDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
@@ -209,6 +218,14 @@ function UploadStatusDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
             </div>
           );
         }
+        return (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {stageLabel}...
+          </p>
+        );
+      }
+      if (upload.uploadType === "export" && upload.exportStage) {
+        const stageLabel = EXPORT_STAGE_LABELS[upload.exportStage];
         return (
           <p className="text-xs text-muted-foreground mt-0.5">
             {stageLabel}...
@@ -292,6 +309,18 @@ function UploadStatusDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
                 <ExternalLink className="size-3" />
               </a>
             )}
+          </div>
+        );
+      }
+      if (upload.uploadType === "export") {
+        return (
+          <div className="flex items-center gap-2 mt-0.5">
+            <Badge
+              variant="secondary"
+              className="text-green-500 text-[10px] px-1.5 py-0"
+            >
+              Exported
+            </Badge>
           </div>
         );
       }
