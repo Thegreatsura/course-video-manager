@@ -1,4 +1,4 @@
-import { Config, Effect } from "effect";
+import { Config, Effect, Schedule } from "effect";
 import { FileSystem } from "@effect/platform";
 import { DBFunctionsService } from "@/services/db-service";
 import { runtimeLive } from "@/services/layer";
@@ -105,6 +105,7 @@ export const action = async (args: Route.ActionArgs) => {
                 },
               })
               .pipe(
+                Effect.retry(Schedule.recurs(2)),
                 Effect.tap(() => {
                   sendEvent("complete", { videoId: video.id });
                 }),
