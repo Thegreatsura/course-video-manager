@@ -61,7 +61,8 @@
       "WebFetch(domain:community.zapier.com)",
       "Read(/home/mattpocock/repos/ai/course-builder/**)",
       "WebFetch(domain:developers.kit.com)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(npx react-router:*)"
     ],
     "deny": [],
     "ask": []

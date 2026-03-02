@@ -77,7 +77,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
           "-of",
           "default=noprint_wrappers=1:nokey=1",
           inputVideo
-        );
+        ).pipe(Command.stdout("inherit"), Command.stderr("inherit"));
 
         const result = yield* cpuSemaphore.withPermits(1)(
           Command.string(command)
@@ -191,7 +191,10 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         yield* gpuSemaphore.withPermits(1)(
           Effect.gen(function* () {
             const code = yield* Command.exitCode(
-              Command.make("ffmpeg", ...args)
+              Command.make("ffmpeg", ...args).pipe(
+                Command.stdout("inherit"),
+                Command.stderr("inherit")
+              )
             ).pipe(
               Effect.mapError(
                 (e) =>
@@ -278,7 +281,10 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         yield* cpuSemaphore.withPermits(1)(
           Effect.gen(function* () {
             const code = yield* Command.exitCode(
-              Command.make("ffmpeg", ...args)
+              Command.make("ffmpeg", ...args).pipe(
+                Command.stdout("inherit"),
+                Command.stderr("inherit")
+              )
             ).pipe(
               Effect.mapError(
                 (e) =>
