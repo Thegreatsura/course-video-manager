@@ -4,8 +4,10 @@ import type {
   ClipOnDatabase,
   FrontendId,
   FrontendInsertionPoint,
+  RecordingSession,
   TimelineItem,
 } from "./clip-state-reducer";
+import type { SessionPanelData } from "./video-editor-selectors";
 import type { videoStateReducer } from "./video-state-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
@@ -54,6 +56,8 @@ export type VideoEditorContextType = {
 
   // Route-level props
   items: TimelineItem[];
+  sessions: RecordingSession[];
+  sessionPanels: SessionPanelData[];
   videoPath: string;
   videoId: string;
   repoName?: string;

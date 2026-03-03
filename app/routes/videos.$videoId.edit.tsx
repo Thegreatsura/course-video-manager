@@ -527,18 +527,8 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         dispatch({ type: "add-clip-section-at", name, position, itemId });
       }}
       obsConnectorState={obsConnector.state}
-      items={clipState.items.filter((item) => {
-        if (item.type === "optimistically-added" && item.shouldArchive) {
-          return false;
-        }
-        if (
-          item.type === "clip-section-optimistically-added" &&
-          item.shouldArchive
-        ) {
-          return false;
-        }
-        return true;
-      })}
+      items={clipState.items}
+      sessions={clipState.sessions}
       repoId={props.loaderData.video.lesson?.section.repoVersion.repo.id}
       lessonId={props.loaderData.video.lesson?.id}
       videoPath={props.loaderData.video.path}

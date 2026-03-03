@@ -18,6 +18,7 @@ import type {
   EditorError,
   FrontendId,
   FrontendInsertionPoint,
+  RecordingSession,
   TimelineItem,
 } from "./clip-state-reducer";
 import { isClip } from "./clip-utils";
@@ -38,6 +39,8 @@ import {
   getShowLiveStream,
   getShowLastFrame,
   getDatabaseClipBeforeInsertionPoint,
+  getTimelineItems,
+  getSessionPanels,
   getCurrentClip,
   getAllClipsHaveSilenceDetected,
   getAllClipsHaveText,
@@ -117,6 +120,7 @@ const useVideoEditor = (props: {
 export const VideoEditor = (props: {
   obsConnectorState: OBSConnectionOuterState;
   items: TimelineItem[];
+  sessions: RecordingSession[];
   videoPath: string;
   lessonPath?: string;
   repoName?: string;
@@ -153,13 +157,24 @@ export const VideoEditor = (props: {
     mode: "copy" | "move"
   ) => void;
 }) => {
-  // Filter items to get only clips (excluding clip sections)
-  // Clip sections will be rendered separately in a future update
-  const clips = useMemo(() => props.items.filter(isClip), [props.items]);
+  // Filter items for the main timeline (excludes optimistic clips and archived items)
+  const timelineItems = useMemo(
+    () => getTimelineItems(props.items),
+    [props.items]
+  );
+
+  // Derive clips from timeline items for playback, timecodes, etc.
+  const clips = useMemo(() => timelineItems.filter(isClip), [timelineItems]);
+
+  // Derive session panel data for RecordingSessionPanel components
+  const sessionPanels = useMemo(
+    () => getSessionPanels(props.items, props.sessions),
+    [props.items, props.sessions]
+  );
 
   // Generate default name for new clip sections based on existing count
   const generateDefaultClipSectionName = () => {
-    const existingClipSectionCount = props.items.filter(
+    const existingClipSectionCount = timelineItems.filter(
       (item) =>
         item.type === "clip-section-on-database" ||
         item.type === "clip-section-optimistically-added"
@@ -168,7 +183,7 @@ export const VideoEditor = (props: {
   };
 
   const { state, dispatch } = useVideoEditor({
-    items: props.items,
+    items: timelineItems,
     clips: clips,
     insertionPoint: props.insertionPoint,
     onClipsRemoved: props.onClipsRemoved,
@@ -228,7 +243,7 @@ export const VideoEditor = (props: {
     isCopied,
     isChaptersCopied,
     youtubeChapters,
-  } = useClipboardOperations(props.items);
+  } = useClipboardOperations(timelineItems);
 
   const totalDuration = getTotalDuration(clips);
 
@@ -240,7 +255,7 @@ export const VideoEditor = (props: {
   const showLastFrame = getShowLastFrame(state.showLastFrameOfVideo);
 
   const databaseClipToShowLastFrameOf = getDatabaseClipBeforeInsertionPoint(
-    props.items,
+    timelineItems,
     props.insertionPoint
   );
 
@@ -347,7 +362,9 @@ export const VideoEditor = (props: {
       databaseClipToShowLastFrameOf,
 
       // Route-level props
-      items: props.items,
+      items: timelineItems,
+      sessions: props.sessions,
+      sessionPanels,
       videoPath: props.videoPath,
       videoId: props.videoId,
       repoName: props.repoName,
