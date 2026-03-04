@@ -2562,6 +2562,52 @@ describe("clipStateReducer", () => {
         expect(tester.getState().items).toHaveLength(0);
       });
 
+      it("Should remove orphaned optimistic clips for a session", () => {
+        const tester = new ReducerTester(
+          clipStateReducer,
+          createInitialState()
+        );
+
+        tester.send({
+          type: "recording-started",
+          outputPath: "/tmp/recording.mkv",
+        });
+
+        const sessionId = tester.getState().sessions[0]!.id;
+
+        tester
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-1",
+            })
+          )
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-2",
+            })
+          )
+          .send({ type: "recording-stopped" })
+          .send({ type: "session-polling-complete", sessionId });
+
+        // Both clips should now be orphaned
+        expect(
+          (tester.getState().items[0] as ClipOptimisticallyAdded).isOrphaned
+        ).toBe(true);
+        expect(
+          (tester.getState().items[1] as ClipOptimisticallyAdded).isOrphaned
+        ).toBe(true);
+
+        // Permanently remove all — should clear orphaned clips too
+        tester.send({
+          type: "permanently-remove-archived",
+          sessionId,
+        });
+
+        expect(tester.getState().items).toHaveLength(0);
+      });
+
       it("Should remove archived database clips for a session", () => {
         const tester = new ReducerTester(
           clipStateReducer,

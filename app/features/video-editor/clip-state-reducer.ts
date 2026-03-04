@@ -1243,7 +1243,7 @@ export const clipStateReducer: EffectReducer<
       const itemsToRemove = state.items.filter((item) => {
         if (
           item.type === "optimistically-added" &&
-          item.shouldArchive &&
+          (item.shouldArchive || item.isOrphaned) &&
           item.sessionId === action.sessionId
         ) {
           return true;

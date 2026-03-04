@@ -64,7 +64,7 @@ export const getSessionPanels = (
 
   for (const item of items) {
     if (item.type === "optimistically-added") {
-      if (item.shouldArchive) {
+      if (item.shouldArchive || item.isOrphaned) {
         const clips = archivedBySession.get(item.sessionId) ?? [];
         clips.push(item);
         archivedBySession.set(item.sessionId, clips);

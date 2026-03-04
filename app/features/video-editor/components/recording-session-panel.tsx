@@ -85,28 +85,47 @@ const ArchivedClipRow = ({
   onRestore: () => void;
 }) => {
   const isResolved = clip.type === "on-database";
+  const isOrphaned =
+    clip.type === "optimistically-added" && clip.isOrphaned === true;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded text-sm bg-red-950/10">
-      <ArchiveIcon className="size-3.5 text-red-400/50 shrink-0" />
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded text-sm",
+        isOrphaned ? "bg-amber-950/20" : "bg-red-950/10"
+      )}
+    >
+      {isOrphaned ? (
+        <AlertTriangleIcon className="size-3.5 text-amber-500/50 shrink-0" />
+      ) : (
+        <ArchiveIcon className="size-3.5 text-red-400/50 shrink-0" />
+      )}
       <span
         className={cn(
-          "flex-1 line-through",
-          isResolved ? "text-gray-400" : "text-gray-500"
+          "flex-1",
+          isOrphaned
+            ? "text-amber-300/70"
+            : "line-through " + (isResolved ? "text-gray-400" : "text-gray-500")
         )}
       >
-        {isResolved ? clip.text || "No transcript" : "Awaiting clip..."}
+        {isOrphaned
+          ? "No clip found"
+          : isResolved
+            ? clip.text || "No transcript"
+            : "Awaiting clip..."}
       </span>
       <span className="text-[10px] text-gray-600">
         #{clip.insertionOrder ?? "?"}
       </span>
-      <button
-        onClick={onRestore}
-        className="text-gray-500 hover:text-green-400 p-1 rounded hover:bg-gray-700/50 transition-colors"
-        title="Restore clip"
-      >
-        <Undo2Icon className="size-3.5" />
-      </button>
+      {!isOrphaned && (
+        <button
+          onClick={onRestore}
+          className="text-gray-500 hover:text-green-400 p-1 rounded hover:bg-gray-700/50 transition-colors"
+          title="Restore clip"
+        >
+          <Undo2Icon className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 };
@@ -172,7 +191,7 @@ const SessionPanel = ({ panel }: { panel: SessionPanelData }) => {
         <div className="border-t border-gray-700/50">
           <div className="px-4 py-2 bg-red-950/20 flex items-center justify-between">
             <span className="text-xs text-red-300/70">
-              {panel.archivedClips.length} deleted
+              {panel.archivedClips.length} to clear
             </span>
             <button
               onClick={() => onPermanentlyRemoveArchived(panel.sessionId)}
