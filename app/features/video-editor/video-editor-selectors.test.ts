@@ -947,10 +947,10 @@ describe("getSessionPanels", () => {
     ]);
   });
 
-  it("excludes sessions with no pending clips", () => {
+  it("excludes non-recording sessions with no pending clips", () => {
     const sessions: RecordingSession[] = [
-      makeSession({ id: sid("s1"), displayNumber: 1 }),
-      makeSession({ id: sid("s2"), displayNumber: 2 }),
+      makeSession({ id: sid("s1"), displayNumber: 1, isRecording: false }),
+      makeSession({ id: sid("s2"), displayNumber: 2, isRecording: false }),
     ];
     const items: TimelineItem[] = [
       makeOptimisticClip({ frontendId: id("c1"), sessionId: sid("s1") }),
@@ -1063,10 +1063,10 @@ describe("getSessionPanels", () => {
     ]);
   });
 
-  it("excludes sessions with no pending or archived clips", () => {
+  it("excludes non-recording sessions with no pending or archived clips", () => {
     const sessions: RecordingSession[] = [
-      makeSession({ id: sid("s1"), displayNumber: 1 }),
-      makeSession({ id: sid("s2"), displayNumber: 2 }),
+      makeSession({ id: sid("s1"), displayNumber: 1, isRecording: false }),
+      makeSession({ id: sid("s2"), displayNumber: 2, isRecording: false }),
     ];
     const items: TimelineItem[] = [
       makeOptimisticClip({ frontendId: id("c1"), sessionId: sid("s1") }),
@@ -1117,5 +1117,18 @@ describe("getSessionPanels", () => {
     const panels = getSessionPanels(items, sessions);
     expect(panels[0]!.isRecording).toBe(true);
     expect(panels[1]!.isRecording).toBe(false);
+  });
+
+  it("includes recording sessions even with no clips", () => {
+    const sessions: RecordingSession[] = [
+      makeSession({ id: sid("s1"), displayNumber: 1, isRecording: true }),
+    ];
+    const items: TimelineItem[] = [];
+    const panels = getSessionPanels(items, sessions);
+    expect(panels).toHaveLength(1);
+    expect(panels[0]!.sessionId).toBe(sid("s1"));
+    expect(panels[0]!.isRecording).toBe(true);
+    expect(panels[0]!.pendingClips).toHaveLength(0);
+    expect(panels[0]!.archivedClips).toHaveLength(0);
   });
 });

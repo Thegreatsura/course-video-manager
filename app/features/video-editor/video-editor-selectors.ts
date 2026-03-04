@@ -49,8 +49,8 @@ export type SessionPanelData = {
 /**
  * Derives session panel data from sessions and items.
  * Groups pending (non-archived) optimistic clips and archived clips by session ID.
- * Only includes sessions that have at least one pending or archived clip.
- * Sorted by display number (oldest first).
+ * Includes sessions that are actively recording (even with no clips) or have
+ * at least one pending or archived clip. Sorted by display number (oldest first).
  */
 export const getSessionPanels = (
   items: TimelineItem[],
@@ -87,7 +87,9 @@ export const getSessionPanels = (
   return sessions
     .filter(
       (session) =>
-        pendingBySession.has(session.id) || archivedBySession.has(session.id)
+        session.isRecording ||
+        pendingBySession.has(session.id) ||
+        archivedBySession.has(session.id)
     )
     .map((session) => ({
       sessionId: session.id,
