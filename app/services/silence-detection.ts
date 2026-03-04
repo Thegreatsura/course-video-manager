@@ -6,7 +6,6 @@ const THRESHOLD = -38; // dB
 const SILENCE_DURATION = 0.8; // seconds
 const AUTO_EDITED_START_PADDING = 0; // frames
 const AUTO_EDITED_END_PADDING = 0.08; // frames
-const AUTO_EDITED_VIDEO_FINAL_END_PADDING = 0.5; // seconds
 const MINIMUM_CLIP_LENGTH_IN_SECONDS = 1;
 
 interface SpeakingClip {
@@ -121,18 +120,16 @@ export function findSilenceInVideo(
     const startTimeAdjustment = opts?.startTime ?? 0;
 
     // Convert frame-based durations to seconds (rounded to 2dp)
-    const clips = speakingClips.map((clip, index, array) => {
+    const clips = speakingClips.map((clip) => {
       const startTime =
         Math.round(clip.startTime * 100) / 100 + startTimeAdjustment;
       const endTime =
         Math.round(clip.endTime * 100) / 100 + startTimeAdjustment;
-      const isFinalClip = index === array.length - 1;
 
       return {
         inputVideo,
         startTime,
-        endTime:
-          endTime + (isFinalClip ? AUTO_EDITED_VIDEO_FINAL_END_PADDING : 0),
+        endTime,
       };
     });
 

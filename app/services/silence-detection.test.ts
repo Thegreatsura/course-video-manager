@@ -47,9 +47,9 @@ describe("findSilenceInVideo", () => {
     expect(result.clips).toHaveLength(1);
     const clip = result.clips[0]!;
     // At 30fps: startFrame = round(2.0 * 30) - 0 = 60, startTime = 60/30 = 2.0
-    // endFrame = round(5.0 * 30) + round(0.08 * 30) = 150 + 2 = 152, endTime = 152/30 + 0.5 (final clip padding) ≈ 5.57
+    // endFrame = round(5.0 * 30) + round(0.08 * 30) = 150 + 2 = 152, endTime = 152/30 ≈ 5.07
     expect(clip.startTime).toBeCloseTo(2.0, 1);
-    expect(clip.endTime).toBeCloseTo(5.57, 1);
+    expect(clip.endTime).toBeCloseTo(5.07, 1);
   });
 
   it("adjusts clip timestamps by startTime offset", async () => {
@@ -69,7 +69,7 @@ describe("findSilenceInVideo", () => {
     const clip = result.clips[0]!;
     // Same as above but offset by 99s
     expect(clip.startTime).toBeCloseTo(2.0 + startTimeOffset, 1);
-    expect(clip.endTime).toBeCloseTo(5.57 + startTimeOffset, 0);
+    expect(clip.endTime).toBeCloseTo(5.07 + startTimeOffset, 0);
   });
 
   it("does not adjust timestamps when startTime is 0", async () => {
@@ -85,6 +85,6 @@ describe("findSilenceInVideo", () => {
     expect(result.clips).toHaveLength(1);
     const clip = result.clips[0]!;
     expect(clip.startTime).toBeCloseTo(2.0, 1);
-    expect(clip.endTime).toBeCloseTo(5.57, 1);
+    expect(clip.endTime).toBeCloseTo(5.07, 1);
   });
 });
