@@ -705,7 +705,8 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
           const standaloneVideos = yield* makeDbCall(() =>
             db.query.videos.findMany({
               where: and(isNull(videos.lessonId), eq(videos.archived, false)),
-              orderBy: desc(videos.createdAt),
+              orderBy: desc(videos.updatedAt),
+              limit: 5,
               with: {
                 clips: {
                   orderBy: asc(clips.order),
@@ -1056,7 +1057,7 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
           yield* makeDbCall(() =>
             db
               .update(videos)
-              .set({ path: opts.path })
+              .set({ path: opts.path, updatedAt: new Date() })
               .where(eq(videos.id, opts.videoId))
           );
         }),

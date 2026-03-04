@@ -124,6 +124,12 @@ export const videos = createTable("video", {
   })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", {
+    mode: "date",
+    withTimezone: true,
+  })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const clips = createTable("clip", {
