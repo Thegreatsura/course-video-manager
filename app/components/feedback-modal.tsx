@@ -25,7 +25,10 @@ export function FeedbackModal(props: {
   useEffect(() => {
     if (prevState.current === "loading" && fetcher.state === "idle") {
       if (fetcher.data && "success" in fetcher.data) {
-        toast("Feedback submitted! Thank you.");
+        const openCount = (fetcher.data as { openIssueCount?: number | null })
+          .openIssueCount;
+        const countMsg = openCount != null ? ` ${openCount} open issues.` : "";
+        toast(`Feedback submitted! Thank you.${countMsg}`);
         formRef.current?.reset();
         props.onOpenChange(false);
       }

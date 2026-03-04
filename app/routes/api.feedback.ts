@@ -49,7 +49,26 @@ export const action = async (args: Route.ActionArgs) => {
       body,
     ]);
 
-    return { success: true };
+    // Count open issues to show in the toast
+    let openIssueCount: number | null = null;
+    try {
+      const { stdout } = await execFileAsync("gh", [
+        "issue",
+        "list",
+        "--repo",
+        "mattpocock/course-video-manager",
+        "--state",
+        "open",
+        "--json",
+        "number",
+      ]);
+      const issues = JSON.parse(stdout);
+      openIssueCount = issues.length;
+    } catch {
+      // Non-critical, just skip the count
+    }
+
+    return { success: true, openIssueCount };
   } catch (error) {
     console.error("Failed to create GitHub issue:", error);
     throw data("Failed to create GitHub issue", { status: 500 });
