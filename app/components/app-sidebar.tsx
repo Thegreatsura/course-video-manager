@@ -29,7 +29,6 @@ import {
   ClipboardList,
   FolderGit2,
   FolderOpen,
-  LayoutTemplate,
   Menu,
   PencilIcon,
   Plus,
@@ -360,15 +359,6 @@ export function AppSidebar({
           </div>
         </CollapsibleContent>
       </Collapsible>
-
-      {/* Diagram Playground */}
-      <Link
-        to="/diagram-playground"
-        className="flex items-center gap-2 text-lg font-semibold hover:text-foreground/80 transition-colors pl-6"
-      >
-        <LayoutTemplate className="w-5 h-5" />
-        Diagram Playground
-      </Link>
 
       {/* Settings */}
       <Link
