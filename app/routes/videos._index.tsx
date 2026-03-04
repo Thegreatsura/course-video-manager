@@ -39,6 +39,7 @@ export const loader = async () => {
 
     const repos = yield* db.getRepos();
     const videos = yield* db.getAllStandaloneVideos();
+    const sidebarVideos = yield* db.getStandaloneVideos();
     const archivedVideos = yield* db.getArchivedStandaloneVideos();
     const plans = yield* db.getPlans();
 
@@ -54,6 +55,7 @@ export const loader = async () => {
     return {
       repos,
       videos,
+      sidebarVideos,
       archivedVideos,
       hasExportedVideoMap,
       plans,
@@ -68,8 +70,14 @@ export const loader = async () => {
 };
 
 export default function Component(props: Route.ComponentProps) {
-  const { repos, videos, archivedVideos, hasExportedVideoMap, plans } =
-    props.loaderData;
+  const {
+    repos,
+    videos,
+    sidebarVideos,
+    archivedVideos,
+    hasExportedVideoMap,
+    plans,
+  } = props.loaderData;
   const [isAddVideoOpen, setIsAddVideoOpen] = useState(false);
   const [videoToDelete, setVideoToDelete] = useState<{
     id: string;
@@ -88,7 +96,7 @@ export default function Component(props: Route.ComponentProps) {
     <div className="flex h-screen bg-background text-foreground">
       <AppSidebar
         repos={repos}
-        standaloneVideos={videos}
+        standaloneVideos={sidebarVideos}
         plans={plans}
         isAddStandaloneVideoModalOpen={isAddVideoOpen}
         setIsAddStandaloneVideoModalOpen={setIsAddVideoOpen}
