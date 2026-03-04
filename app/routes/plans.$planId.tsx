@@ -21,7 +21,9 @@ import { usePlanReducer } from "@/hooks/use-plan-reducer";
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   CircleHelp,
   ClipboardCopy,
   Code,
@@ -35,7 +37,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link, useNavigate, data } from "react-router";
 import type {
   LessonPriority,
@@ -591,6 +593,8 @@ interface SortableSectionProps {
   priorityFilter: LessonPriority[];
   pinnedLessonIds: string[];
   iconFilter: LessonIcon[];
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 function SortableSection({
@@ -602,6 +606,8 @@ function SortableSection({
   priorityFilter,
   pinnedLessonIds,
   iconFilter,
+  isCollapsed,
+  onToggleCollapsed,
 }: SortableSectionProps) {
   const {
     attributes,
@@ -689,6 +695,16 @@ function SortableSection({
           <>
             <div className="flex items-center gap-2">
               <button
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={onToggleCollapsed}
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+              <button
                 className="cursor-grab active:cursor-grabbing p-1"
                 {...attributes}
                 {...listeners}
@@ -739,6 +755,12 @@ function SortableSection({
                   </div>
                 );
               })()}
+              {isCollapsed && (
+                <span className="text-xs text-muted-foreground">
+                  {filteredLessons.length} lesson
+                  {filteredLessons.length !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover/section:opacity-100 transition-opacity">
               <Button
@@ -760,82 +782,89 @@ function SortableSection({
       </div>
 
       {/* Lessons */}
-      <SortableContext
-        items={filteredLessons.map((l) => l.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="space-y-1 ml-4">
-          {filteredLessons.map((lesson) => {
-            // Get the original index for consistent numbering
-            const originalIndex = sortedLessons.findIndex(
-              (l) => l.id === lesson.id
-            );
-            return (
-              <SortableLesson
-                key={lesson.id}
-                lesson={lesson}
-                lessonNumber={`${sectionNumber}.${originalIndex + 1}`}
-                sectionId={section.id}
-                editingLesson={state.editingLesson}
-                editingDescription={state.editingDescription}
-                dispatch={dispatch}
-                allLessons={allLessons}
-              />
-            );
-          })}
+      {!isCollapsed && (
+        <SortableContext
+          items={filteredLessons.map((l) => l.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-1 ml-4">
+            {filteredLessons.map((lesson) => {
+              // Get the original index for consistent numbering
+              const originalIndex = sortedLessons.findIndex(
+                (l) => l.id === lesson.id
+              );
+              return (
+                <SortableLesson
+                  key={lesson.id}
+                  lesson={lesson}
+                  lessonNumber={`${sectionNumber}.${originalIndex + 1}`}
+                  sectionId={section.id}
+                  editingLesson={state.editingLesson}
+                  editingDescription={state.editingDescription}
+                  dispatch={dispatch}
+                  allLessons={allLessons}
+                />
+              );
+            })}
 
-          {/* Add Lesson */}
-          {addingLesson ? (
-            <div className="flex items-center gap-2 py-2 px-3">
-              <Input
-                value={newLessonTitle}
-                onChange={(e) =>
+            {/* Add Lesson */}
+            {addingLesson ? (
+              <div className="flex items-center gap-2 py-2 px-3">
+                <Input
+                  value={newLessonTitle}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "new-lesson-title-changed",
+                      value: e.target.value,
+                    })
+                  }
+                  placeholder="Lesson title..."
+                  className="text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter")
+                      dispatch({ type: "new-lesson-save-requested" });
+                    if (e.key === "Escape")
+                      dispatch({ type: "new-lesson-cancel-requested" });
+                  }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    dispatch({ type: "new-lesson-save-requested" })
+                  }
+                >
+                  Add
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    dispatch({ type: "new-lesson-cancel-requested" })
+                  }
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                data-add-lesson-button={section.id}
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground"
+                onClick={() =>
                   dispatch({
-                    type: "new-lesson-title-changed",
-                    value: e.target.value,
+                    type: "add-lesson-clicked",
+                    sectionId: section.id,
                   })
                 }
-                placeholder="Lesson title..."
-                className="text-sm"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter")
-                    dispatch({ type: "new-lesson-save-requested" });
-                  if (e.key === "Escape")
-                    dispatch({ type: "new-lesson-cancel-requested" });
-                }}
-              />
-              <Button
-                size="sm"
-                onClick={() => dispatch({ type: "new-lesson-save-requested" })}
               >
-                Add
+                <Plus className="w-4 h-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  dispatch({ type: "new-lesson-cancel-requested" })
-                }
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button
-              data-add-lesson-button={section.id}
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground"
-              onClick={() =>
-                dispatch({ type: "add-lesson-clicked", sectionId: section.id })
-              }
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-      </SortableContext>
+            )}
+          </div>
+        </SortableContext>
+      )}
     </div>
   );
 }
@@ -859,6 +888,40 @@ function PlanDetailPageContent({ loaderData }: Route.ComponentProps) {
   const [activeDragType, setActiveDragType] = useState<
     "section" | "lesson" | null
   >(null);
+
+  // Collapsed sections state, persisted in localStorage per plan
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(
+    () => {
+      if (typeof window === "undefined") return new Set();
+      try {
+        const stored = localStorage.getItem(
+          `plan-collapsed-sections:${loaderData.plan!.id}`
+        );
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+      } catch {
+        return new Set();
+      }
+    }
+  );
+
+  const toggleSectionCollapsed = useCallback(
+    (sectionId: string) => {
+      setCollapsedSectionIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(sectionId)) {
+          next.delete(sectionId);
+        } else {
+          next.add(sectionId);
+        }
+        localStorage.setItem(
+          `plan-collapsed-sections:${loaderData.plan!.id}`,
+          JSON.stringify([...next])
+        );
+        return next;
+      });
+    },
+    [loaderData.plan!.id]
+  );
 
   // Priority filter comes from the reducer (allows pinning behavior)
   const { priorityFilter, pinnedLessonIds, iconFilter } = state;
@@ -1322,6 +1385,8 @@ function PlanDetailPageContent({ loaderData }: Route.ComponentProps) {
                     priorityFilter={priorityFilter}
                     pinnedLessonIds={pinnedLessonIds}
                     iconFilter={iconFilter}
+                    isCollapsed={collapsedSectionIds.has(section.id)}
+                    onToggleCollapsed={() => toggleSectionCollapsed(section.id)}
                   />
                 ))}
               </div>
