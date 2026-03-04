@@ -36,6 +36,7 @@ import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { getVideoPath } from "@/lib/get-video";
 import { cn } from "@/lib/utils";
 import { DBFunctionsService } from "@/services/db-service.server";
+import { FeatureFlagService } from "@/services/feature-flag-service";
 import { runtimeLive } from "@/services/layer.server";
 import { formatSecondsToTimeCode } from "@/services/utils";
 import { FileSystem } from "@effect/platform";
@@ -97,6 +98,7 @@ export const loader = async (args: Route.LoaderArgs) => {
   return Effect.gen(function* () {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
+    const featureFlags = yield* FeatureFlagService;
 
     // First get repos and versions for the selected repo
     const repos = yield* db.getRepos();
@@ -206,6 +208,7 @@ export const loader = async (args: Route.LoaderArgs) => {
       hasExportedVideoMap,
       hasExplainerFolderMap,
       plans,
+      showMediaFilesList: featureFlags.isEnabled("ENABLE_MEDIA_FILES_LIST"),
     };
   }).pipe(
     Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),
@@ -507,21 +510,23 @@ export default function Component(props: Route.ComponentProps) {
                                 </span>
                               </div>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link
-                                to={`/repos/${currentRepo.id}/versions/${data.selectedVersion.id}/media-files`}
-                              >
-                                <Film className="w-4 h-4 mr-2" />
-                                <div className="flex flex-col">
-                                  <span className="font-medium">
-                                    View Media Files
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    List source footage for clips
-                                  </span>
-                                </div>
-                              </Link>
-                            </DropdownMenuItem>
+                            {data.showMediaFilesList && (
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  to={`/repos/${currentRepo.id}/versions/${data.selectedVersion.id}/media-files`}
+                                >
+                                  <Film className="w-4 h-4 mr-2" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      View Media Files
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      List source footage for clips
+                                    </span>
+                                  </div>
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
                             {data.versions.length > 1 && (
                               <DropdownMenuItem asChild>
                                 <Link to={`/repos/${currentRepo.id}/changelog`}>

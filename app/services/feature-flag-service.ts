@@ -16,6 +16,11 @@ export class FeatureFlagService extends Effect.Service<FeatureFlagService>()(
          * on the social page.
          */
         ENABLE_SOCIAL_SHARE_BUTTONS: false,
+        /**
+         * When true, show "View Media Files" action in the version
+         * dropdown on the main page.
+         */
+        ENABLE_MEDIA_FILES_LIST: false,
       } as const;
 
       const isEnabled = (flag: keyof typeof flags): boolean => flags[flag];
