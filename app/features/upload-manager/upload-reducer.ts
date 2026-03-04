@@ -176,6 +176,12 @@ export const uploadReducer = (
       const upload = state.uploads[action.uploadId];
       if (!upload || upload.uploadType !== "export") return state;
 
+      const stageProgress: Record<uploadReducer.ExportStage, number> = {
+        queued: 0,
+        "concatenating-clips": 50,
+        "normalizing-audio": 80,
+      };
+
       return {
         ...state,
         uploads: {
@@ -183,6 +189,7 @@ export const uploadReducer = (
           [action.uploadId]: {
             ...upload,
             exportStage: action.stage,
+            progress: stageProgress[action.stage],
           },
         },
       };
