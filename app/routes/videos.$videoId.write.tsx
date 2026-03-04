@@ -68,6 +68,7 @@ import {
   SettingsIcon,
   Trash2Icon,
   CrosshairIcon,
+  VideoOffIcon,
 } from "lucide-react";
 import { marked } from "marked";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -93,6 +94,7 @@ import {
   DEFAULT_UNCHECKED_PATHS,
 } from "@/services/text-writing-agent";
 import { getStandaloneVideoFilePath } from "@/services/standalone-video-files";
+import { getVideoPath } from "@/lib/get-video";
 
 const partsToText = (parts: UIMessage["parts"]) => {
   return parts
@@ -113,6 +115,7 @@ export const loader = async (args: Route.LoaderArgs) => {
     const fs = yield* FileSystem.FileSystem;
     const video = yield* db.getVideoWithClipsById(videoId);
     const globalLinks = yield* db.getLinks();
+    const videoExists = yield* fs.exists(getVideoPath(videoId));
 
     const lesson = video.lesson;
 
@@ -239,6 +242,7 @@ export const loader = async (args: Route.LoaderArgs) => {
 
       return {
         videoPath: video.path,
+        videoExists,
         lessonPath: null,
         sectionPath: null,
         repoId: null,
@@ -350,6 +354,7 @@ export const loader = async (args: Route.LoaderArgs) => {
 
     return {
       videoPath: video.path,
+      videoExists,
       lessonPath: lesson.path,
       sectionPath: section.path,
       repoId: section.repoVersion.repoId,
@@ -463,6 +468,7 @@ export function InnerComponent(props: Route.ComponentProps) {
     links,
     courseStructure,
     nextLessonWithoutVideo,
+    videoExists,
   } = props.loaderData;
   const [text, setText] = useState<string>("");
   const [mode, setMode] = useState<Mode>(() => {
@@ -585,6 +591,7 @@ export function InnerComponent(props: Route.ComponentProps) {
   const writeToReadmeFetcher = useFetcher();
   const deleteLinkFetcher = useFetcher();
   const openFolderFetcher = useFetcher();
+  const revealVideoFetcher = useFetcher();
 
   useEffect(() => {
     const result = openFolderFetcher.data as { error?: string } | undefined;
@@ -886,7 +893,27 @@ export function InnerComponent(props: Route.ComponentProps) {
               action: `/api/links/${linkId}/delete`,
             });
           }}
-          videoSlot={<Video src={`/api/videos/${videoId}/stream`} />}
+          videoSlot={
+            videoExists ? (
+              <Video src={`/api/videos/${videoId}/stream`} />
+            ) : (
+              <div className="w-full aspect-[16/9] bg-gray-800 rounded-lg flex flex-col items-center justify-center gap-3">
+                <VideoOffIcon className="size-10 text-gray-500" />
+                <p className="text-gray-400 text-sm text-center px-4">
+                  Video file not found on disk.
+                </p>
+              </div>
+            )
+          }
+          onRevealInFileSystem={() => {
+            revealVideoFetcher.submit(
+              {},
+              {
+                method: "post",
+                action: `/api/videos/${videoId}/reveal`,
+              }
+            );
+          }}
         />
 
         {/* Right column: Chat */}

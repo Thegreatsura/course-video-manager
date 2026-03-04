@@ -22,6 +22,7 @@ import {
   DEFAULT_UNCHECKED_PATHS,
 } from "@/services/text-writing-agent";
 import { getStandaloneVideoFilePath } from "@/services/standalone-video-files";
+import { getVideoPath } from "@/lib/get-video";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,7 @@ import {
   XCircleIcon,
   YoutubeIcon,
   UnplugIcon,
+  VideoOffIcon,
 } from "lucide-react";
 import {
   Card,
@@ -80,6 +82,7 @@ export const loader = async (args: Route.LoaderArgs) => {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
     const video = yield* db.getVideoWithClipsById(videoId);
+    const videoExists = yield* fs.exists(getVideoPath(videoId));
 
     // Check YouTube auth status
     const youtubeAuth = yield* db.getYoutubeAuth();
@@ -201,6 +204,7 @@ export const loader = async (args: Route.LoaderArgs) => {
 
       return {
         videoPath: video.path,
+        videoExists,
         files: standaloneFiles,
         isStandalone: true,
         transcriptWordCount,
@@ -280,6 +284,7 @@ export const loader = async (args: Route.LoaderArgs) => {
 
     return {
       videoPath: video.path,
+      videoExists,
       files: filesWithMetadata,
       isStandalone: false,
       transcriptWordCount,
@@ -324,6 +329,7 @@ export default function PostPage(props: Route.ComponentProps) {
     courseStructure,
     isYoutubeAuthenticated,
     thumbnails,
+    videoExists,
   } = props.loaderData;
 
   // Title and description with localStorage persistence
@@ -732,7 +738,18 @@ export default function PostPage(props: Route.ComponentProps) {
               action: `/api/links/${linkId}/delete`,
             });
           }}
-          videoSlot={<Video src={`/api/videos/${videoId}/stream`} />}
+          videoSlot={
+            videoExists ? (
+              <Video src={`/api/videos/${videoId}/stream`} />
+            ) : (
+              <div className="w-full aspect-[16/9] bg-gray-800 rounded-lg flex flex-col items-center justify-center gap-3">
+                <VideoOffIcon className="size-10 text-gray-500" />
+                <p className="text-gray-400 text-sm text-center px-4">
+                  Video file not found on disk.
+                </p>
+              </div>
+            )
+          }
           onRevealInFileSystem={() => {
             revealVideoFetcher.submit(
               {},
