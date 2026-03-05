@@ -266,6 +266,181 @@ describe("RepoWriteService", () => {
     });
   });
 
+  describe("renameLessons (batch)", () => {
+    const createAndCommitLessons = (
+      sectionDir: string,
+      lessonNames: string[]
+    ) => {
+      for (const name of lessonNames) {
+        const lessonDir = path.join(sectionDir, name, "explainer");
+        fs.mkdirSync(lessonDir, { recursive: true });
+        fs.writeFileSync(path.join(lessonDir, "readme.md"), `# ${name}\n`);
+      }
+      execSync("git add . && git commit -m 'add lessons'", { cwd: tempDir });
+    };
+
+    it("swaps two lessons without path collision", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, [
+        "01.01-first",
+        "01.02-second",
+        "01.03-third",
+      ]);
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [
+              { oldPath: "01.01-first", newPath: "01.03-first" },
+              { oldPath: "01.02-second", newPath: "01.01-second" },
+              { oldPath: "01.03-third", newPath: "01.02-third" },
+            ],
+          });
+        })
+      );
+
+      // Verify new structure
+      expect(fs.existsSync(path.join(sectionDir, "01.01-second"))).toBe(true);
+      expect(fs.existsSync(path.join(sectionDir, "01.02-third"))).toBe(true);
+      expect(fs.existsSync(path.join(sectionDir, "01.03-first"))).toBe(true);
+      // Old names should not exist
+      expect(fs.existsSync(path.join(sectionDir, "01.01-first"))).toBe(false);
+      expect(fs.existsSync(path.join(sectionDir, "01.02-second"))).toBe(false);
+      expect(fs.existsSync(path.join(sectionDir, "01.03-third"))).toBe(false);
+    });
+
+    it("handles empty renames array (no-op)", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, ["01.01-only"]);
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [],
+          });
+        })
+      );
+
+      expect(fs.existsSync(path.join(sectionDir, "01.01-only"))).toBe(true);
+    });
+
+    it("renames are staged in git", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, ["01.01-aaa", "01.02-bbb"]);
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [
+              { oldPath: "01.01-aaa", newPath: "01.02-aaa" },
+              { oldPath: "01.02-bbb", newPath: "01.01-bbb" },
+            ],
+          });
+        })
+      );
+
+      const status = execSync("git status --porcelain", { cwd: tempDir })
+        .toString()
+        .trim();
+      expect(status).toContain("01.01-bbb");
+      expect(status).toContain("01.02-aaa");
+    });
+
+    it("preserves unstaged changes through batch rename", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, ["01.01-alpha", "01.02-beta"]);
+
+      // Add unstaged modification to first lesson
+      fs.writeFileSync(
+        path.join(sectionDir, "01.01-alpha", "explainer", "readme.md"),
+        "# Modified alpha\n"
+      );
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [
+              { oldPath: "01.01-alpha", newPath: "01.02-alpha" },
+              { oldPath: "01.02-beta", newPath: "01.01-beta" },
+            ],
+          });
+        })
+      );
+
+      const content = fs.readFileSync(
+        path.join(sectionDir, "01.02-alpha", "explainer", "readme.md"),
+        "utf-8"
+      );
+      expect(content).toBe("# Modified alpha\n");
+    });
+
+    it("preserves untracked files through batch rename", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, ["01.01-one", "01.02-two"]);
+
+      // Add untracked file
+      fs.writeFileSync(
+        path.join(sectionDir, "01.02-two", "notes.txt"),
+        "my notes"
+      );
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [
+              { oldPath: "01.02-two", newPath: "01.01-two" },
+              { oldPath: "01.01-one", newPath: "01.02-one" },
+            ],
+          });
+        })
+      );
+
+      const content = fs.readFileSync(
+        path.join(sectionDir, "01.01-two", "notes.txt"),
+        "utf-8"
+      );
+      expect(content).toBe("my notes");
+    });
+
+    it("no temporary directories remain after rename", async () => {
+      const sectionDir = path.join(tempDir, "01-intro");
+      createAndCommitLessons(sectionDir, ["01.01-x", "01.02-y"]);
+
+      await runEffect(
+        Effect.gen(function* () {
+          const service = yield* RepoWriteService;
+          yield* service.renameLessons({
+            repoPath: tempDir,
+            sectionPath: "01-intro",
+            renames: [
+              { oldPath: "01.01-x", newPath: "01.02-x" },
+              { oldPath: "01.02-y", newPath: "01.01-y" },
+            ],
+          });
+        })
+      );
+
+      const entries = fs.readdirSync(sectionDir);
+      const tempEntries = entries.filter((e) => e.startsWith("__reorder_tmp_"));
+      expect(tempEntries).toHaveLength(0);
+    });
+  });
+
   describe("renameLesson", () => {
     const createAndCommitLesson = (
       sectionDir: string,

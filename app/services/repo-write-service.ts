@@ -164,7 +164,86 @@ export class RepoWriteService extends Effect.Service<RepoWriteService>()(
         return { newLessonDirName };
       });
 
-      return { createLessonDirectory, addLesson, renameLesson };
+      /**
+       * Executes a batch of `git mv` operations for reordering lessons.
+       * Uses a two-pass rename (old → temp, temp → final) to avoid path collisions.
+       *
+       * @param repoPath - Absolute path to the course repo root
+       * @param sectionPath - Section directory name (e.g., "01-intro")
+       * @param renames - Array of {oldPath, newPath} rename operations
+       */
+      const renameLessons = Effect.fn("renameLessons")(function* (opts: {
+        repoPath: string;
+        sectionPath: string;
+        renames: Array<{ oldPath: string; newPath: string }>;
+      }) {
+        if (opts.renames.length === 0) return;
+
+        const tempPrefix = `__reorder_tmp_`;
+
+        // Pass 1: old → temp (avoids collisions)
+        for (let i = 0; i < opts.renames.length; i++) {
+          const rename = opts.renames[i]!;
+          const tempName = `${tempPrefix}${i}_${rename.newPath}`;
+          const oldFullPath = path.join(
+            opts.repoPath,
+            opts.sectionPath,
+            rename.oldPath
+          );
+          const tempFullPath = path.join(
+            opts.repoPath,
+            opts.sectionPath,
+            tempName
+          );
+
+          yield* Effect.try({
+            try: () =>
+              execFileSync("git", ["mv", oldFullPath, tempFullPath], {
+                cwd: opts.repoPath,
+              }),
+            catch: (cause) =>
+              new RepoWriteError({
+                cause,
+                message: `git mv failed (pass 1): ${rename.oldPath} → ${tempName}`,
+              }),
+          });
+        }
+
+        // Pass 2: temp → final
+        for (let i = 0; i < opts.renames.length; i++) {
+          const rename = opts.renames[i]!;
+          const tempName = `${tempPrefix}${i}_${rename.newPath}`;
+          const tempFullPath = path.join(
+            opts.repoPath,
+            opts.sectionPath,
+            tempName
+          );
+          const newFullPath = path.join(
+            opts.repoPath,
+            opts.sectionPath,
+            rename.newPath
+          );
+
+          yield* Effect.try({
+            try: () =>
+              execFileSync("git", ["mv", tempFullPath, newFullPath], {
+                cwd: opts.repoPath,
+              }),
+            catch: (cause) =>
+              new RepoWriteError({
+                cause,
+                message: `git mv failed (pass 2): ${tempName} → ${rename.newPath}`,
+              }),
+          });
+        }
+      });
+
+      return {
+        createLessonDirectory,
+        addLesson,
+        renameLesson,
+        renameLessons,
+      };
     }),
     dependencies: [NodeFileSystem.layer],
   }
