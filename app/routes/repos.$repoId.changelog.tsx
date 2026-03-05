@@ -6,7 +6,7 @@ import { runtimeLive } from "@/services/layer.server";
 import { Console, Effect } from "effect";
 import { ArrowLeft } from "lucide-react";
 import Markdown from "react-markdown";
-import { data, Link } from "react-router";
+import { data, Link, useNavigate } from "react-router";
 import type { Route } from "./+types/repos.$repoId.changelog";
 
 export const loader = async (args: Route.LoaderArgs) => {
@@ -37,6 +37,7 @@ export const loader = async (args: Route.LoaderArgs) => {
 
 export default function Component(props: Route.ComponentProps) {
   const { repo, changelog } = props.loaderData;
+  const navigate = useNavigate();
 
   useFocusRevalidate({ enabled: true });
 
@@ -44,7 +45,13 @@ export default function Component(props: Route.ComponentProps) {
     <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-3xl mx-auto p-6">
         <div className="mb-6">
-          <Link to={`/?repoId=${repo.id}`}>
+          <Link
+            to={`/?repoId=${repo.id}`}
+            onClick={(e) => e.preventDefault()}
+            onMouseDown={(e) => {
+              if (e.button === 0) navigate(`/?repoId=${repo.id}`);
+            }}
+          >
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to {repo.name}

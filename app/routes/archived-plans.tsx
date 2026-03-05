@@ -77,7 +77,7 @@ export default function ArchivedPlans(props: Route.ComponentProps) {
                     <Button
                       variant="link"
                       className="h-auto p-0 font-medium text-base"
-                      onClick={() => {
+                      onMouseDown={() => {
                         navigate(`/plans/${plan.id}`, {
                           preventScrollReset: true,
                         });

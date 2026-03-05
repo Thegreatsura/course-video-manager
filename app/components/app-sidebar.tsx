@@ -137,7 +137,7 @@ export function AppSidebar({
                     "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors",
                     selectedRepoId === repo.id && "bg-muted text-foreground/90"
                   )}
-                  onClick={() => {
+                  onMouseDown={() => {
                     navigate(`/?repoId=${repo.id}`, {
                       preventScrollReset: true,
                     });
@@ -168,6 +168,10 @@ export function AppSidebar({
         <Link
           to="/archived-repos"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
+          onClick={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            if (e.button === 0) navigate("/archived-repos");
+          }}
         >
           <Archive className="w-3 h-3" />
           Archived Courses
@@ -202,7 +206,7 @@ export function AppSidebar({
               <ContextMenuTrigger asChild>
                 <button
                   className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
-                  onClick={() => {
+                  onMouseDown={() => {
                     navigate(`/videos/${video.id}/edit`, {
                       preventScrollReset: true,
                     });
@@ -255,6 +259,10 @@ export function AppSidebar({
         <Link
           to="/videos"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
+          onClick={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            if (e.button === 0) navigate("/videos");
+          }}
         >
           <Eye className="w-3 h-3" />
           View All Videos
@@ -297,7 +305,7 @@ export function AppSidebar({
                 <ContextMenuTrigger asChild>
                   <button
                     className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
-                    onClick={() => {
+                    onMouseDown={() => {
                       navigate(`/plans/${plan.id}`, {
                         preventScrollReset: true,
                       });
@@ -356,6 +364,10 @@ export function AppSidebar({
         <Link
           to="/archived-plans"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
+          onClick={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            if (e.button === 0) navigate("/archived-plans");
+          }}
         >
           <Archive className="w-3 h-3" />
           Archived Plans

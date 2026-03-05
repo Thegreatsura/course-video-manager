@@ -77,7 +77,7 @@ export default function ArchivedRepos(props: Route.ComponentProps) {
                     <Button
                       variant="link"
                       className="h-auto p-0 font-medium text-base"
-                      onClick={() => {
+                      onMouseDown={() => {
                         navigate(`/?repoId=${repo.id}`, {
                           preventScrollReset: true,
                         });

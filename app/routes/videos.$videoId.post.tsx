@@ -6,7 +6,13 @@ import { runtimeLive } from "@/services/layer.server";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
 import { Array as EffectArray, Console, Effect } from "effect";
 import { useContext, useEffect, useRef, useState } from "react";
-import { data, Link, useFetcher, useRevalidator } from "react-router";
+import {
+  data,
+  Link,
+  useFetcher,
+  useNavigate,
+  useRevalidator,
+} from "react-router";
 import { toast } from "sonner";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import type { Route } from "./+types/videos.$videoId.post";
@@ -328,6 +334,7 @@ const Video = (props: { src: string }) => {
 
 export default function PostPage(props: Route.ComponentProps) {
   const { videoId } = props.params;
+  const navigate = useNavigate();
   const {
     files,
     isStandalone,
@@ -911,7 +918,14 @@ export default function PostPage(props: Route.ComponentProps) {
                       className="mt-2"
                       asChild
                     >
-                      <Link to={`/videos/${videoId}/thumbnails`}>
+                      <Link
+                        to={`/videos/${videoId}/thumbnails`}
+                        onClick={(e) => e.preventDefault()}
+                        onMouseDown={(e) => {
+                          if (e.button === 0)
+                            navigate(`/videos/${videoId}/thumbnails`);
+                        }}
+                      >
                         <PlusIcon className="h-4 w-4" />
                         Add New Thumbnail
                       </Link>
@@ -950,7 +964,14 @@ export default function PostPage(props: Route.ComponentProps) {
                       ))}
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/videos/${videoId}/thumbnails`}>
+                      <Link
+                        to={`/videos/${videoId}/thumbnails`}
+                        onClick={(e) => e.preventDefault()}
+                        onMouseDown={(e) => {
+                          if (e.button === 0)
+                            navigate(`/videos/${videoId}/thumbnails`);
+                        }}
+                      >
                         <PlusIcon className="h-4 w-4" />
                         Add New Thumbnail
                       </Link>

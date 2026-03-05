@@ -738,7 +738,7 @@ export default function Component(props: Route.ComponentProps) {
                                       <ContextMenuTrigger asChild>
                                         <button
                                           className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-muted/50 transition-colors cursor-context-menu w-full text-left"
-                                          onClick={() => {
+                                          onMouseDown={() => {
                                             navigate(
                                               `/videos/${video.id}/edit`
                                             );
@@ -877,6 +877,11 @@ export default function Component(props: Route.ComponentProps) {
                           key={video.id}
                           to={`/videos/${video.id}/edit`}
                           className="block border rounded-lg p-4 hover:border-primary/50 transition-colors"
+                          onClick={(e) => e.preventDefault()}
+                          onMouseDown={(e) => {
+                            if (e.button === 0)
+                              navigate(`/videos/${video.id}/edit`);
+                          }}
                         >
                           <div className="flex items-center gap-2 mb-2">
                             <VideoIcon className="w-4 h-4 text-muted-foreground" />
@@ -900,6 +905,10 @@ export default function Component(props: Route.ComponentProps) {
                     key={repo.id}
                     to={`?repoId=${repo.id}`}
                     className="block border rounded-lg p-6 hover:border-primary/50 transition-colors cursor-pointer"
+                    onClick={(e) => e.preventDefault()}
+                    onMouseDown={(e) => {
+                      if (e.button === 0) navigate(`?repoId=${repo.id}`);
+                    }}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-lg font-semibold">{repo.name}</h3>

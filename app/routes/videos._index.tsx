@@ -28,7 +28,7 @@ import {
   VideoOffIcon,
 } from "lucide-react";
 import { useContext, useState } from "react";
-import { data, Link, useFetcher } from "react-router";
+import { data, Link, useFetcher, useNavigate } from "react-router";
 import type { Route } from "./+types/videos._index";
 
 export const meta: Route.MetaFunction = () => {
@@ -90,6 +90,7 @@ export default function Component(props: Route.ComponentProps) {
     id: string;
     path: string;
   } | null>(null);
+  const navigate = useNavigate();
   const archiveVideoFetcher = useFetcher();
   const revealVideoFetcher = useFetcher();
   const deleteVideoFileFetcher = useFetcher();
@@ -165,6 +166,11 @@ export default function Component(props: Route.ComponentProps) {
                       <Link
                         to={`/videos/${video.id}/edit`}
                         className="flex items-center justify-between border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-context-menu"
+                        onClick={(e) => e.preventDefault()}
+                        onMouseDown={(e) => {
+                          if (e.button === 0)
+                            navigate(`/videos/${video.id}/edit`);
+                        }}
                       >
                         <div className="flex items-center gap-3">
                           {hasExportedVideoMap[video.id] ? (
@@ -273,6 +279,11 @@ export default function Component(props: Route.ComponentProps) {
                         <Link
                           to={`/videos/${video.id}/edit`}
                           className="flex items-center justify-between border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-context-menu"
+                          onClick={(e) => e.preventDefault()}
+                          onMouseDown={(e) => {
+                            if (e.button === 0)
+                              navigate(`/videos/${video.id}/edit`);
+                          }}
                         >
                           <div className="flex items-center gap-3">
                             {hasExportedVideoMap[video.id] ? (

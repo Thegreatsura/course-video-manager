@@ -13,7 +13,7 @@ import {
   NewspaperIcon,
   MailIcon,
 } from "lucide-react";
-import { data, Link, Outlet, useLocation } from "react-router";
+import { data, Link, Outlet, useLocation, useNavigate } from "react-router";
 import type { Route } from "./+types/videos.$videoId";
 
 export const loader = async (args: Route.LoaderArgs) => {
@@ -110,6 +110,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
     previousVideoId,
   } = loaderData;
 
+  const navigate = useNavigate();
   const location = useLocation();
 
   // Determine active tab from current path
@@ -141,7 +142,13 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
         <div className="flex items-center gap-2">
           {/* Back button */}
           <Button variant="ghost" size="icon" asChild>
-            <Link to={backButtonUrl}>
+            <Link
+              to={backButtonUrl}
+              onClick={(e) => e.preventDefault()}
+              onMouseDown={(e) => {
+                if (e.button === 0) navigate(backButtonUrl);
+              }}
+            >
               <ChevronLeftIcon className="size-6" />
             </Link>
           </Button>
@@ -166,6 +173,11 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
                       ? "bg-gray-700 text-white"
                       : "text-gray-400 hover:text-gray-200"
                   )}
+                  onClick={(e) => e.preventDefault()}
+                  onMouseDown={(e) => {
+                    if (e.button === 0)
+                      navigate(`/videos/${videoId}/${tab.path}`);
+                  }}
                 >
                   <tab.icon className="size-4" />
                   {tab.label}
@@ -178,7 +190,14 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
           <div className="flex items-center gap-2">
             {previousVideoId ? (
               <Button variant="ghost" size="sm" asChild>
-                <Link to={`/videos/${previousVideoId}/${activeTab}`}>
+                <Link
+                  to={`/videos/${previousVideoId}/${activeTab}`}
+                  onClick={(e) => e.preventDefault()}
+                  onMouseDown={(e) => {
+                    if (e.button === 0)
+                      navigate(`/videos/${previousVideoId}/${activeTab}`);
+                  }}
+                >
                   <ChevronLeftIcon className="size-4 mr-1" />
                   Previous
                 </Link>
@@ -186,7 +205,14 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
             ) : null}
             {nextVideoId ? (
               <Button variant="ghost" size="sm" asChild>
-                <Link to={`/videos/${nextVideoId}/${activeTab}`}>
+                <Link
+                  to={`/videos/${nextVideoId}/${activeTab}`}
+                  onClick={(e) => e.preventDefault()}
+                  onMouseDown={(e) => {
+                    if (e.button === 0)
+                      navigate(`/videos/${nextVideoId}/${activeTab}`);
+                  }}
+                >
                   Next
                   <ChevronRightIcon className="size-4 ml-1" />
                 </Link>
