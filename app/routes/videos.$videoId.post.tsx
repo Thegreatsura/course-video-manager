@@ -758,15 +758,19 @@ export default function PostPage(props: Route.ComponentProps) {
               </div>
             )
           }
-          onRevealInFileSystem={() => {
-            revealVideoFetcher.submit(
-              {},
-              {
-                method: "post",
-                action: `/api/videos/${videoId}/reveal`,
-              }
-            );
-          }}
+          onRevealInFileSystem={
+            videoExists
+              ? () => {
+                  revealVideoFetcher.submit(
+                    {},
+                    {
+                      method: "post",
+                      action: `/api/videos/${videoId}/reveal`,
+                    }
+                  );
+                }
+              : undefined
+          }
         />
 
         {/* Right panel: Tabbed posting interface */}
