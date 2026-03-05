@@ -128,6 +128,12 @@ export const ClipTimeline = () => {
               );
             })}
 
+            {/* Fallback: show insertion point when it references a clip not in the filtered timeline (e.g., unpaired optimistic clip) */}
+            {insertionPoint.type === "after-clip" &&
+              !items.some(
+                (item) => item.frontendId === insertionPoint.frontendClipId
+              ) && <InsertionPointIndicator />}
+
             {insertionPoint.type === "end" && <InsertionPointIndicator />}
           </>
         )}
