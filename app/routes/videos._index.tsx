@@ -8,6 +8,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { UploadContext } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { getVideoPath } from "@/lib/get-video";
 import { formatSecondsToTimeCode } from "@/services/utils";
@@ -17,6 +18,7 @@ import { FileSystem } from "@effect/platform";
 import { Console, Effect } from "effect";
 import {
   Archive,
+  Download,
   FileX,
   FolderOpen,
   PencilIcon,
@@ -25,7 +27,7 @@ import {
   VideoIcon,
   VideoOffIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { data, Link, useFetcher } from "react-router";
 import type { Route } from "./+types/videos._index";
 
@@ -91,6 +93,7 @@ export default function Component(props: Route.ComponentProps) {
   const archiveVideoFetcher = useFetcher();
   const revealVideoFetcher = useFetcher();
   const deleteVideoFileFetcher = useFetcher();
+  const { startExportUpload } = useContext(UploadContext);
 
   useFocusRevalidate({ enabled: true });
 
@@ -184,6 +187,14 @@ export default function Component(props: Route.ComponentProps) {
                       >
                         <PencilIcon className="w-4 h-4" />
                         Rename
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          startExportUpload(video.id, video.path);
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        Export
                       </ContextMenuItem>
                       <ContextMenuItem
                         onSelect={() => {
@@ -287,6 +298,14 @@ export default function Component(props: Route.ComponentProps) {
                         >
                           <PencilIcon className="w-4 h-4" />
                           Rename
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          onSelect={() => {
+                            startExportUpload(video.id, video.path);
+                          }}
+                        >
+                          <Download className="w-4 h-4" />
+                          Export
                         </ContextMenuItem>
                         <ContextMenuItem
                           onSelect={() => {
