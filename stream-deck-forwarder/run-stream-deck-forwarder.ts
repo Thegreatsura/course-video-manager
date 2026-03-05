@@ -45,6 +45,10 @@ const httpServer = http.createServer((req, res) => {
     sendMessage({
       type: "add-clip-section",
     });
+  } else if (req.url === "/api/clear-all-archived") {
+    sendMessage({
+      type: "clear-all-archived",
+    });
   }
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("Hello, world!");

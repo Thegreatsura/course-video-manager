@@ -150,6 +150,7 @@ export const VideoEditor = (props: {
   ) => void;
   onRestoreClip: (clipId: FrontendId) => void;
   onPermanentlyRemoveArchived: (sessionId: SessionId) => void;
+  onClearAllArchived: () => void;
   error: EditorError | null;
   standaloneFiles: Array<{ path: string }>;
   files: Array<{ path: string; size: number; defaultEnabled: boolean }>;
@@ -234,6 +235,7 @@ export const VideoEditor = (props: {
     dispatch,
     onDeleteLatestInsertedClip: props.onDeleteLatestInsertedClip,
     onToggleBeat: props.onToggleBeat,
+    onClearAllArchived: props.onClearAllArchived,
     setClipSectionNamingModal,
     generateDefaultClipSectionName,
   });

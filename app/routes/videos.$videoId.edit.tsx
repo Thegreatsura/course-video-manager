@@ -672,6 +672,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       onPermanentlyRemoveArchived={(sessionId) => {
         dispatch({ type: "permanently-remove-archived", sessionId });
       }}
+      onClearAllArchived={() => {
+        dispatch({ type: "permanently-remove-all-archived" });
+      }}
       obsConnectorState={obsConnector.state}
       items={clipState.items}
       sessions={clipState.sessions}

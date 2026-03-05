@@ -17,6 +17,7 @@ export function useWebSocket(params: {
   dispatch: (action: { type: "toggle-last-frame-of-video" }) => void;
   onDeleteLatestInsertedClip: () => void;
   onToggleBeat: () => void;
+  onClearAllArchived: () => void;
   setClipSectionNamingModal: (modal: ClipSectionNamingModal) => void;
   generateDefaultClipSectionName: () => string;
 }) {
@@ -37,6 +38,8 @@ export function useWebSocket(params: {
           mode: "create",
           defaultName: params.generateDefaultClipSectionName(),
         });
+      } else if (data.type === "clear-all-archived") {
+        params.onClearAllArchived();
       }
     });
     return () => {
@@ -46,6 +49,7 @@ export function useWebSocket(params: {
     params.dispatch,
     params.onDeleteLatestInsertedClip,
     params.onToggleBeat,
+    params.onClearAllArchived,
     params.setClipSectionNamingModal,
     params.generateDefaultClipSectionName,
   ]);

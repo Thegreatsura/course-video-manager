@@ -3068,6 +3068,117 @@ describe("clipStateReducer", () => {
         expect(newClip2.frontendId).not.toBe(clip2Id);
       });
     });
+
+    describe("permanently-remove-all-archived", () => {
+      it("Should remove archived and orphaned clips across all sessions", () => {
+        const tester = new ReducerTester(
+          clipStateReducer,
+          createInitialState()
+        );
+
+        // Session 1: create and archive a clip
+        tester
+          .send({ type: "recording-started", outputPath: "/tmp/recording.mkv" })
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-1",
+            })
+          );
+
+        const clip1Id = tester.getState().items[0]!.frontendId;
+        tester
+          .send({ type: "clips-deleted", clipIds: [clip1Id] })
+          .send({ type: "recording-stopped" });
+
+        // Session 2: create and archive a clip
+        tester
+          .send({
+            type: "recording-started",
+            outputPath: "/tmp/recording2.mkv",
+          })
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-2",
+            })
+          );
+
+        const clip2Id = tester.getState().items[1]!.frontendId;
+        tester.send({ type: "clips-deleted", clipIds: [clip2Id] });
+
+        expect(tester.getState().items).toHaveLength(2);
+
+        // Clear all archived across all sessions
+        tester.send({
+          type: "permanently-remove-all-archived",
+        });
+
+        expect(tester.getState().items).toHaveLength(0);
+      });
+
+      it("Should not affect non-archived clips", () => {
+        const tester = new ReducerTester(
+          clipStateReducer,
+          createInitialState()
+        );
+
+        tester
+          .send({ type: "recording-started", outputPath: "/tmp/recording.mkv" })
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-1",
+            })
+          )
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-2",
+            })
+          );
+
+        const clip1Id = tester.getState().items[0]!.frontendId;
+
+        // Archive only clip 1, leave clip 2 pending
+        tester.send({ type: "clips-deleted", clipIds: [clip1Id] });
+
+        // Clear all archived
+        tester.send({
+          type: "permanently-remove-all-archived",
+        });
+
+        // Clip 2 (non-archived) should remain
+        expect(tester.getState().items).toHaveLength(1);
+        expect(
+          (tester.getState().items[0] as ClipOptimisticallyAdded).shouldArchive
+        ).toBeUndefined();
+      });
+
+      it("Should no-op if no archived clips exist", () => {
+        const tester = new ReducerTester(
+          clipStateReducer,
+          createInitialState()
+        );
+
+        tester
+          .send({ type: "recording-started", outputPath: "/tmp/recording.mkv" })
+          .send(
+            fromPartial({
+              type: "new-optimistic-clip-detected",
+              soundDetectionId: "sound-1",
+            })
+          );
+
+        const stateBefore = tester.getState();
+
+        tester.send({
+          type: "permanently-remove-all-archived",
+        });
+
+        expect(tester.getState()).toEqual(stateBefore);
+      });
+    });
   });
 
   describe("Scoped DB clip matching by outputPath", () => {
