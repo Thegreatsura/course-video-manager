@@ -1,6 +1,7 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { AddLessonModal } from "@/components/add-lesson-modal";
 import { AddVideoModal } from "@/components/add-video-modal";
 import { ClearVideoFilesModal } from "@/components/clear-video-files-modal";
 import { CreateVersionModal } from "@/components/create-version-modal";
@@ -234,6 +235,9 @@ export default function Component(props: Route.ComponentProps) {
   const navigate = useNavigate();
   const selectedRepoId = searchParams.get("repoId");
   const [isAddRepoModalOpen, setIsAddRepoModalOpen] = useState(false);
+  const [addLessonSectionId, setAddLessonSectionId] = useState<string | null>(
+    null
+  );
   const [addVideoToLessonId, setAddVideoToLessonId] = useState<string | null>(
     null
   );
@@ -669,17 +673,39 @@ export default function Component(props: Route.ComponentProps) {
 
                   return (
                     <div key={section.id} className="rounded-lg border bg-card">
-                      <div className="px-4 py-3 border-b bg-muted/30">
-                        <div className="flex items-center justify-between">
-                          <h2 className="font-medium text-sm">
-                            {section.path}
-                          </h2>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {section.lessons.length} lessons &middot;{" "}
-                            {formatSecondsToTimeCode(sectionDuration)}
-                          </Badge>
-                        </div>
-                      </div>
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          <div className="px-4 py-3 border-b bg-muted/30 cursor-context-menu">
+                            <div className="flex items-center justify-between">
+                              <h2 className="font-medium text-sm">
+                                {section.path}
+                              </h2>
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px]"
+                              >
+                                {section.lessons.length} lessons &middot;{" "}
+                                {formatSecondsToTimeCode(sectionDuration)}
+                              </Badge>
+                            </div>
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem
+                            onSelect={() => setAddLessonSectionId(section.id)}
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add Lesson
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                      <AddLessonModal
+                        sectionId={section.id}
+                        open={addLessonSectionId === section.id}
+                        onOpenChange={(open) => {
+                          setAddLessonSectionId(open ? section.id : null);
+                        }}
+                      />
                       <div className="p-2">
                         {section.lessons.map((lesson, li) => (
                           <React.Fragment key={lesson.id}>
