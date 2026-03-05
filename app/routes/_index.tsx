@@ -58,6 +58,7 @@ import {
   FileX,
   FolderOpen,
   FolderPen,
+  LayoutGrid,
   Loader2,
   PencilIcon,
   Play,
@@ -542,6 +543,21 @@ export default function Component(props: Route.ComponentProps) {
                                 </Link>
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem asChild>
+                              <Link
+                                to={`/tabbed?repoId=${currentRepo.id}${data.selectedVersion ? `&versionId=${data.selectedVersion.id}` : ""}`}
+                              >
+                                <LayoutGrid className="w-4 h-4 mr-2" />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    Tabbed View
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    View sections as tabs
+                                  </span>
+                                </div>
+                              </Link>
+                            </DropdownMenuItem>
                             {data.versions.length > 1 && (
                               <DropdownMenuItem asChild>
                                 <Link to={`/repos/${currentRepo.id}/changelog`}>
