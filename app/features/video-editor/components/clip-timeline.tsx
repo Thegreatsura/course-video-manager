@@ -156,6 +156,10 @@ export const ClipTimeline = () => {
           </>
         )}
 
+        {items.length === 0 && sessions.length > 0 && (
+          <RecordingSessionPanels />
+        )}
+
         {/* Inline suggestion display at the bottom of the timeline */}
         <InlineSuggestion />
       </div>
