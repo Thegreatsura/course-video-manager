@@ -274,6 +274,7 @@ interface SortableLessonProps {
   editingDescription: planStateReducer.State["editingDescription"];
   dispatch: (action: planStateReducer.Action) => void;
   allLessons: FlattenedLesson[];
+  dependencyMap: Record<string, string[]>;
 }
 
 function SortableLesson({
@@ -284,6 +285,7 @@ function SortableLesson({
   editingDescription,
   dispatch,
   allLessons,
+  dependencyMap,
 }: SortableLessonProps) {
   const isEditingTitle = editingLesson?.lessonId === lesson.id;
   const editedTitle = isEditingTitle ? editingLesson.value : "";
@@ -433,6 +435,7 @@ function SortableLesson({
                     orderViolations={orderViolations}
                     priorityViolations={priorityViolations}
                     lessonPriority={lesson.priority ?? 2}
+                    dependencyMap={dependencyMap}
                   />
                   {/* Priority pill */}
                   <button
@@ -598,6 +601,7 @@ interface SortableSectionProps {
   iconFilter: LessonIcon[];
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
+  dependencyMap: Record<string, string[]>;
 }
 
 function SortableSection({
@@ -611,6 +615,7 @@ function SortableSection({
   iconFilter,
   isCollapsed,
   onToggleCollapsed,
+  dependencyMap,
 }: SortableSectionProps) {
   const {
     attributes,
@@ -806,6 +811,7 @@ function SortableSection({
                   editingDescription={state.editingDescription}
                   dispatch={dispatch}
                   allLessons={allLessons}
+                  dependencyMap={dependencyMap}
                 />
               );
             })}
@@ -988,6 +994,16 @@ function PlanDetailPageContent({ loaderData }: Route.ComponentProps) {
       }));
     }
   );
+
+  // Build dependency map for circular dependency detection
+  const dependencyMap: Record<string, string[]> = {};
+  for (const section of sortedSections) {
+    for (const lesson of section.lessons) {
+      if (lesson.dependencies && lesson.dependencies.length > 0) {
+        dependencyMap[lesson.id] = lesson.dependencies;
+      }
+    }
+  }
 
   // Helper to check if a lesson passes the current filters
   const passesFilters = (lesson: Lesson) => {
@@ -1396,6 +1412,7 @@ function PlanDetailPageContent({ loaderData }: Route.ComponentProps) {
                     iconFilter={iconFilter}
                     isCollapsed={collapsedSectionIds.has(section.id)}
                     onToggleCollapsed={() => toggleSectionCollapsed(section.id)}
+                    dependencyMap={dependencyMap}
                   />
                 ))}
               </div>

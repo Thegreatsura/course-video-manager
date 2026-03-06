@@ -884,6 +884,16 @@ export default function Component(props: Route.ComponentProps) {
                     }))
                   );
 
+                // Build dependency map for circular dependency detection
+                const dependencyMap: Record<string, string[]> = {};
+                for (const section of displaySections) {
+                  for (const lesson of section.lessons) {
+                    if (lesson.dependencies && lesson.dependencies.length > 0) {
+                      dependencyMap[lesson.id] = lesson.dependencies;
+                    }
+                  }
+                }
+
                 return (
                   <DndContext
                     sensors={sensors}
@@ -1102,6 +1112,7 @@ export default function Component(props: Route.ComponentProps) {
                                             deleteLessonFetcher={
                                               deleteLessonFetcher
                                             }
+                                            dependencyMap={dependencyMap}
                                           />
                                         ))}
                                       </SortableContext>
@@ -1391,6 +1402,7 @@ function SortableLessonItem({
   deleteVideoFetcher,
   deleteLessonFetcher,
   allFlatLessons,
+  dependencyMap,
 }: {
   lesson: Lesson;
   lessonIndex: number;
@@ -1422,6 +1434,7 @@ function SortableLessonItem({
   deleteVideoFetcher: ReturnType<typeof useFetcher>;
   deleteLessonFetcher: ReturnType<typeof useFetcher>;
   allFlatLessons: DependencyLessonItem[];
+  dependencyMap: Record<string, string[]>;
 }) {
   const {
     attributes,
@@ -1566,6 +1579,7 @@ function SortableLessonItem({
                 orderViolations={orderViolations}
                 priorityViolations={priorityViolations}
                 lessonPriority={lessonPriority}
+                dependencyMap={dependencyMap}
               />
             </div>
           </ContextMenuTrigger>

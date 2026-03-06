@@ -29,6 +29,7 @@ interface DependencySelectorProps {
   orderViolations: DependencyOrderViolation[];
   priorityViolations: DependencyPriorityViolation[];
   lessonPriority: number;
+  dependencyMap: Record<string, string[]>;
 }
 
 function useClickOutside(
@@ -62,6 +63,25 @@ function useDropdownPosition(
   return maxHeight;
 }
 
+function wouldCreateCycle(
+  fromId: string,
+  toId: string,
+  depMap: Record<string, string[]>
+): boolean {
+  const visited = new Set<string>();
+  const stack = [toId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === fromId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const dep of depMap[current] ?? []) {
+      stack.push(dep);
+    }
+  }
+  return false;
+}
+
 export function DependencySelector({
   lessonId,
   dependencies,
@@ -70,6 +90,7 @@ export function DependencySelector({
   orderViolations,
   priorityViolations,
   lessonPriority,
+  dependencyMap,
 }: DependencySelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -184,21 +205,41 @@ export function DependencySelector({
                     <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       {section.number}. {section.title}
                     </div>
-                    {section.lessons.map((l) => (
-                      <label
-                        key={l.id}
-                        className="flex items-center gap-2 px-2 pl-4 py-1.5 rounded hover:bg-muted cursor-pointer text-sm"
-                      >
-                        <Checkbox
-                          checked={dependencies.includes(l.id)}
-                          onCheckedChange={() => toggle(l.id)}
-                        />
-                        <span className="text-muted-foreground w-7 text-right shrink-0">
-                          {l.number}
-                        </span>
-                        <span className="truncate">{l.title}</span>
-                      </label>
-                    ))}
+                    {section.lessons.map((l) => {
+                      const isCircular =
+                        !dependencies.includes(l.id) &&
+                        wouldCreateCycle(lessonId, l.id, dependencyMap);
+                      return (
+                        <label
+                          key={l.id}
+                          className={`flex items-center gap-2 px-2 pl-4 py-1.5 rounded text-sm ${
+                            isCircular
+                              ? "opacity-50 cursor-not-allowed"
+                              : "hover:bg-muted cursor-pointer"
+                          }`}
+                          title={
+                            isCircular
+                              ? "Would create a circular dependency"
+                              : undefined
+                          }
+                        >
+                          <Checkbox
+                            checked={dependencies.includes(l.id)}
+                            onCheckedChange={() => toggle(l.id)}
+                            disabled={isCircular}
+                          />
+                          <span className="text-muted-foreground w-7 text-right shrink-0">
+                            {l.number}
+                          </span>
+                          <span className="truncate">{l.title}</span>
+                          {isCircular && (
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              (circular)
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
                 ))
               )}
