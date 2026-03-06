@@ -458,11 +458,10 @@ export default function Component(props: Route.ComponentProps) {
   const totalDurationFormatted = (() => {
     const hours = Math.floor(totalDurationSeconds / 3600);
     const minutes = Math.floor((totalDurationSeconds % 3600) / 60);
-    const seconds = Math.floor(totalDurationSeconds % 60);
     if (hours > 0) {
-      return `${hours}h ${minutes}m ${seconds}s`;
+      return `${hours}h ${minutes}m`;
     }
-    return `${minutes}m ${seconds}s`;
+    return `${minutes}m`;
   })();
 
   const percentageComplete =
