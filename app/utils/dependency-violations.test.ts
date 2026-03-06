@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   findNewOrderViolations,
+  findNewSectionOrderViolations,
   type LessonForViolationCheck,
+  type SectionForViolationCheck,
 } from "./dependency-violations";
 
 const makeLesson = (id: string, deps?: string[]): LessonForViolationCheck => ({
@@ -154,5 +156,133 @@ describe("findNewOrderViolations", () => {
     const violations = findNewOrderViolations([A, B], [B, A]);
     expect(violations[0]!.lessonLabel).toBe("01.02-setup");
     expect(violations[0]!.depLabel).toBe("01.01-intro");
+  });
+});
+
+const makeSection = (
+  id: string,
+  lessons: LessonForViolationCheck[]
+): SectionForViolationCheck => ({
+  id,
+  lessons,
+});
+
+describe("findNewSectionOrderViolations", () => {
+  it("returns empty when no cross-section dependencies exist", () => {
+    const s1 = makeSection("s1", [makeLesson("A"), makeLesson("B")]);
+    const s2 = makeSection("s2", [makeLesson("C"), makeLesson("D")]);
+
+    expect(findNewSectionOrderViolations([s1, s2], [s2, s1])).toEqual([]);
+  });
+
+  it("returns empty when reorder does not introduce violations", () => {
+    // C depends on A. S1 has A, S2 has C. Moving S2 after S1 is fine.
+    const s1 = makeSection("s1", [makeLesson("A")]);
+    const s2 = makeSection("s2", [makeLesson("C", ["A"])]);
+    const s3 = makeSection("s3", [makeLesson("D")]);
+
+    // Old: s1, s2, s3. New: s1, s3, s2. C still after A.
+    expect(findNewSectionOrderViolations([s1, s2, s3], [s1, s3, s2])).toEqual(
+      []
+    );
+  });
+
+  it("detects new violation when section with dependency moves before its target", () => {
+    // C (in s2) depends on A (in s1). Swapping s1 and s2 puts C before A.
+    const s1 = makeSection("s1", [makeLesson("A")]);
+    const s2 = makeSection("s2", [makeLesson("C", ["A"])]);
+
+    const violations = findNewSectionOrderViolations([s1, s2], [s2, s1]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toEqual({
+      lessonId: "C",
+      lessonLabel: "Lesson C",
+      depId: "A",
+      depLabel: "Lesson A",
+    });
+  });
+
+  it("does not report pre-existing cross-section violations", () => {
+    // C (s2) depends on A (s1). Old order: s2, s1 (already violated).
+    // New order: s2, s3, s1 (still violated).
+    const s1 = makeSection("s1", [makeLesson("A")]);
+    const s2 = makeSection("s2", [makeLesson("C", ["A"])]);
+    const s3 = makeSection("s3", [makeLesson("D")]);
+
+    expect(findNewSectionOrderViolations([s2, s1, s3], [s2, s3, s1])).toEqual(
+      []
+    );
+  });
+
+  it("ignores within-section dependencies", () => {
+    // B depends on A, both in s1. Section reorder can't affect this.
+    const s1 = makeSection("s1", [makeLesson("A"), makeLesson("B", ["A"])]);
+    const s2 = makeSection("s2", [makeLesson("C")]);
+
+    expect(findNewSectionOrderViolations([s1, s2], [s2, s1])).toEqual([]);
+  });
+
+  it("detects multiple new violations across sections", () => {
+    // C depends on A (s1→s2), D depends on B (s1→s2). Swapping introduces both.
+    const s1 = makeSection("s1", [makeLesson("A"), makeLesson("B")]);
+    const s2 = makeSection("s2", [
+      makeLesson("C", ["A"]),
+      makeLesson("D", ["B"]),
+    ]);
+
+    const violations = findNewSectionOrderViolations([s1, s2], [s2, s1]);
+    expect(violations).toHaveLength(2);
+    expect(violations).toContainEqual({
+      lessonId: "C",
+      lessonLabel: "Lesson C",
+      depId: "A",
+      depLabel: "Lesson A",
+    });
+    expect(violations).toContainEqual({
+      lessonId: "D",
+      lessonLabel: "Lesson D",
+      depId: "B",
+      depLabel: "Lesson B",
+    });
+  });
+
+  it("reports only new violations when some pre-exist", () => {
+    // C depends on A, D depends on B.
+    // Old: s2(C,D), s1(A,B), s3(E) — C→A and D→B already violated.
+    // New: s2(C,D), s3(E), s1(A,B) — same violations, no new ones.
+    // But if E depends on B: Old s3 after s1, no violation. New s3 before s1, new violation.
+    const s1 = makeSection("s1", [makeLesson("A"), makeLesson("B")]);
+    const s2 = makeSection("s2", [makeLesson("C", ["A"])]);
+    const s3 = makeSection("s3", [makeLesson("E", ["B"])]);
+
+    // Old: s2, s1, s3. C→A violated, E→B ok.
+    // New: s2, s3, s1. C→A still violated, E→B now violated.
+    const violations = findNewSectionOrderViolations(
+      [s2, s1, s3],
+      [s2, s3, s1]
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toEqual({
+      lessonId: "E",
+      lessonLabel: "Lesson E",
+      depId: "B",
+      depLabel: "Lesson B",
+    });
+  });
+
+  it("handles lessons with null dependencies", () => {
+    const s1 = makeSection("s1", [
+      { id: "A", title: null, path: "01.01-a", dependencies: null },
+    ]);
+    const s2 = makeSection("s2", [makeLesson("B")]);
+
+    expect(findNewSectionOrderViolations([s1, s2], [s2, s1])).toEqual([]);
+  });
+
+  it("returns empty for identical orderings", () => {
+    const s1 = makeSection("s1", [makeLesson("A")]);
+    const s2 = makeSection("s2", [makeLesson("B", ["A"])]);
+
+    expect(findNewSectionOrderViolations([s1, s2], [s1, s2])).toEqual([]);
   });
 });

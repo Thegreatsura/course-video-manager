@@ -117,7 +117,10 @@ import {
 } from "react-router";
 import type { Route } from "./+types/_index";
 import { toast } from "sonner";
-import { findNewOrderViolations } from "@/utils/dependency-violations";
+import {
+  findNewOrderViolations,
+  findNewSectionOrderViolations,
+} from "@/utils/dependency-violations";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -377,7 +380,18 @@ export default function Component(props: Route.ComponentProps) {
   );
 
   const handleSectionDragEnd = useCallback(
-    (sections: { id: string }[], repoVersionId: string) =>
+    (
+      sections: {
+        id: string;
+        lessons: {
+          id: string;
+          title?: string | null;
+          path: string;
+          dependencies?: string[] | null;
+        }[];
+      }[],
+      repoVersionId: string
+    ) =>
       (event: DragEndEvent) => {
         const { active, over } = event;
         if (!over || active.id === over.id) return;
@@ -387,6 +401,17 @@ export default function Component(props: Route.ComponentProps) {
         if (fromIndex === -1 || toIndex === -1) return;
 
         const newOrder = arrayMove(sections, fromIndex, toIndex);
+
+        // Check for new cross-section dependency violations
+        const newViolations = findNewSectionOrderViolations(sections, newOrder);
+        if (newViolations.length > 0) {
+          const details = newViolations
+            .map((v) => `${v.lessonLabel} → ${v.depLabel}`)
+            .join(", ");
+          toast.warning("Dependency violation introduced", {
+            description: details,
+          });
+        }
 
         reorderSectionFetcher.submit(
           {
