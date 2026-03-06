@@ -48,7 +48,7 @@ export function EditLessonModal(props: {
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Rename Lesson</DialogTitle>
+          <DialogTitle>Rename</DialogTitle>
         </DialogHeader>
         <fetcher.Form
           method="post"

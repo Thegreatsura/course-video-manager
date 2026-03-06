@@ -1630,7 +1630,7 @@ function SortableLessonItem({
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={() => setEditLessonId(lesson.id)}>
                   <PencilIcon className="w-4 h-4" />
-                  Rename Lesson
+                  Rename
                 </ContextMenuItem>
               </>
             )}
