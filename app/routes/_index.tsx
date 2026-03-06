@@ -1563,6 +1563,10 @@ function SortableLessonItem({
   const isGhost =
     lesson.fsStatus === "ghost" && createOnDiskFetcher.state === "idle";
   const descriptionFetcher = useFetcher();
+  const currentDescription =
+    (descriptionFetcher.formData?.get("description") as string) ??
+    lesson.description ??
+    "";
   const [editingDesc, setEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState(lesson.description || "");
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1657,7 +1661,7 @@ function SortableLessonItem({
   const saveDescription = useCallback(
     (value: string) => {
       setEditingDesc(false);
-      if (value !== (lesson.description || "")) {
+      if (value !== currentDescription) {
         descriptionFetcher.submit(
           { description: value },
           {
@@ -1667,7 +1671,7 @@ function SortableLessonItem({
         );
       }
     },
-    [lesson.description, lesson.id, descriptionFetcher]
+    [currentDescription, lesson.id, descriptionFetcher]
   );
 
   return (
@@ -1832,7 +1836,7 @@ function SortableLessonItem({
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
-                    setDescValue(lesson.description || "");
+                    setDescValue(currentDescription);
                     setEditingDesc(false);
                   }
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -1842,15 +1846,15 @@ function SortableLessonItem({
                 onBlur={() => saveDescription(descValue)}
               />
             </div>
-          ) : lesson.description ? (
+          ) : currentDescription ? (
             <div
               className="text-xs text-muted-foreground mt-1 cursor-pointer hover:text-foreground/70 whitespace-pre-line max-w-[65ch]"
               onClick={() => {
-                setDescValue(lesson.description || "");
+                setDescValue(currentDescription);
                 setEditingDesc(true);
               }}
             >
-              {lesson.description}
+              {currentDescription}
             </div>
           ) : (
             <button
