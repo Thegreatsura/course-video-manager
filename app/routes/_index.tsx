@@ -1656,15 +1656,6 @@ function SortableLessonItem({
               </>
             )}
             <ContextMenuItem
-              onSelect={() => {
-                setDescValue(lesson.description || "");
-                setEditingDesc(true);
-              }}
-            >
-              <FileText className="w-4 h-4" />
-              Edit Description
-            </ContextMenuItem>
-            <ContextMenuItem
               variant="destructive"
               onSelect={() => {
                 deleteLessonFetcher.submit(
