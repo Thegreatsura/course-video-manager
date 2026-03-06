@@ -1,13 +1,15 @@
 import { Console, Effect, Schema } from "effect";
-import type { Route } from "./+types/api.lessons.delete";
+import type { Route } from "./+types/api.lessons.$lessonId.update-title";
 import { DBFunctionsService } from "@/services/db-service.server";
-import { RepoWriteService } from "@/services/repo-write-service";
 import { runtimeLive } from "@/services/layer.server";
 import { withDatabaseDump } from "@/services/dump-service";
+import { toSlug } from "@/services/lesson-path-service";
 import { data } from "react-router";
 
-const deleteLessonSchema = Schema.Struct({
-  lessonId: Schema.String,
+const updateTitleSchema = Schema.Struct({
+  title: Schema.String.pipe(
+    Schema.minLength(1, { message: () => "Title is required" })
+  ),
 });
 
 export const action = async (args: Route.ActionArgs) => {
@@ -15,28 +17,22 @@ export const action = async (args: Route.ActionArgs) => {
   const formDataObject = Object.fromEntries(formData);
 
   return Effect.gen(function* () {
-    const { lessonId } =
-      yield* Schema.decodeUnknown(deleteLessonSchema)(formDataObject);
+    const { title } =
+      yield* Schema.decodeUnknown(updateTitleSchema)(formDataObject);
 
     const db = yield* DBFunctionsService;
-    const repoWrite = yield* RepoWriteService;
 
-    // Fetch lesson with hierarchy to get filesystem paths
-    const lesson = yield* db.getLessonWithHierarchyById(lessonId);
+    const currentLesson = yield* db.getLessonWithHierarchyById(
+      args.params.lessonId
+    );
 
-    // Only remove from disk for real lessons (ghost lessons have no files)
-    if (lesson.fsStatus !== "ghost") {
-      const repoPath = lesson.section.repoVersion.repo.filePath;
-      const sectionPath = lesson.section.path;
-
-      yield* repoWrite.deleteLesson({
-        repoPath,
-        sectionPath,
-        lessonDirName: lesson.path,
-      });
-    }
-
-    yield* db.deleteLesson(lessonId);
+    // Update title and regenerate path slug for future "Create on Disk"
+    const slug = toSlug(title) || "untitled";
+    yield* db.updateLesson(args.params.lessonId, {
+      title: title.trim(),
+      path: slug,
+      sectionId: currentLesson.sectionId,
+    });
 
     return { success: true };
   }).pipe(

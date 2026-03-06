@@ -1,11 +1,13 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { AddGhostLessonModal } from "@/components/add-ghost-lesson-modal";
 import { AddLessonModal } from "@/components/add-lesson-modal";
 import { AddVideoModal } from "@/components/add-video-modal";
 import { ClearVideoFilesModal } from "@/components/clear-video-files-modal";
 import { CreateVersionModal } from "@/components/create-version-modal";
 import { DeleteVersionModal } from "@/components/delete-version-modal";
+import { EditGhostLessonModal } from "@/components/edit-ghost-lesson-modal";
 import { EditLessonModal } from "@/components/edit-lesson-modal";
 import { MoveVideoModal } from "@/components/move-video-modal";
 import { RenameVideoModal } from "@/components/rename-video-modal";
@@ -17,6 +19,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -258,6 +261,9 @@ export default function Component(props: Route.ComponentProps) {
   const [addLessonSectionId, setAddLessonSectionId] = useState<string | null>(
     null
   );
+  const [addGhostLessonSectionId, setAddGhostLessonSectionId] = useState<
+    string | null
+  >(null);
   const [addVideoToLessonId, setAddVideoToLessonId] = useState<string | null>(
     null
   );
@@ -807,6 +813,14 @@ export default function Component(props: Route.ComponentProps) {
                             <Plus className="w-4 h-4" />
                             Add Lesson
                           </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() =>
+                              setAddGhostLessonSectionId(section.id)
+                            }
+                          >
+                            <Ghost className="w-4 h-4" />
+                            Add Ghost Lesson
+                          </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
                       <AddLessonModal
@@ -814,6 +828,13 @@ export default function Component(props: Route.ComponentProps) {
                         open={addLessonSectionId === section.id}
                         onOpenChange={(open) => {
                           setAddLessonSectionId(open ? section.id : null);
+                        }}
+                      />
+                      <AddGhostLessonModal
+                        sectionId={section.id}
+                        open={addGhostLessonSectionId === section.id}
+                        onOpenChange={(open) => {
+                          setAddGhostLessonSectionId(open ? section.id : null);
                         }}
                       />
                       <div className="p-2">
@@ -1134,6 +1155,7 @@ function SortableLessonItem({
   };
 
   const isGhost = lesson.fsStatus === "ghost";
+  const createOnDiskFetcher = useFetcher();
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -1191,14 +1213,39 @@ function SortableLessonItem({
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onSelect={() => setAddVideoToLessonId(lesson.id)}>
-              <Plus className="w-4 h-4" />
-              Add Video
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => setEditLessonId(lesson.id)}>
-              <PencilIcon className="w-4 h-4" />
-              Rename Lesson
-            </ContextMenuItem>
+            {isGhost ? (
+              <>
+                <ContextMenuItem
+                  onSelect={() => {
+                    createOnDiskFetcher.submit(null, {
+                      method: "post",
+                      action: `/api/lessons/${lesson.id}/create-on-disk`,
+                    });
+                  }}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Create on Disk
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => setEditLessonId(lesson.id)}>
+                  <PencilIcon className="w-4 h-4" />
+                  Rename
+                </ContextMenuItem>
+              </>
+            ) : (
+              <>
+                <ContextMenuItem
+                  onSelect={() => setAddVideoToLessonId(lesson.id)}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Video
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => setEditLessonId(lesson.id)}>
+                  <PencilIcon className="w-4 h-4" />
+                  Rename Lesson
+                </ContextMenuItem>
+              </>
+            )}
             <ContextMenuItem
               variant="destructive"
               onSelect={() => {
@@ -1225,14 +1272,25 @@ function SortableLessonItem({
             setAddVideoToLessonId(open ? lesson.id : null);
           }}
         />
-        <EditLessonModal
-          lessonId={lesson.id}
-          currentPath={lesson.path}
-          open={editLessonId === lesson.id}
-          onOpenChange={(open) => {
-            setEditLessonId(open ? lesson.id : null);
-          }}
-        />
+        {isGhost ? (
+          <EditGhostLessonModal
+            lessonId={lesson.id}
+            currentTitle={lesson.title || lesson.path}
+            open={editLessonId === lesson.id}
+            onOpenChange={(open) => {
+              setEditLessonId(open ? lesson.id : null);
+            }}
+          />
+        ) : (
+          <EditLessonModal
+            lessonId={lesson.id}
+            currentPath={lesson.path}
+            open={editLessonId === lesson.id}
+            onOpenChange={(open) => {
+              setEditLessonId(open ? lesson.id : null);
+            }}
+          />
+        )}
         <div className="ml-5 space-y-0.5">
           {lesson.videos.map((video) => {
             const totalDuration = video.clips.reduce((acc, clip) => {

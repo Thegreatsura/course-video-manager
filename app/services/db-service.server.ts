@@ -1229,12 +1229,37 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
 
           return lessonResult;
         }),
+        createGhostLesson: Effect.fn("createGhostLesson")(function* (
+          sectionId: string,
+          opts: {
+            title: string;
+            path: string;
+            order: number;
+          }
+        ) {
+          const lessonResult = yield* makeDbCall(() =>
+            db
+              .insert(lessons)
+              .values({
+                sectionId,
+                title: opts.title,
+                path: opts.path,
+                order: opts.order,
+                fsStatus: "ghost",
+              })
+              .returning()
+          );
+
+          return lessonResult;
+        }),
         updateLesson: Effect.fn("updateLesson")(function* (
           lessonId: string,
           lesson: {
             path?: string;
             sectionId?: string;
             lessonNumber?: number;
+            title?: string;
+            fsStatus?: string;
           }
         ) {
           const lessonResult = yield* makeDbCall(() =>
@@ -1244,6 +1269,8 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
                 path: lesson.path,
                 sectionId: lesson.sectionId,
                 order: lesson.lessonNumber,
+                title: lesson.title,
+                fsStatus: lesson.fsStatus,
               })
               .where(eq(lessons.id, lessonId))
           );
