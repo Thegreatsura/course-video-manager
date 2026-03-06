@@ -1571,9 +1571,8 @@ function SortableLessonItem({
                 {lesson.title || lesson.path}
               </span>
               {isGhost && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground/60 px-1.5 py-0.5 rounded-sm bg-muted/50 shrink-0">
+                <span className="flex items-center text-xs text-muted-foreground/60 px-1 py-0.5 rounded-sm bg-muted/50 shrink-0">
                   <Ghost className="w-3 h-3" />
-                  Ghost
                 </span>
               )}
               {lesson.priority !== undefined && lesson.priority !== 2 && (

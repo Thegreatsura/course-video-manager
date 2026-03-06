@@ -535,9 +535,8 @@ function PriorityBadge({
 function FsStatusBadge({ fsStatus }: { fsStatus: FsStatus }) {
   if (fsStatus === "real") return null;
   return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground/60 px-1.5 py-0.5 rounded-sm bg-muted/50">
+    <span className="flex items-center text-xs text-muted-foreground/60 px-1 py-0.5 rounded-sm bg-muted/50">
       <Ghost className="w-3 h-3" />
-      Ghost
     </span>
   );
 }
