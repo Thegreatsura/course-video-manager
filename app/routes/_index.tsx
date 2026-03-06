@@ -1693,8 +1693,7 @@ function SortableLessonItem({
                     ? "bg-yellow-500/20 text-yellow-600"
                     : currentIcon === "discussion"
                       ? "bg-green-500/20 text-green-600"
-                      : "bg-purple-500/20 text-purple-600",
-                  isGhost && "opacity-50"
+                      : "bg-purple-500/20 text-purple-600"
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
