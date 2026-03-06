@@ -68,7 +68,6 @@ import {
   SettingsIcon,
   Trash2Icon,
   CrosshairIcon,
-  VideoOffIcon,
 } from "lucide-react";
 import { marked } from "marked";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -389,26 +388,6 @@ export const loader = async (args: Route.LoaderArgs) => {
   );
 };
 
-const Video = (props: { src: string }) => {
-  const ref = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.playbackRate = 2;
-    }
-  }, [props.src, ref.current]);
-
-  return (
-    <video
-      src={props.src}
-      className="w-full"
-      controls
-      preload="none"
-      ref={ref}
-    />
-  );
-};
-
 const modeToLabel: Record<Mode, string> = {
   article: "Article",
   "article-plan": "Article Plan",
@@ -476,7 +455,6 @@ export function InnerComponent(props: Route.ComponentProps) {
     links,
     courseStructure,
     nextLessonWithoutVideo,
-    videoExists,
   } = props.loaderData;
   const [text, setText] = useState<string>("");
   const [mode, setMode] = useState<Mode>(() => {
@@ -599,7 +577,6 @@ export function InnerComponent(props: Route.ComponentProps) {
   const writeToReadmeFetcher = useFetcher();
   const deleteLinkFetcher = useFetcher();
   const openFolderFetcher = useFetcher();
-  const revealVideoFetcher = useFetcher();
 
   useEffect(() => {
     const result = openFolderFetcher.data as { error?: string } | undefined;
@@ -901,31 +878,6 @@ export function InnerComponent(props: Route.ComponentProps) {
               action: `/api/links/${linkId}/delete`,
             });
           }}
-          videoSlot={
-            videoExists ? (
-              <Video src={`/api/videos/${videoId}/stream`} />
-            ) : (
-              <div className="w-full aspect-[16/9] bg-gray-800 rounded-lg flex flex-col items-center justify-center gap-3">
-                <VideoOffIcon className="size-10 text-gray-500" />
-                <p className="text-gray-400 text-sm text-center px-4">
-                  Video file not found on disk.
-                </p>
-              </div>
-            )
-          }
-          onRevealInFileSystem={
-            videoExists
-              ? () => {
-                  revealVideoFetcher.submit(
-                    {},
-                    {
-                      method: "post",
-                      action: `/api/videos/${videoId}/reveal`,
-                    }
-                  );
-                }
-              : undefined
-          }
         />
 
         {/* Right column: Chat */}
