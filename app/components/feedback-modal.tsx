@@ -45,6 +45,9 @@ export function FeedbackModal(props: {
   const addMoreRef = useRef(addMore);
   addMoreRef.current = addMore;
 
+  const onOpenChangeRef = useRef(props.onOpenChange);
+  onOpenChangeRef.current = props.onOpenChange;
+
   // Notify parent of submitting state changes
   useEffect(() => {
     props.onSubmittingChange?.(fetcher.state !== "idle");
@@ -57,7 +60,12 @@ export function FeedbackModal(props: {
         const openCount = (fetcher.data as { openIssueCount?: number | null })
           .openIssueCount;
         const countMsg = openCount != null ? ` ${openCount} open issues.` : "";
-        toast(`Feedback submitted! Thank you.${countMsg}`);
+        toast(`Feedback submitted! Thank you.${countMsg}`, {
+          action: {
+            label: "Add more",
+            onClick: () => onOpenChangeRef.current(true),
+          },
+        });
       }
     }
     prevState.current = fetcher.state;
