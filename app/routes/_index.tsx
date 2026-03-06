@@ -326,6 +326,7 @@ export default function Component(props: Route.ComponentProps) {
 
   const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
   const [iconFilter, setIconFilter] = useState<string[]>([]);
+  const [fsStatusFilter, setFsStatusFilter] = useState<string[]>([]);
 
   const togglePriorityFilter = useCallback((priority: number) => {
     setPriorityFilter((prev) =>
@@ -338,6 +339,14 @@ export default function Component(props: Route.ComponentProps) {
   const toggleIconFilter = useCallback((icon: string) => {
     setIconFilter((prev) =>
       prev.includes(icon) ? prev.filter((i) => i !== icon) : [...prev, icon]
+    );
+  }, []);
+
+  const toggleFsStatusFilter = useCallback((status: string) => {
+    setFsStatusFilter((prev) =>
+      prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status]
     );
   }, []);
 
@@ -592,6 +601,34 @@ export default function Component(props: Route.ComponentProps) {
                           ) : (
                             <Play className="w-3 h-3" />
                           )}
+                        </button>
+                      );
+                    })}
+
+                    <span className="text-muted-foreground mx-1">|</span>
+                    {(["ghost", "real"] as const).map((status) => {
+                      const isSelected = fsStatusFilter.includes(status);
+                      const showAsActive =
+                        fsStatusFilter.length === 0 || isSelected;
+                      return (
+                        <button
+                          key={status}
+                          className={`text-xs px-2 py-0.5 rounded-sm font-medium transition-colors flex items-center gap-1 ${
+                            showAsActive
+                              ? status === "ghost"
+                                ? "bg-muted text-muted-foreground"
+                                : "bg-blue-500/20 text-blue-600"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          } ${isSelected ? "ring-1 ring-current" : ""}`}
+                          onClick={() => toggleFsStatusFilter(status)}
+                          title={status === "ghost" ? "Ghost" : "Real"}
+                        >
+                          {status === "ghost" ? (
+                            <Ghost className="w-3 h-3" />
+                          ) : (
+                            <FileVideo className="w-3 h-3" />
+                          )}
+                          {status === "ghost" ? "Ghost" : "Real"}
                         </button>
                       );
                     })}
@@ -983,7 +1020,9 @@ export default function Component(props: Route.ComponentProps) {
 
                           // Filter lessons based on active filters
                           const hasActiveFilters =
-                            priorityFilter.length > 0 || iconFilter.length > 0;
+                            priorityFilter.length > 0 ||
+                            iconFilter.length > 0 ||
+                            fsStatusFilter.length > 0;
                           const filteredLessons = hasActiveFilters
                             ? lessons.filter((lesson) => {
                                 const passesPriorityFilter =
@@ -992,7 +1031,16 @@ export default function Component(props: Route.ComponentProps) {
                                 const passesIconFilter =
                                   iconFilter.length === 0 ||
                                   iconFilter.includes(lesson.icon ?? "watch");
-                                return passesPriorityFilter && passesIconFilter;
+                                const passesFsStatusFilter =
+                                  fsStatusFilter.length === 0 ||
+                                  fsStatusFilter.includes(
+                                    lesson.fsStatus ?? "real"
+                                  );
+                                return (
+                                  passesPriorityFilter &&
+                                  passesIconFilter &&
+                                  passesFsStatusFilter
+                                );
                               })
                             : lessons;
 
