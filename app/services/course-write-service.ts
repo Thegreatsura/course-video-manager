@@ -360,6 +360,109 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
         return { success: true, renames };
       });
 
+      /**
+       * Moves a lesson to a different section.
+       * If real: moves directory via git mv, renumbers source section
+       * to close the gap, and assigns the correct lesson number in
+       * the target section. If ghost: DB-only update.
+       */
+      const moveToSection = Effect.fn("moveToSection")(function* (
+        lessonId: string,
+        targetSectionId: string
+      ) {
+        const lesson = yield* db.getLessonWithHierarchyById(lessonId);
+        const targetLessons = yield* db.getLessonsBySectionId(targetSectionId);
+        const maxOrder =
+          targetLessons.length > 0
+            ? Math.max(...targetLessons.map((l) => l.order))
+            : 0;
+
+        // Ghost lesson: DB-only move to end of target section
+        if (lesson.fsStatus === "ghost") {
+          yield* db.updateLesson(lessonId, { sectionId: targetSectionId });
+          yield* db.updateLessonOrder(lessonId, maxOrder + 1);
+          return { success: true };
+        }
+
+        // Real lesson: filesystem move + renumber both sections
+        const repoPath = lesson.section.repoVersion.repo.filePath;
+        const sourceSectionPath = lesson.section.path;
+        const targetSection =
+          yield* db.getSectionWithHierarchyById(targetSectionId);
+        const targetSectionPath = targetSection.path;
+
+        const sourceParsed = parseSectionPath(sourceSectionPath);
+        const targetParsed = parseSectionPath(targetSectionPath);
+        const sourceSectionNumber = sourceParsed?.sectionNumber ?? 1;
+        const targetSectionNumber = targetParsed?.sectionNumber ?? 1;
+
+        // Compute new path in target section
+        const lessonParsed = parseLessonPath(lesson.path);
+        const slug = lessonParsed?.slug ?? lesson.path;
+        const targetRealLessons = targetLessons.filter(
+          (l) => l.fsStatus !== "ghost"
+        );
+        const nextLessonNumber = targetRealLessons.length + 1;
+        const newLessonPath = buildLessonPath(
+          targetSectionNumber,
+          nextLessonNumber,
+          slug
+        );
+
+        // Move the directory via git mv
+        yield* repoWrite.moveLessonToSection({
+          repoPath,
+          sourceSectionPath,
+          targetSectionPath,
+          oldLessonDirName: lesson.path,
+          newLessonDirName: newLessonPath,
+        });
+
+        // Update DB: move to target section with new path
+        yield* db.updateLesson(lessonId, {
+          sectionId: targetSectionId,
+          path: newLessonPath,
+        });
+        yield* db.updateLessonOrder(lessonId, maxOrder + 1);
+
+        // Renumber source section real lessons to close the gap
+        const sourceLessons = yield* db.getLessonsBySectionId(lesson.sectionId);
+        const sourceRealLessons = sourceLessons.filter(
+          (l) => l.fsStatus !== "ghost" && l.id !== lessonId
+        );
+
+        if (sourceRealLessons.length > 0) {
+          const renames: { id: string; oldPath: string; newPath: string }[] =
+            [];
+          for (let i = 0; i < sourceRealLessons.length; i++) {
+            const l = sourceRealLessons[i]!;
+            const p = parseLessonPath(l.path);
+            if (!p) continue;
+            const newPath = buildLessonPath(sourceSectionNumber, i + 1, p.slug);
+            if (newPath !== l.path) {
+              renames.push({ id: l.id, oldPath: l.path, newPath });
+            }
+          }
+
+          if (renames.length > 0) {
+            yield* repoWrite.renameLessons({
+              repoPath,
+              sectionPath: sourceSectionPath,
+              renames: renames.map((r) => ({
+                oldPath: r.oldPath,
+                newPath: r.newPath,
+              })),
+            });
+
+            for (const rename of renames) {
+              yield* db.updateLesson(rename.id, { path: rename.newPath });
+            }
+          }
+        }
+
+        return { success: true };
+      });
+
       return {
         materializeGhost,
         addGhostLesson,
@@ -367,6 +470,7 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
         convertToGhost,
         renameLesson,
         reorderLessons,
+        moveToSection,
       };
     }),
     dependencies: [DBFunctionsService.Default, RepoWriteService.Default],

@@ -445,6 +445,42 @@ export class RepoWriteService extends Effect.Service<RepoWriteService>()(
         yield* fs.remove(fullPath, { recursive: true });
       });
 
+      /**
+       * Moves a lesson directory from one section to another via `git mv`.
+       */
+      const moveLessonToSection = Effect.fn("moveLessonToSection")(
+        function* (opts: {
+          repoPath: string;
+          sourceSectionPath: string;
+          targetSectionPath: string;
+          oldLessonDirName: string;
+          newLessonDirName: string;
+        }) {
+          const oldFullPath = path.join(
+            opts.repoPath,
+            opts.sourceSectionPath,
+            opts.oldLessonDirName
+          );
+          const newFullPath = path.join(
+            opts.repoPath,
+            opts.targetSectionPath,
+            opts.newLessonDirName
+          );
+
+          yield* Effect.try({
+            try: () =>
+              execFileSync("git", ["mv", oldFullPath, newFullPath], {
+                cwd: opts.repoPath,
+              }),
+            catch: (cause) =>
+              new RepoWriteError({
+                cause,
+                message: `git mv failed: ${opts.sourceSectionPath}/${opts.oldLessonDirName} → ${opts.targetSectionPath}/${opts.newLessonDirName}`,
+              }),
+          });
+        }
+      );
+
       return {
         createLessonDirectory,
         addLesson,
@@ -452,6 +488,7 @@ export class RepoWriteService extends Effect.Service<RepoWriteService>()(
         renameLessons,
         renameSections,
         deleteLesson,
+        moveLessonToSection,
       };
     }),
     dependencies: [NodeFileSystem.layer],

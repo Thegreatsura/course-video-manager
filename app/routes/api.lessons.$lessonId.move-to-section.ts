@@ -1,6 +1,6 @@
 import { Console, Effect, Schema } from "effect";
 import type { Route } from "./+types/api.lessons.$lessonId.move-to-section";
-import { DBFunctionsService } from "@/services/db-service.server";
+import { CourseWriteService } from "@/services/course-write-service";
 import { runtimeLive } from "@/services/layer.server";
 import { withDatabaseDump } from "@/services/dump-service";
 import { data } from "react-router";
@@ -19,25 +19,8 @@ export const action = async (args: Route.ActionArgs) => {
     const { sectionId } =
       yield* Schema.decodeUnknown(moveLessonSchema)(formDataObject);
 
-    const db = yield* DBFunctionsService;
-
-    // Verify lesson exists
-    yield* db.getLessonWithHierarchyById(args.params.lessonId);
-
-    // Get lessons in target section to determine order
-    const targetLessons = yield* db.getLessonsBySectionId(sectionId);
-    const maxOrder =
-      targetLessons.length > 0
-        ? Math.max(...targetLessons.map((l) => l.order))
-        : -1;
-
-    // Move lesson to target section at the bottom
-    yield* db.updateLesson(args.params.lessonId, {
-      sectionId,
-      lessonNumber: maxOrder + 1,
-    });
-
-    return { success: true };
+    const service = yield* CourseWriteService;
+    return yield* service.moveToSection(args.params.lessonId, sectionId);
   }).pipe(
     withDatabaseDump,
     Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),

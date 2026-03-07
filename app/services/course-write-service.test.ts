@@ -897,4 +897,136 @@ describe("CourseWriteService", () => {
       expect(updated2.path).toBe("01.02-second");
     });
   });
+
+  describe("moveToSection", () => {
+    it("moves a real lesson: directory moved, source renumbered, DB updated", async () => {
+      const { run, createSection, createRealLesson, getLesson } = await setup();
+
+      const section1 = await createSection("01-intro", 1);
+      const section2 = await createSection("02-advanced", 2);
+
+      const real1 = await createRealLesson(
+        section1.id,
+        "01-intro",
+        "01.01-first",
+        1
+      );
+      const real2 = await createRealLesson(
+        section1.id,
+        "01-intro",
+        "01.02-second",
+        2
+      );
+      const real3 = await createRealLesson(
+        section1.id,
+        "01-intro",
+        "01.03-third",
+        3
+      );
+      // Target section has one existing lesson
+      await createRealLesson(section2.id, "02-advanced", "02.01-existing", 1);
+
+      // Move real2 from section1 to section2
+      await run(
+        Effect.gen(function* () {
+          const service = yield* CourseWriteService;
+          return yield* service.moveToSection(real2.id, section2.id);
+        })
+      );
+
+      // Lesson directory moved to target section with correct numbering
+      expect(
+        fs.existsSync(path.join(tempDir, "02-advanced", "02.02-second"))
+      ).toBe(true);
+      // Old location gone
+      expect(
+        fs.existsSync(path.join(tempDir, "01-intro", "01.02-second"))
+      ).toBe(false);
+
+      // Source section renumbered: third lesson closes the gap (01.03 → 01.02)
+      expect(fs.existsSync(path.join(tempDir, "01-intro", "01.01-first"))).toBe(
+        true
+      );
+      expect(fs.existsSync(path.join(tempDir, "01-intro", "01.02-third"))).toBe(
+        true
+      );
+      expect(fs.existsSync(path.join(tempDir, "01-intro", "01.03-third"))).toBe(
+        false
+      );
+
+      // DB: moved lesson updated
+      const movedLesson = await getLesson(real2.id);
+      expect(movedLesson.sectionId).toBe(section2.id);
+      expect(movedLesson.path).toBe("02.02-second");
+
+      // DB: source section renumbered
+      const updatedReal3 = await getLesson(real3.id);
+      expect(updatedReal3.path).toBe("01.02-third");
+
+      // DB: first lesson unchanged
+      const updatedReal1 = await getLesson(real1.id);
+      expect(updatedReal1.path).toBe("01.01-first");
+    });
+
+    it("moves a ghost lesson: DB-only update, no filesystem ops", async () => {
+      const { run, createSection, createGhostLesson, getLesson } =
+        await setup();
+
+      const section1 = await createSection("01-intro", 1);
+      const section2 = await createSection("02-advanced", 2);
+
+      const ghost = await createGhostLesson(
+        section1.id,
+        "Ghost Lesson",
+        "ghost-lesson",
+        1
+      );
+
+      await run(
+        Effect.gen(function* () {
+          const service = yield* CourseWriteService;
+          return yield* service.moveToSection(ghost.id, section2.id);
+        })
+      );
+
+      // DB: moved to target section
+      const movedLesson = await getLesson(ghost.id);
+      expect(movedLesson.sectionId).toBe(section2.id);
+      expect(movedLesson.fsStatus).toBe("ghost");
+      expect(movedLesson.path).toBe("ghost-lesson"); // path unchanged for ghost
+    });
+
+    it("moves a real lesson to an empty section", async () => {
+      const { run, createSection, createRealLesson, getLesson } = await setup();
+
+      const section1 = await createSection("01-intro", 1);
+      const section2 = await createSection("02-advanced", 2);
+
+      const real1 = await createRealLesson(
+        section1.id,
+        "01-intro",
+        "01.01-only-lesson",
+        1
+      );
+
+      await run(
+        Effect.gen(function* () {
+          const service = yield* CourseWriteService;
+          return yield* service.moveToSection(real1.id, section2.id);
+        })
+      );
+
+      // Moved to target section as first lesson
+      expect(
+        fs.existsSync(path.join(tempDir, "02-advanced", "02.01-only-lesson"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(tempDir, "01-intro", "01.01-only-lesson"))
+      ).toBe(false);
+
+      const movedLesson = await getLesson(real1.id);
+      expect(movedLesson.sectionId).toBe(section2.id);
+      expect(movedLesson.path).toBe("02.01-only-lesson");
+    });
+  });
 });
