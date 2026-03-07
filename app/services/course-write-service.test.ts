@@ -1,9 +1,5 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import * as schema from "@/db/schema";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import { Effect, Layer } from "effect";
-import { pushSchema } from "drizzle-kit/api";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { CourseWriteService } from "@/services/course-write-service";
@@ -12,8 +8,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import {
+  createTestDb,
+  truncateAllTables,
+  type TestDb,
+} from "@/test-utils/pglite";
 
 let tempDir: string;
+let testDb: TestDb;
+
+beforeAll(async () => {
+  const result = await createTestDb();
+  testDb = result.testDb;
+});
 
 const setupTempGitRepo = () => {
   tempDir = fs.mkdtempSync(path.join(tmpdir(), "course-write-test-"));
@@ -25,16 +32,12 @@ const setupTempGitRepo = () => {
 };
 
 /**
- * Creates test infrastructure: PGlite DB + temp git repo + composed layer.
+ * Creates test infrastructure: temp git repo + composed layer using shared PGlite.
  * Returns seed helpers and a run function for executing effects.
  */
 const setup = async () => {
   setupTempGitRepo();
-
-  const pglite = new PGlite();
-  const testDb = drizzle(pglite, { schema });
-  const { apply } = await pushSchema(schema, testDb as any);
-  await apply();
+  await truncateAllTables(testDb);
 
   const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
 

@@ -1,17 +1,26 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import * as schema from "@/db/schema";
 import { describe, it, expect } from "@effect/vitest";
-import { beforeEach } from "vitest";
+import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
-import { pushSchema } from "drizzle-kit/api";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { sortByOrder } from "@/lib/sort-by-order";
+import {
+  createTestDb,
+  truncateAllTables,
+  type TestDb,
+} from "@/test-utils/pglite";
 
-let pglite: PGlite;
-let testDb: ReturnType<typeof drizzle<typeof schema>>;
+let testDb: TestDb;
 let testLayer: Layer.Layer<DBFunctionsService>;
+
+beforeAll(async () => {
+  const result = await createTestDb();
+  testDb = result.testDb;
+
+  testLayer = DBFunctionsService.Default.pipe(
+    Layer.provide(Layer.succeed(DrizzleService, testDb as any))
+  );
+});
 
 type InsertionPoint =
   | { type: "start" }
@@ -68,14 +77,7 @@ describe("appendClips", () => {
 
   beforeEach(async () => {
     clipCounter = 0;
-    pglite = new PGlite();
-    testDb = drizzle(pglite, { schema });
-    const { apply } = await pushSchema(schema, testDb as any);
-    await apply();
-
-    testLayer = DBFunctionsService.Default.pipe(
-      Layer.provide(Layer.succeed(DrizzleService, testDb as any))
-    );
+    await truncateAllTables(testDb);
 
     const video = await Effect.gen(function* () {
       const db = yield* DBFunctionsService;

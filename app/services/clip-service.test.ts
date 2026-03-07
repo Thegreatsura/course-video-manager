@@ -1,8 +1,5 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@/db/schema";
-import { describe, it, expect, vi } from "vitest";
-import { pushSchema } from "drizzle-kit/api";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import {
   createDirectClipService,
   type VideoProcessingAdapter,
@@ -14,29 +11,30 @@ import type {
   FrontendTimelineItem,
   FrontendInsertionPoint,
 } from "./clip-service";
+import {
+  createTestDb,
+  truncateAllTables,
+  type TestDb,
+} from "@/test-utils/pglite";
 
-/**
- * Creates an isolated test environment with its own PGlite instance,
- * drizzle database, mock video processing adapter, and clip service.
- * Each test gets its own setup so tests can run concurrently.
- */
-const setup = async () => {
-  const pglite = new PGlite();
-  const testDb = drizzle(pglite, { schema });
-  const { apply } = await pushSchema(schema, testDb as any);
-  await apply();
+let testDb: TestDb;
+let clipService: ClipService;
+let mockVideoProcessing: VideoProcessingAdapter;
 
-  const mockVideoProcessing: VideoProcessingAdapter = {
+beforeAll(async () => {
+  const result = await createTestDb();
+  testDb = result.testDb;
+});
+
+beforeEach(async () => {
+  await truncateAllTables(testDb);
+
+  mockVideoProcessing = {
     getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
   };
 
-  const clipService = createDirectClipService(
-    testDb as any,
-    mockVideoProcessing
-  );
-
-  return { pglite, testDb, clipService, mockVideoProcessing };
-};
+  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
+});
 
 /**
  * Builds FrontendTimelineItem[] from the current database timeline.
@@ -80,10 +78,9 @@ const afterSection = (id: string): FrontendInsertionPoint => ({
 const start: FrontendInsertionPoint = { type: "start" };
 const end: FrontendInsertionPoint = { type: "end" };
 
-describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
+describe("ClipService", () => {
   describe("createVideo", () => {
     it("creates a standalone video", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       expect(video).toMatchObject({
@@ -96,7 +93,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("getTimeline", () => {
     it("returns an empty timeline for a video with no clips", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
       const timeline = await clipService.getTimeline(video.id);
 
@@ -104,7 +100,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("returns clips sorted by order", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -127,7 +122,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("returns clips and sections interleaved and sorted", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clipA] = await clipService.appendClips({
@@ -164,7 +158,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("appendClips", () => {
     it("inserts clips at start", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -185,7 +178,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips after an existing clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clipA] = await clipService.appendClips({
@@ -209,7 +201,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips after a clip section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const section = await clipService.createClipSectionAtInsertionPoint({
@@ -235,7 +226,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips at end when last item is a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clipA] = await clipService.appendClips({
@@ -258,7 +248,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips at end when last item is a section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clipA] = await clipService.appendClips({
@@ -292,7 +281,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts at start when end is used with empty timeline", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -310,7 +298,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("archiveClips", () => {
     it("archives a single clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -327,7 +314,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("archives multiple clips", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -349,7 +335,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("updateClips", () => {
     it("updates scene, profile, and beatType for a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -382,7 +367,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("updateBeat", () => {
     it("updates beat type for a single clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -406,7 +390,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("reorderClip", () => {
     it("moves a clip up past another clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -429,7 +412,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("moves a clip down past another clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const clips = await clipService.appendClips({
@@ -454,7 +436,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("createClipSectionAtInsertionPoint", () => {
     it("creates a section at the start", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const section = await clipService.createClipSectionAtInsertionPoint({
@@ -476,7 +457,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("creates a section after a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -503,7 +483,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("createClipSectionAtPosition", () => {
     it("creates a section before a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -529,7 +508,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("creates a section after a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -557,7 +535,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("updateClipSection", () => {
     it("updates the name of a clip section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const section = await clipService.createClipSectionAtInsertionPoint({
@@ -577,7 +554,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("archiveClipSections", () => {
     it("archives a clip section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const section = await clipService.createClipSectionAtInsertionPoint({
@@ -596,7 +572,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("reorderClipSection", () => {
     it("moves a section up past a clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -624,7 +599,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("preserves ordering when moving a section up past another section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Build timeline: [SectionA, Clip1, SectionB, Clip2, SectionC]
@@ -691,7 +665,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("moves a section up past an adjacent section (no clips between)", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Build timeline: [Clip1, SectionA, SectionB, Clip2]
@@ -737,7 +710,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("preserves ordering when sections created via createClipSectionAtPosition are moved", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Create clips first: [Clip1, Clip2, Clip3, Clip4]
@@ -833,7 +805,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("appendFromObs", () => {
     it("returns empty array when CLI detects no clips", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       mockVideoProcessing.getLatestOBSVideoClips = vi
@@ -854,7 +825,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips detected by CLI", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       mockVideoProcessing.getLatestOBSVideoClips = vi.fn().mockResolvedValue({
@@ -882,7 +852,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("converts Windows path to WSL path", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       mockVideoProcessing.getLatestOBSVideoClips = vi
@@ -903,7 +872,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("deduplicates clips that already exist", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // First, add a clip directly
@@ -942,7 +910,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("deduplicates clips with nearly identical start/end times (rounding tolerance)", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // First, add a clip directly
@@ -984,7 +951,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("deduplicates clips with drifted startTime from ffmpeg re-detection (0.57s drift)", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // First clip inserted correctly
@@ -1026,7 +992,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts genuinely distinct clips that differ by more than 0.6s", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // First clip
@@ -1068,7 +1033,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("calculates start time from last clip with same input video", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Add existing clip
@@ -1102,7 +1066,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("inserts clips at specified insertion point", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Add existing clip
@@ -1133,7 +1096,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("serializes concurrent append-from-obs calls via mutex", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       mockVideoProcessing.getLatestOBSVideoClips = vi.fn().mockResolvedValue({
@@ -1166,7 +1128,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("mutex releases on error allowing subsequent calls", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // First call: mock throws
@@ -1209,7 +1170,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("optimistic insertion point resolution", () => {
     it("resolves after-clip on optimistic item to nearest persisted section", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Seed: [ClipA, Section1] in DB
@@ -1264,7 +1224,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("resolves after-clip on optimistic item to nearest persisted clip", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Seed: [Section1, ClipA] in DB
@@ -1319,7 +1278,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("resolves after-clip-section on optimistic section to nearest persisted item", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Seed: [Section1, ClipA] in DB
@@ -1374,7 +1332,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("resolves to start when no persisted items exist before optimistic item", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Frontend items: [OptClip (optimistic)] — no persisted items
@@ -1401,7 +1358,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("resolves end with only optimistic items to start", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Frontend items: [OptClip (optimistic)] — no persisted items
@@ -1424,7 +1380,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("skips shouldArchive clips when resolving end insertion point", async () => {
-      const { clipService, mockVideoProcessing } = await setup();
       const video = await clipService.createVideo("test-video.mp4");
 
       // Create clipA in DB then archive it (simulates optimistic delete -> DB pairing -> archive)
@@ -1470,7 +1425,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
 
   describe("createVideoFromSelection", () => {
     it("copy mode creates a new video with selected clips, originals remain in source", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const [clipA, clipB] = await clipService.appendClips({
@@ -1512,7 +1466,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("copy mode creates a new video with selected clip sections, originals remain", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const sectionA = await clipService.createClipSectionAtInsertionPoint({
@@ -1550,7 +1503,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("mixed selection creates a new video with all selected items", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const sectionA = await clipService.createClipSectionAtInsertionPoint({
@@ -1589,7 +1541,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("items in new video preserve their relative order from source timeline", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       // Create timeline: [ClipA, SectionX, ClipB, ClipC]
@@ -1637,7 +1588,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("copied clips retain all metadata", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -1682,7 +1632,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("copied clip sections retain their names", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const section = await clipService.createClipSectionAtInsertionPoint({
@@ -1710,7 +1659,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("new video inherits lessonId from source video", async () => {
-      const { clipService, testDb } = await setup();
       // First create a video with a lesson association
       // We need to create the lesson structure first
       const repoVersionId = crypto.randomUUID();
@@ -1775,7 +1723,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("selecting a single clip creates a valid new video", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -1799,7 +1746,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("selecting all items creates a new video with everything", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const sectionA = await clipService.createClipSectionAtInsertionPoint({
@@ -1846,7 +1792,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     // ==========================================================================
 
     it("move mode creates a new video AND archives originals from source", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const [clipA, clipB] = await clipService.appendClips({
@@ -1880,7 +1825,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("move mode archives original clip sections from source", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const sectionA = await clipService.createClipSectionAtInsertionPoint({
@@ -1918,7 +1862,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("move mode with mixed selection archives all selected originals", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const sectionA = await clipService.createClipSectionAtInsertionPoint({
@@ -1969,7 +1912,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("move mode preserves metadata on moved clips", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       const [clip] = await clipService.appendClips({
@@ -2016,7 +1958,6 @@ describe("ClipService", { concurrent: true, timeout: 30_000 }, () => {
     });
 
     it("move mode preserves correct ordering in new video", async () => {
-      const { clipService } = await setup();
       const video = await clipService.createVideo("source-video.mp4");
 
       // Create timeline: [ClipA, SectionX, ClipB, ClipC]
