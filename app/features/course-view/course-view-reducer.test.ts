@@ -45,7 +45,6 @@ describe("courseViewReducer", () => {
       const state = createTester().getState();
       expect(state.moveVideoState).toBeNull();
       expect(state.moveLessonState).toBeNull();
-      expect(state.linkGhostLessonState).toBeNull();
       expect(state.renameVideoState).toBeNull();
     });
 
@@ -297,34 +296,6 @@ describe("courseViewReducer", () => {
         .send({ type: "close-move-lesson" })
         .getState();
       expect(state.moveLessonState).toBeNull();
-    });
-  });
-
-  describe("Link ghost lesson", () => {
-    it("29. open-link-ghost-lesson: sets link ghost lesson state", () => {
-      const state = createTester()
-        .send({
-          type: "open-link-ghost-lesson",
-          lessonId: "lesson-1",
-          sectionId: "section-1",
-        })
-        .getState();
-      expect(state.linkGhostLessonState).toEqual({
-        lessonId: "lesson-1",
-        sectionId: "section-1",
-      });
-    });
-
-    it("30. close-link-ghost-lesson: clears link ghost lesson state", () => {
-      const state = createTester()
-        .send({
-          type: "open-link-ghost-lesson",
-          lessonId: "lesson-1",
-          sectionId: "section-1",
-        })
-        .send({ type: "close-link-ghost-lesson" })
-        .getState();
-      expect(state.linkGhostLessonState).toBeNull();
     });
   });
 

@@ -14,7 +14,6 @@ import {
 } from "@/components/dependency-selector";
 import { EditGhostLessonModal } from "@/components/edit-ghost-lesson-modal";
 import { EditLessonModal } from "@/components/edit-lesson-modal";
-import { LinkGhostLessonModal } from "@/components/link-ghost-lesson-modal";
 import { MoveLessonModal } from "@/components/move-lesson-modal";
 import { MoveVideoModal } from "@/components/move-video-modal";
 import { RenameVideoModal } from "@/components/rename-video-modal";
@@ -306,7 +305,6 @@ export default function Component(props: Route.ComponentProps) {
     videoPlayerState,
     moveVideoState,
     moveLessonState,
-    linkGhostLessonState,
     renameVideoState,
     priorityFilter,
     iconFilter,
@@ -1557,17 +1555,6 @@ export default function Component(props: Route.ComponentProps) {
         />
       )}
 
-      {linkGhostLessonState && (
-        <LinkGhostLessonModal
-          lessonId={linkGhostLessonState.lessonId}
-          sectionId={linkGhostLessonState.sectionId}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) dispatch({ type: "close-link-ghost-lesson" });
-          }}
-        />
-      )}
-
       {moveVideoState && currentRepo && (
         <MoveVideoModal
           videoId={moveVideoState.videoId}
@@ -1905,18 +1892,6 @@ function SortableLessonItem({
                 >
                   <BookOpen className="w-4 h-4" />
                   Create on Disk
-                </ContextMenuItem>
-                <ContextMenuItem
-                  onSelect={() =>
-                    dispatch({
-                      type: "open-link-ghost-lesson",
-                      lessonId: lesson.id,
-                      sectionId: section.id,
-                    })
-                  }
-                >
-                  <FolderOpen className="w-4 h-4" />
-                  Link to Existing Files
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem
