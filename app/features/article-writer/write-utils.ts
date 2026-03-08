@@ -33,6 +33,36 @@ export const modeToLabel: Record<Mode, string> = {
 };
 
 export const MODE_STORAGE_KEY = "article-writer-mode";
+export const RECENT_MODES_STORAGE_KEY = "article-writer-recent-modes";
+
+export const MAX_RECENT_MODES = 3;
+
+export const loadRecentModes = (): Mode[] => {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(RECENT_MODES_STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved) as Mode[];
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+};
+
+export const saveRecentMode = (mode: Mode): void => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const recent = loadRecentModes().filter((m) => m !== mode);
+    recent.unshift(mode);
+    localStorage.setItem(
+      RECENT_MODES_STORAGE_KEY,
+      JSON.stringify(recent.slice(0, MAX_RECENT_MODES))
+    );
+  } catch {
+    // ignore
+  }
+};
 export const MODEL_STORAGE_KEY = "article-writer-model";
 export const COURSE_STRUCTURE_STORAGE_KEY =
   "article-writer-include-course-structure";

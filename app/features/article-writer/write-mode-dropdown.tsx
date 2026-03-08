@@ -5,6 +5,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   DropdownMenu,
@@ -19,14 +21,23 @@ import {
   MicIcon,
   CrosshairIcon,
 } from "lucide-react";
+import { useState } from "react";
 import type { Mode } from "./types";
-import { modeToLabel } from "./write-utils";
+import { modeToLabel, loadRecentModes, saveRecentMode } from "./write-utils";
 
 export function WriteModeDropdown(props: {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
 }) {
   const { mode, onModeChange } = props;
+  const [recentModes, setRecentModes] = useState<Mode[]>(loadRecentModes);
+
+  const handleModeChange = (newMode: Mode) => {
+    saveRecentMode(newMode);
+    setRecentModes(loadRecentModes());
+    onModeChange(newMode);
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -36,6 +47,22 @@ export function WriteModeDropdown(props: {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
+        {recentModes.length > 0 && (
+          <>
+            <DropdownMenuLabel>Recent</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={mode}
+              onValueChange={(value) => handleModeChange(value as Mode)}
+            >
+              {recentModes.map((recentMode) => (
+                <DropdownMenuRadioItem key={recentMode} value={recentMode}>
+                  {modeToLabel[recentMode]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {/* Writing */}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
@@ -45,7 +72,7 @@ export function WriteModeDropdown(props: {
           <DropdownMenuSubContent className="w-64">
             <DropdownMenuRadioGroup
               value={mode}
-              onValueChange={(value) => onModeChange(value as Mode)}
+              onValueChange={(value) => handleModeChange(value as Mode)}
             >
               <DropdownMenuRadioItem value="article">
                 <div>
@@ -84,7 +111,7 @@ export function WriteModeDropdown(props: {
           <DropdownMenuSubContent className="w-64">
             <DropdownMenuRadioGroup
               value={mode}
-              onValueChange={(value) => onModeChange(value as Mode)}
+              onValueChange={(value) => handleModeChange(value as Mode)}
             >
               <DropdownMenuRadioItem value="project">
                 <div>
@@ -131,7 +158,7 @@ export function WriteModeDropdown(props: {
           <DropdownMenuSubContent className="w-64">
             <DropdownMenuRadioGroup
               value={mode}
-              onValueChange={(value) => onModeChange(value as Mode)}
+              onValueChange={(value) => handleModeChange(value as Mode)}
             >
               <DropdownMenuRadioItem value="youtube-title">
                 <div>
@@ -178,7 +205,7 @@ export function WriteModeDropdown(props: {
           <DropdownMenuSubContent className="w-64">
             <DropdownMenuRadioGroup
               value={mode}
-              onValueChange={(value) => onModeChange(value as Mode)}
+              onValueChange={(value) => handleModeChange(value as Mode)}
             >
               <DropdownMenuRadioItem value="brainstorming">
                 <div>
@@ -217,7 +244,7 @@ export function WriteModeDropdown(props: {
           <DropdownMenuSubContent className="w-64">
             <DropdownMenuRadioGroup
               value={mode}
-              onValueChange={(value) => onModeChange(value as Mode)}
+              onValueChange={(value) => handleModeChange(value as Mode)}
             >
               <DropdownMenuRadioItem value="interview-prep">
                 <div>
