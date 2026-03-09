@@ -452,23 +452,27 @@ export function SectionGrid({
                           <PencilIcon className="w-4 h-4" />
                           Rename
                         </ContextMenuItem>
-                        <ContextMenuItem
-                          onSelect={async () => {
-                            try {
-                              await navigator.clipboard.writeText(
-                                buildSectionTranscript(section.path, lessons)
-                              );
-                              toast("Section transcript copied to clipboard");
-                            } catch {
-                              toast.error(
-                                "Failed to copy transcript to clipboard"
-                              );
-                            }
-                          }}
-                        >
-                          <ClipboardCopy className="w-4 h-4" />
-                          Copy Section Transcript
-                        </ContextMenuItem>
+                        {lessons.some(
+                          (l) => l.fsStatus !== "ghost" && l.videos.length > 0
+                        ) && (
+                          <ContextMenuItem
+                            onSelect={async () => {
+                              try {
+                                await navigator.clipboard.writeText(
+                                  buildSectionTranscript(section.path, lessons)
+                                );
+                                toast("Section transcript copied to clipboard");
+                              } catch {
+                                toast.error(
+                                  "Failed to copy transcript to clipboard"
+                                );
+                              }
+                            }}
+                          >
+                            <ClipboardCopy className="w-4 h-4" />
+                            Copy Section Transcript
+                          </ContextMenuItem>
+                        )}
                         {isGhostSection && (
                           <>
                             <ContextMenuSeparator />
