@@ -4,7 +4,7 @@ export function buildSectionTranscript(sectionPath: string, lessons: Lesson[]) {
   const realLessons = lessons.filter((l) => l.fsStatus !== "ghost");
   const lines: string[] = [`<section title="${escapeAttr(sectionPath)}">`];
   for (const lesson of realLessons) {
-    lines.push(`  <lesson title="${escapeAttr(lesson.title || lesson.path)}">`);
+    lines.push(`  <lesson title="${escapeAttr(lesson.path)}">`);
     if (lesson.videos.length === 0) {
       lines.push("    (no videos)");
       lines.push("  </lesson>");
