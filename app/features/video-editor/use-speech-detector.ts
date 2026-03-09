@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  SILENCE_THRESHOLD_DB,
+  SILENCE_DURATION_SECONDS,
+  MINIMUM_CLIP_LENGTH_SECONDS,
+} from "@/silence-detection-constants";
 
 export type SpeechDetectorState =
   | {
@@ -25,9 +30,10 @@ export type FrontendSpeechDetectorState =
   | { type: "long-enough-speaking-for-clip-detected"; soundDetectionId: string }
   | { type: "silence" };
 
-const SPEAKING_THRESHOLD = -33;
-const LONG_ENOUGH_TIME_IN_MILLISECONDS = 800;
-const LONG_ENOUGH_SPEECH_TIME_IN_MILLISECONDS = 1400;
+const SPEAKING_THRESHOLD = SILENCE_THRESHOLD_DB;
+const LONG_ENOUGH_TIME_IN_MILLISECONDS = SILENCE_DURATION_SECONDS * 1000;
+const LONG_ENOUGH_SPEECH_TIME_IN_MILLISECONDS =
+  MINIMUM_CLIP_LENGTH_SECONDS * 1000;
 
 const resolveFrontendSpeechDetectorState = (
   state: SpeechDetectorState

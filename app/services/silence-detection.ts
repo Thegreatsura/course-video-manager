@@ -1,12 +1,13 @@
 import { Effect } from "effect";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
+import {
+  SILENCE_THRESHOLD_DB,
+  SILENCE_DURATION_SECONDS,
+  MINIMUM_CLIP_LENGTH_SECONDS,
+} from "@/silence-detection-constants";
 
-// Hardcoded constants from TT monorepo
-const THRESHOLD = -38; // dB
-const SILENCE_DURATION = 0.8; // seconds
 const AUTO_EDITED_START_PADDING = 0; // frames
 const AUTO_EDITED_END_PADDING = 0.08; // frames
-const MINIMUM_CLIP_LENGTH_IN_SECONDS = 1;
 
 interface SpeakingClip {
   startFrame: number;
@@ -74,7 +75,7 @@ export function getClipsOfSpeakingFromFFmpeg(
     const clipDuration = clipEndTime - clipStartTime;
 
     // Skip clips shorter than minimum
-    if (clipDuration < MINIMUM_CLIP_LENGTH_IN_SECONDS) continue;
+    if (clipDuration < MINIMUM_CLIP_LENGTH_SECONDS) continue;
 
     const startFrame = Math.round(clipStartTime * fps) - startPadding;
     const endFrame = Math.round(clipEndTime * fps) + endPadding;
@@ -104,8 +105,8 @@ export function findSilenceInVideo(
     const fps = yield* ffmpeg.getFPS(inputVideo);
 
     const rawOutput = yield* ffmpeg.detectSilence(inputVideo, {
-      threshold: THRESHOLD,
-      silenceDuration: SILENCE_DURATION,
+      threshold: SILENCE_THRESHOLD_DB,
+      silenceDuration: SILENCE_DURATION_SECONDS,
       startTime: opts?.startTime,
     });
 
