@@ -149,7 +149,38 @@ export const loader = async (args: Route.LoaderArgs) => {
           }))
       ) ?? [];
 
-    const lessonHasFilesMap: Record<string, string[]> = {};
+    const lessonHasFilesMap: Record<string, { path: string; size: number }[]> =
+      {};
+
+    const listFilesRecursive = (
+      dir: string,
+      prefix: string
+    ): Effect.Effect<
+      { path: string; size: number }[],
+      never,
+      FileSystem.FileSystem
+    > =>
+      Effect.gen(function* () {
+        const entries = yield* fs
+          .readDirectory(dir)
+          .pipe(Effect.catchAll(() => Effect.succeed([] as string[])));
+        const results: { path: string; size: number }[] = [];
+        for (const entry of entries) {
+          const fullPath = `${dir}/${entry}`;
+          const relativePath = prefix ? `${prefix}/${entry}` : entry;
+          const stat = yield* fs
+            .stat(fullPath)
+            .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+          if (!stat) continue;
+          if (stat.type === "Directory") {
+            const nested = yield* listFilesRecursive(fullPath, relativePath);
+            results.push(...nested);
+          } else {
+            results.push({ path: relativePath, size: Number(stat.size) });
+          }
+        }
+        return results;
+      });
 
     yield* Effect.forEach(lessons, (lesson) => {
       return Effect.gen(function* () {
@@ -158,11 +189,11 @@ export const loader = async (args: Route.LoaderArgs) => {
 
         hasExplainerFolderMap[lesson.id] = hasExplainerFolder;
 
-        // List files/subdirectories in lesson directory
-        const entries = yield* fs
-          .readDirectory(lesson.fullPath)
-          .pipe(Effect.catchAll(() => Effect.succeed([] as string[])));
-        lessonHasFilesMap[lesson.id] = entries;
+        // List all files recursively with sizes
+        lessonHasFilesMap[lesson.id] = yield* listFilesRecursive(
+          lesson.fullPath,
+          ""
+        );
       });
     });
 
