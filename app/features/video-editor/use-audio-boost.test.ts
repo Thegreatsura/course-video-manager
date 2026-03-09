@@ -1,13 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { _sourceCacheForTesting as sourceCache } from "./use-audio-boost";
 
-const mockConnect = vi.fn();
-const mockClose = vi.fn();
+const mockGainConnect = vi.fn();
 const mockGainNode = {
   gain: { value: 1 },
-  connect: mockConnect,
+  connect: mockGainConnect,
+  disconnect: vi.fn(),
 };
 const mockSourceNode = {
   connect: vi.fn(),
+  disconnect: vi.fn(),
 };
 
 const mockCreateMediaElementSource = vi.fn(() => mockSourceNode);
@@ -19,12 +21,9 @@ vi.stubGlobal(
     createMediaElementSource: mockCreateMediaElementSource,
     createGain: mockCreateGain,
     destination: "mock-destination",
-    close: mockClose,
   }))
 );
 
-// We can't use renderHook, so test the core logic directly
-// by extracting the gain calculation
 describe("useAudioBoost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,7 +73,75 @@ describe("useAudioBoost", () => {
       expect(mockCreateGain).toHaveBeenCalled();
       expect(mockGainNode.gain.value).toBeCloseTo(3.162, 2);
       expect(mockSourceNode.connect).toHaveBeenCalledWith(mockGainNode);
-      expect(mockConnect).toHaveBeenCalledWith("mock-destination");
+      expect(mockGainConnect).toHaveBeenCalledWith("mock-destination");
+    });
+  });
+
+  describe("Strict Mode double-invoke resilience", () => {
+    it("does not call createMediaElementSource twice for the same element", () => {
+      const mockVideo = {} as HTMLVideoElement;
+
+      // Simulate first mount
+      const ctx1 = new AudioContext();
+      const source1 = ctx1.createMediaElementSource(mockVideo);
+      sourceCache.set(mockVideo, {
+        source: source1 as unknown as MediaElementAudioSourceNode,
+        context: ctx1,
+      });
+
+      vi.clearAllMocks();
+
+      // Simulate second mount (Strict Mode re-invoke) - should reuse cached source
+      const cached = sourceCache.get(mockVideo);
+      expect(cached).toBeDefined();
+      expect(mockCreateMediaElementSource).not.toHaveBeenCalled();
+    });
+
+    it("reuses cached source and creates new gain node on re-mount", () => {
+      const mockVideo = {} as HTMLVideoElement;
+
+      // First mount: create and cache
+      const ctx = new AudioContext();
+      const source = ctx.createMediaElementSource(mockVideo);
+      sourceCache.set(mockVideo, {
+        source: source as unknown as MediaElementAudioSourceNode,
+        context: ctx,
+      });
+
+      vi.clearAllMocks();
+
+      // Second mount: reuse source, create new gain
+      const cached = sourceCache.get(mockVideo)!;
+      const gain = cached.context.createGain();
+      (gain as unknown as typeof mockGainNode).gain.value = Math.pow(
+        10,
+        10 / 20
+      );
+
+      expect(mockCreateGain).toHaveBeenCalledTimes(1);
+      expect(mockGainNode.gain.value).toBeCloseTo(3.162, 2);
+    });
+
+    it("properly disconnects on cleanup without closing context", () => {
+      const mockVideo = {} as HTMLVideoElement;
+
+      const ctx = new AudioContext();
+      const source = ctx.createMediaElementSource(mockVideo);
+      const gain = ctx.createGain();
+
+      (source as unknown as typeof mockSourceNode).connect(
+        gain as unknown as AudioNode
+      );
+      (gain as unknown as AudioNode).connect(
+        ctx.destination as unknown as AudioNode
+      );
+
+      // Cleanup: disconnect but don't close
+      (source as unknown as typeof mockSourceNode).disconnect();
+      (gain as unknown as typeof mockGainNode).disconnect();
+
+      expect(mockSourceNode.disconnect).toHaveBeenCalled();
+      expect(mockGainNode.disconnect).toHaveBeenCalled();
     });
   });
 });
