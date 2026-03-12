@@ -171,7 +171,7 @@ export function WriteChat(props: WriteChatProps) {
   return (
     <div className="w-3/4 flex flex-col">
       <AIConversation className="flex-1 overflow-y-auto scrollbar scrollbar-track-transparent scrollbar-thumb-gray-700 hover:scrollbar-thumb-gray-600">
-        <AIConversationContent className="max-w-2xl mx-auto">
+        <AIConversationContent className="max-w-[75ch] mx-auto">
           {error && (
             <Card className="p-4 mb-4 border-red-500 bg-red-50 dark:bg-red-950">
               <div className="flex items-start gap-2">
@@ -217,7 +217,7 @@ export function WriteChat(props: WriteChatProps) {
         <AIConversationScrollButton />
       </AIConversation>
       <div className="border-t p-4 bg-background">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-[75ch] mx-auto">
           <WriteToolbar {...toolbarProps} />
           <AIInput onSubmit={onSubmit}>
             <AIInputTextarea
