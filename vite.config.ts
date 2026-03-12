@@ -11,5 +11,10 @@ export default defineConfig({
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "**/.react-router/**"],
     pool: "forks",
+    poolOptions: {
+      forks: {
+        maxForks: 5,
+      },
+    },
   },
 });
