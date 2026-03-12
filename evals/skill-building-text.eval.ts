@@ -8,6 +8,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { Array, Effect } from "effect";
 import { evalite } from "evalite";
 import { wrapAISDKModel } from "evalite/ai-sdk";
+import type { LanguageModel } from "ai";
 
 const lessons = [
   // 01-retrieval-day-1
@@ -42,12 +43,12 @@ const INTRO_MAX_LENGTH_IN_CHARS = 1000;
 evalite.each([
   {
     name: "Haiku 4.5",
-    input: anthropic("claude-haiku-4-5"),
+    input: anthropic("claude-haiku-4-5") as any,
     only: true,
   },
   {
     name: "Sonnet 4.5",
-    input: anthropic("claude-sonnet-4-5"),
+    input: anthropic("claude-sonnet-4-5") as any,
   },
 ])("Skill Building Text", {
   data: async () => {
@@ -101,12 +102,12 @@ evalite.each([
       code: filesWithoutReadme,
       transcript: input.transcript,
       imageFiles: [],
-      model: wrapAISDKModel(model),
+      model: wrapAISDKModel(model) as unknown as LanguageModel,
       mode: "skill-building",
     });
 
     const result = await agent.generate({
-      messages: createModelMessagesForTextWritingAgent({
+      messages: await createModelMessagesForTextWritingAgent({
         messages: [
           {
             id: "1",

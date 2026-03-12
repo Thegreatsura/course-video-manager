@@ -6,7 +6,7 @@ import {
   type FewShotExample,
 } from "@/prompts/generate-suggest-next-clip";
 import { DBFunctionsService } from "@/services/db-service.server";
-import { Experimental_Agent as Agent } from "ai";
+import { ToolLoopAgent as Agent } from "ai";
 import { Console, Effect, Schema } from "effect";
 import type { Route } from "./+types/videos.$videoId.suggest-next-clip";
 import { anthropic } from "@ai-sdk/anthropic";
@@ -106,17 +106,19 @@ export const action = async (args: Route.ActionArgs) => {
 
     const agent = new Agent({
       model: anthropic("claude-haiku-4-5"),
-      system: systemPrompt,
+      instructions: systemPrompt,
     });
 
-    const result = agent.stream({
-      messages: [
-        {
-          role: "user",
-          content: "Go.",
-        },
-      ],
-    });
+    const result = yield* Effect.tryPromise(() =>
+      agent.stream({
+        messages: [
+          {
+            role: "user",
+            content: "Go.",
+          },
+        ],
+      })
+    );
 
     return result.toUIMessageStreamResponse();
   }).pipe(

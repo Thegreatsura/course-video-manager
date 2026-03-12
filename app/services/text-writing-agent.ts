@@ -17,7 +17,7 @@ import { generateScopingDiscussionPrompt } from "@/prompts/generate-scoping-disc
 import { generateScopingDocumentPrompt } from "@/prompts/generate-scoping-document";
 import type { GlobalLink } from "@/prompts/link-instructions";
 import {
-  Experimental_Agent as Agent,
+  ToolLoopAgent as Agent,
   convertToModelMessages,
   type LanguageModel,
   type ModelMessage,
@@ -200,15 +200,15 @@ export const createTextWritingAgent = (props: {
 
   return new Agent({
     model: props.model,
-    system: systemPrompt + memorySection,
+    instructions: systemPrompt + memorySection,
   });
 };
 
-export const createModelMessagesForTextWritingAgent = (props: {
+export const createModelMessagesForTextWritingAgent = async (props: {
   messages: UIMessage[];
   imageFiles: TextWritingAgentImageFile[];
-}): ModelMessage[] => {
-  const modelMessages = convertToModelMessages(props.messages);
+}): Promise<ModelMessage[]> => {
+  const modelMessages = await convertToModelMessages(props.messages);
 
   if (props.imageFiles.length > 0) {
     modelMessages.unshift({

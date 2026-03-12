@@ -1,7 +1,7 @@
 import { generateArticlePrompt } from "@/prompts/generate-article";
 import type { GlobalLink } from "@/prompts/link-instructions";
 import {
-  Experimental_Agent as Agent,
+  ToolLoopAgent as Agent,
   tool,
   type LanguageModel,
   stepCountIs,
@@ -105,7 +105,7 @@ After calling writeDocument, you may add a brief conversational message explaini
   if (props.document) {
     return new Agent({
       model: props.model,
-      system: systemPrompt + memorySection,
+      instructions: systemPrompt + memorySection,
       tools: { editDocument: editDocumentTool },
       stopWhen: stepCountIs(5),
     });
@@ -113,7 +113,7 @@ After calling writeDocument, you may add a brief conversational message explaini
 
   return new Agent({
     model: props.model,
-    system: systemPrompt + memorySection,
+    instructions: systemPrompt + memorySection,
     tools: { writeDocument: writeDocumentTool },
     stopWhen: stepCountIs(5),
   });

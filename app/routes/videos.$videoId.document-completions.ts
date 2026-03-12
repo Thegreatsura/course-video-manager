@@ -85,10 +85,12 @@ export const action = async (args: Route.ActionArgs) => {
       courseStructureText = lines.join("\n");
     }
 
-    const modelMessages = createModelMessagesForTextWritingAgent({
-      messages,
-      imageFiles: videoContext.imageFiles,
-    });
+    const modelMessages = yield* Effect.tryPromise(() =>
+      createModelMessagesForTextWritingAgent({
+        messages,
+        imageFiles: videoContext.imageFiles,
+      })
+    );
 
     // Append document content to last user message for prompt caching
     if (parsed.document) {
@@ -111,8 +113,11 @@ export const action = async (args: Route.ActionArgs) => {
       memory: parsed.memory,
     });
 
-    const result = agent.stream({
-      messages: modelMessages,
+    const result = yield* Effect.promise(async () => {
+      const stream = await (agent.stream({
+        messages: modelMessages,
+      }) as Promise<{ toUIMessageStreamResponse: () => Response }>);
+      return stream;
     });
 
     return result.toUIMessageStreamResponse();

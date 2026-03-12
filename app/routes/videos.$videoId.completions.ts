@@ -110,10 +110,12 @@ export const action = async (args: Route.ActionArgs) => {
       courseStructureText = lines.join("\n");
     }
 
-    const modelMessages = createModelMessagesForTextWritingAgent({
-      messages,
-      imageFiles: videoContext.imageFiles,
-    });
+    const modelMessages = yield* Effect.tryPromise(() =>
+      createModelMessagesForTextWritingAgent({
+        messages,
+        imageFiles: videoContext.imageFiles,
+      })
+    );
 
     const agent = createTextWritingAgent({
       model: anthropic(model),
@@ -129,9 +131,9 @@ export const action = async (args: Route.ActionArgs) => {
       memory: parsed.memory,
     });
 
-    const result = agent.stream({
-      messages: modelMessages,
-    });
+    const result = yield* Effect.tryPromise(() =>
+      agent.stream({ messages: modelMessages })
+    );
 
     return result.toUIMessageStreamResponse();
   }).pipe(
