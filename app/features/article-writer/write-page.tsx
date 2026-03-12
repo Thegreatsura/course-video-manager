@@ -29,6 +29,8 @@ import {
 import { hasUnresolvedScreenshots } from "./choose-screenshot-mutations";
 import { WriteChat } from "./write-chat";
 import { WriteModals } from "./write-modals";
+import { DocumentPanel } from "./document-panel";
+import { useDocumentFlow } from "./use-document-flow";
 
 export interface WritePageProps {
   videoId: string;
@@ -152,6 +154,8 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     };
   }, [memory, repoId]);
 
+  const isDocumentMode = mode === "article";
+
   const hasExplainerOrProblem = files.some(
     (f) => f.path.startsWith("explainer/") || f.path.startsWith("problem/")
   );
@@ -160,21 +164,39 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     loadMessagesFromStorage(videoId, mode)
   );
 
-  const { messages, setMessages, sendMessage, regenerate, status, error } =
-    useChat({
-      transport: new DefaultChatTransport({
-        api: `/videos/${videoId}/completions`,
-      }),
-      messages: initialMessages,
-    });
+  const chatApi = isDocumentMode
+    ? `/videos/${videoId}/document-completions`
+    : `/videos/${videoId}/completions`;
+
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    regenerate,
+    addToolOutput,
+    status,
+    error,
+  } = useChat({
+    transport: new DefaultChatTransport({ api: chatApi }),
+    messages: initialMessages,
+  });
+
+  const { document, clearDocument, saveDocument } = useDocumentFlow({
+    videoId,
+    isDocumentMode,
+    messages,
+    status,
+    addToolOutput,
+  });
 
   const prevStatusRef = useRef(status);
   useEffect(() => {
     if (prevStatusRef.current === "streaming" && status === "ready") {
       saveMessagesToStorage(videoId, mode, messages);
+      if (isDocumentMode) saveDocument();
     }
     prevStatusRef.current = status;
-  }, [status, videoId, mode, messages]);
+  }, [status, videoId, mode, messages, isDocumentMode, saveDocument]);
 
   const handleModeChange = (newMode: Mode) => {
     if (messages.length > 0) {
@@ -184,8 +206,7 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(MODE_STORAGE_KEY, newMode);
     }
-    const savedMessages = loadMessagesFromStorage(videoId, newMode);
-    setMessages(savedMessages);
+    setMessages(loadMessagesFromStorage(videoId, newMode));
     if (newMode === "style-guide-skill-building") {
       setEnabledFiles(
         new Set(
@@ -216,14 +237,14 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
   const handleClearChat = () => {
     setMessages([]);
     saveMessagesToStorage(videoId, mode, []);
+    if (isDocumentMode) clearDocument();
   };
 
   const getBodyPayload = () => {
     const transcriptEnabled =
       clipSections.length > 0 ? enabledSections.size > 0 : includeTranscript;
-    return {
+    const base = {
       enabledFiles: Array.from(enabledFiles),
-      mode,
       model,
       includeTranscript: transcriptEnabled,
       enabledSections: Array.from(enabledSections),
@@ -231,10 +252,7 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
         includeCourseStructure && courseStructure ? courseStructure : undefined,
       memory: memoryEnabled && memory ? memory : undefined,
     };
-  };
-
-  const handleRegenerate = () => {
-    regenerate({ body: getBodyPayload() });
+    return isDocumentMode ? { ...base, document } : { ...base, mode };
   };
 
   const writeToReadmeFetcher = useFetcher();
@@ -279,11 +297,15 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     ? partsToText(lastAssistantMessage.parts)
     : "";
 
+  const setCopied = () => {
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(lastAssistantMessageText);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      setCopied();
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
     }
@@ -299,8 +321,7 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
       await navigator.clipboard.write([
         new ClipboardItem({ "text/html": blob, "text/plain": textBlob }),
       ]);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      setCopied();
     } catch (error) {
       console.error("Failed to copy as rich text:", error);
     }
@@ -308,10 +329,8 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
 
   const copyConversationHistory = async () => {
     try {
-      const qaText = formatConversationAsQA(messages);
-      await navigator.clipboard.writeText(qaText);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      await navigator.clipboard.writeText(formatConversationAsQA(messages));
+      setCopied();
     } catch (error) {
       console.error("Failed to copy conversation history:", error);
     }
@@ -322,24 +341,6 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     mode,
     bannedPhrases
   );
-
-  const handleFixLintViolations = () => {
-    const fixMessage = composeFixMessage();
-    if (fixMessage) {
-      sendMessage({ text: fixMessage }, { body: getBodyPayload() });
-    }
-  };
-
-  const writeToReadme = (writeMode: "write" | "append") => {
-    writeToReadmeFetcher.submit(
-      { lessonId, content: lastAssistantMessageText, mode: writeMode },
-      {
-        method: "POST",
-        action: "/api/write-readme",
-        encType: "application/json",
-      }
-    );
-  };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -390,28 +391,64 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     }
   };
 
-  const handleDeleteFile = (filename: string) => {
-    setFileToDelete(filename);
-    setIsDeleteModalOpen(true);
-  };
-
   const handleModalClose = (setter: (open: boolean) => void, open: boolean) => {
     setter(open);
     if (!open) revalidator.revalidate();
   };
 
-  const handleFileCreated = (filename: string) => {
-    setEnabledFiles((prev) => new Set([...prev, filename]));
+  const toolbarProps = {
+    mode,
+    model,
+    status,
+    isCopied,
+    messagesLength: messages.length,
+    violations,
+    hasExplainerOrProblem,
+    isStandalone,
+    lastAssistantMessageText,
+    writeToReadmeFetcherState: writeToReadmeFetcher.state,
+    hasUnresolvedScreenshots: hasUnresolvedScreenshots(
+      lastAssistantMessageText
+    ),
+    onModeChange: handleModeChange,
+    onModelChange: handleModelChange,
+    onCopyToClipboard: copyToClipboard,
+    onCopyAsRichText: copyAsRichText,
+    onCopyConversationHistory: copyConversationHistory,
+    onGoLive: handleGoLive,
+    onFixLintViolations: () => {
+      const fixMessage = composeFixMessage();
+      if (fixMessage)
+        sendMessage({ text: fixMessage }, { body: getBodyPayload() });
+    },
+    onOpenBannedPhrases: () => setIsBannedPhrasesModalOpen(true),
+    onRegenerate: () => regenerate({ body: getBodyPayload() }),
+    onClearChat: handleClearChat,
+    onWriteToReadme: (writeMode: "write" | "append") => {
+      writeToReadmeFetcher.submit(
+        { lessonId, content: lastAssistantMessageText, mode: writeMode },
+        {
+          method: "POST",
+          action: "/api/write-readme",
+          encType: "application/json",
+        }
+      );
+    },
   };
 
-  const handleFileClick = (filePath: string) => {
-    setPreviewFilePath(filePath);
-    setIsPreviewModalOpen(true);
-  };
-
-  const handlePreviewModalClose = (open: boolean) => {
-    setIsPreviewModalOpen(open);
-    if (!open) setPreviewFilePath("");
+  const chatProps = {
+    messages,
+    setMessages,
+    error,
+    fullPath,
+    text,
+    onTextChange: setText,
+    onSubmit: handleSubmit,
+    status,
+    indexedClips,
+    mode,
+    videoId,
+    toolbarProps,
   };
 
   return (
@@ -441,7 +478,10 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
           isStandalone={isStandalone}
           enabledFiles={enabledFiles}
           onEnabledFilesChange={setEnabledFiles}
-          onFileClick={handleFileClick}
+          onFileClick={(filePath) => {
+            setPreviewFilePath(filePath);
+            setIsPreviewModalOpen(true);
+          }}
           onOpenFolderClick={() => {
             openFolderFetcher.submit(null, {
               method: "post",
@@ -454,7 +494,10 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
               : () => setIsLessonPasteModalOpen(true)
           }
           onEditFile={handleEditFile}
-          onDeleteFile={handleDeleteFile}
+          onDeleteFile={(filename) => {
+            setFileToDelete(filename);
+            setIsDeleteModalOpen(true);
+          }}
           links={links}
           onAddLinkClick={() => setIsAddLinkModalOpen(true)}
           onDeleteLink={(linkId) => {
@@ -473,45 +516,16 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
             }
           }}
         />
-        <WriteChat
-          messages={messages}
-          setMessages={setMessages}
-          error={error}
-          fullPath={fullPath}
-          text={text}
-          onTextChange={setText}
-          onSubmit={handleSubmit}
-          status={status}
-          indexedClips={indexedClips}
-          mode={mode}
-          videoId={videoId}
-          toolbarProps={{
-            mode,
-            model,
-            status,
-            isCopied,
-            messagesLength: messages.length,
-            violations,
-            hasExplainerOrProblem,
-            isStandalone,
-            lastAssistantMessageText,
-            writeToReadmeFetcherState: writeToReadmeFetcher.state,
-            hasUnresolvedScreenshots: hasUnresolvedScreenshots(
-              lastAssistantMessageText
-            ),
-            onModeChange: handleModeChange,
-            onModelChange: handleModelChange,
-            onCopyToClipboard: copyToClipboard,
-            onCopyAsRichText: copyAsRichText,
-            onCopyConversationHistory: copyConversationHistory,
-            onGoLive: handleGoLive,
-            onFixLintViolations: handleFixLintViolations,
-            onOpenBannedPhrases: () => setIsBannedPhrasesModalOpen(true),
-            onRegenerate: handleRegenerate,
-            onClearChat: handleClearChat,
-            onWriteToReadme: writeToReadme,
-          }}
-        />
+        {isDocumentMode ? (
+          <>
+            <WriteChat {...chatProps} className="w-1/2" />
+            <div className="w-1/2 flex flex-col border-l">
+              <DocumentPanel document={document} fullPath={fullPath} />
+            </div>
+          </>
+        ) : (
+          <WriteChat {...chatProps} />
+        )}
       </div>
       <WriteModals
         videoId={videoId}
@@ -526,7 +540,9 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
         onPasteModalClose={(open) =>
           handleModalClose(setIsPasteModalOpen, open)
         }
-        onStandaloneFileCreated={handleFileCreated}
+        onStandaloneFileCreated={(filename) =>
+          setEnabledFiles((prev) => new Set([...prev, filename]))
+        }
         isDeleteModalOpen={isDeleteModalOpen}
         fileToDelete={fileToDelete}
         onDeleteModalClose={(open) =>
@@ -536,10 +552,15 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
         onLessonPasteModalClose={(open) =>
           handleModalClose(setIsLessonPasteModalOpen, open)
         }
-        onLessonFileCreated={handleFileCreated}
+        onLessonFileCreated={(filename) =>
+          setEnabledFiles((prev) => new Set([...prev, filename]))
+        }
         isPreviewModalOpen={isPreviewModalOpen}
         previewFilePath={previewFilePath}
-        onPreviewModalClose={() => handlePreviewModalClose(false)}
+        onPreviewModalClose={() => {
+          setIsPreviewModalOpen(false);
+          setPreviewFilePath("");
+        }}
         isBannedPhrasesModalOpen={isBannedPhrasesModalOpen}
         onBannedPhrasesModalOpenChange={setIsBannedPhrasesModalOpen}
         bannedPhrases={bannedPhrases}

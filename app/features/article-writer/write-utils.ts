@@ -103,6 +103,38 @@ export const saveMessagesToStorage = (
   }
 };
 
+export const getDocumentStorageKey = (videoId: string) =>
+  `article-writer-document-${videoId}`;
+
+export const loadDocumentFromStorage = (
+  videoId: string
+): string | undefined => {
+  if (typeof localStorage === "undefined") return undefined;
+  try {
+    const saved = localStorage.getItem(getDocumentStorageKey(videoId));
+    return saved ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const saveDocumentToStorage = (
+  videoId: string,
+  document: string | undefined
+) => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const key = getDocumentStorageKey(videoId);
+    if (document === undefined) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, document);
+    }
+  } catch {
+    // ignore
+  }
+};
+
 export const formatConversationAsQA = (messages: UIMessage[]) => {
   const qaMessages: string[] = [];
 

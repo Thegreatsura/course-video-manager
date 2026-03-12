@@ -39,6 +39,7 @@ export interface WriteChatProps {
   indexedClips: IndexedClip[];
   mode: Mode;
   videoId: string;
+  className?: string;
   toolbarProps: WriteToolbarProps;
 }
 
@@ -55,6 +56,7 @@ export function WriteChat(props: WriteChatProps) {
     indexedClips,
     mode,
     videoId,
+    className,
     toolbarProps,
   } = props;
 
@@ -177,7 +179,11 @@ export function WriteChat(props: WriteChatProps) {
   }, [extraComponents]);
 
   return (
-    <div className="w-3/4 flex flex-col">
+    <div
+      className={
+        className ? `${className} flex flex-col` : "w-3/4 flex flex-col"
+      }
+    >
       <AIConversation className="flex-1 overflow-y-auto scrollbar scrollbar-track-transparent scrollbar-thumb-gray-700 hover:scrollbar-thumb-gray-600">
         <AIConversationContent className="max-w-[75ch] mx-auto">
           {error && (
@@ -205,19 +211,36 @@ export function WriteChat(props: WriteChatProps) {
               );
             }
 
+            const textContent = partsToText(message.parts);
+
             return (
               <AIMessage from={message.role} key={message.id}>
-                <AIResponse
-                  imageBasePath={fullPath ?? ""}
-                  extraComponents={extraComponents}
-                  preprocessMarkdown={
-                    preprocessMarkdown
-                      ? (md: string) => preprocessMarkdown(md, message.id)
-                      : undefined
+                {message.parts.map((part, partIndex) => {
+                  if (part.type === "tool-writeDocument") {
+                    return (
+                      <div
+                        key={partIndex}
+                        className="text-sm text-muted-foreground italic py-1"
+                      >
+                        Wrote document
+                      </div>
+                    );
                   }
-                >
-                  {partsToText(message.parts)}
-                </AIResponse>
+                  return null;
+                })}
+                {textContent && (
+                  <AIResponse
+                    imageBasePath={fullPath ?? ""}
+                    extraComponents={extraComponents}
+                    preprocessMarkdown={
+                      preprocessMarkdown
+                        ? (md: string) => preprocessMarkdown(md, message.id)
+                        : undefined
+                    }
+                  >
+                    {textContent}
+                  </AIResponse>
+                )}
               </AIMessage>
             );
           })}
