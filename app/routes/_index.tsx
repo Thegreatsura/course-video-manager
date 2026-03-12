@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Console, Effect } from "effect";
-import { execFileSync } from "node:child_process";
+import { getGitStatus } from "@/services/git-status-service";
 import { Plus } from "lucide-react";
 import { useCallback, useContext, useMemo, useState } from "react";
 import { data, useFetcher, useNavigate, useSearchParams } from "react-router";
@@ -206,49 +206,9 @@ export const loader = async (args: Route.LoaderArgs) => {
       selectedVersion.id === latestVersion.id
     );
 
-    // Get git status for the selected repo
-    let gitStatus: {
-      modified: number;
-      added: number;
-      deleted: number;
-      untracked: number;
-      total: number;
-    } | null = null;
-
-    if (selectedRepo?.filePath) {
-      try {
-        const output = execFileSync("git", ["status", "--porcelain"], {
-          cwd: selectedRepo.filePath,
-          encoding: "utf-8",
-        });
-        const lines = output.split("\n").filter((l) => l.length > 0);
-        let modified = 0;
-        let added = 0;
-        let deleted = 0;
-        let untracked = 0;
-        for (const line of lines) {
-          const code = line.substring(0, 2);
-          if (code === "??") {
-            untracked++;
-          } else if (code.includes("D")) {
-            deleted++;
-          } else if (code.includes("A")) {
-            added++;
-          } else {
-            modified++;
-          }
-        }
-        gitStatus = {
-          modified,
-          added,
-          deleted,
-          untracked,
-          total: lines.length,
-        };
-      } catch {
-        // Not a git repo or git not available
-      }
-    }
+    const gitStatus = selectedRepo?.filePath
+      ? getGitStatus(selectedRepo.filePath)
+      : null;
 
     return {
       repos,
