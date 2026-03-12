@@ -603,8 +603,8 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
         />
         {isDocumentMode ? (
           <>
-            <WriteChat {...chatProps} className="w-1/2" />
-            <div className="w-1/2 flex flex-col border-l">
+            <WriteChat {...chatProps} className="w-2/5" />
+            <div className="w-3/5 flex flex-col border-l">
               <DocumentPanel
                 document={document}
                 fullPath={fullPath}
