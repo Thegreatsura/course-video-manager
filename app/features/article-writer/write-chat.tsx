@@ -226,6 +226,30 @@ export function WriteChat(props: WriteChatProps) {
                       </div>
                     );
                   }
+                  if (part.type === "tool-editDocument") {
+                    const input = "input" in part ? part.input : undefined;
+                    const editCount =
+                      input &&
+                      typeof input === "object" &&
+                      "edits" in input &&
+                      Array.isArray(input.edits)
+                        ? input.edits.length
+                        : 0;
+                    const result = "result" in part ? part.result : undefined;
+                    const failed =
+                      typeof result === "string" &&
+                      !result.includes("successfully");
+                    return (
+                      <div
+                        key={partIndex}
+                        className={`text-sm italic py-1 ${failed ? "text-red-500" : "text-muted-foreground"}`}
+                      >
+                        {failed
+                          ? "Edit failed — retrying..."
+                          : `Edited document (${editCount} ${editCount === 1 ? "edit" : "edits"})`}
+                      </div>
+                    );
+                  }
                   return null;
                 })}
                 {textContent && (

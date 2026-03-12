@@ -35,7 +35,22 @@ export const createDocumentWritingAgent = (props: {
   });
 
   const documentInstructions = props.document
-    ? ""
+    ? `
+
+## Document Editing Instructions
+
+A document already exists. The user will provide it in a <current-document> tag. You MUST use the \`editDocument\` tool to make changes. Do not output the full article as plain text.
+
+Use minimal, surgical edits:
+- \`replace\`: Find a unique passage of old_text and replace it with new_text. Include enough surrounding context in old_text to ensure a unique match.
+- \`insert_after\`: Find a unique anchor string and insert new_text immediately after it.
+- \`rewrite\`: Replace the entire document (use only for major restructuring when asked).
+
+You can include multiple edits in a single editDocument call. Edits are applied sequentially — each edit sees the document as modified by prior edits.
+
+If an edit fails (e.g. text not found), you will receive an error message. Read it carefully and retry with corrected text.
+
+After calling editDocument, you may add a brief conversational message explaining what you changed.`
     : `
 
 ## Document Writing Instructions
@@ -58,11 +73,40 @@ After calling writeDocument, you may add a brief conversational message explaini
     }),
   });
 
+  const editDocumentTool = tool({
+    description:
+      "Edit the existing document with surgical changes. Use replace for targeted text changes, insert_after to add content after an anchor, or rewrite to replace the entire document.",
+    inputSchema: z.object({
+      edits: z.array(
+        z.object({
+          type: z
+            .enum(["replace", "insert_after", "rewrite"])
+            .describe("The type of edit to apply"),
+          old_text: z
+            .string()
+            .optional()
+            .describe(
+              "For replace: the exact text to find and replace. Include enough context for a unique match."
+            ),
+          anchor: z
+            .string()
+            .optional()
+            .describe(
+              "For insert_after: the exact text after which to insert new content."
+            ),
+          new_text: z
+            .string()
+            .describe("The new text to insert or replace with"),
+        })
+      ),
+    }),
+  });
+
   if (props.document) {
-    // No tools when document already exists (edit flow is a future slice)
     return new Agent({
       model: props.model,
       system: systemPrompt + memorySection,
+      tools: { editDocument: editDocumentTool },
       stopWhen: stepCountIs(5),
     });
   }

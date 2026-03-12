@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { loadDocumentFromStorage, saveDocumentToStorage } from "./write-utils";
+import { applyEdits, type DocumentEdit } from "./document-editing-engine";
 
 /**
  * Manages document state for the article mode document flow.
@@ -55,6 +56,46 @@ export function useDocumentFlow(opts: {
       }
     }
   }, [messages, isDocumentMode, videoId, addToolOutput]);
+
+  // Handle completed editDocument tool calls
+  useEffect(() => {
+    if (!isDocumentMode) return;
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      for (const part of message.parts) {
+        if (
+          "toolCallId" in part &&
+          part.type === "tool-editDocument" &&
+          "input" in part &&
+          part.input &&
+          typeof part.input === "object" &&
+          "edits" in part.input &&
+          Array.isArray(part.input.edits) &&
+          !processedToolCallsRef.current.has(part.toolCallId)
+        ) {
+          processedToolCallsRef.current.add(part.toolCallId);
+          const edits = part.input.edits as DocumentEdit[];
+          const currentDoc = document ?? "";
+          const result = applyEdits(currentDoc, edits);
+          if ("error" in result) {
+            addToolOutput({
+              tool: "editDocument" as never,
+              toolCallId: part.toolCallId,
+              output: result.error as never,
+            });
+          } else {
+            setDocument(result.document);
+            saveDocumentToStorage(videoId, result.document);
+            addToolOutput({
+              tool: "editDocument" as never,
+              toolCallId: part.toolCallId,
+              output: "Document edited successfully." as never,
+            });
+          }
+        }
+      }
+    }
+  }, [messages, isDocumentMode, videoId, addToolOutput, document]);
 
   // Stream document content live during writeDocument tool call
   useEffect(() => {
