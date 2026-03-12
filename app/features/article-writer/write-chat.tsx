@@ -25,6 +25,7 @@ import { preprocessChooseScreenshotMarkdown } from "./choose-screenshot-markdown
 import {
   replaceChooseScreenshotWithImage,
   updateChooseScreenshotClipIndex,
+  removeChooseScreenshot,
 } from "./choose-screenshot-mutations";
 
 export interface WriteChatProps {
@@ -90,6 +91,15 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
     [mutateMessageText]
   );
 
+  const handleRemove = useCallback(
+    (messageId: string, clipIndex: number, alt: string) => {
+      mutateMessageText(messageId, (text) =>
+        removeChooseScreenshot(text, clipIndex, alt)
+      );
+    },
+    [mutateMessageText]
+  );
+
   const [capturingKey, setCapturingKey] = useState<string | null>(null);
 
   const handleCapture = useCallback(
@@ -146,6 +156,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
             onCapture={(ci, a, timestamp, videoFilename) =>
               handleCapture(msgId, ci, a, timestamp, videoFilename)
             }
+            onRemove={(ci, a) => handleRemove(msgId, ci, a)}
             isCapturing={capturingKey === key}
             isStreaming={status === "streaming" || status === "submitted"}
           />
@@ -157,6 +168,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
     mode,
     handleClipIndexChange,
     handleCapture,
+    handleRemove,
     capturingKey,
     status,
   ]);

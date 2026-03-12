@@ -32,6 +32,7 @@ import {
 import {
   replaceChooseScreenshotWithImage,
   updateChooseScreenshotClipIndex,
+  removeChooseScreenshot,
   hasUnresolvedScreenshots,
 } from "./choose-screenshot-mutations";
 import { preprocessChooseScreenshotMarkdown } from "./choose-screenshot-markdown";
@@ -248,6 +249,16 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     [documentRef, updateDocument]
   );
 
+  const handleDocRemove = useCallback(
+    (clipIndex: number, alt: string) => {
+      const currentDoc = documentRef.current;
+      if (currentDoc) {
+        updateDocument(removeChooseScreenshot(currentDoc, clipIndex, alt));
+      }
+    },
+    [documentRef, updateDocument]
+  );
+
   const {
     writeToReadmeFetcher: docWriteToReadmeFetcher,
     isUploadingImages,
@@ -281,6 +292,7 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
               handleDocClipIndexChange(current, next, altText)
             }
             onCapture={handleDocCapture}
+            onRemove={handleDocRemove}
             isCapturing={docCapturingKey === key}
             isStreaming={status === "streaming" || status === "submitted"}
           />
@@ -292,6 +304,7 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     isDocumentMode,
     handleDocClipIndexChange,
     handleDocCapture,
+    handleDocRemove,
     docCapturingKey,
     status,
   ]);

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   replaceChooseScreenshotWithImage,
   updateChooseScreenshotClipIndex,
+  removeChooseScreenshot,
   hasUnresolvedScreenshots,
 } from "./choose-screenshot-mutations";
 
@@ -96,6 +97,61 @@ describe("updateChooseScreenshotClipIndex", () => {
     expect(result).toBe(
       `<ChooseScreenshot clipIndex={4} alt="terminal output" />`
     );
+  });
+});
+
+describe("removeChooseScreenshot", () => {
+  it("removes the tag and two trailing newlines", () => {
+    const message = `Some text before
+
+<ChooseScreenshot clipIndex={3} alt="VS Code showing error" />
+
+Some text after`;
+
+    const result = removeChooseScreenshot(message, 3, "VS Code showing error");
+
+    expect(result).toBe(`Some text before
+
+Some text after`);
+  });
+
+  it("removes only the matching tag when multiple exist", () => {
+    const message = `<ChooseScreenshot clipIndex={1} alt="first" />
+
+Some middle text
+
+<ChooseScreenshot clipIndex={3} alt="second" />
+
+End text`;
+
+    const result = removeChooseScreenshot(message, 1, "first");
+
+    expect(result).toBe(`Some middle text
+
+<ChooseScreenshot clipIndex={3} alt="second" />
+
+End text`);
+  });
+
+  it("removes tag with fewer than two trailing newlines", () => {
+    const message = `<ChooseScreenshot clipIndex={1} alt="test" />
+Next line`;
+
+    const result = removeChooseScreenshot(message, 1, "test");
+
+    expect(result).toBe(`Next line`);
+  });
+
+  it("removes tag at end of string with no trailing newlines", () => {
+    const message = `Some text
+
+<ChooseScreenshot clipIndex={2} alt="end" />`;
+
+    const result = removeChooseScreenshot(message, 2, "end");
+
+    expect(result).toBe(`Some text
+
+`);
   });
 });
 

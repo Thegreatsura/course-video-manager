@@ -51,6 +51,22 @@ export function hasUnresolvedScreenshots(message: string): boolean {
   );
 }
 
+/**
+ * Remove a specific ChooseScreenshot tag and up to two trailing newlines.
+ * Matches by clipIndex and alt text.
+ */
+export function removeChooseScreenshot(
+  message: string,
+  clipIndex: number,
+  alt: string
+): string {
+  const pattern = new RegExp(
+    `<ChooseScreenshot\\s+clipIndex=\\{${clipIndex}\\}\\s+alt="${escapeRegex(alt)}"\\s*/>\n{0,2}`,
+    "g"
+  );
+  return message.replace(pattern, "");
+}
+
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

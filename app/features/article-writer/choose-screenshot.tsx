@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   AlertTriangleIcon,
   LoaderIcon,
+  XIcon,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
@@ -20,6 +21,7 @@ export interface ChooseScreenshotProps {
     timestamp: number,
     videoFilename: string
   ) => void;
+  onRemove: (clipIndex: number, alt: string) => void;
   isCapturing?: boolean;
   isStreaming?: boolean;
 }
@@ -30,6 +32,7 @@ export function ChooseScreenshot({
   clips,
   onClipIndexChange,
   onCapture,
+  onRemove,
   isCapturing,
   isStreaming,
 }: ChooseScreenshotProps) {
@@ -106,7 +109,15 @@ export function ChooseScreenshot({
   }
 
   return (
-    <div className="my-4 rounded-lg border border-border bg-muted/50 p-4">
+    <div className="my-4 rounded-lg border border-border bg-muted/50 p-4 relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground"
+        onClick={() => onRemove(clipIndex, alt)}
+      >
+        <XIcon className="h-3.5 w-3.5" />
+      </Button>
       <p className="mb-2 text-xs text-muted-foreground">
         Clip {clipIndex} — {alt}
       </p>
