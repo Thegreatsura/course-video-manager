@@ -1,7 +1,8 @@
-import { lazy, memo, Suspense, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useState } from "react";
 import { AIResponse } from "components/ui/kibo-ui/ai/response";
 import { Button } from "@/components/ui/button";
 import type { Options } from "react-markdown";
+import type { OnMount } from "@monaco-editor/react";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -21,6 +22,39 @@ export const DocumentPanel = memo(function DocumentPanel({
   onDocumentChange,
 }: DocumentPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
+
+  const handleEditorMount = useCallback<OnMount>(
+    (editor, monaco) => {
+      // Ctrl+S / Cmd+S: format with Prettier
+      editor.addAction({
+        id: "prettier-format",
+        label: "Format with Prettier",
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+        run: async (ed) => {
+          const prettier = await import("prettier/standalone");
+          const markdownPlugin = await import("prettier/plugins/markdown");
+          try {
+            const formatted = await prettier.format(ed.getValue(), {
+              parser: "markdown",
+              plugins: [markdownPlugin],
+              useTabs: false,
+              tabWidth: 2,
+              printWidth: 80,
+              singleQuote: false,
+              trailingComma: "es5",
+              semi: true,
+              arrowParens: "always",
+            });
+            ed.setValue(formatted);
+            onDocumentChange?.(formatted);
+          } catch {
+            // Formatting failed — leave content as-is
+          }
+        },
+      });
+    },
+    [onDocumentChange]
+  );
 
   if (!document) {
     return (
@@ -54,6 +88,7 @@ export const DocumentPanel = memo(function DocumentPanel({
             defaultLanguage="markdown"
             value={document}
             onChange={(value) => onDocumentChange?.(value ?? "")}
+            onMount={handleEditorMount}
             theme="vs-dark"
             options={{
               minimap: { enabled: false },
