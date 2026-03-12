@@ -181,13 +181,14 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
     messages: initialMessages,
   });
 
-  const { document, clearDocument, saveDocument } = useDocumentFlow({
-    videoId,
-    isDocumentMode,
-    messages,
-    status,
-    addToolOutput,
-  });
+  const { document, clearDocument, saveDocument, updateDocument } =
+    useDocumentFlow({
+      videoId,
+      isDocumentMode,
+      messages,
+      status,
+      addToolOutput,
+    });
 
   const prevStatusRef = useRef(status);
   useEffect(() => {
@@ -520,7 +521,11 @@ export function WritePage({ videoId, loaderData }: WritePageProps) {
           <>
             <WriteChat {...chatProps} className="w-1/2" />
             <div className="w-1/2 flex flex-col border-l">
-              <DocumentPanel document={document} fullPath={fullPath} />
+              <DocumentPanel
+                document={document}
+                fullPath={fullPath}
+                onDocumentChange={updateDocument}
+              />
             </div>
           </>
         ) : (

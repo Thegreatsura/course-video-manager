@@ -133,5 +133,10 @@ export function useDocumentFlow(opts: {
     }
   };
 
-  return { document, clearDocument, saveDocument };
+  const updateDocument = (content: string) => {
+    setDocument(content);
+    saveDocumentToStorage(videoId, content);
+  };
+
+  return { document, clearDocument, saveDocument, updateDocument };
 }
