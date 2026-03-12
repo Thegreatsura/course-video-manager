@@ -14,6 +14,7 @@ import { CloudinaryMarkdownService } from "./cloudinary-markdown-service";
 import { RepoWriteService } from "./repo-write-service";
 import { CourseWriteService } from "./course-write-service";
 import { RepoSyncValidationService } from "./repo-sync-validation";
+import { FFmpegCommandsService } from "./ffmpeg-commands";
 
 const CloudinaryMarkdownLayer = CloudinaryMarkdownService.Default.pipe(
   Layer.provide(CloudinaryService.Default)
@@ -33,6 +34,7 @@ export const layerLive = Layer.mergeAll(
   RepoWriteService.Default,
   CourseWriteService.Default,
   RepoSyncValidationService.Default,
+  FFmpegCommandsService.Default,
   NodeContext.layer
 ).pipe(Layer.provideMerge(DrizzleService.Default));
 

@@ -306,11 +306,59 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         return outputFile;
       });
 
+      const captureFrameAtTime = Effect.fn("captureFrameAtTime")(function* (
+        inputVideo: string,
+        timestamp: number,
+        outputPath: string
+      ) {
+        const args = [
+          "-y",
+          "-hide_banner",
+          "-ss",
+          String(timestamp),
+          "-i",
+          inputVideo,
+          "-vframes",
+          "1",
+          "-q:v",
+          "2",
+          outputPath,
+        ];
+
+        yield* cpuSemaphore.withPermits(1)(
+          Effect.gen(function* () {
+            const code = yield* Command.exitCode(
+              Command.make("ffmpeg", ...args).pipe(
+                Command.stdout("inherit"),
+                Command.stderr("inherit")
+              )
+            ).pipe(
+              Effect.mapError(
+                (e) =>
+                  new FFmpegError({
+                    cause: e,
+                    message: `Failed to capture frame at ${timestamp}s: ${e.message}`,
+                  })
+              )
+            );
+            if (code !== 0) {
+              yield* new FFmpegError({
+                cause: null,
+                message: `Failed to capture frame at ${timestamp}s, exit code: ${code}`,
+              });
+            }
+          })
+        );
+
+        return outputPath;
+      });
+
       return {
         detectSilence,
         getFPS,
         createAndConcatenateVideoClipsSinglePass,
         normalizeAudio,
+        captureFrameAtTime,
       };
     }),
     dependencies: [NodeContext.layer],

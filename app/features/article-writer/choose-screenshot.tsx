@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import {
+  CameraIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   AlertTriangleIcon,
+  LoaderIcon,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
@@ -12,6 +14,13 @@ export interface ChooseScreenshotProps {
   alt: string;
   clips: IndexedClip[];
   onClipIndexChange: (currentIndex: number, newIndex: number) => void;
+  onCapture: (
+    clipIndex: number,
+    alt: string,
+    timestamp: number,
+    videoFilename: string
+  ) => void;
+  isCapturing?: boolean;
 }
 
 export function ChooseScreenshot({
@@ -19,6 +28,8 @@ export function ChooseScreenshot({
   alt,
   clips,
   onClipIndexChange,
+  onCapture,
+  isCapturing,
 }: ChooseScreenshotProps) {
   const clip = clips.find((c) => c.index === clipIndex);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -122,6 +133,21 @@ export function ChooseScreenshot({
         >
           Next
           <ChevronRightIcon className="h-3 w-3 ml-1" />
+        </Button>
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          disabled={isCapturing}
+          onClick={() =>
+            onCapture(clipIndex, alt, currentTime, clip.videoFilename)
+          }
+        >
+          {isCapturing ? (
+            <LoaderIcon className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <CameraIcon className="h-3 w-3 mr-1" />
+          )}
+          {isCapturing ? "Capturing…" : "Capture"}
         </Button>
       </div>
     </div>

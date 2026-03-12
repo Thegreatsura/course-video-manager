@@ -15,14 +15,17 @@ import { AIMessage, AIMessageContent } from "components/ui/kibo-ui/ai/message";
 import { AIResponse } from "components/ui/kibo-ui/ai/response";
 import type { Options } from "react-markdown";
 import type { FormEvent, HTMLAttributes } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { partsToText, saveMessagesToStorage } from "./write-utils";
 import type { WriteToolbarProps } from "./write-toolbar";
 import { WriteToolbar } from "./write-toolbar";
 import type { IndexedClip, Mode } from "./types";
 import { ChooseScreenshot } from "./choose-screenshot";
 import { preprocessChooseScreenshotMarkdown } from "./choose-screenshot-markdown";
-import { updateChooseScreenshotClipIndex } from "./choose-screenshot-mutations";
+import {
+  replaceChooseScreenshotWithImage,
+  updateChooseScreenshotClipIndex,
+} from "./choose-screenshot-mutations";
 
 export interface WriteChatProps {
   messages: UIMessage[];
@@ -87,6 +90,41 @@ export function WriteChat(props: WriteChatProps) {
     [mutateMessageText]
   );
 
+  const [capturingKey, setCapturingKey] = useState<string | null>(null);
+
+  const handleCapture = useCallback(
+    async (
+      messageId: string,
+      clipIndex: number,
+      alt: string,
+      timestamp: number,
+      videoFilename: string
+    ) => {
+      const key = `${messageId}-${clipIndex}-${alt}`;
+      setCapturingKey(key);
+      try {
+        const res = await fetch(`/api/videos/${videoId}/capture-screenshot`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timestamp, videoFilename }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to capture screenshot");
+        }
+        const { imagePath } = await res.json();
+        mutateMessageText(messageId, (text) =>
+          replaceChooseScreenshotWithImage(text, clipIndex, alt, imagePath)
+        );
+      } catch (err) {
+        console.error("Screenshot capture failed:", err);
+      } finally {
+        setCapturingKey(null);
+      }
+    },
+    [videoId, mutateMessageText]
+  );
+
   const extraComponents = useMemo((): Options["components"] | undefined => {
     if (indexedClips.length === 0 || mode !== "article") return undefined;
     return {
@@ -96,6 +134,7 @@ export function WriteChat(props: WriteChatProps) {
         const clipIdx = parseInt(compProps.clipindex as string, 10);
         const altText = (compProps.alt as string) ?? "";
         const msgId = (compProps["data-message-id"] as string) ?? "";
+        const key = `${msgId}-${clipIdx}-${altText}`;
         return (
           <ChooseScreenshot
             clipIndex={clipIdx}
@@ -104,11 +143,15 @@ export function WriteChat(props: WriteChatProps) {
             onClipIndexChange={(current, next) =>
               handleClipIndexChange(msgId, current, next, altText)
             }
+            onCapture={(ci, a, timestamp, videoFilename) =>
+              handleCapture(msgId, ci, a, timestamp, videoFilename)
+            }
+            isCapturing={capturingKey === key}
           />
         );
       }) as unknown,
     } as Options["components"];
-  }, [indexedClips, mode, handleClipIndexChange]);
+  }, [indexedClips, mode, handleClipIndexChange, handleCapture, capturingKey]);
 
   const preprocessMarkdown = useMemo(() => {
     if (!extraComponents) return undefined;
