@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import { SortableLessonItem } from "./sortable-lesson-item";
 import { SortableSectionItem } from "./sortable-section-item";
+import { filterLessons, calcSectionDuration } from "./section-grid-utils";
 import type { LoaderData, Section, Lesson } from "./course-view-types";
 
 import { formatSecondsToTimeCode } from "@/services/utils";
@@ -30,6 +31,7 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
+  ChevronRight,
   ClipboardCopy,
   Ghost,
   GripVertical,
@@ -37,6 +39,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 import { useNavigate, useFetcher } from "react-router";
 
 type Fetcher = ReturnType<typeof useFetcher>;
@@ -121,6 +124,22 @@ export function SectionGrid({
   deleteVideoFileFetcher: Fetcher;
   deleteVideoFetcher: Fetcher;
 }) {
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set()
+  );
+
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
+
   // Optimistic section reordering
   let displaySections = currentRepo.sections;
   const pendingSectionReorder = reorderSectionFetcher.formData;
@@ -277,68 +296,12 @@ export function SectionGrid({
               }
             }
 
-            // Filter lessons based on active filters
-            const hasActiveFilters =
-              priorityFilter.length > 0 ||
-              iconFilter.length > 0 ||
-              fsStatusFilter !== null ||
-              searchQuery.length > 0;
-            const filteredLessons = hasActiveFilters
-              ? lessons.filter((lesson) => {
-                  const passesPriorityFilter =
-                    priorityFilter.length === 0 ||
-                    priorityFilter.includes(lesson.priority ?? 2);
-                  const passesIconFilter =
-                    iconFilter.length === 0 ||
-                    iconFilter.includes(lesson.icon ?? "watch");
-                  const passesFsStatusFilter = (() => {
-                    if (fsStatusFilter === null) return true;
-                    if (fsStatusFilter === "ghost")
-                      return (lesson.fsStatus ?? "real") === "ghost";
-                    if (fsStatusFilter === "real")
-                      return (lesson.fsStatus ?? "real") === "real";
-                    // "todo" filter
-                    if ((lesson.fsStatus ?? "real") !== "real") return false;
-                    if (lesson.videos.length === 0) return true;
-                    if (lesson.videos.every((v) => v.clips.length > 1))
-                      return false;
-                    return lesson.videos.some((v) => v.clips.length === 0);
-                  })();
-                  const passesSearch = (() => {
-                    if (!searchQuery) return true;
-                    const q = searchQuery.toLowerCase();
-                    if (lesson.path.toLowerCase().includes(q)) return true;
-                    if (lesson.title?.toLowerCase().includes(q)) return true;
-                    if (lesson.description?.toLowerCase().includes(q))
-                      return true;
-                    return lesson.videos.some((v) =>
-                      v.path.toLowerCase().includes(q)
-                    );
-                  })();
-                  return (
-                    passesPriorityFilter &&
-                    passesIconFilter &&
-                    passesFsStatusFilter &&
-                    passesSearch
-                  );
-                })
-              : lessons;
+            const { filteredLessons, hasActiveFilters } = filterLessons(
+              lessons,
+              { priorityFilter, iconFilter, fsStatusFilter, searchQuery }
+            );
 
-            const sectionDuration = lessons.reduce((acc, lesson) => {
-              return (
-                acc +
-                lesson.videos.reduce((videoAcc, video) => {
-                  return (
-                    videoAcc +
-                    video.clips.reduce((clipAcc, clip) => {
-                      return (
-                        clipAcc + (clip.sourceEndTime - clip.sourceStartTime)
-                      );
-                    }, 0)
-                  );
-                }, 0)
-              );
-            }, 0);
+            const sectionDuration = calcSectionDuration(lessons);
 
             const isGhostSection =
               lessons.length === 0 ||
@@ -373,63 +336,83 @@ export function SectionGrid({
                                   <Ghost className="w-3.5 h-3.5 text-muted-foreground/40" />
                                 )}
                               </div>
-                              {!isGhostSection && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px]"
+                              <div className="flex items-center gap-1.5">
+                                {!isGhostSection && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                  >
+                                    {formatSecondsToTimeCode(sectionDuration)}
+                                  </Badge>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSection(section.id);
+                                  }}
+                                  className="text-muted-foreground/50 hover:text-muted-foreground transition-colors p-0.5"
                                 >
-                                  {formatSecondsToTimeCode(sectionDuration)}
-                                </Badge>
-                              )}
+                                  <ChevronRight
+                                    className={cn(
+                                      "w-4 h-4 transition-transform",
+                                      !collapsedSections.has(section.id) &&
+                                        "rotate-90"
+                                    )}
+                                  />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                          <div className="p-2">
-                            <DndContext
-                              sensors={sensors}
-                              collisionDetection={closestCenter}
-                              onDragEnd={handleLessonDragEnd(
-                                section.id,
-                                lessons
-                              )}
-                            >
-                              <SortableContext
-                                items={lessons.map((l) => l.id)}
-                                strategy={verticalListSortingStrategy}
+                          {!collapsedSections.has(section.id) && (
+                            <div className="p-2">
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleLessonDragEnd(
+                                  section.id,
+                                  lessons
+                                )}
                               >
-                                {hasActiveFilters &&
-                                  filteredLessons.length === 0 && (
-                                    <p className="text-xs text-muted-foreground text-center py-3">
-                                      No matching lessons
-                                    </p>
-                                  )}
-                                {filteredLessons.map((lesson, li) => (
-                                  <SortableLessonItem
-                                    key={lesson.id}
-                                    lesson={lesson}
-                                    lessonIndex={li}
-                                    section={section}
-                                    data={data}
-                                    navigate={navigate}
-                                    allFlatLessons={allFlatLessons}
-                                    addVideoToLessonId={addVideoToLessonId}
-                                    editLessonId={editLessonId}
-                                    convertToGhostLessonId={
-                                      convertToGhostLessonId
-                                    }
-                                    dispatch={dispatch}
-                                    startExportUpload={startExportUpload}
-                                    revealVideoFetcher={revealVideoFetcher}
-                                    deleteVideoFileFetcher={
-                                      deleteVideoFileFetcher
-                                    }
-                                    deleteVideoFetcher={deleteVideoFetcher}
-                                    deleteLessonFetcher={deleteLessonFetcher}
-                                    dependencyMap={dependencyMap}
-                                  />
-                                ))}
-                              </SortableContext>
-                            </DndContext>
-                          </div>
+                                <SortableContext
+                                  items={lessons.map((l) => l.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  {hasActiveFilters &&
+                                    filteredLessons.length === 0 && (
+                                      <p className="text-xs text-muted-foreground text-center py-3">
+                                        No matching lessons
+                                      </p>
+                                    )}
+                                  {filteredLessons.map((lesson, li) => (
+                                    <SortableLessonItem
+                                      key={lesson.id}
+                                      lesson={lesson}
+                                      lessonIndex={li}
+                                      section={section}
+                                      data={data}
+                                      navigate={navigate}
+                                      allFlatLessons={allFlatLessons}
+                                      addVideoToLessonId={addVideoToLessonId}
+                                      editLessonId={editLessonId}
+                                      convertToGhostLessonId={
+                                        convertToGhostLessonId
+                                      }
+                                      dispatch={dispatch}
+                                      startExportUpload={startExportUpload}
+                                      revealVideoFetcher={revealVideoFetcher}
+                                      deleteVideoFileFetcher={
+                                        deleteVideoFileFetcher
+                                      }
+                                      deleteVideoFetcher={deleteVideoFetcher}
+                                      deleteLessonFetcher={deleteLessonFetcher}
+                                      dependencyMap={dependencyMap}
+                                    />
+                                  ))}
+                                </SortableContext>
+                              </DndContext>
+                            </div>
+                          )}
                         </div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
