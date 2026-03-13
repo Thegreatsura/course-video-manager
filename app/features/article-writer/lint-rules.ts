@@ -156,8 +156,7 @@ export const BASE_LINT_RULES: LintRule[] = [
     description:
       "A markdown heading must have at least 2 paragraphs after it before the next heading",
     modes: ["article", "skill-building"],
-    pattern:
-      /^#{1,6} .+\n{2,}(?:(?!#{1,6} )[^\n]+(?:\n(?!\n))?)+\n{2,}(?=#{1,6} )/gm,
+    pattern: /^#{1,6} .+\n\n(?:(?!#{1,6} |\n)[^\n]+\n)*\n(?=#{1,6} )/gm,
     fixInstruction:
       "There are markdown headings with only a single paragraph beneath them (orphaned paragraphs). Restructure the content to have fewer markdown headings overall, not more paragraphs to justify the headings. Merge sections where a heading only introduces one paragraph.",
   },
