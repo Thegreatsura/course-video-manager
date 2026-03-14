@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { useEffect, useState } from "react";
-import { FileIcon } from "lucide-react";
+import { FileIcon, ClipboardIcon, CheckIcon } from "lucide-react";
 
 type FilePreviewModalProps = {
   isOpen: boolean;
@@ -83,6 +83,7 @@ export function FilePreviewModal({
   const [fileContent, setFileContent] = useState<FileContent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -171,10 +172,33 @@ export function FilePreviewModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileIcon className="w-4 h-4" />
-            <span className="truncate">{filePath}</span>
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle className="flex items-center gap-2 min-w-0">
+              <FileIcon className="w-4 h-4 shrink-0" />
+              <span className="truncate">{filePath}</span>
+            </DialogTitle>
+            {fileContent?.type === "text" && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground p-1 shrink-0"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(fileContent.content);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  } catch {
+                    // Clipboard access denied
+                  }
+                }}
+              >
+                {copied ? (
+                  <CheckIcon className="h-4 w-4" />
+                ) : (
+                  <ClipboardIcon className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">
