@@ -136,8 +136,8 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         const concatInputs: string[] = [];
         for (let i = 0; i < clips.length; i++) {
           filterParts.push(
-            `[${i}:v]setpts=PTS-STARTPTS[v${i}]`,
-            `[${i}:a]asetpts=PTS-STARTPTS[a${i}]`
+            `[${i}:v]setpts=PTS-STARTPTS,scale=1920:1080,setsar=1[v${i}]`,
+            `[${i}:a]asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[a${i}]`
           );
           concatInputs.push(`[v${i}][a${i}]`);
         }
