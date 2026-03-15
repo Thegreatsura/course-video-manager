@@ -112,8 +112,8 @@ export const ClipItem = (props: ClipItemProps) => {
       <ContextMenuTrigger asChild>
         <button
           className={cn(
-            "bg-gray-800 rounded-md text-left relative overflow-hidden allow-keydown flex w-full",
-            isSelected && "outline-2 outline-gray-200 bg-gray-700",
+            "bg-card rounded-md text-left relative overflow-hidden allow-keydown flex w-full",
+            isSelected && "outline-2 outline-ring bg-muted",
             isCurrentClip && "bg-blue-900"
           )}
           onClick={(e) => {
@@ -147,7 +147,7 @@ export const ClipItem = (props: ClipItemProps) => {
               {/* Timecode overlay on image */}
               <div
                 className={cn(
-                  "absolute top-1 right-1 text-xs px-1.5 py-0.5 rounded bg-black/60 text-gray-100 flex items-center gap-1",
+                  "absolute top-1 right-1 text-xs px-1.5 py-0.5 rounded bg-black/60 text-card-foreground flex items-center gap-1",
                   isCurrentClip && "text-blue-100",
                   isSelected && "text-white"
                 )}
@@ -156,8 +156,8 @@ export const ClipItem = (props: ClipItemProps) => {
               </div>
             </div>
           ) : (
-            <div className="flex-shrink-0 relative w-32 aspect-[16/9] bg-gray-700 rounded flex items-center justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <div className="flex-shrink-0 relative w-32 aspect-[16/9] bg-muted rounded flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           )}
 
@@ -174,17 +174,17 @@ export const ClipItem = (props: ClipItemProps) => {
             )}
 
             {/* Transcript text */}
-            <div className="z-10 relative text-white text-sm leading-6">
+            <div className="z-10 relative text-card-foreground text-sm leading-6">
               {clipIdsBeingTranscribed.has(clip.frontendId) ? (
                 clip.type === "on-database" && clip.text ? (
                   <>
-                    <span className="text-gray-400 mr-2">
+                    <span className="text-muted-foreground mr-2">
                       Re-transcribing...
                     </span>
-                    <span className="text-gray-500">{clip.text}</span>
+                    <span className="text-muted-foreground">{clip.text}</span>
                   </>
                 ) : (
-                  <span className="text-gray-400">Transcribing...</span>
+                  <span className="text-muted-foreground">Transcribing...</span>
                 )
               ) : clip.type === "on-database" ? (
                 <>
@@ -196,7 +196,7 @@ export const ClipItem = (props: ClipItemProps) => {
                   )}
                   <span
                     className={cn(
-                      "text-gray-100",
+                      "text-card-foreground",
                       isCurrentClip && "text-white"
                     )}
                   >
@@ -204,7 +204,9 @@ export const ClipItem = (props: ClipItemProps) => {
                   </span>
                 </>
               ) : (
-                <span className="text-gray-400">Detecting silence...</span>
+                <span className="text-muted-foreground">
+                  Detecting silence...
+                </span>
               )}
             </div>
           </div>

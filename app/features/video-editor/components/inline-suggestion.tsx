@@ -30,7 +30,7 @@ export const InlineSuggestion = () => {
   const hasContent = suggestionText || isStreaming;
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 min-h-[72px]">
+    <div className="rounded-lg border border-border bg-card/50 p-4 min-h-[72px]">
       {error ? (
         <div className="flex items-start gap-3">
           <AlertCircleIcon className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
@@ -52,21 +52,23 @@ export const InlineSuggestion = () => {
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 mt-0.5">
             {isStreaming ? (
-              <Loader2Icon className="h-4 w-4 text-gray-400 animate-spin" />
+              <Loader2Icon className="h-4 w-4 text-muted-foreground animate-spin" />
             ) : (
-              <SparklesIcon className="h-4 w-4 text-gray-400" />
+              <SparklesIcon className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-400 mb-1">Say next:</p>
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              Say next:
+            </p>
             {suggestionText ? (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap text-gray-200">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
                 {suggestionText}
               </p>
             ) : (
               <div className="space-y-2">
-                <div className="h-4 bg-gray-700/50 rounded animate-pulse w-3/4" />
-                <div className="h-4 bg-gray-700/50 rounded animate-pulse w-1/2" />
+                <div className="h-4 bg-muted/50 rounded animate-pulse w-3/4" />
+                <div className="h-4 bg-muted/50 rounded animate-pulse w-1/2" />
               </div>
             )}
           </div>
@@ -83,7 +85,7 @@ export const InlineSuggestion = () => {
           </Button>
         </div>
       ) : (
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-muted-foreground">
           <SparklesIcon className="h-4 w-4 flex-shrink-0" />
           <p className="flex-1 text-sm">
             Click refresh to generate a suggestion for what to say next

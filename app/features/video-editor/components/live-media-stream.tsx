@@ -66,7 +66,7 @@ export const LiveMediaStream = (props: LiveMediaStreamProps) => {
         muted
         className={cn(
           "outline-4",
-          "outline-gray-300",
+          "outline-muted-foreground",
           "rounded-lg",
           isRecording &&
             props.speechDetectorState.type === "speaking-detected" &&

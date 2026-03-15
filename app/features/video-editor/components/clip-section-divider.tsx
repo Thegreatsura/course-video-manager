@@ -24,19 +24,19 @@ export const ClipSectionDivider = React.forwardRef<
       ref={ref}
       className={cn(
         "flex items-center gap-3 py-2 px-3 w-full allow-keydown",
-        "sticky top-0 z-10 bg-gray-900",
-        "hover:bg-gray-800/50 rounded-md transition-colors",
-        isSelected && "bg-gray-700 outline-2 outline-gray-200",
+        "sticky top-0 z-10 bg-background",
+        "hover:bg-card/50 rounded-md transition-colors",
+        isSelected && "bg-muted outline-2 outline-ring",
         className
       )}
       onClick={onClick}
       {...rest}
     >
-      <div className="border-t-2 border-gray-500 flex-1" />
-      <span className="text-sm font-medium text-gray-300 whitespace-nowrap">
+      <div className="border-t-2 border-border flex-1" />
+      <span className="text-sm font-medium text-foreground whitespace-nowrap">
         {name}
       </span>
-      <div className="border-t-2 border-gray-500 flex-1" />
+      <div className="border-t-2 border-border flex-1" />
     </button>
   );
 });

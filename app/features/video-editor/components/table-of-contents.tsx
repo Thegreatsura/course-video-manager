@@ -30,9 +30,9 @@ export function TableOfContents(props: TableOfContentsProps) {
             key={section.frontendId}
             onClick={() => props.onSectionClick(section.frontendId, index)}
             className={cn(
-              "w-full text-left px-3 py-2 rounded text-sm hover:bg-gray-700 transition-colors",
+              "w-full text-left px-3 py-2 rounded text-sm hover:bg-muted transition-colors",
               props.selectedClipsSet.has(section.frontendId) &&
-                "bg-gray-700 font-medium"
+                "bg-muted font-medium"
             )}
           >
             {section.name}
