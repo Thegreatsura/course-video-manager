@@ -19,18 +19,10 @@ export class NotLatestVersionError extends Data.TaggedError(
   latestVersionId: string;
 }> {}
 
-export class CannotDeleteOnlyVersionError extends Data.TaggedError(
-  "CannotDeleteOnlyVersionError"
+export class CannotUpdatePublishedVersionError extends Data.TaggedError(
+  "CannotUpdatePublishedVersionError"
 )<{
   versionId: string;
-  repoId: string;
-}> {}
-
-export class CannotDeleteNonLatestVersionError extends Data.TaggedError(
-  "CannotDeleteNonLatestVersionError"
-)<{
-  versionId: string;
-  latestVersionId: string;
 }> {}
 
 export class AmbiguousCourseUpdateError extends Data.TaggedError(

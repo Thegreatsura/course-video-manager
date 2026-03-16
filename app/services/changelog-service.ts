@@ -140,6 +140,9 @@ function renderVideoChanges(
 }
 
 export function generateChangelog(versions: VersionWithStructure[]): string {
+  // Filter out draft versions (no name) — only published versions appear in changelog
+  versions = versions.filter((v) => v.name !== "");
+
   if (versions.length === 0) {
     return "# Changelog\n\nNo versions found.\n";
   }

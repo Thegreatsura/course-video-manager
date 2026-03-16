@@ -1,46 +1,9 @@
-import { Effect, Schema } from "effect";
 import type { Route } from "./+types/api.courses.$courseId.delete-version";
-import { DBFunctionsService } from "@/services/db-service.server";
-import { runtimeLive } from "@/services/layer.server";
-import { withDatabaseDump } from "@/services/dump-service";
 
-const deleteVersionSchema = Schema.Struct({
-  versionId: Schema.String.pipe(Schema.minLength(1)),
-});
-
-export const action = async (args: Route.ActionArgs) => {
-  const formData = await args.request.formData();
-  const formDataObject = Object.fromEntries(formData);
-
-  return Effect.gen(function* () {
-    const { versionId } =
-      yield* Schema.decodeUnknown(deleteVersionSchema)(formDataObject);
-
-    const db = yield* DBFunctionsService;
-
-    const newLatestVersion = yield* db.deleteCourseVersion(versionId);
-
-    return { success: true, newLatestVersionId: newLatestVersion?.id };
-  }).pipe(
-    Effect.catchTag("CannotDeleteOnlyVersionError", () =>
-      Effect.succeed({
-        success: false,
-        error: "Cannot delete the only version of a repository",
-      })
-    ),
-    Effect.catchTag("CannotDeleteNonLatestVersionError", () =>
-      Effect.succeed({
-        success: false,
-        error: "Can only delete the latest version",
-      })
-    ),
-    Effect.catchTag("NotFoundError", () =>
-      Effect.succeed({
-        success: false,
-        error: "Version not found",
-      })
-    ),
-    withDatabaseDump,
-    runtimeLive.runPromise
-  );
+export const action = async (_args: Route.ActionArgs) => {
+  return {
+    success: false,
+    error:
+      "Deleting versions is no longer supported. Published versions are immutable and the draft cannot be deleted.",
+  };
 };

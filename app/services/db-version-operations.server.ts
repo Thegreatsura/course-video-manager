@@ -10,8 +10,7 @@ import {
   videos,
 } from "@/db/schema";
 import {
-  CannotDeleteNonLatestVersionError,
-  CannotDeleteOnlyVersionError,
+  CannotUpdatePublishedVersionError,
   NotFoundError,
   NotLatestVersionError,
   UnknownDBServiceError,
@@ -176,6 +175,33 @@ export const createVersionOperations = (db: DrizzleDB) => {
   const updateCourseVersion = Effect.fn("updateCourseVersion")(
     function* (opts: { versionId: string; name: string; description: string }) {
       const { versionId, name, description } = opts;
+
+      // Find the version to get its courseId
+      const version = yield* makeDbCall(() =>
+        db.query.courseVersions.findFirst({
+          where: eq(courseVersions.id, versionId),
+        })
+      );
+
+      if (!version) {
+        return yield* new NotFoundError({
+          type: "updateCourseVersion",
+          params: { versionId },
+        });
+      }
+
+      // Check if this is the latest (draft) version
+      const latestVersion = yield* makeDbCall(() =>
+        db.query.courseVersions.findFirst({
+          where: eq(courseVersions.repoId, version.repoId),
+          orderBy: desc(courseVersions.createdAt),
+        })
+      );
+
+      if (!latestVersion || latestVersion.id !== versionId) {
+        return yield* new CannotUpdatePublishedVersionError({ versionId });
+      }
+
       const [updated] = yield* makeDbCall(() =>
         db
           .update(courseVersions)
@@ -195,57 +221,11 @@ export const createVersionOperations = (db: DrizzleDB) => {
     }
   );
 
-  const deleteCourseVersion = Effect.fn("deleteCourseVersion")(function* (
-    versionId: string
-  ) {
-    const version = yield* makeDbCall(() =>
-      db.query.courseVersions.findFirst({
-        where: eq(courseVersions.id, versionId),
-      })
-    );
-
-    if (!version) {
-      return yield* new NotFoundError({
-        type: "deleteCourseVersion",
-        params: { versionId },
-      });
-    }
-
-    const allVersions = yield* makeDbCall(() =>
-      db.query.courseVersions.findMany({
-        where: eq(courseVersions.repoId, version.repoId),
-        orderBy: desc(courseVersions.createdAt),
-      })
-    );
-
-    if (allVersions.length <= 1) {
-      return yield* new CannotDeleteOnlyVersionError({
-        versionId,
-        repoId: version.repoId,
-      });
-    }
-
-    const latestVersion = allVersions[0];
-    if (!latestVersion || latestVersion.id !== versionId) {
-      return yield* new CannotDeleteNonLatestVersionError({
-        versionId,
-        latestVersionId: latestVersion?.id ?? "none",
-      });
-    }
-
-    yield* makeDbCall(() =>
-      db.delete(courseVersions).where(eq(courseVersions.id, versionId))
-    );
-
-    const newLatestVersion = allVersions[1];
-    return newLatestVersion;
-  });
-
   const copyVersionStructure = Effect.fn("copyVersionStructure")(
     function* (input: {
       sourceVersionId: string;
       repoId: string;
-      newVersionName: string;
+      newVersionName?: string;
     }) {
       const latestVersion = yield* makeDbCall(() =>
         db.query.courseVersions.findFirst({
@@ -266,7 +246,7 @@ export const createVersionOperations = (db: DrizzleDB) => {
           .insert(courseVersions)
           .values({
             repoId: input.repoId,
-            name: input.newVersionName,
+            name: input.newVersionName ?? "",
           })
           .returning()
       ).pipe(
@@ -553,7 +533,6 @@ export const createVersionOperations = (db: DrizzleDB) => {
     getVersionWithSections,
     createCourseVersion,
     updateCourseVersion,
-    deleteCourseVersion,
     copyVersionStructure,
     getVideoIdsForVersion,
     getAllVersionsWithStructure,

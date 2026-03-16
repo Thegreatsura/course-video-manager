@@ -36,6 +36,11 @@ export const action = async (args: Route.ActionArgs) => {
     Effect.catchTag("ParseError", () => {
       return Effect.die(data("Invalid request", { status: 400 }));
     }),
+    Effect.catchTag("CannotUpdatePublishedVersionError", () => {
+      return Effect.die(
+        data("Cannot update a published version", { status: 400 })
+      );
+    }),
     Effect.catchAll(() => {
       return Effect.die(data("Internal server error", { status: 500 }));
     }),

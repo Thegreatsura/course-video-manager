@@ -475,6 +475,75 @@ describe("changelog-service", () => {
     });
   });
 
+  describe("draft version filtering", () => {
+    it("excludes draft versions (empty name) from changelog", () => {
+      const publishedVersion = makeVersion("v1", "v1.0", [
+        makeSection("s1", "01-intro", [
+          makeLesson("l1", "01.01-welcome", null, ["Hello"]),
+        ]),
+      ]);
+
+      // Draft version has empty name
+      const draftVersion = makeVersion("v2", "", [
+        makeSection(
+          "s2",
+          "01-intro",
+          [
+            makeLesson("l2", "01.01-welcome", "l1", ["Hello"]),
+            makeLesson("l3", "01.02-setup", null, ["Setup guide"]),
+          ],
+          "s1"
+        ),
+      ]);
+
+      const changelog = generateChangelog([draftVersion, publishedVersion]);
+
+      // Draft should be filtered out — only published version appears
+      expect(changelog).not.toContain("01.02-setup");
+      expect(changelog).toContain("v1.0");
+      expect(changelog).toContain("Initial version.");
+    });
+
+    it("includes draft when name is overridden at publish time", () => {
+      const publishedVersion = makeVersion("v1", "v1.0", [
+        makeSection("s1", "01-intro", [
+          makeLesson("l1", "01.01-welcome", null, ["Hello"]),
+        ]),
+      ]);
+
+      // Simulates publish flow: draft name overridden to publish name
+      const aboutToPublish = makeVersion("v2", "v2.0", [
+        makeSection(
+          "s2",
+          "01-intro",
+          [
+            makeLesson("l2", "01.01-welcome", "l1", ["Hello"]),
+            makeLesson("l3", "01.02-setup", null, ["Setup guide"]),
+          ],
+          "s1"
+        ),
+      ]);
+
+      const changelog = generateChangelog([aboutToPublish, publishedVersion]);
+
+      expect(changelog).toContain("v2.0");
+      expect(changelog).toContain("New Lessons");
+      expect(changelog).toContain("01.02-setup");
+    });
+
+    it("returns no versions found when only a draft exists", () => {
+      const draftVersion = makeVersion("v1", "", [
+        makeSection("s1", "01-intro", [
+          makeLesson("l1", "01.01-welcome", null, ["Hello"]),
+        ]),
+      ]);
+
+      const changelog = generateChangelog([draftVersion]);
+
+      expect(changelog).toContain("No versions found.");
+    });
+  });
+
   describe("video-level changelog tracking", () => {
     it("shows the video path when a video is updated", () => {
       const prevVersion = makeVersion("v1", "v1.0", [
