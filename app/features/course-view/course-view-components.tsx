@@ -1,8 +1,5 @@
 import { ClearVideoFilesModal } from "@/components/clear-video-files-modal";
 import { CopyTranscriptModal } from "@/components/copy-transcript-modal";
-import { CreateVersionModal } from "@/components/create-version-modal";
-import { DeleteVersionModal } from "@/components/delete-version-modal";
-import { EditVersionModal } from "@/components/edit-version-modal";
 import { MoveLessonModal } from "@/components/move-lesson-modal";
 import { MoveVideoModal } from "@/components/move-video-modal";
 import { RenameCourseModal } from "@/components/rename-course-modal";
@@ -309,6 +306,14 @@ export function FilterBar({
   );
 }
 
+export function ReadOnlyBanner() {
+  return (
+    <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-600 dark:text-amber-400">
+      Viewing published version — read-only
+    </div>
+  );
+}
+
 export function NoCourseView({
   courses,
   standaloneVideos,
@@ -421,11 +426,8 @@ export function RouteModals({
   data: LoaderData;
   selectedCourseId: string | null;
   viewState: {
-    isCreateVersionModalOpen: boolean;
-    isEditVersionModalOpen: boolean;
     isRenameCourseModalOpen: boolean;
     isVersionSelectorModalOpen: boolean;
-    isDeleteVersionModalOpen: boolean;
     isClearVideoFilesModalOpen: boolean;
     isRewriteCoursePathModalOpen: boolean;
     isCopyTranscriptModalOpen: boolean;
@@ -454,30 +456,6 @@ export function RouteModals({
 }) {
   return (
     <>
-      {currentCourse && data.selectedVersion && (
-        <CreateVersionModal
-          repoId={currentCourse.id}
-          sourceVersionId={data.selectedVersion.id}
-          isOpen={viewState.isCreateVersionModalOpen}
-          onOpenChange={(open) =>
-            dispatch({ type: "set-create-version-modal-open", open })
-          }
-        />
-      )}
-
-      {currentCourse && data.selectedVersion && (
-        <EditVersionModal
-          repoId={currentCourse.id}
-          versionId={data.selectedVersion.id}
-          currentName={data.selectedVersion.name}
-          currentDescription={data.selectedVersion.description}
-          open={viewState.isEditVersionModalOpen}
-          onOpenChange={(open) =>
-            dispatch({ type: "set-edit-version-modal-open", open })
-          }
-        />
-      )}
-
       {currentCourse && (
         <RenameCourseModal
           courseId={currentCourse.id}
@@ -502,18 +480,6 @@ export function RouteModals({
               preventScrollReset: true,
             });
           }}
-        />
-      )}
-
-      {currentCourse && data.selectedVersion && data.versions.length > 1 && (
-        <DeleteVersionModal
-          repoId={currentCourse.id}
-          versionId={data.selectedVersion.id}
-          versionName={data.selectedVersion.name}
-          open={viewState.isDeleteVersionModalOpen}
-          onOpenChange={(open) =>
-            dispatch({ type: "set-delete-version-modal-open", open })
-          }
         />
       )}
 

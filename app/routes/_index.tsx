@@ -37,6 +37,7 @@ import {
   FilterBar,
   StatsBar,
   NoCourseView,
+  ReadOnlyBanner,
   RouteModals,
 } from "@/features/course-view/course-view-components";
 import { NextTodoCard } from "@/features/course-view/next-todo-card";
@@ -123,20 +124,17 @@ export const loader = async (args: Route.LoaderArgs) => {
         );
 
     const hasExportedVideoMap: Record<string, boolean> = {};
-
-    const videos = selectedCourse?.sections.flatMap((section) =>
-      section.lessons.flatMap((lesson) => lesson.videos)
+    const videos = selectedCourse?.sections.flatMap((s) =>
+      s.lessons.flatMap((l) => l.videos)
+    );
+    yield* Effect.forEach(videos ?? [], (video) =>
+      Effect.gen(function* () {
+        hasExportedVideoMap[video.id] = yield* fs.exists(
+          getVideoPath(video.id)
+        );
+      })
     );
 
-    yield* Effect.forEach(videos ?? [], (video) => {
-      return Effect.gen(function* () {
-        const hasExportedVideo = yield* fs.exists(getVideoPath(video.id));
-
-        hasExportedVideoMap[video.id] = hasExportedVideo;
-      });
-    });
-
-    // Check for explainer folder in each lesson
     const hasExplainerFolderMap: Record<string, boolean> = {};
 
     const lessons =
@@ -182,22 +180,18 @@ export const loader = async (args: Route.LoaderArgs) => {
         return results;
       });
 
-    yield* Effect.forEach(lessons, (lesson) => {
-      return Effect.gen(function* () {
-        const explainerPath = `${lesson.fullPath}/explainer`;
-        const hasExplainerFolder = yield* fs.exists(explainerPath);
-
-        hasExplainerFolderMap[lesson.id] = hasExplainerFolder;
-
-        // List all files recursively with sizes
+    yield* Effect.forEach(lessons, (lesson) =>
+      Effect.gen(function* () {
+        hasExplainerFolderMap[lesson.id] = yield* fs.exists(
+          `${lesson.fullPath}/explainer`
+        );
         lessonHasFilesMap[lesson.id] = yield* listFilesRecursive(
           lesson.fullPath,
           ""
         );
-      });
-    });
+      })
+    );
 
-    // Determine if selected version is the latest
     const latestVersion = versions[0];
     const isLatestVersion = !!(
       selectedVersion &&
@@ -489,7 +483,7 @@ export default function Component(props: Route.ComponentProps) {
                         }
                         className="text-muted-foreground hover:text-foreground transition-colors text-lg font-normal"
                       >
-                        [{loaderData.selectedVersion.name}]
+                        [{loaderData.selectedVersion.name || "Draft"}]
                       </button>
                     )}
                 </h1>
@@ -503,6 +497,10 @@ export default function Component(props: Route.ComponentProps) {
                 />
               </div>
 
+              {loaderData.selectedVersion && !loaderData.isLatestVersion && (
+                <ReadOnlyBanner />
+              )}
+
               {/* Stats */}
               <div className="mb-10">
                 <StatsBar
@@ -511,27 +509,29 @@ export default function Component(props: Route.ComponentProps) {
                 />
               </div>
 
-              {/* Next Up */}
-              <div className="mb-14">
-                <NextTodoCard
-                  sections={currentCourse.sections}
-                  data={loaderData}
-                  navigate={navigate}
-                  addVideoToLessonId={addVideoToLessonId}
-                  editLessonId={editLessonId}
-                  convertToGhostLessonId={convertToGhostLessonId}
-                  dispatch={dispatch}
-                  startExportUpload={startExportUpload}
-                  revealVideoFetcher={revealVideoFetcher}
-                  deleteVideoFileFetcher={deleteVideoFileFetcher}
-                  deleteVideoFetcher={deleteVideoFetcher}
-                  deleteLessonFetcher={deleteLessonFetcher}
-                  allFlatLessons={allFlatLessons}
-                  dependencyMap={dependencyMap}
-                  dismissed={nextUpDismissed}
-                  onDismiss={() => setNextUpDismissed(true)}
-                />
-              </div>
+              {/* Next Up — only show for draft */}
+              {loaderData.isLatestVersion && (
+                <div className="mb-14">
+                  <NextTodoCard
+                    sections={currentCourse.sections}
+                    data={loaderData}
+                    navigate={navigate}
+                    addVideoToLessonId={addVideoToLessonId}
+                    editLessonId={editLessonId}
+                    convertToGhostLessonId={convertToGhostLessonId}
+                    dispatch={dispatch}
+                    startExportUpload={startExportUpload}
+                    revealVideoFetcher={revealVideoFetcher}
+                    deleteVideoFileFetcher={deleteVideoFileFetcher}
+                    deleteVideoFetcher={deleteVideoFetcher}
+                    deleteLessonFetcher={deleteLessonFetcher}
+                    allFlatLessons={allFlatLessons}
+                    dependencyMap={dependencyMap}
+                    dismissed={nextUpDismissed}
+                    onDismiss={() => setNextUpDismissed(true)}
+                  />
+                </div>
+              )}
 
               {/* All Lessons */}
               <div className="mb-4">
@@ -578,7 +578,7 @@ export default function Component(props: Route.ComponentProps) {
                 deleteVideoFetcher={deleteVideoFetcher}
               />
 
-              {loaderData.selectedVersion && (
+              {loaderData.selectedVersion && loaderData.isLatestVersion && (
                 <div className="mt-8 flex justify-center">
                   <Button
                     variant="outline"
@@ -596,7 +596,7 @@ export default function Component(props: Route.ComponentProps) {
                 </div>
               )}
 
-              {loaderData.selectedVersion && (
+              {loaderData.selectedVersion && loaderData.isLatestVersion && (
                 <CreateSectionModal
                   repoVersionId={loaderData.selectedVersion.id}
                   maxOrder={currentCourse.sections.length}

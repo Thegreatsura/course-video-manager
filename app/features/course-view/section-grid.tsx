@@ -217,6 +217,8 @@ export function SectionGrid({
     }
   }
 
+  const isReadOnly = !data.isLatestVersion;
+
   return (
     <DndContext
       sensors={sensors}
@@ -334,12 +336,14 @@ export function SectionGrid({
                           <div className="px-4 py-3 border-b bg-muted/30">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <button
-                                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground touch-none"
-                                  {...dragHandleListeners}
-                                >
-                                  <GripVertical className="w-4 h-4" />
-                                </button>
+                                {!isReadOnly && (
+                                  <button
+                                    className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground touch-none"
+                                    {...dragHandleListeners}
+                                  >
+                                    <GripVertical className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <h2
                                   className={cn(
                                     "font-medium text-sm",
@@ -435,28 +439,32 @@ export function SectionGrid({
                         </div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
-                        <ContextMenuItem
-                          onSelect={() =>
-                            dispatch({
-                              type: "set-add-ghost-lesson-section-id",
-                              sectionId: section.id,
-                            })
-                          }
-                        >
-                          <Plus className="w-4 h-4" />
-                          Add Lesson
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          onSelect={() =>
-                            dispatch({
-                              type: "set-edit-section-id",
-                              sectionId: section.id,
-                            })
-                          }
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                          Rename
-                        </ContextMenuItem>
+                        {!isReadOnly && (
+                          <>
+                            <ContextMenuItem
+                              onSelect={() =>
+                                dispatch({
+                                  type: "set-add-ghost-lesson-section-id",
+                                  sectionId: section.id,
+                                })
+                              }
+                            >
+                              <Plus className="w-4 h-4" />
+                              Add Lesson
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() =>
+                                dispatch({
+                                  type: "set-edit-section-id",
+                                  sectionId: section.id,
+                                })
+                              }
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                              Rename
+                            </ContextMenuItem>
+                          </>
+                        )}
                         {lessons.some(
                           (l) => l.fsStatus !== "ghost" && l.videos.length > 0
                         ) && (
@@ -473,7 +481,7 @@ export function SectionGrid({
                             Copy Section Transcript
                           </ContextMenuItem>
                         )}
-                        {isGhostSection && (
+                        {!isReadOnly && isGhostSection && (
                           <>
                             <ContextMenuSeparator />
                             <ContextMenuItem

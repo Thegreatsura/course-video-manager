@@ -8,24 +8,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import type { LoaderData } from "./course-view-types";
 import {
   Archive,
   ChevronDown,
-  Copy,
   Download,
   Film,
   FileText,
   FileX,
   GitBranch,
   PencilIcon,
-  Trash2,
   FolderPen,
   ClipboardCopy,
   Upload,
@@ -57,31 +50,35 @@ export function ActionsDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuItem
-          disabled={!data.selectedVersion}
-          onSelect={() => {
-            handleBatchExport();
-          }}
-        >
-          <Download className="w-4 h-4 mr-2" />
-          <div className="flex flex-col">
-            <span className="font-medium">Export</span>
-            <span className="text-xs text-muted-foreground">
-              Export videos not yet exported
-            </span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to={`/courses/${currentCourse.id}/publish`}>
-            <Upload className="w-4 h-4 mr-2" />
-            <div className="flex flex-col">
-              <span className="font-medium">Publish</span>
-              <span className="text-xs text-muted-foreground">
-                Review changes and publish to Dropbox
-              </span>
-            </div>
-          </Link>
-        </DropdownMenuItem>
+        {data.isLatestVersion && (
+          <>
+            <DropdownMenuItem
+              disabled={!data.selectedVersion}
+              onSelect={() => {
+                handleBatchExport();
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              <div className="flex flex-col">
+                <span className="font-medium">Export</span>
+                <span className="text-xs text-muted-foreground">
+                  Export videos not yet exported
+                </span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={`/courses/${currentCourse.id}/publish`}>
+                <Upload className="w-4 h-4 mr-2" />
+                <div className="flex flex-col">
+                  <span className="font-medium">Publish</span>
+                  <span className="text-xs text-muted-foreground">
+                    Review changes and publish to Dropbox
+                  </span>
+                </div>
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
 
         {data.gitStatus && data.gitStatus.total > 0 && (
           <DropdownMenuItem
@@ -202,40 +199,6 @@ export function ActionsDropdown({
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Version</DropdownMenuLabel>
             <DropdownMenuGroup>
-              {data.isLatestVersion && (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    dispatch({
-                      type: "set-create-version-modal-open",
-                      open: true,
-                    })
-                  }
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">Create New Version</span>
-                    <span className="text-xs text-muted-foreground">
-                      Copy structure from current version
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() =>
-                  dispatch({
-                    type: "set-edit-version-modal-open",
-                    open: true,
-                  })
-                }
-              >
-                <PencilIcon className="w-4 h-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">Edit Version</span>
-                  <span className="text-xs text-muted-foreground">
-                    Change version name and description
-                  </span>
-                </div>
-              </DropdownMenuItem>
               {data.showMediaFilesList && (
                 <DropdownMenuItem asChild>
                   <Link
@@ -264,50 +227,6 @@ export function ActionsDropdown({
                   </Link>
                 </DropdownMenuItem>
               )}
-              {data.versions.length > 1 &&
-                (() => {
-                  const canDelete = data.isLatestVersion;
-                  const disabledReason = !data.isLatestVersion
-                    ? "Can only delete latest version"
-                    : null;
-
-                  const menuItem = (
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        canDelete &&
-                        dispatch({
-                          type: "set-delete-version-modal-open",
-                          open: true,
-                        })
-                      }
-                      disabled={!canDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      <div className="flex flex-col">
-                        <span className="font-medium">Delete Version</span>
-                        <span className="text-xs text-muted-foreground">
-                          Remove current version permanently
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                  );
-
-                  if (disabledReason) {
-                    return (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div>{menuItem}</div>
-                        </TooltipTrigger>
-                        <TooltipContent side="left">
-                          {disabledReason}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return menuItem;
-                })()}
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />

@@ -43,6 +43,7 @@ function VideoThumbnailItem({
   deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   deleteVideoFetcher: ReturnType<typeof useFetcher>;
 }) {
+  const isReadOnly = !data.isLatestVersion;
   const totalDuration = video.clips.reduce((acc, clip) => {
     return acc + (clip.sourceEndTime - clip.sourceStartTime);
   }, 0);
@@ -124,63 +125,67 @@ function VideoThumbnailItem({
           <FolderOpen className="w-4 h-4" />
           Reveal in File System
         </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            dispatch({
-              type: "open-rename-video",
-              videoId: video.id,
-              videoPath: video.path,
-            });
-          }}
-        >
-          <PencilIcon className="w-4 h-4" />
-          Rename
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            dispatch({
-              type: "open-move-video",
-              videoId: video.id,
-              videoPath: video.path,
-              currentLessonId: lesson.id,
-            });
-          }}
-        >
-          <ArrowRightLeft className="w-4 h-4" />
-          Move to Lesson
-        </ContextMenuItem>
-        {data.hasExportedVideoMap[video.id] && (
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              deleteVideoFileFetcher.submit(
-                {},
-                {
-                  method: "post",
-                  action: `/api/videos/${video.id}/delete-file`,
-                }
-              );
-            }}
-          >
-            <FileX className="w-4 h-4" />
-            Delete from File System
-          </ContextMenuItem>
+        {!isReadOnly && (
+          <>
+            <ContextMenuItem
+              onSelect={() => {
+                dispatch({
+                  type: "open-rename-video",
+                  videoId: video.id,
+                  videoPath: video.path,
+                });
+              }}
+            >
+              <PencilIcon className="w-4 h-4" />
+              Rename
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() => {
+                dispatch({
+                  type: "open-move-video",
+                  videoId: video.id,
+                  videoPath: video.path,
+                  currentLessonId: lesson.id,
+                });
+              }}
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              Move to Lesson
+            </ContextMenuItem>
+            {data.hasExportedVideoMap[video.id] && (
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => {
+                  deleteVideoFileFetcher.submit(
+                    {},
+                    {
+                      method: "post",
+                      action: `/api/videos/${video.id}/delete-file`,
+                    }
+                  );
+                }}
+              >
+                <FileX className="w-4 h-4" />
+                Delete from File System
+              </ContextMenuItem>
+            )}
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() => {
+                deleteVideoFetcher.submit(
+                  { videoId: video.id },
+                  {
+                    method: "post",
+                    action: "/api/videos/delete",
+                  }
+                );
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </ContextMenuItem>
+          </>
         )}
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => {
-            deleteVideoFetcher.submit(
-              { videoId: video.id },
-              {
-                method: "post",
-                action: "/api/videos/delete",
-              }
-            );
-          }}
-        >
-          <Trash2 className="w-4 h-4" />
-          Delete
-        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );

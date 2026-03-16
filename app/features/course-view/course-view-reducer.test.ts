@@ -14,11 +14,8 @@ describe("courseViewReducer", () => {
       const state = createTester().getState();
       expect(state.isAddCourseModalOpen).toBe(false);
       expect(state.isCreateSectionModalOpen).toBe(false);
-      expect(state.isCreateVersionModalOpen).toBe(false);
       expect(state.isVersionSelectorModalOpen).toBe(false);
-      expect(state.isEditVersionModalOpen).toBe(false);
       expect(state.isRenameCourseModalOpen).toBe(false);
-      expect(state.isDeleteVersionModalOpen).toBe(false);
       expect(state.isClearVideoFilesModalOpen).toBe(false);
       expect(state.isRewriteCoursePathModalOpen).toBe(false);
       expect(state.isAddStandaloneVideoModalOpen).toBe(false);
@@ -79,13 +76,6 @@ describe("courseViewReducer", () => {
       expect(state.isCreateSectionModalOpen).toBe(true);
     });
 
-    it("9. set-create-version-modal-open: toggles", () => {
-      const state = createTester()
-        .send({ type: "set-create-version-modal-open", open: true })
-        .getState();
-      expect(state.isCreateVersionModalOpen).toBe(true);
-    });
-
     it("10. set-version-selector-modal-open: toggles", () => {
       const state = createTester()
         .send({ type: "set-version-selector-modal-open", open: true })
@@ -93,25 +83,11 @@ describe("courseViewReducer", () => {
       expect(state.isVersionSelectorModalOpen).toBe(true);
     });
 
-    it("11. set-edit-version-modal-open: toggles", () => {
-      const state = createTester()
-        .send({ type: "set-edit-version-modal-open", open: true })
-        .getState();
-      expect(state.isEditVersionModalOpen).toBe(true);
-    });
-
     it("12. set-rename-course-modal-open: toggles", () => {
       const state = createTester()
         .send({ type: "set-rename-course-modal-open", open: true })
         .getState();
       expect(state.isRenameCourseModalOpen).toBe(true);
-    });
-
-    it("13. set-delete-version-modal-open: toggles", () => {
-      const state = createTester()
-        .send({ type: "set-delete-version-modal-open", open: true })
-        .getState();
-      expect(state.isDeleteVersionModalOpen).toBe(true);
     });
 
     it("14. set-clear-video-files-modal-open: toggles", () => {
@@ -141,7 +117,7 @@ describe("courseViewReducer", () => {
         .getState();
       expect(state.isAddCourseModalOpen).toBe(true);
       expect(state.isCreateSectionModalOpen).toBe(false);
-      expect(state.isCreateVersionModalOpen).toBe(false);
+      expect(state.isVersionSelectorModalOpen).toBe(false);
     });
   });
 

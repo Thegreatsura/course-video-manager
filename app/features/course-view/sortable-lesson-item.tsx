@@ -88,6 +88,7 @@ export function SortableLessonItem({
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  const isReadOnly = !data.isLatestVersion;
   const createOnDiskFetcher = useFetcher();
   const isGhost =
     lesson.fsStatus === "ghost" && createOnDiskFetcher.state === "idle";
@@ -216,13 +217,15 @@ export function SortableLessonItem({
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div className="flex items-center gap-2 mb-1.5 cursor-context-menu hover:bg-muted/50 rounded px-1 py-0.5 transition-colors">
-              <button
-                className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 touch-none flex items-center justify-center"
-                {...attributes}
-                {...listeners}
-              >
-                <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
+              {!isReadOnly && (
+                <button
+                  className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 touch-none flex items-center justify-center"
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              )}
               <button
                 className={cn(
                   "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors",
@@ -234,14 +237,20 @@ export function SortableLessonItem({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleIconCycle();
+                  if (!isReadOnly) handleIconCycle();
                 }}
                 title={
                   currentIcon === "code"
-                    ? "Interactive (click to change)"
+                    ? isReadOnly
+                      ? "Interactive"
+                      : "Interactive (click to change)"
                     : currentIcon === "discussion"
-                      ? "Discussion (click to change)"
-                      : "Watch (click to change)"
+                      ? isReadOnly
+                        ? "Discussion"
+                        : "Discussion (click to change)"
+                      : isReadOnly
+                        ? "Watch"
+                        : "Watch (click to change)"
                 }
               >
                 {currentIcon === "code" ? (
@@ -276,9 +285,13 @@ export function SortableLessonItem({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handlePriorityCycle();
+                  if (!isReadOnly) handlePriorityCycle();
                 }}
-                title="Click to toggle priority (P2 → P3 → P1 → P2)"
+                title={
+                  isReadOnly
+                    ? `P${currentPriority}`
+                    : "Click to toggle priority (P2 → P3 → P1 → P2)"
+                }
               >
                 P{currentPriority}
               </button>
@@ -295,134 +308,138 @@ export function SortableLessonItem({
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            {isGhost ? (
+            {!isReadOnly && (
               <>
-                <ContextMenuItem
-                  onSelect={() => {
-                    createOnDiskFetcher.submit(null, {
-                      method: "post",
-                      action: `/api/lessons/${lesson.id}/create-on-disk`,
-                    });
-                  }}
-                >
-                  <BookOpen className="w-4 h-4" />
-                  Create on Disk
-                </ContextMenuItem>
+                {isGhost ? (
+                  <>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        createOnDiskFetcher.submit(null, {
+                          method: "post",
+                          action: `/api/lessons/${lesson.id}/create-on-disk`,
+                        });
+                      }}
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      Create on Disk
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onSelect={() =>
+                        dispatch({
+                          type: "set-edit-lesson-id",
+                          lessonId: lesson.id,
+                        })
+                      }
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                      Rename
+                    </ContextMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <ContextMenuItem
+                      onSelect={() =>
+                        dispatch({
+                          type: "set-add-video-to-lesson-id",
+                          lessonId: lesson.id,
+                        })
+                      }
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Video
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() =>
+                        dispatch({
+                          type: "set-edit-lesson-id",
+                          lessonId: lesson.id,
+                        })
+                      }
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                      Rename
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onSelect={() =>
+                        dispatch({
+                          type: "set-convert-to-ghost-lesson-id",
+                          lessonId: lesson.id,
+                        })
+                      }
+                    >
+                      <Ghost className="w-4 h-4" />
+                      Convert to Ghost
+                    </ContextMenuItem>
+                  </>
+                )}
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   onSelect={() =>
                     dispatch({
-                      type: "set-edit-lesson-id",
-                      lessonId: lesson.id,
-                    })
-                  }
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  Rename
-                </ContextMenuItem>
-              </>
-            ) : (
-              <>
-                <ContextMenuItem
-                  onSelect={() =>
-                    dispatch({
-                      type: "set-add-video-to-lesson-id",
-                      lessonId: lesson.id,
+                      type: "set-insert-lesson",
+                      sectionId: section.id,
+                      adjacentLessonId: lesson.id,
+                      position: "before",
                     })
                   }
                 >
                   <Plus className="w-4 h-4" />
-                  Add Video
+                  Add Lesson Before
                 </ContextMenuItem>
                 <ContextMenuItem
                   onSelect={() =>
                     dispatch({
-                      type: "set-edit-lesson-id",
-                      lessonId: lesson.id,
+                      type: "set-insert-lesson",
+                      sectionId: section.id,
+                      adjacentLessonId: lesson.id,
+                      position: "after",
                     })
                   }
                 >
-                  <PencilIcon className="w-4 h-4" />
-                  Rename
+                  <Plus className="w-4 h-4" />
+                  Add Lesson After
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   onSelect={() =>
                     dispatch({
-                      type: "set-convert-to-ghost-lesson-id",
+                      type: "open-move-lesson",
                       lessonId: lesson.id,
+                      lessonTitle: isGhost
+                        ? lesson.title || lesson.path
+                        : lesson.path,
+                      currentSectionId: section.id,
                     })
                   }
                 >
-                  <Ghost className="w-4 h-4" />
-                  Convert to Ghost
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Move to Section
                 </ContextMenuItem>
+                {isGhost && (
+                  <ContextMenuItem
+                    variant="destructive"
+                    onSelect={() => {
+                      deleteLessonFetcher.submit(
+                        { lessonId: lesson.id },
+                        {
+                          method: "post",
+                          action: "/api/lessons/delete",
+                        }
+                      );
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </ContextMenuItem>
+                )}
               </>
-            )}
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onSelect={() =>
-                dispatch({
-                  type: "set-insert-lesson",
-                  sectionId: section.id,
-                  adjacentLessonId: lesson.id,
-                  position: "before",
-                })
-              }
-            >
-              <Plus className="w-4 h-4" />
-              Add Lesson Before
-            </ContextMenuItem>
-            <ContextMenuItem
-              onSelect={() =>
-                dispatch({
-                  type: "set-insert-lesson",
-                  sectionId: section.id,
-                  adjacentLessonId: lesson.id,
-                  position: "after",
-                })
-              }
-            >
-              <Plus className="w-4 h-4" />
-              Add Lesson After
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onSelect={() =>
-                dispatch({
-                  type: "open-move-lesson",
-                  lessonId: lesson.id,
-                  lessonTitle: isGhost
-                    ? lesson.title || lesson.path
-                    : lesson.path,
-                  currentSectionId: section.id,
-                })
-              }
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              Move to Section
-            </ContextMenuItem>
-            {isGhost && (
-              <ContextMenuItem
-                variant="destructive"
-                onSelect={() => {
-                  deleteLessonFetcher.submit(
-                    { lessonId: lesson.id },
-                    {
-                      method: "post",
-                      action: "/api/lessons/delete",
-                    }
-                  );
-                }}
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </ContextMenuItem>
             )}
           </ContextMenuContent>
         </ContextMenu>
         <div className="ml-5">
-          {editingDesc ? (
+          {!isReadOnly && editingDesc ? (
             <div className="mt-1 max-w-[65ch]">
               <Textarea
                 ref={descTextareaRef}
@@ -445,15 +462,19 @@ export function SortableLessonItem({
             </div>
           ) : currentDescription ? (
             <div
-              className="text-xs text-muted-foreground mt-1 cursor-pointer hover:text-foreground/70 whitespace-pre-line max-w-[65ch]"
+              className={cn(
+                "text-xs text-muted-foreground mt-1 whitespace-pre-line max-w-[65ch]",
+                !isReadOnly && "cursor-pointer hover:text-foreground/70"
+              )}
               onClick={() => {
+                if (isReadOnly) return;
                 setDescValue(currentDescription);
                 setEditingDesc(true);
               }}
             >
               {currentDescription}
             </div>
-          ) : (
+          ) : !isReadOnly ? (
             <button
               className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               onClick={() => {
@@ -463,7 +484,7 @@ export function SortableLessonItem({
             >
               + Add description
             </button>
-          )}
+          ) : null}
         </div>
         <AddVideoModal
           lessonId={lesson.id}

@@ -28,11 +28,8 @@ export namespace courseViewReducer {
     // Boolean modal toggles
     isAddCourseModalOpen: boolean;
     isCreateSectionModalOpen: boolean;
-    isCreateVersionModalOpen: boolean;
     isVersionSelectorModalOpen: boolean;
-    isEditVersionModalOpen: boolean;
     isRenameCourseModalOpen: boolean;
-    isDeleteVersionModalOpen: boolean;
     isClearVideoFilesModalOpen: boolean;
     isRewriteCoursePathModalOpen: boolean;
     isAddStandaloneVideoModalOpen: boolean;
@@ -69,11 +66,8 @@ export namespace courseViewReducer {
     // Boolean modal toggles
     | { type: "set-add-course-modal-open"; open: boolean }
     | { type: "set-create-section-modal-open"; open: boolean }
-    | { type: "set-create-version-modal-open"; open: boolean }
     | { type: "set-version-selector-modal-open"; open: boolean }
-    | { type: "set-edit-version-modal-open"; open: boolean }
     | { type: "set-rename-course-modal-open"; open: boolean }
-    | { type: "set-delete-version-modal-open"; open: boolean }
     | { type: "set-clear-video-files-modal-open"; open: boolean }
     | { type: "set-rewrite-course-path-modal-open"; open: boolean }
     | { type: "set-add-standalone-video-modal-open"; open: boolean }
@@ -136,11 +130,8 @@ export function createInitialCourseViewState(): courseViewReducer.State {
   return {
     isAddCourseModalOpen: false,
     isCreateSectionModalOpen: false,
-    isCreateVersionModalOpen: false,
     isVersionSelectorModalOpen: false,
-    isEditVersionModalOpen: false,
     isRenameCourseModalOpen: false,
-    isDeleteVersionModalOpen: false,
     isClearVideoFilesModalOpen: false,
     isRewriteCoursePathModalOpen: false,
     isAddStandaloneVideoModalOpen: false,
@@ -176,16 +167,10 @@ export const courseViewReducer: EffectReducer<
       return { ...state, isAddCourseModalOpen: action.open };
     case "set-create-section-modal-open":
       return { ...state, isCreateSectionModalOpen: action.open };
-    case "set-create-version-modal-open":
-      return { ...state, isCreateVersionModalOpen: action.open };
     case "set-version-selector-modal-open":
       return { ...state, isVersionSelectorModalOpen: action.open };
-    case "set-edit-version-modal-open":
-      return { ...state, isEditVersionModalOpen: action.open };
     case "set-rename-course-modal-open":
       return { ...state, isRenameCourseModalOpen: action.open };
-    case "set-delete-version-modal-open":
-      return { ...state, isDeleteVersionModalOpen: action.open };
     case "set-clear-video-files-modal-open":
       return { ...state, isClearVideoFilesModalOpen: action.open };
     case "set-rewrite-course-path-modal-open":

@@ -54,7 +54,7 @@ export function VersionSelectorModal({
               >
                 <div className="flex flex-col items-start text-left min-w-0 overflow-hidden">
                   <span className="truncate w-full">
-                    {version.name}{" "}
+                    {version.name || <span className="italic">Draft</span>}{" "}
                     <span className="text-muted-foreground">
                       ({new Date(version.createdAt).toLocaleDateString()})
                     </span>
@@ -62,6 +62,11 @@ export function VersionSelectorModal({
                   {version.description && (
                     <span className="text-xs text-muted-foreground line-clamp-2 text-wrap">
                       {version.description}
+                    </span>
+                  )}
+                  {version.name && (
+                    <span className="text-xs text-muted-foreground">
+                      Published (read-only)
                     </span>
                   )}
                 </div>
