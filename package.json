@@ -19,7 +19,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:clone-local": "./scripts/clone-db-to-local.sh",
-    "ralph": "./plans/backlog/afk.sh 100",
+    "ralph": "./docker-container-experiment/run.sh 100",
     "check:file-tokens": "./scripts/check-file-tokens.sh"
   },
   "dependencies": {
