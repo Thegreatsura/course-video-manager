@@ -153,6 +153,10 @@ export const ClipItem = (props: ClipItemProps) => {
                 {timecode}
               </div>
             </div>
+          ) : clip.type === "effect-clip-optimistically-added" ? (
+            <div className="flex-shrink-0 relative w-32 aspect-[16/9] bg-muted rounded flex items-center justify-center">
+              <FilmIcon className="w-6 h-6 text-muted-foreground" />
+            </div>
           ) : (
             <div className="flex-shrink-0 relative w-32 aspect-[16/9] bg-muted rounded flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -201,6 +205,10 @@ export const ClipItem = (props: ClipItemProps) => {
                     {clip.text}
                   </span>
                 </>
+              ) : clip.type === "effect-clip-optimistically-added" ? (
+                <span className="text-muted-foreground italic">
+                  {clip.text}
+                </span>
               ) : (
                 <span className="text-muted-foreground">
                   Detecting silence...
