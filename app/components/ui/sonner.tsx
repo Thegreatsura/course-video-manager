@@ -12,6 +12,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme="system"
       className="toaster group"
+      position="bottom-left"
       closeButton
       icons={{
         success: <CircleCheckIcon className="size-4" />,
