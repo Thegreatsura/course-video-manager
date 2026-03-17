@@ -1,42 +1,33 @@
-import { Config, Effect } from "effect";
-import { FileSystem } from "@effect/platform";
+import { Effect } from "effect";
+import { CoursePublishService } from "@/services/course-publish-service";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import type { Route } from "./+types/api.courseVersions.$versionId.unexported-videos";
 import { data } from "react-router";
-import path from "node:path";
 
 export const action = async (args: Route.ActionArgs) => {
   const { versionId } = args.params;
 
   return Effect.gen(function* () {
+    const publishService = yield* CoursePublishService;
     const db = yield* DBFunctionsService;
-    const fs = yield* FileSystem.FileSystem;
-    const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-      "FINISHED_VIDEOS_DIRECTORY"
-    );
 
+    const { unexportedVideoIds } =
+      yield* publishService.validatePublishability(versionId);
+
+    // Map unexported video IDs to display paths
     const version = yield* db.getVersionWithSections(versionId);
-
     const unexportedVideos: Array<{ id: string; title: string }> = [];
 
     for (const section of version.sections) {
       for (const lesson of section.lessons) {
         if (lesson.fsStatus === "ghost") continue;
         for (const video of lesson.videos) {
-          if (video.clips.length > 0) {
-            const exportedVideoPath = path.join(
-              FINISHED_VIDEOS_DIRECTORY,
-              `${video.id}.mp4`
-            );
-            const exists = yield* fs.exists(exportedVideoPath);
-
-            if (!exists) {
-              unexportedVideos.push({
-                id: video.id,
-                title: `${section.path}/${lesson.path}/${video.path}`,
-              });
-            }
+          if (unexportedVideoIds.includes(video.id)) {
+            unexportedVideos.push({
+              id: video.id,
+              title: `${section.path}/${lesson.path}/${video.path}`,
+            });
           }
         }
       }

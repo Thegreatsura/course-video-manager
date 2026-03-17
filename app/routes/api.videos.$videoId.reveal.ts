@@ -2,7 +2,7 @@ import { Console, Effect } from "effect";
 import type { Route } from "./+types/api.videos.$videoId.reveal";
 import { runtimeLive } from "@/services/layer.server";
 import { data } from "react-router";
-import { getVideoPath } from "@/lib/get-video";
+import { CoursePublishService } from "@/services/course-publish-service";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -48,10 +48,17 @@ export const action = async (args: Route.ActionArgs) => {
   const videoId = args.params.videoId;
 
   return Effect.gen(function* () {
-    const videoPath = getVideoPath(videoId);
+    const publishService = yield* CoursePublishService;
+    const exportPath = yield* publishService.resolveExportPath(videoId);
+
+    if (!exportPath) {
+      return yield* Effect.die(
+        data("No exported file for this video", { status: 404 })
+      );
+    }
 
     // Convert WSL path to Windows path
-    const windowsPath = yield* wslPathToWindows(videoPath);
+    const windowsPath = yield* wslPathToWindows(exportPath);
 
     // Reveal in Windows Explorer
     yield* revealInExplorer(windowsPath);
