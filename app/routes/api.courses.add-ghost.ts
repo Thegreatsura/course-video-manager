@@ -29,9 +29,9 @@ export const action = async ({ request }: Route.ActionArgs) => {
       name: "v1.0",
     });
 
-    return {
+    return data({
       id: course.id,
-    };
+    });
   }).pipe(
     withDatabaseDump,
     Effect.tapErrorCause((e) => {

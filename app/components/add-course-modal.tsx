@@ -8,7 +8,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEffect } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 
 interface AddCourseModalProps {
   isOpen: boolean;
@@ -16,13 +16,15 @@ interface AddCourseModalProps {
 }
 
 export function AddCourseModal({ isOpen, onOpenChange }: AddCourseModalProps) {
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ id: string }>();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
+    if (fetcher.state === "idle" && fetcher.data?.id) {
       onOpenChange(false);
+      navigate(`/?courseId=${fetcher.data.id}`);
     }
-  }, [fetcher.state, fetcher.data, onOpenChange]);
+  }, [fetcher.state, fetcher.data, onOpenChange, navigate]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -52,7 +54,9 @@ export function AddCourseModal({ isOpen, onOpenChange }: AddCourseModalProps) {
             >
               Cancel
             </Button>
-            <Button type="submit">Add Course</Button>
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
+              {fetcher.state !== "idle" ? "Adding..." : "Add Course"}
+            </Button>
           </div>
         </fetcher.Form>
       </DialogContent>
