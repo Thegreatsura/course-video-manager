@@ -41,12 +41,13 @@ interface VideoItem {
   id: string;
   path: string;
   duration: number;
+  contextPath?: string;
 }
 
 interface CourseVideoSection {
   sectionPath: string;
   lessons: {
-    lessonTitle: string;
+    lessonPath: string;
     videos: VideoItem[];
   }[];
 }
@@ -83,10 +84,11 @@ export const loader = async () => {
             id: v.id,
             path: v.path,
             duration: computeDuration(v.clips),
+            contextPath: `${course.name} / ${section.path} / ${lesson.path}`,
           }));
           if (lessonVideos.length > 0) {
             lessons.push({
-              lessonTitle: lesson.title ?? lesson.path,
+              lessonPath: lesson.path,
               videos: lessonVideos,
             });
           }
@@ -124,6 +126,7 @@ interface QueueItem {
   id: string;
   path: string;
   duration: number;
+  contextPath?: string;
 }
 
 function SortableQueueItem({
@@ -162,6 +165,11 @@ function SortableQueueItem({
         <GripVertical className="w-4 h-4" />
       </button>
       <div className="flex-1 min-w-0">
+        {item.contextPath && (
+          <span className="text-xs text-muted-foreground truncate block">
+            {item.contextPath}
+          </span>
+        )}
         <span className="text-sm font-medium truncate block">{item.path}</span>
         <span className="text-xs text-muted-foreground">
           {formatSecondsToTimeCode(item.duration)}
@@ -267,9 +275,9 @@ function CourseVideoList({
               );
               if (availableVideos.length === 0) return null;
               return (
-                <div key={lesson.lessonTitle} className="mb-2">
+                <div key={lesson.lessonPath} className="mb-2">
                   <div className="text-xs text-muted-foreground px-3 mb-0.5">
-                    {lesson.lessonTitle}
+                    {lesson.lessonPath}
                   </div>
                   <div className="space-y-1">
                     {availableVideos.map((video) => (
