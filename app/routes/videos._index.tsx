@@ -116,10 +116,15 @@ export default function Component(props: Route.ComponentProps) {
               <VideoIcon className="w-6 h-6" />
               Standalone Videos
             </h1>
-            <Button onClick={() => setIsAddVideoOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Video
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => navigate("/videos/concatenate")}>
+                Concatenate
+              </Button>
+              <Button onClick={() => setIsAddVideoOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Video
+              </Button>
+            </div>
           </div>
 
           {videoToDelete && (

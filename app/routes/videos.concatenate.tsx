@@ -1,0 +1,329 @@
+import { AppSidebar } from "@/components/app-sidebar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DBFunctionsService } from "@/services/db-service.server";
+import { runtimeLive } from "@/services/layer.server";
+import { formatSecondsToTimeCode } from "@/services/utils";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Console, Effect } from "effect";
+import {
+  GripVertical,
+  Loader2,
+  Plus,
+  Trash2,
+  VideoIcon,
+} from "lucide-react";
+import { useState, useCallback } from "react";
+import { data, useNavigate, useSearchParams } from "react-router";
+import type { Route } from "./+types/videos.concatenate";
+
+export const meta: Route.MetaFunction = () => {
+  return [{ title: "CVM - Concatenate Videos" }];
+};
+
+export const loader = async () => {
+  return Effect.gen(function* () {
+    const db = yield* DBFunctionsService;
+    const videos = yield* db.getAllStandaloneVideos();
+    const courses = yield* db.getCourses();
+    const sidebarVideos = yield* db.getStandaloneVideos();
+    const plans = yield* db.getPlans();
+
+    return {
+      videos: videos.map((v) => ({
+        id: v.id,
+        path: v.path,
+        duration: v.clips.reduce(
+          (acc: number, c: any) => acc + (c.sourceEndTime - c.sourceStartTime),
+          0
+        ),
+      })),
+      courses,
+      sidebarVideos,
+      plans,
+    };
+  }).pipe(
+    Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),
+    Effect.catchAll(() => {
+      return Effect.die(data("Internal server error", { status: 500 }));
+    }),
+    runtimeLive.runPromise
+  );
+};
+
+interface QueueItem {
+  id: string;
+  path: string;
+  duration: number;
+}
+
+function SortableQueueItem({
+  item,
+  onRemove,
+}: {
+  item: QueueItem;
+  onRemove: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-background"
+    >
+      <button
+        className="cursor-grab text-muted-foreground hover:text-foreground"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium truncate block">{item.path}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatSecondsToTimeCode(item.duration)}
+        </span>
+      </div>
+      <button
+        onClick={onRemove}
+        className="text-muted-foreground hover:text-destructive"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+export default function Component({ loaderData }: Route.ComponentProps) {
+  const { videos, courses, sidebarVideos, plans } = loaderData;
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialVideoId = searchParams.get("initial");
+
+  // Initialize queue with the initial video if provided
+  const initialQueue: QueueItem[] = [];
+  if (initialVideoId) {
+    const initialVideo = videos.find((v) => v.id === initialVideoId);
+    if (initialVideo) {
+      initialQueue.push(initialVideo);
+    }
+  }
+
+  const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
+  const [name, setName] = useState(initialQueue[0]?.path ?? "");
+  const [isCreating, setIsCreating] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setQueue((items) => {
+        const oldIndex = items.findIndex((i) => i.id === active.id);
+        const newIndex = items.findIndex((i) => i.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  }, []);
+
+  const addToQueue = useCallback(
+    (video: QueueItem) => {
+      setQueue((prev) => [...prev, video]);
+      if (queue.length === 0 && name === "") {
+        setName(video.path);
+      }
+    },
+    [queue.length, name]
+  );
+
+  const removeFromQueue = useCallback((id: string) => {
+    setQueue((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const handleCreate = async () => {
+    if (queue.length === 0 || !name.trim()) return;
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/videos/concatenate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          sourceVideoIds: queue.map((v) => v.id),
+        }),
+      });
+      const result = await response.json();
+      if (result.id) {
+        navigate(`/videos/${result.id}/edit`);
+      }
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Videos that are available to add (not already in queue)
+  const queueIds = new Set(queue.map((q) => q.id));
+  const availableVideos = videos.filter((v) => !queueIds.has(v.id));
+
+  return (
+    <div className="flex h-screen bg-background text-foreground">
+      <AppSidebar
+        courses={courses}
+        standaloneVideos={sidebarVideos}
+        plans={plans}
+      />
+
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="border-b px-6 py-4">
+          <h1 className="text-xl font-bold">Concatenate Videos</h1>
+        </div>
+
+        <div className="flex-1 overflow-hidden flex">
+          {/* Left column: Source selector */}
+          <div className="w-48 border-r overflow-y-auto p-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Sources
+            </div>
+            <div className="px-3 py-2 rounded-md bg-muted text-sm font-medium">
+              Standalone
+            </div>
+          </div>
+
+          {/* Middle column: Available videos */}
+          <div className="flex-1 border-r overflow-y-auto p-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Available Videos
+            </div>
+            {availableVideos.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                {videos.length === 0
+                  ? "No standalone videos"
+                  : "All videos added to queue"}
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {availableVideos.map((video) => (
+                  <div
+                    key={video.id}
+                    className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-muted/50"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <VideoIcon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="text-sm truncate">{video.path}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatSecondsToTimeCode(video.duration)}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => addToQueue(video)}
+                      className="ml-2 flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right column: Queue */}
+          <div className="w-80 overflow-y-auto p-3 flex flex-col">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Queue ({queue.length})
+            </div>
+
+            <div className="mb-3">
+              <Input
+                placeholder="Video name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            {queue.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Add videos from the list
+              </p>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={queue.map((q) => q.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-1 flex-1">
+                    {queue.map((item) => (
+                      <SortableQueueItem
+                        key={item.id}
+                        item={item}
+                        onRemove={() => removeFromQueue(item.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+
+            <div className="mt-auto pt-3">
+              <Button
+                onClick={handleCreate}
+                disabled={queue.length === 0 || !name.trim() || isCreating}
+                className="w-full"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
