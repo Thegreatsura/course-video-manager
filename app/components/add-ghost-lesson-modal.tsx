@@ -66,11 +66,12 @@ export function AddGhostLessonModal(props: {
     ? "/api/lessons/create-real"
     : "/api/lessons/add-ghost";
 
-  const dialogTitle = props.position === "before"
-    ? "Add Lesson Before"
-    : props.position === "after"
-      ? "Add Lesson After"
-      : "Add Lesson";
+  const dialogTitle =
+    props.position === "before"
+      ? "Add Lesson Before"
+      : props.position === "after"
+        ? "Add Lesson After"
+        : "Add Lesson";
 
   return (
     <Dialog
@@ -129,7 +130,7 @@ export function AddGhostLessonModal(props: {
               autoFocus={!isGhostCourse}
             />
           </div>
-          {props.courseFilePath != null && (
+          {props.courseFilePath !== undefined && (
             <div className="flex items-start space-x-2">
               <Checkbox
                 id="real-lesson-checkbox"
@@ -137,12 +138,15 @@ export function AddGhostLessonModal(props: {
                 onCheckedChange={(checked) => setIsReal(checked === true)}
               />
               <div className="grid gap-1 leading-none">
-                <Label htmlFor="real-lesson-checkbox" className="cursor-pointer">
+                <Label
+                  htmlFor="real-lesson-checkbox"
+                  className="cursor-pointer"
+                >
                   Create on filesystem
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Creates a directory for this lesson on disk. Leave unchecked to
-                  create a ghost lesson that exists only in the database.
+                  Creates a directory for this lesson on disk. Leave unchecked
+                  to create a ghost lesson that exists only in the database.
                 </p>
               </div>
             </div>
@@ -159,14 +163,12 @@ export function AddGhostLessonModal(props: {
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Must point to an existing directory. This will permanently assign
-                a file path to the course.
+                Must point to an existing directory. This will permanently
+                assign a file path to the course.
               </p>
             </div>
           )}
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end space-x-2">
             <Button
               variant="outline"
@@ -180,7 +182,10 @@ export function AddGhostLessonModal(props: {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isValid || fetcher.state !== "idle"}>
+            <Button
+              type="submit"
+              disabled={!isValid || fetcher.state !== "idle"}
+            >
               {fetcher.state !== "idle" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : isGhostCourse ? (
