@@ -464,7 +464,9 @@ describe("CourseWriteService", () => {
         cwd: tempDir,
       });
 
-      // Attempting a rename should fail with CourseRepoSyncError
+      // Attempting a rename should fail — either the operation itself fails
+      // (CourseRepoWriteError from git mv) or post-validation catches the
+      // mismatch (CourseRepoSyncError). Both are valid rejection paths.
       const result = await run(
         Effect.gen(function* () {
           const service = yield* CourseWriteService;
@@ -472,12 +474,15 @@ describe("CourseWriteService", () => {
         }).pipe(
           Effect.map(() => "succeeded" as const),
           Effect.catchTag("CourseRepoSyncError", () =>
-            Effect.succeed("sync-error" as const)
+            Effect.succeed("rejected" as const)
+          ),
+          Effect.catchTag("CourseRepoWriteError", () =>
+            Effect.succeed("rejected" as const)
           )
         )
       );
 
-      expect(result).toBe("sync-error");
+      expect(result).toBe("rejected");
     });
 
     it("succeeds when latest version is in sync despite stale older versions", async () => {

@@ -42,11 +42,16 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
         })
       );
 
-      const withSyncValidation = <A, E>(
+      /**
+       * Runs sync validation AFTER the operation completes.
+       * Pre-validation was removed because it doubled filesystem I/O
+       * for every request — extremely slow on WSL 2 where each fs call
+       * crosses the Linux/Windows bridge (~100ms+ per call).
+       */
+      const withPostValidation = <A, E>(
         effect: Effect.Effect<A, E>
       ): Effect.Effect<A, E | CourseRepoSyncError> =>
         Effect.gen(function* () {
-          yield* runValidation;
           const result = yield* effect;
           yield* runValidation;
           return result;
@@ -188,7 +193,9 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
               yield* renumberSections(lesson.section.repoVersionId, repoPath);
             }
           }
+          yield* runValidation;
         } else {
+          // Ghost lesson: DB-only delete, skip filesystem validation
           yield* db.deleteLesson(lessonId);
         }
 
@@ -327,6 +334,11 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
           path: newPath,
         });
 
+        // Only validate after filesystem-modifying renames
+        if (lesson.fsStatus !== "ghost") {
+          yield* runValidation;
+        }
+
         return { success: true, path: newPath };
       });
 
@@ -398,7 +410,7 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
             ? Math.max(...targetLessons.map((l) => l.order))
             : 0;
 
-        // Ghost lesson: DB-only move to end of target section
+        // Ghost lesson: DB-only move — skip filesystem validation entirely
         if (lesson.fsStatus === "ghost") {
           yield* db.updateLesson(lessonId, { sectionId: targetSectionId });
           yield* db.updateLessonOrder(lessonId, maxOrder + 1);
@@ -481,6 +493,7 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
           }
         }
 
+        yield* runValidation;
         return { success: true };
       });
 
@@ -520,31 +533,31 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
       });
 
       return {
+        // Always-FS operations: validate after
         materializeGhost: (...args: Parameters<typeof materializeGhost>) =>
-          withSyncValidation(materializeGhost(...args)),
+          withPostValidation(materializeGhost(...args)),
         createRealLesson: (...args: Parameters<typeof createRealLesson>) =>
-          withSyncValidation(createRealLesson(...args)),
+          withPostValidation(createRealLesson(...args)),
         materializeCourseWithLesson: (
           ...args: Parameters<typeof materializeCourseWithLesson>
-        ) => withSyncValidation(materializeCourseWithLesson(...args)),
+        ) => withPostValidation(materializeCourseWithLesson(...args)),
+        convertToGhost: (...args: Parameters<typeof convertToGhost>) =>
+          withPostValidation(convertToGhost(...args)),
+        reorderLessons: (...args: Parameters<typeof reorderLessons>) =>
+          withPostValidation(reorderLessons(...args)),
+        reorderSections: (...args: Parameters<typeof reorderSections>) =>
+          withPostValidation(reorderSections(...args)),
+        renameSection: (...args: Parameters<typeof renameSection>) =>
+          withPostValidation(renameSection(...args)),
+        deleteSection: (...args: Parameters<typeof deleteSection>) =>
+          withPostValidation(deleteSection(...args)),
+        // DB-only operations: no validation
         addGhostSection,
         addGhostLesson,
-        deleteLesson: (...args: Parameters<typeof deleteLesson>) =>
-          withSyncValidation(deleteLesson(...args)),
-        deleteSection: (...args: Parameters<typeof deleteSection>) =>
-          withSyncValidation(deleteSection(...args)),
-        convertToGhost: (...args: Parameters<typeof convertToGhost>) =>
-          withSyncValidation(convertToGhost(...args)),
-        renameLesson: (...args: Parameters<typeof renameLesson>) =>
-          withSyncValidation(renameLesson(...args)),
-        reorderLessons: (...args: Parameters<typeof reorderLessons>) =>
-          withSyncValidation(reorderLessons(...args)),
-        moveToSection: (...args: Parameters<typeof moveToSection>) =>
-          withSyncValidation(moveToSection(...args)),
-        reorderSections: (...args: Parameters<typeof reorderSections>) =>
-          withSyncValidation(reorderSections(...args)),
-        renameSection: (...args: Parameters<typeof renameSection>) =>
-          withSyncValidation(renameSection(...args)),
+        // Conditionally-FS operations: validate internally only when FS is touched
+        deleteLesson,
+        renameLesson,
+        moveToSection,
       };
     }),
     dependencies: [
