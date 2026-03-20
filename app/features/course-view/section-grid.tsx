@@ -404,9 +404,7 @@ export function SectionGrid({
                             </ContextMenuItem>
                           </>
                         )}
-                        {lessons.some(
-                          (l) => l.fsStatus !== "ghost" && l.videos.length > 0
-                        ) && (
+                        {lessons.length > 0 && (
                           <ContextMenuItem
                             onSelect={() =>
                               dispatch({

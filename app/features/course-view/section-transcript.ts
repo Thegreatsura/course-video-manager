@@ -24,10 +24,6 @@ export function buildCourseTranscript(
 ) {
   const lines: string[] = [`<course title="${escapeAttr(coursePath)}">`];
   for (const section of sections) {
-    // Skip sections where all lessons are ghosts
-    if (section.lessons.every((l) => l.fsStatus === "ghost")) {
-      continue;
-    }
     const sectionLines = buildSectionTranscript(
       section.path,
       section.lessons,
@@ -49,9 +45,8 @@ export function buildSectionTranscript(
   options: TranscriptOptions = defaultOptions,
   videoTranscripts: Record<string, string> = {}
 ) {
-  const realLessons = lessons.filter((l) => l.fsStatus !== "ghost");
   const lines: string[] = [`<section title="${escapeAttr(sectionPath)}">`];
-  for (const lesson of realLessons) {
+  for (const lesson of lessons) {
     const lessonAttrs = [
       `title="${escapeAttr(lesson.path)}"`,
       ...(options.includeLessonTitles && lesson.title

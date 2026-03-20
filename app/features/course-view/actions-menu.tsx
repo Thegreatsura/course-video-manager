@@ -128,9 +128,7 @@ export function ActionsDropdown({
               </div>
             </DropdownMenuItem>
           )}
-          {currentCourse.sections.some((s) =>
-            s.lessons.some((l) => l.fsStatus !== "ghost" && l.videos.length > 0)
-          ) && (
+          {currentCourse.sections.some((s) => s.lessons.length > 0) && (
             <DropdownMenuItem
               onSelect={() =>
                 dispatch({
