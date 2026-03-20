@@ -15,8 +15,12 @@ import { cn } from "@/lib/utils";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import { SortableLessonItem } from "./sortable-lesson-item";
 import { SortableSectionItem } from "./sortable-section-item";
-import { filterLessons, calcSectionDuration } from "./section-grid-utils";
-import type { LoaderData, Section, Lesson } from "./course-view-types";
+import {
+  applyOptimisticLessonUpdates,
+  filterLessons,
+  calcSectionDuration,
+} from "./section-grid-utils";
+import type { LoaderData, Section } from "./course-view-types";
 
 import { formatSecondsToTimeCode } from "@/services/utils";
 import {
@@ -236,109 +240,17 @@ export function SectionGrid({
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {displaySections.map((section) => {
-            // Optimistic lesson reordering
-            let lessons = section.lessons;
-            const pendingReorder = reorderLessonFetcher.formData;
-            if (
-              pendingReorder &&
-              pendingReorder.get("sectionId") === section.id
-            ) {
-              const lessonIds = JSON.parse(
-                pendingReorder.get("lessonIds") as string
-              ) as string[];
-              const lessonMap = new Map(section.lessons.map((l) => [l.id, l]));
-              const reordered = lessonIds
-                .map((id) => lessonMap.get(id))
-                .filter(Boolean) as typeof section.lessons;
-              if (reordered.length === section.lessons.length) {
-                lessons = reordered;
+            const lessons = applyOptimisticLessonUpdates(
+              section,
+              displaySections,
+              {
+                reorderFormData: reorderLessonFetcher.formData,
+                deleteFormData: deleteLessonFetcher.formData,
+                addFormData: addGhostFetcher.formData,
+                addFormAction: addGhostFetcher.formAction,
+                moveFormData: moveLessonFetcher.formData,
               }
-            }
-
-            // Optimistic lesson deletion
-            const pendingDelete = deleteLessonFetcher.formData;
-            const pendingDeleteId = pendingDelete?.get("lessonId") as
-              | string
-              | null;
-            if (pendingDeleteId) {
-              lessons = lessons.filter((l) => l.id !== pendingDeleteId);
-            }
-
-            // Optimistic lesson addition (ghost or real)
-            const pendingGhostAdd = addGhostFetcher.formData;
-            if (
-              pendingGhostAdd &&
-              pendingGhostAdd.get("sectionId") === section.id
-            ) {
-              const lessonTitle = pendingGhostAdd.get("title") as string;
-              const isRealMode =
-                addGhostFetcher.formAction?.includes("create-real");
-              const adjLessonId = pendingGhostAdd.get("adjacentLessonId") as
-                | string
-                | null;
-              const pos = pendingGhostAdd.get("position") as
-                | "before"
-                | "after"
-                | null;
-
-              const optimisticLesson = {
-                id: `optimistic-lesson-${lessonTitle}`,
-                path: lessonTitle,
-                title: lessonTitle,
-                fsStatus: isRealMode ? "real" : "ghost",
-                description: "",
-                icon: null,
-                priority: 2,
-                dependencies: [],
-                order: lessons.length,
-                videos: [],
-                createdAt: new Date(),
-                previousVersionLessonId: null,
-                sectionId: section.id,
-              } as Lesson;
-
-              if (adjLessonId && pos) {
-                const adjIdx = lessons.findIndex((l) => l.id === adjLessonId);
-                if (adjIdx !== -1) {
-                  const insertIdx = pos === "after" ? adjIdx + 1 : adjIdx;
-                  lessons = [
-                    ...lessons.slice(0, insertIdx),
-                    optimisticLesson,
-                    ...lessons.slice(insertIdx),
-                  ];
-                } else {
-                  lessons = [...lessons, optimisticLesson];
-                }
-              } else {
-                lessons = [...lessons, optimisticLesson];
-              }
-            }
-
-            // Optimistic lesson move between sections
-            const pendingMove = moveLessonFetcher.formData;
-            if (pendingMove) {
-              const movedLessonId = pendingMove.get("lessonId") as string;
-              const targetSectionId = pendingMove.get("sectionId") as string;
-              // Remove from source section
-              if (targetSectionId !== section.id) {
-                lessons = lessons.filter((l) => l.id !== movedLessonId);
-              }
-              // Add to target section
-              if (targetSectionId === section.id) {
-                const movedLesson = displaySections
-                  .flatMap((s) => s.lessons)
-                  .find((l) => l.id === movedLessonId);
-                if (
-                  movedLesson &&
-                  !lessons.some((l) => l.id === movedLessonId)
-                ) {
-                  lessons = [
-                    ...lessons,
-                    { ...movedLesson, sectionId: section.id },
-                  ];
-                }
-              }
-            }
+            );
 
             const { filteredLessons, hasActiveFilters } = filterLessons(
               lessons,
