@@ -5,6 +5,10 @@ import type {
   EditorSection,
   EditorLesson,
 } from "./course-editor-types";
+import {
+  parseLessonPath,
+  buildLessonPath,
+} from "@/services/lesson-path-service";
 
 // ============================================================================
 // Helpers
@@ -140,17 +144,22 @@ export function handleLessonCase(
     case "update-lesson-name": {
       const { lesson } = findLesson(state, action.frontendId);
       if (!lesson) return state;
+      const slug = toSlug(action.newSlug) || "untitled";
+      const parsed = parseLessonPath(lesson.path);
+      const newPath = parsed
+        ? buildLessonPath(parsed.sectionNumber ?? 1, parsed.lessonNumber, slug)
+        : slug;
       exec({
         type: "update-lesson-name",
         frontendId: action.frontendId,
         lessonId: lesson.databaseId ?? lesson.frontendId,
-        newSlug: action.newSlug,
+        newSlug: slug,
       });
       return {
         ...state,
         sections: updateLesson(state, action.frontendId, (l) => ({
           ...l,
-          path: action.newSlug,
+          path: newPath,
         })),
       };
     }

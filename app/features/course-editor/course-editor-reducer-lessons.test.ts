@@ -158,7 +158,7 @@ describe("courseEditorReducer — lesson operations", () => {
   });
 
   describe("property updates", () => {
-    it("should update lesson name/path", () => {
+    it("should update lesson name/path for ghost lesson (no prefix)", () => {
       const lesson = createLesson({ path: "old-name" });
       const section = createSection({ lessons: [lesson] });
       const tester = createTester([section]);
@@ -170,6 +170,63 @@ describe("courseEditorReducer — lesson operations", () => {
         })
         .getState();
       expect(state.sections[0]!.lessons[0]!.path).toBe("new-name");
+    });
+
+    it("should convert name to slug when renaming", () => {
+      const lesson = createLesson({ path: "old-name" });
+      const section = createSection({ lessons: [lesson] });
+      const state = createTester([section])
+        .send({
+          type: "update-lesson-name",
+          frontendId: lesson.frontendId,
+          newSlug: "My New Lesson",
+        })
+        .getState();
+      expect(state.sections[0]!.lessons[0]!.path).toBe("my-new-lesson");
+    });
+
+    it("should preserve numeric prefix when renaming a real lesson", () => {
+      const lesson = createLesson({ path: "01.03-old-name" });
+      const section = createSection({ lessons: [lesson] });
+      const state = createTester([section])
+        .send({
+          type: "update-lesson-name",
+          frontendId: lesson.frontendId,
+          newSlug: "new-name",
+        })
+        .getState();
+      expect(state.sections[0]!.lessons[0]!.path).toBe("01.03-new-name");
+    });
+
+    it("should convert name to slug AND preserve prefix for real lesson", () => {
+      const lesson = createLesson({ path: "01.03-old-name" });
+      const section = createSection({ lessons: [lesson] });
+      const state = createTester([section])
+        .send({
+          type: "update-lesson-name",
+          frontendId: lesson.frontendId,
+          newSlug: "My New Lesson",
+        })
+        .getState();
+      expect(state.sections[0]!.lessons[0]!.path).toBe("01.03-my-new-lesson");
+    });
+
+    it("should send only slug (not full path) in update-lesson-name effect", () => {
+      const lesson = createLesson({ path: "01.03-old-name" });
+      const section = createSection({ lessons: [lesson] });
+      const tester = createTester([section]);
+      tester.send({
+        type: "update-lesson-name",
+        frontendId: lesson.frontendId,
+        newSlug: "My New Lesson",
+      });
+      const exec = tester.getExec();
+      expect(exec).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "update-lesson-name",
+          newSlug: "my-new-lesson",
+        })
+      );
     });
 
     it("should update lesson title", () => {

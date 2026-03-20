@@ -34,7 +34,6 @@ export function EditLessonModal(props: {
 
   const slug = toSlug(input);
   const isValid = slug.length > 0 && SLUG_PATTERN.test(slug);
-  const newPath = parsed ? prefix + slug : slug;
 
   return (
     <Dialog
@@ -53,7 +52,7 @@ export function EditLessonModal(props: {
           onSubmit={(e) => {
             e.preventDefault();
             if (!isValid) return;
-            props.onRename(newPath);
+            props.onRename(slug);
             props.onOpenChange(false);
           }}
         >
