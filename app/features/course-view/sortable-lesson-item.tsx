@@ -324,7 +324,12 @@ export function SortableLessonItem({
                     <ContextMenuItem
                       onSelect={() => {
                         if (isGhostCourse) {
-                          setShowCreateOnDiskModal(true);
+                          // Delay so the Dialog opens after the ContextMenu
+                          // has fully closed — otherwise Radix's dismiss
+                          // events immediately close the Dialog.
+                          requestAnimationFrame(() =>
+                            setShowCreateOnDiskModal(true)
+                          );
                         } else {
                           createOnDiskFetcher.submit(null, {
                             method: "post",
