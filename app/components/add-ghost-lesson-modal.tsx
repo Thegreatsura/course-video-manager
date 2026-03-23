@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { capitalizeTitle } from "@/utils/capitalize-title";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function AddGhostLessonModal(props: {
   sectionId: string;
@@ -26,14 +26,15 @@ export function AddGhostLessonModal(props: {
 }) {
   const [title, setTitle] = useState("");
   const [filePath, setFilePath] = useState("");
-  const [isReal, setIsReal] = useState(false);
+  const [isReal, setIsReal] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("createOnFileSystem") === "true";
+  });
 
-  // Reset isReal when modal opens/closes
-  useEffect(() => {
-    if (!props.open) {
-      setIsReal(false);
-    }
-  }, [props.open]);
+  const handleSetIsReal = (value: boolean) => {
+    setIsReal(value);
+    localStorage.setItem("createOnFileSystem", String(value));
+  };
 
   const isGhostCourse = isReal && !props.courseFilePath;
   const isValid =
@@ -53,7 +54,6 @@ export function AddGhostLessonModal(props: {
         if (!open) {
           setTitle("");
           setFilePath("");
-          setIsReal(false);
         }
         props.onOpenChange(open);
       }}
@@ -74,7 +74,6 @@ export function AddGhostLessonModal(props: {
             });
             setTitle("");
             setFilePath("");
-            setIsReal(false);
             props.onOpenChange(false);
           }}
         >
@@ -94,7 +93,7 @@ export function AddGhostLessonModal(props: {
               <Checkbox
                 id="real-lesson-checkbox"
                 checked={isReal}
-                onCheckedChange={(checked) => setIsReal(checked === true)}
+                onCheckedChange={(checked) => handleSetIsReal(checked === true)}
               />
               <div className="grid gap-1 leading-none">
                 <Label
@@ -133,7 +132,6 @@ export function AddGhostLessonModal(props: {
               onClick={() => {
                 setTitle("");
                 setFilePath("");
-                setIsReal(false);
                 props.onOpenChange(false);
               }}
               type="button"
