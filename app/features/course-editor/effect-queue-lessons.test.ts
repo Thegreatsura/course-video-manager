@@ -68,6 +68,32 @@ describe("EffectQueue — section effects", () => {
 });
 
 describe("EffectQueue — lesson effects", () => {
+  it("should dispatch lesson-created with slug path, not the database UUID", async () => {
+    const service = {
+      ...createMockService(),
+      addGhostLesson: vi
+        .fn()
+        .mockResolvedValue({ success: true, lessonId: "db-uuid-xyz789" }),
+    };
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    queue.enqueue({
+      type: "add-ghost-lesson",
+      frontendId: fid("l-1"),
+      sectionId: did("db-s-1"),
+      title: "My Cool Lesson",
+    });
+
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "lesson-created",
+      frontendId: fid("l-1"),
+      databaseId: "db-uuid-xyz789",
+      path: "my-cool-lesson",
+    });
+  });
+
   it("should resolve section FrontendId for add-ghost-lesson after create-section", async () => {
     const service = createMockService();
     const dispatch = vi.fn();

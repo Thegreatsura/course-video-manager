@@ -1,4 +1,5 @@
 import type { CourseEditorService } from "@/services/course-editor-service";
+import { toSlug } from "@/services/lesson-path-service";
 import type { courseEditorReducer } from "./course-editor-reducer";
 import type { FrontendId, DatabaseId } from "./course-editor-types";
 
@@ -125,7 +126,7 @@ export class EffectQueue {
           type: "lesson-created",
           frontendId: effect.frontendId,
           databaseId: result.lessonId as DatabaseId,
-          path: result.lessonId,
+          path: toSlug(effect.title) || "untitled",
         });
         break;
       }
