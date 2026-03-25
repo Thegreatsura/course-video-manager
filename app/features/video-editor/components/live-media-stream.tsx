@@ -65,22 +65,22 @@ export const LiveMediaStream = (props: LiveMediaStreamProps) => {
         ref={videoRef}
         muted
         className={cn(
-          "outline-4",
-          "outline-muted-foreground",
+          "ring-4",
+          "ring-muted-foreground",
           "rounded-lg",
           isRecording &&
             props.speechDetectorState.type === "speaking-detected" &&
-            "outline-yellow-600",
+            "ring-yellow-600",
           isRecording &&
             props.speechDetectorState.type ===
               "long-enough-speaking-for-clip-detected" &&
-            "outline-green-600",
+            "ring-green-600",
           isRecording &&
             props.speechDetectorState.type === "silence" &&
-            "outline-blue-600",
+            "ring-blue-600",
           isRecording &&
             props.speechDetectorState.type === "warming-up" &&
-            "outline-red-600"
+            "ring-red-600"
         )}
       />
     </div>
