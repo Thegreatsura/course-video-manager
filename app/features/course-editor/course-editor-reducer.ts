@@ -58,7 +58,7 @@ export namespace courseEditorReducer {
     editSectionId: FrontendId | null;
     convertToGhostLessonId: FrontendId | null;
     deleteLessonId: FrontendId | null;
-    deleteSectionId: FrontendId | null;
+    archiveSectionId: FrontendId | null;
     createOnDiskLessonId: FrontendId | null;
     videoPlayerState: VideoPlayerState;
     moveVideoState: MoveVideoState;
@@ -78,7 +78,7 @@ export namespace courseEditorReducer {
         frontendId: FrontendId;
         description: string;
       }
-    | { type: "delete-section"; frontendId: FrontendId }
+    | { type: "archive-section"; frontendId: FrontendId }
     | { type: "reorder-sections"; frontendIds: FrontendId[] }
     | {
         type: "add-ghost-lesson";
@@ -133,7 +133,7 @@ export namespace courseEditorReducer {
       }
     | { type: "section-renamed"; frontendId: FrontendId; path: string }
     | { type: "section-description-updated"; frontendId: FrontendId }
-    | { type: "section-deleted"; frontendId: FrontendId }
+    | { type: "section-archived"; frontendId: FrontendId }
     | { type: "sections-reordered" }
     | {
         type: "lesson-created";
@@ -188,7 +188,7 @@ export namespace courseEditorReducer {
         lessonId: FrontendId | null;
       }
     | { type: "set-delete-lesson-id"; lessonId: FrontendId | null }
-    | { type: "set-delete-section-id"; sectionId: FrontendId | null }
+    | { type: "set-archive-section-id"; sectionId: FrontendId | null }
     | { type: "set-create-on-disk-lesson-id"; lessonId: FrontendId | null }
     | { type: "open-video-player"; videoId: string; videoPath: string }
     | { type: "close-video-player" }
@@ -234,7 +234,7 @@ export namespace courseEditorReducer {
         description: string;
       }
     | {
-        type: "delete-section";
+        type: "archive-section";
         frontendId: FrontendId;
         sectionId: FrontendId | DatabaseId;
       }
@@ -356,7 +356,7 @@ export function createInitialCourseEditorState(
     editSectionId: null,
     convertToGhostLessonId: null,
     deleteLessonId: null,
-    deleteSectionId: null,
+    archiveSectionId: null,
     createOnDiskLessonId: null,
     videoPlayerState: { isOpen: false, videoId: "", videoPath: "" },
     moveVideoState: null,
@@ -449,13 +449,13 @@ export const courseEditorReducer: EffectReducer<
       };
     }
 
-    case "delete-section": {
+    case "archive-section": {
       const section = state.sections.find(
         (s) => s.frontendId === action.frontendId
       );
       if (!section) return state;
       exec({
-        type: "delete-section",
+        type: "archive-section",
         frontendId: action.frontendId,
         sectionId: section.databaseId ?? section.frontendId,
       });
@@ -499,7 +499,7 @@ export const courseEditorReducer: EffectReducer<
       };
 
     case "section-description-updated":
-    case "section-deleted":
+    case "section-archived":
     case "sections-reordered":
       return state;
 
@@ -553,8 +553,8 @@ export const courseEditorReducer: EffectReducer<
       return { ...state, convertToGhostLessonId: action.lessonId };
     case "set-delete-lesson-id":
       return { ...state, deleteLessonId: action.lessonId };
-    case "set-delete-section-id":
-      return { ...state, deleteSectionId: action.sectionId };
+    case "set-archive-section-id":
+      return { ...state, archiveSectionId: action.sectionId };
     case "set-create-on-disk-lesson-id":
       return { ...state, createOnDiskLessonId: action.lessonId };
     case "open-video-player":

@@ -111,7 +111,8 @@ export async function createCourseWithVersion(
 
 export async function getSections(repoVersionId: string) {
   return testDb.query.sections.findMany({
-    where: (s, { eq }) => eq(s.repoVersionId, repoVersionId),
+    where: (s, { eq, and, isNull }) =>
+      and(eq(s.repoVersionId, repoVersionId), isNull(s.archivedAt)),
     orderBy: (s, { asc }) => asc(s.order),
   });
 }

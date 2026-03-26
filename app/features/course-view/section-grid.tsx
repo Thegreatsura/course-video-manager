@@ -1,5 +1,5 @@
 import { AddGhostLessonModal } from "@/components/add-ghost-lesson-modal";
-import { DeleteSectionModal } from "@/components/delete-section-modal";
+import { ArchiveSectionModal } from "@/components/archive-section-modal";
 import { type DependencyLessonItem } from "@/components/dependency-selector";
 import { EditGhostSectionModal } from "@/components/edit-ghost-section-modal";
 import { EditSectionModal } from "@/components/edit-section-modal";
@@ -32,13 +32,13 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
+  Archive,
   ChevronRight,
   ClipboardCopy,
   Ghost,
   GripVertical,
   PencilIcon,
   Plus,
-  Trash2,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useNavigate, useFetcher } from "react-router";
@@ -61,7 +61,7 @@ export function SectionGrid({
   convertToGhostLessonId,
   deleteLessonId,
   createOnDiskLessonId,
-  deleteSectionId,
+  archiveSectionId,
   dispatch,
   navigate,
   startExportUpload,
@@ -107,7 +107,7 @@ export function SectionGrid({
   convertToGhostLessonId: string | null;
   deleteLessonId: string | null;
   createOnDiskLessonId: string | null;
-  deleteSectionId: string | null;
+  archiveSectionId: string | null;
   dispatch: (action: courseViewReducer.Action) => void;
   navigate: ReturnType<typeof useNavigate>;
   startExportUpload: (videoId: string, path: string) => void;
@@ -387,19 +387,19 @@ export function SectionGrid({
                               onSelect={() => {
                                 if (lessons.length === 0) {
                                   dispatch({
-                                    type: "delete-section",
+                                    type: "archive-section",
                                     frontendId: section.id,
                                   } as any);
                                 } else {
                                   dispatch({
-                                    type: "set-delete-section-id",
+                                    type: "set-archive-section-id",
                                     sectionId: section.id,
                                   });
                                 }
                               }}
                             >
-                              <Trash2 className="w-4 h-4" />
-                              Delete Section
+                              <Archive className="w-4 h-4" />
+                              Archive Section
                             </ContextMenuItem>
                           </>
                         )}
@@ -433,20 +433,20 @@ export function SectionGrid({
                       position={insertPosition}
                       courseFilePath={currentCourse.filePath}
                     />
-                    <DeleteSectionModal
+                    <ArchiveSectionModal
                       sectionId={section.id}
                       sectionTitle={section.path}
                       lessonCount={lessons.length}
-                      open={deleteSectionId === section.id}
+                      open={archiveSectionId === section.id}
                       onOpenChange={(open) => {
                         dispatch({
-                          type: "set-delete-section-id",
+                          type: "set-archive-section-id",
                           sectionId: open ? section.id : null,
                         });
                       }}
-                      onDelete={() => {
+                      onArchive={() => {
                         dispatch({
-                          type: "delete-section",
+                          type: "archive-section",
                           frontendId: section.id,
                         } as any);
                       }}

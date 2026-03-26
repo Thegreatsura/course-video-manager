@@ -119,21 +119,27 @@ describe("CourseEditorService — sections", () => {
     });
   });
 
-  describe("delete-section", () => {
-    it("deletes a ghost section with no lessons", async () => {
+  describe("archive-section", () => {
+    it("archives a ghost section with no lessons (section no longer visible)", async () => {
       const { version } = await createCourseWithVersion();
-      const result = await svc().createSection(version.id, "To Delete", 0);
-      await svc().deleteSection(result.sectionId);
+      const result = await svc().createSection(version.id, "To Archive", 0);
+      await svc().archiveSection(result.sectionId);
 
+      // Section should not appear in getSectionsByRepoVersionId (filters archived)
       const sections = await getSections(version.id);
       expect(sections).toHaveLength(0);
+
+      // But the section should still exist in the DB with archivedAt set
+      const allSections = await db().query.sections.findMany();
+      expect(allSections).toHaveLength(1);
+      expect(allSections[0]!.archivedAt).not.toBeNull();
     });
 
-    it("deletes a ghost section and its ghost lessons", async () => {
+    it("archives a ghost section and ghost lessons are preserved (not deleted)", async () => {
       const { version } = await createCourseWithVersion();
       const createResult = await svc().createSection(
         version.id,
-        "To Delete",
+        "To Archive",
         0
       );
 
@@ -156,12 +162,15 @@ describe("CourseEditorService — sections", () => {
           },
         ]);
 
-      await svc().deleteSection(createResult.sectionId);
+      await svc().archiveSection(createResult.sectionId);
+
+      // Section not visible
       expect(await getSections(version.id)).toHaveLength(0);
-      expect(await db().query.lessons.findMany()).toHaveLength(0);
+      // Ghost lessons preserved in DB (not deleted)
+      expect(await db().query.lessons.findMany()).toHaveLength(2);
     });
 
-    it("rejects deleting a section with real lessons", async () => {
+    it("rejects archiving a section with real lessons", async () => {
       const { version } = await createCourseWithVersion();
       const createResult = await svc().createSection(
         version.id,
@@ -178,7 +187,7 @@ describe("CourseEditorService — sections", () => {
       });
 
       await expect(
-        svc().deleteSection(createResult.sectionId)
+        svc().archiveSection(createResult.sectionId)
       ).rejects.toThrow();
     });
   });

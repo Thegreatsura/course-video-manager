@@ -26,7 +26,7 @@ export const CourseEditorEventSchema = Schema.Union(
     description: Schema.String,
   }),
   Schema.Struct({
-    type: Schema.Literal("delete-section"),
+    type: Schema.Literal("archive-section"),
     sectionId: nonEmptyString,
   }),
   Schema.Struct({

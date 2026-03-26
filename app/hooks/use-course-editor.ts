@@ -166,7 +166,7 @@ export function useCourseEditor(
       "create-section": (_s, effect) => enqueue(effect),
       "rename-section": (_s, effect) => enqueue(effect),
       "update-section-description": (_s, effect) => enqueue(effect),
-      "delete-section": (_s, effect) => enqueue(effect),
+      "archive-section": (_s, effect) => enqueue(effect),
       "reorder-sections": (_s, effect) => enqueue(effect),
       "add-ghost-lesson": (_s, effect) => enqueue(effect),
       "create-real-lesson": (_s, effect) => enqueue(effect),

@@ -534,14 +534,10 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
         return { success: true };
       });
 
-      /** Deletes a ghost section and all its ghost lessons. */
-      const deleteSection = Effect.fn("deleteSection")(function* (
+      /** Archives a section (soft-delete). Only works if there are no real lessons. */
+      const archiveSection = Effect.fn("archiveSection")(function* (
         sectionId: string
       ) {
-        const section = yield* db.getSectionWithHierarchyById(sectionId);
-        const repoPath = section.repoVersion.repo.filePath!;
-        const repoVersionId = section.repoVersionId;
-
         const sectionLessons = yield* db.getLessonsBySectionId(sectionId);
         const realLessons = sectionLessons.filter(
           (l) => l.fsStatus !== "ghost"
@@ -551,21 +547,11 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
           return yield* new CourseWriteError({
             cause: null,
             message:
-              "Cannot delete section with real lessons. Convert or delete them first.",
+              "Cannot archive section with real lessons. Convert or delete them first.",
           });
         }
 
-        // Delete all ghost lessons in this section
-        for (const lesson of sectionLessons) {
-          yield* db.deleteLesson(lesson.id);
-        }
-
-        // Delete the section itself
-        yield* db.deleteSection(sectionId);
-
-        // Renumber remaining sections to close the gap
-        yield* renumberSections(repoVersionId, repoPath);
-
+        yield* db.archiveSection(sectionId);
         return { success: true };
       });
 
@@ -586,9 +572,8 @@ export class CourseWriteService extends Effect.Service<CourseWriteService>()(
           withPostValidation(reorderSections(...args)),
         renameSection: (...args: Parameters<typeof renameSection>) =>
           withPostValidation(renameSection(...args)),
-        deleteSection: (...args: Parameters<typeof deleteSection>) =>
-          withPostValidation(deleteSection(...args)),
         // DB-only operations: no validation
+        archiveSection,
         addGhostSection,
         addGhostLesson,
         // Conditionally-FS operations: validate internally only when FS is touched

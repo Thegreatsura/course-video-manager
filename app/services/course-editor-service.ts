@@ -31,7 +31,7 @@ export type CourseEditorEvent =
       description: string;
     }
   | {
-      type: "delete-section";
+      type: "archive-section";
       sectionId: string;
     }
   | {
@@ -134,7 +134,7 @@ export interface CourseEditorService {
     description: string
   ): Promise<{ success: true }>;
 
-  deleteSection(sectionId: string): Promise<{ success: true }>;
+  archiveSection(sectionId: string): Promise<{ success: true }>;
 
   reorderSections(sectionIds: string[]): Promise<{ success: true }>;
 
@@ -241,9 +241,9 @@ export function createCourseEditorService(
       }) as Promise<{ success: true }>;
     },
 
-    async deleteSection(sectionId) {
+    async archiveSection(sectionId) {
       return send({
-        type: "delete-section",
+        type: "archive-section",
         sectionId,
       }) as Promise<{ success: true }>;
     },

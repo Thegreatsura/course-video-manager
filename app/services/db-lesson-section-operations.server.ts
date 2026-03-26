@@ -4,7 +4,7 @@ import {
   NotFoundError,
   UnknownDBServiceError,
 } from "@/services/db-service-errors";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
@@ -229,6 +229,17 @@ export const createLessonSectionOperations = (db: DrizzleDB) => {
     return sectionResult;
   });
 
+  const archiveSection = Effect.fn("archiveSection")(function* (
+    sectionId: string
+  ) {
+    return yield* makeDbCall(() =>
+      db
+        .update(sections)
+        .set({ archivedAt: new Date() })
+        .where(eq(sections.id, sectionId))
+    );
+  });
+
   const updateSectionOrder = Effect.fn("updateSectionOrder")(function* (
     sectionId: string,
     order: number
@@ -273,7 +284,10 @@ export const createLessonSectionOperations = (db: DrizzleDB) => {
     function* (repoVersionId: string) {
       return yield* makeDbCall(() =>
         db.query.sections.findMany({
-          where: eq(sections.repoVersionId, repoVersionId),
+          where: and(
+            eq(sections.repoVersionId, repoVersionId),
+            isNull(sections.archivedAt)
+          ),
           orderBy: asc(sections.order),
         })
       );
@@ -300,6 +314,7 @@ export const createLessonSectionOperations = (db: DrizzleDB) => {
     updateLesson,
     deleteLesson,
     deleteSection,
+    archiveSection,
     updateSectionOrder,
     updateSectionPath,
     updateSectionDescription,

@@ -244,10 +244,13 @@ function ComponentInner(props: Route.ComponentProps) {
   const currentCourse = loaderData.selectedCourse;
 
   // Course editor reducer owns entity state + UI state
-  const { state: viewState, dispatch, pendingCount } = useCourseEditor(
-    currentCourse?.sections ?? [],
-    { courseFilePath: currentCourse?.filePath }
-  );
+  const {
+    state: viewState,
+    dispatch,
+    pendingCount,
+  } = useCourseEditor(currentCourse?.sections ?? [], {
+    courseFilePath: currentCourse?.filePath,
+  });
 
   // Adapter: convert reducer-owned sections back to loader Section[] shape
   // for existing components that haven't been migrated yet
@@ -287,7 +290,7 @@ function ComponentInner(props: Route.ComponentProps) {
     convertToGhostLessonId,
     deleteLessonId,
     createOnDiskLessonId,
-    deleteSectionId,
+    archiveSectionId,
     videoPlayerState,
     priorityFilter,
     iconFilter,
@@ -296,11 +299,8 @@ function ComponentInner(props: Route.ComponentProps) {
   } = viewState;
 
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
-  const {
-    uploads,
-    startExportUpload,
-    startBatchExportUpload,
-  } = useContext(UploadContext);
+  const { uploads, startExportUpload, startBatchExportUpload } =
+    useContext(UploadContext);
 
   const hasActiveUploads = Object.values(uploads).some(
     (u) =>
@@ -491,7 +491,7 @@ function ComponentInner(props: Route.ComponentProps) {
                   }
                   deleteLessonId={deleteLessonId as string | null}
                   createOnDiskLessonId={createOnDiskLessonId as string | null}
-                  deleteSectionId={deleteSectionId as string | null}
+                  archiveSectionId={archiveSectionId as string | null}
                   dispatch={legacyDispatch}
                   navigate={navigate}
                   startExportUpload={startExportUpload}

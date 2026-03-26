@@ -130,11 +130,11 @@ export class EffectQueue {
         break;
       }
 
-      case "delete-section": {
+      case "archive-section": {
         const resolvedId = this.resolveId(effect.sectionId);
-        await this.service.deleteSection(resolvedId);
+        await this.service.archiveSection(resolvedId);
         this.dispatch({
-          type: "section-deleted",
+          type: "section-archived",
           frontendId: effect.frontendId,
         });
         break;

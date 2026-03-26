@@ -59,8 +59,8 @@ export const handleCourseEditorEvent = Effect.fn("handleCourseEditorEvent")(
         return { success: true };
       }
 
-      case "delete-section": {
-        return yield* service.deleteSection(event.sectionId);
+      case "archive-section": {
+        return yield* service.archiveSection(event.sectionId);
       }
 
       case "reorder-sections": {

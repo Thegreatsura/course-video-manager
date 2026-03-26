@@ -199,30 +199,30 @@ describe("courseEditorReducer", () => {
     });
   });
 
-  describe("delete-section", () => {
+  describe("archive-section", () => {
     it("should remove the section optimistically", () => {
       const section = createSection();
       const tester = createTester([section]);
 
       const state = tester
-        .send({ type: "delete-section", frontendId: section.frontendId })
+        .send({ type: "archive-section", frontendId: section.frontendId })
         .getState();
 
       expect(state.sections).toHaveLength(0);
     });
 
-    it("should schedule a delete-section effect", () => {
+    it("should schedule an archive-section effect", () => {
       const section = createSection({ databaseId: did("db-456") });
       const tester = createTester([section]);
 
       tester.send({
-        type: "delete-section",
+        type: "archive-section",
         frontendId: section.frontendId,
       });
 
       expect(tester.getExec()).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "delete-section",
+          type: "archive-section",
           sectionId: did("db-456"),
         })
       );
@@ -316,11 +316,11 @@ describe("courseEditorReducer", () => {
       expect(state.sections[0]!.path).toBe("new-path");
     });
 
-    it("section-deleted should not change state", () => {
+    it("section-archived should not change state", () => {
       const tester = createTester();
 
       const state = tester
-        .send({ type: "section-deleted", frontendId: fid("any") })
+        .send({ type: "section-archived", frontendId: fid("any") })
         .getState();
 
       expect(state.sections).toHaveLength(0);
@@ -395,7 +395,7 @@ describe("EffectQueue", () => {
     }),
     updateSectionName: vi.fn().mockResolvedValue({ success: true }),
     updateSectionDescription: vi.fn().mockResolvedValue({ success: true }),
-    deleteSection: vi.fn().mockResolvedValue({ success: true }),
+    archiveSection: vi.fn().mockResolvedValue({ success: true }),
     reorderSections: vi.fn().mockResolvedValue({ success: true }),
     addGhostLesson: vi
       .fn()
@@ -483,7 +483,7 @@ describe("EffectQueue", () => {
     );
   });
 
-  it("should resolve FrontendId to DatabaseId for delete-section", async () => {
+  it("should resolve FrontendId to DatabaseId for archive-section", async () => {
     const service = createMockService();
     const dispatch = vi.fn();
     const queue = new EffectQueue(service, dispatch);
@@ -497,7 +497,7 @@ describe("EffectQueue", () => {
     });
 
     queue.enqueue({
-      type: "delete-section",
+      type: "archive-section",
       frontendId: fid("frontend-1"),
       sectionId: fid("frontend-1"),
     });
@@ -506,7 +506,7 @@ describe("EffectQueue", () => {
       expect(dispatch).toHaveBeenCalledTimes(2);
     });
 
-    expect(service.deleteSection).toHaveBeenCalledWith("db-section-new");
+    expect(service.archiveSection).toHaveBeenCalledWith("db-section-new");
   });
 
   it("should resolve FrontendIds in reorder-sections", async () => {
@@ -560,7 +560,7 @@ describe("EffectQueue", () => {
         return { success: true };
       }),
       updateSectionDescription: vi.fn().mockResolvedValue({ success: true }),
-      deleteSection: vi.fn().mockImplementation(async () => {
+      archiveSection: vi.fn().mockImplementation(async () => {
         executionOrder.push("delete");
         return { success: true };
       }),
@@ -604,7 +604,7 @@ describe("EffectQueue", () => {
     });
 
     queue.enqueue({
-      type: "delete-section",
+      type: "archive-section",
       frontendId: fid("f-1"),
       sectionId: fid("f-1"),
     });
@@ -622,7 +622,7 @@ describe("EffectQueue", () => {
     const queue = new EffectQueue(service, dispatch);
 
     queue.enqueue({
-      type: "delete-section",
+      type: "archive-section",
       frontendId: fid("f-1"),
       sectionId: did("existing-db-id"),
     });
@@ -631,6 +631,6 @@ describe("EffectQueue", () => {
       expect(dispatch).toHaveBeenCalled();
     });
 
-    expect(service.deleteSection).toHaveBeenCalledWith("existing-db-id");
+    expect(service.archiveSection).toHaveBeenCalledWith("existing-db-id");
   });
 });

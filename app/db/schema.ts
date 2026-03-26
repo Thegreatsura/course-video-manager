@@ -80,6 +80,10 @@ export const sections = createTable("section", {
   }),
   path: text("path").notNull(),
   description: text("description").notNull().default(""),
+  archivedAt: timestamp("archived_at", {
+    mode: "date",
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", {
     mode: "date",
     withTimezone: true,
