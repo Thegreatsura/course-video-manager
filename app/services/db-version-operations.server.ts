@@ -304,6 +304,7 @@ export const createVersionOperations = (db: DrizzleDB) => {
               previousVersionSectionId: sourceSection.id,
               path: sourceSection.path,
               order: sourceSection.order,
+              description: sourceSection.description,
             })
             .returning()
         );
