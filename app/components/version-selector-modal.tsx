@@ -36,7 +36,7 @@ export function VersionSelectorModal({
         <DialogHeader>
           <DialogTitle>Select Version</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 py-4">
+        <div className="space-y-2 py-4 overflow-y-auto max-h-[60vh]">
           {versions.map((version) => {
             const isSelected = version.id === selectedVersionId;
             return (
