@@ -103,6 +103,7 @@ export function SortableLessonItem({
   const lessonFsMaps = use(data.lessonFsMaps);
   const isReadOnly = !data.isLatestVersion;
   const isGhost = lesson.fsStatus === "ghost";
+  const showGhostStyle = isGhost && !isGhostCourse;
 
   const currentDescription = lesson.description ?? "";
   const [editingDesc, setEditingDesc] = useState(false);
@@ -200,7 +201,7 @@ export function SortableLessonItem({
       <div
         className={cn(
           "rounded-md px-2 py-2 group",
-          isGhost &&
+          showGhostStyle &&
             "border border-dashed border-muted-foreground/30 bg-muted/20"
         )}
       >
@@ -254,12 +255,12 @@ export function SortableLessonItem({
               <span
                 className={cn(
                   "text-sm font-medium",
-                  isGhost && "text-muted-foreground/70 italic"
+                  showGhostStyle && "text-muted-foreground/70 italic"
                 )}
               >
                 {isGhost ? lesson.title || lesson.path : lesson.path}
               </span>
-              {isGhost && (
+              {showGhostStyle && (
                 <span className="flex items-center text-muted-foreground/60 shrink-0">
                   <Ghost className="w-3 h-3" />
                 </span>

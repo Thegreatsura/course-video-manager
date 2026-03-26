@@ -207,6 +207,7 @@ export function SectionGrid({
             const isGhostSection =
               lessons.length === 0 ||
               lessons.every((l) => l.fsStatus === "ghost");
+            const showGhostSectionStyle = isGhostSection && !isGhostCourse;
 
             return (
               <SortableSectionItem key={section.id} id={section.id}>
@@ -229,13 +230,13 @@ export function SectionGrid({
                                 <h2
                                   className={cn(
                                     "font-medium text-sm",
-                                    isGhostSection &&
+                                    showGhostSectionStyle &&
                                       "text-muted-foreground/70 italic"
                                   )}
                                 >
                                   {section.path}
                                 </h2>
-                                {isGhostSection && (
+                                {showGhostSectionStyle && (
                                   <Ghost className="w-3.5 h-3.5 text-muted-foreground/40" />
                                 )}
                               </div>
