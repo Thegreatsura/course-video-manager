@@ -190,6 +190,49 @@ describe("CourseEditorService — sections", () => {
         svc().archiveSection(createResult.sectionId)
       ).rejects.toThrow();
     });
+
+    it("rejects archiving a section with mixed ghost and real lessons", async () => {
+      const { version } = await createCourseWithVersion();
+      const createResult = await svc().createSection(
+        version.id,
+        "Mixed Lessons",
+        0
+      );
+
+      await db()
+        .insert(schema.lessons)
+        .values([
+          {
+            sectionId: createResult.sectionId,
+            path: "ghost-lesson",
+            title: "Ghost Lesson",
+            fsStatus: "ghost",
+            order: 1,
+          },
+          {
+            sectionId: createResult.sectionId,
+            path: "real-lesson",
+            title: "Real Lesson",
+            fsStatus: "real",
+            order: 2,
+          },
+        ]);
+
+      await expect(
+        svc().archiveSection(createResult.sectionId)
+      ).rejects.toThrow();
+    });
+
+    it("double-archiving the same section does not throw", async () => {
+      const { version } = await createCourseWithVersion();
+      const result = await svc().createSection(version.id, "Double Archive", 0);
+      await svc().archiveSection(result.sectionId);
+      await svc().archiveSection(result.sectionId);
+
+      const allSections = await db().query.sections.findMany();
+      expect(allSections).toHaveLength(1);
+      expect(allSections[0]!.archivedAt).not.toBeNull();
+    });
   });
 
   describe("reorder-sections", () => {

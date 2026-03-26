@@ -227,6 +227,50 @@ describe("courseEditorReducer", () => {
         })
       );
     });
+
+    it("should be a no-op when frontendId does not exist", () => {
+      const section = createSection();
+      const tester = createTester([section]);
+
+      const state = tester
+        .send({ type: "archive-section", frontendId: fid("nonexistent") })
+        .getState();
+
+      expect(state.sections).toHaveLength(1);
+      expect(tester.getExec()).not.toHaveBeenCalled();
+    });
+
+    it("should use frontendId as sectionId when databaseId is null", () => {
+      const section = createSection({
+        frontendId: fid("frontend-only"),
+        databaseId: null as unknown as DatabaseId,
+      });
+      const tester = createTester([section]);
+
+      tester.send({
+        type: "archive-section",
+        frontendId: fid("frontend-only"),
+      });
+
+      expect(tester.getExec()).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "archive-section",
+          sectionId: fid("frontend-only"),
+        })
+      );
+    });
+
+    it("should clear archiveSectionId after archiving", () => {
+      const section = createSection();
+      const tester = createTester([section]);
+
+      const state = tester
+        .send({ type: "set-archive-section-id", sectionId: section.frontendId })
+        .send({ type: "archive-section", frontendId: section.frontendId })
+        .getState();
+
+      expect(state.sections).toHaveLength(0);
+    });
   });
 
   describe("reorder-sections", () => {
