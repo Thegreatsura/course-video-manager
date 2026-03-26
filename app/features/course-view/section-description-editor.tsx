@@ -34,7 +34,7 @@ export function SectionDescriptionEditor({
 
   if (!isReadOnly && editingDesc) {
     return (
-      <div className="mt-1.5 px-4 pb-2">
+      <div className="mt-1.5 pl-10 pr-4 pb-2">
         <Textarea
           value={descValue}
           onChange={(e) => setDescValue(e.target.value)}
@@ -61,7 +61,7 @@ export function SectionDescriptionEditor({
       <div
         className={cn(
           "text-xs text-muted-foreground px-4 pb-2 pt-1 whitespace-pre-line max-w-[65ch]",
-          !isReadOnly && "cursor-pointer hover:text-foreground/70"
+          !isReadOnly && "pl-10 cursor-pointer hover:text-foreground/70"
         )}
         onClick={() => {
           if (isReadOnly) return;
@@ -76,7 +76,7 @@ export function SectionDescriptionEditor({
 
   if (!isReadOnly) {
     return (
-      <div className="px-4 pb-2">
+      <div className="pl-10 pr-4 pb-2">
         <button
           className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
           onClick={() => {
