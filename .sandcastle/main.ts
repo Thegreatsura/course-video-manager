@@ -105,7 +105,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       sandcastle.run({
         hooks,
         copyToSandbox,
-        name: `Impklementer #${issue.number}`,
+        name: `Implementer #${issue.number}`,
         // Give each agent plenty of room to implement and iterate on tests.
         maxIterations: 100,
         // Sonnet for execution: fast and capable enough for typical issue work.
