@@ -78,6 +78,55 @@ describe("EffectQueue — hasUnresolvedItems", () => {
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
     expect(queue.hasUnresolvedItems()).toBe(false);
   });
+
+  it("returns true when multiple items are queued and first is still processing", () => {
+    const service = {
+      ...createMockService(),
+      createSection: vi.fn().mockReturnValue(new Promise(() => {})),
+    };
+    const queue = new EffectQueue(service, vi.fn());
+
+    queue.enqueue({
+      type: "create-section",
+      frontendId: fid("s-1"),
+      repoVersionId: "v1",
+      title: "First",
+      maxOrder: 0,
+    });
+    queue.enqueue({
+      type: "create-section",
+      frontendId: fid("s-2"),
+      repoVersionId: "v1",
+      title: "Second",
+      maxOrder: 1,
+    });
+
+    expect(queue.hasUnresolvedItems()).toBe(true);
+  });
+
+  it("returns false after multiple items have all been processed", async () => {
+    const service = createMockService();
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    queue.enqueue({
+      type: "create-section",
+      frontendId: fid("s-1"),
+      repoVersionId: "v1",
+      title: "First",
+      maxOrder: 0,
+    });
+    queue.enqueue({
+      type: "create-section",
+      frontendId: fid("s-2"),
+      repoVersionId: "v1",
+      title: "Second",
+      maxOrder: 1,
+    });
+
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2));
+    expect(queue.hasUnresolvedItems()).toBe(false);
+  });
 });
 
 describe("EffectQueue — section effects", () => {
