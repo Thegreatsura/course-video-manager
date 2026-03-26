@@ -56,7 +56,12 @@ export class EffectQueue {
     while (this.queue.length > 0) {
       const effect = this.queue.shift()!;
       this.notifyQueueSize();
-      await this.execute(effect);
+      try {
+        await this.execute(effect);
+      } catch {
+        // Effect failed — skip it and continue draining remaining items
+        // so the queue doesn't get permanently stuck.
+      }
     }
 
     this.processing = false;

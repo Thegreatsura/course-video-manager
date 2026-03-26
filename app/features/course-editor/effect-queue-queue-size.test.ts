@@ -52,7 +52,9 @@ describe("EffectQueue — queue size tracking", () => {
       title: "New Title",
     });
 
-    const calls = onQueueSizeChange.mock.calls.map((args: unknown[]) => args[0] as number);
+    const calls = onQueueSizeChange.mock.calls.map(
+      (args: unknown[]) => args[0] as number
+    );
     expect(calls.some((n) => n > 0)).toBe(true);
   });
 
@@ -71,9 +73,52 @@ describe("EffectQueue — queue size tracking", () => {
 
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
 
-    const calls = onQueueSizeChange.mock.calls.map((args: unknown[]) => args[0] as number);
+    const calls = onQueueSizeChange.mock.calls.map(
+      (args: unknown[]) => args[0] as number
+    );
     const lastCall = calls[calls.length - 1];
     expect(lastCall).toBe(0);
+  });
+
+  it("resets to 0 and continues processing after an effect throws", async () => {
+    const service = createMockService();
+    (
+      service.updateLessonTitle as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce(new Error("network failure"));
+    const dispatch = vi.fn();
+    const onQueueSizeChange = vi.fn();
+    const queue = new EffectQueue(service, dispatch, onQueueSizeChange);
+
+    // First effect will fail
+    queue.enqueue({
+      type: "update-lesson-title",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      title: "Fail",
+    });
+
+    // Wait for the failed effect to complete
+    await vi.waitFor(() => {
+      const calls = onQueueSizeChange.mock.calls.map(
+        (args: unknown[]) => args[0] as number
+      );
+      expect(calls[calls.length - 1]).toBe(0);
+    });
+
+    // Second effect should still process (queue not stuck)
+    queue.enqueue({
+      type: "update-lesson-title",
+      frontendId: fid("l-2"),
+      lessonId: did("db-l-2"),
+      title: "After failure",
+    });
+
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+
+    const calls = onQueueSizeChange.mock.calls.map(
+      (args: unknown[]) => args[0] as number
+    );
+    expect(calls[calls.length - 1]).toBe(0);
   });
 
   it("tracks size correctly across multiple sequential effects", async () => {
@@ -97,7 +142,9 @@ describe("EffectQueue — queue size tracking", () => {
 
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2));
 
-    const calls = onQueueSizeChange.mock.calls.map((args: unknown[]) => args[0] as number);
+    const calls = onQueueSizeChange.mock.calls.map(
+      (args: unknown[]) => args[0] as number
+    );
     // Should have been called with > 0 at some point
     expect(calls.some((n) => n > 0)).toBe(true);
     // And finally called with 0
