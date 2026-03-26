@@ -149,6 +149,45 @@ describe("editorSectionsToLoaderSections", () => {
     expect(result[0]!.lessons[0]!.id).toBe("frontend-temp-uuid");
   });
 
+  it("lesson frontendId is stable across databaseId assignment (prevents React key churn on lesson-created)", () => {
+    // Before lesson-created fires: optimistic lesson has no databaseId
+    const sectionBefore = createEditorSection({
+      lessons: [
+        createEditorLesson({
+          frontendId: fid("frontend-temp-uuid"),
+          databaseId: null as unknown as DatabaseId,
+        }),
+      ],
+    });
+
+    const before = editorSectionsToLoaderSections([sectionBefore]);
+    const stableKeyBefore = (
+      before[0]!.lessons[0]! as unknown as { frontendId: string }
+    ).frontendId;
+
+    // After lesson-created fires: databaseId is set
+    const sectionAfter = {
+      ...sectionBefore,
+      lessons: [
+        { ...sectionBefore.lessons[0]!, databaseId: did("db-real-uuid") },
+      ],
+    };
+
+    const after = editorSectionsToLoaderSections([sectionAfter]);
+    const stableKeyAfter = (
+      after[0]!.lessons[0]! as unknown as { frontendId: string }
+    ).frontendId;
+
+    // Stable key must not change — otherwise React unmounts the description textarea
+    expect(stableKeyBefore).toBe("frontend-temp-uuid");
+    expect(stableKeyAfter).toBe("frontend-temp-uuid");
+    expect(stableKeyBefore).toBe(stableKeyAfter);
+
+    // lesson.id still changes (from frontendId to databaseId) for API calls
+    expect(before[0]!.lessons[0]!.id).toBe("frontend-temp-uuid");
+    expect(after[0]!.lessons[0]!.id).toBe("db-real-uuid");
+  });
+
   it("should handle empty sections", () => {
     const result = editorSectionsToLoaderSections([]);
     expect(result).toEqual([]);

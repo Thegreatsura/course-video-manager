@@ -301,7 +301,13 @@ export function SectionGrid({
                                     )}
                                   {filteredLessons.map((lesson, li) => (
                                     <SortableLessonItem
-                                      key={lesson.id}
+                                      key={
+                                        (
+                                          lesson as unknown as {
+                                            frontendId?: string;
+                                          }
+                                        ).frontendId ?? lesson.id
+                                      }
                                       lesson={lesson}
                                       lessonIndex={li}
                                       section={section}
