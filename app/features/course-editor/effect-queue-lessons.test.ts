@@ -39,6 +39,195 @@ const createMockService = (): CourseEditorService => ({
     .mockResolvedValue({ success: true, path: "on-disk-path" }),
 });
 
+describe("EffectQueue — throttled effects (coalescing)", () => {
+  it("should coalesce multiple update-lesson-priority effects for the same lesson, only calling service once with final value", async () => {
+    // Simulate slow service so the first effect is in-flight while others queue up
+    let resolveFirst!: () => void;
+    const firstCallPromise = new Promise<void>((res) => {
+      resolveFirst = res;
+    });
+    const service = {
+      ...createMockService(),
+      updateLessonPriority: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          firstCallPromise.then(() => ({ success: true }))
+        )
+        .mockResolvedValue({ success: true }),
+    };
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    // Enqueue first effect — this starts processing immediately (in-flight)
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      priority: 3,
+    });
+
+    // Enqueue two more while first is still in-flight
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      priority: 1,
+    });
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      priority: 2,
+    });
+
+    // Let first call complete
+    resolveFirst();
+
+    // Wait for all processing to complete
+    await vi.waitFor(() =>
+      expect(service.updateLessonPriority).toHaveBeenCalledTimes(2)
+    );
+
+    // First in-flight call with P3, then only the last queued value P2 (P1 was coalesced away)
+    expect(service.updateLessonPriority).toHaveBeenNthCalledWith(
+      1,
+      "db-l-1",
+      3
+    );
+    expect(service.updateLessonPriority).toHaveBeenNthCalledWith(
+      2,
+      "db-l-1",
+      2
+    );
+  });
+
+  it("should coalesce multiple update-lesson-icon effects for the same lesson, only calling service once with final value", async () => {
+    let resolveFirst!: () => void;
+    const firstCallPromise = new Promise<void>((res) => {
+      resolveFirst = res;
+    });
+    const service = {
+      ...createMockService(),
+      updateLessonIcon: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          firstCallPromise.then(() => ({ success: true }))
+        )
+        .mockResolvedValue({ success: true }),
+    };
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    queue.enqueue({
+      type: "update-lesson-icon",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      icon: "code",
+    });
+
+    queue.enqueue({
+      type: "update-lesson-icon",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      icon: "discussion",
+    });
+    queue.enqueue({
+      type: "update-lesson-icon",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      icon: "watch",
+    });
+
+    resolveFirst();
+
+    await vi.waitFor(() =>
+      expect(service.updateLessonIcon).toHaveBeenCalledTimes(2)
+    );
+
+    expect(service.updateLessonIcon).toHaveBeenNthCalledWith(
+      1,
+      "db-l-1",
+      "code"
+    );
+    expect(service.updateLessonIcon).toHaveBeenNthCalledWith(
+      2,
+      "db-l-1",
+      "watch"
+    );
+  });
+
+  it("should not coalesce effects for different lessons", async () => {
+    const service = createMockService();
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      priority: 3,
+    });
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-2"),
+      lessonId: did("db-l-2"),
+      priority: 1,
+    });
+
+    await vi.waitFor(() =>
+      expect(service.updateLessonPriority).toHaveBeenCalledTimes(2)
+    );
+    expect(service.updateLessonPriority).toHaveBeenCalledWith("db-l-1", 3);
+    expect(service.updateLessonPriority).toHaveBeenCalledWith("db-l-2", 1);
+  });
+
+  it("should not coalesce priority and icon effects for the same lesson", async () => {
+    let resolveFirst!: () => void;
+    const firstCallPromise = new Promise<void>((res) => {
+      resolveFirst = res;
+    });
+    const service = {
+      ...createMockService(),
+      updateLessonPriority: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          firstCallPromise.then(() => ({ success: true }))
+        )
+        .mockResolvedValue({ success: true }),
+    };
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    // Priority goes in-flight
+    queue.enqueue({
+      type: "update-lesson-priority",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      priority: 3,
+    });
+
+    // Icon for the same lesson should NOT be coalesced away
+    queue.enqueue({
+      type: "update-lesson-icon",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      icon: "code",
+    });
+
+    resolveFirst();
+
+    await vi.waitFor(() =>
+      expect(service.updateLessonPriority).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(service.updateLessonIcon).toHaveBeenCalledTimes(1)
+    );
+
+    expect(service.updateLessonPriority).toHaveBeenCalledWith("db-l-1", 3);
+    expect(service.updateLessonIcon).toHaveBeenCalledWith("db-l-1", "code");
+  });
+});
+
 describe("EffectQueue — section effects", () => {
   it("should dispatch section-created with the user title as path, not the database UUID", async () => {
     const service = {

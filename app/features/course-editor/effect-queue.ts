@@ -31,6 +31,17 @@ export class EffectQueue {
   }
 
   enqueue(effect: courseEditorReducer.Effect): void {
+    // Coalesce: for idempotent per-lesson updates, remove any pending (not yet
+    // executing) effects of the same type targeting the same lesson so that
+    // only the final state is sent to the server.
+    if (
+      effect.type === "update-lesson-priority" ||
+      effect.type === "update-lesson-icon"
+    ) {
+      this.queue = this.queue.filter(
+        (e) => !(e.type === effect.type && "lessonId" in e && e.lessonId === effect.lessonId)
+      );
+    }
     this.queue.push(effect);
     this.notifyQueueSize();
     this.drain();
