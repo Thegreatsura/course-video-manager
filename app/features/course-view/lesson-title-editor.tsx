@@ -108,7 +108,7 @@ export function LessonTitleEditor({
   if (!isReadOnly && editingTitle) {
     return (
       <div
-        className="flex items-center gap-1 flex-1 min-w-0"
+        className="flex items-center gap-1 min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         {!isGhost && pathPrefix && (
@@ -117,7 +117,8 @@ export function LessonTitleEditor({
           </span>
         )}
         <input
-          className="text-sm font-medium bg-transparent border-b border-foreground outline-none flex-1 min-w-0"
+          className="text-sm font-medium bg-transparent border-b border-foreground outline-none min-w-0"
+          size={Math.max(titleValue.length, 1)}
           value={titleValue}
           autoFocus
           onChange={(e) => onTitleValueChange(e.target.value)}
