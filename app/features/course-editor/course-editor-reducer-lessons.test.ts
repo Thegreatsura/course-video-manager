@@ -595,5 +595,3 @@ describe("courseEditorReducer — lesson operations", () => {
     });
   });
 });
-// Tests for editing optimistic lessons by databaseId are in
-// course-editor-reducer-optimistic-id.test.ts

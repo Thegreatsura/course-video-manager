@@ -56,20 +56,25 @@ function computeOptimisticSectionMaterialization(
   };
 }
 
+/**
+ * Match a lesson by frontendId OR databaseId. After an optimistic lesson is
+ * persisted, editorSectionsToLoaderSections exposes lesson.id = databaseId,
+ * so components may dispatch with databaseId as the identifier.
+ */
+function lessonMatchesId(lesson: EditorLesson, id: FrontendId): boolean {
+  const idStr = id as string;
+  return (
+    (lesson.frontendId as string) === idStr ||
+    (lesson.databaseId !== null && (lesson.databaseId as string) === idStr)
+  );
+}
+
 export function findLesson(
   state: courseEditorReducer.State,
   frontendId: FrontendId
 ): { lesson: EditorLesson | undefined; section: EditorSection | undefined } {
-  // Match by frontendId OR databaseId. After an optimistic lesson is persisted,
-  // editorSectionsToLoaderSections exposes lesson.id = databaseId, so components
-  // may dispatch with databaseId as the frontendId parameter.
-  const id = frontendId as string;
   for (const section of state.sections) {
-    const lesson = section.lessons.find(
-      (l) =>
-        (l.frontendId as string) === id ||
-        (l.databaseId !== null && (l.databaseId as string) === id)
-    );
+    const lesson = section.lessons.find((l) => lessonMatchesId(l, frontendId));
     if (lesson) return { lesson, section };
   }
   return { lesson: undefined, section: undefined };
@@ -80,15 +85,10 @@ export function updateLesson(
   frontendId: FrontendId,
   updater: (lesson: EditorLesson) => EditorLesson
 ): EditorSection[] {
-  // Match by frontendId OR databaseId — see findLesson for rationale.
-  const id = frontendId as string;
   return state.sections.map((s) => ({
     ...s,
     lessons: s.lessons.map((l) =>
-      (l.frontendId as string) === id ||
-      (l.databaseId !== null && (l.databaseId as string) === id)
-        ? updater(l)
-        : l
+      lessonMatchesId(l, frontendId) ? updater(l) : l
     ),
   }));
 }
@@ -165,8 +165,8 @@ export function handleLessonCase(
 
       let newLessons: EditorLesson[];
       if (action.adjacentLessonId && action.position) {
-        const adjIdx = section.lessons.findIndex(
-          (l) => l.frontendId === action.adjacentLessonId
+        const adjIdx = section.lessons.findIndex((l) =>
+          lessonMatchesId(l, action.adjacentLessonId!)
         );
         if (adjIdx === -1) {
           newLessons = [...section.lessons, newLesson];
@@ -183,8 +183,8 @@ export function handleLessonCase(
 
       const adjacentLessonDb = action.adjacentLessonId
         ? (() => {
-            const adj = section.lessons.find(
-              (l) => l.frontendId === action.adjacentLessonId
+            const adj = section.lessons.find((l) =>
+              lessonMatchesId(l, action.adjacentLessonId!)
             );
             return adj ? (adj.databaseId ?? adj.frontendId) : undefined;
           })()
@@ -355,9 +355,15 @@ export function handleLessonCase(
         (s) => s.frontendId === action.sectionFrontendId
       );
       if (!section) return state;
-      const lessonMap = new Map(section.lessons.map((l) => [l.frontendId, l]));
+      const lessonMap = new Map<string, EditorLesson>();
+      for (const l of section.lessons) {
+        lessonMap.set(l.frontendId as string, l);
+        if (l.databaseId !== null) {
+          lessonMap.set(l.databaseId as string, l);
+        }
+      }
       const reorderedLessons = action.lessonFrontendIds
-        .map((fid) => lessonMap.get(fid))
+        .map((fid) => lessonMap.get(fid as string))
         .filter((l): l is EditorLesson => l != null)
         .map((l, i) => ({ ...l, order: i + 1 }));
 
