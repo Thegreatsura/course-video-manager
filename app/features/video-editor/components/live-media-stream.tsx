@@ -26,7 +26,7 @@ export const LiveMediaStream = (props: LiveMediaStreamProps) => {
   const isRecording = props.obsConnectorState.type === "obs-recording";
 
   return (
-    <div className={cn("relative")}>
+    <div className={cn("relative p-1")}>
       {isRecording && props.speechDetectorState.type === "silence" && (
         <div className="absolute top-4 left-4 bg-blue-600 rounded-full size-8 flex items-center justify-center">
           <CheckIcon className="size-4 text-white" />
