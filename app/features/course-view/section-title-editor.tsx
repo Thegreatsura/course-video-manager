@@ -68,7 +68,14 @@ export function useSectionTitleEditor({
       setTitleValue(isGhostSection ? sectionPath : currentSlug);
       setEditingTitle(true);
     }
-  }, [editSectionId, sectionId]);
+  }, [
+    editSectionId,
+    sectionId,
+    editingTitle,
+    isGhostSection,
+    sectionPath,
+    currentSlug,
+  ]);
 
   const saveTitle = useCallback(
     (value: string) => {
@@ -156,6 +163,9 @@ export function SectionTitleEditor({
               handledRef.current = true;
               onSave(titleValue);
             }
+          }}
+          onFocus={() => {
+            handledRef.current = false;
           }}
           onBlur={() => {
             if (!handledRef.current) {
