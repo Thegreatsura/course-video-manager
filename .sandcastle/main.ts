@@ -4,8 +4,10 @@
 //   Phase 1 (Plan):    An opus agent analyzes open issues, builds a dependency
 //                      graph, and outputs a <plan> JSON listing unblocked issues
 //                      with their target branch names.
-//   Phase 2 (Execute): N sonnet agents run in parallel via Promise.allSettled,
-//                      each working a single issue on its own branch.
+//   Phase 2 (Execute + Review): N sonnet agents run in parallel via
+//                      Promise.allSettled, each working a single issue on its
+//                      own branch. After each implementer commits, an opus
+//                      reviewer refines the code on the same branch.
 //   Phase 3 (Merge):   A sonnet agent merges all branches that produced commits.
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
@@ -92,17 +94,20 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   }
 
   // -------------------------------------------------------------------------
-  // Phase 2: Execute
+  // Phase 2: Execute + Review
   //
   // Spawn one sonnet agent per issue, all running concurrently.
   // Each agent works on its own branch so there are no conflicts during
   // execution — merging happens in Phase 3.
   //
+  // After each implementer commits, an opus reviewer checks the code for
+  // quality, clarity, and correctness on the same branch.
+  //
   // Promise.allSettled means one failing agent doesn't cancel the others.
   // -------------------------------------------------------------------------
   const settled = await Promise.allSettled(
-    issues.map((issue) =>
-      sandcastle.run({
+    issues.map(async (issue) => {
+      const result = await sandcastle.run({
         hooks,
         copyToSandbox,
         name: `Implementer #${issue.number}`,
@@ -121,8 +126,28 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         },
         // Each agent starts on its own branch.
         branch: issue.branch,
-      })
-    )
+      });
+
+      // Only review if the implementer actually made commits.
+      if (result.commits.length > 0) {
+        await sandcastle.run({
+          hooks,
+          copyToSandbox,
+          name: `Reviewer #${issue.number}`,
+          // Opus for review: deeper reasoning catches subtle issues.
+          model: "claude-opus-4-6",
+          promptFile: "./.sandcastle/review-prompt.md",
+          promptArgs: {
+            ISSUE_NUMBER: String(issue.number),
+            ISSUE_TITLE: issue.title,
+            BRANCH: issue.branch,
+          },
+          branch: issue.branch,
+        });
+      }
+
+      return result;
+    })
   );
 
   // Log any agents that threw (network error, sandbox crash, etc.).
