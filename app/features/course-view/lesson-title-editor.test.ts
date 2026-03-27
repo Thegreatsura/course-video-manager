@@ -89,6 +89,33 @@ describe("LessonTitleEditor — blur-save guard (handledRef)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests for auto-select on focus (issue #718)
+// ---------------------------------------------------------------------------
+
+describe("LessonTitleEditor — auto-select on focus", () => {
+  it("calls select() on the input element when focused", () => {
+    const selectMock = vi.fn();
+    const mockTarget = { select: selectMock };
+    const handledRef = { current: false };
+
+    // Simulate the onFocus handler that the input element uses
+    const onFocus = (e: { target: { select: () => void } }) => {
+      handledRef.current = false;
+      e.target.select();
+    };
+
+    // Simulate a prior Enter-save that set handledRef to true
+    handledRef.current = true;
+
+    onFocus({ target: mockTarget });
+
+    expect(selectMock).toHaveBeenCalledOnce();
+    // handledRef should also be reset
+    expect(handledRef.current).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests for saveTitle dispatch logic
 // ---------------------------------------------------------------------------
 

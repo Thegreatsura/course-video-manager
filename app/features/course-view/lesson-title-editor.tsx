@@ -132,8 +132,9 @@ export function LessonTitleEditor({
               onSave(titleValue);
             }
           }}
-          onFocus={() => {
+          onFocus={(e) => {
             handledRef.current = false;
+            e.target.select();
           }}
           onBlur={() => {
             if (!handledRef.current) {
