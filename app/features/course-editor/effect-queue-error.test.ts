@@ -112,4 +112,56 @@ describe("EffectQueue — onError callback", () => {
       expect.objectContaining({ type: "lesson-title-updated" })
     );
   });
+
+  it("stringifies non-Error thrown values", async () => {
+    const service = createMockService();
+    (service.createOnDisk as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      "plain string rejection"
+    );
+    const dispatch = vi.fn();
+    const onError = vi.fn();
+    const queue = new EffectQueue(service, dispatch, undefined, onError);
+
+    queue.enqueue({
+      type: "create-on-disk",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      repoPath: "/bad",
+    });
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError).toHaveBeenCalledWith(
+      "create-on-disk",
+      "plain string rejection"
+    );
+  });
+
+  it("does not throw when onError is not provided", async () => {
+    const service = createMockService();
+    (service.createOnDisk as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("fail")
+    );
+    const dispatch = vi.fn();
+    const queue = new EffectQueue(service, dispatch);
+
+    queue.enqueue({
+      type: "create-on-disk",
+      frontendId: fid("l-1"),
+      lessonId: did("db-l-1"),
+      repoPath: "/bad",
+    });
+
+    // Enqueue a follow-up to prove the queue still drains
+    queue.enqueue({
+      type: "update-lesson-title",
+      frontendId: fid("l-2"),
+      lessonId: did("db-l-2"),
+      title: "Still works",
+    });
+
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "lesson-title-updated" })
+    );
+  });
 });
