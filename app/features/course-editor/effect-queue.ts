@@ -19,15 +19,18 @@ export class EffectQueue {
   private service: CourseEditorService;
   private dispatch: (action: courseEditorReducer.Action) => void;
   private onQueueSizeChange?: (size: number) => void;
+  private onError?: (effectType: string, message: string) => void;
 
   constructor(
     service: CourseEditorService,
     dispatch: (action: courseEditorReducer.Action) => void,
-    onQueueSizeChange?: (size: number) => void
+    onQueueSizeChange?: (size: number) => void,
+    onError?: (effectType: string, message: string) => void
   ) {
     this.service = service;
     this.dispatch = dispatch;
     this.onQueueSizeChange = onQueueSizeChange;
+    this.onError = onError;
   }
 
   enqueue(effect: courseEditorReducer.Effect): void {
@@ -78,9 +81,11 @@ export class EffectQueue {
       this.notifyQueueSize();
       try {
         await this.execute(effect);
-      } catch {
-        // Effect failed — skip it and continue draining remaining items
+      } catch (err) {
+        // Effect failed — notify caller and continue draining remaining items
         // so the queue doesn't get permanently stuck.
+        const message = err instanceof Error ? err.message : String(err);
+        this.onError?.(effect.type, message);
       }
     }
 

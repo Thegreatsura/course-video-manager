@@ -27,6 +27,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Console, Effect } from "effect";
+import { toast } from "sonner";
 import { getGitStatusAsync } from "@/services/git-status-service";
 import { Loader2, Plus } from "lucide-react";
 import { Suspense, useContext, useMemo, useState } from "react";
@@ -250,6 +251,16 @@ function ComponentInner(props: Route.ComponentProps) {
     pendingCount,
   } = useCourseEditor(currentCourse?.sections ?? [], {
     courseFilePath: currentCourse?.filePath,
+    onError: (effectType, message) => {
+      if (effectType === "create-on-disk") {
+        // Extract user-facing message: strip the HTTP prefix if present
+        const match = message.match(
+          /^CourseEditorService request failed: \d+ (.+)$/
+        );
+        const userMessage = match ? match[1] : message;
+        toast.error(userMessage);
+      }
+    },
   });
 
   // Adapter: convert reducer-owned sections back to loader Section[] shape

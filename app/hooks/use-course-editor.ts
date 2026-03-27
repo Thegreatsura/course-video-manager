@@ -114,7 +114,10 @@ export function editorSectionsToLoaderSections(
 
 export function useCourseEditor(
   loaderSections: Section[],
-  opts?: { courseFilePath?: string | null }
+  opts?: {
+    courseFilePath?: string | null;
+    onError?: (effectType: string, message: string) => void;
+  }
 ) {
   // Stable service ref — created once per hook lifecycle
   const serviceRef = useRef(createHttpCourseEditorService());
@@ -130,6 +133,10 @@ export function useCourseEditor(
   const setPendingCountRef = useRef(setPendingCount);
   setPendingCountRef.current = setPendingCount;
 
+  // onError ref — allows the caller to update the callback without recreating the queue
+  const onErrorRef = useRef(opts?.onError);
+  onErrorRef.current = opts?.onError;
+
   // Effect queue ref — created once, uses dispatch wrapper
   const queueRef = useRef(
     new EffectQueue(
@@ -139,6 +146,9 @@ export function useCourseEditor(
       },
       (size) => {
         setPendingCountRef.current(size);
+      },
+      (effectType, message) => {
+        onErrorRef.current?.(effectType, message);
       }
     )
   );
