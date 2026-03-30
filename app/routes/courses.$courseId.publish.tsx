@@ -23,11 +23,14 @@ export const loader = async (args: Route.LoaderArgs) => {
     const db = yield* DBFunctionsService;
     const publishService = yield* CoursePublishService;
 
-    const [course, latestVersion, allVersions] = yield* Effect.all([
-      db.getCourseById(courseId),
-      db.getLatestCourseVersion(courseId),
-      db.getAllVersionsWithStructure(courseId),
-    ]);
+    const [course, latestVersion, allVersions] = yield* Effect.all(
+      [
+        db.getCourseById(courseId),
+        db.getLatestCourseVersion(courseId),
+        db.getAllVersionsWithStructure(courseId),
+      ],
+      { concurrency: "unbounded" }
+    );
 
     if (!latestVersion) {
       return yield* Effect.die(data("No version found", { status: 404 }));

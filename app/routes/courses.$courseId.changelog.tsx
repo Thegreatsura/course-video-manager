@@ -16,10 +16,10 @@ export const loader = async (args: Route.LoaderArgs) => {
   return Effect.gen(function* () {
     const db = yield* DBFunctionsService;
 
-    const [repo, versions] = yield* Effect.all([
-      db.getCourseById(repoId),
-      db.getAllVersionsWithStructure(repoId),
-    ]);
+    const [repo, versions] = yield* Effect.all(
+      [db.getCourseById(repoId), db.getAllVersionsWithStructure(repoId)],
+      { concurrency: "unbounded" }
+    );
     const changelog = generateChangelog(versions);
 
     return {
