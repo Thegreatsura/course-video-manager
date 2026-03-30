@@ -24,8 +24,10 @@ export const loader = async (args: Route.LoaderArgs) => {
     const fs = yield* FileSystem.FileSystem;
     const publishService = yield* CoursePublishService;
     const video = yield* db.getVideoWithClipsById(videoId);
-    const globalLinks = yield* db.getLinks();
-    const videoExists = yield* publishService.isExported(video);
+    const [globalLinks, videoExists] = yield* Effect.all(
+      [db.getLinks(), publishService.isExported(video)],
+      { concurrency: "unbounded" }
+    );
 
     const lesson = video.lesson;
 
@@ -38,10 +40,10 @@ export const loader = async (args: Route.LoaderArgs) => {
 
     // For standalone videos (no lesson), fetch standalone video files
     if (!lesson) {
-      const [nextVideoId, previousVideoId] = yield* Effect.all([
-        db.getNextVideoId(video),
-        db.getPreviousVideoId(video),
-      ]);
+      const [nextVideoId, previousVideoId] = yield* Effect.all(
+        [db.getNextVideoId(video), db.getPreviousVideoId(video)],
+        { concurrency: "unbounded" }
+      );
       const standaloneVideoDir = getStandaloneVideoFilePath(videoId);
       const dirExists = yield* fs.exists(standaloneVideoDir);
 
@@ -147,21 +149,26 @@ export const loader = async (args: Route.LoaderArgs) => {
       }
     ).pipe(Effect.map(EffectArray.filter((f) => f !== null)));
 
-    const [nextVideoId, previousVideoId] = yield* Effect.all([
-      db.getNextVideoId(video),
-      db.getPreviousVideoId(video),
-    ]);
-    const nextLessonWithoutVideo = yield* db.getNextLessonWithoutVideo(video);
+    const [
+      [nextVideoId, previousVideoId],
+      nextLessonWithoutVideo,
+      repoWithSections,
+    ] = yield* Effect.all(
+      [
+        Effect.all([db.getNextVideoId(video), db.getPreviousVideoId(video)], {
+          concurrency: "unbounded",
+        }),
+        db.getNextLessonWithoutVideo(video),
+        db.getCourseStructureById(section.repoVersion.repoId),
+      ],
+      { concurrency: "unbounded" }
+    );
 
     let nextLessonHasExplainerFolder = false;
     if (nextLessonWithoutVideo) {
       const explainerPath = `${nextLessonWithoutVideo.repoFilePath}/${nextLessonWithoutVideo.sectionPath}/${nextLessonWithoutVideo.lessonPath}/explainer`;
       nextLessonHasExplainerFolder = yield* fs.exists(explainerPath);
     }
-
-    const repoWithSections = yield* db.getCourseStructureById(
-      section.repoVersion.repoId
-    );
     const matchingVersion = repoWithSections?.versions.find(
       (v) => v.id === section.repoVersion.id
     );

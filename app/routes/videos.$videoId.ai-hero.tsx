@@ -34,15 +34,14 @@ export const loader = async (args: Route.LoaderArgs) => {
   return Effect.gen(function* () {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
-    const video = yield* db.getVideoWithClipsById(videoId);
-
-    // Check AI Hero auth status
-    const aiHeroAuth = yield* db.getAiHeroAuth();
+    const [video, aiHeroAuth, globalLinks] = yield* Effect.all(
+      [db.getVideoWithClipsById(videoId), db.getAiHeroAuth(), db.getLinks()],
+      { concurrency: "unbounded" }
+    );
     const aiHero: { connected: true; userId: string } | { connected: false } =
       aiHeroAuth
         ? { connected: true, userId: aiHeroAuth.userId }
         : { connected: false };
-    const globalLinks = yield* db.getLinks();
 
     const lesson = video.lesson;
 

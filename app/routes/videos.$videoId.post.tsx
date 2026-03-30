@@ -37,16 +37,18 @@ export const loader = async (args: Route.LoaderArgs) => {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
     const publishService = yield* CoursePublishService;
-    const video = yield* db.getVideoWithClipsById(videoId);
+    const [video, youtubeAuth, globalLinks, videoThumbnails] =
+      yield* Effect.all(
+        [
+          db.getVideoWithClipsById(videoId),
+          db.getYoutubeAuth(),
+          db.getLinks(),
+          db.getThumbnailsByVideoId(videoId),
+        ],
+        { concurrency: "unbounded" }
+      );
     const videoExists = yield* publishService.isExported(video);
-
-    // Check YouTube auth status
-    const youtubeAuth = yield* db.getYoutubeAuth();
     const isYoutubeAuthenticated = youtubeAuth !== null;
-    const globalLinks = yield* db.getLinks();
-
-    // Load thumbnails for this video
-    const videoThumbnails = yield* db.getThumbnailsByVideoId(videoId);
 
     const lesson = video.lesson;
 

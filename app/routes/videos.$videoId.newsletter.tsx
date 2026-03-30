@@ -34,9 +34,10 @@ export const loader = async (args: Route.LoaderArgs) => {
   return Effect.gen(function* () {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
-    const video = yield* db.getVideoWithClipsById(videoId);
-
-    const globalLinks = yield* db.getLinks();
+    const [video, globalLinks] = yield* Effect.all(
+      [db.getVideoWithClipsById(videoId), db.getLinks()],
+      { concurrency: "unbounded" }
+    );
 
     const lesson = video.lesson;
 

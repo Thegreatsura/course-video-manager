@@ -36,12 +36,13 @@ export const loader = async (args: Route.LoaderArgs) => {
     const db = yield* DBFunctionsService;
     const fs = yield* FileSystem.FileSystem;
     const featureFlags = yield* FeatureFlagService;
-    const video = yield* db.getVideoWithClipsById(videoId);
+    const [video, globalLinks] = yield* Effect.all(
+      [db.getVideoWithClipsById(videoId), db.getLinks()],
+      { concurrency: "unbounded" }
+    );
     const showSocialShareButtons = featureFlags.isEnabled(
       "ENABLE_SOCIAL_SHARE_BUTTONS"
     );
-
-    const globalLinks = yield* db.getLinks();
 
     const lesson = video.lesson;
 
