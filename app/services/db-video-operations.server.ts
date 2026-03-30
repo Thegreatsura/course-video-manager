@@ -481,8 +481,16 @@ export const createVideoOperations = (
    * Returns lesson info if found, null if no such lesson exists.
    */
   const getNextLessonWithoutVideo = Effect.fn("getNextLessonWithoutVideo")(
-    function* (currentVideoId: string) {
-      const currentVideo = yield* getVideoWithClipsById(currentVideoId);
+    function* (currentVideo: {
+      lesson: {
+        id: string;
+        section: {
+          repoVersion: {
+            repo: { id: string; filePath: string | null };
+          };
+        };
+      } | null;
+    }) {
       const currentLesson = currentVideo.lesson;
       if (!currentLesson) return null; // Standalone videos have no next/prev
 

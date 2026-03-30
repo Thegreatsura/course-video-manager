@@ -151,7 +151,7 @@ export const loader = async (args: Route.LoaderArgs) => {
       db.getNextVideoId(video),
       db.getPreviousVideoId(video),
     ]);
-    const nextLessonWithoutVideo = yield* db.getNextLessonWithoutVideo(videoId);
+    const nextLessonWithoutVideo = yield* db.getNextLessonWithoutVideo(video);
 
     let nextLessonHasExplainerFolder = false;
     if (nextLessonWithoutVideo) {
