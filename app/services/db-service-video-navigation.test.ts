@@ -455,3 +455,208 @@ describe("getNextVideoId / getPreviousVideoId", () => {
     );
   });
 });
+
+describe("getNextLessonWithoutVideo", () => {
+  it.effect("returns null for standalone video (no lesson)", () =>
+    Effect.gen(function* () {
+      const db = yield* DBFunctionsService;
+      const video = yield* db.createStandaloneVideo({
+        path: "standalone.mp4",
+      });
+      const fetched = yield* db.getVideoWithClipsById(video.id);
+
+      const result = yield* db.getNextLessonWithoutVideo(fetched);
+      expect(result).toBeNull();
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("returns next lesson in same section that has no videos", () =>
+    Effect.gen(function* () {
+      const db = yield* DBFunctionsService;
+      const fixture = yield* Effect.promise(() =>
+        buildCourseFixture([
+          {
+            path: "section-01",
+            order: 1,
+            lessons: [
+              {
+                path: "lesson-01",
+                title: "Lesson 1",
+                order: 1,
+                videos: [{ path: "a.mp4" }],
+              },
+              {
+                path: "lesson-02",
+                title: "Lesson 2 (empty)",
+                order: 2,
+                videos: [],
+              },
+            ],
+          },
+        ])
+      );
+
+      const videoA = fixture.videos.find((v) => v.path === "a.mp4")!;
+      const fetched = yield* db.getVideoWithClipsById(videoA.id);
+
+      const result = yield* db.getNextLessonWithoutVideo(fetched);
+      expect(result).not.toBeNull();
+      expect(result!.lessonPath).toBe("lesson-02");
+      expect(result!.sectionPath).toBe("section-01");
+      expect(result!.repoFilePath).toBe("/tmp/test-repo");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("returns null when all subsequent lessons have videos", () =>
+    Effect.gen(function* () {
+      const db = yield* DBFunctionsService;
+      const fixture = yield* Effect.promise(() =>
+        buildCourseFixture([
+          {
+            path: "section-01",
+            order: 1,
+            lessons: [
+              {
+                path: "lesson-01",
+                title: "Lesson 1",
+                order: 1,
+                videos: [{ path: "a.mp4" }],
+              },
+              {
+                path: "lesson-02",
+                title: "Lesson 2",
+                order: 2,
+                videos: [{ path: "b.mp4" }],
+              },
+            ],
+          },
+        ])
+      );
+
+      const videoA = fixture.videos.find((v) => v.path === "a.mp4")!;
+      const fetched = yield* db.getVideoWithClipsById(videoA.id);
+
+      const result = yield* db.getNextLessonWithoutVideo(fetched);
+      expect(result).toBeNull();
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("finds empty lesson in a subsequent section", () =>
+    Effect.gen(function* () {
+      const db = yield* DBFunctionsService;
+      const fixture = yield* Effect.promise(() =>
+        buildCourseFixture([
+          {
+            path: "section-01",
+            order: 1,
+            lessons: [
+              {
+                path: "lesson-01",
+                title: "Lesson 1",
+                order: 1,
+                videos: [{ path: "a.mp4" }],
+              },
+            ],
+          },
+          {
+            path: "section-02",
+            order: 2,
+            lessons: [
+              {
+                path: "lesson-02",
+                title: "Lesson 2",
+                order: 1,
+                videos: [{ path: "b.mp4" }],
+              },
+              {
+                path: "lesson-03",
+                title: "Lesson 3 (empty)",
+                order: 2,
+                videos: [],
+              },
+            ],
+          },
+        ])
+      );
+
+      const videoA = fixture.videos.find((v) => v.path === "a.mp4")!;
+      const fetched = yield* db.getVideoWithClipsById(videoA.id);
+
+      const result = yield* db.getNextLessonWithoutVideo(fetched);
+      expect(result).not.toBeNull();
+      expect(result!.lessonPath).toBe("lesson-03");
+      expect(result!.sectionPath).toBe("section-02");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "returns null when current video is in the last lesson and it has videos",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DBFunctionsService;
+        const fixture = yield* Effect.promise(() =>
+          buildCourseFixture([
+            {
+              path: "section-01",
+              order: 1,
+              lessons: [
+                {
+                  path: "lesson-01",
+                  title: "Lesson 1",
+                  order: 1,
+                  videos: [{ path: "a.mp4" }],
+                },
+              ],
+            },
+          ])
+        );
+
+        const videoA = fixture.videos.find((v) => v.path === "a.mp4")!;
+        const fetched = yield* db.getVideoWithClipsById(videoA.id);
+
+        const result = yield* db.getNextLessonWithoutVideo(fetched);
+        expect(result).toBeNull();
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("skips lessons with videos to find first empty one", () =>
+    Effect.gen(function* () {
+      const db = yield* DBFunctionsService;
+      const fixture = yield* Effect.promise(() =>
+        buildCourseFixture([
+          {
+            path: "section-01",
+            order: 1,
+            lessons: [
+              {
+                path: "lesson-01",
+                title: "Lesson 1",
+                order: 1,
+                videos: [{ path: "a.mp4" }],
+              },
+              {
+                path: "lesson-02",
+                title: "Lesson 2",
+                order: 2,
+                videos: [{ path: "b.mp4" }],
+              },
+              {
+                path: "lesson-03",
+                title: "Lesson 3 (empty)",
+                order: 3,
+                videos: [],
+              },
+            ],
+          },
+        ])
+      );
+
+      const videoA = fixture.videos.find((v) => v.path === "a.mp4")!;
+      const fetched = yield* db.getVideoWithClipsById(videoA.id);
+
+      const result = yield* db.getNextLessonWithoutVideo(fetched);
+      expect(result).not.toBeNull();
+      expect(result!.lessonPath).toBe("lesson-03");
+    }).pipe(Effect.provide(testLayer))
+  );
+});
