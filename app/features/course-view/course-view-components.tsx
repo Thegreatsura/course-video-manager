@@ -328,12 +328,10 @@ export function NoCourseView({
   courses,
   standaloneVideos,
   dispatch,
-  navigate,
 }: {
   courses: LoaderData["courses"];
   standaloneVideos: LoaderData["standaloneVideos"];
   dispatch: (action: courseViewReducer.Action) => void;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
   return (
     <div className="max-w-4xl mx-auto">
@@ -354,10 +352,6 @@ export function NoCourseView({
                   key={video.id}
                   to={`/videos/${video.id}/edit`}
                   className="block border rounded-lg p-4 hover:border-primary/50 transition-colors"
-                  onClick={(e) => e.preventDefault()}
-                  onMouseDown={(e) => {
-                    if (e.button === 0) navigate(`/videos/${video.id}/edit`);
-                  }}
                 >
                   <div className="flex items-center gap-2">
                     <VideoIcon className="w-4 h-4 text-muted-foreground" />
@@ -378,10 +372,6 @@ export function NoCourseView({
             key={course.id}
             to={`?courseId=${course.id}`}
             className="block border rounded-lg p-6 hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={(e) => e.preventDefault()}
-            onMouseDown={(e) => {
-              if (e.button === 0) navigate(`?courseId=${course.id}`);
-            }}
           >
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-lg font-semibold">{course.name}</h3>

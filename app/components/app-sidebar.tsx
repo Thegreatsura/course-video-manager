@@ -17,7 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Plan } from "@/features/course-planner/types";
-import { cn, isLeftClick } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   Archive,
   ClipboardList,
@@ -31,7 +31,7 @@ import {
   VideoIcon,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { Link, useFetcher, useLocation, useNavigate } from "react-router";
+import { Link, useFetcher, useLocation } from "react-router";
 
 export interface AppSidebarProps {
   courses: Array<{
@@ -62,7 +62,6 @@ export function AppSidebar({
   isAddStandaloneVideoModalOpen = false,
   setIsAddStandaloneVideoModalOpen,
 }: AppSidebarProps) {
-  const navigate = useNavigate();
   const location = useLocation();
   const archiveCourseFetcher = useFetcher();
   const archiveVideoFetcher = useFetcher();
@@ -134,21 +133,17 @@ export function AppSidebar({
           {courses.map((course) => (
             <ContextMenu key={course.id}>
               <ContextMenuTrigger asChild>
-                <button
+                <Link
+                  to={`/?courseId=${course.id}`}
+                  preventScrollReset
                   className={cn(
                     "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors",
                     selectedCourseId === course.id &&
                       "bg-muted text-foreground/90"
                   )}
-                  onMouseDown={(e) => {
-                    if (!isLeftClick(e)) return;
-                    navigate(`/?courseId=${course.id}`, {
-                      preventScrollReset: true,
-                    });
-                  }}
                 >
                   {course.name}
-                </button>
+                </Link>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <ContextMenuItem
@@ -172,10 +167,6 @@ export function AppSidebar({
         <Link
           to="/archived-courses"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
-          onClick={(e) => e.preventDefault()}
-          onMouseDown={(e) => {
-            if (e.button === 0) navigate("/archived-courses");
-          }}
         >
           <Archive className="w-3 h-3" />
           Archived Courses
@@ -208,17 +199,13 @@ export function AppSidebar({
           {standaloneVideos.map((video) => (
             <ContextMenu key={video.id}>
               <ContextMenuTrigger asChild>
-                <button
+                <Link
+                  to={`/videos/${video.id}/edit`}
+                  preventScrollReset
                   className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
-                  onMouseDown={(e) => {
-                    if (!isLeftClick(e)) return;
-                    navigate(`/videos/${video.id}/edit`, {
-                      preventScrollReset: true,
-                    });
-                  }}
                 >
                   {video.path}
-                </button>
+                </Link>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <ContextMenuItem
@@ -264,10 +251,6 @@ export function AppSidebar({
         <Link
           to="/videos"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
-          onClick={(e) => e.preventDefault()}
-          onMouseDown={(e) => {
-            if (e.button === 0) navigate("/videos");
-          }}
         >
           <Eye className="w-3 h-3" />
           View All Videos
@@ -309,17 +292,13 @@ export function AppSidebar({
               ) : (
                 <ContextMenu key={plan.id}>
                   <ContextMenuTrigger asChild>
-                    <button
+                    <Link
+                      to={`/plans/${plan.id}`}
+                      preventScrollReset
                       className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
-                      onMouseDown={(e) => {
-                        if (!isLeftClick(e)) return;
-                        navigate(`/plans/${plan.id}`, {
-                          preventScrollReset: true,
-                        });
-                      }}
                     >
                       {plan.title}
-                    </button>
+                    </Link>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
                     <ContextMenuItem
@@ -371,10 +350,6 @@ export function AppSidebar({
           <Link
             to="/archived-plans"
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-2 px-2 transition-colors"
-            onClick={(e) => e.preventDefault()}
-            onMouseDown={(e) => {
-              if (e.button === 0) navigate("/archived-plans");
-            }}
           >
             <Archive className="w-3 h-3" />
             Archived Plans

@@ -23,7 +23,7 @@ import {
   MailIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { data, Link, Outlet, useLocation, useNavigate } from "react-router";
+import { data, Link, Outlet, useLocation } from "react-router";
 import type { Route } from "./+types/videos.$videoId";
 
 export const loader = async (args: Route.LoaderArgs) => {
@@ -133,7 +133,6 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
     hasExplainerFolder,
   } = loaderData;
 
-  const navigate = useNavigate();
   const location = useLocation();
   const [addVideoModalOpen, setAddVideoModalOpen] = useState(false);
 
@@ -166,13 +165,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
         <div className="flex items-center gap-2">
           {/* Back button */}
           <Button variant="ghost" size="icon" asChild>
-            <Link
-              to={backButtonUrl}
-              onClick={(e) => e.preventDefault()}
-              onMouseDown={(e) => {
-                if (e.button === 0) navigate(backButtonUrl);
-              }}
-            >
+            <Link to={backButtonUrl}>
               <ChevronLeftIcon className="size-6" />
             </Link>
           </Button>
@@ -197,11 +190,6 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
                       ? "bg-muted text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   )}
-                  onClick={(e) => e.preventDefault()}
-                  onMouseDown={(e) => {
-                    if (e.button === 0)
-                      navigate(`/videos/${videoId}/${tab.path}`);
-                  }}
                 >
                   <tab.icon className="size-4" />
                   {tab.label}
@@ -214,14 +202,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
           <div className="flex items-center gap-2">
             {previousVideoId ? (
               <Button variant="ghost" size="sm" asChild>
-                <Link
-                  to={`/videos/${previousVideoId}/${activeTab}`}
-                  onClick={(e) => e.preventDefault()}
-                  onMouseDown={(e) => {
-                    if (e.button === 0)
-                      navigate(`/videos/${previousVideoId}/${activeTab}`);
-                  }}
-                >
+                <Link to={`/videos/${previousVideoId}/${activeTab}`}>
                   <ChevronLeftIcon className="size-4 mr-1" />
                   Previous
                 </Link>
@@ -231,14 +212,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <Button variant="ghost" size="sm" asChild>
-                    <Link
-                      to={`/videos/${nextVideoId}/${activeTab}`}
-                      onClick={(e) => e.preventDefault()}
-                      onMouseDown={(e) => {
-                        if (e.button === 0)
-                          navigate(`/videos/${nextVideoId}/${activeTab}`);
-                      }}
-                    >
+                    <Link to={`/videos/${nextVideoId}/${activeTab}`}>
                       Next
                       <ChevronRightIcon className="size-4 ml-1" />
                     </Link>

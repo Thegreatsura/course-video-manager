@@ -5,7 +5,7 @@ import { runtimeLive } from "@/services/layer.server";
 import { Console, Effect } from "effect";
 import { ArrowLeft, Check, Copy } from "lucide-react";
 import { useState } from "react";
-import { data, Link, useNavigate } from "react-router";
+import { data, Link } from "react-router";
 import type { Route } from "./+types/courses.$courseId.versions.$versionId.media-files";
 
 export const loader = async (args: Route.LoaderArgs) => {
@@ -38,7 +38,6 @@ export const loader = async (args: Route.LoaderArgs) => {
 
 export default function Component(props: Route.ComponentProps) {
   const { repo, version } = props.loaderData;
-  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
 
   useFocusRevalidate({ enabled: true });
@@ -70,14 +69,7 @@ export default function Component(props: Route.ComponentProps) {
     <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-6 flex items-center justify-between">
-          <Link
-            to={`/?courseId=${repo.id}&versionId=${version.id}`}
-            onClick={(e) => e.preventDefault()}
-            onMouseDown={(e) => {
-              if (e.button === 0)
-                navigate(`/?courseId=${repo.id}&versionId=${version.id}`);
-            }}
-          >
+          <Link to={`/?courseId=${repo.id}&versionId=${version.id}`}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to {repo.name}

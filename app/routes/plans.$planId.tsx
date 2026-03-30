@@ -165,13 +165,7 @@ function PlanDetailPageContent({ loaderData }: Route.ComponentProps) {
         <div className="flex-1 p-6">
           <div className="text-center py-12">
             <h1 className="text-2xl font-bold mb-4">Plan not found</h1>
-            <Link
-              to="/"
-              onClick={(e) => e.preventDefault()}
-              onMouseDown={(e) => {
-                if (e.button === 0) navigate("/");
-              }}
-            >
+            <Link to="/">
               <Button variant="outline">
                 <ChevronLeft className="w-4 h-4 mr-2" />
                 Back to Home

@@ -4,7 +4,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { cn, isLeftClick } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatSecondsToTimeCode } from "@/services/utils";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import {
@@ -19,7 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { use } from "react";
-import { useNavigate, useFetcher } from "react-router";
+import { Link, useNavigate, useFetcher } from "react-router";
 import type { LoaderData, Section, Lesson, Video } from "./course-view-types";
 
 export function VideoItem({
@@ -51,12 +51,9 @@ export function VideoItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <button
+        <Link
+          to={`/videos/${video.id}/edit`}
           className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-muted/50 transition-colors cursor-context-menu w-full text-left"
-          onMouseDown={(e) => {
-            if (!isLeftClick(e)) return;
-            navigate(`/videos/${video.id}/edit`);
-          }}
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <FileVideo
@@ -72,7 +69,7 @@ export function VideoItem({
           <span className="text-muted-foreground font-mono ml-2 shrink-0">
             {formatSecondsToTimeCode(totalDuration)}
           </span>
-        </button>
+        </Link>
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem

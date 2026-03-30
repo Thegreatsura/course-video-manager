@@ -5,7 +5,6 @@ import { runtimeLive } from "@/services/layer.server";
 import { Console, Effect } from "effect";
 import { ArchiveRestore } from "lucide-react";
 import { useState } from "react";
-import { isLeftClick } from "@/lib/utils";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import type { Route } from "./+types/archived-plans";
 
@@ -78,8 +77,7 @@ export default function ArchivedPlans(props: Route.ComponentProps) {
                     <Button
                       variant="link"
                       className="h-auto p-0 font-medium text-base"
-                      onMouseDown={(e) => {
-                        if (!isLeftClick(e)) return;
+                      onClick={() => {
                         navigate(`/plans/${plan.id}`, {
                           preventScrollReset: true,
                         });

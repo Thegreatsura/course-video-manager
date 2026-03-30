@@ -553,7 +553,6 @@ function ComponentInner(props: Route.ComponentProps) {
               courses={courses}
               standaloneVideos={loaderData.standaloneVideos}
               dispatch={legacyDispatch}
-              navigate={navigate}
             />
           )}
         </div>

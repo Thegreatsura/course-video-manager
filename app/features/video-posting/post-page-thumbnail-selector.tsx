@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Link, useNavigate, useRevalidator } from "react-router";
+import { Link, useRevalidator } from "react-router";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { CheckIcon, ImageIcon, Loader2Icon, PlusIcon } from "lucide-react";
@@ -13,7 +13,6 @@ export function ThumbnailSelector({
   videoId: string;
   thumbnails: Array<{ id: string; selectedForUpload: boolean }>;
 }) {
-  const navigate = useNavigate();
   const [selectingThumbnailId, setSelectingThumbnailId] = useState<
     string | null
   >(null);
@@ -47,13 +46,7 @@ export function ThumbnailSelector({
           <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">No thumbnails created yet.</p>
           <Button variant="outline" size="sm" className="mt-2" asChild>
-            <Link
-              to={`/videos/${videoId}/thumbnails`}
-              onClick={(e) => e.preventDefault()}
-              onMouseDown={(e) => {
-                if (e.button === 0) navigate(`/videos/${videoId}/thumbnails`);
-              }}
-            >
+            <Link to={`/videos/${videoId}/thumbnails`}>
               <PlusIcon className="h-4 w-4" />
               Add New Thumbnail
             </Link>
@@ -92,13 +85,7 @@ export function ThumbnailSelector({
             ))}
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link
-              to={`/videos/${videoId}/thumbnails`}
-              onClick={(e) => e.preventDefault()}
-              onMouseDown={(e) => {
-                if (e.button === 0) navigate(`/videos/${videoId}/thumbnails`);
-              }}
-            >
+            <Link to={`/videos/${videoId}/thumbnails`}>
               <PlusIcon className="h-4 w-4" />
               Add New Thumbnail
             </Link>

@@ -4,7 +4,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { isLeftClick } from "@/lib/utils";
 import { formatSecondsToTimeCode } from "@/services/utils";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import {
@@ -19,7 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { use } from "react";
-import { useNavigate, useFetcher } from "react-router";
+import { Link, useNavigate, useFetcher } from "react-router";
 import type { LoaderData, Section, Lesson, Video } from "./course-view-types";
 
 function VideoThumbnailItem({
@@ -52,12 +51,9 @@ function VideoThumbnailItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <button
+        <Link
+          to={`/videos/${video.id}/edit`}
           className="text-left items-center group/thumb bg-muted rounded overflow-hidden inline-flex"
-          onMouseDown={(e) => {
-            if (!isLeftClick(e)) return;
-            navigate(`/videos/${video.id}/edit`);
-          }}
         >
           <div className="relative aspect-video w-32 bg-muted">
             {video.firstClipId ? (
@@ -84,7 +80,7 @@ function VideoThumbnailItem({
               {formatSecondsToTimeCode(totalDuration)}
             </span>
           </div>
-        </button>
+        </Link>
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem
