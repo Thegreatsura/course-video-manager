@@ -23,15 +23,20 @@ export const loader = async (args: Route.LoaderArgs) => {
     const db = yield* DBFunctionsService;
     const publishService = yield* CoursePublishService;
 
-    const course = yield* db.getCourseById(courseId);
-    const latestVersion = yield* db.getLatestCourseVersion(courseId);
+    const [course, latestVersion, allVersions] = yield* Effect.all(
+      [
+        db.getCourseById(courseId),
+        db.getLatestCourseVersion(courseId),
+        db.getAllVersionsWithStructure(courseId),
+      ],
+      { concurrency: "unbounded" }
+    );
 
     if (!latestVersion) {
       return yield* Effect.die(data("No version found", { status: 404 }));
     }
 
     // Get changelog preview (treat draft as if it were published with a placeholder name)
-    const allVersions = yield* db.getAllVersionsWithStructure(courseId);
     const changelogVersions = allVersions.map((v) =>
       v.id === latestVersion.id
         ? { ...v, name: "(Draft — pending publish)" }

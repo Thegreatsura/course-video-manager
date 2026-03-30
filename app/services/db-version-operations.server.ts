@@ -115,6 +115,56 @@ export const createVersionOperations = (db: DrizzleDB) => {
     };
   });
 
+  const getCourseWithSectionsByVersionSlim = Effect.fn(
+    "getCourseWithSectionsByVersionSlim"
+  )(function* (opts: { repoId: string; versionId: string }) {
+    const { repoId, versionId } = opts;
+    const course = yield* makeDbCall(() =>
+      db.query.courses.findFirst({
+        where: eq(courses.id, repoId),
+      })
+    );
+
+    if (!course) {
+      return yield* new NotFoundError({
+        type: "getCourseWithSectionsByVersionSlim",
+        params: { repoId, versionId },
+      });
+    }
+
+    const versionSections = yield* makeDbCall(() =>
+      db.query.sections.findMany({
+        where: eq(sections.repoVersionId, versionId),
+        orderBy: asc(sections.order),
+        with: {
+          lessons: {
+            orderBy: asc(lessons.order),
+            with: {
+              videos: {
+                orderBy: asc(videos.path),
+                with: {
+                  clips: {
+                    columns: {
+                      id: true,
+                      videoFilename: true,
+                    },
+                    orderBy: asc(clips.order),
+                    where: eq(clips.archived, false),
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    return {
+      ...course,
+      sections: versionSections,
+    };
+  });
+
   const getVersionWithSections = Effect.fn("getVersionWithSections")(function* (
     versionId: string
   ) {
@@ -531,6 +581,7 @@ export const createVersionOperations = (db: DrizzleDB) => {
     getLatestCourseVersion,
     getCourseVersionById,
     getCourseWithSectionsByVersion,
+    getCourseWithSectionsByVersionSlim,
     getVersionWithSections,
     createCourseVersion,
     updateCourseVersion,
