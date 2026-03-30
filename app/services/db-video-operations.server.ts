@@ -177,6 +177,43 @@ export const createVideoOperations = (
     return video;
   });
 
+  const getVideoWithLessonById = Effect.fn("getVideoWithLessonById")(function* (
+    id: string
+  ) {
+    const video = yield* makeDbCall(() =>
+      db.query.videos.findFirst({
+        where: eq(videos.id, id),
+        with: {
+          lesson: {
+            with: {
+              section: {
+                with: {
+                  repoVersion: {
+                    with: {
+                      repo: true,
+                    },
+                  },
+                },
+              },
+              videos: {
+                where: eq(videos.archived, false),
+              },
+            },
+          },
+        },
+      })
+    );
+
+    if (!video) {
+      return yield* new NotFoundError({
+        type: "getVideoWithLessonById",
+        params: { id },
+      });
+    }
+
+    return video;
+  });
+
   const createVideo = Effect.fn("createVideo")(function* (
     lessonId: string,
     video: {
@@ -551,6 +588,7 @@ export const createVideoOperations = (
     getAllStandaloneVideos,
     getArchivedStandaloneVideos,
     getVideoWithClipsById,
+    getVideoWithLessonById,
     createVideo,
     createStandaloneVideo,
     hasOriginalFootagePathAlreadyBeenUsed,

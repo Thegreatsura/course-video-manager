@@ -34,7 +34,7 @@ export const loader = async (args: Route.LoaderArgs) => {
   return Effect.gen(function* () {
     const db = yield* DBFunctionsService;
 
-    const video = yield* db.getVideoWithClipsById(videoId);
+    const video = yield* db.getVideoWithLessonById(videoId);
     const courses = yield* db.getCourses();
 
     const coursesWithSections = yield* Effect.all(
