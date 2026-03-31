@@ -137,7 +137,7 @@ export function AppSidebar({
                   to={`/?courseId=${course.id}`}
                   preventScrollReset
                   className={cn(
-                    "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors",
+                    "block w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors",
                     selectedCourseId === course.id &&
                       "bg-muted text-foreground/90"
                   )}
@@ -202,7 +202,7 @@ export function AppSidebar({
                 <Link
                   to={`/videos/${video.id}/edit`}
                   preventScrollReset
-                  className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
+                  className="block w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
                 >
                   {video.path}
                 </Link>
@@ -295,7 +295,7 @@ export function AppSidebar({
                     <Link
                       to={`/plans/${plan.id}`}
                       preventScrollReset
-                      className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
+                      className="block w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
                     >
                       {plan.title}
                     </Link>
