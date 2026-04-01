@@ -2,7 +2,7 @@ import { Console, Effect, Schema } from "effect";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import type { Route } from "./+types/api.videos.create";
-import { data, redirect } from "react-router";
+import { data } from "react-router";
 import { withDatabaseDump } from "@/services/dump-service";
 
 const createVideoSchema = Schema.Struct({
@@ -23,7 +23,7 @@ export const action = async (args: Route.ActionArgs) => {
       path: result.path,
     });
 
-    return redirect(`/videos/${video.id}/edit`);
+    return data({ id: video.id });
   }).pipe(
     withDatabaseDump,
     Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),

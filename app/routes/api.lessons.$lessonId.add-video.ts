@@ -2,7 +2,7 @@ import { Console, Effect, Schema } from "effect";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import type { Route } from "./+types/api.lessons.$lessonId.add-video";
-import { data, redirect } from "react-router";
+import { data } from "react-router";
 import { withDatabaseDump } from "@/services/dump-service";
 
 const addVideoSchema = Schema.Struct({
@@ -25,13 +25,12 @@ export const action = async (args: Route.ActionArgs) => {
       originalFootagePath: "",
     });
 
-    // Check for redirectTo query param to override default redirect
     const url = new URL(args.request.url);
     const redirectTo = url.searchParams.get("redirectTo");
-    if (redirectTo === "write") {
-      return redirect(`/videos/${video.id}/write`);
-    }
-    return redirect(`/videos/${video.id}/edit`);
+    return data({
+      id: video.id,
+      redirectTo: redirectTo === "write" ? "write" : "edit",
+    });
   }).pipe(
     withDatabaseDump,
     Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),

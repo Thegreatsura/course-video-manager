@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getVideoPath } from "@/lib/video-helpers";
 import { Loader2 } from "lucide-react";
-import { useFetcher } from "react-router";
+import { useEffect } from "react";
+import { useFetcher, useNavigate } from "react-router";
 
 export function AddVideoToNextLessonModal(props: {
   lessonId: string;
@@ -20,7 +21,25 @@ export function AddVideoToNextLessonModal(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const addVideoFetcher = useFetcher();
+  const addVideoFetcher = useFetcher<{
+    id: string;
+    redirectTo: "edit" | "write";
+  }>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (addVideoFetcher.state === "idle" && addVideoFetcher.data?.id) {
+      props.onOpenChange(false);
+      navigate(
+        `/videos/${addVideoFetcher.data.id}/${addVideoFetcher.data.redirectTo}`
+      );
+    }
+  }, [
+    addVideoFetcher.state,
+    addVideoFetcher.data,
+    props.onOpenChange,
+    navigate,
+  ]);
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -35,11 +54,6 @@ export function AddVideoToNextLessonModal(props: {
           method="post"
           action={`/api/lessons/${props.lessonId}/add-video?redirectTo=write`}
           className="space-y-4 py-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await addVideoFetcher.submit(e.currentTarget);
-            props.onOpenChange(false);
-          }}
         >
           <input type="hidden" name="lessonId" value={props.lessonId} />
           <div className="space-y-2">
@@ -62,8 +76,8 @@ export function AddVideoToNextLessonModal(props: {
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {addVideoFetcher.state === "submitting" ? (
+            <Button type="submit" disabled={addVideoFetcher.state !== "idle"}>
+              {addVideoFetcher.state !== "idle" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Add Video"

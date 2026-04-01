@@ -8,13 +8,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
-import { useFetcher } from "react-router";
+import { useEffect } from "react";
+import { useFetcher, useNavigate } from "react-router";
 
 export function AddStandaloneVideoModal(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const addVideoFetcher = useFetcher();
+  const addVideoFetcher = useFetcher<{ id: string }>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (addVideoFetcher.state === "idle" && addVideoFetcher.data?.id) {
+      props.onOpenChange(false);
+      navigate(`/videos/${addVideoFetcher.data.id}/edit`);
+    }
+  }, [
+    addVideoFetcher.state,
+    addVideoFetcher.data,
+    props.onOpenChange,
+    navigate,
+  ]);
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -26,11 +40,6 @@ export function AddStandaloneVideoModal(props: {
           method="post"
           action="/api/videos/create"
           className="space-y-4 py-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await addVideoFetcher.submit(e.currentTarget);
-            props.onOpenChange(false);
-          }}
         >
           <div className="space-y-2">
             <Label htmlFor="video-path">Video Name</Label>
@@ -49,8 +58,8 @@ export function AddStandaloneVideoModal(props: {
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {addVideoFetcher.state === "submitting" ? (
+            <Button type="submit" disabled={addVideoFetcher.state !== "idle"}>
+              {addVideoFetcher.state !== "idle" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Create Video"
