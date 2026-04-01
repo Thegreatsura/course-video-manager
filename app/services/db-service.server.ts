@@ -72,7 +72,6 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
         getNextLessonWithoutVideo,
         getVideosForFewShotExamples,
       } = createVideoOperations(db, {
-        getCourseWithSectionsById,
         getCourseNavigationData,
       });
 

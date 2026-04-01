@@ -18,11 +18,10 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
 export const createVideoOperations = (
   db: DrizzleDB,
   deps: {
-    getCourseWithSectionsById: (id: string) => Effect.Effect<any, any>;
     getCourseNavigationData: (id: string) => Effect.Effect<any, any>;
   }
 ) => {
-  const { getCourseWithSectionsById, getCourseNavigationData } = deps;
+  const { getCourseNavigationData } = deps;
 
   const getVideoDeepById = Effect.fn("getVideoById")(function* (id: string) {
     const video = yield* makeDbCall(() =>
@@ -498,8 +497,9 @@ export const createVideoOperations = (
       const currentSection = currentLesson.section;
       const repo = currentSection.repoVersion.repo;
 
-      // Need to get all sections and lessons to find next lesson without video
-      const repoWithVersions = yield* getCourseWithSectionsById(repo.id);
+      // Need to get all sections and lessons to find next lesson without video.
+      // Use the slim navigation query (no clips) — we only need video counts.
+      const repoWithVersions = yield* getCourseNavigationData(repo.id);
       const latestVersionSections =
         repoWithVersions.versions[0]?.sections ?? [];
 
