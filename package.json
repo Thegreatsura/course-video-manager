@@ -19,7 +19,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:clone-local": "./scripts/clone-db-to-local.sh",
-    "ralph": "sandcastle run",
+    "sandcastle": "npx tsx ./.sandcastle/main.ts",
     "check:file-tokens": "./scripts/check-file-tokens.sh"
   },
   "dependencies": {
