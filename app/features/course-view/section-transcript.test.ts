@@ -70,6 +70,17 @@ describe("buildSectionTranscript", () => {
     expect(result).not.toContain("<description>");
   });
 
+  it("3b. does not include section description when option is true but description is undefined", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions, includeSectionDescription: true },
+      {},
+      undefined
+    );
+    expect(result).not.toContain("<description>");
+  });
+
   it("4. escapes special characters in section description", () => {
     const result = buildSectionTranscript(
       "01-basics",
@@ -105,5 +116,37 @@ describe("buildCourseTranscript", () => {
       {}
     );
     expect(result).not.toContain("My section desc");
+  });
+
+  it("7. handles section with null description in course mode", () => {
+    const section = makeSection({ description: null as unknown as string });
+    const result = buildCourseTranscript(
+      "my-course",
+      [section],
+      { ...baseOptions, includeSectionDescription: true },
+      {}
+    );
+    expect(result).not.toContain("<description>");
+  });
+
+  it("8. includes descriptions only for sections that have them", () => {
+    const sectionWithDesc = makeSection({
+      path: "01-with-desc",
+      description: "Has description",
+    });
+    const sectionWithoutDesc = makeSection({
+      path: "02-no-desc",
+      description: null as unknown as string,
+    });
+    const result = buildCourseTranscript(
+      "my-course",
+      [sectionWithDesc, sectionWithoutDesc],
+      { ...baseOptions, includeSectionDescription: true },
+      {}
+    );
+    expect(result).toContain("<description>Has description</description>");
+    // The second section should not have a description tag
+    const descriptionCount = (result.match(/<description>/g) || []).length;
+    expect(descriptionCount).toBe(1);
   });
 });
