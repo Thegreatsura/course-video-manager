@@ -76,11 +76,11 @@ Never change what the code does - only how it does it. All original features, ou
 
 # EXECUTION
 
-1. Run `pnpm run typecheck` and `pnpm run test` first to confirm the current state passes
+1. Run `npm run typecheck` and `npm run test` first to confirm the current state passes
 2. Attempt to reproduce the original bug with new test cases — if you can, fix it
 3. Write edge case tests that stress the implementation
 4. Make any code quality improvements directly on this branch
-5. Run `pnpm run typecheck` and `pnpm run test` again to ensure nothing is broken
+5. Run `npm run typecheck` and `npm run test` again to ensure nothing is broken
 6. Commit with a message starting with `RALPH: Review -` describing the refinements
 
 If the code is already clean, well-tested, and handles edge cases properly, do nothing.
