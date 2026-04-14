@@ -391,6 +391,22 @@ describe("courseEditorReducer", () => {
       expect(state.isCreateSectionModalOpen).toBe(true);
     });
 
+    it("should toggle duplicate course modal", () => {
+      const tester = createTester();
+
+      const opened = tester
+        .send({ type: "set-duplicate-course-modal-open", open: true })
+        .getState();
+
+      expect(opened.isDuplicateCourseModalOpen).toBe(true);
+
+      const closed = tester
+        .send({ type: "set-duplicate-course-modal-open", open: false })
+        .getState();
+
+      expect(closed.isDuplicateCourseModalOpen).toBe(false);
+    });
+
     it("should handle filter toggles", () => {
       const tester = createTester();
 
