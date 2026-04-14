@@ -4,6 +4,8 @@ import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import { withDatabaseDump } from "@/services/dump-service";
 import { data } from "react-router";
+import { FileSystem } from "@effect/platform";
+import * as Path from "node:path";
 
 const duplicateCourseSchema = Schema.Struct({
   name: Schema.String.pipe(
@@ -47,15 +49,54 @@ export const action = async (args: Route.ActionArgs) => {
       );
     }
 
-    // Check name uniqueness
+    // Check name and file path uniqueness
     const allCourses = yield* db.getCourses();
     const archivedCourses = yield* db.getArchivedCourses();
-    const allNames = [...allCourses, ...archivedCourses].map((c) => c.name);
+    const allCoursesCombined = [...allCourses, ...archivedCourses];
 
-    if (allNames.includes(name.trim())) {
+    if (allCoursesCombined.some((c) => c.name === name.trim())) {
       return yield* Effect.die(
         data(
           { error: "A course with this name already exists" },
+          { status: 400 }
+        )
+      );
+    }
+
+    if (allCoursesCombined.some((c) => c.filePath === filePath.trim())) {
+      return yield* Effect.die(
+        data(
+          { error: "A course with this file path already exists" },
+          { status: 400 }
+        )
+      );
+    }
+
+    // Validate directory exists on disk
+    const fs = yield* FileSystem.FileSystem;
+    const pathExists = yield* fs.exists(filePath.trim());
+
+    if (!pathExists) {
+      return yield* Effect.die(
+        data(
+          {
+            error: `Directory does not exist: ${filePath.trim()}`,
+          },
+          { status: 400 }
+        )
+      );
+    }
+
+    // Validate directory is a git repository
+    const gitDirPath = Path.join(filePath.trim(), ".git");
+    const isGitRepo = yield* fs.exists(gitDirPath);
+
+    if (!isGitRepo) {
+      return yield* Effect.die(
+        data(
+          {
+            error: `Directory is not a valid git repository: ${filePath.trim()}`,
+          },
           { status: 400 }
         )
       );
