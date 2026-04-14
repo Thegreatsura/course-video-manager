@@ -13,6 +13,7 @@ import type { LoaderData } from "./course-view-types";
 import {
   Archive,
   ChevronDown,
+  Copy,
   Download,
   Film,
   FileText,
@@ -142,6 +143,24 @@ export function ActionsDropdown({
                 <span className="font-medium">Copy Course Transcript</span>
                 <span className="text-xs text-muted-foreground">
                   Copy all transcripts to clipboard
+                </span>
+              </div>
+            </DropdownMenuItem>
+          )}
+          {!currentCourse.archived && (
+            <DropdownMenuItem
+              onSelect={() =>
+                dispatch({
+                  type: "set-duplicate-course-modal-open",
+                  open: true,
+                })
+              }
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              <div className="flex flex-col">
+                <span className="font-medium">Duplicate Course</span>
+                <span className="text-xs text-muted-foreground">
+                  Create a copy of this course
                 </span>
               </div>
             </DropdownMenuItem>

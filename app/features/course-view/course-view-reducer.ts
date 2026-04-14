@@ -34,6 +34,7 @@ export namespace courseViewReducer {
     isRewriteCoursePathModalOpen: boolean;
     isAddStandaloneVideoModalOpen: boolean;
     isCopyTranscriptModalOpen: boolean;
+    isDuplicateCourseModalOpen: boolean;
     copySectionTranscriptState: {
       sectionPath: string;
       sectionDescription: string | undefined;
@@ -75,6 +76,7 @@ export namespace courseViewReducer {
     | { type: "set-rewrite-course-path-modal-open"; open: boolean }
     | { type: "set-add-standalone-video-modal-open"; open: boolean }
     | { type: "set-copy-transcript-modal-open"; open: boolean }
+    | { type: "set-duplicate-course-modal-open"; open: boolean }
     | {
         type: "open-copy-section-transcript";
         sectionPath: string;
@@ -142,6 +144,7 @@ export function createInitialCourseViewState(): courseViewReducer.State {
     isRewriteCoursePathModalOpen: false,
     isAddStandaloneVideoModalOpen: false,
     isCopyTranscriptModalOpen: false,
+    isDuplicateCourseModalOpen: false,
     copySectionTranscriptState: null,
     addGhostLessonSectionId: null,
     insertAdjacentLessonId: null,
@@ -187,6 +190,8 @@ export const courseViewReducer: EffectReducer<
       return { ...state, isAddStandaloneVideoModalOpen: action.open };
     case "set-copy-transcript-modal-open":
       return { ...state, isCopyTranscriptModalOpen: action.open };
+    case "set-duplicate-course-modal-open":
+      return { ...state, isDuplicateCourseModalOpen: action.open };
     case "open-copy-section-transcript":
       return {
         ...state,

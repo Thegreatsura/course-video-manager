@@ -49,6 +49,7 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
         updateCourseArchiveStatus,
         updateCourseFilePath,
         deleteCourse,
+        duplicateCourse,
       } = createCourseOperations(db);
 
       const {
@@ -218,6 +219,7 @@ export class DBFunctionsService extends Effect.Service<DBFunctionsService>()(
         updateVideoArchiveStatus,
         updateCourseFilePath,
         deleteCourse,
+        duplicateCourse,
         copyVersionStructure,
         getVideoIdsForVersion,
         getAllVersionsWithStructure,
