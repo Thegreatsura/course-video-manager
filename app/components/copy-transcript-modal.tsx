@@ -15,6 +15,7 @@ import {
   buildSectionTranscript,
   filterSectionsForTranscript,
   type TranscriptFilterOptions,
+  type TranscriptFormat,
   type TranscriptOptions,
 } from "@/features/course-view/section-transcript";
 import { filterLessons } from "@/features/course-view/section-grid-utils";
@@ -60,6 +61,7 @@ export function CopyTranscriptModal(
   } & FilterProps &
     (CourseMode | SectionMode)
 ) {
+  const [format, setFormat] = useState<TranscriptFormat>("xml");
   const [options, setOptions] = useState<TranscriptOptions>({
     includeTranscripts: false,
     includeLessonDescriptions: true,
@@ -88,7 +90,8 @@ export function CopyTranscriptModal(
         props.courseName,
         filteredSections,
         options,
-        resolvedTranscripts
+        resolvedTranscripts,
+        format
       );
     }
     const { filteredLessons } = filterLessons(props.lessons, filters);
@@ -97,9 +100,10 @@ export function CopyTranscriptModal(
       filteredLessons,
       options,
       resolvedTranscripts,
-      props.sectionDescription
+      props.sectionDescription,
+      format
     );
-  }, [props, options, resolvedTranscripts]);
+  }, [props, options, resolvedTranscripts, format]);
 
   const byteCount = new TextEncoder().encode(preview).length;
   const approxTokens = Math.ceil(byteCount / 4);
@@ -242,6 +246,32 @@ export function CopyTranscriptModal(
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Format */}
+          <div className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Format
+            </span>
+            <div className="flex items-center gap-2">
+              {(["xml", "markdown", "json"] as const).map((fmt) => (
+                <button
+                  key={fmt}
+                  className={`text-xs px-3 py-1 rounded-sm font-medium transition-colors ${
+                    format === fmt
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                  onClick={() => setFormat(fmt)}
+                >
+                  {fmt === "xml"
+                    ? "XML"
+                    : fmt === "markdown"
+                      ? "Markdown"
+                      : "JSON"}
+                </button>
+              ))}
             </div>
           </div>
 

@@ -306,3 +306,283 @@ describe("filterSectionsForTranscript", () => {
     expect((result[0]!.lessons[0] as unknown as { id: string }).id).toBe("l1");
   });
 });
+
+describe("buildSectionTranscript - markdown format", () => {
+  it("17. renders section as markdown with heading", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions },
+      {},
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("# 01-basics");
+    expect(result).not.toContain("<section");
+  });
+
+  it("18. includes section description as blockquote", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions, includeSectionDescription: true },
+      {},
+      "Section desc",
+      "markdown"
+    );
+    expect(result).toContain("> Section desc");
+  });
+
+  it("19. renders lesson title and name in heading", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson({ path: "01.01-intro", title: "Intro" })],
+      { ...baseOptions, includeLessonTitles: true },
+      {},
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("## 01.01-intro");
+    expect(result).toContain("Intro");
+  });
+
+  it("20. includes priority and exercise type in lesson heading", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson({ priority: 1, icon: "watch" })],
+      { ...baseOptions, includePriority: true, includeExerciseType: true },
+      {},
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("[P1]");
+    expect(result).toContain("[watch]");
+  });
+
+  it("21. includes lesson description as blockquote", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson({ description: "Lesson desc" })],
+      { ...baseOptions, includeLessonDescriptions: true },
+      {},
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("> Lesson desc");
+  });
+
+  it("22. includes video transcripts", () => {
+    const lesson = makeLesson({
+      videos: [{ id: "v1", path: "video-001", clipCount: 3 } as never],
+    });
+    const result = buildSectionTranscript(
+      "01-basics",
+      [lesson],
+      { ...baseOptions, includeTranscripts: true },
+      { v1: "[1] Hello [2] World" },
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("**video-001:**");
+    expect(result).toContain("[1] Hello [2] World");
+  });
+
+  it("23. shows (no videos) for lesson without videos", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson({ videos: [] as never })],
+      { ...baseOptions },
+      {},
+      undefined,
+      "markdown"
+    );
+    expect(result).toContain("(no videos)");
+  });
+});
+
+describe("buildCourseTranscript - markdown format", () => {
+  it("24. renders course with top-level heading", () => {
+    const section = makeSection({ description: "My desc" });
+    const result = buildCourseTranscript(
+      "my-course",
+      [section],
+      { ...baseOptions, includeSectionDescription: true },
+      {},
+      "markdown"
+    );
+    expect(result.startsWith("# my-course")).toBe(true);
+    expect(result).toContain("## 01-basics");
+    expect(result).not.toContain("<course");
+  });
+
+  it("24b. empty course produces just heading", () => {
+    const result = buildCourseTranscript(
+      "my-course",
+      [],
+      baseOptions,
+      {},
+      "markdown"
+    );
+    expect(result).toBe("# my-course");
+  });
+});
+
+describe("buildSectionTranscript - json format", () => {
+  it("25. returns valid JSON with section title", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions },
+      {},
+      undefined,
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.section).toBe("01-basics");
+    expect(parsed.lessons).toHaveLength(1);
+  });
+
+  it("26. includes section description when option enabled", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions, includeSectionDescription: true },
+      {},
+      "Section desc",
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.description).toBe("Section desc");
+  });
+
+  it("27. omits description field when option disabled", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions, includeSectionDescription: false },
+      {},
+      "Section desc",
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.description).toBeUndefined();
+  });
+
+  it("28. includes lesson metadata based on options", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [
+        makeLesson({
+          path: "01.01-intro",
+          title: "Intro",
+          priority: 1,
+          icon: "watch",
+        }),
+      ],
+      {
+        ...baseOptions,
+        includeLessonTitles: true,
+        includePriority: true,
+        includeExerciseType: true,
+        includeLessonDescriptions: true,
+      },
+      {},
+      undefined,
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    const lesson = parsed.lessons[0];
+    expect(lesson.title).toBe("01.01-intro");
+    expect(lesson.name).toBe("Intro");
+    expect(lesson.priority).toBe("p1");
+    expect(lesson.type).toBe("watch");
+    expect(lesson.description).toBe("Lesson desc");
+  });
+
+  it("29. omits optional lesson fields when options disabled", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions },
+      {},
+      undefined,
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    const lesson = parsed.lessons[0];
+    expect(lesson.name).toBeUndefined();
+    expect(lesson.priority).toBeUndefined();
+    expect(lesson.type).toBeUndefined();
+    expect(lesson.description).toBeUndefined();
+  });
+
+  it("30. includes video transcripts when option enabled", () => {
+    const lesson = makeLesson({
+      videos: [{ id: "v1", path: "video-001", clipCount: 3 } as never],
+    });
+    const result = buildSectionTranscript(
+      "01-basics",
+      [lesson],
+      { ...baseOptions, includeTranscripts: true },
+      { v1: "[1] Hello [2] World" },
+      undefined,
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    const video = parsed.lessons[0].videos[0];
+    expect(video.title).toBe("video-001");
+    expect(video.transcript).toBe("[1] Hello [2] World");
+  });
+});
+
+describe("buildCourseTranscript - json format", () => {
+  it("31. returns valid JSON with course title and sections", () => {
+    const section = makeSection();
+    const result = buildCourseTranscript(
+      "my-course",
+      [section],
+      { ...baseOptions },
+      {},
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.course).toBe("my-course");
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].section).toBe("01-basics");
+  });
+
+  it("31b. empty course in json", () => {
+    const result = buildCourseTranscript(
+      "my-course",
+      [],
+      baseOptions,
+      {},
+      "json"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.course).toBe("my-course");
+    expect(parsed.sections).toHaveLength(0);
+  });
+});
+
+describe("format defaults to xml", () => {
+  it("32. buildSectionTranscript defaults to xml when no format given", () => {
+    const result = buildSectionTranscript(
+      "01-basics",
+      [makeLesson()],
+      { ...baseOptions },
+      {}
+    );
+    expect(result).toContain("<section");
+  });
+
+  it("33. buildCourseTranscript defaults to xml when no format given", () => {
+    const result = buildCourseTranscript(
+      "my-course",
+      [makeSection()],
+      { ...baseOptions },
+      {}
+    );
+    expect(result).toContain("<course");
+  });
+});
