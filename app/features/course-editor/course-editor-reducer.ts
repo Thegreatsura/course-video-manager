@@ -6,6 +6,7 @@ import type {
 } from "./course-editor-types";
 import type { Lesson } from "@/features/course-view/course-view-types";
 import { handleLessonCase } from "./course-editor-lesson-cases";
+import { handleVideoCase } from "./course-editor-video-cases";
 import {
   parseSectionPath,
   buildSectionPath,
@@ -214,6 +215,12 @@ export namespace courseEditorReducer {
         currentSectionId: string;
       }
     | { type: "close-move-lesson" }
+    | {
+        type: "video-moved";
+        videoId: string;
+        fromLessonId: string;
+        toLessonId: string;
+      }
     | { type: "open-rename-video"; videoId: string; videoPath: string }
     | { type: "close-rename-video" }
     | { type: "toggle-priority-filter"; priority: number }
@@ -387,9 +394,11 @@ export const courseEditorReducer: EffectReducer<
   courseEditorReducer.Action,
   courseEditorReducer.Effect
 > = (state, action, exec) => {
-  // Delegate lesson actions to the lesson case handler
   const lessonResult = handleLessonCase(state, action, exec);
   if (lessonResult !== null) return lessonResult;
+
+  const videoResult = handleVideoCase(state, action);
+  if (videoResult !== null) return videoResult;
 
   switch (action.type) {
     case "add-section": {

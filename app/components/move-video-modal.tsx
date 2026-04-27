@@ -29,6 +29,7 @@ export function MoveVideoModal(props: {
   }[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAfterMove?: (targetLessonId: string) => void;
 }) {
   const fetcher = useFetcher();
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
@@ -94,6 +95,7 @@ export function MoveVideoModal(props: {
                     action: `/api/videos/${props.videoId}/move-to-lesson`,
                   }
                 );
+                props.onAfterMove?.(selectedLessonId);
                 handleOpenChange(false);
               }}
             >

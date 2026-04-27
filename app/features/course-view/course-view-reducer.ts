@@ -114,6 +114,12 @@ export namespace courseViewReducer {
         currentLessonId: string;
       }
     | { type: "close-move-video" }
+    | {
+        type: "video-moved";
+        videoId: string;
+        fromLessonId: string;
+        toLessonId: string;
+      }
     // Move lesson
     | {
         type: "open-move-lesson";
@@ -262,6 +268,8 @@ export const courseViewReducer: EffectReducer<
       };
     case "close-move-video":
       return { ...state, moveVideoState: null };
+    case "video-moved":
+      return state;
 
     // Move lesson
     case "open-move-lesson":

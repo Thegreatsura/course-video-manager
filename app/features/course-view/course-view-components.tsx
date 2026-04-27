@@ -576,6 +576,14 @@ export function RouteModals({
           onOpenChange={(open) => {
             if (!open) dispatch({ type: "close-move-video" });
           }}
+          onAfterMove={(targetLessonId) => {
+            dispatch({
+              type: "video-moved",
+              videoId: viewState.moveVideoState!.videoId,
+              fromLessonId: viewState.moveVideoState!.currentLessonId,
+              toLessonId: targetLessonId,
+            });
+          }}
         />
       )}
 
