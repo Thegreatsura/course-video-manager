@@ -1,12 +1,7 @@
 import { execFile } from "node:child_process";
+import type { GitStatus } from "./git-status-types";
 
-export type GitStatus = {
-  modified: number;
-  added: number;
-  deleted: number;
-  untracked: number;
-  total: number;
-};
+export type { GitStatus };
 
 export function getGitStatusAsync(repoPath: string): Promise<GitStatus | null> {
   return new Promise((resolve) => {

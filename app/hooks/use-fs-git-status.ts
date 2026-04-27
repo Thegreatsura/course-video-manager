@@ -1,4 +1,4 @@
-import type { GitStatus } from "@/services/git-status-service";
+import type { GitStatus } from "@/services/git-status-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type FsGitStatusData = {

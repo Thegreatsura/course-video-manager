@@ -10,7 +10,7 @@ import {
   loadLessonFsMaps,
 } from "@/services/course-loader-fs";
 import type { ExportClip } from "@/services/export-hash";
-import { getGitStatusAsync } from "@/services/git-status-service";
+import { getGitStatusAsync } from "@/services/git-status-service.server";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import { Effect } from "effect";

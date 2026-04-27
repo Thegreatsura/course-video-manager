@@ -28,7 +28,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Console, Effect } from "effect";
 import { toast } from "sonner";
-import { getGitStatusAsync } from "@/services/git-status-service";
+import { getGitStatusAsync } from "@/services/git-status-service.server";
 import { Loader2, Plus } from "lucide-react";
 import { Suspense, useContext, useMemo, useState } from "react";
 import { data, useFetcher, useNavigate, useSearchParams } from "react-router";
