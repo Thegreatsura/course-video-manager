@@ -130,6 +130,37 @@ describe("courseEditorReducer — video-moved", () => {
     expect(state.sections[1]!.lessons[0]!.videos[0]!.id).toBe("video-1");
   });
 
+  it("should be a no-op when from and to lesson are the same", () => {
+    const section = createSection({
+      lessons: [
+        createLesson({
+          databaseId: did("db-lesson-1"),
+          videos: [
+            {
+              id: "video-1",
+              path: "video-1.mp4",
+              clipCount: 1,
+              totalDuration: 60,
+              firstClipId: "clip-1",
+            },
+          ],
+        }),
+      ],
+    });
+
+    const state = createTester([section])
+      .send({
+        type: "video-moved",
+        videoId: "video-1",
+        fromLessonId: "db-lesson-1",
+        toLessonId: "db-lesson-1",
+      })
+      .getState();
+
+    expect(state.sections[0]!.lessons[0]!.videos).toHaveLength(1);
+    expect(state.sections[0]!.lessons[0]!.videos[0]!.id).toBe("video-1");
+  });
+
   it("should be a no-op when the video is not found", () => {
     const section = createSection({
       lessons: [

@@ -7,6 +7,7 @@ export function handleVideoCase(
 ): courseEditorReducer.State | null {
   switch (action.type) {
     case "video-moved": {
+      if (action.fromLessonId === action.toLessonId) return state;
       let movedVideo: EditorVideo | undefined;
       for (const section of state.sections) {
         for (const lesson of section.lessons) {
