@@ -59,6 +59,9 @@ export namespace courseViewReducer {
     moveLessonState: MoveLessonState;
     renameVideoState: RenameVideoState;
 
+    // Optimistic state
+    optimisticVideoRenames: Record<string, string>;
+
     // Filter states
     priorityFilter: number[];
     iconFilter: string[];
@@ -125,6 +128,7 @@ export namespace courseViewReducer {
     // Rename video
     | { type: "open-rename-video"; videoId: string; videoPath: string }
     | { type: "close-rename-video" }
+    | { type: "rename-video-optimistic"; videoId: string; newName: string }
     // Filters
     | { type: "toggle-priority-filter"; priority: number }
     | { type: "toggle-icon-filter"; icon: string }
@@ -160,6 +164,7 @@ export function createInitialCourseViewState(): courseViewReducer.State {
     moveVideoState: null,
     moveLessonState: null,
     renameVideoState: null,
+    optimisticVideoRenames: {},
     priorityFilter: [],
     iconFilter: [],
     fsStatusFilter: null,
@@ -287,6 +292,15 @@ export const courseViewReducer: EffectReducer<
       };
     case "close-rename-video":
       return { ...state, renameVideoState: null };
+    case "rename-video-optimistic":
+      return {
+        ...state,
+        renameVideoState: null,
+        optimisticVideoRenames: {
+          ...state.optimisticVideoRenames,
+          [action.videoId]: action.newName,
+        },
+      };
 
     // Filters
     case "toggle-priority-filter":

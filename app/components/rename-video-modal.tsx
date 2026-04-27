@@ -15,6 +15,7 @@ export function RenameVideoModal(props: {
   currentName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRename?: (newName: string) => void;
 }) {
   const fetcher = useFetcher();
 
@@ -30,8 +31,14 @@ export function RenameVideoModal(props: {
           className="space-y-4 py-4"
           onSubmit={async (e) => {
             e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const newName = formData.get("name") as string;
             await fetcher.submit(e.currentTarget);
-            props.onOpenChange(false);
+            if (props.onRename) {
+              props.onRename(newName);
+            } else {
+              props.onOpenChange(false);
+            }
           }}
         >
           <div className="space-y-2">

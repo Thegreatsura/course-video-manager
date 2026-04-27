@@ -216,6 +216,7 @@ export namespace courseEditorReducer {
     | { type: "close-move-lesson" }
     | { type: "open-rename-video"; videoId: string; videoPath: string }
     | { type: "close-rename-video" }
+    | { type: "rename-video-optimistic"; videoId: string; newName: string }
     | { type: "toggle-priority-filter"; priority: number }
     | { type: "toggle-icon-filter"; icon: string }
     | { type: "toggle-fs-status-filter"; status: string }
@@ -619,6 +620,20 @@ export const courseEditorReducer: EffectReducer<
       };
     case "close-rename-video":
       return { ...state, renameVideoState: null };
+    case "rename-video-optimistic":
+      return {
+        ...state,
+        renameVideoState: null,
+        sections: state.sections.map((s) => ({
+          ...s,
+          lessons: s.lessons.map((l) => ({
+            ...l,
+            videos: l.videos.map((v) =>
+              v.id === action.videoId ? { ...v, path: action.newName } : v
+            ),
+          })),
+        })),
+      };
     case "toggle-priority-filter":
       return {
         ...state,

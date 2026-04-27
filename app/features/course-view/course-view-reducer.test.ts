@@ -319,6 +319,48 @@ describe("courseViewReducer", () => {
     });
   });
 
+  describe("Rename video optimistic", () => {
+    it("33a. rename-video-optimistic: stores optimistic name and closes modal", () => {
+      const state = createTester()
+        .send({
+          type: "open-rename-video",
+          videoId: "vid-1",
+          videoPath: "old-name.mp4",
+        })
+        .send({
+          type: "rename-video-optimistic",
+          videoId: "vid-1",
+          newName: "new-name.mp4",
+        })
+        .getState();
+
+      expect(state.renameVideoState).toBeNull();
+      expect(state.optimisticVideoRenames).toEqual({
+        "vid-1": "new-name.mp4",
+      });
+    });
+
+    it("33b. rename-video-optimistic: accumulates multiple renames", () => {
+      const state = createTester()
+        .send({
+          type: "rename-video-optimistic",
+          videoId: "vid-1",
+          newName: "name-a.mp4",
+        })
+        .send({
+          type: "rename-video-optimistic",
+          videoId: "vid-2",
+          newName: "name-b.mp4",
+        })
+        .getState();
+
+      expect(state.optimisticVideoRenames).toEqual({
+        "vid-1": "name-a.mp4",
+        "vid-2": "name-b.mp4",
+      });
+    });
+  });
+
   describe("Filters", () => {
     it("33. toggle-priority-filter: adds priority when not present", () => {
       const state = createTester()

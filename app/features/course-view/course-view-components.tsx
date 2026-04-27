@@ -587,6 +587,13 @@ export function RouteModals({
           onOpenChange={(open) => {
             if (!open) dispatch({ type: "close-rename-video" });
           }}
+          onRename={(newName) => {
+            dispatch({
+              type: "rename-video-optimistic",
+              videoId: viewState.renameVideoState!.videoId,
+              newName,
+            });
+          }}
         />
       )}
     </>
