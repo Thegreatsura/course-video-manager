@@ -10,9 +10,9 @@ import { CourseRepoParserService } from "./course-repo-parser";
 import {
   computeExportHash,
   resolveExportPath as resolveExportPathPure,
-  garbageCollect,
   type ExportClip,
 } from "./export-hash";
+import { garbageCollect } from "./export-hash.server";
 import { FINAL_VIDEO_PADDING } from "@/features/video-editor/constants";
 import { generateChangelog } from "./changelog-service";
 import { resolveSectionsWithVideos } from "./publish-to-dropbox";

@@ -7,10 +7,10 @@ import {
   exportFilename,
   resolveExportPath,
   isExported,
-  garbageCollect,
   EXPORT_VERSION,
   type ExportClip,
 } from "@/services/export-hash";
+import { garbageCollect } from "@/services/export-hash.server";
 
 const makeClip = (
   overrides: Partial<ExportClip> &
