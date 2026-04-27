@@ -4,13 +4,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { UploadContext } from "@/features/upload-manager/upload-context";
+import { hasActiveExportUploads } from "@/features/upload-manager/export-status";
 import { generateChangelog } from "@/services/changelog-service";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { DBFunctionsService } from "@/services/db-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import { Console, Effect } from "effect";
 import { ArrowLeft, Download, AlertCircle, ChevronRight } from "lucide-react";
-import { useCallback, useContext, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { data, Link, useNavigate, useRevalidator } from "react-router";
@@ -88,13 +89,7 @@ export default function Component(props: Route.ComponentProps) {
   const [description, setDescription] = useState("");
   const [publishStarted, setPublishStarted] = useState(false);
 
-  const hasActiveExport = Object.values(uploads).some(
-    (u) =>
-      u.uploadType === "export" &&
-      (u.status === "uploading" ||
-        u.status === "waiting" ||
-        u.status === "retrying")
-  );
+  const hasActiveExport = hasActiveExportUploads(uploads);
   const hasActivePublish = Object.values(uploads).some(
     (u) =>
       u.uploadType === "publish" &&
@@ -106,6 +101,14 @@ export default function Component(props: Route.ComponentProps) {
 
   useFocusRevalidate({ enabled: !publishStarted });
 
+  const prevHadActiveExportRef = useRef(false);
+  useEffect(() => {
+    if (prevHadActiveExportRef.current && !hasActiveExport) {
+      revalidator.revalidate();
+    }
+    prevHadActiveExportRef.current = hasActiveExport;
+  }, [hasActiveExport, revalidator]);
+
   const hasUnexportedVideos = unexportedVideoCount > 0;
   const canPublish =
     name.trim().length > 0 &&
@@ -115,9 +118,7 @@ export default function Component(props: Route.ComponentProps) {
 
   const handleExportAll = useCallback(() => {
     startBatchExportUpload(latestVersion.id);
-    // Revalidate after a delay to pick up newly exported videos
-    setTimeout(() => revalidator.revalidate(), 2000);
-  }, [latestVersion.id, startBatchExportUpload, revalidator]);
+  }, [latestVersion.id, startBatchExportUpload]);
 
   const handlePublish = useCallback(() => {
     setPublishStarted(true);
