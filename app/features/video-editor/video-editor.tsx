@@ -23,6 +23,8 @@ import { useChapterModal } from "./hooks/use-chapter-modal";
 import { useReferenceVideoId } from "./hooks/use-reference-video-id";
 import { RenameVideoModal } from "@/components/rename-video-modal";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
+import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
+import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
 import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
 import {
@@ -312,6 +314,32 @@ export const VideoEditor = (props: {
 
   const [persistedBeatTab, setPersistedBeatTab] = useBeatTab(props.videoId);
 
+  const activeReference =
+    referenceVideoId &&
+    props.referenceCandidates.some((c) => c.id === referenceVideoId)
+      ? referenceVideoId
+      : null;
+
+  const hasReference = activeReference !== null;
+  const hasBeats = props.beats.length > 0;
+  const activeTab = resolveBeatTab({
+    persistedTab: persistedBeatTab,
+    hasBeats,
+    hasReference,
+  });
+
+  // Sits below `activeTab` rather than up with the other mount effects because
+  // it carries the tab — and above the error-overlay early return, because
+  // these are hooks.
+  useTeleprompterEditorMode({
+    videoId: props.videoId,
+    capture: props.isRecordingActive
+      ? props.speechDetectorState.type
+      : "not-recording",
+    tab: activeTab,
+  });
+  useTeleprompterShortcuts();
+
   // Adding a reference auto-switches the persisted tab to Reference so the
   // newly-added reader surfaces; removing (next === null) leaves the tab alone.
   const handleSetReferenceVideoId = useCallback(
@@ -563,20 +591,6 @@ export const VideoEditor = (props: {
   if (props.error) {
     return <ErrorOverlay error={props.error} />;
   }
-
-  const activeReference =
-    referenceVideoId &&
-    props.referenceCandidates.some((c) => c.id === referenceVideoId)
-      ? referenceVideoId
-      : null;
-
-  const hasReference = activeReference !== null;
-  const hasBeats = props.beats.length > 0;
-  const activeTab = resolveBeatTab({
-    persistedTab: persistedBeatTab,
-    hasBeats,
-    hasReference,
-  });
 
   const modals = (
     <>

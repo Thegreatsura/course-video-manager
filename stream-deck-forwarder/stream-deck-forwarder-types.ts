@@ -7,6 +7,12 @@ export const streamDeckForwarderMessageSchema = z.object({
     "toggle-pause",
     "add-chapter",
     "clear-all-archived",
+    // Consumed only by the /teleprompter route. The Video Editor's dispatch
+    // is an if/else chain, so it ignores these rather than throwing.
+    "teleprompter-advance",
+    "teleprompter-back",
+    "teleprompter-toggle-play",
+    "teleprompter-reset",
   ]),
 });
 
