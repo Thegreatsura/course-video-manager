@@ -167,6 +167,10 @@ export const SessionPanel = ({ panel }: { panel: SessionPanelData }) => {
     VideoEditorContext,
     (ctx) => ctx.onPermanentlyRemoveArchived
   );
+  const isTeleprompterConnected = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.isTeleprompterConnected
+  );
 
   const [elapsedSeconds, setElapsedSeconds] = useState(() =>
     Math.floor((Date.now() - panel.startedAt) / 1000)
@@ -250,7 +254,18 @@ export const SessionPanel = ({ panel }: { panel: SessionPanelData }) => {
         </span>
         {panel.isRecording && (
           <span className="flex items-center gap-1.5 text-xs text-red-400">
-            <CircleDotIcon className="size-3 animate-pulse" />
+            {/*
+              The badge stays while the teleprompter is connected — it says
+              *which* session is live, which nothing else does — but it stops
+              pulsing. A blinking dot is what pulls your eye back to a screen
+              you're deliberately not looking at.
+            */}
+            <CircleDotIcon
+              className={cn(
+                "size-3",
+                !isTeleprompterConnected && "animate-pulse"
+              )}
+            />
             Recording
             <span className="font-mono tabular-nums">
               {formatSecondsToTimeCode(elapsedSeconds)}

@@ -419,6 +419,21 @@ export const getShowCenterLine = (
 };
 
 /**
+ * The pulsing red signal over the live preview.
+ *
+ * Recording alone isn't enough: a connected teleprompter takes over reporting
+ * the take (`capture-indicator.tsx` mirrors the editor's badge verbatim), and
+ * the glass is what you're looking at while filming. Leaving the signal up
+ * would only put something blinking on a screen you aren't watching.
+ */
+export const getShowRecordingSignal = (
+  obsConnectorState: OBSConnectionOuterState,
+  isTeleprompterConnected: boolean
+): boolean => {
+  return obsConnectorState.type === "obs-recording" && !isTeleprompterConnected;
+};
+
+/**
  * Is a capture in progress — recording *or* still settling afterwards?
  *
  * The Beat Panel is editable only when fully idle and every clip is

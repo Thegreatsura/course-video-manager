@@ -8,6 +8,7 @@ import { PreloadableClipManager } from "../preloadable-clip";
 import {
   getIsOBSActive as getIsOBSActiveSelector,
   getShowCenterLine as getShowCenterLineSelector,
+  getShowRecordingSignal as getShowRecordingSignalSelector,
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
 import { formatSecondsToTimeCode } from "@/services/utils";
@@ -56,6 +57,10 @@ export const PortraitStudioPanel = () => {
   const speechDetectorState = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.speechDetectorState
+  );
+  const isTeleprompterConnected = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.isTeleprompterConnected
   );
   const clipsToAggressivelyPreload = useContextSelector(
     VideoEditorContext,
@@ -169,6 +174,10 @@ export const PortraitStudioPanel = () => {
 
   const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
   const showCenterLine = getShowCenterLineSelector(obsConnectorState);
+  const showRecordingSignal = getShowRecordingSignalSelector(
+    obsConnectorState,
+    isTeleprompterConnected
+  );
   const showScrubSlider = getShowScrubSliderSelector(
     currentClip?.type,
     showVideoPlayer
@@ -195,9 +204,7 @@ export const PortraitStudioPanel = () => {
                   !showVideoPlayer && showLiveStream && "block"
                 )}
               >
-                {obsConnectorState.type === "obs-recording" && (
-                  <RecordingSignalIndicator />
-                )}
+                {showRecordingSignal && <RecordingSignalIndicator />}
 
                 {isOBSActive && (
                   <LiveMediaStream
@@ -205,6 +212,7 @@ export const PortraitStudioPanel = () => {
                     obsConnectorState={obsConnectorState}
                     speechDetectorState={speechDetectorState}
                     showCenterLine={showCenterLine}
+                    showCaptureStatus={!isTeleprompterConnected}
                   />
                 )}
               </div>

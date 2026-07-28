@@ -51,4 +51,11 @@ export type LiveMediaStreamProps = {
   obsConnectorState: OBSConnectionOuterState;
   speechDetectorState: FrontendSpeechDetectorState;
   showCenterLine: boolean;
+  /**
+   * Report capture status at all — the mic badge and the coloured ring, in both
+   * the recording and idle cases. False while a teleprompter is connected: the
+   * glass mirrors the same status and is what you're looking at while filming,
+   * so the editor's copy is only something blinking on an unwatched screen.
+   */
+  showCaptureStatus: boolean;
 };
