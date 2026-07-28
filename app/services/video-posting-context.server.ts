@@ -110,17 +110,17 @@ function computeChapterWordCounts(
   };
 
   const sortedItems = sortByOrder<ClipItem | ChapterItem>([
-    ...clips.map(
-      (clip): ClipItem => ({ type: "clip", order: clip.order, text: clip.text })
-    ),
-    ...chapters.map(
-      (ch): ChapterItem => ({
-        type: "chapter",
-        order: ch.order,
-        id: ch.id,
-        name: ch.name,
-      })
-    ),
+    ...clips.map((clip): ClipItem => ({
+      type: "clip",
+      order: clip.order,
+      text: clip.text,
+    })),
+    ...chapters.map((ch): ChapterItem => ({
+      type: "chapter",
+      order: ch.order,
+      id: ch.id,
+      name: ch.name,
+    })),
   ]);
 
   const sections: SectionWithWordCount[] = [];
@@ -206,6 +206,8 @@ export interface WriterContextData {
     title: string;
     description: string;
   }>;
+  /** The video's script — the base Matt improvised from. Empty when unwritten. */
+  script: string;
 }
 
 export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
@@ -255,6 +257,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       courseStructure: null,
       links: globalLinks,
       beats,
+      script: video.script ?? "",
     } satisfies WriterContextData;
   }
 
@@ -290,5 +293,6 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     courseStructure,
     links: globalLinks,
     beats,
+    script: video.script ?? "",
   } satisfies WriterContextData;
 });

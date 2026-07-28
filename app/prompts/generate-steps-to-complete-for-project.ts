@@ -2,6 +2,7 @@ import { getImageInstructions } from "./image-instructions";
 import { getLinkInstructions, type GlobalLink } from "./link-instructions";
 import { PROJECT_STYLE_GUIDE } from "./project-style-guide";
 import PROJECT_STEPS_SAMPLE from "./project-steps-sample.md?raw";
+import { PROJECT_SOURCE_HIERARCHY } from "./source-hierarchy";
 import { getTranscriptSection } from "./transcript-instructions";
 
 export const generateStepsToCompleteForProjectPrompt = (opts: {
@@ -33,13 +34,15 @@ You are a helpful assistant being asked to turn a git commit diff and video tran
 
 ## Documents
 
-${transcriptSection}${courseStructureSection}Here is the code for the video, which includes the git diff and commit message:
+${transcriptSection}${courseStructureSection}Here is the supporting material for the video, which includes the git diff and commit message:
 
 <code>
 ${opts.code
   .map((file) => `<file path="${file.path}">${file.content}</file>`)
   .join("\n")}
 </code>
+
+${PROJECT_SOURCE_HIERARCHY}
 
 ${PROJECT_STYLE_GUIDE}
 

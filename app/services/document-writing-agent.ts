@@ -3,6 +3,8 @@ import { generateStepsToCompleteForSkillBuildingProblemPrompt } from "@/prompts/
 import { generateNewsletterPrompt } from "@/prompts/generate-newsletter";
 import { generateSeoDescriptionPrompt } from "@/prompts/generate-seo-description";
 import type { GlobalLink } from "@/prompts/link-instructions";
+import { getBeatsSection } from "@/prompts/beats-instructions";
+import { getScriptSection } from "@/prompts/script-instructions";
 import {
   ToolLoopAgent as Agent,
   tool,
@@ -17,10 +19,7 @@ import type {
 } from "./text-writing-agent";
 
 export type DocumentWritingAgentMode =
-  | "article"
-  | "skill-building"
-  | "newsletter"
-  | "seo-description-document";
+  "article" | "skill-building" | "newsletter" | "seo-description-document";
 
 export const writeDocumentTool = tool({
   description:
@@ -79,6 +78,8 @@ export const createDocumentWritingAgent = (props: {
   additionalContext?: Array<{ label: string; value: string }>;
   /** Pre-formatted beat plan text (kinds + titles + descriptions). */
   beats?: string;
+  /** The video's script — the base Matt improvised from. */
+  script?: string;
 }) => {
   const links = props.links ?? [];
   const mode = props.mode ?? "article";
@@ -170,9 +171,9 @@ After calling writeDocument, you may add a brief conversational message explaini
     ? `\n\n## Course Memory\n\nThe following is course-level context provided by the author. Use it to inform your response:\n\n<memory>\n${props.memory}\n</memory>`
     : "";
 
-  const beatsSection = props.beats
-    ? `\n\n## Beat Plan\n\nThe following is the video's beat plan — the planned structure of what the video covers, in order. Each beat has a kind (Definition, Walkthrough, Playthrough, Quest, Reaction) and may have a description. Use this to understand the video's intended flow and structure:\n\n<beats>\n${props.beats}\n</beats>`
-    : "";
+  const beatsSection = getBeatsSection(props.beats ?? "");
+
+  const scriptSection = getScriptSection(props.script ?? "");
 
   const repairToolCall: ConstructorParameters<
     typeof Agent
@@ -188,7 +189,7 @@ After calling writeDocument, you may add a brief conversational message explaini
   if (props.document) {
     return new Agent({
       model: props.model,
-      instructions: systemPrompt + memorySection + beatsSection,
+      instructions: systemPrompt + memorySection + scriptSection + beatsSection,
       tools: { editDocument: editDocumentTool },
       stopWhen: stepCountIs(5),
       experimental_repairToolCall: repairToolCall,
@@ -197,7 +198,7 @@ After calling writeDocument, you may add a brief conversational message explaini
 
   return new Agent({
     model: props.model,
-    instructions: systemPrompt + memorySection + beatsSection,
+    instructions: systemPrompt + memorySection + scriptSection + beatsSection,
     tools: { writeDocument: writeDocumentTool },
     stopWhen: stepCountIs(5),
     experimental_repairToolCall: repairToolCall,
