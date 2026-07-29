@@ -390,7 +390,7 @@ export function WriterEngine({
     submit: handleSubmit,
     queuedMessages,
     clearQueue,
-  } = useMessageQueue(status, handleSend);
+  } = useMessageQueue(status, handleSend, docCapturingKey !== null);
 
   const handleClearChat = () => {
     setMessages([]);
