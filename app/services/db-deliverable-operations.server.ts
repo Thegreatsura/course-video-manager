@@ -32,12 +32,33 @@ export const createDeliverableOperations = (db: Database) => {
     );
   });
 
+  /**
+   * One Deliverable by id, links included — same shape as a `listDeliverables`
+   * row. Returns undefined when the id is unknown; archived rows ARE returned
+   * (unlike listDeliverables), so callers decide what archived means to them.
+   */
+  const getDeliverableById = Effect.fn("getDeliverableById")(function* (
+    id: string
+  ) {
+    return yield* makeDbCall(() =>
+      db.query.deliverables.findFirst({
+        where: eq(deliverables.id, id),
+        with: {
+          deliverablesCourses: { columns: { courseId: true } },
+          deliverablesPitches: { columns: { pitchId: true } },
+        },
+      })
+    );
+  });
+
   const createDeliverable = Effect.fn("createDeliverable")(function* (input: {
     title: string;
     date: string;
     notes?: string;
-    courseIds?: string[];
-    pitchIds?: string[];
+    /** Omitted => the column default, `planned`. */
+    status?: "planned" | "done" | "cancelled";
+    courseIds?: readonly string[];
+    pitchIds?: readonly string[];
   }) {
     const results = yield* makeDbCall(() =>
       db
@@ -46,6 +67,7 @@ export const createDeliverableOperations = (db: Database) => {
           title: input.title,
           date: input.date,
           notes: input.notes || null,
+          ...(input.status === undefined ? {} : { status: input.status }),
         })
         .returning()
     );
@@ -114,8 +136,8 @@ export const createDeliverableOperations = (db: Database) => {
     date: string;
     notes?: string;
     status: "planned" | "done" | "cancelled";
-    courseIds?: string[];
-    pitchIds?: string[];
+    courseIds?: readonly string[];
+    pitchIds?: readonly string[];
   }) {
     const results = yield* makeDbCall(() =>
       db
@@ -246,6 +268,7 @@ export const createDeliverableOperations = (db: Database) => {
 
   return {
     listDeliverables,
+    getDeliverableById,
     createDeliverable,
     updateDeliverableStatus,
     updateDeliverable,
