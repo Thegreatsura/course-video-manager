@@ -1,3 +1,4 @@
+import { LEADING_HEADING_PATTERN, stripLeadingHeadings } from "./lint-fix";
 import type { Mode } from "./types";
 
 /**
@@ -20,6 +21,13 @@ export interface LintRule {
   required?: boolean;
   /** Optional filter to exclude false-positive matches. Return true to keep the match. */
   matchFilter?: (match: string) => boolean;
+  /**
+   * Optional deterministic repair. When present, and when it actually changes
+   * the document, the fix is applied directly and the rule's `fixInstruction`
+   * is not sent to the model. Only reachable in document modes, where we own
+   * the text.
+   */
+  deterministicFix?: (text: string) => string;
 }
 
 /**
@@ -150,9 +158,10 @@ export const BASE_LINT_RULES: LintRule[] = [
     name: "No Leading Heading",
     description: "Content must not start with a markdown heading",
     modes: ["article", "skill-building"],
-    pattern: /^#+ /,
+    pattern: LEADING_HEADING_PATTERN,
     fixInstruction:
       "Remove the markdown heading from the start of the content. Do not start with a heading - begin directly with the content.",
+    deterministicFix: stripLeadingHeadings,
   },
 ];
 

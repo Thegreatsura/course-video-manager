@@ -13,7 +13,7 @@ import { WriteChat } from "./write-chat";
 import { DocumentPanel } from "./document-panel";
 import { useDocumentFlow } from "./use-document-flow";
 import { useRemoveDocumentBlock } from "./use-remove-document-block";
-import { useLint } from "@/hooks/use-lint";
+import { useLint, useLintFix } from "@/hooks/use-lint";
 import { useBannedPhrases } from "@/hooks/use-banned-phrases";
 import { useMessageQueue } from "./use-message-queue";
 import { MODEL_STORAGE_KEY, partsToText } from "./write-utils";
@@ -338,7 +338,10 @@ export function WriterEngine({
           : undefined,
       pageFields: enabledPageFields,
     };
-    return isDocumentMode ? { ...base, document, mode } : { ...base, mode };
+    // Ref, not state: a lint fix sends in the same tick as it rewrites.
+    return isDocumentMode
+      ? { ...base, document: documentRef.current, mode }
+      : { ...base, mode };
   }, [
     chapters.length,
     ctxModel.enabledSections,
@@ -356,7 +359,7 @@ export function WriterEngine({
     ctxModel.scriptEnabled,
     ctxModel.scriptText,
     isDocumentMode,
-    document,
+    documentRef,
     mode,
   ]);
 
@@ -373,7 +376,7 @@ export function WriterEngine({
       .find((m) => m.role === "assistant")?.parts ?? []
   );
 
-  const { violations, composeFixMessage } = useLint(
+  const { violations } = useLint(
     isDocumentMode && document ? document : lastAssistantMessageText,
     mode,
     bannedPhrases
@@ -401,10 +404,13 @@ export function WriterEngine({
     if (isDocumentMode) resetDocument();
   };
 
-  const handleFixLintViolations = useCallback(() => {
-    const fixMessage = composeFixMessage();
-    if (fixMessage) handleSubmit(fixMessage);
-  }, [composeFixMessage, handleSubmit]);
+  const handleFixLintViolations = useLintFix({
+    violations,
+    isDocumentMode,
+    documentRef,
+    updateDocument,
+    submitMessage: handleSubmit,
+  });
 
   const handleRegenerate = useCallback(() => {
     regenerate({ body: getBodyPayload() });
