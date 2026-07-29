@@ -14,7 +14,7 @@ import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { renderThumbnailPngBase64 } from "@/features/diagrams/render-thumbnail";
 import { usePreserveSnapshotShortcut } from "@/features/diagrams/preserve-snapshot-shortcut";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
-import { copySceneToClipboard } from "@/features/diagrams/copy-scene-to-clipboard";
+import { copyDiagramContents } from "@/features/diagrams/copy-scene-to-clipboard";
 import {
   TimelinePanel,
   type Snapshot,
@@ -28,6 +28,9 @@ import {
 import { useParams, useNavigate, Link, useRevalidator } from "react-router";
 import type { Route } from "./+types/diagram-playground.$diagramId";
 import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playground-active.loader.server";
+import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
+import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundary";
+import { DiagramCommandPalette } from "@/features/diagrams/palette/diagram-command-palette";
 
 export const loader = loadDiagramPlaygroundActive;
 
@@ -76,6 +79,16 @@ export default function DiagramPlaygroundActive({
   const scheduleSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveHead(), DEBOUNCE_MS);
+  }, [saveHead]);
+
+  // Every flow that leaves the current diagram must call this first, or up to
+  // 500ms of debounced edits is silently lost.
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    await saveHead();
   }, [saveHead]);
 
   const loadDiagramScene = useCallback(
@@ -160,15 +173,11 @@ export default function DiagramPlaygroundActive({
     preservingRef.current = true;
     setPreserving(true);
     try {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-      await saveHead();
+      await flushPendingSave();
 
       let thumbnailPngBase64: string | null;
       try {
-        thumbnailPngBase64 = await renderThumbnailPngBase64(ed);
+        thumbnailPngBase64 = await renderThumbnailPngBase64(ed, "current-page");
       } catch {
         toast.error("Failed to render thumbnail");
         return;
@@ -294,9 +303,10 @@ export default function DiagramPlaygroundActive({
             await saveHead();
 
             // Auto-pin thumbnails are best-effort; proceed without one if rendering fails.
-            const thumbnailPngBase64 = await renderThumbnailPngBase64(ed).catch(
-              () => null
-            );
+            const thumbnailPngBase64 = await renderThumbnailPngBase64(
+              ed,
+              "current-page"
+            ).catch(() => null);
 
             const res = await fetch(
               `/api/diagrams/${targetDiagramId}/snapshots`,
@@ -432,48 +442,19 @@ export default function DiagramPlaygroundActive({
 
   const handleCopyDiagramContents = useCallback(
     async (id: string) => {
-      try {
-        if (id === activeDiagramId.current) {
-          if (saveTimer.current) {
-            clearTimeout(saveTimer.current);
-            saveTimer.current = null;
-          }
-          await saveHead();
-        }
-        const res = await fetch(`/api/diagrams/${id}/head`);
-        if (!res.ok) {
-          toast.error("Failed to copy diagram");
-          return;
-        }
-        const data = await res.json();
-        if (!data.headScene) {
-          toast.error("Diagram is empty");
-          return;
-        }
-        const result = await copySceneToClipboard(data.headScene);
-        if (result === "ok") {
-          toast.success("Diagram copied — paste into the canvas");
-        } else if (result === "empty") {
-          toast.error("Diagram has no shapes to copy");
-        } else {
-          toast.error("Failed to copy diagram");
-        }
-      } catch {
-        toast.error("Failed to copy diagram");
-      }
+      // Copying the OPEN diagram reads its stored head like any other, so the
+      // debounced save has to land first or the clipboard is up to 500ms stale.
+      if (id === activeDiagramId.current) await flushPendingSave();
+      await copyDiagramContents(id);
     },
-    [saveHead]
+    [flushPendingSave]
   );
 
   const handleCreateDiagram = useCallback(async () => {
     if (creating) return;
     setCreating(true);
     try {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-      await saveHead();
+      await flushPendingSave();
       const res = await fetch("/api/diagrams/create", { method: "POST" });
       if (!res.ok) {
         toast.error("Failed to create diagram");
@@ -489,11 +470,7 @@ export default function DiagramPlaygroundActive({
   }, [creating, saveHead, navigate]);
 
   const handleNavigateHome = useCallback(async () => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    await saveHead();
+    await flushPendingSave();
     sendToParent({ type: "activeDiagramChanged", diagramId: null });
     navigate("/diagram-playground");
   }, [saveHead, navigate]);
@@ -503,23 +480,39 @@ export default function DiagramPlaygroundActive({
   return (
     <div className="flex h-screen w-screen">
       <div className="relative flex-1">
-        <Tldraw
-          onMount={handleMount}
-          colorScheme="dark"
-          acceptedImageMimeTypes={EMPTY_MIME_TYPES}
-          acceptedVideoMimeTypes={EMPTY_MIME_TYPES}
-          embeds={EMPTY_EMBEDS}
-        />
+        <DiagramEditorBoundary>
+          <Tldraw
+            onMount={handleMount}
+            colorScheme="dark"
+            acceptedImageMimeTypes={EMPTY_MIME_TYPES}
+            acceptedVideoMimeTypes={EMPTY_MIME_TYPES}
+            embeds={EMPTY_EMBEDS}
+            shapeUtils={CVM_SHAPE_UTILS}
+          />
+          {diagramId && (
+            <button
+              onClick={preserveSnapshot}
+              disabled={preserving}
+              title="Preserve Snapshot"
+              aria-label="Preserve Snapshot"
+              className="absolute bottom-16 right-2 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 shadow hover:bg-zinc-600 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+            </button>
+          )}
+        </DiagramEditorBoundary>
+        {/* Active Diagram window only — never Playground Home. */}
         {diagramId && (
-          <button
-            onClick={preserveSnapshot}
-            disabled={preserving}
-            title="Preserve Snapshot"
-            aria-label="Preserve Snapshot"
-            className="absolute bottom-16 right-2 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 shadow hover:bg-zinc-600 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-          </button>
+          <DiagramCommandPalette
+            diagramId={diagramId}
+            editorRef={editorRef}
+            flushPendingSave={flushPendingSave}
+            preserveSnapshot={preserveSnapshot}
+            handleRestoreRequest={handleRestoreRequest}
+            handleCopyDiagramContents={handleCopyDiagramContents}
+            handleCreateDiagram={handleCreateDiagram}
+            reloadScene={loadDiagramScene}
+          />
         )}
         <ConnectionStatusIndicator
           editorConnected={editorConnected}

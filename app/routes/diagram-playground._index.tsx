@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from "react-router";
 import { Plus, Search } from "lucide-react";
 import { sendToParent } from "@/lib/diagram-protocol";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
+import { makeSnippet } from "@/features/diagrams/make-snippet";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
 import { Effect } from "effect";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import { makeLoader } from "@/services/route-action.server";
-import { filteredNewestSnapshot } from "@/lib/filtered-newest-snapshot";
+import { newestSnapshotHashByDiagram } from "@/lib/filtered-newest-snapshot";
 import { data } from "react-router";
 import type { Route } from "./+types/diagram-playground._index";
 
@@ -36,38 +37,14 @@ export const loader = makeLoader({
         { concurrency: "unbounded" }
       );
 
-      const snapshotsByDiagram = new Map<
-        string,
-        {
-          id: string;
-          contentHash: string;
-          preserved: boolean;
-          createdAt: Date;
-          clips: { archived: boolean }[];
-        }[]
-      >();
-      for (const s of allSnapshots) {
-        let arr = snapshotsByDiagram.get(s.diagramId);
-        if (!arr) {
-          arr = [];
-          snapshotsByDiagram.set(s.diagramId, arr);
-        }
-        arr.push(s);
-      }
+      const hashes = newestSnapshotHashByDiagram(allSnapshots);
 
-      const tiles = allDiagrams.map((d) => {
-        const snapshots = snapshotsByDiagram.get(d.id) ?? [];
-        const newestId = filteredNewestSnapshot(snapshots);
-        const newestSnapshot = newestId
-          ? snapshots.find((s) => s.id === newestId)
-          : null;
-        return {
-          id: d.id,
-          name: d.name,
-          updatedAt: d.updatedAt.toISOString(),
-          thumbnailContentHash: newestSnapshot?.contentHash ?? null,
-        };
-      });
+      const tiles = allDiagrams.map((d) => ({
+        id: d.id,
+        name: d.name,
+        updatedAt: d.updatedAt.toISOString(),
+        thumbnailContentHash: hashes.get(d.id) ?? null,
+      }));
 
       return data({ mode: "grid" as const, tiles });
     }),
@@ -85,22 +62,6 @@ function formatTimeAgo(date: Date): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 30) return `${diffDays}d ago`;
   return date.toLocaleDateString();
-}
-
-function makeSnippet(searchText: string | null, query: string): string {
-  if (!searchText) return "";
-  const words = searchText.split(/\s+/);
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const idx = words.findIndex((w) =>
-    terms.some((t) => w.toLowerCase().includes(t))
-  );
-  const start = Math.max(0, idx > 0 ? idx - 3 : 0);
-  const slice = words.slice(start, start + 10);
-  return (
-    (start > 0 ? "… " : "") +
-    slice.join(" ") +
-    (start + 10 < words.length ? " …" : "")
-  );
 }
 
 export default function DiagramPlaygroundHome({
