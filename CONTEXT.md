@@ -52,6 +52,10 @@ _Avoid_: Rollback, Delete version
 The release flow: Submit, then the Dropbox commit (upload culminating in the atomic `course.json` rename — the sole commit receipt), then Promote. Structure is derived from the database (never parsed from disk); the Dropbox output is exclusively `.mp4` files plus one `course.json` and its companion `course.schema.json` (referenced via `$schema`) — no authoring sidecars, no `changelog.md`. Every shipping **Video** must be complete — exportable **Clips** (hence an `.mp4` and an **Export Hash**), a `body`, and a `description` — so no `course.json` field is ever null; an incomplete Video fails the Publish (ADR 0019).
 _Avoid_: Commit (that is one phase of it), Deploy, Push
 
+**Publish Readiness**:
+The answer to "what stands between this Course and shipping?", computed for a **CourseVersion** as four lists of outstanding work: **Unexported Videos**, course-view lints (the lesson-level role warnings plus every **Video Warning**, carried as `courseViewLints`), invalid Lesson role combos, and incomplete **Videos**. Computed against the effective output, so it differs by the to-do toggle. Only three of the four stop a release: lints refuse the **Publish** outright, and invalid combos / incomplete Videos fail the later `course.json` build — whereas an **Unexported Video** is rendered by the Publish itself as its export stage and blocks nothing. A single "can this ship?" reading must therefore exclude the unexported set. One walk backs the publish gate, the publish page's pre-publish warnings, and the read-only `cvm course readiness` verb, so they can never disagree. Distinct from authoring progress, which is toggle-independent and counts work no Publish would ship.
+_Avoid_: Publish status, Readiness check, Blockers (only three of the four lists block)
+
 **Export Version Key**:
 A hardcoded constant in the codebase (`EXPORT_VERSION`) that, when bumped, invalidates all video export hashes and forces re-export.
 _Avoid_: Version number, Build version
