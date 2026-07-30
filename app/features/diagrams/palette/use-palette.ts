@@ -26,6 +26,7 @@ import {
   visibleRootActions,
   type RootAction,
 } from "./palette-model";
+import { readRecentIcons, recordIconUse } from "./recent-icons";
 import {
   INITIAL_NAV,
   currentPage,
@@ -175,9 +176,20 @@ export function usePalette(opts: {
   );
 
   // --- Icons ---------------------------------------------------------------
+  // Re-read on every open, not once at mount: storage is the source of truth
+  // (see `recent-icons`), and this is only the copy the grid renders from.
+  const [recentIcons, setRecentIcons] = useState<string[]>([]);
+  useEffect(() => {
+    if (open) setRecentIcons(readRecentIcons());
+  }, [open]);
+
   const icons = useMemo(
-    () => searchIconNames(nav.query, { limit: ICON_RESULT_CAP }),
-    [nav.query]
+    () =>
+      searchIconNames(nav.query, {
+        limit: ICON_RESULT_CAP,
+        recent: recentIcons,
+      }),
+    [nav.query, recentIcons]
   );
 
   const insertIcon = useCallback(
@@ -200,7 +212,12 @@ export function usePalette(opts: {
       // component path follows: the palette goes when the shapes LAND. At the
       // page's shape cap nothing lands, and the `max-shapes` toast below is the
       // only thing the author should see.
-      if (landed) setOpen(false);
+      if (!landed) return;
+      // Recorded only for an icon that actually landed, so a run into the shape
+      // cap does not reorder the grid for an insert that never happened. The
+      // palette is closing, so the reorder is never seen mid-gesture.
+      setRecentIcons(recordIconUse(name));
+      setOpen(false);
     },
     [editorRef]
   );

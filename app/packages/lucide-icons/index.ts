@@ -38,10 +38,16 @@ const INDEX = buildSearchIndex(ICON_NAMES);
 /**
  * Search icon names, honouring lucide's own aliases as synonyms — typing
  * "grab" finds `hand-grab`. Returns at most `limit` names, best matches first.
+ *
+ * `recent` is the caller's most-recently-used list, most recent first. Whichever
+ * of those names match are sorted to the TOP — ahead of every textual ranking
+ * except a term typed out in full, which always leads. Unknown names are
+ * ignored. It is REQUIRED, and `[]` says "no history": a caller that could omit
+ * it would drop the recency ordering silently rather than fail to compile.
  */
 export function searchIconNames(
   query: string,
-  opts?: { limit?: number }
+  opts: { limit?: number; recent: readonly string[] }
 ): string[] {
-  return searchIndex(INDEX, query, opts?.limit ?? 200);
+  return searchIndex(INDEX, query, opts.limit ?? 200, opts.recent);
 }
