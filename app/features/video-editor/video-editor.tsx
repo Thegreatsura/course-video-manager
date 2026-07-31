@@ -1,7 +1,5 @@
-import { ChapterNamingModal as ChapterNamingModalComponent } from "./components/chapter-naming-modal";
-import { CreateVideoFromSelectionModal } from "./components/create-video-from-selection-modal";
 import { EditorCompactHeader } from "./components/editor-compact-header";
-import { FilePasteModalWithFsData } from "./components/file-paste-modal-with-fs-data";
+import { EditorModals } from "./components/editor-modals";
 import { VideoPlayerPanel } from "./components/video-player-panel";
 import { PortraitStudioPanel } from "./components/portrait-studio-panel";
 import { ClipTimeline } from "./components/clip-timeline";
@@ -21,7 +19,6 @@ import {
 } from "./hooks/use-diagram-pin";
 import { useChapterModal } from "./hooks/use-chapter-modal";
 import { useReferenceVideoId } from "./hooks/use-reference-video-id";
-import { RenameVideoModal } from "@/components/rename-video-modal";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
 import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
@@ -29,7 +26,6 @@ import { useTeleprompterConnected } from "./hooks/use-teleprompter-connected";
 import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
 import {
-  Suspense,
   useCallback,
   type ReactNode,
   useEffect,
@@ -37,7 +33,7 @@ import {
   useState,
 } from "react";
 import { enableVideoEditorMode } from "@/lib/diagram-window";
-import { useFetcher, useRevalidator, useSubmit } from "react-router";
+import { useFetcher, useSubmit } from "react-router";
 import type {
   DatabaseId,
   EditorError,
@@ -108,6 +104,8 @@ export const VideoEditor = (props: {
   }>;
   videoCount: number;
   beats: BeatListBeat[];
+  /** Does this video have a teleprompter script? Enables "Copy script". */
+  hasScript: boolean;
   referenceCandidates: ReferenceCandidate[];
   onAddReferenceChapterAt: (input: {
     videoId: string;
@@ -159,7 +157,9 @@ export const VideoEditor = (props: {
     [props.items]
   );
 
-  // Derive clips from timeline items for playback, timecodes, etc.
+  // Derive clips from timeline items for playback, timecodes, etc. This is also
+  // exactly what a Copy Video duplicates — clips on the database that aren't on
+  // their way to the archive — so its length is what the Copy Video modal shows.
   const clips = useMemo(() => timelineItems.filter(isClip), [timelineItems]);
 
   // Derive session panel data for RecordingSessionPanel components
@@ -195,8 +195,8 @@ export const VideoEditor = (props: {
   const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [isRenameVideoModalOpen, setIsRenameVideoModalOpen] = useState(false);
+  const [isCopyVideoModalOpen, setIsCopyVideoModalOpen] = useState(false);
   const [isCreateVideoModalOpen, setIsCreateVideoModalOpen] = useState(false);
-  const revalidator = useRevalidator();
 
   const {
     openForMain: onOpenGenerateChaptersModal,
@@ -289,14 +289,6 @@ export const VideoEditor = (props: {
   const clipComputedProps = useMemo(() => getClipComputedProps(clips), [clips]);
 
   const areAnyClipsDangerous = getAreAnyClipsDangerous(clips);
-
-  const handlePasteModalClose = (open: boolean) => {
-    setIsPasteModalOpen(open);
-    if (!open) {
-      // Revalidate to refresh the file list
-      revalidator.revalidate();
-    }
-  };
 
   const handleCreateVideoFromSelection = useCallback(
     (title: string, mode: "copy" | "move") => {
@@ -502,6 +494,8 @@ export const VideoEditor = (props: {
       onAddNoteFromClipboard: () => setIsPasteModalOpen(true),
       isRenameVideoModalOpen,
       setIsRenameVideoModalOpen,
+      isCopyVideoModalOpen,
+      setIsCopyVideoModalOpen,
       isCreateVideoModalOpen,
       setIsCreateVideoModalOpen,
 
@@ -576,6 +570,8 @@ export const VideoEditor = (props: {
       setIsAddVideoModalOpen,
       isRenameVideoModalOpen,
       setIsRenameVideoModalOpen,
+      isCopyVideoModalOpen,
+      setIsCopyVideoModalOpen,
       isCreateVideoModalOpen,
       setIsCreateVideoModalOpen,
       suggestionState,
@@ -598,36 +594,17 @@ export const VideoEditor = (props: {
   }
 
   const modals = (
-    <>
-      <ChapterNamingModalComponent
-        modalState={chapterNamingModal}
-        onClose={() => setChapterNamingModal(null)}
-        onAddChapter={props.onAddChapter}
-        onUpdateChapter={props.onUpdateChapter}
-        onAddChapterAt={props.onAddChapterAt}
-      />
-      <Suspense>
-        <FilePasteModalWithFsData
-          fsData={props.fsData}
-          videoId={props.videoId}
-          isPasteModalOpen={isPasteModalOpen}
-          handlePasteModalClose={handlePasteModalClose}
-          handleFileCreated={() => {}}
-        />
-      </Suspense>
-      <RenameVideoModal
-        videoId={props.videoId}
-        currentName={props.videoTitle}
-        open={isRenameVideoModalOpen}
-        onOpenChange={setIsRenameVideoModalOpen}
-      />
-      <CreateVideoFromSelectionModal
-        open={isCreateVideoModalOpen}
-        onOpenChange={setIsCreateVideoModalOpen}
-        onSubmit={handleCreateVideoFromSelection}
-      />
-      {generateChaptersModal}
-    </>
+    <EditorModals
+      chapterNamingModal={chapterNamingModal}
+      onCloseChapterNamingModal={() => setChapterNamingModal(null)}
+      isPasteModalOpen={isPasteModalOpen}
+      setIsPasteModalOpen={setIsPasteModalOpen}
+      clipCount={clips.length}
+      beatCount={props.beats.length}
+      hasScript={props.hasScript}
+      onCreateVideoFromSelection={handleCreateVideoFromSelection}
+      generateChaptersModal={generateChaptersModal}
+    />
   );
 
   const isShort = props.videoFormat === "short";

@@ -22,6 +22,15 @@ export function CopyVideoModal(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCopy?: () => void;
+  /**
+   * Where to send the user once the copy lands, with `{id}` standing in for the
+   * new video's id — or `null` to stay put. Lets a surface that is *showing*
+   * the source video (the editor) follow the user onto the copy; the tree
+   * views, which show the new video where it lands, pass `null`. The action
+   * performs the navigation itself, so there is no client-side effect to
+   * re-fire.
+   */
+  redirectTo: string | null;
 }) {
   const fetcher = useFetcher();
   const [options, setOptions] = useVideoCopyOptions();
@@ -89,6 +98,10 @@ export function CopyVideoModal(props: {
             }
           }}
         >
+          {props.redirectTo && (
+            <input type="hidden" name="redirectTo" value={props.redirectTo} />
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="copy-video-name">New Video Name</Label>
             <Input
