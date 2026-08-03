@@ -456,24 +456,6 @@ export const VideoEditor = (props: {
       onUpdateCurrentTime: (time: number) => {
         dispatch({ type: "update-clip-current-time", time });
       },
-      onChapterClick: (chapterId: FrontendId, index: number) => {
-        dispatch({
-          type: "click-clip",
-          clipId: chapterId,
-          ctrlKey: false,
-          shiftKey: false,
-        });
-
-        requestAnimationFrame(() => {
-          const allChapters = document.querySelectorAll('[id^="chapter-"]');
-          if (allChapters[index]) {
-            allChapters[index].scrollIntoView({
-              behavior: "instant",
-              block: "center",
-            });
-          }
-        });
-      },
       onAddIntroChapter,
       onOpenCreateChapterModal,
       onEditChapter,

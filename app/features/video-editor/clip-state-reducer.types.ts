@@ -367,6 +367,12 @@ export type ClipReducerEffect =
       type: "archive-clips";
       clipIds: DatabaseId[];
     }
+  /**
+   * Scrolls the timeline to the insertion point. This is the editor's only
+   * viewport jump, and only the recording flow fires it, so clips stay in view
+   * as they land while you narrate. Every other action deliberately leaves the
+   * timeline where it is (#1483) — don't dispatch this from one.
+   */
   | {
       type: "scroll-to-insertion-point";
     }
