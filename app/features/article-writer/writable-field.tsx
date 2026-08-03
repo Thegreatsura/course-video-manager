@@ -9,10 +9,16 @@ import { cn } from "@/lib/utils";
 import { PencilIcon, EyeIcon, Maximize2Icon } from "lucide-react";
 import type { OnMount } from "@monaco-editor/react";
 import type { WriterContext } from "./writer-engine";
-import type { Mode } from "./types";
+import type { Mode, WriterView } from "./types";
 import type { WriterFieldId } from "./writer-engine-utils";
 import { FIELD_MODES } from "./writer-engine-utils";
 import { WriterModal } from "./writer-modal";
+import {
+  WRITER_URL_UPDATE,
+  applyWriterUrlState,
+  readWriterUrlState,
+  type WriterUrlState,
+} from "./writer-url-state";
 
 interface WritableFieldPropsBase {
   videoId: string;
@@ -67,12 +73,12 @@ export function WritableField({
   const resolvedModes = modes ?? FIELD_MODES[fieldId] ?? [];
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const isOpen = searchParams.get("writer") === fieldId;
 
-  const view =
-    (searchParams.get("writerView") as
-      "writer" | "context" | "settings" | null) ?? "writer";
-  const ctxTab = searchParams.get("writerTab") ?? undefined;
+  // The open writer lives in the URL so a reload restores it.
+  const writerState = readWriterUrlState(searchParams, fieldId);
+  const isOpen = writerState !== null;
+  const view = writerState?.view ?? "writer";
+  const ctxTab = writerState?.ctxTab;
 
   // Inline editor state: a local draft drives Monaco so persisting through the
   // host (which round-trips the value back down) never yanks the cursor.
@@ -106,56 +112,37 @@ export function WritableField({
     });
   }, []);
 
-  const setOpen = useCallback(
-    (open: boolean) => {
+  const updateWriterUrl = useCallback(
+    (next: WriterUrlState) => {
       setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (open) {
-            next.set("writer", fieldId);
-          } else {
-            next.delete("writer");
-            next.delete("writerView");
-            next.delete("writerTab");
-          }
-          return next;
-        },
-        { replace: true }
+        (prev) => applyWriterUrlState(prev, fieldId, next),
+        WRITER_URL_UPDATE
       );
     },
     [setSearchParams, fieldId]
   );
 
-  const handleViewChange = useCallback(
-    (v: "writer" | "context" | "settings") => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (v === "writer") {
-            next.delete("writerView");
-          } else {
-            next.set("writerView", v);
-          }
-          return next;
-        },
-        { replace: true }
-      );
+  const setOpen = useCallback(
+    (open: boolean) => {
+      // Opening starts on the writer with no context tab selected, so a fresh
+      // open never inherits the sub-view another field was left on.
+      updateWriterUrl(open ? { view: "writer", ctxTab: undefined } : null);
     },
-    [setSearchParams]
+    [updateWriterUrl]
+  );
+
+  const handleViewChange = useCallback(
+    (v: WriterView) => {
+      updateWriterUrl({ view: v, ctxTab });
+    },
+    [updateWriterUrl, ctxTab]
   );
 
   const handleCtxTabChange = useCallback(
     (tab: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set("writerTab", tab);
-          return next;
-        },
-        { replace: true }
-      );
+      updateWriterUrl({ view, ctxTab: tab });
     },
-    [setSearchParams]
+    [updateWriterUrl, view]
   );
 
   return (
