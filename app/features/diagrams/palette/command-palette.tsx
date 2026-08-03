@@ -27,7 +27,8 @@ import "./command-palette.css";
  * The Cmd+K command palette, mounted inside the Active Diagram window's canvas
  * box — and nowhere else. It is invisible until summoned, which is what lets it
  * coexist with ADR 0004's requirement that "every pixel of chrome must
- * disappear" in tldraw Focus Mode.
+ * disappear" in tldraw Focus Mode. Cmd+F summons it too, straight onto the
+ * diagram search — see `palette-shortcuts`.
  *
  * There is deliberately NO on-canvas affordance pointing at Cmd+K. The grouped
  * root list is itself the discovery surface, once the palette is open.
@@ -97,7 +98,7 @@ export function CommandPalette({
   }, [state.rootActions]);
 
   return (
-    <Dialog open={state.open} onOpenChange={state.setOpen}>
+    <Dialog open={state.open} onOpenChange={state.onOpenChange}>
       <DialogContent
         showCloseButton={false}
         onEscapeKeyDown={blockRadixEscape}

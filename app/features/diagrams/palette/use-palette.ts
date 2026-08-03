@@ -35,6 +35,7 @@ import {
   type PageKey,
   type PaletteNav,
 } from "./palette-nav";
+import { paletteKeyCommand } from "./palette-shortcuts";
 
 export type ComponentSummary = { id: string; name: string };
 
@@ -104,31 +105,48 @@ export function usePalette(opts: {
     [nav]
   );
 
-  // --- Cmd+K ---------------------------------------------------------------
-  // tldraw 5.2.4 leaves Cmd+K unbound (the laser tool binds bare `k`, and its
-  // modifier matching is exact) and never stopPropagations keydown, so a plain
-  // document listener is enough — and it works identically in Focus Mode.
+  /**
+   * Every summon runs through here, `page` and all — a call, not a piece of
+   * state reconciled by an effect. That distinction is the whole point: an
+   * effect keyed on "which page was asked for" does nothing at all when the
+   * answer has not changed, so Cmd+F pressed a second time (opened onto the
+   * search, Esc back to the root, Cmd+F again) would be a dead keypress.
+   */
+  const openPalette = useCallback(
+    (page: PageKey | null) => {
+      dispatchNav(page ? { type: "openAt", page } : { type: "open" });
+      setBusy(false);
+      // Read on every summon: the palette is modal, so the canvas cannot change
+      // underneath it, and every page below decides what it offers from this.
+      const selected = editorRef.current?.getSelectedShapes() ?? [];
+      setHasSelection(selected.length > 0);
+      setSelectedIcon(singleSelectedIcon(selected));
+      setOpen(true);
+    },
+    [editorRef]
+  );
+
+  /** Radix's handle on the dialog: a click away comes back through here. */
+  const onOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) openPalette(null);
+      else setOpen(false);
+    },
+    [openPalette]
+  );
+
+  // --- Shortcuts -----------------------------------------------------------
   useEffect(() => {
     function onKeyDown(e: globalThis.KeyboardEvent) {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setOpen((o) => !o);
-      }
+      const command = paletteKeyCommand(e, { isOpen: open });
+      if (!command) return;
+      e.preventDefault();
+      if (command.command === "close") setOpen(false);
+      else openPalette(command.page);
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    dispatchNav({ type: "open" });
-    setBusy(false);
-    // Read ONCE, on open: the palette is modal, so the canvas cannot change
-    // underneath it, and every page below decides what it offers from this.
-    const selected = editorRef.current?.getSelectedShapes() ?? [];
-    setHasSelection(selected.length > 0);
-    setSelectedIcon(singleSelectedIcon(selected));
-  }, [open, editorRef]);
+  }, [open, openPalette]);
 
   // At `maxShapesPerPage`, `putContentOntoCurrentPage` bails SILENTLY — it
   // emits this event and returns. Without listening, an insert at the cap looks
@@ -477,7 +495,7 @@ export function usePalette(opts: {
 
   return {
     open,
-    setOpen,
+    onOpenChange,
     nav,
     page,
     dispatch: dispatchNav,
