@@ -1,17 +1,20 @@
 /**
- * PROTOTYPE — throwaway. Parent-side API for the teleprompter popup, cloned
- * from `diagram-window.ts`.
+ * Parent-side API for the teleprompter popup, cloned from `diagram-window.ts`.
  *
  * The editor calls `enableTeleprompterEditorMode()` to answer the popup's
  * heartbeat and handshake, and {@link pushTeleprompterState} whenever what it
  * has open changes. Because the popup has no picker, those pushes are the *only*
  * way it learns what to show.
+ *
+ * The wire format and the reasoning behind the push-not-poll design live in
+ * `teleprompter-protocol.ts`, which is the de facto ADR for this pair.
  */
 import {
   sendToTeleprompter,
   subscribeTeleprompterParent,
   type CaptureStatus,
   type EditorTab,
+  type ClipMarks,
   type TeleprompterCommand,
   type TeleprompterChildToParentMessage,
 } from "./teleprompter-protocol";
@@ -20,6 +23,8 @@ export type TeleprompterEditorState = {
   videoId: string | null;
   capture: CaptureStatus;
   tab: EditorTab;
+  /** This session's clips, for the marks display on the glass. */
+  marks?: ClipMarks;
 };
 
 const TELEPROMPTER_PATH = "/teleprompter";

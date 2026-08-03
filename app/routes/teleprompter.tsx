@@ -25,6 +25,7 @@ import { useTeleprompterWpm } from "@/features/teleprompter/teleprompter-setting
 import { BeatsView } from "@/features/teleprompter/beats-view";
 import { TeleprompterCrawl } from "@/features/teleprompter/teleprompter-crawl";
 import { teleprompterSession } from "@/features/teleprompter/teleprompter-session";
+import { SessionMarks } from "@/features/teleprompter/session-marks";
 import type { Route } from "./+types/teleprompter";
 
 const PING_INTERVAL_MS = 2000;
@@ -57,6 +58,7 @@ export default function Teleprompter() {
           videoId: msg.videoId,
           capture: msg.capture,
           tab: msg.tab,
+          marks: msg.marks,
           at: Date.now(),
         });
       } else if (msg.type === "pong") {
@@ -162,6 +164,12 @@ export default function Teleprompter() {
         status={state.capture}
         editorConnected={state.editorConnected}
       />
+
+      {/*
+        Always mounted: with no session under way it draws nothing at all, so
+        the glass is unchanged until you press record.
+      */}
+      {state.editorConnected && <SessionMarks marks={state.marks} />}
 
       {!hasContent ? (
         <div className="flex h-full items-center justify-center px-12 text-center">
