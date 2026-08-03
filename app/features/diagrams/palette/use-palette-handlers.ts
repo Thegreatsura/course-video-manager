@@ -2,9 +2,9 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { useNavigate, useRevalidator } from "react-router";
 import {
-  isHeadPreserved,
+  fetchSnapshotList,
+  isHeadCaptured,
   type Snapshot,
-  type SnapshotListResponse,
 } from "@/features/diagrams/snapshot-list";
 import type { PaletteHandlers } from "./use-palette";
 
@@ -21,7 +21,7 @@ export function usePaletteHandlers(opts: {
   /** Cancels the debounced autosave and lands it now. */
   flushPendingSave: () => Promise<void>;
   preserveSnapshot: () => Promise<void>;
-  handleRestoreRequest: (snapshot: Snapshot, headIsPreserved: boolean) => void;
+  handleRestoreRequest: (snapshot: Snapshot, headIsCaptured: boolean) => void;
   handleCopyDiagramContents: (id: string) => Promise<void>;
   handleCreateDiagram: () => Promise<void>;
   /** Re-reads head from the server and loads it into the editor. */
@@ -48,28 +48,23 @@ export function usePaletteHandlers(opts: {
         // "Discard changes since the last snapshot" — the same restore the
         // timeline performs, on the newest snapshot, and through the same
         // handler, so the confirm dialog still appears when the head is not
-        // already preserved.
-        try {
-          const res = await fetch(`/api/diagrams/${diagramId}/snapshots/list`);
-          if (!res.ok) {
-            toast.error("Failed to load snapshots");
-            return;
-          }
-          const data = (await res.json()) as SnapshotListResponse;
-          // The list comes back oldest-first.
-          const newest: Snapshot | undefined =
-            data.snapshots?.[data.snapshots.length - 1];
-          if (!newest) {
-            toast.error("No snapshots to restore");
-            return;
-          }
-          handleRestoreRequest(
-            newest,
-            isHeadPreserved(data.snapshots, data.headContentHash)
-          );
-        } catch {
+        // already captured on the timeline.
+        const data = await fetchSnapshotList(diagramId);
+        if (!data) {
           toast.error("Failed to load snapshots");
+          return;
         }
+        // The list comes back oldest-first.
+        const newest: Snapshot | undefined =
+          data.snapshots?.[data.snapshots.length - 1];
+        if (!newest) {
+          toast.error("No snapshots to restore");
+          return;
+        }
+        handleRestoreRequest(
+          newest,
+          isHeadCaptured(data.snapshots, data.headContentHash)
+        );
       },
 
       onCopyContents: () => handleCopyDiagramContents(diagramId),
