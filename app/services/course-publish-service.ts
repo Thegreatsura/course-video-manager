@@ -1,5 +1,5 @@
 import { Config, Deferred, Effect, Exit, Schedule } from "effect";
-import { FileSystem } from "@effect/platform";
+import { CommandExecutor, FileSystem } from "@effect/platform";
 import path from "node:path";
 import { VideoOperationsService } from "./db-video-operations.server";
 import { VersionOperationsService } from "./db-version-operations.server";
@@ -13,6 +13,7 @@ import {
   toExportClips,
 } from "./export-hash";
 import { garbageCollect } from "./export-hash.server";
+import { ensureExportDigest } from "./export-sha256-sidecar";
 import { FINAL_VIDEO_PADDING } from "@/features/video-editor/constants";
 import { resolveVideoFormat } from "@/features/videos/video-format";
 import { DoesNotExistOnDbError } from "./publish-to-dropbox";
@@ -25,9 +26,13 @@ import {
 } from "./course-publish-errors";
 import {
   noExportPhase,
+  resolveDropboxCourseDir,
   syncFrozenCourseVersionToDropbox,
 } from "./course-publish-dropbox";
+import { EMPTY_REUSE_PLAN, planBundleReuse } from "./course-publish-reuse-plan";
+import { getValidDropboxAccessToken } from "./dropbox-auth-service";
 import {
+  extractErrorMessage,
   runObservedExportLoop,
   type EmitPublishDetailEvent,
   type PublishStage,
@@ -154,8 +159,12 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           hash
         );
 
-        // Skip if already exported
+        // Skip if already exported — but not before making sure it carries a
+        // digest. An export that predates sidecars is exactly the one that
+        // never gets encoded again, so this path is the only one that can
+        // ever close the gap.
         if (yield* effectFs.exists(targetPath)) {
+          yield* ensureExportDigest(effectFs, targetPath);
           return { targetPath, owner };
         }
 
@@ -186,6 +195,12 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           `${videoId}.mp4`
         );
         yield* effectFs.rename(videoIdPath, targetPath);
+
+        // Digest it now, while it is the newest thing on the disk. A later
+        // Publish that copies this Video inside Dropbox rather than uploading
+        // it never streams the bytes, so this is the only moment they are
+        // guaranteed to pass through our hands.
+        yield* ensureExportDigest(effectFs, targetPath);
 
         return { targetPath, owner };
       });
@@ -348,9 +363,38 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         // Export Hash is untouched by Submit: the clone copies Clip
         // filenames, source timings and order verbatim and never mutates the
         // source rows, so this walk sees exactly what validation saw.
-        const { unexportedVideos, shippingVideos } = yield* findShippingVideos(
-          latestVersion.id,
-          includeTodoLessons
+        const {
+          unexportedVideos: rosterUnexportedVideos,
+          shippingVideos,
+          courseName: dropboxCourseName,
+        } = yield* findShippingVideos(latestVersion.id, includeTodoLessons);
+
+        // ── The reuse plan, drawn before the GPU is touched ─────────────────
+        // A Video the previously Published Bundle already holds is copied
+        // inside Dropbox, so it needs neither an upload nor an ENCODE. Drawing
+        // the plan here — rather than inside the commit, where the copying
+        // happens — is what lets it cancel work in the export pool.
+        //
+        // Any failure at all yields an empty plan. Reuse is an optimisation,
+        // and a Publish must never fail because the optimisation could not be
+        // worked out.
+        // Captured here, where the export pool's context is still in scope, so
+        // the commit can re-run a cancelled encode from inside its own.
+        const commandExecutor = yield* CommandExecutor.CommandExecutor;
+
+        const reusePlan = yield* Effect.gen(function* () {
+          const accessToken = yield* getValidDropboxAccessToken;
+          const dropboxCourseDir =
+            yield* resolveDropboxCourseDir(dropboxCourseName);
+          return yield* planBundleReuse({ accessToken, dropboxCourseDir });
+        }).pipe(Effect.catchAll(() => Effect.succeed(EMPTY_REUSE_PLAN)));
+
+        // Videos whose bytes Dropbox can produce on its own never enter the
+        // export queue. This is the case that hurts most today: a re-Publish
+        // after the garbage collector has reclaimed an export currently
+        // re-encodes the whole Video only to upload bytes Dropbox already had.
+        const unexportedVideos = rosterUnexportedVideos.filter(
+          (video) => !reusePlan.has(video.exportHash)
         );
 
         // Announce the whole roster before either pool starts, so every Video
@@ -454,6 +498,45 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
             includeTodoLessons,
             onDetailEvent,
             awaitVideoReady,
+            // The same plan the export roster was filtered against. Handing it
+            // over rather than letting the commit redraw it keeps the two
+            // decisions identical — a Video dropped from the export queue is
+            // exactly a Video the commit will copy.
+            //
+            // `restore` is the other half of that: the roster filter spent
+            // this Video's local copy before the commit had proved it could
+            // get the remote one, so the commit must be able to encode it
+            // after all. It runs outside the export pool because the pool may
+            // already have finished; fallbacks are rare enough that the GPU
+            // contention costs less than the Publish it saves.
+            cancelledExports: {
+              plan: reusePlan,
+              restore: (videoId: string): Effect.Effect<void, ExportError> =>
+                exportVideoCore(videoId).pipe(
+                  Effect.asVoid,
+                  // Whatever an encode can go wrong with — a Video that has
+                  // gone from the database, an ffmpeg that would not run —
+                  // reaches the commit as the one failure it can attribute to
+                  // a Video: this Video did not export.
+                  Effect.catchAll((error) =>
+                    Effect.fail(
+                      new ExportError({
+                        message: `Export failed for video ${videoId}: ${extractErrorMessage(
+                          error,
+                          "unknown error"
+                        )}`,
+                      })
+                    )
+                  ),
+                  // The commit's context is fixed by the time it calls this,
+                  // so ffmpeg's executor rides along from here rather than
+                  // being demanded of the caller.
+                  Effect.provideService(
+                    CommandExecutor.CommandExecutor,
+                    commandExecutor
+                  )
+                ),
+            },
           }).pipe(Effect.retry(Schedule.recurs(1)))
         );
 

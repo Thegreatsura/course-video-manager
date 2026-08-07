@@ -1,5 +1,7 @@
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { FileSystem } from "@effect/platform";
+import { createHash } from "node:crypto";
+import { DropboxContentHasher } from "./dropbox-content-hash";
 
 /**
  * The digest of an Exported Video, cached on disk beside the export itself.
@@ -74,6 +76,60 @@ export const readExportDigest = (
     Effect.map((raw) => parseDigest(raw, expectedBytes)),
     Effect.catchAll(() => Effect.succeed(null))
   );
+
+/** Read an Exported Video once and derive both digests from the one pass. */
+export const computeExportDigest = (
+  fs: FileSystem.FileSystem,
+  exportPath: string
+): Effect.Effect<ExportDigest, never, never> =>
+  Effect.gen(function* () {
+    const sha256Hash = createHash("sha256");
+    const contentHasher = new DropboxContentHasher();
+    const bytes = yield* fs.stream(exportPath).pipe(
+      Stream.runFold(0, (total, chunk) => {
+        sha256Hash.update(chunk);
+        contentHasher.update(chunk);
+        return total + chunk.byteLength;
+      })
+    );
+    return {
+      sha256: sha256Hash.digest("hex"),
+      bytes,
+      contentHash: contentHasher.digest(),
+    };
+  }).pipe(Effect.orDie);
+
+/**
+ * Give an export a sidecar if it does not already have a usable one.
+ *
+ * Sidecars used to be written only by an upload, which was sound while every
+ * Publish uploaded everything. Once a Publish can COPY an unchanged Video
+ * inside Dropbox instead, no upload happens — so a sidecar written at upload
+ * time would never be written again, and the coverage that verification
+ * depends on would freeze wherever it stood.
+ *
+ * Writing at export time inverts that: every Exported Video carries its digest
+ * from birth, so the immutability check is free and grows to cover everything.
+ * "Every" includes the export the pool finds already on disk and skips — that
+ * is precisely the old export whose sidecar is still missing, so digesting
+ * only the freshly encoded ones would leave the backlog uncovered for ever.
+ *
+ * The read is therefore conditional, not the write: a file that already has a
+ * sound sidecar costs one stat. Best-effort throughout — a digest that cannot
+ * be taken or written costs the next Publish a re-read and is never a reason
+ * to fail this one.
+ */
+export const ensureExportDigest = (
+  fs: FileSystem.FileSystem,
+  exportPath: string
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const size = Number((yield* fs.stat(exportPath)).size);
+    const cached = yield* readExportDigest(fs, exportPath, size);
+    if (cached) return;
+    const digest = yield* computeExportDigest(fs, exportPath);
+    yield* writeExportDigest(fs, exportPath, digest);
+  }).pipe(Effect.ignore);
 
 /**
  * Best-effort: a sidecar that cannot be written costs the next Publish a
