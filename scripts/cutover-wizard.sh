@@ -184,7 +184,7 @@ finish() {
 # Spec #1536, PR #1542, runbook docs/planetscale-cutover.md, ADR 0025.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=11
+TOTAL_STAGES=12
 
 # The wizard runs against the repo it lives in, and the monorepo keeps ONE .env
 # at the workspace root — apps/local, apps/remote and cvm all read that file.
@@ -219,7 +219,7 @@ say "PR #1542 split this repo into apps/local, apps/remote and packages/core."
 say "The code has landed. Everything left is infrastructure, and this wizard"
 say "is that part."
 printf '\n'
-warn "cvm is DEAD on this machine until stage 9. It now reaches the domain"
+warn "cvm is DEAD on this machine until stage 10. It now reaches the domain"
 note "  data only over HTTP, and CVM_API_URL/CVM_API_TOKEN do not exist yet."
 printf '\n'
 
@@ -254,12 +254,19 @@ pause "Press Enter to continue"
 # ── 2 ─────────────────────────────────────────────────────────────────────
 stage "PlanetScale — create the database"
 
-say "PS-5, London, Postgres. The spec's sizing: the whole database is ~81 MB."
+say "PS-5, London, Postgres 17. The spec's sizing: the whole database is ~81 MB."
 open_url "https://app.planetscale.com/"
 step "Create a new Postgres database."
 step "Cluster size PS-5. Region: London (eu-west-2)."
+step "Postgres version: 17. CHANGE THIS — the dropdown defaults to the newest."
 step "Once it is up, open Settings → Backups."
 step "Set the backup schedule to DAILY, retained 30 days."
+printf '\n'
+note "17 because the local container is 17.0 and this wizard restores a dump"
+note "taken by its pg_dump. A dump from 18 cannot be restored INTO a 17 server,"
+note "so choosing 18 would weld shut the revert path the next week depends on."
+note "PlanetScale has no in-place major upgrade, but at 81 MB moving to 18 later"
+note "is a minute of data and a calm afternoon — not this irreversible step."
 printf '\n'
 note "Daily, not weekly, and this is the one setting worth being fussy about:"
 note "a 30-day window over WEEKLY backups means replaying up to seven days of"
@@ -270,33 +277,212 @@ confirm "Database created, daily backups retained 30 days?" \
   || die "Come back when it is up — nothing has changed yet."
 
 # ── 3 ─────────────────────────────────────────────────────────────────────
-stage "PlanetScale — the two connection strings"
+stage "PlanetScale — two roles, not one"
 
-say "A hosted Postgres hands out two, and this repo uses both for different jobs:"
+say "Create TWO roles. Each one gives you its own connection string, and which"
+say "role a string belongs to is what the next stage is really asking."
 printf '\n'
-step "DATABASE_URL      — through the POOLER (PgBouncer). Every application query."
-step "DIRECT_DATABASE_URL — straight to the PRIMARY. Migrations only."
+printf '  %scvm-migrate%s — tick ONLY the last permission in the list:\n' "$BOLD" "$RESET"
+note "    \"Create, modify, and drop databases, users, roles, tables,"
+note "     schemas, and all other objects.\""
+note "  Used by the restore below, and after that by exactly one thing"
+note "  forever: the apps/remote deploy's vercel-build step."
 printf '\n'
-note "Migrations cannot go through a transaction-mode pooler: it cannot carry"
-note "session state that DDL needs — advisory locks, SET, prepared statements."
+printf '  %scvm-app%s — tick EXACTLY TWO:\n' "$BOLD" "$RESET"
+note "    \"Read data from all tables, views, and sequences.\""
+note "    \"Write data to all tables, views, and sequences.\""
+note "  Used by every application query, in apps/local and apps/remote."
 printf '\n'
-step "In the PlanetScale dashboard: Connect → choose the Postgres/psql format."
-step "Copy the POOLED connection string first."
-ask_secret PS_POOLED_URL "Paste the POOLED connection string:"
-[[ -n "$PS_POOLED_URL" ]] || die "no pooled connection string given."
-step "Now switch to the DIRECT (primary) connection string and copy that."
-ask_secret PS_DIRECT_URL "Paste the DIRECT connection string:"
-[[ -n "$PS_DIRECT_URL" ]] || die "no direct connection string given."
-
-PS_POOLED_URL="$(unquote "$PS_POOLED_URL")"
-PS_DIRECT_URL="$(unquote "$PS_DIRECT_URL")"
-if [[ "$PS_POOLED_URL" == "$PS_DIRECT_URL" ]]; then
-  warn "those two are identical — check you copied the pooled and the direct one."
-fi
-printf '  %s✓%s held in memory. They are written to .env at stage 7, not before.\n' "$GREEN" "$RESET"
-pause "Press Enter to continue"
+say "Leave the other nine unticked. They are monitoring, maintenance and"
+say "replication — PlanetScale's dashboard and autovacuum cover all of it."
+printf '\n'
+note "Why split: DATABASE_URL ends up in .env, in two Vercel variables and in"
+note "every runtime connection. Splitting makes the string that is EVERYWHERE"
+note "incapable of dropping a table, and leaves DDL to the one string a single"
+note "deploy step touches. Those two data roles apply to all tables whatever"
+note "owns them, so nothing needs GRANTing after a migration."
+printf '\n'
+note "If the dashboard fights you, one admin role for both strings is a fine"
+note "fallback — the spec does not require the split. Do not lose an hour here."
+printf '\n'
+confirm "Both roles created?" || die "Come back when they exist."
 
 # ── 4 ─────────────────────────────────────────────────────────────────────
+stage "PlanetScale — connection strings, and the port that pools them"
+
+say "PlanetScale shows you ONE connection string per role, and that is all it"
+say "will ever show you. Do not go looking for a second, 'pooled' one."
+printf '\n'
+note "The pooler is the SAME string on a different PORT. Every PlanetScale"
+note "Postgres database runs a PgBouncer on the primary's own node, already on,"
+note "nothing to enable:"
+printf '\n'
+printf '    %s5432%s  straight to Postgres  → migrations\n' "$BOLD" "$RESET"
+printf '    %s6432%s  through PgBouncer     → every application query\n' "$BOLD" "$RESET"
+printf '\n'
+note "The dialog hands you the 5432 form. This wizard makes the pooled one for"
+note "you by changing the port, so you paste what you are actually shown."
+printf '\n'
+note "Migrations must take 5432: PlanetScale's PgBouncer runs in transaction"
+note "mode only, which cannot carry the session state DDL needs — advisory"
+note "locks, SET outliving a statement, prepared statements."
+printf '\n'
+step "PlanetScale dashboard → Connect."
+step "Set the format dropdown to the URI / connection string form — the one"
+step "  starting postgresql://  — NOT the 'psql host=... port=...' form."
+step "Select role cvm-app and copy its connection string."
+ask_secret PS_APP_URL "Paste the cvm-app connection string:"
+[[ -n "$PS_APP_URL" ]] || die "no cvm-app connection string given."
+step "Now select role cvm-migrate and copy its connection string."
+ask_secret PS_DIRECT_URL "Paste the cvm-migrate connection string:"
+[[ -n "$PS_DIRECT_URL" ]] || die "no cvm-migrate connection string given."
+
+PS_APP_URL="$(unquote "$PS_APP_URL")"
+PS_DIRECT_URL="$(unquote "$PS_DIRECT_URL")"
+
+for u in "$PS_APP_URL" "$PS_DIRECT_URL"; do
+  [[ "$u" == postgres://* || "$u" == postgresql://* ]] || die \
+    "that is not a postgresql:// URI. Switch the dashboard's format dropdown to the URI form and re-run."
+done
+
+# strip_sslrootcert URL — drop `sslrootcert=system`.
+#
+# PlanetScale hands out a string ending `sslrootcert=system`, which is libpq
+# saying "verify against the operating system's trust store". node-postgres
+# does not speak that dialect: it reads sslrootcert as a FILE PATH and calls
+# readFileSync('system'), so every connection dies with ENOENT before a packet
+# is sent. psql, being libpq, connects perfectly — which is what makes this
+# worth stripping rather than diagnosing twice.
+#
+# Removing it does not weaken anything. `sslmode=verify-full` stays, and Node
+# then verifies against its own bundled CA list, which contains the public
+# authority PlanetScale's certificate comes from.
+strip_sslrootcert() {
+  local u="$1"
+  u="${u//&sslrootcert=system/}"
+  u="${u//\?sslrootcert=system&/?}"
+  u="${u//\?sslrootcert=system/}"
+  printf '%s' "$u"
+}
+
+# psql is libpq and WANTS sslrootcert=system; node-postgres chokes on it. So
+# both forms are kept, and each tool is handed the one it understands. Dropping
+# it for psql would be worse than useless: with sslmode=verify-full and no root
+# certificate named, libpq falls back to ~/.postgresql/root.crt, which does not
+# exist, and refuses the connection.
+PS_DIRECT_URL_LIBPQ="$PS_DIRECT_URL"
+
+if [[ "$PS_APP_URL" == *sslrootcert=system* || "$PS_DIRECT_URL" == *sslrootcert=system* ]]; then
+  PS_APP_URL="$(strip_sslrootcert "$PS_APP_URL")"
+  PS_DIRECT_URL="$(strip_sslrootcert "$PS_DIRECT_URL")"
+  printf '\n'
+  note "dropped 'sslrootcert=system' for everything that runs through Node —"
+  note "that is libpq syntax for the OS trust store, and node-postgres reads it"
+  note "as a filename. sslmode=verify-full stays, and Node verifies against its"
+  note "own CA list. psql keeps the original string, because libpq needs it."
+fi
+
+# to_pooled URL — the same credentials, aimed at PgBouncer instead of Postgres.
+# A URI with no port means 5432 by implication, so name 6432 rather than leave
+# the default to be guessed by whatever reads it next.
+to_pooled() {
+  local url="$1"
+  case "$url" in
+    *:6432*) printf '%s' "$url" ;;
+    *:5432*) printf '%s' "${url/:5432/:6432}" ;;
+    *)       printf '%s' "$url" | sed -E 's#^(postgres(ql)?://[^/?]+)#\1:6432#' ;;
+  esac
+}
+# mask_url URL — safe to print: the password becomes ****.
+mask_url() { printf '%s' "$1" | sed -E 's#(://[^:]+:)[^@]*(@)#\1****\2#'; }
+
+PS_POOLED_URL="$(to_pooled "$PS_APP_URL")"
+printf '\n'
+if [[ "$PS_POOLED_URL" == "$PS_APP_URL" ]]; then
+  warn "could not find a port to change in the cvm-app string."
+  note "  Derived: $(mask_url "$PS_POOLED_URL")"
+  note "  It should end in :6432. Fix it by hand in .env after this run."
+else
+  printf '  %s✓ pooled string derived%s\n' "$GREEN" "$RESET"
+  note "  $(mask_url "$PS_POOLED_URL")"
+fi
+if [[ "$PS_DIRECT_URL" == *:6432* ]]; then
+  warn "the cvm-migrate string points at 6432, the pooler. Migrations need 5432."
+  confirm "Go on anyway?" || die "Re-copy the cvm-migrate string on port 5432."
+fi
+printf '  %s✓%s held in memory. They are written to .env at stage 8, not before.\n' "$GREEN" "$RESET"
+
+# The dump waiting on disk was written by pg_dump 17. Restoring it into a
+# server OLDER than that is unsupported, and into a NEWER one costs the way
+# back — a dump taken there could never return to the local 17 container.
+# Cheap to check now; expensive to discover at stage 7.
+printf '\n'
+
+# pg_probe URL — connect, and say plainly what happened. Prints "OK <version>"
+# or "ERR <message>".
+#
+# Deliberately node-postgres and not psql. psql is libpq, and libpq accepts
+# connection strings node-postgres refuses — so a psql-shaped check reports a
+# healthy database right up until drizzle-kit, which is node-postgres, fails on
+# the same string and swallows the reason inside its spinner. This probe tests
+# the stack that actually runs.
+pg_probe() {
+  NODE_PATH="$REPO_ROOT/node_modules" node -e '
+    const fail = (e) => { console.log("ERR " + (e && e.message ? e.message : e)); process.exit(0); };
+    (async () => {
+      let Client;
+      try { Client = require("pg").Client; }
+      catch { return fail("cannot load the pg module — run pnpm install first"); }
+      let client;
+      // new Client() parses the connection string, and a bad one throws HERE,
+      // synchronously, before any promise exists to reject.
+      try { client = new Client({ connectionString: process.argv[1] }); }
+      catch (e) { return fail(e); }
+      try {
+        await client.connect();
+        const r = await client.query("show server_version");
+        console.log("OK " + r.rows[0].server_version);
+        await client.end();
+      } catch (e) { return fail(e); }
+    })();
+  ' "$1" 2>&1 | tail -n1
+}
+
+# The pooled string is the one every query will use from here on, and the
+# easiest of the two to paste from the wrong role. Prove it while a bad paste
+# still costs nothing.
+APP_PROBE="$(pg_probe "$PS_POOLED_URL" || true)"
+if [[ "$APP_PROBE" == OK* ]]; then
+  printf '  %s✓ the pooled (cvm-app) string connects on 6432%s\n' "$GREEN" "$RESET"
+else
+  warn "the POOLED string did not connect:"
+  note "  ${APP_PROBE#ERR }"
+  confirm "Go on anyway?" || die "Stopped: fix the pooled connection string."
+fi
+
+DIRECT_PROBE="$(pg_probe "$PS_DIRECT_URL" || true)"
+if [[ "$DIRECT_PROBE" != OK* ]]; then
+  warn "the DIRECT (cvm-migrate) string did not connect:"
+  note "  ${DIRECT_PROBE#ERR }"
+  die "Stopped: migrations cannot run. Fix the cvm-migrate string and re-run."
+fi
+PS_VERSION="$(printf '%s' "${DIRECT_PROBE#OK }" | cut -d. -f1)"
+if [[ -z "$PS_VERSION" ]]; then
+  warn "could not read the server version — check it before going on."
+elif [[ "$PS_VERSION" == "17" ]]; then
+  printf '  %s✓ PlanetScale is Postgres %s — matches the local container%s\n' "$GREEN" "$PS_VERSION" "$RESET"
+else
+  warn "PlanetScale is Postgres $PS_VERSION; the local container is 17."
+  note "  Newer: the restore will work, but a dump taken there can never go"
+  note "  back into your local 17 container — the revert path loses its data."
+  note "  Older: the restore will likely fail outright at stage 7."
+  note "  There is no in-place major upgrade, so this is decided now."
+  confirm "Go on with Postgres $PS_VERSION anyway?" \
+    || die "Recreate the database on Postgres 17 and re-run."
+fi
+pause "Press Enter to continue"
+
+# ── 5 ─────────────────────────────────────────────────────────────────────────
 stage "Migrate the empty database"
 
 say "This is the ONE time migrations are applied by hand. From here on the"
@@ -313,7 +499,7 @@ DIRECT_DATABASE_URL="$PS_DIRECT_URL" DATABASE_URL="$PS_DIRECT_URL" \
 printf '  %s✓ migrations applied%s\n' "$GREEN" "$RESET"
 pause "Press Enter to continue"
 
-# ── 5 ─────────────────────────────────────────────────────────────────────
+# ── 6 ─────────────────────────────────────────────────────────────────────────
 stage "Verify the risky schema features"
 
 say "PGlite cannot prove hosted compatibility, so these are checked against the"
@@ -341,7 +527,7 @@ note "saved to $VERIFY_OUT"
 step "Paste that output onto issue #1537 — the spec asks for the record."
 pause "Press Enter to continue"
 
-# ── 6 ─────────────────────────────────────────────────────────────────────
+# ── 7 ─────────────────────────────────────────────────────────────────────────
 stage "Move the data"
 
 say "The dump from stage 1 carries the schema, the data AND drizzle's record of"
@@ -362,20 +548,33 @@ confirm "Drop the PlanetScale schema and restore the dump?" || die "Stopped befo
 # the dump came from, so it is preferred; but the container may have no route
 # out, in which case the host's client does the job just as well — psql only
 # sends SQL, so its version matters far less than pg_dump's did.
-if docker exec -i "$LOCAL_CONTAINER" psql "$PS_DIRECT_URL" -c 'select 1' >/dev/null 2>&1; then
-  psql_ps() { docker exec -i "$LOCAL_CONTAINER" psql "$PS_DIRECT_URL" "$@"; }
+if docker exec -i "$LOCAL_CONTAINER" psql "$PS_DIRECT_URL_LIBPQ" -c 'select 1' >/dev/null 2>&1; then
+  psql_ps() { docker exec -i "$LOCAL_CONTAINER" psql "$PS_DIRECT_URL_LIBPQ" "$@"; }
   note "reaching PlanetScale through the container's psql"
-elif command -v psql >/dev/null 2>&1 && psql "$PS_DIRECT_URL" -c 'select 1' >/dev/null 2>&1; then
-  psql_ps() { psql "$PS_DIRECT_URL" "$@"; }
+elif command -v psql >/dev/null 2>&1 && psql "$PS_DIRECT_URL_LIBPQ" -c 'select 1' >/dev/null 2>&1; then
+  psql_ps() { psql "$PS_DIRECT_URL_LIBPQ" "$@"; }
   note "the container has no route out — using this machine's psql instead"
 else
   die "Nothing here can reach PlanetScale with psql. Check the direct string."
 fi
 
+# Dropping the objects one by one rather than dropping the schema: `public` is
+# owned by pg_database_owner, so a migration role that is not a superuser can
+# fill it but cannot drop it. Everything below was created by that role at
+# stage 5, so it owns all of it. The dump recreates `drizzle` but never
+# `public` — pg_dump does not emit it — so public must survive.
 psql_ps -v ON_ERROR_STOP=1 <<'SQL' || die "Could not clear the database."
 DROP SCHEMA IF EXISTS drizzle CASCADE;
-DROP SCHEMA public CASCADE;
-CREATE SCHEMA public;
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
+  END LOOP;
+  FOR r IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP
+    EXECUTE format('DROP SEQUENCE IF EXISTS public.%I CASCADE', r.sequencename);
+  END LOOP;
+END $$;
 SQL
 printf '  %s✓ cleared%s\n' "$GREEN" "$RESET"
 
@@ -391,7 +590,7 @@ DIRECT_DATABASE_URL="$PS_DIRECT_URL" DATABASE_URL="$PS_DIRECT_URL" \
 printf '  %s✓ schema up to date%s\n' "$GREEN" "$RESET"
 pause "Press Enter to continue"
 
-# ── 7 ─────────────────────────────────────────────────────────────────────
+# ── 8 ─────────────────────────────────────────────────────────────────────────
 stage "Point apps/local at the hosted database"
 
 say "apps/local connects to the database DIRECTLY — the Video Editor and the"
@@ -419,7 +618,7 @@ step "  keep going based on a measurement, not a feeling."
 note "If latency is bad, the fix is batching inside packages/core, not reversing."
 pause "Press Enter when the app is talking to the hosted database"
 
-# ── 8 ─────────────────────────────────────────────────────────────────────
+# ── 9 ─────────────────────────────────────────────────────────────────────────
 stage "Deploy apps/remote to Vercel"
 
 say "A small Hono app: the RPC API, and nothing else. No UI is being deployed."
@@ -440,7 +639,7 @@ printf '\n'
 printf '    %sDATABASE_URL%s        the POOLED string\n' "$BOLD" "$RESET"
 printf '    %sDIRECT_DATABASE_URL%s the DIRECT string\n' "$BOLD" "$RESET"
 printf '\n'
-note "They are on your clipboard's history from stage 3; both are also in"
+note "They are on your clipboard's history from stage 4; both are also in"
 note "  $ENV_FILE now."
 printf '\n'
 note "The vercel-build script takes precedence over the preset's build command,"
@@ -457,7 +656,7 @@ CVM_API_URL="${CVM_API_URL%/}"
 write_env_quoted CVM_API_URL "$CVM_API_URL"
 pause "Press Enter to continue"
 
-# ── 9 ─────────────────────────────────────────────────────────────────────
+# ── 10 ────────────────────────────────────────────────────────────────────────
 stage "Mint an API token"
 
 say "Access to the API is a token you mint deliberately — not a secret copied"
@@ -488,7 +687,7 @@ printf '\n'
 warn "NEVER set CVM_LOCAL_MACHINE on a remote box."
 pause "Press Enter to continue"
 
-# ── 10 ────────────────────────────────────────────────────────────────────
+# ── 11 ────────────────────────────────────────────────────────────────────────
 stage "Smoke test — cvm over the wire"
 
 say "Your own cvm now takes exactly the route an agent takes. That is the point"
@@ -511,7 +710,7 @@ else
 fi
 pause "Press Enter to continue"
 
-# ── 11 ────────────────────────────────────────────────────────────────────
+# ── 12 ────────────────────────────────────────────────────────────────────────
 stage "Aftercare — what is true now, and what to watch"
 
 say "What changed:"
