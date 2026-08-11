@@ -25,3 +25,7 @@ assets/
 diagram-thumbnails/
 video-files
 .worktrees
+
+# The cutover wizard's working directory: full database dumps and the .env it
+# backed up before it wrote to it. Never commit either.
+.cutover/

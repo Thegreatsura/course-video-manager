@@ -22,6 +22,11 @@ EXCLUDE_PATTERNS=(
   # consume it as ONE module, so it grows by one table at a time and cannot be
   # split the way application code can.
   "packages/core/db/schema.ts"
+  # The one-off cutover wizard. It is a runbook that a human reads and answers
+  # from top to bottom at one terminal; sourcing it in fragments would hide the
+  # order of the stages, which is the only thing it teaches. It was already over
+  # the limit when it landed.
+  "scripts/cutover-wizard.sh"
 )
 
 should_skip() {
