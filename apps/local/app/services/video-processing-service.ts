@@ -8,6 +8,8 @@ import { homedir, tmpdir } from "os";
 import OpenAI from "openai";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { findSilenceInVideo } from "./silence-detection";
+import { VideoEditorLoggerService } from "./video-editor-logger-service";
+import { makeFfmpegLogger } from "./ffmpeg-video-logger";
 import type { SilenceLength } from "@/silence-detection-constants";
 import {
   VIDEO_FORMAT_DIMENSIONS,
@@ -69,6 +71,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
     effect: Effect.gen(function* () {
       const effectFs = yield* FileSystem.FileSystem;
       const ffmpegCommands = yield* FFmpegCommandsService;
+      const videoEditorLogger = yield* VideoEditorLoggerService;
       const transcriptionSemaphore = yield* Effect.makeSemaphore(
         TRANSCRIPTION_PERMITS
       );
@@ -157,6 +160,14 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           "FINISHED_VIDEOS_DIRECTORY"
         );
 
+        // Every ffmpeg invocation for this export is teed into
+        // `.data/logs/{videoId}.log` (fetch its path via VideoEditorLoggerService
+        // or GET /api/videos/:videoId/log-path) — the "cli-output" event, on
+        // both success and failure, so a rare hang or corrupt export has a
+        // durable artifact to diagnose from instead of a swallowed exit code.
+        const logCliOutput = (stage: "concat" | "normalize-audio") =>
+          makeFfmpegLogger(videoEditorLogger, opts.videoId, `export:${stage}`);
+
         // Create concatenated video using native FFmpeg, in the aspect ratio
         // that matches the video's format (portrait for shorts, landscape
         // otherwise).
@@ -165,16 +176,22 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
             opts.clips,
             VIDEO_FORMAT_DIMENSIONS[opts.format],
-            (percent) =>
-              opts.onProgress?.({ stage: "concatenating-clips", percent })
+            {
+              onProgress: (percent) =>
+                opts.onProgress?.({ stage: "concatenating-clips", percent }),
+              onLog: logCliOutput("concat"),
+            }
           );
 
         // Normalize audio
         opts.onStageChange?.("normalizing-audio");
         const normalizedPath = yield* ffmpegCommands.normalizeAudio(
           concatenatedPath,
-          (percent) =>
-            opts.onProgress?.({ stage: "normalizing-audio", percent })
+          {
+            onProgress: (percent) =>
+              opts.onProgress?.({ stage: "normalizing-audio", percent }),
+            onLog: logCliOutput("normalize-audio"),
+          }
         );
 
         // Move to final location
@@ -605,6 +622,10 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
         sendClipsToDavinciResolve,
       };
     }),
-    dependencies: [NodeContext.layer, FFmpegCommandsService.Default],
+    dependencies: [
+      NodeContext.layer,
+      FFmpegCommandsService.Default,
+      VideoEditorLoggerService.Default,
+    ],
   }
 ) {}

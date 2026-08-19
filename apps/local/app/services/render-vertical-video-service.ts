@@ -7,6 +7,8 @@ import crypto from "node:crypto";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoProcessingService } from "./video-processing-service";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
+import { VideoEditorLoggerService } from "./video-editor-logger-service";
+import { makeFfmpegLogger } from "./ffmpeg-video-logger";
 import { VIDEO_FORMAT_DIMENSIONS } from "@/features/videos/video-format";
 
 export type RenderVerticalStage =
@@ -27,6 +29,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
       const videoProcessing = yield* VideoProcessingService;
       const ffmpegCommands = yield* FFmpegCommandsService;
       const effectFs = yield* FileSystem.FileSystem;
+      const videoEditorLogger = yield* VideoEditorLoggerService;
 
       const renderVerticalVideo = Effect.fn("renderVerticalVideo")(
         function* (opts: {
@@ -46,6 +49,14 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             });
           }
 
+          // Every ffmpeg invocation for this render is teed into
+          // `.data/logs/{videoId}.log` (the "cli-output" event, on both
+          // success and failure) — see the matching comment in
+          // video-processing-service.ts's exportVideoClips.
+          const logCliOutput = (
+            stage: "concat" | "normalize-audio" | "composite-overlay"
+          ) => makeFfmpegLogger(videoEditorLogger, opts.videoId, `short:${stage}`);
+
           // Step 1: Concatenate clips → temp file (not the final output path,
           // since the composite step will write the final .mp4)
           opts.onStageChange?.("concatenating-clips");
@@ -60,10 +71,13 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
               })),
               // The vertical renderer always produces a 9:16 short — the Remotion
               // subtitle/CTA overlay below is rendered at 1080x1920 to match.
-              VIDEO_FORMAT_DIMENSIONS.short
+              VIDEO_FORMAT_DIMENSIONS.short,
+              { onLog: logCliOutput("concat") }
             );
-          const concatenatedPath =
-            yield* ffmpegCommands.normalizeAudio(rawConcatenatedPath);
+          const concatenatedPath = yield* ffmpegCommands.normalizeAudio(
+            rawConcatenatedPath,
+            { onLog: logCliOutput("normalize-audio") }
+          );
 
           // Clean up raw concatenated file
           yield* effectFs
@@ -139,7 +153,8 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           yield* ffmpegCommands.compositeOverlay(
             concatenatedPath,
             overlayPath,
-            outputPath
+            outputPath,
+            logCliOutput("composite-overlay")
           );
 
           // Clean up intermediate files
@@ -160,6 +175,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
       NodeContext.layer,
       VideoProcessingService.Default,
       FFmpegCommandsService.Default,
+      VideoEditorLoggerService.Default,
     ],
   }
 ) {}
