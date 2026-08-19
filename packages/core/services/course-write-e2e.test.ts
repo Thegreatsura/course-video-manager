@@ -104,6 +104,13 @@ const setup = async () => {
       return yield* lsOps.getLessonsBySectionId(sectionId);
     }).pipe(Effect.provide(dbLayer), Effect.runPromise);
 
+  const getVersionHasChanges = () =>
+    Effect.gen(function* () {
+      const versionOps = yield* VersionOperationsService;
+      const found = yield* versionOps.getCourseVersionById(version.id);
+      return found.hasChanges;
+    }).pipe(Effect.provide(dbLayer), Effect.runPromise);
+
   return {
     run,
     repoVersionId: version.id,
@@ -112,6 +119,7 @@ const setup = async () => {
     getLesson,
     getSection,
     getLessonsInSection,
+    getVersionHasChanges,
   };
 };
 
@@ -223,6 +231,47 @@ describe("CourseWriteService (DB-only)", () => {
       expect(result.success).toBe(true);
       const archived = await getSection(section.id);
       expect(archived.archivedAt).not.toBeNull();
+    });
+  });
+
+  describe("hasChanges", () => {
+    it("is false on a freshly created Draft Version", async () => {
+      const { getVersionHasChanges } = await setup();
+
+      expect(await getVersionHasChanges()).toBe(false);
+    });
+
+    it("flips true once a write lands on the Draft Version", async () => {
+      const { run, repoVersionId, getVersionHasChanges } = await setup();
+
+      expect(await getVersionHasChanges()).toBe(false);
+
+      await run(
+        Effect.gen(function* () {
+          const service = yield* CourseWriteService;
+          return yield* service.addSection(repoVersionId, "Before We Start");
+        })
+      );
+
+      expect(await getVersionHasChanges()).toBe(true);
+    });
+
+    it("stays true across further writes (archiveSection included)", async () => {
+      const { run, createSection, createLesson, getVersionHasChanges } =
+        await setup();
+
+      const section = await createSection("Intro", 1);
+      await createLesson(section.id, "Lesson", 1);
+      expect(await getVersionHasChanges()).toBe(true);
+
+      await run(
+        Effect.gen(function* () {
+          const service = yield* CourseWriteService;
+          return yield* service.archiveSection(section.id);
+        })
+      );
+
+      expect(await getVersionHasChanges()).toBe(true);
     });
   });
 });
