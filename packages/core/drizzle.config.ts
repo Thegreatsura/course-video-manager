@@ -1,5 +1,18 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "drizzle-kit";
 import { resolveMigrationDatabaseUrl } from "./db/database-url.js";
+
+/**
+ * drizzle-kit runs in THIS package, but the author's environment lives in the
+ * .env at the repo root — one file for the whole monorepo. Nothing loads it for
+ * a bare binary, so load it here. A missing file is not an error: on a deployed
+ * box the variables are real environment variables and there is no .env.
+ */
+try {
+  process.loadEnvFile(fileURLToPath(new URL("../../.env", import.meta.url)));
+} catch {
+  // No .env — the environment supplies the variables directly.
+}
 
 /**
  * The schema, the migrations and the tooling that reads them live TOGETHER, in
