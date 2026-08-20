@@ -36,6 +36,21 @@ function seedSettings(settings: Partial<CenteringSettings>) {
 }
 
 /**
+ * `window` is a system boundary too, same rule as `localStorage` above —
+ * stubbed the same way `recent-icons.test.ts` stubs it, and always torn back
+ * down so a test that forgets to call this still runs in the no-window
+ * environment every other test in this file relies on.
+ */
+function withWindowWidth<T>(innerWidth: number, fn: () => T): T {
+  (globalThis as { window?: unknown }).window = { innerWidth };
+  try {
+    return fn();
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+}
+
+/**
  * A stand-in for tldraw's `Editor` — a third-party boundary. Only the camera
  * call matters here, so the fake records it rather than simulating it.
  */
@@ -66,55 +81,89 @@ function fakeEditor(opts: {
 
 describe("centreCameraOnContent", () => {
   it("frames the page's content dead-centre when no face-cam room is reserved", () => {
+    // Explicit, not implicit: CENTERING_DEFAULTS ships non-zero (Matt's own
+    // rig), so "nothing reserved" has to be seeded rather than assumed.
+    seedSettings({
+      faceCamWidth: 0,
+      paddingX: 0,
+      paddingY: 0,
+      maxZoomPercent: 800,
+    });
     const { editor, calls } = fakeEditor({
       bounds: { x: 100, y: 200, w: 400, h: 300 },
     });
     centreCameraOnContent(editor);
     expect(calls).toHaveLength(1);
-    // zoom = min(1000/400, 800/300) = 2.5, capped at baseZoom 1
-    // x = -100 + (0 + (1000 - 400*1)/2)/1 = 200
-    // y = -200 + (0 + (800 - 300*1)/2)/1 = 50
-    expect(calls[0]!.point).toMatchObject({ x: 200, y: 50, z: 1 });
+    // zoom = min(1000/400, 800/300) = 2.5 — width is the constraining axis,
+    // so it fills exactly; height has 50px of slack split above and below.
+    // x = -100 + (0 + (1000 - 400*2.5)/2)/2.5 = -100
+    // y = -200 + (0 + (800 - 300*2.5)/2)/2.5 = -190
+    expect(calls[0]!.point).toMatchObject({ x: -100, y: -190, z: 2.5 });
     expect(calls[0]!.opts).toMatchObject({ immediate: true });
   });
 
   it("reserves a full-height strip on the right for the face-cam", () => {
-    seedSettings({ faceCamWidth: 200 });
+    // paddingX/paddingY zeroed and maxZoomPercent set high to isolate this
+    // from CENTERING_DEFAULTS' own non-zero padding and zoom cap — this
+    // test is about the face-cam reservation alone.
+    seedSettings({
+      faceCamWidth: 200,
+      paddingX: 0,
+      paddingY: 0,
+      maxZoomPercent: 800,
+    });
     const { editor, calls } = fakeEditor({
       bounds: { x: 0, y: 0, w: 100, h: 100 },
     });
     centreCameraOnContent(editor);
     // safeWidth = 1000 - 200 = 800, safeHeight = 800 (full height, unaffected)
-    // fit zoom = min(800/100, 800/100) = 8, capped at baseZoom 1
-    // x = -0 + (0 + (800 - 100*1)/2)/1 = 350
-    // y = -0 + (0 + (800 - 100*1)/2)/1 = 350
-    expect(calls[0]!.point).toMatchObject({ x: 350, y: 350, z: 1 });
+    // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
+    // x = -0 + (0 + (800 - 100*8)/2)/8 = 0
+    // y = -0 + (0 + (800 - 100*8)/2)/8 = 0
+    expect(calls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
   });
 
-  it("insets the diagram by paddingX/paddingY on every side", () => {
-    seedSettings({ paddingX: 50, paddingY: 20 });
+  it("insets the diagram by paddingX/paddingY on every side — the fitted edge lands exactly on the padding line", () => {
+    seedSettings({
+      faceCamWidth: 0,
+      paddingX: 100,
+      paddingY: 100,
+      maxZoomPercent: 800,
+    });
     const { editor, calls } = fakeEditor({
-      bounds: { x: 0, y: 0, w: 100, h: 100 },
+      bounds: { x: 0, y: 0, w: 200, h: 100 },
     });
     centreCameraOnContent(editor);
-    // safeWidth = 1000 - 100 = 900, safeHeight = 800 - 40 = 760
-    // fit zoom = min(900/100, 760/100) = 7.6, capped at baseZoom 1
-    // x = -0 + (50 + (900 - 100*1)/2)/1 = 450
-    // y = -0 + (20 + (760 - 100*1)/2)/1 = 350
-    expect(calls[0]!.point).toMatchObject({ x: 450, y: 350, z: 1 });
+    // safeWidth = 1000 - 200 = 800, safeHeight = 800 - 200 = 600
+    // fit zoom = min(800/200, 600/100) = 4 — width is the constraining axis.
+    // x = -0 + (100 + (800 - 200*4)/2)/4 = 25 — and 25 * 4 = 100 = paddingX
+    //     exactly: the left edge of the content lands ON the padding line,
+    //     not floating somewhere inside it (the bug this test used to hide,
+    //     back when zoom capped at 100% and left a diagram this small just
+    //     sitting in the middle of a much bigger gap).
+    // y = -0 + (100 + (600 - 100*4)/2)/4 = 50
+    expect(calls[0]!.point).toMatchObject({ x: 25, y: 50, z: 4 });
   });
 
-  it("never zooms in past the editor's own 100%", () => {
-    // `targetZoom` is a cap in tldraw, not a target: a big diagram still zooms
-    // out to fit, but a single small shape does not fill the screen at 8x. The
-    // cap is whatever this editor calls 100% — not a hardcoded 1, which camera
-    // constraints can move.
+  it("zooms in past 100% to fill the safe area, clamped only by the camera's own zoom ceiling", () => {
+    // Spatial settings zeroed and maxZoomPercent set effectively unlimited,
+    // so zoomSteps is the only thing left to demonstrate here.
+    seedSettings({
+      faceCamWidth: 0,
+      paddingX: 0,
+      paddingY: 0,
+      maxZoomPercent: 100_000,
+    });
+    // No cap at the editor's "100%" (`baseZoom`) any more: a diagram this
+    // small would ask for 80x (min(1000/10, 800/10)) to fill the frame, which
+    // is past even this editor's own zoom ceiling (zoomSteps top * baseZoom =
+    // 8 * 2 = 16) — so the ceiling is what actually stops it, not 100%.
     const { editor, calls } = fakeEditor({
       bounds: { x: 0, y: 0, w: 10, h: 10 },
       baseZoom: 2,
     });
     centreCameraOnContent(editor);
-    expect(calls[0]!.point).toMatchObject({ z: 2 });
+    expect(calls[0]!.point).toMatchObject({ z: 16 });
   });
 
   it("leaves the camera alone when the page is empty", () => {
@@ -123,5 +172,120 @@ describe("centreCameraOnContent", () => {
     const { editor, calls } = fakeEditor({ bounds: undefined });
     centreCameraOnContent(editor);
     expect(calls).toHaveLength(0);
+  });
+
+  describe("maxZoomPercent", () => {
+    it("applies the real production defaults end to end when nothing has been tuned", () => {
+      // Nothing seeded: this is what a fresh install — or CENTERING_DEFAULTS
+      // itself, unedited — actually produces. A regression here means either
+      // the shipped numbers moved or the four of them stopped composing the
+      // way they're documented to.
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 10, h: 10 },
+      });
+      centreCameraOnContent(editor);
+      // insets: left 150, right 492 + 150 = 642, top/bottom 120.
+      // safeWidth = 1000 - 150 - 642 = 208, safeHeight = 800 - 120 - 120 = 560
+      // fit zoom = min(208/10, 560/10) = 20.8 — far past the default 225%
+      // cap (2.25 * baseZoom 1), which is the more restrictive of it and
+      // zoomSteps' own max (8), and wins.
+      expect(calls[0]!.point).toMatchObject({ z: 2.25 });
+    });
+
+    it("honours a configured value in place of the default", () => {
+      seedSettings({ maxZoomPercent: 150 });
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 10, h: 10 },
+      });
+      centreCameraOnContent(editor);
+      expect(calls[0]!.point).toMatchObject({ z: 1.5 });
+    });
+
+    it("still yields to zoomSteps' own max when that's the more restrictive of the two", () => {
+      seedSettings({ maxZoomPercent: 100_000 });
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 10, h: 10 },
+        zoomSteps: [0.1, 2],
+      });
+      centreCameraOnContent(editor);
+      expect(calls[0]!.point).toMatchObject({ z: 2 });
+    });
+  });
+
+  describe("sidebar independence", () => {
+    it("lands the diagram in exactly the same spot whether or not the Snapshot Timeline / Diagram Rail sidebar is eating the reserved strip", () => {
+      // The sidebar (800px of canvas left, out of a 1000px window) happens to
+      // be exactly as wide as the reserved face-cam strip: the canvas can't
+      // reach any of the strip, so nothing extra needs reserving from ITS
+      // edge — the sidebar is already doing that job. Padding zeroed and
+      // maxZoomPercent set high to isolate this from CENTERING_DEFAULTS'
+      // own non-zero padding and zoom cap — this test is about the sidebar.
+      seedSettings({
+        faceCamWidth: 200,
+        paddingX: 0,
+        paddingY: 0,
+        maxZoomPercent: 800,
+      });
+      const { editor: withSidebar, calls: withSidebarCalls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        viewport: { x: 0, y: 0, w: 800, h: 800 },
+      });
+      withWindowWidth(1000, () => centreCameraOnContent(withSidebar));
+      // safeWidth = 800 - 0 = 800, safeHeight = 800
+      // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
+      // x = -0 + (0 + (800 - 100*8)/2)/8 = 0
+      expect(withSidebarCalls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
+
+      // No sidebar (Focus Mode, or Playground Home): same window, same
+      // content, the canvas now spans it and reserves the strip itself.
+      const { editor: noSidebar, calls: noSidebarCalls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        viewport: { x: 0, y: 0, w: 1000, h: 800 },
+      });
+      withWindowWidth(1000, () => centreCameraOnContent(noSidebar));
+      // safeWidth = 1000 - 200 = 800, safeHeight = 800 — identical to above.
+      expect(noSidebarCalls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
+    });
+
+    it("still reserves whatever the sidebar doesn't already cover", () => {
+      // The sidebar only eats 100px of a 200px strip — the canvas has to
+      // leave the other 100px clear itself.
+      seedSettings({
+        faceCamWidth: 200,
+        paddingX: 0,
+        paddingY: 0,
+        maxZoomPercent: 800,
+      });
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        viewport: { x: 0, y: 0, w: 900, h: 800 },
+      });
+      withWindowWidth(1000, () => centreCameraOnContent(editor));
+      // right inset = max(200 - 100, 0) = 100
+      // safeWidth = 900 - 100 = 800, safeHeight = 800
+      // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
+      // x = -0 + (0 + (800 - 100*8)/2)/8 = 0
+      expect(calls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
+    });
+
+    it("falls back to reserving the full strip from the viewport's own edge without a window (SSR/tests)", () => {
+      // No `window` stubbed — every other test in this file runs this way,
+      // and it used to be the only way this function ran at all.
+      seedSettings({
+        faceCamWidth: 200,
+        paddingX: 0,
+        paddingY: 0,
+        maxZoomPercent: 800,
+      });
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 75, h: 100 },
+        viewport: { x: 0, y: 0, w: 800, h: 800 },
+      });
+      centreCameraOnContent(editor);
+      // safeWidth = 800 - 200 = 600, safeHeight = 800
+      // fit zoom = min(600/75, 800/100) = 8 — both axes fill exactly.
+      // x = -0 + (0 + (600 - 75*8)/2)/8 = 0
+      expect(calls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
+    });
   });
 });

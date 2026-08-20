@@ -1,9 +1,10 @@
 import { useEffect, useState, type RefObject } from "react";
-import type { Editor } from "tldraw";
+import { useValue, type Editor } from "tldraw";
 import { SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { centreCameraOnContent } from "./centre-camera-on-content";
 import {
+  getRightOffscreenWidth,
   getSafeAreaInsets,
   useCenteringSetting,
 } from "./diagram-centering-settings";
@@ -11,10 +12,11 @@ import {
 /**
  * A prototype tuning UI (see `docs/adr` — none written yet on purpose: this
  * is deliberately a debug tool, not a finished setting screen). It's how the
- * three numbers `centreCameraOnContent` reads get found in the first place:
- * open it, drag the values until the guide boxes and the diagram look right
- * against your actual camera setup, close it. Nothing here needs to be
- * pretty — it needs to be legible enough to tune live while sat in frame.
+ * four numbers `centreCameraOnContent` reads get found in the first place:
+ * open it, drag the values until the guide boxes, the zoom readout, and the
+ * diagram itself all look right against your actual camera setup, close it.
+ * Nothing here needs to be pretty — it needs to be legible enough to tune
+ * live while sat in frame.
  *
  * Deliberately independent of Focus Mode: Focus Mode hides the Snapshot
  * Timeline / Diagram Rail panel on the right, and tuning has to work with
@@ -31,17 +33,50 @@ export function DiagramCenteringDebug({
   const [faceCamWidth, setFaceCamWidth] = useCenteringSetting("faceCamWidth");
   const [paddingX, setPaddingX] = useCenteringSetting("paddingX");
   const [paddingY, setPaddingY] = useCenteringSetting("paddingY");
+  const [maxZoomPercent, setMaxZoomPercent] =
+    useCenteringSetting("maxZoomPercent");
   // Same insets `centreCameraOnContent` computes the camera move from — the
   // guide boxes below render them directly as CSS, so they can't drift from
-  // where the diagram actually lands.
-  const insets = getSafeAreaInsets({ faceCamWidth, paddingX, paddingY });
+  // where the diagram actually lands. Read fresh on every render (rather than
+  // cached in state) so a sidebar/Focus Mode toggle — which re-renders this
+  // component as a side effect of its parent's own re-render — recomputes it
+  // too; see `getRightOffscreenWidth` for why the sidebar matters here at all.
+  const viewport = editorRef.current?.getViewportScreenBounds();
+  const windowWidth =
+    typeof window !== "undefined"
+      ? window.innerWidth
+      : (viewport?.x ?? 0) + (viewport?.w ?? 0);
+  const rightOffscreen = viewport
+    ? getRightOffscreenWidth(viewport, windowWidth)
+    : 0;
+  const insets = getSafeAreaInsets(
+    { faceCamWidth, paddingX, paddingY },
+    rightOffscreen
+  );
 
   // Live-update: every persisted change re-runs the same recentre the rest
   // of the app uses, so the debug panel never drifts from real behaviour.
   useEffect(() => {
     const ed = editorRef.current;
     if (ed) centreCameraOnContent(ed);
-  }, [faceCamWidth, paddingX, paddingY, editorRef]);
+  }, [faceCamWidth, paddingX, paddingY, maxZoomPercent, editorRef]);
+
+  // The live counterpart to `maxZoomPercent` above: past the padded edges,
+  // this is what a small diagram's fit zoom actually comes out to, tuned
+  // against in real time rather than guessed at — drag the field, watch
+  // this move, stop where it looks right.
+  //
+  // `[editorRef.current]` (not `[editorRef]`) is deliberate: `useValue`
+  // builds its reactive subscription once per identity in the deps array,
+  // and the ref OBJECT never changes, only what it points at. Keying on the
+  // object would leave this watching a `computed` built before the editor
+  // ever mounted, permanently stuck reading `null` off a signal it never
+  // wired up.
+  const zoom = useValue(
+    "centering-debug-zoom",
+    () => editorRef.current?.getZoomLevel() ?? null,
+    [editorRef.current]
+  );
 
   return (
     <>
@@ -61,10 +96,13 @@ export function DiagramCenteringDebug({
       {open && (
         <>
           {/* Reserved face-cam strip — a full-height zone on the right the
-              diagram is kept clear of. */}
+              diagram is kept clear of. Drawn at whatever's left of it after
+              the sidebar's own width: the strip is pinned to the window's
+              edge, so a sidebar wide enough to cover it needs no red shown
+              here at all. */}
           <div
             className="pointer-events-none absolute right-0 top-0 z-40 h-full border-l-2 border-red-500/70 bg-red-500/10"
-            style={{ width: Math.max(faceCamWidth, 0) }}
+            style={{ width: Math.max(faceCamWidth - rightOffscreen, 0) }}
           />
           {/* The padded safe rect the diagram is actually fit-and-centred
               into — the same `getSafeAreaInsets` `centreCameraOnContent`
@@ -83,6 +121,12 @@ export function DiagramCenteringDebug({
             <div className="mb-2 text-xs font-semibold text-zinc-300">
               Diagram centering (debug)
             </div>
+            <div className="mb-2 flex items-center justify-between text-xs text-zinc-400">
+              <span>Zoom</span>
+              <span className="font-mono text-zinc-100">
+                {zoom === null ? "—" : `${Math.round(zoom * 100)}%`}
+              </span>
+            </div>
             <NumberField
               label="Face-cam width"
               value={faceCamWidth}
@@ -98,6 +142,12 @@ export function DiagramCenteringDebug({
               value={paddingY}
               onChange={setPaddingY}
             />
+            <NumberField
+              label="Max zoom %"
+              value={maxZoomPercent}
+              onChange={setMaxZoomPercent}
+              step={25}
+            />
           </div>
         </>
       )}
@@ -109,17 +159,21 @@ function NumberField({
   label,
   value,
   onChange,
+  step = 4,
 }: {
   label: string;
   value: number;
   onChange: (next: number) => void;
+  /** Pixel-sized fields (padding, face-cam width) move in fine steps; a
+   * percentage field wants coarser ones. */
+  step?: number;
 }) {
   return (
     <label className="mb-2 flex items-center justify-between gap-2 text-xs text-zinc-400 last:mb-0">
       <span>{label}</span>
       <Input
         type="number"
-        step={4}
+        step={step}
         value={value}
         onChange={(e) => {
           const next = Number(e.target.value);
