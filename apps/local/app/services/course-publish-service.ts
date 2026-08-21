@@ -1,20 +1,25 @@
 import { Config, Deferred, Effect, Exit, Schedule } from "effect";
-import { CommandExecutor, FileSystem } from "@effect/platform";
+import { FileSystem } from "@effect/platform";
 import path from "node:path";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import {
-  VideoProcessingService,
-  type PauseType,
-} from "./video-processing-service";
+import { VideoProcessingService } from "./video-processing-service";
 import {
   computeExportHash,
   resolveExportPath as resolveExportPathPure,
   toExportClips,
 } from "./export-hash";
 import { garbageCollect } from "./export-hash.server";
-import { ensureExportDigest } from "./export-sha256-sidecar";
-import { FINAL_VIDEO_PADDING } from "@/features/video-editor/constants";
+import {
+  ensureExportDigest,
+  ensureExportDuration,
+  sidecarPath,
+} from "./export-sha256-sidecar";
+import {
+  expectedExportDurationInSeconds,
+  isExportUnacceptablyShort,
+  paddedClipDurationsInSeconds,
+} from "./export-duration-check";
 import { resolveVideoFormat } from "@/features/videos/video-format";
 import { DoesNotExistOnDbError } from "./publish-to-dropbox";
 import { validatePublishability as validatePublishabilityCore } from "./course-publish-readiness";
@@ -26,13 +31,9 @@ import {
 } from "./course-publish-errors";
 import {
   noExportPhase,
-  resolveDropboxCourseDir,
   syncFrozenCourseVersionToDropbox,
 } from "./course-publish-dropbox";
-import { EMPTY_REUSE_PLAN, planBundleReuse } from "./course-publish-reuse-plan";
-import { getValidDropboxAccessToken } from "./dropbox-auth-service";
 import {
-  extractErrorMessage,
   runObservedExportLoop,
   type EmitPublishDetailEvent,
   type PublishStage,
@@ -131,6 +132,10 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         return yield* effectFs.exists(exportPath);
       });
 
+      /** Deleting a file we are replacing is never a reason to fail. */
+      const removeQuietly = (filePath: string) =>
+        effectFs.remove(filePath).pipe(Effect.catchAll(() => Effect.void));
+
       const exportVideoCore = Effect.fn("exportVideoCore")(function* (
         videoId: string,
         onStage?: (stage: "concatenating-clips" | "normalizing-audio") => void,
@@ -160,49 +165,94 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           hash
         );
 
-        // Skip if already exported — but not before making sure it carries a
-        // digest. An export that predates sidecars is exactly the one that
-        // never gets encoded again, so this path is the only one that can
-        // ever close the gap.
+        // What the Clips ask for, and what the renderer is told to make: one
+        // list of padded durations, used for both, so the file asked for and
+        // the file checked for cannot differ.
+        const clipDurations = paddedClipDurationsInSeconds(video.clips);
+        const renderClips = video.clips.map((clip, index) => ({
+          inputVideo: clip.videoFilename,
+          startTime: clip.sourceStartTime,
+          duration: clipDurations[index]!.duration,
+          pauseType: clipDurations[index]!.pauseType,
+          zoomType: clip.zoomType,
+        }));
+
+        const expectedDurationInSeconds =
+          expectedExportDurationInSeconds(clipDurations);
+
+        // An export already at its address is skipped, but only after it has
+        // answered for its duration. An export truncated before this check
+        // existed would otherwise be skipped for ever and shipped every time;
+        // a short one is removed with its sidecar and falls through to be
+        // re-encoded, which repairs the backlog without touching the exports
+        // that are sound.
         if (yield* effectFs.exists(targetPath)) {
-          yield* ensureExportDigest(effectFs, targetPath);
-          return { targetPath, owner };
+          const durationInSeconds = yield* ensureExportDuration(
+            effectFs,
+            targetPath,
+            // An export that cannot be probed at all is no more trustworthy
+            // than one measured short, and is refused the same way.
+            videoProcessing
+              .getVideoDurationInSeconds(targetPath)
+              .pipe(Effect.orElseSucceed(() => Number.NaN))
+          );
+          if (
+            !isExportUnacceptablyShort({
+              expectedDurationInSeconds,
+              actualDurationInSeconds: durationInSeconds,
+            })
+          ) {
+            return { targetPath, owner };
+          }
+          yield* removeQuietly(targetPath);
+          yield* removeQuietly(sidecarPath(targetPath));
         }
 
         // Export via ffmpeg → writes to {videoId}.mp4
-        yield* videoProcessing.exportVideoClips({
+        const rendered = yield* videoProcessing.exportVideoClips({
           videoId,
           format: resolveVideoFormat(video.format),
           shortsDirectoryOutputName: undefined,
-          clips: video.clips.map((clip, index, array) => {
-            const isFinalClip = index === array.length - 1;
-            return {
-              inputVideo: clip.videoFilename,
-              startTime: clip.sourceStartTime,
-              duration:
-                clip.sourceEndTime -
-                clip.sourceStartTime +
-                (isFinalClip ? FINAL_VIDEO_PADDING : 0),
-              pauseType: (clip.pauseType as PauseType) || "none",
-              zoomType: clip.zoomType,
-            };
-          }),
+          clips: renderClips,
           onStageChange: onStage,
           onProgress,
         });
 
-        // Move from {videoId}.mp4 to content-addressed path
         const videoIdPath = path.join(
           FINISHED_VIDEOS_DIRECTORY,
           `${videoId}.mp4`
         );
+
+        // Check the export against its own Clips BEFORE the rename. A file
+        // that never reaches its content-addressed path never becomes an
+        // Exported Video, so nothing downstream can address it and the next
+        // attempt re-encodes rather than skipping.
+        if (
+          isExportUnacceptablyShort({
+            expectedDurationInSeconds,
+            actualDurationInSeconds: rendered.durationInSeconds,
+          })
+        ) {
+          yield* removeQuietly(videoIdPath);
+          return yield* Effect.fail(
+            new ExportError({
+              message: `Export for video "${video.title}" (${videoId}) is short: its clips ask for ${expectedDurationInSeconds.toFixed(1)}s but the file is ${rendered.durationInSeconds.toFixed(1)}s`,
+            })
+          );
+        }
+
+        // Move from {videoId}.mp4 to content-addressed path
         yield* effectFs.rename(videoIdPath, targetPath);
 
         // Digest it now, while it is the newest thing on the disk. A later
         // Publish that copies this Video inside Dropbox rather than uploading
         // it never streams the bytes, so this is the only moment they are
         // guaranteed to pass through our hands.
-        yield* ensureExportDigest(effectFs, targetPath);
+        yield* ensureExportDigest(
+          effectFs,
+          targetPath,
+          rendered.durationInSeconds
+        );
 
         return { targetPath, owner };
       });
@@ -365,38 +415,18 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         // Export Hash is untouched by Submit: the clone copies Clip
         // filenames, source timings and order verbatim and never mutates the
         // source rows, so this walk sees exactly what validation saw.
-        const {
-          unexportedVideos: rosterUnexportedVideos,
-          shippingVideos,
-          courseName: dropboxCourseName,
-        } = yield* findShippingVideos(latestVersion.id, includeTodoLessons);
-
-        // ── The reuse plan, drawn before the GPU is touched ─────────────────
-        // A Video the previously Published Bundle already holds is copied
-        // inside Dropbox, so it needs neither an upload nor an ENCODE. Drawing
-        // the plan here — rather than inside the commit, where the copying
-        // happens — is what lets it cancel work in the export pool.
         //
-        // Any failure at all yields an empty plan. Reuse is an optimisation,
-        // and a Publish must never fail because the optimisation could not be
-        // worked out.
-        // Captured here, where the export pool's context is still in scope, so
-        // the commit can re-run a cancelled encode from inside its own.
-        const commandExecutor = yield* CommandExecutor.CommandExecutor;
-
-        const reusePlan = yield* Effect.gen(function* () {
-          const accessToken = yield* getValidDropboxAccessToken;
-          const dropboxCourseDir =
-            yield* resolveDropboxCourseDir(dropboxCourseName);
-          return yield* planBundleReuse({ accessToken, dropboxCourseDir });
-        }).pipe(Effect.catchAll(() => Effect.succeed(EMPTY_REUSE_PLAN)));
-
-        // Videos whose bytes Dropbox can produce on its own never enter the
-        // export queue. This is the case that hurts most today: a re-Publish
-        // after the garbage collector has reclaimed an export currently
-        // re-encodes the whole Video only to upload bytes Dropbox already had.
-        const unexportedVideos = rosterUnexportedVideos.filter(
-          (video) => !reusePlan.has(video.exportHash)
+        // Every Unexported Video this walk finds is exported. No encode is
+        // ever cancelled on the strength of a copy that has not happened yet:
+        // what Dropbox receives is decided by each Video's BYTES, and this
+        // machine has no bytes to compare until the encode has produced them.
+        // The saving survives because the encode is reproducible — a Video
+        // whose bytes Dropbox already holds is still copied rather than
+        // uploaded — so reuse now costs GPU time instead of a wrong Bundle
+        // (issue #1562).
+        const { unexportedVideos, shippingVideos } = yield* findShippingVideos(
+          latestVersion.id,
+          includeTodoLessons
         );
 
         // Announce the whole roster before either pool starts, so every Video
@@ -500,45 +530,6 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
             includeTodoLessons,
             onDetailEvent,
             awaitVideoReady,
-            // The same plan the export roster was filtered against. Handing it
-            // over rather than letting the commit redraw it keeps the two
-            // decisions identical — a Video dropped from the export queue is
-            // exactly a Video the commit will copy.
-            //
-            // `restore` is the other half of that: the roster filter spent
-            // this Video's local copy before the commit had proved it could
-            // get the remote one, so the commit must be able to encode it
-            // after all. It runs outside the export pool because the pool may
-            // already have finished; fallbacks are rare enough that the GPU
-            // contention costs less than the Publish it saves.
-            cancelledExports: {
-              plan: reusePlan,
-              restore: (videoId: string): Effect.Effect<void, ExportError> =>
-                exportVideoCore(videoId).pipe(
-                  Effect.asVoid,
-                  // Whatever an encode can go wrong with — a Video that has
-                  // gone from the database, an ffmpeg that would not run —
-                  // reaches the commit as the one failure it can attribute to
-                  // a Video: this Video did not export.
-                  Effect.catchAll((error) =>
-                    Effect.fail(
-                      new ExportError({
-                        message: `Export failed for video ${videoId}: ${extractErrorMessage(
-                          error,
-                          "unknown error"
-                        )}`,
-                      })
-                    )
-                  ),
-                  // The commit's context is fixed by the time it calls this,
-                  // so ffmpeg's executor rides along from here rather than
-                  // being demanded of the caller.
-                  Effect.provideService(
-                    CommandExecutor.CommandExecutor,
-                    commandExecutor
-                  )
-                ),
-            },
           }).pipe(Effect.retry(Schedule.recurs(1)))
         );
 

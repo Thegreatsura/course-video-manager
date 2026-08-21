@@ -33,6 +33,10 @@ import {
 } from "@/db/schema";
 import { fromPartial } from "@total-typescript/shoehorn";
 import { eq } from "drizzle-orm";
+import {
+  honestRenderedDurationInSeconds,
+  soundExportDurationProbe,
+} from "@/test-utils/fake-video-processing";
 
 let testDb: TestDb;
 let finishedVideosDir: string;
@@ -80,8 +84,12 @@ const setupSync = async () => {
           );
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
           fs.writeFileSync(outputPath, "dummy-video-content");
-          return outputPath;
+          return {
+            outputPath,
+            durationInSeconds: honestRenderedDurationInSeconds(opts),
+          };
         }),
+      getVideoDurationInSeconds: soundExportDurationProbe,
     })
   );
 

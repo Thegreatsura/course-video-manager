@@ -18,6 +18,10 @@ import { VideoProcessingService } from "@/services/video-processing-service";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { computeExportHash, type ExportClip } from "@/services/export-hash";
 import { clips as clipsTable } from "@/db/schema";
+import {
+  honestRenderedDurationInSeconds,
+  soundExportDurationProbe,
+} from "@/test-utils/fake-video-processing";
 
 let testDb: TestDb;
 let finishedVideosDir: string;
@@ -55,8 +59,12 @@ const setup = async () => {
         opts.onProgress?.({ stage: "concatenating-clips", percent: 50 });
         opts.onStageChange?.("normalizing-audio");
         opts.onProgress?.({ stage: "normalizing-audio", percent: 50 });
-        return outputPath;
+        return {
+          outputPath,
+          durationInSeconds: honestRenderedDurationInSeconds(opts),
+        };
       }),
+    getVideoDurationInSeconds: soundExportDurationProbe,
   } as any);
 
   const configLayer = Layer.setConfigProvider(
@@ -529,7 +537,8 @@ describe("CoursePublishService", () => {
       );
 
       const mockVideoProcessing = Layer.succeed(VideoProcessingService, {
-        exportVideoClips: () => Effect.succeed(""),
+        exportVideoClips: () =>
+          Effect.succeed({ outputPath: "", durationInSeconds: 0 }),
       } as any);
 
       const configLayer = Layer.setConfigProvider(

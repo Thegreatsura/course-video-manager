@@ -25,6 +25,15 @@ export type ExportDigest = {
   contentHash: string;
   /** Size in bytes, used to detect a sidecar that has fallen out of step. */
   bytes: number;
+  /**
+   * The export's measured duration in seconds, so the truncation check costs
+   * one ffprobe the first time and nothing afterwards.
+   *
+   * `null` when this digest was taken from a byte stream that never passed
+   * through ffprobe — an upload, or a file read back off disk. The duration is
+   * then simply not known yet, and whoever needs it measures it.
+   */
+  durationInSeconds: number | null;
 };
 
 export const SIDECAR_SUFFIX = ".sha256";
@@ -53,7 +62,10 @@ const parseDigest = (
   }
   if (typeof parsed !== "object" || parsed === null) return null;
 
-  const { sha256, contentHash, bytes } = parsed as Record<string, unknown>;
+  const { sha256, contentHash, bytes, durationInSeconds } = parsed as Record<
+    string,
+    unknown
+  >;
   if (typeof sha256 !== "string" || !HEX_64.test(sha256)) return null;
   if (typeof contentHash !== "string" || !HEX_64.test(contentHash)) return null;
   if (typeof bytes !== "number" || !Number.isInteger(bytes) || bytes < 0) {
@@ -62,8 +74,17 @@ const parseDigest = (
   // The one thing that could make a sidecar lie: bytes on disk that are not the
   // bytes it describes. Cheap to check, since the caller has already stat'd.
   if (bytes !== expectedBytes) return null;
+  // A sidecar written before durations were recorded has no such field. It is
+  // treated as absent rather than as an error, so it is simply replaced.
+  if (durationInSeconds !== null) {
+    if (typeof durationInSeconds !== "number") return null;
+    if (!Number.isFinite(durationInSeconds) || durationInSeconds < 0) {
+      return null;
+    }
+    return { sha256, contentHash, bytes, durationInSeconds };
+  }
 
-  return { sha256, contentHash, bytes };
+  return { sha256, contentHash, bytes, durationInSeconds: null };
 };
 
 /** The cached digest for an export, or `null` if there isn't a usable one. */
@@ -78,9 +99,10 @@ export const readExportDigest = (
   );
 
 /** Read an Exported Video once and derive both digests from the one pass. */
-export const computeExportDigest = (
+const computeExportDigest = (
   fs: FileSystem.FileSystem,
-  exportPath: string
+  exportPath: string,
+  durationInSeconds: number | null
 ): Effect.Effect<ExportDigest, never, never> =>
   Effect.gen(function* () {
     const sha256Hash = createHash("sha256");
@@ -96,11 +118,14 @@ export const computeExportDigest = (
       sha256: sha256Hash.digest("hex"),
       bytes,
       contentHash: contentHasher.digest(),
+      durationInSeconds,
     };
   }).pipe(Effect.orDie);
 
 /**
- * Give an export a sidecar if it does not already have a usable one.
+ * The digest of the export on disk, taking it — and writing the sidecar that
+ * caches it — if this machine does not already hold one. `null` when there is
+ * nothing to digest: no file at that path, or a file that cannot be read.
  *
  * Sidecars used to be written only by an upload, which was sound while every
  * Publish uploaded everything. Once a Publish can COPY an unchanged Video
@@ -108,28 +133,56 @@ export const computeExportDigest = (
  * time would never be written again, and the coverage that verification
  * depends on would freeze wherever it stood.
  *
- * Writing at export time inverts that: every Exported Video carries its digest
- * from birth, so the immutability check is free and grows to cover everything.
- * "Every" includes the export the pool finds already on disk and skips — that
- * is precisely the old export whose sidecar is still missing, so digesting
- * only the freshly encoded ones would leave the backlog uncovered for ever.
+ * Ensuring it at export time inverts that: every Exported Video carries its
+ * digest from birth, so the immutability check is free and grows to cover
+ * everything. "Every" includes the export the pool finds already on disk and
+ * skips — that is precisely the old export whose sidecar is still missing, so
+ * digesting only the freshly encoded ones would leave the backlog uncovered
+ * for ever. The read is therefore conditional, not the write: a file that
+ * already has a sound sidecar costs one stat.
  *
- * The read is therefore conditional, not the write: a file that already has a
- * sound sidecar costs one stat. Best-effort throughout — a digest that cannot
- * be taken or written costs the next Publish a re-read and is never a reason
- * to fail this one.
+ * Keeping the answer is what lets a Publish decide by BYTES. A Video's Byte
+ * Hash is the only thing that can say whether the file this machine holds is
+ * the file Dropbox already has, and the sidecar is where that hash lives.
+ * `null` therefore means "this machine cannot vouch for any bytes", never "the
+ * bytes are different" — the caller falls back rather than concluding. A
+ * caller with no use for the answer can simply discard it; best-effort
+ * throughout, so a digest that cannot be taken or written costs the next
+ * Publish a re-read and is never a reason to fail this one.
+ *
+ * `durationInSeconds` is what the caller has just measured, or `null` when it
+ * has measured nothing. It is only ever written down, never compared: a
+ * caller that holds no duration still gets the digest it asked for.
  */
 export const ensureExportDigest = (
   fs: FileSystem.FileSystem,
-  exportPath: string
-): Effect.Effect<void> =>
+  exportPath: string,
+  durationInSeconds: number | null
+): Effect.Effect<ExportDigest | null> =>
   Effect.gen(function* () {
     const size = Number((yield* fs.stat(exportPath)).size);
     const cached = yield* readExportDigest(fs, exportPath, size);
-    if (cached) return;
-    const digest = yield* computeExportDigest(fs, exportPath);
+    if (cached) {
+      // A sound sidecar that is only missing the duration is worth one small
+      // rewrite; re-reading the whole file to learn a number the caller
+      // already holds is not.
+      if (cached.durationInSeconds !== null || durationInSeconds === null) {
+        return cached;
+      }
+      const filled = { ...cached, durationInSeconds };
+      yield* writeExportDigest(fs, exportPath, filled);
+      return filled;
+    }
+    // A sidecar that is missing, torn, or disagrees with the file on disk is
+    // an absent one. Replacing it costs one read, once.
+    const digest = yield* computeExportDigest(
+      fs,
+      exportPath,
+      durationInSeconds
+    );
     yield* writeExportDigest(fs, exportPath, digest);
-  }).pipe(Effect.ignore);
+    return digest;
+  }).pipe(Effect.catchAll(() => Effect.succeed(null)));
 
 /**
  * Best-effort: a sidecar that cannot be written costs the next Publish a
@@ -143,3 +196,49 @@ export const writeExportDigest = (
   fs
     .writeFileString(sidecarPath(exportPath), JSON.stringify(digest))
     .pipe(Effect.ignore);
+
+/**
+ * The export's duration in seconds, measured at most once in its lifetime.
+ *
+ * A sidecar that already records a duration answers immediately. Anything else
+ * — no sidecar, a torn one, or one written before durations were recorded —
+ * costs one `measure`, and the answer is written down so the next Publish that
+ * asks pays nothing. This is what lets the truncation check run on every visit
+ * to an export, including the ones the export step finds already on disk.
+ *
+ * `measure` must already have collapsed its own failure to a number — an
+ * export that cannot be probed is not sound, and this is not the place to
+ * decide that. It stays generic in its CONTEXT alone, because the one measure
+ * that matters shells out to ffprobe and so carries a CommandExecutor.
+ */
+export const ensureExportDuration = <R>(
+  fs: FileSystem.FileSystem,
+  exportPath: string,
+  measure: Effect.Effect<number, never, R>
+): Effect.Effect<number, never, R> =>
+  Effect.gen(function* () {
+    const cached = yield* ensureExportDigest(fs, exportPath, null);
+    if (cached?.durationInSeconds != null) return cached.durationInSeconds;
+    const measured = yield* measure;
+    yield* ensureExportDigest(fs, exportPath, measured);
+    return measured;
+  });
+
+/**
+ * The duration this machine has already recorded for an export, or `null` when
+ * it has recorded none — no file, no sidecar, or a sidecar that disagrees with
+ * the file on disk.
+ *
+ * Cheap on purpose: a stat and a small read, never a pass over the export
+ * itself. It answers "do I already know this export is sound?", which is a
+ * question a walk over a whole Course has to be able to ask.
+ */
+export const readExportDurationInSeconds = (
+  fs: FileSystem.FileSystem,
+  exportPath: string
+): Effect.Effect<number | null> =>
+  Effect.gen(function* () {
+    const size = Number((yield* fs.stat(exportPath)).size);
+    const digest = yield* readExportDigest(fs, exportPath, size);
+    return digest?.durationInSeconds ?? null;
+  }).pipe(Effect.catchAll(() => Effect.succeed(null)));

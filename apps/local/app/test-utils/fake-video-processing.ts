@@ -1,7 +1,42 @@
 import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import {
+  VideoProcessingService,
+  type PauseType,
+} from "@/services/video-processing-service";
+import { expectedExportDurationInSeconds } from "@/services/export-duration-check";
+
+/**
+ * What an honest renderer reports for the file it just wrote: exactly the
+ * duration the Clips asked for.
+ *
+ * Every fake renderer owes the export step a duration now, because the export
+ * step refuses a short file. A fake that is not about truncation should say
+ * this, so that the truncation check stays invisible to it.
+ */
+export const honestRenderedDurationInSeconds = (exportOpts: {
+  clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;
+}): number =>
+  expectedExportDurationInSeconds(
+    (exportOpts.clips ?? []).map((clip) => ({
+      duration: clip.duration,
+      pauseType: clip.pauseType ?? "none",
+    }))
+  );
+
+/**
+ * What a fake probe reports for an export it did not render.
+ *
+ * A fake renderer writes a few bytes of text, so there is no real duration to
+ * measure from the file. A test that is not about truncation wants such a file
+ * treated as sound, and this is longer than any test's Clips ask for.
+ */
+export const SOUND_FAKE_EXPORT_DURATION_IN_SECONDS = 24 * 60 * 60;
+
+/** The duration probe of a fake renderer that never produces a short file. */
+export const soundExportDurationProbe = (): Effect.Effect<number> =>
+  Effect.succeed(SOUND_FAKE_EXPORT_DURATION_IN_SECONDS);
 
 /**
  * A VideoProcessingService fake with CONTROLLABLE COMPLETION: an encode can be
@@ -74,7 +109,10 @@ export const createControllableVideoProcessing = (opts: {
   const encodingCount = () => started.size - finished.size;
 
   const layer = Layer.succeed(VideoProcessingService, {
-    exportVideoClips: (exportOpts: { videoId: string }) =>
+    exportVideoClips: (exportOpts: {
+      videoId: string;
+      clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;
+    }) =>
       Effect.promise(async () => {
         const { videoId } = exportOpts;
         started.add(videoId);
@@ -90,8 +128,12 @@ export const createControllableVideoProcessing = (opts: {
           opts.content?.(videoId) ?? `dummy-video-content-${videoId}`
         );
         finished.add(videoId);
-        return outputPath;
+        return {
+          outputPath,
+          durationInSeconds: honestRenderedDurationInSeconds(exportOpts),
+        };
       }),
+    getVideoDurationInSeconds: soundExportDurationProbe,
   } as any);
 
   return {

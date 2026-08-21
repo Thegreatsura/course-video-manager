@@ -13,6 +13,10 @@ import {
   setupPublishableCourse as setup,
   testDb,
 } from "./course-publish-service-test-setup";
+import {
+  honestRenderedDurationInSeconds,
+  soundExportDurationProbe,
+} from "@/test-utils/fake-video-processing";
 
 setupPublishServiceTests();
 
@@ -78,8 +82,12 @@ describe("CoursePublishService — Submit before export", () => {
             `${exportOpts.videoId}.mp4`
           );
           fs.writeFileSync(outputPath, "dummy-video-content");
-          return outputPath;
+          return {
+            outputPath,
+            durationInSeconds: honestRenderedDurationInSeconds(exportOpts),
+          };
         }),
+      getVideoDurationInSeconds: soundExportDurationProbe,
     } as any);
 
     const { course, run } = await setup({ mockVideoProcessing: observingMock });

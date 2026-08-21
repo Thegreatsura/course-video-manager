@@ -3,7 +3,10 @@ import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
 import { CoursePublishService } from "@/services/course-publish-service";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import {
+  VideoProcessingService,
+  type PauseType,
+} from "@/services/video-processing-service";
 import { createControllableVideoProcessing } from "@/test-utils/fake-video-processing";
 import {
   fakeDropbox,
@@ -11,6 +14,10 @@ import {
   setupPublishServiceTests,
   setupPublishableCourse as setup,
 } from "./course-publish-service-test-setup";
+import {
+  honestRenderedDurationInSeconds,
+  soundExportDurationProbe,
+} from "@/test-utils/fake-video-processing";
 
 setupPublishServiceTests();
 
@@ -115,7 +122,10 @@ describe("CoursePublishService — export/upload pipelining", () => {
     // Resolved after setup, before the publish that first calls the mock.
     let doomedVideoId = "";
     const partiallyFailingProcessing = Layer.succeed(VideoProcessingService, {
-      exportVideoClips: (opts: { videoId: string }) =>
+      exportVideoClips: (opts: {
+        videoId: string;
+        clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;
+      }) =>
         opts.videoId === doomedVideoId
           ? Effect.fail(new Error("ffmpeg crashed"))
           : Effect.sync(() => {
@@ -124,8 +134,12 @@ describe("CoursePublishService — export/upload pipelining", () => {
                 `${opts.videoId}.mp4`
               );
               fs.writeFileSync(outputPath, `dummy-${opts.videoId}`);
-              return outputPath;
+              return {
+                outputPath,
+                durationInSeconds: honestRenderedDurationInSeconds(opts),
+              };
             }),
+      getVideoDurationInSeconds: soundExportDurationProbe,
     } as any);
 
     const { course, videos, run } = await setup({
