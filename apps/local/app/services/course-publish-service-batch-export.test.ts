@@ -7,6 +7,7 @@ import { writeAlreadyExportedVideo } from "@/test-utils/exported-video-fixture";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { createFakeOverlayRenderCache } from "@/test-utils/fake-overlay-render-cache";
+import { createFakeVideoEditorLogger } from "@/test-utils/fake-video-editor-logger";
 import fs from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -86,6 +87,7 @@ const setup = async () => {
     VersionOperationsService.Default,
     mockVideoProcessing,
     createFakeOverlayRenderCache().layer,
+    createFakeVideoEditorLogger().layer,
     NodeContext.layer
   ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
 

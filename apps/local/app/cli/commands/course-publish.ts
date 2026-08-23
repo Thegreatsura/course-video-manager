@@ -10,6 +10,7 @@ import { VideoProcessingService } from "@/services/video-processing-service";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import { OverlayRenderCacheService } from "@/services/overlay-render-cache.server";
 import { CoursePublishService } from "@/services/course-publish-service";
+import { VideoEditorLoggerService } from "@/services/video-editor-logger-service";
 import { loadRepoEnv } from "@/cli/env";
 import {
   NEEDS_FINISHED_VIDEOS_AND_FFMPEG,
@@ -69,6 +70,9 @@ const publishDeps = Layer.mergeAll(
   VideoProcessingService.Default,
   FFmpegCommandsService.Default,
   OverlayRenderCacheService.Default,
+  // The export writes why a stage failed into the Video's own log, so the
+  // CLI's publish needs the same logger the app's export does.
+  VideoEditorLoggerService.Default,
   NodeContext.layer
 ).pipe(Layer.provideMerge(DrizzleService.Default));
 

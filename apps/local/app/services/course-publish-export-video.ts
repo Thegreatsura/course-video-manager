@@ -25,6 +25,8 @@ import {
   withRenderedCard,
 } from "./overlay-compositing";
 import { ExportError } from "./course-publish-errors";
+import { formatFailureCause } from "./format-failure-cause";
+import { VideoEditorLoggerService } from "./video-editor-logger-service";
 
 /**
  * Who the export belongs to: a Course names the file and gives the export
@@ -58,11 +60,32 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
     const videoOps = yield* VideoOperationsService;
     const videoProcessing = yield* VideoProcessingService;
     const overlayRenderCache = yield* OverlayRenderCacheService;
+    const videoEditorLogger = yield* VideoEditorLoggerService;
     const effectFs = yield* FileSystem.FileSystem;
 
     /** Deleting a file we are replacing is never a reason to fail. */
     const removeQuietly = (filePath: string) =>
       effectFs.remove(filePath).pipe(Effect.catchAll(() => Effect.void));
+
+    /**
+     * Write why a stage failed into the Video's own log, beside the
+     * `cli-output` of whichever passes did run.
+     *
+     * Best-effort, exactly like `makeFfmpegLogger`: a log write that fails
+     * must never replace the export failure it was called to explain.
+     */
+    const recordStageFailure =
+      (stage: string) =>
+      (cause: unknown): Effect.Effect<void> =>
+        videoEditorLogger
+          .log(videoId, {
+            type: "export-stage-failed",
+            videoId,
+            stage,
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: formatFailureCause(cause),
+          })
+          .pipe(Effect.catchAll(() => Effect.void));
 
     const video = yield* videoOps.getVideoWithClipsById(videoId);
     const courseId = video.lesson?.section.repoVersion.repo.id;
@@ -183,19 +206,35 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
                   withRenderedCard(placed, overlayPath)
                 )
               )
+          // The render stage is named apart from the compositing stage on
+          // purpose: the two fail for unrelated reasons — a Chromium render
+          // versus an ffmpeg filtergraph — and the log should say which one
+          // the export never got past.
+        ).pipe(
+          Effect.tapError(recordStageFailure("export:render-definition-cards"))
         );
 
-        yield* videoProcessing.compositeOverlaysOntoExport({
-          videoId,
-          videoPath: videoIdPath,
-          overlays: renderedOverlays,
-          totalDurationSeconds: expectedDurationInSeconds,
-        });
+        yield* videoProcessing
+          .compositeOverlaysOntoExport({
+            videoId,
+            videoPath: videoIdPath,
+            overlays: renderedOverlays,
+            totalDurationSeconds: expectedDurationInSeconds,
+          })
+          .pipe(
+            Effect.tapError(recordStageFailure("export:composite-overlays"))
+          );
       }).pipe(
         // A card that will not render, and an ffmpeg pass that will not run,
         // are both simply "this Video did not export": the file never reaches
         // its address, so nothing downstream can ship it and the next attempt
         // starts over.
+        //
+        // The cause is written to the Video's own log ABOVE, before this
+        // `mapError` throws it away. `Effect.logError` alone was not enough:
+        // it goes to the app's stdout, while everyone diagnosing a failed
+        // export reads `.data/logs/{videoId}.log`, and the message that
+        // survives this `mapError` names only the Video.
         Effect.tapError((cause) =>
           Effect.logError("Overlay compositing failed", cause)
         ),

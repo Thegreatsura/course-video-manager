@@ -39,6 +39,7 @@ import { CoursePublishService } from "@/services/course-publish-service";
 import { computeExportHash, type ExportClip } from "@/services/export-hash";
 import { SOUND_FAKE_EXPORT_DURATION_IN_SECONDS } from "@/test-utils/fake-video-processing";
 import { createFakeOverlayRenderCache } from "@/test-utils/fake-overlay-render-cache";
+import { createFakeVideoEditorLogger } from "@/test-utils/fake-video-editor-logger";
 import {
   clips as clipsTable,
   chapters as chaptersTable,
@@ -132,6 +133,14 @@ export const setupPublishableCourse = async (opts?: {
    * Default: a duration no test's Clips can exceed, i.e. a sound file.
    */
   measureExportDurationInSeconds?: (probe: { exportPath: string }) => number;
+  /**
+   * Fail every Definition Card render with this error — a Chromium that will
+   * not start, a cache directory that cannot be written. The export then never
+   * reaches its compositing pass.
+   *
+   * Default: every card renders.
+   */
+  failCardRenderWith?: unknown;
 }) => {
   const videoCount = opts?.videoCount ?? 1;
   await truncateAllTables(testDb);
@@ -271,7 +280,9 @@ export const setupPublishableCourse = async (opts?: {
   // Video with no Overlays never asks ffmpeg for a second encode.
   const compositeRuns: FakeCompositeRun[] = [];
 
-  const overlayRenderCache = createFakeOverlayRenderCache();
+  const overlayRenderCache = createFakeOverlayRenderCache({
+    failWith: opts?.failCardRenderWith,
+  });
 
   const defaultMockVideoProcessing = Layer.succeed(VideoProcessingService, {
     exportVideoClips: (exportOpts: any) =>
@@ -332,6 +343,11 @@ export const setupPublishableCourse = async (opts?: {
     )
   );
 
+  // The export writes why a stage failed into the Video's own log. In memory
+  // here, so the suite leaves no `.data/logs` behind and a test can read back
+  // what a failure said.
+  const videoEditorLogger = createFakeVideoEditorLogger();
+
   const coreTestLayer = Layer.mergeAll(
     CourseOperationsService.Default,
     VideoOperationsService.Default,
@@ -339,6 +355,7 @@ export const setupPublishableCourse = async (opts?: {
     LinkAuthOperationsService.Default,
     mockVideoProcessing,
     overlayRenderCache.layer,
+    videoEditorLogger.layer,
     NodeContext.layer
   ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
 
@@ -363,5 +380,7 @@ export const setupPublishableCourse = async (opts?: {
     cardRenderRequests: overlayRenderCache.requests,
     /** Every run of the compositing pass. Empty means it never ran. */
     compositeRuns,
+    /** Every line the export wrote to the Video's log. */
+    videoLog: videoEditorLogger,
   };
 };

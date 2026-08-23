@@ -27,6 +27,13 @@ export type FakeCardRenderRequest = {
 export const createFakeOverlayRenderCache = (opts?: {
   /** Where the pretend renders live. Default: a fixed, obviously-fake dir. */
   directory?: string;
+  /**
+   * Fail every render with this error instead of answering with a path — a
+   * Chromium that will not start, a cache directory that cannot be written.
+   * The request is still recorded, so a test can tell "asked and failed" from
+   * "never asked".
+   */
+  failWith?: unknown;
 }) => {
   const directory = opts?.directory ?? "/fake-overlay-render-cache";
   const requests: FakeCardRenderRequest[] = [];
@@ -36,13 +43,15 @@ export const createFakeOverlayRenderCache = (opts?: {
       courseId: string;
       content: DefinitionCardContent;
     }) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         const renderPath = path.join(
           directory,
           `${request.courseId}-${computeDefinitionCardContentHash(request.content)}.mov`
         );
         requests.push({ ...request, renderPath });
-        return renderPath;
+        return opts?.failWith === undefined
+          ? Effect.succeed(renderPath)
+          : Effect.fail(opts.failWith);
       }),
   } as unknown as OverlayRenderCacheService);
 

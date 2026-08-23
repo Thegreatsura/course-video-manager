@@ -100,6 +100,26 @@ export type LogEvent =
       videoId: string;
     }
   | {
+      /**
+       * A stage of an export failed, and why.
+       *
+       * The ffmpeg passes write their own output here as `cli-output`, so a
+       * failure inside one of them leaves a trail. A stage that fails BEFORE
+       * ffmpeg is reached — a Definition Card that will not render, a missing
+       * config key — leaves none, and the export's own error names only the
+       * Video. This event is where that cause goes, in the same file, in
+       * order, beside the passes that did run.
+       */
+      type: "export-stage-failed";
+      videoId: string;
+      /** Same naming as `cli-output`'s stage, e.g. `export:composite-overlays`. */
+      stage: string;
+      /** What the export reported to its caller. */
+      message: string;
+      /** The underlying failure, unwrapped — see `formatFailureCause`. */
+      cause: string;
+    }
+  | {
       type: "video-created-from-selection";
       sourceVideoId: string;
       clipIds: string[];

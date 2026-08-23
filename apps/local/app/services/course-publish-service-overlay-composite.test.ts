@@ -230,4 +230,73 @@ describe("Definition Cards in a course export", () => {
     expect(compositeRuns[1]!.overlays[0]!.startInSeconds).toBe(2);
     expect(fs.existsSync(secondPath)).toBe(true);
   });
+
+  describe("when a stage fails, the Video's log says why", () => {
+    /**
+     * The export's own error names the Video and nothing else, on purpose —
+     * one failed card and one failed ffmpeg pass are both just "this Video did
+     * not export". That makes the Video's log the only place the actual cause
+     * can survive, so these tests hold it to writing one.
+     */
+    const cardRenderFailure = new Error(
+      "The overlay renderer exited with code 1: Chromium could not start"
+    );
+
+    it("records the cause of a failed card render, unwrapped", async () => {
+      const { video, run, videoLog } = await setup({
+        failCardRenderWith: cardRenderFailure,
+      });
+
+      await addOverlay(video.id, 0, {
+        at: 2,
+        durationInSeconds: 4,
+        title: "Monomorphism",
+        description: "Never collapses two inputs into one output.",
+      });
+
+      await expect(run(exportVideo(video.id))).rejects.toThrow();
+
+      const failures = videoLog.ofType("export-stage-failed");
+      expect(failures).toHaveLength(1);
+      expect(failures[0]!.videoId).toBe(video.id);
+      // Which stage the export never got past.
+      expect(failures[0]!.stage).toBe("export:render-definition-cards");
+      // The detail the export's own ExportError throws away.
+      expect(failures[0]!.cause).toContain("Chromium could not start");
+    });
+
+    it("writes the failure to the log of the Video that failed", async () => {
+      const { videos, run, videoLog } = await setup({
+        videoCount: 2,
+        failCardRenderWith: cardRenderFailure,
+      });
+
+      await addOverlay(videos[1]!.id, 0, {
+        at: 1,
+        durationInSeconds: 3,
+        title: "Epimorphism",
+        description: "Cancels on the right.",
+      });
+
+      await expect(run(exportVideo(videos[1]!.id))).rejects.toThrow();
+
+      expect(videoLog.lines.map((line) => line.videoId)).toEqual([
+        videos[1]!.id,
+      ]);
+    });
+
+    it("stays quiet when every stage succeeds", async () => {
+      const { video, run, videoLog } = await setup();
+
+      await addOverlay(video.id, 0, {
+        at: 2,
+        durationInSeconds: 4,
+        title: "Monomorphism",
+        description: "Never collapses two inputs into one output.",
+      });
+      await run(exportVideo(video.id));
+
+      expect(videoLog.ofType("export-stage-failed")).toEqual([]);
+    });
+  });
 });
