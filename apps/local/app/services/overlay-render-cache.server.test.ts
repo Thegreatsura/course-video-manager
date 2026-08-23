@@ -221,6 +221,34 @@ describe("OverlayRenderCacheService", () => {
     expect(renderer.renders).toHaveLength(1);
   });
 
+  it("renders to a scratch name that keeps the `.mov` extension", async () => {
+    // Remotion reads the output extension to pick the container, and refuses a
+    // ProRes render to a name ending in anything but `mov`, `mkv` or `mxf`. A
+    // scratch name that drops the extension fails every render on the machine
+    // and none in the suite, so the extension is asserted here.
+    const cacheDir = await makeCacheDir();
+    const renderer = fakeRenderer();
+
+    await renderCard(cacheDir, renderer.layer, {
+      courseId: "course-1",
+      content: card(),
+    });
+
+    expect(renderer.renders).toHaveLength(1);
+    const scratchPath = renderer.renders[0]!.outputPath;
+    expect(path.extname(scratchPath)).toBe(".mov");
+    // Still a scratch name, not the address itself.
+    expect(scratchPath).not.toBe(
+      path.join(
+        cacheDir,
+        definitionCardFilename(
+          "course-1",
+          computeDefinitionCardContentHash(card())
+        )
+      )
+    );
+  });
+
   it("leaves nothing behind at the cached address when a render fails", async () => {
     const cacheDir = await makeCacheDir();
     // A renderer that dies halfway: some bytes on disk, no finished render.

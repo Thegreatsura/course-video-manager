@@ -34,6 +34,12 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
       const fs = yield* FileSystem.FileSystem;
       const renderer = yield* DefinitionCardRendererService;
 
+      // Read at layer construction, not inside the render. A key read only
+      // where it is used turns a missing `.env` line into a failure that
+      // appears minutes into an export, after the concat and normalize passes
+      // have already run — see `.sandcastle/CODING_STANDARDS.md`.
+      const cacheDir = yield* Config.string("OVERLAY_RENDER_CACHE_DIRECTORY");
+
       /**
        * The path to this Definition Card's rendered `.mov`, rendering it first
        * if the cache does not already hold it.
@@ -45,10 +51,6 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
        */
       const renderDefinitionCard = Effect.fn("renderDefinitionCard")(
         function* (opts: { courseId: string; content: DefinitionCardContent }) {
-          const cacheDir = yield* Config.string(
-            "OVERLAY_RENDER_CACHE_DIRECTORY"
-          );
-
           const cachedPath = resolveDefinitionCardRenderPath(
             cacheDir,
             opts.courseId,
@@ -70,9 +72,16 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
           // the addressed file exists. A render killed halfway would otherwise
           // leave a truncated `.mov` sitting at a valid address, and every
           // later export would happily composite it.
+          //
+          // The scratch name keeps the cached name's extension. Remotion reads
+          // the output extension to decide the container, and refuses a ProRes
+          // render to any name that does not end in `mov`, `mkv` or `mxf` — so
+          // a scratch name ending in `.partial` fails every render before a
+          // single frame is drawn.
+          const cachedExtension = path.extname(cachedPath);
           const scratchPath = path.join(
             cacheDir,
-            `.${path.basename(cachedPath)}.${crypto.randomUUID()}.partial`
+            `.${path.basename(cachedPath, cachedExtension)}.${crypto.randomUUID()}.partial${cachedExtension}`
           );
 
           yield* renderer
