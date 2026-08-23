@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { writeAlreadyExportedVideo } from "@/test-utils/exported-video-fixture";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
+import { createFakeOverlayRenderCache } from "@/test-utils/fake-overlay-render-cache";
 import fs from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -84,6 +85,7 @@ const setup = async () => {
     VideoOperationsService.Default,
     VersionOperationsService.Default,
     mockVideoProcessing,
+    createFakeOverlayRenderCache().layer,
     NodeContext.layer
   ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
 
@@ -164,6 +166,7 @@ const setup = async () => {
       sourceEndTime: 10,
       pauseType: "none",
       zoomType: "none",
+      overlays: [],
     },
     {
       videoFilename: "recording.mp4",
@@ -171,6 +174,7 @@ const setup = async () => {
       sourceEndTime: 25,
       pauseType: "none",
       zoomType: "none",
+      overlays: [],
     },
   ];
   const exportHash = computeExportHash(clips, "landscape")!;

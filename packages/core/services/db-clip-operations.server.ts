@@ -20,6 +20,12 @@ import {
 } from "../features/videos/clip-zoom.js";
 import { ClipNotZoomableError } from "./db-service-errors.js";
 import { createChapterOperationsUnwrapped } from "./db-chapter-operations.server.js";
+import {
+  createTranscriptWordOperationsUnwrapped,
+  writeTranscriptWords,
+  type TranscriptWordInput,
+} from "./db-transcript-word-operations.server.js";
+import { createClipRetimeOperationsUnwrapped } from "./db-clip-retime.server.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -293,10 +299,12 @@ const createClipOperationsUnwrapped = (db: Database) => {
    * end when it is `null`.
    *
    * Unlike `appendClips` (the OBS-capture / create-from-selection bulk path,
-   * which always writes empty `text`), this carries the `text` the caller has
-   * already sliced from the cached Footage transcript — the manual
-   * `cvm clip add` path. It goes through the SAME draft-version write-closure
-   * guard as every other clip write (a non-Draft owning version is refused).
+   * which always writes empty `text`), this carries the `text` AND the
+   * Transcript Words the caller has already sliced from the cached Footage
+   * transcript — the manual `cvm clip add` path. Both are written in one
+   * transaction, so a Clip never exists with text but no word timing. It goes
+   * through the SAME draft-version write-closure guard as every other clip
+   * write (a non-Draft owning version is refused).
    */
   const createClip = Effect.fn("createClip")(function* (opts: {
     videoId: string;
@@ -304,6 +312,8 @@ const createClipOperationsUnwrapped = (db: Database) => {
     sourceStartTime: number;
     sourceEndTime: number;
     text: string;
+    /** Clip-relative word timing for `text`; `[]` when the slice had none. */
+    transcriptWords: ReadonlyArray<TranscriptWordInput>;
     beforeItemId: string | null;
   }) {
     yield* requireDraftVersionForVideo(db, opts.videoId);
@@ -333,10 +343,14 @@ const createClipOperationsUnwrapped = (db: Database) => {
         .returning()
     );
 
+    yield* writeTranscriptWords(db, clip!.id, opts.transcriptWords);
+
     return clip!;
   });
 
   const chapterOps = createChapterOperationsUnwrapped(db);
+  const transcriptWordOps = createTranscriptWordOperationsUnwrapped(db);
+  const retimeOps = createClipRetimeOperationsUnwrapped(db);
 
   const appendClips = Effect.fn("addClips")(function* (opts: {
     videoId: string;
@@ -506,6 +520,8 @@ const createClipOperationsUnwrapped = (db: Database) => {
     appendClips,
     createClipWebLinks,
     deleteClipWebLink,
+    ...transcriptWordOps,
+    ...retimeOps,
   };
 };
 
@@ -529,6 +545,8 @@ export const createClipOperations = (db: Database) =>
     "appendClips",
     "createClipWebLinks",
     "deleteClipWebLink",
+    "replaceTranscriptWords",
+    "retimeClip",
   ]);
 
 export class ClipOperationsService extends Effect.Service<ClipOperationsService>()(

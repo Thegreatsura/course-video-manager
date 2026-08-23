@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatSecondsToTimeCode } from "@/services/utils";
 import { LiveMediaStream } from "./live-media-stream";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { RecordingSignalIndicator } from "./timeline-indicators";
@@ -10,6 +9,7 @@ import {
   DeferredSuggestionsPanel,
 } from "./deferred-fs-panels";
 import { ActionsDropdown } from "./actions-dropdown";
+import { VideoPlayerStatusStrip } from "./video-player-status-strip";
 import { LessonBodyWriterModal } from "@/features/lesson-writer/lesson-body-writer-modal";
 import { AutofillDescriptionModal } from "@/features/lesson-writer/autofill-description-modal";
 import { VideoPlayerLinksTab } from "./video-player-links-tab";
@@ -25,7 +25,7 @@ import {
   getShowRecordingSignal as getShowRecordingSignalSelector,
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
-import { AlertTriangleIcon, ClipboardIcon, VideoOffIcon } from "lucide-react";
+import { ClipboardIcon, VideoOffIcon } from "lucide-react";
 import { useFetcher } from "react-router";
 import { useContextSelector } from "use-context-selector";
 import {
@@ -57,14 +57,6 @@ export const VideoPlayerPanel = () => {
   const videoTitle = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.videoTitle
-  );
-  const totalDuration = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.totalDuration
-  );
-  const areAnyClipsDangerous = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.areAnyClipsDangerous
   );
   const lessonId = useContextSelector(
     VideoEditorContext,
@@ -361,18 +353,7 @@ export const VideoPlayerPanel = () => {
     <>
       <div className="lg:flex-1 relative order-1 lg:order-2 overflow-y-auto h-full">
         <div className="">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-muted-foreground">
-              {videoTitle}
-              {" · " + formatSecondsToTimeCode(totalDuration)}
-            </span>
-            {areAnyClipsDangerous && (
-              <span className="text-orange-500 text-xs font-medium inline-flex items-center">
-                <AlertTriangleIcon className="size-3.5 mr-1" />
-                Possible duplicates
-              </span>
-            )}
-          </div>
+          <VideoPlayerStatusStrip />
 
           {!liveMediaStream && clips.length === 0 ? (
             <div className="w-full aspect-[16/9] bg-card rounded-lg flex flex-col items-center justify-center gap-3">

@@ -21,6 +21,7 @@ Verbs:
   clip update <id> [flags]             set --zoom and/or retime --start/--end
   clip move <id> --before/--after <id> reposition within the timeline
   clip delete <id>                     archive the clip (soft delete; irreversible from the CLI)
+  clip words <id>                      the clip's Transcript Words, in spoken order (NDJSON)
 
 All writes are immediate — no confirmation, no dry-run (agent-facing tool). There is no 'clip tree'
 (clips are leaves) — use 'video tree' then 'clip get'. 'clip add' cuts a single clip from a footage
@@ -44,6 +45,22 @@ IMPORTANT: retiming does NOT touch 'text' or 'transcribedAt' — the transcript 
 re-generated for the new range. A retimed clip's text can be stale until something re-transcribes
 it; there is currently no CLI signal for "this text no longer matches this range" (only the
 pre-existing "never transcribed" signal, transcribedAt == null).
+
+Retiming DOES cascade to everything positioned relative to the clip's start, in the same
+transaction as the recut itself, because moving the in-point moves the footage out from under
+every stored offset:
+
+  Transcript Words ('cvm clip words') are shifted by the same delta as the recut. A word the new,
+  shorter range no longer contains — either end outside [0, duration] — is DROPPED. Words are
+  read-side data, reproducible by re-transcribing, and one claiming a moment the clip no longer
+  holds is worse than no word at all.
+
+  Overlays ('cvm overlay list') anchored to the clip have their 'at' shifted by that same delta,
+  and an anchor pushed out of the new range is CLAMPED back inside it — to 0, or to the clip's new
+  end (which for the video's final clip is the video's last frame). An Overlay is NEVER deleted by
+  a retime, and its title/description are never touched: an unrelated trim must not be able to
+  destroy hand-authored content. Check 'cvm overlay list --clip <id>' after a big retime — a
+  clamped Definition Card is in the wrong place until you move it.
 
 Examples:
   cvm clip update clip_abc --zoom subtle
@@ -81,6 +98,10 @@ words of '<source>'s cached transcript (produced by 'cvm footage transcribe')
 that fall in [start, end) are sliced out as the clip's 'text'. If '<source>' has
 no cached transcript this is refused (exit 3) — run 'cvm footage transcribe
 <source>' first. There is no live Whisper call here.
+
+The SAME slice also populates the clip's Transcript Words (see 'clip words'),
+re-based so 0 is the clip's own start — so a clip cut this way has per-word
+timing straight away, with no re-transcribe step.
 
 --before / --after resolve exactly like 'clip move': the anchor is another item
 on the SAME video, and because clips and chapters share one order space the new
@@ -143,3 +164,28 @@ Examples:
   cvm clip get clip_abc
   cvm clip get clip_abc clip_def clip_ghi
   cvm clip get clip_abc | jq '{id, text, start: .sourceStartTime, end: .sourceEndTime}'`;
+
+export const WORDS_HELP = `A Clip's Transcript Words — the per-word timing of its spoken audio.
+
+One NDJSON object per word, in spoken order:
+
+  { "start": 1.2, "end": 1.5, "text": "overlay" }
+
+'start'/'end' are seconds CLIP-RELATIVE: 0 is the clip's own start, NOT an
+offset into the source footage file and NOT a position in the Video's finished
+timeline. They survive the source footage being re-recorded or moved, because
+they are stored on the clip itself.
+
+Words are written by transcribing the clip (the editor's transcribe action) or,
+for a clip cut with 'clip add', by slicing '<source>'s cached footage transcript.
+A clip that has never been transcribed simply HAS no words: that prints nothing
+and exits 0 — it is an ordinary state, not an error. Clips transcribed before
+Transcript Words existed are in exactly that state and need a re-transcribe.
+
+Read-only: there is no CLI verb that writes or edits an individual word.
+
+Examples:
+  cvm clip words clip_abc
+
+  # When was "overlay" said in this clip?
+  cvm clip words clip_abc | jq 'select(.text == "overlay")'`;

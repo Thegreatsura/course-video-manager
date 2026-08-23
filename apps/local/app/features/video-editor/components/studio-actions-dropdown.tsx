@@ -18,6 +18,7 @@ import {
   RenameVideoItem,
   RevealInFileSystemItem,
 } from "./shared-action-items";
+import { RetranscribeAllClipsItem } from "./transcript-word-actions";
 
 export const StudioActionsDropdown = (props: {
   allClipsHaveSilenceDetected: boolean;
@@ -62,6 +63,8 @@ export const StudioActionsDropdown = (props: {
         )}
       </Tooltip>
       <DropdownMenuContent align="end" className="w-64">
+        <RetranscribeAllClipsItem />
+
         {props.onRenderVertical && (
           <DropdownMenuItem onSelect={props.onRenderVertical}>
             <FilmIcon className="w-4 h-4 mr-2" />

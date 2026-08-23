@@ -4,6 +4,7 @@ import { LiveMediaStream } from "./live-media-stream";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { RecordingSignalIndicator } from "./timeline-indicators";
 import { StudioActionsDropdown } from "./studio-actions-dropdown";
+import { MissingWordTimingBadge } from "./transcript-word-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
 import {
   getIsOBSActive as getIsOBSActiveSelector,
@@ -275,6 +276,7 @@ export const PortraitStudioPanel = () => {
           {videoTitle}
           {" · " + formatSecondsToTimeCode(totalDuration)}
         </span>
+        <MissingWordTimingBadge />
         <div className="flex gap-1 shrink-0">
           <StudioActionsDropdown
             allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}

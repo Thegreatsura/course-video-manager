@@ -344,6 +344,88 @@ export const clipWebLinks = createTable("clip_web_link", {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Transcript Words — Whisper's per-word timing for a Clip, one row per word.
+ *
+ * Offsets are CLIP-RELATIVE seconds (`0` = the Clip's own start), so they stay
+ * meaningful independently of the source Footage file the Clip was cut from
+ * (which can be re-recorded, moved, or deleted). Written whole-Clip-at-a-time
+ * by a transcription (the `clips.transcribe` route) or by slicing the Footage
+ * sidecar on `cvm clip add`; read back by `cvm clip words`.
+ *
+ * There is no ordering column — order IS `start` ascending. Cascade-deleted
+ * with the Clip, like `clipWebLinks`.
+ */
+export const clipTranscriptWords = createTable(
+  "clip_transcript_word",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clipId: varchar("clip_id", { length: 255 })
+      .references(() => clips.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Clip-relative start, seconds. `0` is the Clip's own start. */
+    start: doublePrecision("start").notNull(),
+    /** Clip-relative end, seconds. */
+    end: doublePrecision("end").notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [
+    // Every read is "all the words of one Clip", and a Clip carries hundreds to
+    // thousands of them. Postgres does not index FKs automatically (see the
+    // note on `clip_diagram_snapshot_id_idx`), so without this each read
+    // seq-scans the largest table in the schema.
+    index("clip_transcript_word_clip_id_idx").on(table.clipId),
+  ]
+);
+
+/**
+ * An Overlay — a rendered visual layer composited on top of a Video's footage
+ * (CONTEXT.md, "Overlays and transitions").
+ *
+ * Anchored to ONE Clip at `at`, a plain Clip-relative offset in seconds, so
+ * retiming or reordering earlier Clips carries the anchor with them. Its
+ * `durationInSeconds` is INDEPENDENT of that Clip's own length: an Overlay
+ * commonly runs on past the end of its anchor Clip and across however many
+ * further Clips it takes to fill its length.
+ *
+ * `title` + `description` are the Definition Card content — the only
+ * content-kind there is, which is why there is deliberately NO `kind`
+ * discriminator column. Add one when a second content-kind actually exists,
+ * not before.
+ *
+ * Diverges from the Clip soft-delete convention on purpose: an Overlay is HARD
+ * deleted (no `archived` flag), because nothing in the schema references an
+ * overlay row in either direction, so a delete can leave nothing dangling.
+ * Same reasoning as `diagram_component`.
+ */
+export const overlays = createTable(
+  "overlay",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clipId: varchar("clip_id", { length: 255 })
+      .references(() => clips.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Clip-relative anchor offset, seconds. 0 = the Clip's own start. */
+    at: doublePrecision("at").notNull(),
+    /** How long the Overlay stays on screen, seconds. Not bounded by the Clip. */
+    durationInSeconds: doublePrecision("duration_in_seconds").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+  },
+  (table) => [
+    // "Every Overlay on this Video" resolves Clip-by-Clip, so this FK column is
+    // read on every export and every `overlay list`. Postgres does not index
+    // FKs automatically (see the clip/video tables above for the same note).
+    index("overlay_clip_id_idx").on(table.clipId),
+  ]
+);
+
 export const videoPosts = createTable("video_post", {
   id: varchar("id", { length: 255 })
     .notNull()
@@ -429,6 +511,22 @@ export namespace DB {
     id: DatabaseId;
     clipId: DatabaseId;
   }
+
+  export interface ClipTranscriptWord extends Omit<
+    InferSelectModel<typeof clipTranscriptWords>,
+    "id" | "clipId"
+  > {
+    id: DatabaseId;
+    clipId: DatabaseId;
+  }
+
+  export interface Overlay extends Omit<
+    InferSelectModel<typeof overlays>,
+    "id" | "clipId"
+  > {
+    id: DatabaseId;
+    clipId: DatabaseId;
+  }
 }
 
 export const clipsRelations = relations(clips, ({ one, many }) => ({
@@ -438,6 +536,15 @@ export const clipsRelations = relations(clips, ({ one, many }) => ({
     references: [diagramSnapshots.id],
   }),
   webLinks: many(clipWebLinks),
+  transcriptWords: many(clipTranscriptWords),
+  overlays: many(overlays),
+}));
+
+export const overlaysRelations = relations(overlays, ({ one }) => ({
+  clip: one(clips, {
+    fields: [overlays.clipId],
+    references: [clips.id],
+  }),
 }));
 
 export const clipWebLinksRelations = relations(clipWebLinks, ({ one }) => ({
@@ -446,6 +553,16 @@ export const clipWebLinksRelations = relations(clipWebLinks, ({ one }) => ({
     references: [clips.id],
   }),
 }));
+
+export const clipTranscriptWordsRelations = relations(
+  clipTranscriptWords,
+  ({ one }) => ({
+    clip: one(clips, {
+      fields: [clipTranscriptWords.clipId],
+      references: [clips.id],
+    }),
+  })
+);
 
 export const videoPostsRelations = relations(videoPosts, ({ one }) => ({
   video: one(videos, {

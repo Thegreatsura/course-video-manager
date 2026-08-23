@@ -11,6 +11,7 @@
 import { beforeAll, afterEach } from "vitest";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
+import { createFakeOverlayRenderCache } from "@/test-utils/fake-overlay-render-cache";
 import fs from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -196,6 +197,7 @@ export const setupUploads = async (opts?: {
       sourceEndTime: clip.sourceEndTime,
       pauseType: "none",
       zoomType: "none",
+      overlays: [],
     }));
     const exportHash = computeExportHash(clips, "landscape")!;
     const exportPath = resolveExportPath(
@@ -246,6 +248,7 @@ export const setupUploads = async (opts?: {
     VersionOperationsService.Default,
     LinkAuthOperationsService.Default,
     mockVideoProcessing,
+    createFakeOverlayRenderCache().layer,
     NodeContext.layer
   ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
 

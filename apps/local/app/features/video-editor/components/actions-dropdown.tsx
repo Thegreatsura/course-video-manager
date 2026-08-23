@@ -39,6 +39,7 @@ import {
   RenameVideoItem,
   RevealInFileSystemItem,
 } from "./shared-action-items";
+import { RetranscribeAllClipsItem } from "./transcript-word-actions";
 
 export const ActionsDropdown = (props: {
   /** Whether silence detection has completed for all clips */
@@ -144,6 +145,8 @@ export const ActionsDropdown = (props: {
             </span>
           </div>
         </DropdownMenuItem>
+
+        <RetranscribeAllClipsItem />
 
         {props.lessonId && (
           <>

@@ -5,6 +5,7 @@ import { CourseOperationsService } from "@/services/db-course-operations.server"
 import { CourseWriteService } from "@/services/course-write-service";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
+import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { SearchOperationsService } from "@/services/db-search-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
@@ -194,6 +195,7 @@ const clipService = (client: RpcClient) =>
     ),
     createClip: rpcMethod((json) => client.rpc.clip.createClip.$post({ json })),
     updateClip: rpcMethod((json) => client.rpc.clip.updateClip.$post({ json })),
+    retimeClip: rpcMethod((json) => client.rpc.clip.retimeClip.$post({ json })),
     setClipZoom: rpcMethod((json) =>
       client.rpc.clip.setClipZoom.$post({ json })
     ),
@@ -202,6 +204,12 @@ const clipService = (client: RpcClient) =>
     ),
     archiveClip: rpcMethod((json) =>
       client.rpc.clip.archiveClip.$post({ json })
+    ),
+    listTranscriptWords: rpcMethod((json) =>
+      client.rpc.clip.listTranscriptWords.$post({ json })
+    ),
+    replaceTranscriptWords: rpcMethod((json) =>
+      client.rpc.clip.replaceTranscriptWords.$post({ json })
     ),
     // Chapters live on this same service (ClipOperationsService merges the
     // chapter ops in), so `cvm chapter`'s verbs are RPC methods here too, backed
@@ -225,6 +233,26 @@ const clipService = (client: RpcClient) =>
       client.rpc.chapter.archiveChapter.$post({ json })
     ),
   }) satisfies RemoteService<ClipOperationsService>;
+
+const overlayService = (client: RpcClient) =>
+  ({
+    _tag: "OverlayOperationsService",
+    listOverlaysByVideoId: rpcMethod((json) =>
+      client.rpc.overlay.listOverlaysByVideoId.$post({ json })
+    ),
+    getOverlaysByIds: rpcMethod((json) =>
+      client.rpc.overlay.getOverlaysByIds.$post({ json })
+    ),
+    createOverlay: rpcMethod((json) =>
+      client.rpc.overlay.createOverlay.$post({ json })
+    ),
+    updateOverlay: rpcMethod((json) =>
+      client.rpc.overlay.updateOverlay.$post({ json })
+    ),
+    deleteOverlay: rpcMethod((json) =>
+      client.rpc.overlay.deleteOverlay.$post({ json })
+    ),
+  }) satisfies RemoteService<OverlayOperationsService>;
 
 const beatService = (client: RpcClient) =>
   ({
@@ -310,6 +338,7 @@ export type RemoteServices =
   | LessonSectionOperationsService
   | VideoOperationsService
   | ClipOperationsService
+  | OverlayOperationsService
   | BeatOperationsService
   | PitchOperationsService
   | DeliverableOperationsService
@@ -345,6 +374,7 @@ export const makeRemoteLayer = (
     remoteLayer(LessonSectionOperationsService, lessonSectionService, client),
     remoteLayer(VideoOperationsService, videoService, client),
     remoteLayer(ClipOperationsService, clipService, client),
+    remoteLayer(OverlayOperationsService, overlayService, client),
     remoteLayer(BeatOperationsService, beatService, client),
     remoteLayer(PitchOperationsService, pitchService, client),
     remoteLayer(DeliverableOperationsService, deliverableService, client),

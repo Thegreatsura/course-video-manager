@@ -23,6 +23,7 @@ import {
 } from "../lib/transcript-builder.js";
 import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
 import { attachDerivedPaths } from "./path-projection.js";
+import { overlayExportRelation } from "./db-overlay-operations.server.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -264,6 +265,7 @@ export const createCourseOperations = (db: Database) => {
                               },
                               orderBy: asc(clips.order),
                               where: eq(clips.archived, false),
+                              with: { overlays: overlayExportRelation },
                             },
                             chapters: {
                               columns: {
@@ -575,6 +577,21 @@ export const createCourseOperations = (db: Database) => {
     duplicateCourse,
   };
 };
+
+/**
+ * The Course's navigation tree — its latest version's Sections, their Lessons,
+ * and each Lesson's Videos — exactly as {@link createCourseOperations}'s
+ * `getCourseNavigationData` returns it.
+ *
+ * Exported so the readers that take that query as their one dependency can name
+ * what they are handed, instead of taking `any` and losing every field name in
+ * the walk that follows.
+ */
+export type CourseNavigationData = Effect.Effect.Success<
+  ReturnType<
+    ReturnType<typeof createCourseOperations>["getCourseNavigationData"]
+  >
+>;
 
 export class CourseOperationsService extends Effect.Service<CourseOperationsService>()(
   "CourseOperationsService",
