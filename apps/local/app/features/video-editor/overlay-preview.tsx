@@ -29,7 +29,7 @@ export type ClipOverlay = {
 
 /**
  * Every Definition Card renders at the landscape export frame regardless of
- * this Video's own format — see `DEFINITION_CARD_FRAME` in
+ * this Video's own format — see `OVERLAY_RENDER_FRAME` in
  * `overlay-render-cache.ts`, which this mirrors so the preview matches what
  * export actually composites.
  */
@@ -38,13 +38,13 @@ const { width: COMPOSITION_WIDTH, height: COMPOSITION_HEIGHT } =
 
 /**
  * The frame rate every Definition Card is rendered at — see
- * `DEFINITION_CARD_FPS` in `overlay-render-cache.ts`. Duplicated rather than
+ * `OVERLAY_RENDER_FPS` in `overlay-render-cache.ts`. Duplicated rather than
  * imported: that constant lives in a `.server.ts`-adjacent service module
  * pulled into the loader's Effect graph, and importing it here would pull
  * that graph into the client bundle for one number. The source footage is
  * always 60fps too, so there is no mismatch to reconcile against `currentTime`.
  */
-const DEFINITION_CARD_FPS = 60;
+const OVERLAY_RENDER_FPS = 60;
 
 /**
  * The frame of `overlay`'s own card timeline that `currentTime` names, clamped
@@ -137,7 +137,7 @@ export const OverlayPreview = (props: {
   }
 
   const durationInFrames = Math.ceil(
-    active.durationInSeconds * DEFINITION_CARD_FPS
+    active.durationInSeconds * OVERLAY_RENDER_FPS
   );
 
   const inputProps: DefinitionCardInputProps = {
@@ -154,7 +154,7 @@ export const OverlayPreview = (props: {
         ref={playerRef}
         component={DefinitionCardPreview}
         inputProps={inputProps}
-        fps={DEFINITION_CARD_FPS}
+        fps={OVERLAY_RENDER_FPS}
         durationInFrames={durationInFrames}
         compositionWidth={COMPOSITION_WIDTH}
         compositionHeight={COMPOSITION_HEIGHT}

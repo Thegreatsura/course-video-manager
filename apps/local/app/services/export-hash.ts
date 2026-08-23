@@ -7,6 +7,14 @@ import {
   DEFAULT_CLIP_ZOOM_TYPE,
   resolveClipZoomType,
 } from "@/features/videos/clip-zoom";
+import {
+  DEFAULT_OVERLAY_KIND,
+  resolveOverlayKind,
+} from "@/features/videos/overlay-kind";
+import {
+  bulletPanelHashPayload,
+  type BulletPanelBullet,
+} from "@/features/videos/bullet-panel";
 
 /**
  * Bump this constant to force re-export of all videos (e.g., after changing
@@ -24,8 +32,15 @@ export const EXPORT_VERSION = 1;
 export type ExportOverlay = {
   at: number;
   durationInSeconds: number;
+  /** The raw `kind` column; narrowed by `resolveOverlayKind` on the way in. */
+  kind: string;
+  /** Cut in / cut out instead of easing — see `overlay-transform.ts`. */
+  disableEnterAnimation: boolean;
+  disableExitAnimation: boolean;
   title: string;
   description: string;
+  /** A Bullet Panel's bullets; null for every other content-kind. */
+  bullets: BulletPanelBullet[] | null;
 };
 
 export type ExportClip = {
@@ -61,8 +76,12 @@ export const toExportClips = (
     overlays: ReadonlyArray<{
       at: number;
       durationInSeconds: number;
+      kind: string;
+      disableEnterAnimation: boolean;
+      disableExitAnimation: boolean;
       title: string;
       description: string;
+      bullets: BulletPanelBullet[] | null;
     }>;
   }>
 ): ExportClip[] =>
@@ -75,8 +94,12 @@ export const toExportClips = (
     overlays: c.overlays.map((o) => ({
       at: o.at,
       durationInSeconds: o.durationInSeconds,
+      kind: o.kind,
+      disableEnterAnimation: o.disableEnterAnimation,
+      disableExitAnimation: o.disableExitAnimation,
       title: o.title,
       description: o.description,
+      bullets: o.bullets,
     })),
   }));
 
@@ -93,8 +116,31 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
     .map((o) => ({
       a: o.at,
       d: o.durationInSeconds,
+      // Emitted only when it is NOT the default, exactly as `z`/`p` are below:
+      // every Overlay written before `kind` existed is a Definition Card, so
+      // omitting the default leaves every existing export address untouched
+      // while a change of kind still moves the address.
+      ...(resolveOverlayKind(o.kind) === DEFAULT_OVERLAY_KIND
+        ? {}
+        : { k: resolveOverlayKind(o.kind) }),
+      // Same rule for the animation toggles: they change the rendered bytes —
+      // both the panel's own animation and the kind-derived camera Transform —
+      // so they belong in the address, but only when set. Every Overlay
+      // written before the columns existed eases both ways, so omitting the
+      // `false` leaves every existing export address exactly where it was.
+      ...(o.disableEnterAnimation ? { ne: true } : {}),
+      ...(o.disableExitAnimation ? { nx: true } : {}),
       t: o.title,
       x: o.description,
+      // The Bullet Panel's bullets join `k` in being emitted only when they
+      // say something: an Overlay with no bullets hashes exactly as it did
+      // before the column existed, so no export written before this feature
+      // is re-addressed. The bullets themselves are spelled out by
+      // `bulletPanelHashPayload` — the SAME encoder the Overlay Render Cache's
+      // content hash uses, so the two addresses cannot drift apart.
+      ...(o.bullets && o.bullets.length > 0
+        ? { b: bulletPanelHashPayload(o.bullets) }
+        : {}),
     }))
     .sort((left, right) =>
       JSON.stringify(left) < JSON.stringify(right) ? -1 : 1

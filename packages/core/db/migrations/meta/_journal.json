@@ -127,6 +127,20 @@
       "when": 1787479605740,
       "tag": "0017_index_clip_chapter_course_version_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787490909187,
+      "tag": "0018_add_overlay_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787492010647,
+      "tag": "0019_add_overlay_bullet_panel_content",
+      "breakpoints": true
     }
   ]
 }
