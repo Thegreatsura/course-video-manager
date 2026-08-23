@@ -26,6 +26,10 @@ For optimistic UI on fetcher mutations, derive the optimistic value from `fetche
 
 ---
 
+Read every environment variable a run needs at its start, not at the moment of use. A `Config.string(...)` inside a branch that runs rarely turns a missing `.env` line into a failure that appears only when that branch first runs — a video export that concats and normalizes for thirteen seconds, then fails because nobody set `OVERLAY_RENDER_CACHE_DIRECTORY`, and does it again on every retry. Resolve the config at the edge (the layer, or the command's entry point) so a missing variable stops the process before any work starts, and let the error name the variable. Add each new key to `.env.example` in the same commit that reads it.
+
+---
+
 ## Testing
 
 ### Core Principle
