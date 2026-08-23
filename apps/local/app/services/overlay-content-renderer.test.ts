@@ -3,7 +3,10 @@ import {
   overlayPropsSchema,
   BULLET_PANEL_ANIMATION_IN_SECONDS as RENDERER_EASE,
 } from "@cvm/overlay-renderer/props";
-import { OVERLAY_TRANSFORM_EASE_IN_SECONDS } from "@/features/videos/overlay-transform";
+import {
+  OVERLAY_CONTENT_FPS,
+  OVERLAY_TRANSFORM_EASE_IN_SECONDS,
+} from "@/features/videos/overlay-transform";
 import { overlayRenderProps } from "@/services/overlay-content-renderer";
 import {
   OVERLAY_RENDER_FPS,
@@ -46,6 +49,21 @@ const panel: BulletPanelContent = {
 describe("the panel and the camera move at one speed", () => {
   it("holds the renderer's ease equal to the domain's", () => {
     expect(RENDERER_EASE).toBe(OVERLAY_TRANSFORM_EASE_IN_SECONDS);
+  });
+
+  /**
+   * The camera is read on the frame grid of the content it is moving for, so
+   * it has to know that content's frame rate. `packages/core` cannot import
+   * {@link OVERLAY_RENDER_FPS} — it must stay free of anything filesystem-
+   * bound — so it repeats the number, and this is again the only package that
+   * sees both.
+   *
+   * If this fails, the footage is being sampled on a grid the panel is not
+   * drawn on, and the two slide apart by up to a frame's travel — 38px at the
+   * quickest part of the ease. Fix the two constants, not this test.
+   */
+  it("holds the camera's frame grid equal to the content's frame rate", () => {
+    expect(OVERLAY_CONTENT_FPS).toBe(OVERLAY_RENDER_FPS);
   });
 });
 

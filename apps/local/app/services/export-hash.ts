@@ -12,6 +12,10 @@ import {
   resolveOverlayKind,
 } from "@/features/videos/overlay-kind";
 import {
+  OVERLAY_CAMERA_VERSION,
+  overlayTransform,
+} from "@/features/videos/overlay-transform";
+import {
   bulletPanelHashPayload,
   type BulletPanelBullet,
 } from "@/features/videos/bullet-panel";
@@ -130,6 +134,13 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
       // `false` leaves every existing export address exactly where it was.
       ...(o.disableEnterAnimation ? { ne: true } : {}),
       ...(o.disableExitAnimation ? { nx: true } : {}),
+      // How the camera move itself renders, carried ONLY by an Overlay whose
+      // Kind has one. The move's arithmetic is not in the address — it is code,
+      // not data — so a Video already exported with an older, wronger move
+      // would otherwise keep those bytes for ever. Absent for a Definition
+      // Card, which moves no camera, so no export that predates the Transform
+      // is re-addressed by it.
+      ...(overlayTransform(o.kind) ? { cv: OVERLAY_CAMERA_VERSION } : {}),
       t: o.title,
       x: o.description,
       // The Bullet Panel's bullets join `k` in being emitted only when they

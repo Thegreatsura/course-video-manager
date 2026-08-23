@@ -27,6 +27,12 @@
  */
 
 import { resolveOverlayKind, type OverlayKind } from "./overlay-kind.js";
+import {
+  easeOverlayTransformProgress,
+  easeStatements,
+  exact,
+  fmt,
+} from "./overlay-transform-ease.js";
 
 /**
  * Where the footage sits in frame: `offsetX` is how far RIGHT it has travelled
@@ -82,6 +88,27 @@ const OVERLAY_TRANSFORMS: Record<OverlayKind, OverlayTransform | null> = {
 };
 
 /**
+ * What the camera move RENDERS AS — bumped whenever this file starts putting
+ * the footage somewhere it did not put it before.
+ *
+ * An export is content-addressed: a Video whose address has not changed is not
+ * re-exported, whatever the code now does. So a fix to the move that leaves the
+ * address alone reaches every Video EXCEPT the ones that already have the bug
+ * baked into a file. This constant is how the address is told.
+ *
+ * It is not `EXPORT_VERSION`. That one re-exports the whole library; this is
+ * carried only by an Overlay whose Kind actually moves the camera, so a Video
+ * with nothing but Definition Cards keeps the address it has and is not
+ * re-encoded to produce the bytes it already has.
+ *
+ * - 1 — the first move to ship.
+ * - 2 — the ease became exact and the footage started reading it on the
+ *   content's own frame grid. Up to 38px of the move landed on a different
+ *   frame from the panel before this.
+ */
+export const OVERLAY_CAMERA_VERSION = 2;
+
+/**
  * The move a raw `kind` column asks for, or `null` for none. Every consumer
  * goes through here, and through {@link resolveOverlayKind}, so a `kind`
  * nothing recognises moves no camera rather than throwing.
@@ -117,43 +144,6 @@ export const overlayTransform = (
  * down through one to 800ms.
  */
 export const OVERLAY_TRANSFORM_EASE_IN_SECONDS = 0.8;
-
-/**
- * The easing curve, as control points: `cubic-bezier(0.25, 0.1, 0.25, 1)` —
- * CSS's `ease`, and the exact curve `Easing.bezier(0.25, 0.1, 0.25, 1)` already
- * gives the Subtitle overlay's slide in the Remotion renderer. It is spelled
- * out here rather than imported because `packages/core` does not (and should
- * not) depend on Remotion; the numbers are the contract.
- */
-const EASE_CONTROL_POINTS = { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 } as const;
-
-/** One axis of a unit cubic Bézier, whose first and last points are 0 and 1. */
-const bezierAxis = (s: number, p1: number, p2: number): number =>
-  3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
-
-/**
- * The eased value of a 0..1 ramp.
- *
- * A cubic Bézier gives x and y in terms of a parameter, not y in terms of x,
- * and has no closed-form inverse — so x is solved for by bisection. Thirty
- * halvings is far past the precision of anything downstream (a frame, or six
- * decimal places in a filter string) and costs nothing: this runs a few dozen
- * times while a filter graph is being built, never per frame.
- */
-export const easeOverlayTransformProgress = (ramp: number): number => {
-  const target = Math.min(1, Math.max(0, ramp));
-  if (target === 0 || target === 1) return target;
-
-  const { x1, y1, x2, y2 } = EASE_CONTROL_POINTS;
-  let low = 0;
-  let high = 1;
-  for (let i = 0; i < 30; i++) {
-    const mid = (low + high) / 2;
-    if (bezierAxis(mid, x1, x2) < target) low = mid;
-    else high = mid;
-  }
-  return bezierAxis((low + high) / 2, y1, y2);
-};
 
 /** The framing partway through a move: `0` is `from`, `1` is `to`. */
 export const overlayTransformFramingAt = (
@@ -206,11 +196,70 @@ const easeDurations = (window: OverlayTransformWindow) => {
 };
 
 /**
+ * The frame rate an Overlay's own CONTENT is rendered at.
+ *
+ * The camera has to know it. A Bullet Panel is not drawn live alongside the
+ * footage — it is a CLIP, rendered at this rate, and a clip can only ever show
+ * whole frames. Whatever the moment, what is actually on screen is the frame
+ * whose own time has most recently passed, up to a frame stale. The footage
+ * has no such grid: left alone, it slides continuously and runs ahead of the
+ * panel by as much as a whole frame's travel — 38px at the fastest part of the
+ * ease, which is a visible slip on an opaque edge.
+ *
+ * So the camera is sampled on the panel's grid too (see {@link sampledTime}).
+ * The two are then not merely following the same curve, they are reading it at
+ * the same instants.
+ *
+ * `packages/core` cannot import the renderer's own copy of this number
+ * (`OVERLAY_RENDER_FPS` in `apps/local`) without depending on it, so it is
+ * repeated here and held equal by a test in `apps/local`, which imports both —
+ * the same arrangement `BULLET_PANEL_ANIMATION_IN_SECONDS` already has.
+ */
+export const OVERLAY_CONTENT_FPS = 60;
+
+/**
+ * A nanosecond of slack on the frame boundary.
+ *
+ * The same moment reaches this arithmetic on two different clocks — the
+ * flattened Video's for the export, the Clip's own (with a NEGATIVE start for
+ * an Overlay that spilled onto it) for the editor — and subtracting two
+ * different pairs of doubles does not always land on the same side of a frame
+ * boundary. Without this, one surface takes frame 11 where the other takes 12,
+ * and the footage jumps a frame's worth of travel against the panel. A moment
+ * within a nanosecond of a boundary is that frame; nothing downstream can
+ * resolve finer.
+ */
+const FRAME_EPSILON = 1e-9;
+
+/**
+ * How far past its start the Overlay's camera is really read: the ELAPSED
+ * seconds, snapped back to the frame of the Overlay's content on screen at
+ * them.
+ *
+ * FLOOR, not round, and that is measured rather than assumed: ffmpeg's
+ * `overlay` shows the most recent frame of the graphic whose presentation time
+ * has passed, so `floor` names the frame the export actually composites. The
+ * editor's preview seeks its `<Player>` the same way for the same reason.
+ *
+ * Elapsed, never an absolute moment, so the answer cannot depend on which
+ * clock the caller states its window on.
+ */
+const sampledElapsed = (
+  window: OverlayTransformWindow,
+  timeInSeconds: number
+): number =>
+  Math.floor(
+    (timeInSeconds - window.startInSeconds) * OVERLAY_CONTENT_FPS +
+      FRAME_EPSILON
+  ) / OVERLAY_CONTENT_FPS;
+
+/**
  * How far into the move the camera is at a given moment on the timeline.
  *
  * The same arithmetic the emitted `crop` expression performs, in TypeScript:
- * the nearer end's ramp, eased. Outside the window there is no move at all,
- * which is what the filter's `enable` gate does by bypassing the node.
+ * the nearer end's ramp, read on the content's frame grid, eased. Outside the
+ * window there is no move at all, which is what the two nodes composing to an
+ * identity gives without a gate.
  */
 export const overlayTransformProgressAt = (
   window: OverlayTransformWindow,
@@ -222,14 +271,13 @@ export const overlayTransformProgressAt = (
   ) {
     return 0;
   }
+  const elapsed = sampledElapsed(window, timeInSeconds);
+  const span = window.endInSeconds - window.startInSeconds;
   const { enter, exit } = easeDurations(window);
-  const ramp = (elapsed: number, duration: number) =>
-    duration === 0 ? 1 : Math.min(1, Math.max(0, elapsed / duration));
+  const ramp = (remaining: number, duration: number) =>
+    duration === 0 ? 1 : Math.min(1, Math.max(0, remaining / duration));
   return easeOverlayTransformProgress(
-    Math.min(
-      ramp(timeInSeconds - window.startInSeconds, enter),
-      ramp(window.endInSeconds - timeInSeconds, exit)
-    )
+    Math.min(ramp(elapsed, enter), ramp(span - elapsed, exit))
   );
 };
 
@@ -287,51 +335,18 @@ export const overlayTransformCssStyleAt = (
 // ---------------------------------------------------------------------------
 
 /**
- * Numbers as the filter graph spells them: fixed notation, never exponential,
- * for the same reason `overlay-compositing.ts` formats seconds that way —
- * ffmpeg's expression parser reads `1e-7` as an identifier minus a number.
- */
-const fmt = (value: number): string => value.toFixed(6);
-
-/**
- * How many straight segments the eased curve is approximated by.
+ * The head of the `crop` expression: the moment into slot 1, progress into
+ * slot 2, and the offset it implies into slot 3.
  *
- * ffmpeg's expression language has no cubic-Bézier solver and no way to define
- * a function, so the curve is SAMPLED here and emitted as a piecewise-linear
- * `if`/`lerp` ladder. Eight segments hold the curve to well under a pixel of
- * error at these scales, and the ladder stays short enough to read.
- */
-const EASE_SEGMENTS = 8;
-
-/**
- * The eased value of `argExpr` (a 0..1 ramp) as an ffmpeg expression.
- *
- * `argExpr` is repeated twice per segment, so callers pass a cheap one — an
- * `ld(n)` slot rather than the arithmetic that filled it.
- */
-const easeExpression = (argExpr: string): string => {
-  let expression = fmt(1);
-  for (let segment = EASE_SEGMENTS - 1; segment >= 0; segment--) {
-    const from = segment / EASE_SEGMENTS;
-    const to = (segment + 1) / EASE_SEGMENTS;
-    expression =
-      `if(lt(${argExpr},${fmt(to)}),` +
-      `lerp(${fmt(easeOverlayTransformProgress(from))},` +
-      `${fmt(easeOverlayTransformProgress(to))},` +
-      `(${argExpr}-${fmt(from)})/${fmt(1 / EASE_SEGMENTS)}),` +
-      `${expression})`;
-  }
-  return expression;
-};
-
-/**
- * The head of the `crop` expression: progress into slot 2, and the offset it
- * implies into slot 3.
+ * Slot 1 is `t` snapped back to the frame grid of the Overlay's own content —
+ * {@link sampledTime}, in ffmpeg — so the footage is read at the instant the
+ * panel frame beside it was drawn for. Without it the footage slides smoothly
+ * past a panel that can only step, and leads it by up to a frame's travel.
  *
  * The two ends are reduced to ONE ramp before being eased, rather than eased
  * separately and then compared. The curve is monotonic, so
  * `min(ease(a), ease(b))` and `ease(min(a, b))` are the same number, and only
- * the second spells the ladder out once.
+ * the second spells the ease out once.
  *
  * A disabled end contributes the constant `1` to that `min` — the camera is
  * simply already there — and that, and nothing else, is what makes it a cut.
@@ -341,23 +356,27 @@ const progressPrelude = (
   window: OverlayTransformWindow
 ): string => {
   const { enter, exit } = easeDurations(window);
+  const fps = exact(OVERLAY_CONTENT_FPS);
+  // Slot 1 is the ELAPSED seconds, on the content's frame grid — the same two
+  // rules {@link sampledElapsed} follows, for the same reasons.
+  const grid =
+    `st(1,floor((t-${fmt(window.startInSeconds)})*${fps}` +
+    `+${exact(FRAME_EPSILON)})/${fps});`;
+  const span = window.endInSeconds - window.startInSeconds;
   const ramps = [
-    enter === 0
-      ? fmt(1)
-      : `clip((t-${fmt(window.startInSeconds)})/${fmt(enter)},0,1)`,
-    exit === 0
-      ? fmt(1)
-      : `clip((${fmt(window.endInSeconds)}-t)/${fmt(exit)},0,1)`,
+    enter === 0 ? fmt(1) : `clip(ld(1)/${fmt(enter)},0,1)`,
+    exit === 0 ? fmt(1) : `clip((${fmt(span)}-ld(1))/${fmt(exit)},0,1)`,
   ];
 
   const progress =
     enter === 0 && exit === 0
       ? `st(2,${fmt(1)});`
-      : `st(0,min(${ramps[0]},${ramps[1]}));st(2,${easeExpression("ld(0)")});`;
+      : `${grid}st(0,min(${ramps[0]},${ramps[1]}));${easeStatements()}`;
 
   return (
     progress +
-    `st(3,lerp(${fmt(transform.from.offsetX)},${fmt(transform.to.offsetX)},ld(2)));`
+    `st(3,lerp(${exact(transform.from.offsetX)},` +
+    `${exact(transform.to.offsetX)},ld(2)));`
   );
 };
 
@@ -418,12 +437,12 @@ export const overlayTransformVideoFilter = (
   const widened = 1 + padLeft + padRight;
 
   const prelude = progressPrelude(transform, overlay);
-  const sourceWidth = `iw/${fmt(widened)}`;
+  const sourceWidth = `iw/${exact(widened)}`;
 
   const pad = [
-    `pad=w='iw*${fmt(widened)}'`,
+    `pad=w='iw*${exact(widened)}'`,
     `h='ih'`,
-    `x='iw*${fmt(padLeft)}'`,
+    `x='iw*${exact(padLeft)}'`,
     `y='0'`,
     `color=${SLIDE_BACKGROUND_COLOR}`,
   ].join(":");
@@ -434,9 +453,16 @@ export const overlayTransformVideoFilter = (
   const crop = [
     `crop=w='${sourceWidth}'`,
     `h='ih'`,
-    `x='${prelude}(${sourceWidth})*(${fmt(padLeft)}-ld(3))'`,
+    `x='${prelude}(${sourceWidth})*(${exact(padLeft)}-ld(3))'`,
     `y='0'`,
   ].join(":");
 
   return `${pad},${crop}`;
 };
+
+/**
+ * Re-exported so the ease stays part of THIS feature's surface. Callers ask
+ * `overlay-transform` for the camera's easing; that it is worked out next door
+ * (`./overlay-transform-ease.ts`) is this feature's business, not theirs.
+ */
+export { easeOverlayTransformProgress };
