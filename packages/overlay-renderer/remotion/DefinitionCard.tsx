@@ -1,8 +1,10 @@
 import {
   AbsoluteFill,
+  Easing,
   Img,
   interpolate,
   Sequence,
+  spring,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
@@ -17,11 +19,42 @@ const { fontFamily } = loadFont();
 
 /** The reference frame the card's pixel sizes are authored against. */
 const DESIGN_WIDTH = 1920;
-const FADE_DURATION = 10;
+
+/** The entrance: a short rise, straight up from the bottom, with a small scale. */
+const ENTER_DURATION = 18;
+const EXIT_DURATION = 10;
+const RISE_DISTANCE = 12;
+const RISE_EXIT_DISTANCE = 6;
+const RISE_START_SCALE = 0.98;
+
+/**
+ * The title's underline. It wipes in from the left, holds for a moment, then
+ * wipes out to the right — one unhurried left-to-right gesture that nudges the
+ * eye into reading the term. It is not a permanent rule; the card is left
+ * clean.
+ *
+ * Both halves decelerate, and both take the same number of frames, so the
+ * gesture is symmetrical: it leaves exactly the way it arrived. Neither
+ * springs — a bouncing rule reads as a loading bar.
+ */
+const UNDERLINE_DELAY = 3;
+const UNDERLINE_DRAW = 32;
+const UNDERLINE_HOLD = 6;
+const UNDERLINE_ERASE = UNDERLINE_DRAW;
+const UNDERLINE_HEIGHT = 4;
+/** The gap between the title's baseline box and the rule. */
+const UNDERLINE_GAP = 5;
+/** Amber-400. The accent bar's paler amber is invisible on white. */
+const UNDERLINE_COLOR = "#FBBF24";
+
+/** The brand mark, sized against the 36 px title it stands beside. */
+const LOGO_SIZE = 40;
+const LOGO_OFFSET = 3;
 
 /**
  * The AI-Hero-branded term Definition Card: a `title` + `description` pair
- * over the footage. Deliberately has no Transform (pan/zoom) — it only fades.
+ * over the footage. Deliberately has no Transform (pan/zoom) — it only rises
+ * in, holds, and drops out.
  */
 export const DefinitionCards = ({ cards }: { cards: DefinitionCard[] }) => (
   <>
@@ -41,51 +74,137 @@ export const DefinitionCards = ({ cards }: { cards: DefinitionCard[] }) => (
 
 const Card = ({ card }: { card: DefinitionCard }) => {
   const frame = useCurrentFrame();
-  const { width } = useVideoConfig();
+  const { width, fps } = useVideoConfig();
   const scale = width / DESIGN_WIDTH;
-
   const duration = Math.max(1, card.durationInFrames);
-  const opacity = interpolate(
+
+  // 0 -> 1 as the card arrives; 0 -> 1 again as it leaves.
+  const enter = spring({
     frame,
-    [0, FADE_DURATION, duration - FADE_DURATION, duration],
-    [0, 1, 1, 0],
+    fps,
+    config: { damping: 200 },
+    durationInFrames: ENTER_DURATION,
+  });
+  const exit = interpolate(
+    frame,
+    [duration - EXIT_DURATION, duration],
+    [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
+  // The underline wipes in from the left, then out to the right. Swapping the
+  // transform origin between the two phases is what keeps the gesture moving
+  // one way: at the swap the rule is at full width, so nothing jumps.
+  const drawStart = ENTER_DURATION + UNDERLINE_DELAY;
+  const eraseStart = drawStart + UNDERLINE_DRAW + UNDERLINE_HOLD;
+  const draw = interpolate(
+    frame,
+    [drawStart, drawStart + UNDERLINE_DRAW],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    }
+  );
+  const erase = interpolate(
+    frame,
+    [eraseStart, eraseStart + UNDERLINE_ERASE],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    }
+  );
+  const underline = Math.max(0, draw - erase);
+
+  const y = (1 - enter) * RISE_DISTANCE + exit * RISE_EXIT_DISTANCE;
+  const size = RISE_START_SCALE + enter * (1 - RISE_START_SCALE);
 
   return (
     <AbsoluteFill
       className="flex flex-col justify-end items-start"
       style={{ fontFamily, padding: 96 * scale }}
     >
+      {/* The shadow sits on a wrapper as a drop-shadow, not a box-shadow on
+          the panel: a box-shadow lies outside the panel's border box, so the
+          panel's own overflow clip would cut it off. */}
       <div
-        className="flex items-start bg-stone-900/95 text-white"
         style={{
-          opacity,
-          gap: 32 * scale,
-          padding: 40 * scale,
-          borderRadius: 24 * scale,
-          maxWidth: 760 * scale,
+          opacity: enter * (1 - exit),
+          transform: `translateY(${y * scale}px) scale(${size})`,
+          // Straight up from the bottom edge — not from a corner.
+          transformOrigin: "bottom center",
+          filter: `drop-shadow(0 ${10 * scale}px ${24 * scale}px rgba(28,25,23,0.3))`,
         }}
       >
-        <Img
-          src={staticFile("/ai-hero-logo.svg")}
-          style={{ width: 56 * scale, height: 56 * scale, flexShrink: 0 }}
-        />
-        <div className="flex flex-col" style={{ gap: 12 * scale }}>
-          <p
-            className="font-bold leading-tight text-amber-200"
-            style={{ fontSize: 48 * scale }}
-          >
-            {card.title}
-          </p>
-          <p
-            className="font-normal leading-snug text-stone-200"
-            style={{ fontSize: 32 * scale }}
-          >
-            {card.description}
-          </p>
+        <div
+          className="relative flex items-start overflow-hidden bg-white"
+          style={{
+            gap: 32 * scale,
+            padding: 40 * scale,
+            paddingLeft: (40 + 8) * scale,
+            maxWidth: 760 * scale,
+            // The left corners are barely rounded, so the amber accent reads as
+            // a straight bar rather than a crescent.
+            borderRadius: `${8 * scale}px ${24 * scale}px ${24 * scale}px ${
+              8 * scale
+            }px`,
+          }}
+        >
+          <AccentBar scale={scale} />
+          {/* Sized and nudged down so the mark's centre sits on the title's
+              cap height, not on the top of the title's line box. */}
+          <Img
+            src={staticFile("/ai-hero-logo-dark.svg")}
+            style={{
+              width: LOGO_SIZE * scale,
+              height: LOGO_SIZE * scale,
+              marginTop: LOGO_OFFSET * scale,
+              flexShrink: 0,
+            }}
+          />
+          <div className="flex flex-col items-start" style={{ gap: 6 * scale }}>
+            {/* `inline-block` so the underline is as wide as the title's own
+                text, not as wide as the column. A column-wide rule reads as a
+                divider instead of an underline. */}
+            <p
+              className="relative inline-block font-bold leading-tight text-stone-900"
+              style={{
+                fontSize: 36 * scale,
+                paddingBottom: UNDERLINE_GAP * scale,
+              }}
+            >
+              {card.title}
+              <span
+                className="absolute left-0 bottom-0"
+                style={{
+                  width: "100%",
+                  height: UNDERLINE_HEIGHT * scale,
+                  borderRadius: UNDERLINE_HEIGHT * scale,
+                  background: UNDERLINE_COLOR,
+                  transform: `scaleX(${underline})`,
+                  transformOrigin: erase > 0 ? "right" : "left",
+                }}
+              />
+            </p>
+            <p
+              className="font-normal leading-snug text-stone-600"
+              style={{ fontSize: 26 * scale }}
+            >
+              {card.description}
+            </p>
+          </div>
         </div>
       </div>
     </AbsoluteFill>
   );
 };
+
+/** The amber brand bar down the panel's left edge. Static. */
+const AccentBar = ({ scale }: { scale: number }) => (
+  <div
+    className="absolute left-0 top-0 bottom-0"
+    style={{ width: 8 * scale, background: "#FDE68A" }}
+  />
+);

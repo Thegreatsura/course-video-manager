@@ -5,7 +5,9 @@ import { COMPOSITION_ID, type OverlayProps } from "../src/props";
 
 // Sample props so Remotion Studio (`pnpm run studio`) has something to show. The
 // real render always supplies its own props via `inputProps`.
-const sampleProps: OverlayProps = {
+
+/** The vertical Shorts pipeline: subtitles + CTA. */
+const shortsSampleProps: OverlayProps = {
   width: 1080,
   height: 1920,
   fps: 60,
@@ -16,6 +18,21 @@ const sampleProps: OverlayProps = {
     { startFrame: 120, endFrame: 180, text: "that AI can only be" },
   ],
   cta: { variant: "ai", durationInFrames: 120 },
+  definitionCards: [],
+};
+
+/**
+ * The landscape course-video pipeline: one Definition Card, alone, for the
+ * length of its own overlay clip. Uses the same `Overlay` component as the
+ * render, so the Studio shows exactly what the renderer draws.
+ */
+const definitionCardSampleProps: OverlayProps = {
+  width: 1920,
+  height: 1080,
+  fps: 60,
+  durationInFrames: 180,
+  subtitles: [],
+  cta: null,
   definitionCards: [
     {
       title: "Ubiquitous Language",
@@ -27,23 +44,38 @@ const sampleProps: OverlayProps = {
   ],
 };
 
+const metadata = async ({ props }: { props: OverlayProps }) => ({
+  durationInFrames: Math.floor(props.durationInFrames),
+  fps: props.fps,
+  width: props.width,
+  height: props.height,
+});
+
 export const RemotionRoot: React.FC = () => {
   return (
-    <Composition
-      id={COMPOSITION_ID}
-      component={Overlay}
-      defaultProps={sampleProps}
-      calculateMetadata={async ({ props }) => ({
-        durationInFrames: Math.floor(props.durationInFrames),
-        fps: props.fps,
-        width: props.width,
-        height: props.height,
-      })}
-      // Overridden per-render by calculateMetadata; required by the type.
-      durationInFrames={sampleProps.durationInFrames}
-      fps={sampleProps.fps}
-      width={sampleProps.width}
-      height={sampleProps.height}
-    />
+    <>
+      <Composition
+        id={COMPOSITION_ID}
+        component={Overlay}
+        defaultProps={shortsSampleProps}
+        calculateMetadata={metadata}
+        // Overridden per-render by calculateMetadata; required by the type.
+        durationInFrames={shortsSampleProps.durationInFrames}
+        fps={shortsSampleProps.fps}
+        width={shortsSampleProps.width}
+        height={shortsSampleProps.height}
+      />
+      {/* Studio-only preview. The render always selects COMPOSITION_ID. */}
+      <Composition
+        id="DefinitionCard"
+        component={Overlay}
+        defaultProps={definitionCardSampleProps}
+        calculateMetadata={metadata}
+        durationInFrames={definitionCardSampleProps.durationInFrames}
+        fps={definitionCardSampleProps.fps}
+        width={definitionCardSampleProps.width}
+        height={definitionCardSampleProps.height}
+      />
+    </>
   );
 };
