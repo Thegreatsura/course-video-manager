@@ -101,9 +101,9 @@ export const VideoPlayerPanel = () => {
     (ctx) => ctx.clipsToAggressivelyPreload
   );
   const clips = useContextSelector(VideoEditorContext, (ctx) => ctx.clips);
-  const overlays = useContextSelector(
+  const overlaysByClipId = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.overlays
+    (ctx) => ctx.overlaysByClipId
   );
   const insertionPoint = useContextSelector(
     VideoEditorContext,
@@ -424,7 +424,7 @@ export const VideoPlayerPanel = () => {
                   onUpdateCurrentTime={onUpdateCurrentTime}
                   playbackRate={playbackRate}
                   scrubSeekTime={scrubSeekTime}
-                  overlays={overlays}
+                  overlaysByClipId={overlaysByClipId}
                 />
               </div>
             </>

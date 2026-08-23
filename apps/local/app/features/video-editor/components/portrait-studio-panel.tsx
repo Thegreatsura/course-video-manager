@@ -246,7 +246,7 @@ export const PortraitStudioPanel = () => {
                 // previews — are a landscape/course-video feature (see
                 // `DEFINITION_CARD_FRAME` in `overlay-render-cache.ts`); the
                 // Shorts studio has no overlay preview of its own yet.
-                overlays={NO_OVERLAYS}
+                overlaysByClipId={NO_OVERLAYS}
               />
             </div>
 
@@ -336,5 +336,5 @@ export const PortraitStudioPanel = () => {
   );
 };
 
-/** A stable empty array — the Shorts studio has no overlay preview yet. */
-const NO_OVERLAYS: ClipOverlay[] = [];
+/** A stable empty map — the Shorts studio has no overlay preview yet. */
+const NO_OVERLAYS = new Map<string, ClipOverlay[]>();
