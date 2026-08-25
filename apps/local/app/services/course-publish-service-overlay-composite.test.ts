@@ -369,8 +369,10 @@ describe("Bullet Panels in a course export", () => {
     // window lives in the ramps, not in an `enable=`.
     expect(graph).toContain("pad=w=");
     expect(graph).toContain("crop=w=");
-    expect(graph).toContain("clip((t-11.000000)/");
-    expect(graph).toContain("clip((17.000000-t)/");
+    // The window is the Overlay's start, and its own LENGTH — the ramps are
+    // stated on the elapsed seconds slot 1 holds, on the panel's frame grid.
+    expect(graph).toContain("floor((t-11.000000)*60");
+    expect(graph).toContain("clip((6.000000-ld(1))/");
     // ...and the panel drawn on top of it, over the very same window.
     expect(graph).toContain("[1:v]setpts=PTS-STARTPTS+11.000/TB[ovl0]");
     expect(graph).toContain(

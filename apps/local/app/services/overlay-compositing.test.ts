@@ -346,8 +346,9 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
     // back out of it wherever the ramps read zero. Gating only the crop would
     // emit a wider frame than the graph expects, and `pad` has no timeline
     // support to gate it with.
-    expect(graph).toContain("clip((t-12.000000)/");
-    expect(graph).toContain("clip((20.000000-t)/");
+    expect(graph).toContain("floor((t-12.000000)*60");
+    expect(graph).toContain("clip(ld(1)/");
+    expect(graph).toContain("clip((8.000000-ld(1))/");
     // The only `enable=` left in the graph is the graphic overlay's own.
     expect(graph.match(/enable=/g)).toHaveLength(1);
     expect(graph).toContain("[ovl0]overlay=");
@@ -356,14 +357,18 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
   it("slides to the kind's own default Transform, which nobody authored", () => {
     const graph = buildOverlayCompositeFilterGraph([panel()])!;
 
-    // Unmoved (offset 0) to half the panel's own ground, 406 of 1920.
-    expect(graph).toContain("st(3,lerp(0.000000,0.211458,ld(2)))");
+    // Unmoved (offset 0) to half the panel's own ground, 406 of 1920 —
+    // spelled to twelve places, because this is the number the preview slides
+    // by too and six places would make them different numbers.
+    expect(graph).toContain("st(3,lerp(0,0.211458333333,ld(2)))");
     // The canvas is widened by exactly that travel, on the left, and the
     // picture is taken back out of it at its own size — so the source is
     // never magnified.
-    expect(graph).toContain("pad=w='iw*1.211458':h='ih':x='iw*0.211458':y='0'");
-    expect(graph).toContain("crop=w='iw/1.211458':h='ih'");
-    expect(graph).toContain("(iw/1.211458)*(0.211458-ld(3))");
+    expect(graph).toContain(
+      "pad=w='iw*1.211458333333':h='ih':x='iw*0.211458333333':y='0'"
+    );
+    expect(graph).toContain("crop=w='iw/1.211458333333':h='ih'");
+    expect(graph).toContain("(iw/1.211458333333)*(0.211458333333-ld(3))");
     // Nothing divides a dimension by the progress slot any more — that
     // division WAS the zoom.
     expect(graph).not.toContain("iw/ld(3)");
@@ -379,12 +384,17 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
   it("eases in and out over the same span at both ends", () => {
     const graph = buildOverlayCompositeFilterGraph([panel()])!;
 
-    expect(graph).toContain(`clip((t-1.500000)/${EASE},0,1)`);
-    expect(graph).toContain(`clip((4.500000-t)/${EASE},0,1)`);
-    // Eased, not linear: the sampled curve is past a third of the way there
-    // by an eighth of the ramp.
-    expect(graph).toContain("lerp(0.000000,0.136888,");
-    expect(graph).toContain("lerp(0.136888,0.408511,");
+    // Both ramps are stated on the ELAPSED seconds in slot 1, so the exit's
+    // is the window's own LENGTH minus it, not its end minus `t`.
+    expect(graph).toContain(`clip(ld(1)/${EASE},0,1)`);
+    expect(graph).toContain(`clip((3.000000-ld(1))/${EASE},0,1)`);
+    // Eased, and eased EXACTLY: Cardano's one real root of the curve's x
+    // axis, which is what lets the export and the preview agree at every
+    // instant rather than only at the ends. It replaced eight straight
+    // segments that drifted 18px from the panel in between.
+    expect(graph).toContain("sqrt(ld(4)*ld(4)/4+0.006591796875)");
+    expect(graph).toContain("pow(ld(5)-ld(4)/2,1/3)-pow(ld(5)+ld(4)/2,1/3)");
+    expect(graph).not.toContain("lerp(0.000000,0.136888,");
   });
 
   it("splits what it has when the Overlay is shorter than two eases", () => {
@@ -392,8 +402,8 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
       panel({ startInSeconds: 0, endInSeconds: 0.4 }),
     ])!;
 
-    expect(graph).toContain("clip((t-0.000000)/0.200000,0,1)");
-    expect(graph).toContain("clip((0.400000-t)/0.200000,0,1)");
+    expect(graph).toContain("clip(ld(1)/0.200000,0,1)");
+    expect(graph).toContain("clip((0.400000-ld(1))/0.200000,0,1)");
   });
 
   it("cuts into the shifted framing when the enter animation is off", () => {
@@ -403,8 +413,8 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
 
     // No ramp at the start at all — the camera is already there — while the
     // exit still eases.
-    expect(graph).toContain(`min(1.000000,clip((4.500000-t)/${EASE},0,1))`);
-    expect(graph).not.toContain("clip((t-1.500000)");
+    expect(graph).toContain(`min(1.000000,clip((3.000000-ld(1))/${EASE},0,1))`);
+    expect(graph).not.toContain(`clip(ld(1)/${EASE}`);
   });
 
   it("cuts out of it when the exit animation is off", () => {
@@ -412,8 +422,8 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
       panel({ disableExitAnimation: true }),
     ])!;
 
-    expect(graph).toContain(`min(clip((t-1.500000)/${EASE},0,1),1.000000)`);
-    expect(graph).not.toContain("clip((4.500000-t)");
+    expect(graph).toContain(`min(clip(ld(1)/${EASE},0,1),1.000000)`);
+    expect(graph).not.toContain("clip((3.000000-ld(1))");
   });
 
   it("holds one framing throughout when both are off", () => {
@@ -425,7 +435,10 @@ describe("buildOverlayCompositeFilterGraph — the camera Transform", () => {
     // for the whole of the Overlay's window, with no ramp at either end.
     expect(graph).toContain("st(2,1.000000);");
     expect(graph).not.toContain("clip(");
-    expect(graph).not.toContain("lerp(0.000000,0.136888,");
+    // No ease at all, so no solve for one either — and no frame grid to read
+    // it on, since nothing is moving.
+    expect(graph).not.toContain("sqrt(");
+    expect(graph).not.toContain("floor(");
   });
 
   it("moves the camera only for the Overlays whose kind asks for it", () => {

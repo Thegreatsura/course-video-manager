@@ -1,6 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { buildOverlayCompositeFilterGraph } from "@/services/overlay-compositing";
+import {
+  overlayTransform,
+  overlayTransformProgressAt,
+  overlayTransformVideoFilter,
+  type OverlayTransformWindow,
+} from "@/features/videos/overlay-transform";
 
 /**
  * The one test that asks ffmpeg itself whether the compositing pass can run.
@@ -86,6 +92,100 @@ describe.skipIf(!hasFfmpeg)(
 
       expect(graph).not.toBeNull();
       expect(() => runGraph(graph!, 4)).not.toThrow();
+    });
+  }
+);
+
+/**
+ * Where the camera actually puts the picture, measured in REAL PIXELS out of
+ * real ffmpeg.
+ *
+ * A white source is slid over a near-black background, so the first lit column
+ * of a row is the picture's own left edge — which is the whole of what the move
+ * does. One row is read per frame; the frame is only 16 tall because nothing
+ * about a horizontal slide varies down it.
+ */
+const measureLeftEdges = (filter: string, fps: number, seconds: number) => {
+  const width = 1920;
+  const height = 16;
+  const raw = execFileSync(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=white:s=${width}x${height}:r=${fps}:d=${seconds}`,
+      "-vf",
+      filter,
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "gray",
+      "-",
+    ],
+    { maxBuffer: 64 * 1024 * 1024 }
+  );
+
+  const frames = Math.floor(raw.length / (width * height));
+  return Array.from({ length: frames }, (_, frame) => {
+    const row = raw.subarray(
+      frame * width * height,
+      frame * width * height + width
+    );
+    const edge = row.findIndex((value) => value > 200);
+    return { timeInSeconds: frame / fps, leftEdge: edge };
+  });
+};
+
+describe.skipIf(!hasFfmpeg)(
+  "the camera move, measured in ffmpeg's own pixels",
+  () => {
+    const window: OverlayTransformWindow & { kind: string } = {
+      kind: "bulletPanel",
+      startInSeconds: 0,
+      endInSeconds: 10,
+    };
+
+    /**
+     * REGRESSION, and the test that should have existed first.
+     *
+     * Every other test of this move evaluates its expressions with an evaluator
+     * of this repo's own. That proves the arithmetic and says nothing about what
+     * ffmpeg does with it — so an export that ran 17px ahead of the panel it was
+     * moving with passed the lot. This asks ffmpeg where the picture is.
+     *
+     * The tolerance is 2px because the source is chroma-subsampled, which pins a
+     * crop's `x` to an even column. That is the finest the export can be, not a
+     * margin for the move to drift in: the error it was written to catch is ten
+     * times it.
+     */
+    it("puts the picture where the preview says it is, on every frame", () => {
+      const filter = overlayTransformVideoFilter(window)!;
+      const travel = overlayTransform(window.kind)!.to.offsetX * 1920;
+
+      let worst = 0;
+      for (const { timeInSeconds, leftEdge } of measureLeftEdges(
+        filter,
+        25,
+        1
+      )) {
+        const want = overlayTransformProgressAt(window, timeInSeconds) * travel;
+        worst = Math.max(worst, Math.abs(leftEdge - want));
+      }
+
+      expect(worst).toBeLessThanOrEqual(2);
+    });
+
+    it("leaves the picture alone before the move starts", () => {
+      const later = { ...window, startInSeconds: 5, endInSeconds: 9 };
+      const filter = overlayTransformVideoFilter(later)!;
+
+      for (const { leftEdge } of measureLeftEdges(filter, 25, 1)) {
+        expect(leftEdge).toBe(0);
+      }
     });
   }
 );

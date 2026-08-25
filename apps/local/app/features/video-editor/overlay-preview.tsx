@@ -68,12 +68,22 @@ const OVERLAY_RENDER_FPS = 60;
  * including when `at` is negative because it began on an earlier Clip, which
  * simply makes that difference larger.
  */
+/**
+ * The frame of the Overlay's content that `currentTime` lands on.
+ *
+ * FLOOR, not round: it has to name the frame the EXPORT composites, and
+ * ffmpeg's `overlay` shows the most recent frame of the graphic whose time has
+ * passed. Rounding showed the next frame half a frame early, which put the
+ * panel up to half a frame ahead of the footage under it — and the footage is
+ * read on this same grid (`sampledTime` in `overlay-transform.ts`), so the two
+ * only stay locked while both round the same way.
+ */
 const overlayFrameAt = (overlay: ClipOverlay, currentTime: number) =>
   Math.max(
     0,
     Math.min(
       Math.ceil(overlay.durationInSeconds * OVERLAY_RENDER_FPS) - 1,
-      Math.round((currentTime - overlay.at) * OVERLAY_RENDER_FPS)
+      Math.floor((currentTime - overlay.at) * OVERLAY_RENDER_FPS)
     )
   );
 

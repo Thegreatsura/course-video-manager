@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  OVERLAY_CONTENT_FPS,
   OVERLAY_TRANSFORM_EASE_IN_SECONDS,
+  easeOverlayTransformProgress,
   overlayTransform,
   overlayTransformCssStyleAt,
   overlayTransformVideoFilter,
@@ -14,9 +16,10 @@ import {
  * hoping.
  *
  * The dialect is small and entirely arithmetic: `st`/`ld` are the numbered
- * slots, `;` sequences them, and `if`/`lt`/`min`/`clip`/`lerp` are ffmpeg's
- * own functions. `if` is evaluated eagerly here, which its uses in this file
- * allow — every branch is plain arithmetic with nothing to guard against.
+ * slots, `;` sequences them, and `min`/`clip`/`lerp`/`floor`/`sqrt`/`pow` are
+ * ffmpeg's own functions. There is no `if` left to evaluate — the camera's
+ * ease stopped being a branching ladder of straight segments when it became a
+ * closed form.
  */
 const evaluateExpression = (
   expression: string,
@@ -25,13 +28,14 @@ const evaluateExpression = (
   t: number
 ): number => {
   const js = expression
-    .replace(/\bif\(/g, "IF(")
     .replace(/\bst\(/g, "ST(")
     .replace(/\bld\(/g, "LD(")
     .replace(/\blerp\(/g, "LERP(")
     .replace(/\bclip\(/g, "CLIP(")
-    .replace(/\blt\(/g, "LT(")
     .replace(/\bmin\(/g, "MIN(")
+    .replace(/\bfloor\(/g, "FLOOR(")
+    .replace(/\bsqrt\(/g, "SQRT(")
+    .replace(/\bpow\(/g, "POW(")
     // Sequenced statements become one comma expression, which is exactly what
     // ffmpeg's `;` is: evaluate each, take the last.
     .replace(/;/g, ",");
@@ -43,10 +47,10 @@ const evaluateExpression = (
     LERP: (from: number, to: number, p: number) => from + (to - from) * p,
     CLIP: (value: number, low: number, high: number) =>
       Math.min(high, Math.max(low, value)),
-    LT: (a: number, b: number) => (a < b ? 1 : 0),
     MIN: (a: number, b: number) => Math.min(a, b),
-    IF: (condition: number, then: number, otherwise: number) =>
-      condition !== 0 ? then : otherwise,
+    FLOOR: (value: number) => Math.floor(value),
+    SQRT: (value: number) => Math.sqrt(value),
+    POW: (base: number, exponent: number) => Math.pow(base, exponent),
   };
 
   return Function(
@@ -231,6 +235,57 @@ describe("overlay transform", () => {
     });
   });
 
+  describe("the ease", () => {
+    /**
+     * `cubic-bezier(0.25, 0.1, 0.25, 1)` solved the slow, obvious way: walk the
+     * curve's own parameter until its x reaches the one asked for, then read
+     * its y.
+     *
+     * This is the DEFINITION the closed form has to reproduce. It is written
+     * out here, in the test, precisely because the shipped one no longer looks
+     * anything like it — Cardano's formula is right or wrong by a derivation
+     * nobody can check by eye, so it is checked against the curve instead.
+     */
+    const bisect = (x: number): number => {
+      const axis = (t: number, p1: number, p2: number) =>
+        3 * (1 - t) * (1 - t) * t * p1 + 3 * (1 - t) * t * t * p2 + t * t * t;
+      if (x <= 0 || x >= 1) return Math.min(1, Math.max(0, x));
+      let low = 0;
+      let high = 1;
+      for (let i = 0; i < 60; i++) {
+        const mid = (low + high) / 2;
+        if (axis(mid, 0.25, 0.25) < x) low = mid;
+        else high = mid;
+      }
+      return axis((low + high) / 2, 0.1, 1);
+    };
+
+    it("is the curve it claims to be, at every point of it", () => {
+      let worst = 0;
+      for (let step = 0; step <= 10000; step++) {
+        const x = step / 10000;
+        worst = Math.max(
+          worst,
+          Math.abs(easeOverlayTransformProgress(x) - bisect(x))
+        );
+      }
+      expect(worst).toBeLessThan(1e-12);
+    });
+
+    it("pins both ends, and never leaves 0..1 in between", () => {
+      expect(easeOverlayTransformProgress(0)).toBe(0);
+      expect(easeOverlayTransformProgress(1)).toBe(1);
+      // Out of range in is clamped, not extrapolated.
+      expect(easeOverlayTransformProgress(-5)).toBe(0);
+      expect(easeOverlayTransformProgress(5)).toBe(1);
+      for (let step = 0; step <= 1000; step++) {
+        const y = easeOverlayTransformProgress(step / 1000);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y).toBeLessThanOrEqual(1);
+      }
+    });
+  });
+
   describe("preview and export frame the same shot", () => {
     const filter = overlayTransformVideoFilter(panelWindow)!;
 
@@ -255,15 +310,66 @@ describe("overlay transform", () => {
           moment
         );
 
-        // The export's own ease is a piecewise-linear ladder sampled from the
-        // curve the preview solves exactly, so the two agree to within a
-        // pixel or so rather than to the bit.
+        // To a BILLIONTH of a pixel, not to a pixel. Both sides evaluate the
+        // same closed-form ease at the same grid-sampled moment, so all that
+        // is left between them is the twelfth decimal place the filter string
+        // spells its constants to.
         expect(fromFilter.pictureLeftEdge).toBeCloseTo(
           fromCss.pictureLeftEdge,
-          0
+          6
         );
       });
     }
+
+    // REGRESSION. The export used to sample this curve as eight straight
+    // segments, because a Bézier was thought to have no closed-form inverse.
+    // The two ends of a segment are exact and its middle is not, so every test
+    // that checked whole seconds passed while the export ran up to 18px ahead
+    // of the panel it was meant to be moving with — worst just after the start,
+    // which is exactly where the eye is on the moving edge. Only a sweep sees
+    // it, so this sweeps.
+    it("agree at EVERY moment of the move, not only at the ends", () => {
+      let worst = 0;
+      for (let step = 0; step <= 2000; step++) {
+        const moment =
+          panelWindow.startInSeconds +
+          (step / 2000) *
+            (panelWindow.endInSeconds - panelWindow.startInSeconds);
+        const style = overlayTransformCssStyleAt(panelWindow, moment);
+        if (!style) continue;
+        worst = Math.max(
+          worst,
+          Math.abs(
+            evaluateVideoFilter(filter, SOURCE_WIDTH, SOURCE_HEIGHT, moment)
+              .pictureLeftEdge -
+              evaluateCssStyle(style, SOURCE_WIDTH).pictureLeftEdge
+          )
+        );
+      }
+      // A millionth of a pixel. The ladder's worst was 18.6.
+      expect(worst).toBeLessThan(1e-6);
+    });
+
+    // The panel is a CLIP at `OVERLAY_CONTENT_FPS`, so it can only ever show
+    // whole frames. The footage has to step with it: sliding smoothly past a
+    // panel that steps puts the two out by up to a frame's travel, which is
+    // 38px at the fastest part of this ease.
+    it("holds the footage still across one frame of the panel, and steps with it", () => {
+      const frame = 1 / OVERLAY_CONTENT_FPS;
+      // Mid-ease, where the move is quickest and a slip shows most.
+      const start = panelWindow.startInSeconds + 6 * frame;
+      const at = (moment: number) =>
+        evaluateCssStyle(
+          overlayTransformCssStyleAt(panelWindow, moment)!,
+          SOURCE_WIDTH
+        ).pictureLeftEdge;
+
+      // Anywhere inside one frame of the panel, the footage is in one place.
+      expect(at(start + frame * 0.25)).toBeCloseTo(at(start), 9);
+      expect(at(start + frame * 0.99)).toBeCloseTo(at(start), 9);
+      // And it does move on the next one — this is a grid, not a freeze.
+      expect(at(start + frame)).toBeGreaterThan(at(start) + 10);
+    });
 
     it("keeps the crop inside the padded canvas throughout", () => {
       for (const moment of moments) {
