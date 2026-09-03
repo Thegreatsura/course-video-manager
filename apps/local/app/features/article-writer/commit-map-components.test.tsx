@@ -36,6 +36,11 @@ const REPEATED = `<CommitMap>
   <Commit id="main">Again</Commit>
 </CommitMap>`;
 
+const NPM = `<CommitMap packageManager="npm">
+  <Commit id="main">The course start</Commit>
+  <Commit id="add-settings-json">See my solution</Commit>
+</CommitMap>`;
+
 describe("commit map card", () => {
   it("draws an entry with its id, description and commands", () => {
     const html = render(CONTIGUOUS);
@@ -51,6 +56,15 @@ describe("commit map card", () => {
 
     expect(html).toContain("pnpm reset main");
     expect(html).not.toContain("pnpm cherry-pick main");
+  });
+
+  it("draws npm commands when the map's packageManager is npm", () => {
+    const html = render(NPM);
+
+    expect(html).toContain("npm run reset add-settings-json");
+    expect(html).toContain("npm run cherry-pick add-settings-json");
+    expect(html).not.toContain("pnpm reset");
+    expect(html).not.toContain("pnpm cherry-pick");
   });
 
   it("reports nothing against a contiguous map", () => {
