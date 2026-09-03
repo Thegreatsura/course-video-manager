@@ -11,6 +11,7 @@
     "dev": "turbo run dev --filter=!@cvm/overlay-renderer",
     "start": "turbo run start --filter=!@cvm/overlay-renderer",
     "test": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer",
+    "test:affected": "turbo run test test:root --concurrency=1 --affected --filter=!@cvm/overlay-renderer -- --changed=origin/main",
     "test:watch": "turbo run test:watch --filter=!@cvm/overlay-renderer",
     "typecheck": "turbo run typecheck typecheck:root --filter=!@cvm/overlay-renderer",
     "lint:boundaries": "turbo run lint:boundaries --filter=!@cvm/overlay-renderer",
@@ -62,6 +63,7 @@
     "tsx": "^4.20.5",
     "turbo": "^2.5.6",
     "typescript": "^5.8.3",
-    "vitest": "^3"
+    "vitest": "^3",
+    "zod": "^4.4.3"
   }
 }
