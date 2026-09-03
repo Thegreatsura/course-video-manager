@@ -11,7 +11,6 @@
     "dev": "turbo run dev --filter=!@cvm/overlay-renderer",
     "start": "turbo run start --filter=!@cvm/overlay-renderer",
     "test": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer",
-    "test:affected": "turbo run test test:root --concurrency=1 --affected --filter=!@cvm/overlay-renderer -- --changed=origin/main",
     "test:watch": "turbo run test:watch --filter=!@cvm/overlay-renderer",
     "typecheck": "turbo run typecheck typecheck:root --filter=!@cvm/overlay-renderer",
     "lint:boundaries": "turbo run lint:boundaries --filter=!@cvm/overlay-renderer",

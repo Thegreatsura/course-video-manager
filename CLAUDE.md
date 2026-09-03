@@ -24,7 +24,7 @@ Neither `packages/core` nor `apps/remote` may import anything filesystem-bound �
 
 ### Testing
 
-Two tiers — don't run the full suite by hand. Use `pnpm run test:affected` while iterating (scoped to your diff: Turbo `--affected` skips untouched packages, Vitest `--changed` further narrows to affected test files); the full unfiltered suite runs in CI on every PR (`.github/workflows/test.yml`), so scoping locally never leaves a change unverified. See `docs/agents/testing.md` for the scoping mechanics and known PGlite flakiness under a sandboxed agent workspace's CPU load.
+Two tiers — don't run a package's full suite by hand. While iterating, run only the specific test file(s) that cover your change, directly via `pnpm --filter <package> test -- path/to/thing.test.ts`; the full unfiltered suite runs in CI on every PR (`.github/workflows/test.yml`), so targeting locally never leaves a change unverified. See `docs/agents/testing.md` for the mechanics and known PGlite flakiness under a sandboxed agent workspace's CPU load.
 
 ### Deep-module packages
 
