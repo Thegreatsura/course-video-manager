@@ -123,6 +123,9 @@ const lessonSectionService = (client: RpcClient) =>
     batchUpdateLessonOrders: rpcMethod((json) =>
       client.rpc.lesson.batchUpdateLessonOrders.$post({ json })
     ),
+    deleteLesson: rpcMethod((json) =>
+      client.rpc.lesson.deleteLesson.$post({ json })
+    ),
   }) satisfies RemoteService<LessonSectionOperationsService>;
 
 /** `cvm lesson move` — structural writes, in the `lesson` group with them. */

@@ -47,6 +47,10 @@ export const lessonRoutes = (runtime: RemoteRuntime) =>
       )
     )
     .post(
+      "/deleteLesson",
+      forward(runtime, LessonSectionOperationsService, "deleteLesson")
+    )
+    .post(
       "/reorderLessons",
       forward(runtime, CourseWriteService, "reorderLessons")
     )

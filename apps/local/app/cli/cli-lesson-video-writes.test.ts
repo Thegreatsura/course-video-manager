@@ -16,6 +16,7 @@ import {
   type RunResult,
   type WriteSeed,
 } from "./cli-write-test-harness";
+import * as schema from "@/db/schema";
 
 // ===========================================================================
 // cvm WRITE verbs — lesson create + video create/move/update
@@ -307,6 +308,72 @@ describe("lesson update", () => {
     expect((JSON.parse(stderr.trim()) as { entity: string }).entity).toBe(
       "lesson"
     );
+  });
+});
+
+describe("lesson archive", () => {
+  interface Lesson {
+    id: string;
+    sectionId: string;
+    title: string;
+    archived: boolean;
+  }
+  const lobj = (stdout: string): Lesson => one<Lesson>(stdout);
+
+  it("hides the lesson from get/list/tree and echoes the archived row", async () => {
+    const { stdout, stderr, exitCode } = await run([
+      "lesson",
+      "archive",
+      s.lessonId,
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+    const archived = lobj(stdout);
+    expect(archived.id).toBe(s.lessonId);
+    expect(archived.archived).toBe(true);
+
+    expect((await run(["lesson", "get", s.lessonId])).exitCode).toBe(2);
+    expect((await run(["lesson", "tree", s.lessonId])).exitCode).toBe(2);
+    const list = ndjson(
+      (await run(["lesson", "list", "--section", s.draftSectionId])).stdout
+    ) as Lesson[];
+    expect(list.map((l) => l.id)).not.toContain(s.lessonId);
+  });
+
+  it("rejects an unknown id => exit 2", async () => {
+    expect((await run(["lesson", "archive", "les_missing"])).exitCode).toBe(2);
+  });
+
+  it("is not repeatable — an archived lesson is not addressable", async () => {
+    await run(["lesson", "archive", s.lessonId]);
+    expect((await run(["lesson", "archive", s.lessonId])).exitCode).toBe(2);
+  });
+
+  it("refuses to archive a lesson in a published (frozen) version (exit 3)", async () => {
+    const [oldCourse] = await testDb
+      .insert(schema.courses)
+      .values({ name: "Old", slug: "old-course" })
+      .returning();
+    const [oldVersion] = await testDb
+      .insert(schema.courseVersions)
+      .values({ repoId: oldCourse!.id, name: "v1", commitState: "published" })
+      .returning();
+    const [oldSection] = await testDb
+      .insert(schema.sections)
+      .values({ repoVersionId: oldVersion!.id, title: "01-old", order: 1 })
+      .returning();
+    const [oldLesson] = await testDb
+      .insert(schema.lessons)
+      .values({ sectionId: oldSection!.id, title: "Old One", order: 1 })
+      .returning();
+
+    const { exitCode, stderr } = await run([
+      "lesson",
+      "archive",
+      oldLesson!.id,
+    ]);
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain("ParseError");
   });
 });
 
