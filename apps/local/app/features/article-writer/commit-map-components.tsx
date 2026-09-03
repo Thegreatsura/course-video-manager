@@ -9,17 +9,29 @@ import { CommitEntryCard, CommitMapCard } from "./commit-map-card";
  * No rewrite: a commit map goes into the preview exactly as authored.
  *
  * Quizzes are rewritten before parsing because `data={{ … }}` is a JS object
- * literal and an HTML attribute cannot hold one. A commit map carries a plain
- * `id="…"` attribute and text children, so the HTML parser takes it as it
- * stands — it only lowercases the tag names, which is why these keys are
- * `commitmap` and `commit`. Nothing here needs a scanner, and adding one for
- * symmetry with the quiz would buy nothing.
+ * literal and an HTML attribute cannot hold one. A commit map carries plain
+ * `id="…"` and `packageManager="…"` attributes and text children, so the HTML
+ * parser takes it as it stands — it lowercases tag *and* attribute names,
+ * which is why these keys are `commitmap`/`commit`, and why the slots below
+ * read `props.packagemanager` rather than `props.packageManager` (the stored
+ * body text, and the real MDX aihero.dev compiles it as, keep the camelCase
+ * spelling — only this raw-HTML preview flattens it). Nothing here needs a
+ * scanner, and adding one for symmetry with the quiz would buy nothing.
  */
 export const COMMIT_MAP_TAG_NAME = "commitmap";
 export const COMMIT_ENTRY_TAG_NAME = "commit";
 
+/** The package manager a course's project repo uses, `pnpm` unless stated. */
+type PackageManager = "npm" | "pnpm";
+const DEFAULT_PACKAGE_MANAGER: PackageManager = "pnpm";
+
 /** Ids the surrounding map uses more than once. */
 const DuplicateIdsContext = createContext<ReadonlySet<string>>(new Set());
+
+/** The map's `packageManager`, read by every entry underneath it. */
+const PackageManagerContext = createContext<PackageManager>(
+  DEFAULT_PACKAGE_MANAGER
+);
 
 type SlotProps = HTMLAttributes<HTMLElement> & Record<string, unknown>;
 
@@ -74,15 +86,23 @@ function CommitMapSlot(props: SlotProps) {
       ]
     : [];
 
+  // Lowercased by the raw-HTML parser along with the tag name — see the file
+  // comment above.
+  const packageManager: PackageManager =
+    props.packagemanager === "npm" ? "npm" : DEFAULT_PACKAGE_MANAGER;
+
   return (
-    <DuplicateIdsContext.Provider value={duplicates}>
-      <CommitMapCard problems={problems}>{children}</CommitMapCard>
-    </DuplicateIdsContext.Provider>
+    <PackageManagerContext.Provider value={packageManager}>
+      <DuplicateIdsContext.Provider value={duplicates}>
+        <CommitMapCard problems={problems}>{children}</CommitMapCard>
+      </DuplicateIdsContext.Provider>
+    </PackageManagerContext.Provider>
   );
 }
 
 function CommitEntrySlot(props: SlotProps) {
   const duplicates = useContext(DuplicateIdsContext);
+  const packageManager = useContext(PackageManagerContext);
   const rawId = props.id;
   const id = typeof rawId === "string" && rawId.length > 0 ? rawId : null;
 
@@ -99,6 +119,7 @@ function CommitEntrySlot(props: SlotProps) {
     <CommitEntryCard
       id={id}
       description={props.children as ReactNode}
+      packageManager={packageManager}
       problems={problems}
     />
   );

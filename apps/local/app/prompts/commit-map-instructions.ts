@@ -28,6 +28,7 @@ When you are asked for one, this is the shape:
 The rules:
 
 - It goes at the **top of the body**, before the first line of prose. It is navigation: the reader needs it before they start, not after.
+- The opening tag may carry \`packageManager="npm"\`: \`<CommitMap packageManager="npm">\`. Omit it and the course repo is assumed to use pnpm — that is still true for most courses. Never add or change this attribute yourself; use exactly what you are told the course's repo uses, the same as a slug.
 - Each \`id\` is a **slug** — the id of a commit in the course project repo, in kebab-case. It names what the commit does to the tree (\`add-settings-json\`), not the lesson it appears in. Never invent a slug. Use the ones you are given.
 - \`main\` is the one legal id that is not a slug. It names the course's starting point, the state a student first clones.
 - The **first entry is the reset point** — where a student goes to start the lesson. Later entries are the other points the lesson mentions, in the order the lesson reaches them.

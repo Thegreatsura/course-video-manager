@@ -64,6 +64,38 @@ describe("parseCommitMaps", () => {
   it("yields no block for an unclosed map", () => {
     expect(parseCommitMaps(`<CommitMap>\n${entry("main")}`)).toEqual([]);
   });
+
+  it("defaults to pnpm when the tag carries no packageManager", () => {
+    const blocks = parseCommitMaps(map(entry("main")));
+
+    expect(blocks[0]!.packageManager).toBe("pnpm");
+  });
+
+  it("reads packageManager off the opening tag", () => {
+    const text = `<CommitMap packageManager="npm">\n${entry("main")}\n</CommitMap>`;
+
+    expect(parseCommitMaps(text)[0]!.packageManager).toBe("npm");
+  });
+
+  it('reads an explicit packageManager="pnpm" the same as omitting it', () => {
+    const text = `<CommitMap packageManager="pnpm">\n${entry("main")}\n</CommitMap>`;
+
+    expect(parseCommitMaps(text)[0]!.packageManager).toBe("pnpm");
+  });
+
+  it("does not recognise a tag with an invalid packageManager", () => {
+    // A malformed attribute is not a `<CommitMap>` at all, the same way any
+    // other malformed tag is not.
+    const text = `<CommitMap packageManager="yarn">\n${entry("main")}\n</CommitMap>`;
+
+    expect(parseCommitMaps(text)).toEqual([]);
+  });
+
+  it("leaves an invalid packageManager's entries adrift", () => {
+    const text = `<CommitMap packageManager="yarn">\n${entry("main")}\n</CommitMap>`;
+
+    expect(findCommitsOutsideCommitMap(text)).toEqual(['<Commit id="main">']);
+  });
 });
 
 describe("findCommitsMissingId", () => {
@@ -134,6 +166,14 @@ describe("findUnclosedCommitMaps", () => {
   it("passes a closed map", () => {
     expect(findUnclosedCommitMaps(map(entry("main")))).toEqual([]);
   });
+
+  it("reports the packageManager attribute in an unclosed tag", () => {
+    const text = `<CommitMap packageManager="npm">\n${entry("main")}`;
+
+    expect(findUnclosedCommitMaps(text)).toEqual([
+      '<CommitMap packageManager="npm">',
+    ]);
+  });
 });
 
 describe("findCommitMapsWithBlankLines", () => {
@@ -153,5 +193,13 @@ describe("findCommitMapsWithBlankLines", () => {
     expect(
       findCommitMapsWithBlankLines(map(entry("main"), entry("to-spec-skill")))
     ).toEqual([]);
+  });
+
+  it("reports the packageManager attribute on a broken map", () => {
+    const text = `<CommitMap packageManager="npm">\n${entry("main")}\n\n${entry("to-spec-skill")}\n</CommitMap>`;
+
+    expect(findCommitMapsWithBlankLines(text)).toEqual([
+      '<CommitMap packageManager="npm">',
+    ]);
   });
 });

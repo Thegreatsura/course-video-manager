@@ -13,8 +13,20 @@
  * find the blocks it would not accept.
  */
 
-const OPEN_TAG = "<CommitMap>";
+/**
+ * The opening tag, with its one optional attribute: `packageManager="npm"` or
+ * `="pnpm"`. Global so a scan can walk forward from an arbitrary offset the
+ * way `text.indexOf("<CommitMap>", at)` used to; any other value in the
+ * attribute (a typo, an invented package manager) fails the whole match, the
+ * same way a scanner treats any other malformed tag — as not a `<CommitMap>`
+ * at all.
+ */
+const OPEN_TAG_PATTERN = /<CommitMap(?:\s+packageManager="(npm|pnpm)")?\s*>/g;
 const CLOSE_TAG = "</CommitMap>";
+const DEFAULT_PACKAGE_MANAGER: PackageManager = "pnpm";
+
+/** The package manager a course's project repo uses. `pnpm` unless stated. */
+export type PackageManager = "npm" | "pnpm";
 
 /** `<Commit …>`, but never `<CommitMap>` — `\b` refuses the longer name. */
 const ENTRY_PATTERN = /<Commit\b([^>]*)>([\s\S]*?)<\/Commit>/g;
@@ -37,6 +49,10 @@ export interface CommitMapBlock {
   start: number;
   /** Offset just past the `</CommitMap>` that closes it. */
   end: number;
+  /** The raw opening tag, so a violation can point the author at the line. */
+  openTag: string;
+  /** The course's package manager, `pnpm` when the attribute is omitted. */
+  packageManager: PackageManager;
   entries: CommitMapEntry[];
   /**
    * A blank line inside the block, which changes how markdown parses it: the
@@ -45,10 +61,16 @@ export interface CommitMapBlock {
   hasBlankLine: boolean;
 }
 
+/** An unclosed `<CommitMap …>` — kept with its exact text for reporting. */
+interface UnclosedCommitMap {
+  start: number;
+  tag: string;
+}
+
 interface CommitMapScan {
   blocks: CommitMapBlock[];
-  /** Offsets of `<CommitMap>` tags that are never closed. */
-  unclosedStarts: number[];
+  /** `<CommitMap>` tags that are never closed. */
+  unclosedStarts: UnclosedCommitMap[];
 }
 
 function parseEntries(inner: string): CommitMapEntry[] {
@@ -75,23 +97,31 @@ function parseEntries(inner: string): CommitMapEntry[] {
  */
 export function scanCommitMaps(text: string): CommitMapScan {
   const blocks: CommitMapBlock[] = [];
-  const unclosedStarts: number[] = [];
+  const unclosedStarts: UnclosedCommitMap[] = [];
 
   let at = 0;
   while (true) {
-    const start = text.indexOf(OPEN_TAG, at);
-    if (start === -1) break;
+    OPEN_TAG_PATTERN.lastIndex = at;
+    const openMatch = OPEN_TAG_PATTERN.exec(text);
+    if (openMatch === null) break;
 
-    const closeAt = text.indexOf(CLOSE_TAG, start + OPEN_TAG.length);
+    const start = openMatch.index;
+    const openEnd = start + openMatch[0]!.length;
+    const packageManager: PackageManager =
+      openMatch[1] === "npm" ? "npm" : DEFAULT_PACKAGE_MANAGER;
+
+    const closeAt = text.indexOf(CLOSE_TAG, openEnd);
     if (closeAt === -1) {
-      unclosedStarts.push(start);
+      unclosedStarts.push({ start, tag: openMatch[0]! });
       break;
     }
 
-    const inner = text.slice(start + OPEN_TAG.length, closeAt);
+    const inner = text.slice(openEnd, closeAt);
     blocks.push({
       start,
       end: closeAt + CLOSE_TAG.length,
+      openTag: openMatch[0]!,
+      packageManager,
       entries: parseEntries(inner),
       hasBlankLine: BLANK_LINE.test(inner),
     });
@@ -114,7 +144,7 @@ export function parseCommitMaps(text: string): CommitMapBlock[] {
 function coveredRanges(scan: CommitMapScan, textLength: number) {
   return [
     ...scan.blocks.map((block) => ({ start: block.start, end: block.end })),
-    ...scan.unclosedStarts.map((start) => ({ start, end: textLength })),
+    ...scan.unclosedStarts.map((u) => ({ start: u.start, end: textLength })),
   ];
 }
 
@@ -172,12 +202,12 @@ export function findCommitsOutsideCommitMap(text: string): string[] {
  * writer is streaming.
  */
 export function findUnclosedCommitMaps(text: string): string[] {
-  return scanCommitMaps(text).unclosedStarts.map(() => OPEN_TAG);
+  return scanCommitMaps(text).unclosedStarts.map((u) => u.tag);
 }
 
 /** Commit maps broken by a blank line. */
 export function findCommitMapsWithBlankLines(text: string): string[] {
   return parseCommitMaps(text)
     .filter((block) => block.hasBlankLine)
-    .map(() => OPEN_TAG);
+    .map((block) => block.openTag);
 }

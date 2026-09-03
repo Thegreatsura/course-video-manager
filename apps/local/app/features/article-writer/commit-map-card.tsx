@@ -5,11 +5,15 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/** The package manager a course's project repo uses, `pnpm` unless stated. */
+type PackageManager = "npm" | "pnpm";
+
 /**
  * The preview's stand-in for a commit map on aihero.dev.
  *
  * Deliberately static: the site's card carries a Copy dropdown offering
- * `pnpm reset <slug>` and `pnpm cherry-pick <slug>`, and this one shows those
+ * `pnpm reset <slug>` (or `npm run reset <slug>`, per the map's
+ * `packageManager`) and its cherry-pick equivalent, and this one shows those
  * commands as plain text. The author is proofreading the map, not resetting a
  * repo — and the CVM has no repo to reset.
  */
@@ -41,12 +45,19 @@ export function CommitMapCard({
 export function CommitEntryCard({
   id,
   description,
+  packageManager,
   problems,
 }: {
   id: string | null;
   description: ReactNode;
+  packageManager: PackageManager;
   problems: string[];
 }) {
+  // npm has no bare-script shorthand, so its command carries `run`; pnpm's
+  // does not.
+  const run = (script: string) =>
+    packageManager === "npm" ? `npm run ${script}` : `pnpm ${script}`;
+
   return (
     <div className="relative rounded-md border border-border bg-background p-3">
       <div className="font-mono text-sm font-semibold">
@@ -65,8 +76,14 @@ export function CommitEntryCard({
 
       {id ? (
         <div className="mt-2 space-y-0.5 border-t border-border pt-2 font-mono text-[11px] text-muted-foreground/70">
-          <div>pnpm reset {id}</div>
-          {id === "main" ? null : <div>pnpm cherry-pick {id}</div>}
+          <div>
+            {run("reset")} {id}
+          </div>
+          {id === "main" ? null : (
+            <div>
+              {run("cherry-pick")} {id}
+            </div>
+          )}
         </div>
       ) : null}
 
