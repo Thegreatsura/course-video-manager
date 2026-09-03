@@ -25,7 +25,7 @@ const ROOT_HELP = `cvm — agent-facing access to this Course Video Manager proj
 Read-mostly: most verbs are READS. A growing set of nouns has WRITE verbs —
 'beat' (add/update/move/delete), 'clip' (add/update/move/delete), 'chapter'
 (add/update/move/delete), 'overlay' (add/update/delete), 'lesson'
-(create/update/move), 'video'
+(create/update/move/archive), 'video'
 (create/move/update), 'file' (add/delete), 'footage' (transcribe), 'pitch'
 (create/update), 'deliverable' (create/update/archive) and 'course' (publish).
 Every other verb is read-only, and each verb's own --help is authoritative about
@@ -124,8 +124,10 @@ WRITES
                                      no archive, no restore)
     footage transcribe               cache a raw footage file's transcript on
                                      disk (LOCAL-ONLY; feeds 'clip add')
-    lesson  create/update/move       create a lesson, rename its title,
-                                     or reorder / re-home it
+    lesson
+            create/update/move/      create a lesson, rename its title,
+            archive                  reorder / re-home it, or soft-delete it
+                                     ('archive' is one-way, no restore)
     video   create/move/update       create a Video, re-home it to a lesson/
                                      pitch, or rename it (--name)
     file    add/delete               attach scratch files to a Video (writer

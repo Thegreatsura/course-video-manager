@@ -24,6 +24,7 @@ import {
   CREATE_HELP,
   UPDATE_HELP,
   MOVE_HELP,
+  ARCHIVE_HELP,
 } from "./lesson.help";
 
 /**
@@ -451,6 +452,33 @@ const moveCmd = Command.make(
 ).pipe(Command.withDescription(detail(MOVE_HELP)));
 
 // ---------------------------------------------------------------------------
+// archive <id>
+// ---------------------------------------------------------------------------
+
+const archiveId = Args.text({ name: "id" });
+
+const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
+  Effect.gen(function* () {
+    const svc = yield* LessonSectionOperationsService;
+
+    // Read the row first — once archived it is deleted-equivalent, so this is
+    // the last chance to fetch it (and the draft guard needs its hierarchy).
+    const lesson = yield* svc
+      .getLessonWithHierarchyById(id)
+      .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
+    if (lesson.archived) return yield* notFound("lesson", id);
+    yield* assertDraftLesson(lesson);
+
+    yield* svc.deleteLesson(id);
+
+    // deleteLesson does not return the row (a plain UPDATE, no RETURNING), so
+    // echo what we already read with the one field the write actually
+    // changed — shaped the same way `get` would return it.
+    yield* emitObject({ ...lesson, archived: true });
+  })
+).pipe(Command.withDescription(detail(ARCHIVE_HELP)));
+
+// ---------------------------------------------------------------------------
 // lesson (parent)
 // ---------------------------------------------------------------------------
 
@@ -463,6 +491,7 @@ export const lessonCommand = Command.make("lesson").pipe(
     createCmd,
     updateCmd,
     moveCmd,
+    archiveCmd,
     lessonSearchCmd,
   ])
 );

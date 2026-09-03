@@ -27,7 +27,8 @@ KEY FIELDS
 
 ARCHIVED
   Archived lessons are deleted lessons: they are ALWAYS filtered out and never
-  shown. There is no --archived flag for lessons.
+  shown. There is no --archived flag for lessons — 'archive' is the verb that
+  puts a lesson into that state (see 'cvm lesson archive --help').
 
 VERBS
   list --section <id>   All active lessons in a Section (NDJSON, identity-rich).
@@ -41,6 +42,7 @@ VERBS
                         authoring status (WRITE; slug unchanged).
   move <id> [--section <id>] [--before|--after <lessonId>]
                         Reorder within a section, or re-home to another (WRITE).
+  archive <id>          Soft-delete the lesson (WRITE; one-way).
   search <id> <query>   Substring search down this lesson's subtree
                         (--type lesson|video|beat).
 
@@ -156,6 +158,26 @@ Examples:
   cvm lesson update les_abc --authoring-status done
   cvm lesson update les_abc --authoring-status todo
   cvm lesson update les_abc --title "Setup" --authoring-status todo`;
+
+export const ARCHIVE_HELP = `WRITE. Archive a lesson — the only way to delete one.
+
+Sets archived = true. The lesson drops out of this CLI entirely: it stops
+appearing in 'list' and 'tree', 'get' returns not-found, and
+'update'/'move'/'archive' can no longer address it. Editing a published
+(frozen) version is refused (exit 3); archiving only ever targets the Draft.
+Echoes the archived lesson (shaped like 'get', with archived: true) one last
+time — the lesson's own Section/Version/Repo hierarchy included, since
+'archive' does not re-fetch after the write.
+
+ONE-WAY DOOR. There is no CLI verb, no HTTP route and no UI action that
+un-archives a lesson — the CVM UI's own "delete lesson" dialog is this same
+soft delete with no undo. Archiving is effectively a delete you cannot undo
+without touching the database directly. Reach for it accordingly.
+
+EXAMPLES
+  cvm lesson archive les_abc
+  cvm lesson list --section sec_123 | jq -r 'select(.title=="Scratch") | .id' \\
+    | xargs -n1 cvm lesson archive`;
 
 export const MOVE_HELP = `Reposition a lesson: reorder it within its Section, or re-home it to another.
 
