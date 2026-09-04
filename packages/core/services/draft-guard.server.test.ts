@@ -15,6 +15,7 @@ import {
   requireDraftVersionForSections,
   requireDraftVersionForLesson,
   requireDraftVersionForLessons,
+  requireDraftVersionForLearningGoal,
   requireDraftVersionForVideo,
   requireDraftVersionForClip,
   requireDraftVersionForClips,
@@ -80,6 +81,15 @@ const makeLesson = (sectionId: string, order = 1) =>
       .values({ sectionId, order })
       .returning();
     return lesson!;
+  });
+
+const makeLearningGoal = (sectionId: string, order = 1) =>
+  Effect.promise(async () => {
+    const [learningGoal] = await testDb
+      .insert(schema.learningGoals)
+      .values({ sectionId, order })
+      .returning();
+    return learningGoal!;
   });
 
 const makeVideo = (lessonId: string | null) =>
@@ -300,6 +310,47 @@ describe("requireDraftVersionForLesson(s)", () => {
 
         expect(result._tag).toBe("Left");
       })
+  );
+});
+
+describe("requireDraftVersionForLearningGoal", () => {
+  it.effect("marks the learning goal's owning Draft Version", () =>
+    Effect.gen(function* () {
+      const { version } = yield* draftFixture();
+      const section = yield* makeSection(version.id);
+      const learningGoal = yield* makeLearningGoal(section.id);
+
+      yield* requireDraftVersionForLearningGoal(testDb as any, learningGoal.id);
+
+      expect(yield* getHasChanges(version.id)).toBe(true);
+    })
+  );
+
+  it.effect("passes through for a learning goal id that does not exist", () =>
+    Effect.gen(function* () {
+      const result = yield* requireDraftVersionForLearningGoal(
+        testDb as any,
+        "missing-learning-goal"
+      ).pipe(Effect.either);
+
+      expect(result._tag).toBe("Right");
+    })
+  );
+
+  it.effect("rejects when the owning version is not a Draft", () =>
+    Effect.gen(function* () {
+      const course = yield* makeCourse();
+      const publishedVersion = yield* makeVersion(course.id, "published");
+      const publishedSection = yield* makeSection(publishedVersion.id);
+      const learningGoal = yield* makeLearningGoal(publishedSection.id);
+
+      const result = yield* requireDraftVersionForLearningGoal(
+        testDb as any,
+        learningGoal.id
+      ).pipe(Effect.either);
+
+      expect(result._tag).toBe("Left");
+    })
   );
 });
 

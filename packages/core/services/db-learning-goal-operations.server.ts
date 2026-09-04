@@ -32,6 +32,32 @@ const pruneLearningGoalFields = (
   return set;
 };
 
+/**
+ * Order value that places a row at the given anchor among `existing`
+ * (already sorted ascending by `order`, with any row being repositioned
+ * already excluded). `beforeLearningGoalId === null` appends to the end.
+ * Shared by {@link createLearningGoalOperations}'s create and move — a plain
+ * float midpoint, same as Section's and Lesson's own `order` column: a
+ * Learning Goal only ever reorders within ONE Section (never moves between
+ * Sections), so there is no need for the fractional-indexing scheme Beat
+ * uses to support cross-Video moves.
+ */
+const computeOrder = (
+  existing: readonly { id: string; order: number }[],
+  beforeLearningGoalId: string | null
+): number | "not-found" => {
+  if (beforeLearningGoalId === null) {
+    return (existing.at(-1)?.order ?? 0) + 1;
+  }
+  const idx = existing.findIndex((g) => g.id === beforeLearningGoalId);
+  if (idx === -1) {
+    return "not-found";
+  }
+  const anchor = existing[idx]!;
+  const prev = existing[idx - 1];
+  return prev ? (prev.order + anchor.order) / 2 : anchor.order - 1;
+};
+
 export const createLearningGoalOperations = (db: Database) => {
   /** Non-archived Learning Goals of a Section, sorted by their `order`. */
   const listLearningGoalsBySectionId = (sectionId: string) =>
@@ -65,12 +91,8 @@ export const createLearningGoalOperations = (db: Database) => {
    * Lessons/Videos/Beats -> Script -> recording -> article). `title` defaults
    * empty, `priority` defaults 2 (the column default), matching Lesson's
    * triage convention (lower sorts first). `beforeLearningGoalId` anchors the
-   * new row immediately before that one; `null`/absent appends to the end.
-   *
-   * Order is a plain float midpoint between neighbours, same as Section's and
-   * Lesson's own `order` column — a Learning Goal only ever reorders within
-   * ONE Section (never moves between Sections), so there is no need for the
-   * fractional-indexing scheme Beat uses to support cross-Video moves.
+   * new row immediately before that one; `null`/absent appends to the end
+   * (see {@link computeOrder}).
    */
   const createLearningGoal = Effect.fn("createLearningGoal")(function* (
     sectionId: string,
@@ -80,21 +102,12 @@ export const createLearningGoalOperations = (db: Database) => {
     yield* requireDraftVersionForSection(db, sectionId);
 
     const existing = yield* listLearningGoalsBySectionId(sectionId);
-
-    let order: number;
-    if (beforeLearningGoalId === null) {
-      order = (existing.at(-1)?.order ?? 0) + 1;
-    } else {
-      const idx = existing.findIndex((g) => g.id === beforeLearningGoalId);
-      if (idx === -1) {
-        return yield* new NotFoundError({
-          type: "learningGoal",
-          params: { id: beforeLearningGoalId },
-        });
-      }
-      const anchor = existing[idx]!;
-      const prev = existing[idx - 1];
-      order = prev ? (prev.order + anchor.order) / 2 : anchor.order - 1;
+    const order = computeOrder(existing, beforeLearningGoalId);
+    if (order === "not-found") {
+      return yield* new NotFoundError({
+        type: "learningGoal",
+        params: { id: beforeLearningGoalId },
+      });
     }
 
     const [created] = yield* makeDbCall(() =>
@@ -137,9 +150,9 @@ export const createLearningGoalOperations = (db: Database) => {
 
   /**
    * Reorder a Learning Goal within its Section. `beforeLearningGoalId ===
-   * null` moves it to the end. Mirrors {@link createLearningGoal}'s
-   * placement math; a Learning Goal has no cross-Section move (unlike Beat
-   * across Videos), so there is no target-parent argument.
+   * null` moves it to the end (see {@link computeOrder}, shared with
+   * {@link createLearningGoal}). A Learning Goal has no cross-Section move
+   * (unlike Beat across Videos), so there is no target-parent argument.
    */
   const moveLearningGoal = Effect.fn("moveLearningGoal")(function* (
     id: string,
@@ -150,21 +163,12 @@ export const createLearningGoalOperations = (db: Database) => {
 
     const siblings = yield* listLearningGoalsBySectionId(current.sectionId);
     const remaining = siblings.filter((g) => g.id !== id);
-
-    let order: number;
-    if (beforeLearningGoalId === null) {
-      order = (remaining.at(-1)?.order ?? 0) + 1;
-    } else {
-      const idx = remaining.findIndex((g) => g.id === beforeLearningGoalId);
-      if (idx === -1) {
-        return yield* new NotFoundError({
-          type: "learningGoal",
-          params: { id: beforeLearningGoalId },
-        });
-      }
-      const anchor = remaining[idx]!;
-      const prev = remaining[idx - 1];
-      order = prev ? (prev.order + anchor.order) / 2 : anchor.order - 1;
+    const order = computeOrder(remaining, beforeLearningGoalId);
+    if (order === "not-found") {
+      return yield* new NotFoundError({
+        type: "learningGoal",
+        params: { id: beforeLearningGoalId },
+      });
     }
 
     yield* makeDbCall(() =>

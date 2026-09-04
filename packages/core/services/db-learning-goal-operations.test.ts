@@ -8,6 +8,7 @@ import {
   courseVersions,
   learningGoals,
   sections,
+  type CourseVersionCommitState,
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import {
@@ -32,15 +33,19 @@ beforeEach(async () => {
   await truncateAllTables(testDb);
 });
 
-/** A Draft CourseVersion (the only state that accepts writes) plus its Section. */
-const makeSection = async (sectionId: string, order = 1) => {
+/** A CourseVersion (Draft by default — the only state that accepts writes) plus its Section. */
+const makeSection = async (
+  sectionId: string,
+  order = 1,
+  commitState: CourseVersionCommitState = "draft"
+) => {
   const [course] = await testDb
     .insert(courses)
     .values({ name: `course-${sectionId}` })
     .returning();
   const [version] = await testDb
     .insert(courseVersions)
-    .values({ repoId: course!.id, name: "v1" })
+    .values({ repoId: course!.id, name: "v1", commitState })
     .returning();
   await testDb.insert(sections).values({
     id: sectionId,
@@ -48,6 +53,18 @@ const makeSection = async (sectionId: string, order = 1) => {
     order,
   });
   return version!;
+};
+
+/** Flip a Section's owning CourseVersion to Published, after any Draft-only setup. */
+const publishVersionOf = async (sectionId: string) => {
+  const [section] = await testDb
+    .select({ repoVersionId: sections.repoVersionId })
+    .from(sections)
+    .where(eq(sections.id, sectionId));
+  await testDb
+    .update(courseVersions)
+    .set({ commitState: "published" })
+    .where(eq(courseVersions.id, section!.repoVersionId));
 };
 
 describe("createLearningGoal", () => {
@@ -139,6 +156,18 @@ describe("createLearningGoal", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
+  it.effect("fails when the section's version is not a Draft", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeSection("section-1", 1, "published"));
+      const svc = yield* LearningGoalOperationsService;
+
+      const result = yield* svc
+        .createLearningGoal("section-1")
+        .pipe(Effect.either);
+      expect(result._tag).toBe("Left");
+    }).pipe(Effect.provide(testLayer))
+  );
+
   it.effect("scopes order to each section independently", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeSection("section-1"));
@@ -200,6 +229,20 @@ describe("updateLearningGoal", () => {
       expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
+
+  it.effect("fails once the owning version is no longer a Draft", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeSection("section-1"));
+      const svc = yield* LearningGoalOperationsService;
+      const created = yield* svc.createLearningGoal("section-1");
+      yield* Effect.promise(() => publishVersionOf("section-1"));
+
+      const result = yield* svc
+        .updateLearningGoal(created.id, { title: "x" })
+        .pipe(Effect.either);
+      expect(result._tag).toBe("Left");
+    }).pipe(Effect.provide(testLayer))
+  );
 });
 
 describe("deleteLearningGoal", () => {
@@ -236,6 +279,20 @@ describe("deleteLearningGoal", () => {
       const listed = yield* svc.listLearningGoalsBySectionId("section-1");
       expect(listed).toHaveLength(1);
       expect(listed[0]!.id).toBe(b.id);
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("fails once the owning version is no longer a Draft", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeSection("section-1"));
+      const svc = yield* LearningGoalOperationsService;
+      const created = yield* svc.createLearningGoal("section-1");
+      yield* Effect.promise(() => publishVersionOf("section-1"));
+
+      const result = yield* svc
+        .deleteLearningGoal(created.id)
+        .pipe(Effect.either);
+      expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
 });
@@ -292,6 +349,21 @@ describe("moveLearningGoal", () => {
       const svc = yield* LearningGoalOperationsService;
       const result = yield* svc
         .moveLearningGoal("missing", null)
+        .pipe(Effect.either);
+      expect(result._tag).toBe("Left");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("fails once the owning version is no longer a Draft", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeSection("section-1"));
+      const svc = yield* LearningGoalOperationsService;
+      const a = yield* svc.createLearningGoal("section-1");
+      yield* svc.createLearningGoal("section-1");
+      yield* Effect.promise(() => publishVersionOf("section-1"));
+
+      const result = yield* svc
+        .moveLearningGoal(a.id, null)
         .pipe(Effect.either);
       expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
