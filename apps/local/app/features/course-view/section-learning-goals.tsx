@@ -54,8 +54,8 @@ export function SectionLearningGoals({
 
   return (
     <Collapsible className="border-b bg-muted/10 px-4 py-2">
-      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full text-left">
-        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform data-[state=open]:rotate-90" />
+      <CollapsibleTrigger className="group flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full text-left">
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
         Learning Goals
         <span className="text-muted-foreground/60">
           ({learningGoals.length})

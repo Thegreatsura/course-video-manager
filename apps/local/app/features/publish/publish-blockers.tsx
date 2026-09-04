@@ -127,8 +127,8 @@ export function PublishBlockers({
       <BlockerLists lists={mine} />
       {clearableCount > 0 && (
         <Collapsible className="mb-8 rounded-lg border border-border p-4">
-          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full text-left">
-            <ChevronRight className="w-4 h-4 shrink-0 transition-transform data-[state=open]:rotate-90" />
+          <CollapsibleTrigger className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full text-left">
+            <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
             {clearableCount} blocker{clearableCount !== 1 ? "s" : ""} the
             Autofill will clear
           </CollapsibleTrigger>
