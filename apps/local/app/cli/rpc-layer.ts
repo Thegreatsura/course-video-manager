@@ -105,6 +105,18 @@ const lessonSectionService = (client: RpcClient) =>
     getSectionWithHierarchyById: rpcMethod((json) =>
       client.rpc.section.getSectionWithHierarchyById.$post({ json })
     ),
+    createSections: rpcMethod((json) =>
+      client.rpc.section.createSections.$post({ json })
+    ),
+    updateSectionTitle: rpcMethod((json) =>
+      client.rpc.section.updateSectionTitle.$post({ json })
+    ),
+    archiveSection: rpcMethod((json) =>
+      client.rpc.section.archiveSection.$post({ json })
+    ),
+    batchUpdateSectionOrders: rpcMethod((json) =>
+      client.rpc.section.batchUpdateSectionOrders.$post({ json })
+    ),
     getLessonsBySectionId: rpcMethod((json) =>
       client.rpc.lesson.getLessonsBySectionId.$post({ json })
     ),
@@ -128,7 +140,10 @@ const lessonSectionService = (client: RpcClient) =>
     ),
   }) satisfies RemoteService<LessonSectionOperationsService>;
 
-/** `cvm lesson move` — structural writes, in the `lesson` group with them. */
+/**
+ * `cvm lesson move` and `cvm section move` — structural writes, in their
+ * respective route groups with the rest of that noun's verbs.
+ */
 const courseWriteService = (client: RpcClient) =>
   ({
     _tag: "CourseWriteService",
@@ -137,6 +152,9 @@ const courseWriteService = (client: RpcClient) =>
     ),
     moveToSection: rpcMethod((json) =>
       client.rpc.lesson.moveToSection.$post({ json })
+    ),
+    reorderSections: rpcMethod((json) =>
+      client.rpc.section.reorderSections.$post({ json })
     ),
   }) satisfies RemoteService<CourseWriteService>;
 
