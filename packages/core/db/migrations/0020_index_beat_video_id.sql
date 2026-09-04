@@ -1,1 +1,1 @@
-CREATE INDEX "beat_video_id_idx" ON "course-video-manager_beat" USING btree ("video_id");
+CREATE INDEX IF NOT EXISTS "beat_video_id_idx" ON "course-video-manager_beat" USING btree ("video_id");
