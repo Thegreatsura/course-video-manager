@@ -4,6 +4,7 @@ import {
   clips,
   clipWebLinks,
   courseVersions,
+  learningGoals,
   lessons,
   overlays,
   sections,
@@ -143,6 +144,21 @@ export const requireDraftVersionForLesson = Effect.fn(
   );
   if (!lesson?.section) return;
   yield* lockAndAssertDraft(db, lesson.section.repoVersionId);
+});
+
+/** Guard a write scoped to a Learning Goal. */
+export const requireDraftVersionForLearningGoal = Effect.fn(
+  "requireDraftVersionForLearningGoal"
+)(function* (db: Database, learningGoalId: string) {
+  const learningGoal = yield* makeDbCall(() =>
+    db.query.learningGoals.findFirst({
+      where: eq(learningGoals.id, learningGoalId),
+      columns: { id: true },
+      with: { section: { columns: { repoVersionId: true } } },
+    })
+  );
+  if (!learningGoal?.section) return;
+  yield* lockAndAssertDraft(db, learningGoal.section.repoVersionId);
 });
 
 /** Guard a batch write scoped to Lessons: every distinct owning version. */

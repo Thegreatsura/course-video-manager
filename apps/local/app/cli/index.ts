@@ -8,6 +8,7 @@ import { clipCommand } from "./commands/clip";
 import { chapterCommand } from "./commands/chapter";
 import { overlayCommand } from "./commands/overlay";
 import { beatCommand } from "./commands/beat";
+import { learningGoalCommand } from "./commands/learning-goal";
 import { fileCommand } from "./commands/file";
 import { footageCommand } from "./commands/footage";
 import { pitchCommand } from "./commands/pitch";
@@ -23,7 +24,8 @@ import { searchCommand } from "./commands/search";
 const ROOT_HELP = `cvm — agent-facing access to this Course Video Manager project's domain data.
 
 Read-mostly: most verbs are READS. A growing set of nouns has WRITE verbs —
-'beat' (add/update/move/delete), 'clip' (add/update/move/delete), 'chapter'
+'learning-goal' (create/update/move/delete), 'beat' (add/update/move/delete),
+'clip' (add/update/move/delete), 'chapter'
 (add/update/move/delete), 'overlay' (add/update/delete), 'section'
 (create/rename/move/archive), 'lesson'
 (create/update/move/archive), 'video'
@@ -38,6 +40,8 @@ DOMAIN MODEL
   at most one Pending Version (Submitted, mid-publish), and zero or more
   Published Versions (immutable). Version-scoped reads default to the Draft.
   A Version contains Sections (directory-backed groupings), each containing
+  Learning Goals (the pre-Beat planning artifact — what a learner should come
+  away knowing, authored before its Lessons/Videos/Beats are scaffolded) and
   Lessons. A Lesson contains Videos; a Video is an ordered sequence of Clips
   (recorded timeline) and is planned as an ordered sequence of Beats
   (intended structure, by job/kind). An Overlay is a visual layer composited on
@@ -113,6 +117,11 @@ WRITES
   Write verbs hit the database immediately — no confirmation prompt, no dry-run —
   and each echoes the affected row as one pretty JSON object. Flags come BEFORE
   any positional <id> (a flag after it exits 3). The write surface:
+    learning-goal
+            create/update/move/      author a Section's pre-Beat planning
+            delete                   artifact — what a learner should come
+                                     away knowing (title/description/
+                                     priority); not editable in the UI
     beat    add/update/move/delete   author a Video's Beat plan
                                      (add --pitch <id> targets a pitch's video)
     clip    add/update/move/delete   cut/retime/reorder/archive a Clip ('add'
@@ -160,8 +169,8 @@ WRITES
   (Dropbox) and reads publish-only config from the repo .env.
 
 NOUNS
-  course version section lesson video clip chapter overlay beat file footage
-  pitch deliverable
+  course version section learning-goal lesson video clip chapter overlay beat
+  file footage pitch deliverable
 
 SEARCH
   search <query>   Case-insensitive substring search DOWN THE TREE across every
@@ -186,6 +195,7 @@ export const rootCommand = Command.make("cvm").pipe(
     chapterCommand,
     overlayCommand,
     beatCommand,
+    learningGoalCommand,
     fileCommand,
     footageCommand,
     pitchCommand,

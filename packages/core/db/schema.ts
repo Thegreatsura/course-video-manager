@@ -194,6 +194,43 @@ export const lessons = createTable(
   ]
 );
 
+/**
+ * A Learning Goal — the pre-Beat planning artifact for a Section: what a
+ * learner is expected to come away knowing, authored BEFORE lessons, videos
+ * or Beats are scaffolded (Learning Goals -> scaffold Lessons/Videos/Beats ->
+ * Script -> recording -> article). Read-mostly in the UI (a collapsible on
+ * the Section card); the `cvm` CLI is the primary editing surface.
+ */
+export const learningGoals = createTable(
+  "learning_goal",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sectionId: varchar("section_id", { length: 255 })
+      .references(() => sections.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    priority: integer("priority").notNull().default(2),
+    createdAt: timestamp("created_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    order: doublePrecision("order").notNull(),
+    archived: boolean("archived").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("learning_goal_section_order_uniq")
+      .on(table.sectionId, table.order)
+      .where(sql`NOT ${table.archived}`),
+    index("learning_goal_section_id_idx").on(table.sectionId),
+  ]
+);
+
 export const pitches = createTable("pitch", {
   id: varchar("id", { length: 255 })
     .notNull()
@@ -671,12 +708,20 @@ export const lessonsRelations = relations(lessons, ({ one, many }) => ({
   videos: many(videos),
 }));
 
+export const learningGoalsRelations = relations(learningGoals, ({ one }) => ({
+  section: one(sections, {
+    fields: [learningGoals.sectionId],
+    references: [sections.id],
+  }),
+}));
+
 export const sectionsRelations = relations(sections, ({ one, many }) => ({
   repoVersion: one(courseVersions, {
     fields: [sections.repoVersionId],
     references: [courseVersions.id],
   }),
   lessons: many(lessons),
+  learningGoals: many(learningGoals),
 }));
 
 export const courseVersionsRelations = relations(

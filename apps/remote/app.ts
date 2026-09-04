@@ -5,6 +5,7 @@ import { chapterRoutes } from "./routes/chapter.js";
 import { clipRoutes } from "./routes/clip.js";
 import { courseRoutes } from "./routes/course.js";
 import { deliverableRoutes } from "./routes/deliverable.js";
+import { learningGoalRoutes } from "./routes/learning-goal.js";
 import { lessonRoutes } from "./routes/lesson.js";
 import { overlayRoutes } from "./routes/overlay.js";
 import { pitchRoutes } from "./routes/pitch.js";
@@ -47,6 +48,7 @@ export const createApp = (runtime: RemoteRuntime) =>
     .route("/rpc/course", courseRoutes(runtime))
     .route("/rpc/version", versionRoutes(runtime))
     .route("/rpc/section", sectionRoutes(runtime))
+    .route("/rpc/learning-goal", learningGoalRoutes(runtime))
     .route("/rpc/lesson", lessonRoutes(runtime))
     .route("/rpc/video", videoRoutes(runtime))
     .route("/rpc/clip", clipRoutes(runtime))

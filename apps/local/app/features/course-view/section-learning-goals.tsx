@@ -1,0 +1,83 @@
+import { ChevronRight } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import type { Section } from "./course-view-types";
+
+/**
+ * Same P1/P2/P3 palette as the Lesson priority filter buttons
+ * (course-view-components.tsx) — one convention, read here rather than
+ * re-derived, so a Learning Goal's priority reads the same as a Lesson's.
+ */
+const PRIORITY_BADGE_CLASS: Record<number, string> = {
+  1: "bg-red-500/20 text-red-600",
+  2: "bg-yellow-500/20 text-yellow-600",
+  3: "bg-sky-500/20 text-sky-500",
+};
+
+function PriorityBadge({ priority }: { priority: number }) {
+  const className =
+    PRIORITY_BADGE_CLASS[priority] ?? "bg-muted text-muted-foreground";
+  return (
+    <span
+      className={cn(
+        "text-[10px] px-1.5 py-0.5 rounded-sm font-medium shrink-0",
+        className
+      )}
+    >
+      P{priority}
+    </span>
+  );
+}
+
+/**
+ * A Section's Learning Goals — the pre-Beat planning artifact — shown as a
+ * closed-by-default collapsible (mirrors publish-blockers.tsx's pattern:
+ * a ChevronRight that rotates 90deg on open, no `open`/`defaultOpen` prop so
+ * Radix defaults to closed).
+ *
+ * Deliberately READ-ONLY: the `cvm learning-goal` CLI is the editing surface
+ * (see CONTEXT.md / apps/local/app/cli/commands/learning-goal.ts). Renders
+ * nothing when the Section has no Learning Goals yet.
+ */
+export function SectionLearningGoals({
+  learningGoals,
+}: {
+  learningGoals: Section["learningGoals"];
+}) {
+  if (learningGoals.length === 0) {
+    return null;
+  }
+
+  return (
+    <Collapsible className="border-b bg-muted/10 px-4 py-2">
+      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full text-left">
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform data-[state=open]:rotate-90" />
+        Learning Goals
+        <span className="text-muted-foreground/60">
+          ({learningGoals.length})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        <ul className="space-y-2">
+          {learningGoals.map((goal) => (
+            <li key={goal.id} className="flex items-start gap-2 text-xs">
+              <PriorityBadge priority={goal.priority} />
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">
+                  {goal.title || "(untitled)"}
+                </p>
+                {goal.description && (
+                  <p className="text-muted-foreground">{goal.description}</p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

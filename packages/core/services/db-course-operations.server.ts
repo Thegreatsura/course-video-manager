@@ -5,6 +5,7 @@ import {
   courses,
   courseVersions,
   sections,
+  learningGoals,
   lessons,
   beats,
   videos,
@@ -244,6 +245,15 @@ export const createCourseOperations = (db: Database) => {
                 sections: {
                   where: isNull(sections.archivedAt),
                   with: {
+                    // The pre-Beat planning artifact — what a learner should
+                    // come away knowing, authored before this section's
+                    // lessons/videos/beats are scaffolded. Read-mostly here:
+                    // the UI shows these in a collapsible; `cvm learning-goal`
+                    // is the editing surface (see db-learning-goal-operations).
+                    learningGoals: {
+                      where: eq(learningGoals.archived, false),
+                      orderBy: asc(learningGoals.order),
+                    },
                     lessons: {
                       where: eq(lessons.archived, false),
                       with: {

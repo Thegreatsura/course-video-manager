@@ -148,6 +148,13 @@
       "when": 1787587641717,
       "tag": "0020_index_beat_video_id",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788520321502,
+      "tag": "0021_add_learning_goals_table",
+      "breakpoints": true
     }
   ]
 }

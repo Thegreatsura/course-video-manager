@@ -18,6 +18,10 @@ _Avoid_: Module, Unit
 A single learning unit within a section. A pure database record — no on-disk folder. Identity is carried by its `title` (uniqueness per-parent by `order`).
 _Avoid_: Exercise, Tutorial, Step
 
+**Learning Goal**:
+The pre-**Beat** planning artifact for a **Section**: a statement of one thing a learner should come away knowing, authored BEFORE its Lessons/Videos/Beats are scaffolded. Carries a `title`, a free-text `description`, and a triage `priority` (same convention as Lesson/Pitch: integer, lower sorts first, default 2), ordered within its Section by a float `order`. First step of the authoring flow: Learning Goals → scaffold Lessons/Videos/Beats → Script → recording → article. Read-mostly in the UI — the Section card shows a closed-by-default collapsible of its Learning Goals; the `cvm learning-goal` CLI (create/update/move/delete) is the editing surface. Deleting one is a soft delete (`archived`), same as **Beat**.
+_Avoid_: Objective, Outcome (used loosely elsewhere in course-authoring writing; this is the specific planning-stage entity)
+
 ### Course versions
 
 **CourseVersion**:
