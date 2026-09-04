@@ -4,6 +4,7 @@ import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { CourseWriteService } from "@/services/course-write-service";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
+import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
@@ -296,6 +297,29 @@ const beatService = (client: RpcClient) =>
     deleteBeat: rpcMethod((json) => client.rpc.beat.deleteBeat.$post({ json })),
   }) satisfies RemoteService<BeatOperationsService>;
 
+const learningGoalService = (client: RpcClient) =>
+  ({
+    _tag: "LearningGoalOperationsService",
+    listLearningGoalsBySectionId: rpcMethod((json) =>
+      client.rpc["learning-goal"].listLearningGoalsBySectionId.$post({ json })
+    ),
+    getLearningGoalById: rpcMethod((json) =>
+      client.rpc["learning-goal"].getLearningGoalById.$post({ json })
+    ),
+    createLearningGoal: rpcMethod((json) =>
+      client.rpc["learning-goal"].createLearningGoal.$post({ json })
+    ),
+    updateLearningGoal: rpcMethod((json) =>
+      client.rpc["learning-goal"].updateLearningGoal.$post({ json })
+    ),
+    moveLearningGoal: rpcMethod((json) =>
+      client.rpc["learning-goal"].moveLearningGoal.$post({ json })
+    ),
+    deleteLearningGoal: rpcMethod((json) =>
+      client.rpc["learning-goal"].deleteLearningGoal.$post({ json })
+    ),
+  }) satisfies RemoteService<LearningGoalOperationsService>;
+
 const pitchService = (client: RpcClient) =>
   ({
     _tag: "PitchOperationsService",
@@ -357,6 +381,7 @@ export type RemoteServices =
   | CourseOperationsService
   | VersionOperationsService
   | LessonSectionOperationsService
+  | LearningGoalOperationsService
   | VideoOperationsService
   | ClipOperationsService
   | OverlayOperationsService
@@ -393,6 +418,7 @@ export const makeRemoteLayer = (
     remoteLayer(CourseOperationsService, courseService, client),
     remoteLayer(VersionOperationsService, versionService, client),
     remoteLayer(LessonSectionOperationsService, lessonSectionService, client),
+    remoteLayer(LearningGoalOperationsService, learningGoalService, client),
     remoteLayer(VideoOperationsService, videoService, client),
     remoteLayer(ClipOperationsService, clipService, client),
     remoteLayer(OverlayOperationsService, overlayService, client),

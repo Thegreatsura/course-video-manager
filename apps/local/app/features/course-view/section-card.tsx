@@ -8,6 +8,7 @@ import type { CourseEditorEvent } from "@/services/course-editor-service";
 import { SortableLessonItem } from "./sortable-lesson-item";
 import { SortableSectionItem } from "./sortable-section-item";
 import { SectionDescriptionEditor } from "./section-description-editor";
+import { SectionLearningGoals } from "./section-learning-goals";
 import { SectionTitleRow } from "./section-title-row";
 import { SectionContextMenuItems } from "./section-context-menu";
 import {
@@ -198,6 +199,7 @@ export function SectionCard({
                     />
                   )}
                 </div>
+                <SectionLearningGoals learningGoals={section.learningGoals} />
                 {(!collapsedSections.has(section.id) || searchQuery) && (
                   <CompactLessonList
                     pairs={spinePairs}
