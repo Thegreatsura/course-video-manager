@@ -76,6 +76,7 @@ const AnimaticSubtitle = (props: { text: string }) => (
         padding: "10px 28px",
         borderRadius: 12,
         textAlign: "center",
+        maxWidth: "60ch",
       }}
     >
       {props.text}
