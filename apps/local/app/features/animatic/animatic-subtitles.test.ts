@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MAXIMUM_SUBTITLE_LENGTH_IN_CHARS } from "@/lib/subtitle-chunks";
-import { subtitleCuesForSegment } from "./animatic-subtitles";
+import {
+  ANIMATIC_SUBTITLE_LENGTH_IN_CHARS,
+  subtitleCuesForSegment,
+} from "./animatic-subtitles";
 import {
   ANIMATIC_FPS,
   buildAnimaticTimeline,
@@ -40,13 +42,13 @@ describe("subtitleCuesForSegment", () => {
     ]);
   });
 
-  it("never shows more than the Shorts renderer's limit at once, give or take a word", () => {
+  it("never shows more than twice the Shorts renderer's limit at once, give or take a word", () => {
     const line =
-      "Generics let you write a function once and have it work across many different types without losing safety.";
+      "Generics let you write a function once and have it work across many different types without losing safety, and that is the whole point of them.";
     const cues = subtitleCuesForSegment(segmentFor(line, 6));
 
     expect(cues.length).toBe(
-      Math.ceil(line.length / MAXIMUM_SUBTITLE_LENGTH_IN_CHARS)
+      Math.ceil(line.length / ANIMATIC_SUBTITLE_LENGTH_IN_CHARS)
     );
     expect(cues.map((c) => c.text).join(" ")).toBe(line);
   });

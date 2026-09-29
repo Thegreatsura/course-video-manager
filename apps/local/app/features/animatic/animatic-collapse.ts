@@ -10,9 +10,13 @@ import type { AnimaticChapterSection } from "./animatic-chapters";
  * The state is EPHEMERAL and it is the player's own: a plain record keyed by
  * Chapter id, born empty on every load. A collapse is a five-second-old
  * intention, not a setting, so nothing is written down and nothing is shared.
- * The Video Editor's Clip timeline makes the same choice, and the arithmetic
- * here is that timeline's, lifted: same "all or nothing" toggle. See
- * `features/video-editor/components/clip-timeline.tsx`.
+ * The arithmetic here is the Video Editor's Clip timeline's, lifted: same "all
+ * or nothing" toggle. See `features/video-editor/components/clip-timeline.tsx`.
+ *
+ * FOLDED BY DEFAULT. A Chapter with no entry in the record is closed, so the
+ * page opens on the dividers alone — and a Chapter an agent adds while the page
+ * is open arrives closed too. Read a Chapter's state through
+ * {@link isChapterCollapsed}, never by indexing the record.
  *
  * A FOLD IS ONLY EVER OPENED BY HAND. The playhead does not open one — it plays
  * straight through a folded Chapter, and the divider's fill bar is what says so
@@ -25,6 +29,14 @@ import type { AnimaticChapterSection } from "./animatic-chapters";
  */
 export type AnimaticCollapseState = Readonly<Record<string, boolean>>;
 
+/** Is this Chapter folded away? One the author has not touched is. */
+export function isChapterCollapsed(
+  collapsed: AnimaticCollapseState,
+  chapterId: string
+): boolean {
+  return collapsed[chapterId] ?? true;
+}
+
 /**
  * Is every Chapter folded away? A Video with no Chapter is never "all
  * collapsed", which is what keeps the collapse-all control off that page.
@@ -33,7 +45,10 @@ export function areAllChaptersCollapsed(
   collapsed: AnimaticCollapseState,
   chapterIds: readonly string[]
 ): boolean {
-  return chapterIds.length > 0 && chapterIds.every((id) => collapsed[id]);
+  return (
+    chapterIds.length > 0 &&
+    chapterIds.every((id) => isChapterCollapsed(collapsed, id))
+  );
 }
 
 /** Fold one Chapter away, or open it, and leave every other one as it was. */
@@ -41,7 +56,10 @@ export function toggleChapter(
   collapsed: AnimaticCollapseState,
   chapterId: string
 ): AnimaticCollapseState {
-  return { ...collapsed, [chapterId]: !collapsed[chapterId] };
+  return {
+    ...collapsed,
+    [chapterId]: !isChapterCollapsed(collapsed, chapterId),
+  };
 }
 
 /**
@@ -69,7 +87,7 @@ export function toggleAllChapters(
  *
  * Indices are the timeline's own — the `index` on each row — so the set can be
  * read straight against a selection. It is empty while nothing is folded away,
- * which is what keeps a Video with no Chapters exactly as it was.
+ * and always on a Video with no Chapters, which is exactly as it was.
  */
 export function hiddenRowIndices(params: {
   readonly collapsed: AnimaticCollapseState;
@@ -77,9 +95,8 @@ export function hiddenRowIndices(params: {
 }): ReadonlySet<number> {
   const hidden = new Set<number>();
   for (const section of params.sections) {
-    if (!params.collapsed[section.chapter.id]) continue;
+    if (!isChapterCollapsed(params.collapsed, section.chapter.id)) continue;
     for (const row of section.rows) hidden.add(row.index);
   }
   return hidden;
 }
-

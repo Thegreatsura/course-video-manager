@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 import { useLocalStorageOneOf } from "@/hooks/use-local-storage";
-import { splitSubtitleSegments } from "@/lib/subtitle-chunks";
+import {
+  MAXIMUM_SUBTITLE_LENGTH_IN_CHARS,
+  splitSubtitleSegments,
+} from "@/lib/subtitle-chunks";
 import { ANIMATIC_FPS, type AnimaticSegment } from "./animatic-timeline";
 
 /**
@@ -8,14 +11,19 @@ import { ANIMATIC_FPS, type AnimaticSegment } from "./animatic-timeline";
  * short phrase at a time while it is spoken.
  *
  * HOW MUCH TEXT IS ON SCREEN AT ONCE is the Shorts renderer's rule, imported
- * from `subtitle-chunks.ts` rather than copied — the same 32 characters, the
- * words shared out evenly, the time shared out evenly. The line has no
- * per-word timing, so even division is also the only honest option here.
+ * from `subtitle-chunks.ts` rather than copied — the words shared out evenly,
+ * the time shared out evenly. The line has no per-word timing, so even division
+ * is also the only honest option here. The limit is DOUBLE the Short's: a
+ * landscape frame is wide, and 32 characters cut the line too choppily.
  *
  * ON BY DEFAULT, because the author judges the density of a moment by reading
  * it as well as hearing it, often at two times speed. The choice to turn them
  * off is remembered in the browser, like the playback rate.
  */
+
+/** The longest phrase the Animatic shows at once: twice a Short's. */
+export const ANIMATIC_SUBTITLE_LENGTH_IN_CHARS =
+  MAXIMUM_SUBTITLE_LENGTH_IN_CHARS * 2;
 
 /** One phrase of a Clip Mockup's line, in frames from that Clip Mockup's start. */
 export interface AnimaticSubtitleCue {
@@ -37,11 +45,14 @@ export function subtitleCuesForSegment(
   const text = segment.mockup.line.replace(/\s+/g, " ").trim();
   if (text === "") return [];
 
-  const chunks = splitSubtitleSegments({
-    start: 0,
-    end: segment.speechInFrames / ANIMATIC_FPS,
-    text,
-  }).filter((chunk) => chunk.text !== "");
+  const chunks = splitSubtitleSegments(
+    {
+      start: 0,
+      end: segment.speechInFrames / ANIMATIC_FPS,
+      text,
+    },
+    ANIMATIC_SUBTITLE_LENGTH_IN_CHARS
+  ).filter((chunk) => chunk.text !== "");
 
   return chunks.map((chunk, index) => {
     const fromFrame = Math.round(chunk.start * ANIMATIC_FPS);

@@ -5,7 +5,8 @@
  * which burns the subtitles into the file) and the Animatic (which draws them
  * over its Clip Mockups while it plays). Pure, and free of ffmpeg and Effect,
  * so the browser can import it. The two consumers draw the text differently;
- * what they share is how much of it is on screen at once.
+ * what they share is the rule that cuts it into phrases. The Animatic's
+ * landscape frame takes a longer limit than the Short's narrow one.
  */
 
 /** A span of text timed in seconds. */
@@ -20,22 +21,22 @@ export const MAXIMUM_SUBTITLE_LENGTH_IN_CHARS = 32;
 /**
  * Split a segment that is longer than {@link MAXIMUM_SUBTITLE_LENGTH_IN_CHARS}
  * into several shorter phrases, distributing the words evenly and dividing the
- * segment's time span evenly across the resulting chunks.
+ * segment's time span evenly across the resulting chunks. A caller with a
+ * wider frame than a Short may pass a longer limit.
  *
  * Ported verbatim from the original Total TypeScript renderer's
  * `splitSubtitleSegments`. Timing is by even division (not per-word
  * timestamps), which is the behaviour we are intentionally reproducing.
  */
 export function splitSubtitleSegments(
-  subtitle: SubtitleSegment
+  subtitle: SubtitleSegment,
+  maximumLengthInChars: number = MAXIMUM_SUBTITLE_LENGTH_IN_CHARS
 ): SubtitleSegment[] {
-  if (subtitle.text.length <= MAXIMUM_SUBTITLE_LENGTH_IN_CHARS) {
+  if (subtitle.text.length <= maximumLengthInChars) {
     return [subtitle];
   }
 
-  const numChunks = Math.ceil(
-    subtitle.text.length / MAXIMUM_SUBTITLE_LENGTH_IN_CHARS
-  );
+  const numChunks = Math.ceil(subtitle.text.length / maximumLengthInChars);
 
   const words = subtitle.text.split(" ");
   const wordsPerChunk = Math.ceil(words.length / numChunks);

@@ -19,6 +19,7 @@ import {
 import {
   areAllChaptersCollapsed,
   hiddenRowIndices,
+  isChapterCollapsed,
   toggleAllChapters,
   toggleChapter,
   type AnimaticCollapseState,
@@ -141,8 +142,8 @@ export const AnimaticPlayer = (props: {
     [timeline, chapters]
   );
 
-  // Which dividers are folded away. EPHEMERAL, keyed by Chapter id: it is born
-  // empty on every load, exactly as the Clip timeline's is. See
+  // Which dividers are folded away. EPHEMERAL, keyed by Chapter id, and born
+  // empty on every load — which reads as every Chapter folded. See
   // `animatic-collapse.ts`.
   const [collapsed, setCollapsed] = useState<AnimaticCollapseState>({});
   const chapterIds = useMemo(
@@ -446,7 +447,10 @@ export const AnimaticPlayer = (props: {
                       ? undefined
                       : () => playFrom(section.seekIndex!)
                   }
-                  isCollapsed={collapsed[section.chapter.id] ?? false}
+                  isCollapsed={isChapterCollapsed(
+                    collapsed,
+                    section.chapter.id
+                  )}
                   onToggleCollapse={() =>
                     setCollapsed((prev) =>
                       toggleChapter(prev, section.chapter.id)
@@ -456,7 +460,7 @@ export const AnimaticPlayer = (props: {
                   // playing row draws its own bar, and both at once reads as two
                   // playheads.
                   isPlaying={
-                    (collapsed[section.chapter.id] ?? false) &&
+                    isChapterCollapsed(collapsed, section.chapter.id) &&
                     playingChapterId === section.chapter.id
                   }
                 />
@@ -464,7 +468,8 @@ export const AnimaticPlayer = (props: {
               {/* Folded away: the rows are not drawn. The count and the run
                   time are the divider's own, so it reads the same closed as
                   open, and the clock never knew about any of this. */}
-              {!collapsed[section.chapter.id] && section.rows.map(renderRow)}
+              {!isChapterCollapsed(collapsed, section.chapter.id) &&
+                section.rows.map(renderRow)}
             </Fragment>
           ))}
         </ol>

@@ -3,6 +3,7 @@ import { buildAnimaticChapterLayout } from "./animatic-chapters";
 import {
   areAllChaptersCollapsed,
   hiddenRowIndices,
+  isChapterCollapsed,
   toggleAllChapters,
   toggleChapter,
 } from "./animatic-collapse";
@@ -51,9 +52,23 @@ const sections = buildAnimaticChapterLayout({
 
 const chapterIds = sections.map((section) => section.chapter.id);
 
+describe("a Chapter the author has not touched", () => {
+  it("is folded away, so the page opens on the dividers alone", () => {
+    expect(isChapterCollapsed({}, "ch_a")).toBe(true);
+    expect(areAllChaptersCollapsed({}, chapterIds)).toBe(true);
+    expect(hiddenRowIndices({ collapsed: {}, sections })).toEqual(
+      new Set([1, 2, 3, 4])
+    );
+  });
+
+  it("opens with one click", () => {
+    expect(toggleChapter({}, "ch_a")).toEqual({ ch_a: false });
+  });
+});
+
 describe("folding one Chapter away", () => {
   it("closes it, and leaves every other Chapter as it was", () => {
-    const collapsed = toggleChapter({ ch_b: true }, "ch_a");
+    const collapsed = toggleChapter({ ch_a: false, ch_b: true }, "ch_a");
 
     expect(collapsed).toEqual({ ch_a: true, ch_b: true });
   });
@@ -68,7 +83,7 @@ describe("folding one Chapter away", () => {
 
 describe("the one control for the lot", () => {
   it("folds every Chapter away while any is open", () => {
-    expect(toggleAllChapters({ ch_a: true }, chapterIds)).toEqual({
+    expect(toggleAllChapters({ ch_a: true, ch_b: false }, chapterIds)).toEqual({
       ch_a: true,
       ch_b: true,
     });
@@ -84,7 +99,9 @@ describe("the one control for the lot", () => {
 
 describe("what the control's icon says it will do", () => {
   it("reads as 'collapse' while one Chapter is still open", () => {
-    expect(areAllChaptersCollapsed({ ch_a: true }, chapterIds)).toBe(false);
+    expect(
+      areAllChaptersCollapsed({ ch_a: true, ch_b: false }, chapterIds)
+    ).toBe(false);
   });
 
   it("reads as 'expand' once all are closed", () => {
@@ -100,13 +117,12 @@ describe("what the control's icon says it will do", () => {
 
 describe("the rows a fold takes off the screen", () => {
   it("names the indices under a folded Chapter, and nothing else", () => {
-    expect(hiddenRowIndices({ collapsed: { ch_a: true }, sections })).toEqual(
-      new Set([1, 2])
-    );
+    expect(
+      hiddenRowIndices({ collapsed: { ch_a: true, ch_b: false }, sections })
+    ).toEqual(new Set([1, 2]));
   });
 
   it("hides no row while every Chapter is open", () => {
-    expect(hiddenRowIndices({ collapsed: {}, sections }).size).toBe(0);
     expect(
       hiddenRowIndices({ collapsed: { ch_a: false, ch_b: false }, sections })
         .size
