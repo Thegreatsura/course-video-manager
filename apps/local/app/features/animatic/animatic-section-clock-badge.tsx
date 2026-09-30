@@ -50,7 +50,7 @@ export const AnimaticSectionClock = (props: {
   return (
     <div
       ref={badgeRef}
-      title="Through the whole Section, at the speed you are watching"
+      title="Left in the whole Section, at the speed you are watching"
       className="pointer-events-none absolute left-4 top-4 rounded-md bg-black/70 px-3 py-1.5 font-mono text-sm tabular-nums tracking-wide"
       suppressHydrationWarning
     />

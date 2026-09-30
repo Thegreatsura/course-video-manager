@@ -121,9 +121,10 @@ export function sectionClockAt(params: {
   };
 }
 
-/** `3:12 / 8:40 · 5:28 left` — what the badge in the corner reads. */
+/**
+ * `5:28 left` — what the badge in the corner reads. THE TIME LEFT ONLY: the
+ * elapsed and the total answered no question the author asks mid-sitting.
+ */
 export function formatSectionClock(clock: AnimaticSectionClock): string {
-  return `${formatRunTime(clock.elapsedSeconds)} / ${formatRunTime(
-    clock.totalSeconds
-  )} · ${formatRunTime(clock.remainingSeconds)} left`;
+  return `${formatRunTime(clock.remainingSeconds)} left`;
 }

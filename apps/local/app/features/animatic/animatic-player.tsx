@@ -334,6 +334,9 @@ export const AnimaticPlayer = (props: {
     [timeline, showSubtitles, subtitleStyle]
   );
 
+  // The Clip Mockup on screen now — what the stage's comment button pins to.
+  const activeMockupId = timeline.segments[activeIndex]?.mockup.id;
+
   const renderRow = (row: AnimaticChapterRow) => (
     <AnimaticMockupRow
       key={row.segment.mockup.id}
@@ -472,6 +475,13 @@ export const AnimaticPlayer = (props: {
         />
 
         <div className="absolute right-4 top-4 flex items-center gap-2">
+          {activeMockupId && (
+            <AnimaticCommentThread
+              variant="stage"
+              target={{ type: "clip-mockup", id: activeMockupId }}
+              onOpen={() => playerRef.current?.pause()}
+            />
+          )}
           <AnimaticSubtitlesMenu
             showSubtitles={showSubtitles}
             onShowSubtitles={chooseSubtitles}

@@ -124,13 +124,13 @@ describe("sectionClockAt", () => {
 });
 
 describe("formatSectionClock", () => {
-  it("prints elapsed, total and what is left", () => {
+  it("prints only what is left", () => {
     expect(
       formatSectionClock({
         elapsedSeconds: 192,
         totalSeconds: 520,
         remainingSeconds: 328,
       })
-    ).toBe("3:12 / 8:40 · 5:28 left");
+    ).toBe("5:28 left");
   });
 });

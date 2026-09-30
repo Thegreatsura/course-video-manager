@@ -114,52 +114,98 @@ function useCommentWriter() {
  * The badge (or the hover-only add icon) and the thread behind it. The caller
  * places it: it is drawn beside the row's own button, never inside it, since a
  * button cannot hold another.
+ *
+ * The `stage` variant is the same thread as a button on the black stage,
+ * beside the CC control, always visible: it comments on whatever Clip Mockup
+ * is on screen. THE TARGET IS FROZEN WHILE THE THREAD IS OPEN, so a comment
+ * typed as the Animatic plays on still lands on the moment it was opened on.
  */
 export function AnimaticCommentThread(props: {
   readonly target: AnimaticCommentTarget;
   readonly className?: string;
+  readonly variant?: "sidebar" | "stage";
+  /** Called as the thread opens — the stage pauses the Player here. */
+  readonly onOpen?: () => void;
 }) {
-  const comments =
-    useContext(AnimaticCommentsContext).get(props.target.id) ?? NO_COMMENTS;
   const [open, setOpen] = useState(false);
+  const [openTarget, setOpenTarget] = useState(props.target);
+  const target = open ? openTarget : props.target;
+  const comments =
+    useContext(AnimaticCommentsContext).get(target.id) ?? NO_COMMENTS;
   const [draft, setDraft] = useState("");
   const writer = useCommentWriter();
+  const stage = props.variant === "stage";
+
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setOpenTarget(props.target);
+      props.onOpen?.();
+    }
+    setOpen(next);
+  };
 
   const add = () => {
     if (draft.trim() === "") return;
-    writer.submit({ type: "create", target: props.target, body: draft.trim() });
+    writer.submit({ type: "create", target, body: draft.trim() });
     setDraft("");
   };
 
+  const label =
+    comments.length > 0
+      ? `${comments.length} comment${comments.length === 1 ? "" : "s"}`
+      : "Add a comment";
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={
-            comments.length > 0
-              ? `${comments.length} comment${comments.length === 1 ? "" : "s"}`
-              : "Add a comment"
-          }
-          className={cn(
-            "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] tabular-nums",
-            comments.length > 0
-              ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-300 dark:hover:bg-amber-400/25"
-              : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
-            props.className
-          )}
-        >
-          {comments.length > 0 ? (
-            <>
-              <MessageSquare className="size-3" />
-              {comments.length}
-            </>
-          ) : (
-            <MessageSquarePlus className="size-3.5" />
-          )}
-        </button>
+        {stage ? (
+          <button
+            type="button"
+            aria-label={label}
+            title="Comment on this Clip Mockup"
+            className={cn(
+              "allow-keydown flex items-center gap-1 rounded-md bg-black/70 p-1.5 text-sm tabular-nums hover:bg-black/90",
+              comments.length > 0 ? "text-amber-300" : "text-white",
+              props.className
+            )}
+          >
+            {comments.length > 0 ? (
+              <>
+                <MessageSquare className="size-5" />
+                {comments.length}
+              </>
+            ) : (
+              <MessageSquarePlus className="size-5" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label={label}
+            className={cn(
+              "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] tabular-nums",
+              comments.length > 0
+                ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-300 dark:hover:bg-amber-400/25"
+                : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
+              props.className
+            )}
+          >
+            {comments.length > 0 ? (
+              <>
+                <MessageSquare className="size-3" />
+                {comments.length}
+              </>
+            ) : (
+              <MessageSquarePlus className="size-3.5" />
+            )}
+          </button>
+        )}
       </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-80 p-0">
+      <PopoverContent
+        side={stage ? "bottom" : "right"}
+        align={stage ? "end" : "start"}
+        className="w-80 p-0"
+      >
         {comments.length > 0 && (
           <ul className="max-h-80 divide-y divide-border overflow-y-auto">
             {comments.map((comment) => (
