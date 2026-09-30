@@ -8,6 +8,7 @@ import {
   beats,
   clipMockups,
   clipMockupChapters,
+  clipMockupComments,
   thumbnails,
   videos,
 } from "../db/schema.js";
@@ -25,6 +26,10 @@ import {
   lockCourseForVersionMutation,
   type CopyVersionStructureInput,
 } from "./db-version-mutation.server.js";
+import {
+  copyClipMockupCommentValues,
+  newIdsFor,
+} from "./clip-mockup-comment-copy.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) =>
   Effect.tryPromise({
@@ -131,6 +136,7 @@ export const createVersionCopyOps = (db: Database) => {
                       orderBy: asc(clipMockupChapters.order),
                       where: eq(clipMockupChapters.archived, false),
                     },
+                    clipMockupComments: true,
                     thumbnails: true,
                   },
                 },
@@ -255,10 +261,15 @@ export const createVersionCopyOps = (db: Database) => {
 
             // Clip Mockups copy exactly as Beats do: `order` verbatim, and
             // `imagePath` stays valid because the snapshot keeps lineageId.
+            const clipMockupIds = newIdsFor(sourceVideo.clipMockups);
+            const clipMockupChapterIds = newIdsFor(
+              sourceVideo.clipMockupChapters
+            );
             if (sourceVideo.clipMockups.length > 0) {
               yield* makeDbCall(() =>
                 transaction.insert(clipMockups).values(
                   sourceVideo.clipMockups.map((clipMockup) => ({
+                    id: clipMockupIds.get(clipMockup.id)!,
                     videoId: newVideo.id,
                     line: clipMockup.line,
                     imagePath: clipMockup.imagePath,
@@ -276,11 +287,24 @@ export const createVersionCopyOps = (db: Database) => {
               yield* makeDbCall(() =>
                 transaction.insert(clipMockupChapters).values(
                   sourceVideo.clipMockupChapters.map((chapter) => ({
+                    id: clipMockupChapterIds.get(chapter.id)!,
                     videoId: newVideo.id,
                     name: chapter.name,
                     order: chapter.order,
                   }))
                 )
+              );
+            }
+
+            const commentValues = copyClipMockupCommentValues(
+              sourceVideo.clipMockupComments,
+              newVideo.id,
+              clipMockupIds,
+              clipMockupChapterIds
+            );
+            if (commentValues.length > 0) {
+              yield* makeDbCall(() =>
+                transaction.insert(clipMockupComments).values(commentValues)
               );
             }
 

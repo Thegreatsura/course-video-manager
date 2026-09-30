@@ -1,6 +1,20 @@
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import { clipMockupFrameUrl } from "@/features/clip-mockups/clip-mockup-frame-url";
 
+/** A line's Clip Mockup Comments, as a margin note under it. */
+function PanelComments({ comments }: { comments: readonly string[] }) {
+  if (comments.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-0.5 border-l-2 border-amber-400/70 pl-2 text-xs font-normal normal-case tracking-normal text-amber-700 dark:text-amber-300">
+      {comments.map((body, i) => (
+        <p key={i} className="whitespace-pre-wrap">
+          {body}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The editor side slot's **Animatic** tab: this video's Clip Mockups read as
  * lines, one clip at a time, under their Clip Mockup Chapters — each with a
@@ -22,6 +36,7 @@ export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
             className="mt-4 mb-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-1"
           >
             {line.name}
+            <PanelComments comments={line.comments} />
           </div>
         ) : (
           <div
@@ -43,7 +58,10 @@ export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
                 e.currentTarget.style.visibility = "hidden";
               }}
             />
-            <p className="min-w-0 flex-1 text-sm leading-snug">{line.line}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm leading-snug">{line.line}</p>
+              <PanelComments comments={line.comments} />
+            </div>
           </div>
         )
       )}
