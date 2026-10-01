@@ -10,7 +10,11 @@ import {
 } from "react";
 import { AnimaticBrokenFiles } from "./animatic-broken-files";
 import { AnimaticChapterDivider } from "./animatic-chapter-divider";
-import { AnimaticCommentThread } from "./animatic-comments";
+import {
+  AnimaticCommentContextMenu,
+  AnimaticCommentThread,
+  useStageComments,
+} from "./animatic-comments";
 import { AnimaticMockupRow } from "./animatic-mockup-row";
 import {
   buildAnimaticChapterLayout,
@@ -355,6 +359,10 @@ export const AnimaticPlayer = (props: {
 
   // The Clip Mockup on screen now — what the stage's comment button pins to.
   const activeMockupId = timeline.segments[activeIndex]?.mockup.id;
+  const stageComments = useStageComments({
+    activeMockupId,
+    pause: () => playerRef.current?.pause(),
+  });
 
   const renderRow = (row: AnimaticChapterRow) => (
     <AnimaticMockupRow
@@ -472,25 +480,30 @@ export const AnimaticPlayer = (props: {
         data-animatic-stage
         className="relative flex-1 min-w-0 bg-black text-white"
       >
-        <Player
-          ref={playerRef}
-          component={AnimaticComposition}
-          inputProps={inputProps}
-          fps={ANIMATIC_FPS}
-          durationInFrames={timeline.durationInFrames}
-          compositionWidth={props.width}
-          compositionHeight={props.height}
-          style={{ width: "100%", height: "100%" }}
-          controls
-          playbackRate={playbackRate}
-          showPlaybackRateControl={ANIMATIC_PLAYBACK_RATES}
-          loop={false}
-          clickToPlay
-          // SPACE is ours, not the Player's — leaving both on toggles playback
-          // twice whenever the Player holds focus, which is right after a click
-          // on the picture.
-          spaceKeyToPlayOrPause={false}
-        />
+        {/* Always mounted, so the Player is never remounted under it. */}
+        <AnimaticCommentContextMenu {...stageComments.menu}>
+          <div className="h-full w-full">
+            <Player
+              ref={playerRef}
+              component={AnimaticComposition}
+              inputProps={inputProps}
+              fps={ANIMATIC_FPS}
+              durationInFrames={timeline.durationInFrames}
+              compositionWidth={props.width}
+              compositionHeight={props.height}
+              style={{ width: "100%", height: "100%" }}
+              controls
+              playbackRate={playbackRate}
+              showPlaybackRateControl={ANIMATIC_PLAYBACK_RATES}
+              loop={false}
+              clickToPlay
+              // SPACE is ours, not the Player's — leaving both on toggles playback
+              // twice whenever the Player holds focus, which is right after a click
+              // on the picture.
+              spaceKeyToPlayOrPause={false}
+            />
+          </div>
+        </AnimaticCommentContextMenu>
 
         <AnimaticSectionClock
           playerRef={playerRef}
@@ -500,11 +513,7 @@ export const AnimaticPlayer = (props: {
 
         <div className="absolute right-4 top-4 flex items-center gap-2">
           {activeMockupId && (
-            <AnimaticCommentThread
-              variant="stage"
-              target={{ type: "clip-mockup", id: activeMockupId }}
-              onOpen={() => playerRef.current?.pause()}
-            />
+            <AnimaticCommentThread {...stageComments.thread} />
           )}
           <AnimaticSubtitlesMenu
             showSubtitles={showSubtitles}

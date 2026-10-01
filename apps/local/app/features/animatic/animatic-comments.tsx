@@ -9,6 +9,7 @@ import {
   createContext,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ComponentType,
   type ReactNode,
@@ -54,6 +55,10 @@ import type {
  * only. Either opens the thread in a popover, where a comment is added, edited
  * and deleted. A comment has no author: the CVM has no users.
  *
+ * RIGHT-CLICK IS A SECOND DOOR. Anywhere the Animatic shows a Clip Mockup —
+ * its sidebar row, its frame on the stage — `AnimaticCommentContextMenu`
+ * answers a right-click with a menu whose item opens that same thread.
+ *
  * KEPT APART FROM THE ROWS. The page hands comments down through
  * `AnimaticCommentsProvider`, never folded into the Clip Mockups or Chapters,
  * so a new comment can never change the rows `useStableMockups` holds and so
@@ -94,6 +99,82 @@ export function AnimaticCommentsProvider(props: {
   );
 }
 
+function useCommentsOn(target: AnimaticCommentTarget) {
+  return useContext(AnimaticCommentsContext).get(target.id) ?? NO_COMMENTS;
+}
+
+/**
+ * A right-click menu over anything that shows a Clip Mockup. Its one item
+ * opens the Clip Mockup's comment thread, which the caller holds open through
+ * `AnimaticCommentThread`'s `open` and `onOpenChange`.
+ */
+export function AnimaticCommentContextMenu(props: {
+  readonly target: AnimaticCommentTarget;
+  readonly onComment: () => void;
+  /** Called as the menu opens and closes — the stage pauses the Player here. */
+  readonly onOpenChange?: (open: boolean) => void;
+  /** No menu at all — the browser's own answers the right-click. */
+  readonly disabled?: boolean;
+  readonly children: ReactNode;
+}) {
+  const comments = useCommentsOn(props.target);
+  return (
+    <ContextMenu onOpenChange={props.onOpenChange}>
+      <ContextMenuTrigger asChild disabled={props.disabled}>
+        {props.children}
+      </ContextMenuTrigger>
+      {/* Focus stays where the item sends it: handed back to the trigger, it
+          lands outside the thread as the thread opens, and closes it again. */}
+      <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+        <ContextMenuItem onSelect={props.onComment}>
+          {comments.length > 0 ? (
+            <MessageSquare className="size-4" />
+          ) : (
+            <MessageSquarePlus className="size-4" />
+          )}
+          {comments.length > 0
+            ? `Comments (${comments.length})`
+            : "Add a comment"}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/**
+ * The stage's comment thread, opened by its own button or by a right-click on
+ * the frame. Both PAUSE the Player first, so the comment lands on the frame
+ * that was on screen. With no Clip Mockup on screen the menu is disabled, not
+ * removed, so the Player it wraps is never remounted.
+ */
+export function useStageComments(props: {
+  readonly activeMockupId: string | undefined;
+  readonly pause: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const target: AnimaticCommentTarget = {
+    type: "clip-mockup",
+    id: props.activeMockupId ?? "",
+  };
+  return {
+    menu: {
+      target,
+      disabled: !props.activeMockupId,
+      onOpenChange: (menuOpen: boolean) => {
+        if (menuOpen) props.pause();
+      },
+      onComment: () => setOpen(true),
+    },
+    thread: {
+      variant: "stage",
+      target,
+      onOpen: props.pause,
+      open,
+      onOpenChange: setOpen,
+    },
+  } as const;
+}
+
 /** One place every write of a thread goes through. */
 function useCommentWriter() {
   const fetcher = useFetcher<ClipMockupCommentWriteResult>();
@@ -119,6 +200,9 @@ function useCommentWriter() {
  * beside the CC control, always visible: it comments on whatever Clip Mockup
  * is on screen. THE TARGET IS FROZEN WHILE THE THREAD IS OPEN, so a comment
  * typed as the Animatic plays on still lands on the moment it was opened on.
+ *
+ * Pass `open` and `onOpenChange` to open it from outside its own button, as
+ * `AnimaticCommentContextMenu` does. `onOpen` is for the button alone.
  */
 export function AnimaticCommentThread(props: {
   readonly target: AnimaticCommentTarget;
@@ -126,22 +210,29 @@ export function AnimaticCommentThread(props: {
   readonly variant?: "sidebar" | "stage";
   /** Called as the thread opens — the stage pauses the Player here. */
   readonly onOpen?: () => void;
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [openTarget, setOpenTarget] = useState(props.target);
-  const target = open ? openTarget : props.target;
-  const comments =
-    useContext(AnimaticCommentsContext).get(target.id) ?? NO_COMMENTS;
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = props.open ?? ownOpen;
+  // Captured in render, not in `onOpenChange`, so a thread opened from
+  // outside freezes its target too.
+  const [openTarget, setOpenTarget] = useState<AnimaticCommentTarget | null>(
+    null
+  );
+  if (open && openTarget === null) setOpenTarget(props.target);
+  if (!open && openTarget !== null) setOpenTarget(null);
+  const target = (open && openTarget) || props.target;
+  const comments = useCommentsOn(target);
   const [draft, setDraft] = useState("");
+  const draftRef = useRef<HTMLTextAreaElement>(null);
   const writer = useCommentWriter();
   const stage = props.variant === "stage";
 
   const onOpenChange = (next: boolean) => {
-    if (next) {
-      setOpenTarget(props.target);
-      props.onOpen?.();
-    }
-    setOpen(next);
+    if (next) props.onOpen?.();
+    setOwnOpen(next);
+    props.onOpenChange?.(next);
   };
 
   const add = () => {
@@ -205,6 +296,13 @@ export function AnimaticCommentThread(props: {
         side={stage ? "bottom" : "right"}
         align={stage ? "end" : "start"}
         className="w-80 p-0"
+        // Straight to the new comment, however the thread was opened. Opened
+        // from a context menu, `autoFocus` alone loses to the closing menu and
+        // focus lands on the first comment's `…` button.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          draftRef.current?.focus();
+        }}
       >
         {comments.length > 0 && (
           <ul className="max-h-80 divide-y divide-border overflow-y-auto">
@@ -215,7 +313,7 @@ export function AnimaticCommentThread(props: {
         )}
         <div className="flex flex-col gap-2 border-t border-border p-3 first:border-t-0">
           <Textarea
-            autoFocus
+            ref={draftRef}
             value={draft}
             placeholder="Add a comment for the filming day…"
             className="min-h-16 text-sm"
