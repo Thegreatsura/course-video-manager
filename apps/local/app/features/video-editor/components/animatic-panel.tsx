@@ -5,6 +5,23 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 type ClipMockupLine = Extract<AnimaticLine, { type: "clip-mockup" }>;
 
+/** A Clip Mockup with the name of the Clip Mockup Chapter it sits in. */
+type PreviewClip = ClipMockupLine & { readonly chapter: string | null };
+
+/**
+ * Every Clip Mockup with its Chapter. Membership is implicit: a Clip Mockup
+ * belongs to the last Chapter above it, or to none above the first divider.
+ */
+function withChapters(lines: readonly AnimaticLine[]): PreviewClip[] {
+  let chapter: string | null = null;
+  const clips: PreviewClip[] = [];
+  for (const line of lines) {
+    if (line.type === "chapter") chapter = line.name;
+    else clips.push({ ...line, chapter });
+  }
+  return clips;
+}
+
 /** A line's Clip Mockup Comments, as a margin note under it. */
 function PanelComments({ comments }: { comments: readonly string[] }) {
   if (comments.length === 0) return null;
@@ -37,10 +54,7 @@ function PanelComments({ comments }: { comments: readonly string[] }) {
  * shows, so "number 14" means the same clip in both places.
  */
 export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
-  const clips = useMemo(
-    () => lines.filter((l): l is ClipMockupLine => l.type === "clip-mockup"),
-    [lines]
-  );
+  const clips = useMemo(() => withChapters(lines), [lines]);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
   return (
@@ -100,7 +114,7 @@ export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
  * viewport alone, so a long line never makes it smaller.
  */
 function StillPreview(props: {
-  clips: readonly ClipMockupLine[];
+  clips: readonly PreviewClip[];
   index: number | null;
   onIndexChange: (index: number | null) => void;
 }) {
@@ -132,15 +146,26 @@ function StillPreview(props: {
           // work again the moment the modal closes.
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          <DialogTitle className="text-sm font-normal tabular-nums text-muted-foreground">
-            Clip {clip.position} of {clips.length}
+          {/* The Chapter, never a count: it says where in the Video this is.
+              Above the first divider there is no Chapter, and the title is
+              only for a screen reader. */}
+          <DialogTitle
+            className={
+              clip.chapter
+                ? "text-sm font-semibold uppercase tracking-wider text-muted-foreground"
+                : "sr-only"
+            }
+          >
+            {clip.chapter ?? `Clip ${clip.position}`}
           </DialogTitle>
           <img
             src={clipMockupFrameUrl(clip.id)}
             alt={`Clip ${clip.position}`}
             className="aspect-video w-full rounded-md border bg-black object-contain"
           />
-          <div className="max-h-[12vh] overflow-y-auto">
+          {/* At most 65 characters to a line, so it reads like a line and
+              not a banner across the still. */}
+          <div className="max-h-[12vh] max-w-[65ch] overflow-y-auto">
             <p className="text-base leading-snug">{clip.line}</p>
             <PanelComments comments={clip.comments} />
           </div>
