@@ -15,7 +15,7 @@ const COPIED_FOR_MS = 2000;
 export function ScriptCodeBlock(props: {
   code: string;
   /**
-   * Set at the size of what surrounds it, inside a `<setup>` region that has
+   * Set at the size of what surrounds it, inside an `<instructions>` region that has
    * already stepped the type down. Standing alone in the spoken script, it
    * steps down itself — a command is copied, never read aloud.
    */
@@ -27,7 +27,7 @@ export function ScriptCodeBlock(props: {
     <div
       data-code-block
       className="group relative rounded-md border border-white/15 bg-white/5"
-      style={{ fontSize: props.nested ? "1em" : `${TYPE.setupScale}em` }}
+      style={{ fontSize: props.nested ? "1em" : `${TYPE.instructionsScale}em` }}
     >
       <pre
         className="m-0 py-3 pl-4 pr-14 font-mono"

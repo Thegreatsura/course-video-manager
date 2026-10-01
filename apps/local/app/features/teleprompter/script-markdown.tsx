@@ -12,9 +12,8 @@
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CUE_CLASS, remarkInlineCues } from "./inline-cues";
 import { GlassLink, shortenUrl } from "./linked-text";
-import { TYPE, cueStyle } from "./teleprompter-settings";
+import { TYPE } from "./teleprompter-settings";
 
 const COMPONENTS: Components = {
   // The crawl supplies the wrapper element and its margin.
@@ -22,8 +21,12 @@ const COMPONENTS: Components = {
   // Markers inside the text flow, so they stay with the centred column instead
   // of hanging off in space to the left of it.
   ul: ({ children }) => <ul className="list-inside list-disc">{children}</ul>,
-  ol: ({ children }) => (
-    <ol className="list-inside list-decimal">{children}</ol>
+  // `start` carries on the count: a step list broken by a cue or a command
+  // resumes at 5, not back at 1.
+  ol: ({ children, start }) => (
+    <ol className="list-inside list-decimal" start={start}>
+      {children}
+    </ol>
   ),
   li: ({ children }) => <li className="mb-2 last:mb-0">{children}</li>,
   // Medium rather than bold, and explicit rather than `bolder`. Emphasis is
@@ -36,16 +39,6 @@ const COMPONENTS: Components = {
     </strong>
   ),
   em: ({ children }) => <em className="italic">{children}</em>,
-  // `remarkInlineCues` marks its spans with `CUE_CLASS`; that class is the
-  // whole handshake, so anything else wearing a span stays a plain span.
-  span: ({ children, className }) =>
-    className === CUE_CLASS ? (
-      <span data-cue style={cueStyle()}>
-        {children}
-      </span>
-    ) : (
-      <span className={className}>{children}</span>
-    ),
   code: ({ children }) => (
     <code className="rounded bg-white/10 px-1 py-0.5">{children}</code>
   ),
@@ -83,29 +76,11 @@ function urlLabel(
   return isUrlItself ? shortenUrl(label) : null;
 }
 
-const PLUGINS = [remarkGfm, remarkInlineCues];
-/** Cues off: same markdown, minus the pass that greys bracketed asides. */
-const PLUGINS_WITHOUT_CUES = [remarkGfm];
+const PLUGINS = [remarkGfm];
 
-export function ScriptMarkdown(props: {
-  children: string;
-  /**
-   * Whether `[bracketed asides]` are marked as cues. Off inside a block that is
-   * already a cue — there the direction *is* the block, so a bracket in it is
-   * just a bracket, and marking it again would set it smaller again.
-   *
-   * Required rather than defaulted: which of the two a block wants is the whole
-   * reason the caller knows what kind of block it is, and a renderer that
-   * quietly picks one when asked nothing is a wrong answer waiting to be
-   * omitted.
-   */
-  cues: boolean;
-}) {
+export function ScriptMarkdown(props: { children: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={props.cues ? PLUGINS : PLUGINS_WITHOUT_CUES}
-      components={COMPONENTS}
-    >
+    <ReactMarkdown remarkPlugins={PLUGINS} components={COMPONENTS}>
       {props.children}
     </ReactMarkdown>
   );

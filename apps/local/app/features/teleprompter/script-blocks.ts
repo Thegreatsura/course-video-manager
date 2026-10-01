@@ -9,8 +9,9 @@
  * handles inline formatting from there.
  *
  * Two kinds are not split on blank lines: a fenced code block, which is copied
- * out whole, and a `<setup>…</setup>` region, the production notes read before
- * the take.
+ * out whole, and an `<instructions>…</instructions>`
+ * region, the notes to the
+ * teacher: setup before the take, and what to do and show during it.
  */
 
 export type ScriptBlock = {
@@ -18,13 +19,13 @@ export type ScriptBlock = {
   /**
    * heading = section marker, cue = "[bracketed improv note]", list = bullets
    * or numbered steps, para = verbatim prose, code = a fenced block to copy
-   * and paste (a command, a file's contents), setup = a `<setup>` region of
-   * production notes read before the take, never aloud.
+   * and paste (a command, a file's contents), instructions = an
+   * `<instructions>` region of notes to the teacher, never read aloud.
    */
-  kind: "heading" | "para" | "cue" | "list" | "code" | "setup";
+  kind: "heading" | "para" | "cue" | "list" | "code" | "instructions";
   /**
    * Raw markdown. For "code", the fence's contents exactly as written. For
-   * "setup", the markdown between the tags — parse it again for its blocks.
+   * "instructions", the markdown between the tags — parse it again for its blocks.
    */
   text: string;
   /** Heading depth, 1-6. Only meaningful for kind "heading". */
@@ -37,15 +38,15 @@ const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
 /** A line opening or closing a fenced code block: ``` or ~~~, three or more. */
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
-const SETUP_OPEN = /^\s*<setup>\s*$/i;
-const SETUP_CLOSE = /^\s*<\/setup>\s*$/i;
+const INSTRUCTIONS_OPEN = /^\s*<instructions>\s*$/i;
+const INSTRUCTIONS_CLOSE = /^\s*<\/instructions>\s*$/i;
 
 /**
- * A stretch of the script before it is split into blocks. A fence and a setup
- * region each stay whole: a blank line inside one is part of it, not a break
+ * A stretch of the script before it is split into blocks. A fence and an
+ * instructions region each stay whole: a blank line inside one is part of it, not a break
  * between blocks.
  */
-type Segment = { kind: "prose" | "code" | "setup"; text: string };
+type Segment = { kind: "prose" | "code" | "instructions"; text: string };
 
 function segment(script: string): Segment[] {
   const lines = script.replace(/\r\n/g, "\n").split("\n");
@@ -79,13 +80,13 @@ function segment(script: string): Segment[] {
       const { body, next } = readFence(i);
       segments.push({ kind: "code", text: body.join("\n") });
       i = next;
-    } else if (SETUP_OPEN.test(line)) {
+    } else if (INSTRUCTIONS_OPEN.test(line)) {
       flushProse();
-      // Fences are read whole, so a `</setup>` inside one doesn't close the
+      // Fences are read whole, so a `</instructions>` inside one doesn't close the
       // region.
       const inner: string[] = [];
       i++;
-      while (i < lines.length && !SETUP_CLOSE.test(lines[i]!)) {
+      while (i < lines.length && !INSTRUCTIONS_CLOSE.test(lines[i]!)) {
         if (FENCE.test(lines[i]!)) {
           const { next } = readFence(i);
           inner.push(...lines.slice(i, next));
@@ -95,7 +96,7 @@ function segment(script: string): Segment[] {
           i++;
         }
       }
-      segments.push({ kind: "setup", text: inner.join("\n").trim() });
+      segments.push({ kind: "instructions", text: inner.join("\n").trim() });
       i++;
     } else {
       prose.push(line);
@@ -113,9 +114,14 @@ export function parseScriptBlocks(script: string): ScriptBlock[] {
   for (const seg of segment(script)) {
     if (seg.kind === "code") {
       blocks.push({ id: nextId(), kind: "code", text: seg.text, level: 0 });
-    } else if (seg.kind === "setup") {
+    } else if (seg.kind === "instructions") {
       if (seg.text) {
-        blocks.push({ id: nextId(), kind: "setup", text: seg.text, level: 0 });
+        blocks.push({
+          id: nextId(),
+          kind: "instructions",
+          text: seg.text,
+          level: 0,
+        });
       }
     } else {
       seg.text
@@ -139,14 +145,10 @@ function proseBlock(id: string, raw: string): ScriptBlock {
     };
   }
   // A block that is entirely one bracketed note is a cue: something to do,
-  // not something to read aloud.
+  // not something to read aloud. It is set like any other line, brackets and
+  // all; the kind only keeps its words out of the crawl's pace.
   if (/^\[[\s\S]*\]$/.test(raw)) {
-    return {
-      id,
-      kind: "cue",
-      text: raw.replace(/^\[|\]$/g, "").trim(),
-      level: 0,
-    };
+    return { id, kind: "cue", text: raw, level: 0 };
   }
   // A chunk whose every line opens a list item is a list, and keeps its line
   // breaks — they're the structure, not accidental wrapping.

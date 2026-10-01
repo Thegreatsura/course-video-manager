@@ -161,6 +161,12 @@ for definition/framing, bracketed cues for improvised playthroughs). It is
 internal: like Beats, it is never emitted into the shipped course.json. Write it
 with 'cvm video update --script / --script-file'.
 
+Every note to the teacher — setup before the take, what to do or show during
+it — goes in an <instructions>…</instructions> region, each tag on a line of its
+own. The teleprompter sets it full width and smaller than the spoken lines.
+Anything to copy and paste (a command, a URL, a file's contents) goes in a
+\`\`\` fence; the teleprompter gives each fence a copy button.
+
 Accepts a SINGLE video id (standalone or lesson-bound). Missing id ->
 NotFoundError on stderr, exit 2.
 

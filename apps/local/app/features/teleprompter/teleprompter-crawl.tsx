@@ -12,10 +12,15 @@
  * directly, which is the fastest way to reach a particular line between takes.
  */
 import { useEffect, useMemo, useRef } from "react";
+import { ScriptCodeBlock } from "./script-code-block";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { ScriptMarkdown } from "./script-markdown";
-import { wordCount, type ScriptBlock } from "./script-blocks";
-import { TYPE, cueStyle, textStyle } from "./teleprompter-settings";
+import {
+  parseScriptBlocks,
+  wordCount,
+  type ScriptBlock,
+} from "./script-blocks";
+import { TYPE, textStyle } from "./teleprompter-settings";
 
 export function TeleprompterCrawl(props: {
   blocks: ScriptBlock[];
@@ -124,35 +129,7 @@ export function TeleprompterCrawl(props: {
         >
           <div ref={proseRef}>
             {props.blocks.map((block) => (
-              <div
-                key={block.id}
-                className={
-                  block.kind === "heading"
-                    ? "mb-6 mt-12 font-semibold uppercase tracking-widest text-neutral-400"
-                    : "mb-8"
-                }
-                style={
-                  block.kind === "heading"
-                    ? { fontSize: `${TYPE.fontSize * 0.55}px` }
-                    : block.kind === "cue"
-                      ? cueStyle()
-                      : undefined
-                }
-              >
-                {block.kind === "cue" ? (
-                  // Rendered rather than printed, because "open <this page>"
-                  // is what a stage direction most often says — and the link in
-                  // it is the one thing on the glass you actually click. Cue
-                  // marking is off: the block is already the aside.
-                  <>
-                    {"[ "}
-                    <ScriptMarkdown cues={false}>{block.text}</ScriptMarkdown>
-                    {" ]"}
-                  </>
-                ) : (
-                  <ScriptMarkdown cues>{block.text}</ScriptMarkdown>
-                )}
-              </div>
+              <BlockView key={block.id} block={block} />
             ))}
           </div>
           {/* Runway so the last line can still reach the read line. */}
@@ -166,6 +143,68 @@ export function TeleprompterCrawl(props: {
         style={{ height: `${TYPE.readLine}%` }}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent" />
+    </div>
+  );
+}
+
+/**
+ * One block on the glass. An `<instructions>` region holds blocks of its own — its
+ * notes, and the commands to copy out of it — so it renders its blocks with
+ * this same view, one per line, never run together into one paragraph.
+ */
+function BlockView(props: { block: ScriptBlock; inInstructions?: boolean }) {
+  const { block, inInstructions = false } = props;
+  const gap = inInstructions ? "mb-5" : "mb-8";
+
+  if (block.kind === "instructions") {
+    return (
+      <div
+        data-instructions
+        className="mb-16 rounded-lg border border-white/10 px-8 py-6"
+        style={{
+          // Out of the short spoken measure to the full width of the glass:
+          // the column is centred, so half its width less half the panel's
+          // puts the panel's left edge where the glass starts.
+          width: `${TYPE.instructionsWidth}vw`,
+          marginLeft: `calc(50% - ${TYPE.instructionsWidth / 2}vw)`,
+          fontSize: `${TYPE.instructionsScale}em`,
+          fontWeight: 400,
+          lineHeight: 1.5,
+          color: TYPE.instructionsColor,
+        }}
+      >
+        {parseScriptBlocks(block.text).map((inner) => (
+          <BlockView key={inner.id} block={inner} inInstructions />
+        ))}
+      </div>
+    );
+  }
+
+  if (block.kind === "code") {
+    return (
+      <div className={gap}>
+        <ScriptCodeBlock code={block.text} nested={inInstructions} />
+      </div>
+    );
+  }
+
+  if (block.kind === "heading") {
+    return (
+      <div
+        className="mb-6 mt-12 font-semibold uppercase tracking-widest text-neutral-400"
+        style={{ fontSize: `${TYPE.fontSize * 0.55}px` }}
+      >
+        <ScriptMarkdown>{block.text}</ScriptMarkdown>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={gap}
+      style={inInstructions ? { color: TYPE.instructionsColor } : undefined}
+    >
+      <ScriptMarkdown>{block.text}</ScriptMarkdown>
     </div>
   );
 }
