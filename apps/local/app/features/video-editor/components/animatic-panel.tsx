@@ -27,7 +27,7 @@ function PanelComments({ comments }: { comments: readonly string[] }) {
  *
  * READ-ONLY on purpose — see `EditorSidePanel`. No drag, no line editor.
  *
- * Clicking a thumbnail opens its still large in a modal, to check what was
+ * Clicking a row opens its still large in a modal, to check what was
  * planned at full size. LEFT and RIGHT step to the previous/next Clip Mockup
  * and ESCAPE closes it. While it is open the editor's own keys do nothing:
  * its shortcuts already ignore a key from inside a dialog, and the modal stops
@@ -62,7 +62,11 @@ export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
         ) : (
           <div
             key={line.id}
-            className="flex gap-2 py-2 border-b border-border/40 last:border-b-0"
+            // A div rather than a button: the editor's shortcuts ignore any
+            // key whose target is a button, so a focused trigger would leave
+            // the arrows dead once the modal closes.
+            onClick={() => setPreviewIndex(line.position - 1)}
+            className="flex cursor-zoom-in gap-2 py-2 border-b border-border/40 last:border-b-0 hover:bg-muted/50"
           >
             <span className="w-5 shrink-0 pt-0.5 text-right text-[11px] tabular-nums text-muted-foreground">
               {line.position}
@@ -71,11 +75,7 @@ export function AnimaticPanel({ lines }: { lines: AnimaticLine[] }) {
               src={clipMockupFrameUrl(line.id)}
               alt=""
               loading="lazy"
-              // An image rather than a button: the editor's shortcuts ignore
-              // any key whose target is a button, so a focused trigger would
-              // leave the arrows dead once the modal closes.
-              onClick={() => setPreviewIndex(line.position - 1)}
-              className="h-12 aspect-video shrink-0 cursor-zoom-in rounded-sm border bg-black object-contain"
+              className="h-12 aspect-video shrink-0 rounded-sm border bg-black object-contain"
               // A frame the disk does not have shows as an empty box, not a
               // broken-image glyph. The Animatic page is where a missing file
               // is reported.
