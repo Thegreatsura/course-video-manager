@@ -6,12 +6,16 @@
  * two takes is never in doubt.
  *
  * THREE COLUMNS. The lines run down the middle, exactly over the camera, and
- * nothing a still does ever moves them. Clicking a clip shows its still in the
- * left column, level with its line, and clicking it again hides it. A still is
- * faint until it is clicked, so it never shows on the camera as a shadow;
- * clicking the still itself toggles it between faint and full. The right
- * column stays empty. Which stills are shown is a passing choice, never
- * stored, and stills that are shown at once may overlap.
+ * nothing a still does ever moves them. Every clip's still is always in the
+ * left column, level with its line. A still is faint until it is clicked, so
+ * it never shows on the camera as a shadow; clicking it toggles it between
+ * faint and full, a passing choice that is never stored. Stills may overlap
+ * each other. The right column stays empty.
+ *
+ * THE LEFT COLUMN STOPS SHORT OF THE INSTRUMENTS. The capture indicator and
+ * the session marks sit in a strip down the left edge of the glass, and a
+ * still never reaches into it, so the two can never clash whatever their
+ * stacking order.
  *
  * Laid out like the Beats view, and for the same reasons: the whole list is on
  * the glass at once, nothing dims, nothing rolls, and position is carried by
@@ -63,8 +67,13 @@ function Comments(props: { comments: readonly string[] }) {
   );
 }
 
-/** How a shown still looks: faint until the author clicks it. */
-type StillState = "dim" | "full";
+/**
+ * Where the left column starts: clear of the strip the capture indicator and
+ * the session marks share (`left-4` + `w-14`, so 4.5rem), plus a gap.
+ */
+const INSTRUMENT_CLEARANCE = "5.5rem";
+/** Between a still and its line's number. */
+const STILL_GAP = "2rem";
 
 /**
  * One Clip Mockup's still in the left column. Placed against its row, so it
@@ -74,7 +83,7 @@ type StillState = "dim" | "full";
 function Still(props: {
   clipMockupId: string;
   position: number;
-  state: StillState;
+  full: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -83,15 +92,18 @@ function Still(props: {
       alt={`Clip ${props.position}`}
       draggable={false}
       onClick={(e) => {
-        // The still is not the line: clicking it must not hide it.
+        // The still is not the line: clicking it must not move the spotlight.
         e.stopPropagation();
         props.onToggle();
       }}
+      loading="lazy"
       className="absolute top-0 h-auto cursor-pointer rounded-md transition-opacity"
       style={{
-        right: "calc(100% + 2rem)",
-        width: "calc((100vw - 100%) / 2 - 4rem)",
-        opacity: props.state === "full" ? 1 : TYPE.animaticStillDimOpacity,
+        right: `calc(100% + ${STILL_GAP})`,
+        // Half of what the middle column leaves, less the gap and the
+        // instrument strip — so the still's left edge is at the clearance.
+        width: `max(0px, calc((100vw - 100%) / 2 - ${STILL_GAP} - ${INSTRUMENT_CLEARANCE}))`,
+        opacity: props.full ? 1 : TYPE.animaticStillDimOpacity,
       }}
     />
   );
@@ -114,22 +126,13 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const [activeIndex, setActiveIndex] = useState(0);
-  const [stills, setStills] = useState<ReadonlyMap<string, StillState>>(
-    new Map()
-  );
-
-  const toggleStill = (id: string) =>
-    setStills((prev) => {
-      const next = new Map(prev);
-      if (next.has(id)) next.delete(id);
-      else next.set(id, "dim");
-      return next;
-    });
+  const [fullStills, setFullStills] = useState<ReadonlySet<string>>(new Set());
 
   const toggleStillOpacity = (id: string) =>
-    setStills((prev) => {
-      const next = new Map(prev);
-      next.set(id, prev.get(id) === "full" ? "dim" : "full");
+    setFullStills((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
@@ -202,7 +205,6 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
               );
             }
 
-            const still = stills.get(line.id);
             return (
               <div
                 key={line.id}
@@ -211,23 +213,19 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
                   else rowRefs.current.delete(line.id);
                 }}
                 // Clicking a clip moves the spotlight — the popup rarely has
-                // OS focus for the Stream Deck's keys while you film — and
-                // shows or hides its still.
+                // OS focus for the Stream Deck's keys while you film.
                 onClick={() => {
                   if (hasSelectedText()) return;
                   setActiveIndex(line.position - 1);
-                  toggleStill(line.id);
                 }}
                 className="relative mb-8 flex cursor-pointer"
               >
-                {still && (
-                  <Still
-                    clipMockupId={line.id}
-                    position={line.position}
-                    state={still}
-                    onToggle={() => toggleStillOpacity(line.id)}
-                  />
-                )}
+                <Still
+                  clipMockupId={line.id}
+                  position={line.position}
+                  full={fullStills.has(line.id)}
+                  onToggle={() => toggleStillOpacity(line.id)}
+                />
                 {/* The gutter is sized in body `em`, the number inside it at
                     the cue size, on the first line's own line box. */}
                 <span

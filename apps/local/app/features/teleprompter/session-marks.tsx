@@ -33,7 +33,11 @@
 import type { ClipMarks, ClipMarkState } from "@/lib/teleprompter-protocol";
 import { TYPE } from "./teleprompter-settings";
 
-/** Under the capture dot: top-4 (1rem) + size-14 (3.5rem) + a gap. */
+/**
+ * Under the capture dot: top-4 (1rem) + size-14 (3.5rem) + a gap. The
+ * Animatic view's stills keep clear of this strip (`INSTRUMENT_CLEARANCE` in
+ * `animatic-view.tsx`), so move both together.
+ */
 const ANCHOR = "pointer-events-none absolute left-4 top-20 z-40 select-none";
 
 const PER_ROW = 3;
