@@ -90,12 +90,6 @@ export const TYPE = {
   animaticCommentScale: 0.6,
   commentColor: "var(--color-white)",
   /**
-   * How much of a Clip Mockup's still shows in the left column until it is
-   * clicked: enough to recognise, faint enough that it never shows on the
-   * camera as a shadow through the glass.
-   */
-  animaticStillDimOpacity: 0.25,
-  /**
    * Warm rather than white: easier on the eye through beam-splitter glass.
    *
    * Colours here are Tailwind palette variables rather than hexes — Tailwind v4

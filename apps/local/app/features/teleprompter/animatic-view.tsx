@@ -5,17 +5,8 @@
  * apart from the next, with its number in the gutter, and the boundary between
  * two takes is never in doubt.
  *
- * THREE COLUMNS. The lines run down the middle, exactly over the camera, and
- * nothing a still does ever moves them. Every clip's still is always in the
- * left column, level with its line. A still is faint until it is clicked, so
- * it never shows on the camera as a shadow; clicking it toggles it between
- * faint and full, a passing choice that is never stored. Stills may overlap
- * each other. The right column stays empty.
- *
- * THE LEFT COLUMN STOPS SHORT OF THE INSTRUMENTS. The capture indicator and
- * the session marks sit in a strip down the left edge of the glass, and a
- * still never reaches into it, so the two can never clash whatever their
- * stacking order.
+ * Text only. The stills are on the Animatic page and the editor's Animatic
+ * tab; on the glass they would only be something to read around.
  *
  * Laid out like the Beats view, and for the same reasons: the whole list is on
  * the glass at once, nothing dims, nothing rolls, and position is carried by
@@ -32,7 +23,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
-import { clipMockupFrameUrl } from "@/features/clip-mockups/clip-mockup-frame-url";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { TYPE, cueStyle, textStyle } from "./teleprompter-settings";
 
@@ -67,48 +57,6 @@ function Comments(props: { comments: readonly string[] }) {
   );
 }
 
-/**
- * Where the left column starts: clear of the strip the capture indicator and
- * the session marks share (`left-4` + `w-14`, so 4.5rem), plus a gap.
- */
-const INSTRUMENT_CLEARANCE = "5.5rem";
-/** Between a still and its line's number. */
-const STILL_GAP = "2rem";
-
-/**
- * One Clip Mockup's still in the left column. Placed against its row, so it
- * sits level with the line; the row's own width is the middle column, so the
- * left column is half of what is left of the viewport.
- */
-function Still(props: {
-  clipMockupId: string;
-  position: number;
-  full: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <img
-      src={clipMockupFrameUrl(props.clipMockupId)}
-      alt={`Clip ${props.position}`}
-      draggable={false}
-      onClick={(e) => {
-        // The still is not the line: clicking it must not move the spotlight.
-        e.stopPropagation();
-        props.onToggle();
-      }}
-      loading="lazy"
-      className="absolute top-0 h-auto cursor-pointer rounded-md transition-opacity"
-      style={{
-        right: `calc(100% + ${STILL_GAP})`,
-        // Half of what the middle column leaves, less the gap and the
-        // instrument strip — so the still's left edge is at the clearance.
-        width: `max(0px, calc((100vw - 100%) / 2 - ${STILL_GAP} - ${INSTRUMENT_CLEARANCE}))`,
-        opacity: props.full ? 1 : TYPE.animaticStillDimOpacity,
-      }}
-    />
-  );
-}
-
 /** Same guard as the Beats view: a drag to copy words must not move the list. */
 function hasSelectedText(): boolean {
   const selection = window.getSelection();
@@ -126,15 +74,6 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const [activeIndex, setActiveIndex] = useState(0);
-  const [fullStills, setFullStills] = useState<ReadonlySet<string>>(new Set());
-
-  const toggleStillOpacity = (id: string) =>
-    setFullStills((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
 
   const goTo = useCallback(
     (index: number) => {
@@ -218,14 +157,8 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
                   if (hasSelectedText()) return;
                   setActiveIndex(line.position - 1);
                 }}
-                className="relative mb-8 flex cursor-pointer"
+                className="mb-8 flex cursor-pointer"
               >
-                <Still
-                  clipMockupId={line.id}
-                  position={line.position}
-                  full={fullStills.has(line.id)}
-                  onToggle={() => toggleStillOpacity(line.id)}
-                />
                 {/* The gutter is sized in body `em`, the number inside it at
                     the cue size, on the first line's own line box. */}
                 <span
