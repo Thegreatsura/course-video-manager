@@ -37,8 +37,8 @@ export const loader = makeLoader({
           title: beat.title,
           description: beat.description,
         })),
-        // Text only. The stills stay on the Animatic page and the editor's
-        // Animatic tab — the glass is for the words you say.
+        // Text only. The glass asks for a still by its Clip Mockup id, and
+        // only when the author clicks to show it.
         animatic,
       };
     }),

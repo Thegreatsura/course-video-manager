@@ -5,8 +5,13 @@
  * apart from the next, with its number in the gutter, and the boundary between
  * two takes is never in doubt.
  *
- * Text only. The stills are on the Animatic page and the editor's Animatic
- * tab; on the glass they would only be something to read around.
+ * THREE COLUMNS. The lines run down the middle, exactly over the camera, and
+ * nothing a still does ever moves them. Clicking a clip shows its still in the
+ * left column, level with its line, and clicking it again hides it. A still is
+ * faint until it is clicked, so it never shows on the camera as a shadow;
+ * clicking the still itself toggles it between faint and full. The right
+ * column stays empty. Which stills are shown is a passing choice, never
+ * stored, and stills that are shown at once may overlap.
  *
  * Laid out like the Beats view, and for the same reasons: the whole list is on
  * the glass at once, nothing dims, nothing rolls, and position is carried by
@@ -14,14 +19,16 @@
  * aloud.
  *
  * Clip Mockup Comments sit under the line or Chapter they hang off, small and
- * amber, marked off by a rule on the left like a note in a margin: the
- * author's notes for this take, never said aloud.
+ * white behind a comment icon, marked off by a rule on the left like a note in
+ * a margin: the author's notes for this take, never said aloud.
  *
  * Stream Deck: advance/back scroll to the next/previous clip (Chapters are
  * skipped — they are not something you say), reset returns to the top.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageSquare } from "lucide-react";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
+import { clipMockupFrameUrl } from "@/features/clip-mockups/clip-mockup-frame-url";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { TYPE, cueStyle, textStyle } from "./teleprompter-settings";
 
@@ -44,11 +51,49 @@ function Comments(props: { comments: readonly string[] }) {
       }}
     >
       {props.comments.map((body, i) => (
-        <p key={i} className="whitespace-pre-wrap">
-          {body}
+        <p key={i} className="flex items-start gap-[0.4em] whitespace-pre-wrap">
+          <MessageSquare
+            aria-hidden
+            className="mt-[0.2em] size-[0.9em] shrink-0"
+          />
+          <span className="min-w-0">{body}</span>
         </p>
       ))}
     </div>
+  );
+}
+
+/** How a shown still looks: faint until the author clicks it. */
+type StillState = "dim" | "full";
+
+/**
+ * One Clip Mockup's still in the left column. Placed against its row, so it
+ * sits level with the line; the row's own width is the middle column, so the
+ * left column is half of what is left of the viewport.
+ */
+function Still(props: {
+  clipMockupId: string;
+  position: number;
+  state: StillState;
+  onToggle: () => void;
+}) {
+  return (
+    <img
+      src={clipMockupFrameUrl(props.clipMockupId)}
+      alt={`Clip ${props.position}`}
+      draggable={false}
+      onClick={(e) => {
+        // The still is not the line: clicking it must not hide it.
+        e.stopPropagation();
+        props.onToggle();
+      }}
+      className="absolute top-0 h-auto cursor-pointer rounded-md transition-opacity"
+      style={{
+        right: "calc(100% + 2rem)",
+        width: "calc((100vw - 100%) / 2 - 4rem)",
+        opacity: props.state === "full" ? 1 : TYPE.animaticStillDimOpacity,
+      }}
+    />
   );
 }
 
@@ -69,6 +114,24 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const [activeIndex, setActiveIndex] = useState(0);
+  const [stills, setStills] = useState<ReadonlyMap<string, StillState>>(
+    new Map()
+  );
+
+  const toggleStill = (id: string) =>
+    setStills((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, "dim");
+      return next;
+    });
+
+  const toggleStillOpacity = (id: string) =>
+    setStills((prev) => {
+      const next = new Map(prev);
+      next.set(id, prev.get(id) === "full" ? "dim" : "full");
+      return next;
+    });
 
   const goTo = useCallback(
     (index: number) => {
@@ -139,6 +202,7 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
               );
             }
 
+            const still = stills.get(line.id);
             return (
               <div
                 key={line.id}
@@ -147,13 +211,23 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
                   else rowRefs.current.delete(line.id);
                 }}
                 // Clicking a clip moves the spotlight — the popup rarely has
-                // OS focus for the Stream Deck's keys while you film.
+                // OS focus for the Stream Deck's keys while you film — and
+                // shows or hides its still.
                 onClick={() => {
                   if (hasSelectedText()) return;
                   setActiveIndex(line.position - 1);
+                  toggleStill(line.id);
                 }}
-                className="mb-8 flex cursor-pointer"
+                className="relative mb-8 flex cursor-pointer"
               >
+                {still && (
+                  <Still
+                    clipMockupId={line.id}
+                    position={line.position}
+                    state={still}
+                    onToggle={() => toggleStillOpacity(line.id)}
+                  />
+                )}
                 {/* The gutter is sized in body `em`, the number inside it at
                     the cue size, on the first line's own line box. */}
                 <span
