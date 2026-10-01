@@ -120,6 +120,24 @@ export const TYPE = {
    */
   cueColor: "var(--color-neutral-400)",
   /**
+   * A `<setup>` region, against the body size. Setup is read once, standing
+   * at the desk before the take, and its commands are copied out — never said
+   * aloud. A step above a cue, which is too small to read a list of commands
+   * from, and still clearly below the lines you speak.
+   */
+  setupScale: 0.72,
+  /**
+   * Quieter than the body and warmer than a cue: legible as instructions, but
+   * never confused with a line to deliver.
+   */
+  setupColor: "var(--color-neutral-300)",
+  /**
+   * How wide a `<setup>` region runs, in `vw`. Its commands and paths run long,
+   * and nothing in it is read off the glass mid-take, so it takes the width
+   * the short spoken measure gives up.
+   */
+  setupWidth: 92,
+  /**
    * The same cool as bold, because a link is emphasis of a kind — the underline
    * is what says "this one is clickable", and it's the only underline on the
    * glass, so it doesn't have to shout.
