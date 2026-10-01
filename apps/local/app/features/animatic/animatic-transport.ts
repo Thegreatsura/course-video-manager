@@ -42,3 +42,24 @@ export function startPlayingAt(
   player.seekTo(frame);
   player.play();
 }
+
+/**
+ * Move the playhead to a frame and KEEP WHAT IT WAS DOING: a playing Animatic
+ * plays on from there, a paused one stays paused on that still. This is LEFT
+ * and RIGHT — a step through the moments, not a request to watch one.
+ *
+ * Playing, it goes through `startPlayingAt` for the reason above. Paused, a
+ * bare `seekTo` is safe: Remotion only arms its resume latch when a seek
+ * arrives while it is playing.
+ */
+export function seekKeepingPlayState(
+  player: AnimaticTransport | null | undefined,
+  frame: number
+): void {
+  if (!player) return;
+  if (player.isPlaying()) {
+    startPlayingAt(player, frame);
+    return;
+  }
+  player.seekTo(frame);
+}

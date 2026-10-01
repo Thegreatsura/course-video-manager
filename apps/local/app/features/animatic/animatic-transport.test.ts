@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { startPlayingAt, type AnimaticTransport } from "./animatic-transport";
+import {
+  seekKeepingPlayState,
+  startPlayingAt,
+  type AnimaticTransport,
+} from "./animatic-transport";
 
 /**
  * The Remotion Player is the system boundary here, so it is the only thing
@@ -73,5 +77,29 @@ describe("startPlayingAt", () => {
   it("does nothing at all before the Player has mounted", () => {
     expect(() => startPlayingAt(null, 12)).not.toThrow();
     expect(() => startPlayingAt(undefined, 12)).not.toThrow();
+  });
+});
+
+describe("seekKeepingPlayState", () => {
+  it("plays on from the new frame when the Animatic was playing", () => {
+    const fake = fakePlayer({ playing: true });
+
+    seekKeepingPlayState(fake.player, 90);
+
+    expect(fake.calls).toEqual(["pause", "seekTo(90)", "play"]);
+    expect(fake.player.isPlaying()).toBe(true);
+  });
+
+  it("stays paused on the new frame when the Animatic was paused", () => {
+    const fake = fakePlayer({ playing: false });
+
+    seekKeepingPlayState(fake.player, 90);
+
+    expect(fake.calls).toEqual(["seekTo(90)"]);
+    expect(fake.player.isPlaying()).toBe(false);
+  });
+
+  it("does nothing at all before the Player has mounted", () => {
+    expect(() => seekKeepingPlayState(null, 12)).not.toThrow();
   });
 });

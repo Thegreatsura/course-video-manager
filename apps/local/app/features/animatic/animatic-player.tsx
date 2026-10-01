@@ -54,10 +54,11 @@ import {
   useAnimaticSubtitles,
 } from "./animatic-subtitles";
 import { AnimaticSubtitlesMenu } from "./animatic-subtitles-menu";
-import { startPlayingAt } from "./animatic-transport";
+import { seekKeepingPlayState, startPlayingAt } from "./animatic-transport";
 import { useAnimaticShortcuts } from "./use-animatic-shortcuts";
 import {
   ANIMATIC_FPS,
+  adjacentSegmentStartFrame,
   buildAnimaticTimeline,
   formatRunTime,
   segmentIndexAtFrame,
@@ -73,7 +74,9 @@ import {
  * LEFT, the picture on the right — and the same keys, because the author walks
  * an Animatic with exactly the habit he walks a filmed Video with. SPACE plays
  * and pauses, RETURN plays the selected moment from its start, ARROW UP and
- * ARROW DOWN move the selection without touching playback. See
+ * ARROW DOWN move the selection without touching playback. ARROW LEFT and
+ * ARROW RIGHT are the one pair that differs: they step the playhead to the
+ * previous or next moment, folded or not. See
  * `use-animatic-shortcuts.ts`. A CLICK on a Clip Mockup plays it at once,
  * rather than the Video page's select-then-click-again: there is no per-frame
  * editing to select for here, so the second click had nothing to do.
@@ -274,6 +277,22 @@ export const AnimaticPlayer = (props: {
       setSelection(
         moveSelection({ selection, activeIndex, delta, count, hiddenIndices })
       ),
+    onStepPlayhead: (delta) => {
+      const player = playerRef.current;
+      if (!player) return;
+      // From the Player's own frame, not `activeIndex`: that state lags a
+      // frameupdate behind, and two quick presses must step two moments.
+      const frame = adjacentSegmentStartFrame(
+        segmentsRef.current,
+        player.getCurrentFrame(),
+        delta
+      );
+      if (frame === null) return;
+      // The selection goes back to following the playhead, so the highlight
+      // sits on the moment now on screen.
+      setSelection(null);
+      seekKeepingPlayState(player, frame);
+    },
     onSelectEdge: (edge) =>
       // `null` is "nothing on screen to select", so the selection stands.
       setSelection(
@@ -447,7 +466,12 @@ export const AnimaticPlayer = (props: {
           it. The frame is what is being judged, and a judgement made against a
           white surround is not the judgement the student's player will give.
           Only the chrome around it follows the theme. */}
-      <div className="relative flex-1 min-w-0 bg-black text-white">
+      {/* `data-animatic-stage` lets LEFT and RIGHT through from the Player's
+          own buttons — see `use-animatic-shortcuts.ts`. */}
+      <div
+        data-animatic-stage
+        className="relative flex-1 min-w-0 bg-black text-white"
+      >
         <Player
           ref={playerRef}
           component={AnimaticComposition}

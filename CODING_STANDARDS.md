@@ -171,6 +171,11 @@ SPACE plays and pauses where the playhead is, RETURN plays the selected item
 from its start, the arrows move the selection and do not touch playback, HOME and
 END go to the ends, L and K are 2x and 1x.
 
+One pair differs ON PURPOSE: ARROW LEFT and ARROW RIGHT. On the Video page they
+are a second UP and DOWN; on the Animatic they step the PLAYHEAD to the previous
+or next Clip Mockup, folded or not, because the author is watching the picture
+and a selection does not move it. UP and DOWN keep the Video page's meaning.
+
 Port a key only if the Animatic has something for it to act on — the Animatic is
 read-only, so DELETE, ALT+ARROW (reorder) and B (pause marker) have no
 equivalent and are left out. When a shortcut is ADDED to the Video page, decide
