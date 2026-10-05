@@ -10,6 +10,7 @@ import {
   emitGet,
   emitNdjson,
   emitObject,
+  fullOption,
   notFound,
   parseError,
   withName,
@@ -55,7 +56,9 @@ COPY FIELDS
 VERBS
   list   — every active pitch (optionally filtered by --state). Identity-rich.
   get    — one or more pitches by id, deep (linked Standalone Videos + their
-           Clips and planning Beats).
+           Clips and planning Beats). Large: use 'tree' first.
+  tree   — one pitch as a slim skeleton: pitch -> linked Standalone Videos,
+           with state and counts, no copy and no Clip rows (--full = 'get').
   create — create a Pitch (WRITE). --title required; other copy/ranking fields
            optional. (A pitch needs a title to appear in list/get.)
   update — patch a Pitch's copy/ranking fields (WRITE). Rename = --title.
@@ -64,6 +67,7 @@ EXAMPLES
   cvm pitch list
   cvm pitch list --state scheduled
   cvm pitch list | jq -r '.id + "\\t" + .title + "\\t" + .state'
+  cvm pitch tree <id>                    # structure first
   cvm pitch get <id>
   cvm pitch get <id-a> <id-b>            # NDJSON, one object per line
   cvm pitch get <id> | jq '.videos[].clips'`;
@@ -124,6 +128,28 @@ EXAMPLES
   cvm pitch get <id> | jq '{title, state, videos: [.videos[].title]}'
   cvm pitch get <id-a> <id-b> > pitches.ndjson
   cvm pitch list --state idle | jq -r .id | xargs cvm pitch get`;
+
+const TREE_HELP = `Print the SKELETON of one Pitch: the pitch and its linked Standalone Videos.
+
+The default output is SLIM: identity, state and counts, never content. It has
+no packaging copy, no Video script or body, and no Clip rows. Use it to see a
+pitch's shape, then 'cvm video tree <videoId>' or 'cvm video get <videoId>'.
+  pitch  { id, kind:"pitch", name, state, priority, effort, videoCount,
+           children }
+  video  { id, kind:"video", name, format, clipCount, beatCount, children:[] }
+'name' is the pitch title / the video title. Archived Videos are left out.
+
+--full   Print the complete deep record instead: the same object as
+         'cvm pitch get <id>' (all copy, every Video with its Clips, Overlays
+         and Beats). On a pitch with one filmed Video this can be ~90KB.
+
+A single id only. An unknown or archived pitch id is a not-found (exit 2).
+Flags must come BEFORE the <id>.
+
+EXAMPLES
+  cvm pitch tree <id>
+  cvm pitch tree <id> | jq -r '.children[].id'
+  cvm pitch tree --full <id>`;
 
 const CREATE_HELP = `Create a Pitch. Requires --title <t>; a pitch needs a non-empty title to appear
 in 'pitch list' / 'pitch get', so the title is mandatory.
@@ -205,6 +231,48 @@ const getCmd = Command.make("get", { ids }, ({ ids }) =>
       ),
   })
 ).pipe(Command.withDescription(detail(GET_HELP)));
+
+const treeId = Args.text({ name: "id" });
+
+const treeCmd = Command.make(
+  "tree",
+  { id: treeId, full: fullOption },
+  ({ id, full }) =>
+    Effect.gen(function* () {
+      const svc = yield* PitchOperationsService;
+      const pitch = yield* svc
+        .getPitchWithVideos(id)
+        .pipe(Effect.catchTag("NotFoundError", () => notFound("pitch", id)));
+      // Archived pitches are deleted-equivalent, the same as in 'get'.
+      if (pitch.archived) {
+        return yield* notFound("pitch", id);
+      }
+      if (full) {
+        return yield* emitObject(pitch);
+      }
+      // The skeleton: identity, state and counts only. The packaging copy,
+      // each Video's script/body and every Clip row stay out. On a pitch with
+      // one filmed Video, those are almost all of the bytes.
+      yield* emitObject({
+        id: pitch.id,
+        kind: "pitch",
+        name: pitch.title,
+        state: pitch.state,
+        priority: pitch.priority,
+        effort: pitch.effort,
+        videoCount: pitch.videos.length,
+        children: pitch.videos.map((video) => ({
+          id: video.id,
+          kind: "video",
+          name: video.title,
+          format: video.format,
+          clipCount: video.clips.length,
+          beatCount: video.beats.length,
+          children: [],
+        })),
+      });
+    })
+).pipe(Command.withDescription(detail(TREE_HELP)));
 
 // ---------------------------------------------------------------------------
 // Write verbs: create / update
@@ -346,5 +414,5 @@ const updateCmd = Command.make(
 
 export const pitchCommand = Command.make("pitch").pipe(
   Command.withDescription(detail(PITCH_HELP)),
-  Command.withSubcommands([listCmd, getCmd, createCmd, updateCmd])
+  Command.withSubcommands([listCmd, getCmd, treeCmd, createCmd, updateCmd])
 );
