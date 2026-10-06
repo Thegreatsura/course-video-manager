@@ -434,7 +434,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
                 )
               );
               if (code !== 0) {
-                yield* new FFmpegError({
+                return yield* new FFmpegError({
                   cause: null,
                   message: withStderrTail(
                     `ffmpeg composite exited with code ${code}`,
@@ -543,7 +543,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
               )
             );
             if (code !== 0) {
-              yield* new FFmpegError({
+              return yield* new FFmpegError({
                 cause: null,
                 message: `Failed to capture frame at ${timestamp}s, exit code: ${code}`,
               });

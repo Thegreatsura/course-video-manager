@@ -256,7 +256,7 @@ function renderOverlay(
 
         const exitCode = yield* process.exitCode;
         if (exitCode !== 0) {
-          yield* new RenderVerticalError({
+          return yield* new RenderVerticalError({
             cause: null,
             message: `Overlay renderer exited with code ${exitCode}: ${stderr}`,
           });

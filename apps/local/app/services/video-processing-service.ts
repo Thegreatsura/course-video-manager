@@ -178,7 +178,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           )
         );
         if (code !== 0) {
-          yield* new CouldNotExtractAudioError({
+          return yield* new CouldNotExtractAudioError({
             cause: null,
             message: `Failed to extract audio, exit code: ${code}`,
           });
@@ -313,7 +313,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           )
         );
         if (code !== 0) {
-          yield* new CouldNotExtractAudioError({
+          return yield* new CouldNotExtractAudioError({
             cause: null,
             message: `Failed to extract audio, exit code: ${code}`,
           });

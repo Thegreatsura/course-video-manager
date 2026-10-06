@@ -3,8 +3,8 @@
   "exclude": ["node_modules"],
   "compilerOptions": {
     // Effect language service, run by `pnpm run lint:effect` (effect-tsgo
-    // diagnostics). Only rules backed by CODING_STANDARDS.md ("Effects are run,
-    // never dropped") are errors; the rest of the rules that default to error
+    // diagnostics). Only rules backed by CODING_STANDARDS.md (its Effect
+    // section) are errors; the rest of the rules that default to error
     // are demoted to warnings so they still report without gating CI.
     // See docs/plans/effect-codebase-health.md before promoting one.
     "plugins": [
@@ -16,13 +16,16 @@
           "missingStarInYieldEffectGen": "error",
           "returnEffectInGen": "error",
           "runEffectInsideEffect": "error",
+          "missingReturnYieldStar": "error",
+          "catchUnfailableEffect": "error",
+          "tryCatchInEffectGen": "error",
+          "schemaSyncInEffect": "error",
           "classSelfMismatch": "warning",
           "effectFnImplicitAny": "warning",
           "floatingEffectInVitest": "warning",
           "missingEffectContext": "warning",
           "missingEffectError": "warning",
           "missingLayerContext": "warning",
-          "missingReturnYieldStar": "warning",
           "nonObjectEffectServiceType": "warning",
           "overriddenSchemaConstructor": "warning",
           "schemaLiteralNonFinite": "warning",

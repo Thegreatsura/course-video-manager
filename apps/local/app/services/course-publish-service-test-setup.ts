@@ -147,6 +147,11 @@ export const setupPublishableCourse = async (opts?: {
    * Default: every card renders.
    */
   failCardRenderWith?: unknown;
+  /**
+   * Throw this from every write to a Video's log — a full disk under
+   * `.data/logs`. Default: every write lands.
+   */
+  throwOnLogWrite?: unknown;
 }) => {
   const videoCount = opts?.videoCount ?? 1;
   await truncateAllTables(testDb);
@@ -362,7 +367,9 @@ export const setupPublishableCourse = async (opts?: {
   // The export writes why a stage failed into the Video's own log. In memory
   // here, so the suite leaves no `.data/logs` behind and a test can read back
   // what a failure said.
-  const videoEditorLogger = createFakeVideoEditorLogger();
+  const videoEditorLogger = createFakeVideoEditorLogger({
+    throwOnWrite: opts?.throwOnLogWrite,
+  });
 
   const coreTestLayer = Layer.mergeAll(
     CourseOperationsService.Default,
