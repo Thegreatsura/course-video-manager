@@ -51,7 +51,34 @@ export interface ActionSubmenu {
   items: readonly MaybeItem<ActionLeaf>[];
 }
 
-export type ActionItem = ActionLeaf | ActionSubmenu;
+/**
+ * A value picker nested in an action menu — "Change Course" on a Course badge.
+ * It opens as a submenu of radio options marking the current value. Its
+ * options are values, not actions, so they are exempt from the action rules:
+ * no icon, no Title Case, no group. Use it only where an action menu also
+ * offers a choice of value; a menu that only picks a value is a picker, not an
+ * action menu.
+ */
+export interface ActionPicker {
+  /** Verb-first, Title Case, like any action: "Change Course". */
+  label: string;
+  icon: LucideIcon;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: readonly PickerOption[];
+}
+
+export interface PickerOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  /** Heads a run of options; each change of heading starts a new run. */
+  heading?: string;
+  /** A short code shown before the label, such as a priority ("P1"). */
+  tag?: string;
+}
+
+export type ActionItem = ActionLeaf | ActionSubmenu | ActionPicker;
 
 /** Lets a caller write `!isReadOnly && { … }` inside a group's list. */
 type MaybeItem<T> = T | false | null | undefined;
@@ -83,9 +110,17 @@ export interface LaidOutSubmenu {
   items: LaidOutLeaf[];
 }
 
+export interface LaidOutPicker extends Omit<ActionPicker, "options"> {
+  kind: "picker";
+  key: string;
+  destructive: boolean;
+  /** The options in runs, each under its heading (if any). */
+  runs: { heading: string | undefined; options: PickerOption[] }[];
+}
+
 export interface LaidOutGroup {
   group: ActionGroup;
-  items: (LaidOutLeaf | LaidOutSubmenu)[];
+  items: (LaidOutLeaf | LaidOutSubmenu | LaidOutPicker)[];
 }
 
 const ELLIPSIS = "…";
@@ -127,24 +162,46 @@ export function layoutActionMenu(
     const destructive = group === "danger";
     const declared = (groups[group] ?? []).filter(isPresent);
     const all = group === "copy" ? [...declared, ...appendToCopy] : declared;
-    const items = all.map((item, i): LaidOutLeaf | LaidOutSubmenu => {
-      const key = `${group}-${i}-${item.label}`;
-      if ("items" in item) {
-        return {
-          kind: "submenu",
-          key,
-          label: item.label,
-          icon: item.icon,
-          destructive,
-          items: item.items
-            .filter(isPresent)
-            .map((leaf, j) => layoutLeaf(leaf, `${key}-${j}`, destructive)),
-        };
+    const items = all.map(
+      (item, i): LaidOutLeaf | LaidOutSubmenu | LaidOutPicker => {
+        const key = `${group}-${i}-${item.label}`;
+        if ("options" in item) {
+          const { options, ...picker } = item;
+          return {
+            ...picker,
+            kind: "picker",
+            key,
+            destructive,
+            runs: toRuns(options),
+          };
+        }
+        if ("items" in item) {
+          return {
+            kind: "submenu",
+            key,
+            label: item.label,
+            icon: item.icon,
+            destructive,
+            items: item.items
+              .filter(isPresent)
+              .map((leaf, j) => layoutLeaf(leaf, `${key}-${j}`, destructive)),
+          };
+        }
+        return layoutLeaf(item, key, destructive);
       }
-      return layoutLeaf(item, key, destructive);
-    });
+    );
     return items.length > 0 ? [{ group, items }] : [];
   });
+}
+
+function toRuns(options: readonly PickerOption[]): LaidOutPicker["runs"] {
+  const runs: LaidOutPicker["runs"] = [];
+  for (const option of options) {
+    const last = runs.at(-1);
+    if (last && last.heading === option.heading) last.options.push(option);
+    else runs.push({ heading: option.heading, options: [option] });
+  }
+  return runs;
 }
 
 /** Words Title Case leaves lowercase unless they start or end the label. */

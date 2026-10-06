@@ -1,22 +1,13 @@
 "use client";
 
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import {
-  hasLocalStorage,
-  useLocalStorage,
-} from "@/hooks/use-local-storage";
+import { useContext, useEffect, useRef, useState } from "react";
+import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "sonner";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -28,11 +19,9 @@ import {
 import {
   CheckCircle2Icon,
   ExternalLinkIcon,
-  ImageIcon,
   Loader2Icon,
   SendIcon,
   SparklesIcon,
-  Trash2Icon,
 } from "lucide-react";
 import type { CourseStructure } from "@/components/video-context-panel";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
@@ -42,6 +31,7 @@ import {
   AiHeroConnectCard,
   AiHeroConnectionStatus,
 } from "./ai-hero-components";
+import { ImageUploadDropdown } from "./skills-changelog-helpers";
 
 const AI_HERO_TITLE_STORAGE_KEY = (videoId: string) =>
   `ai-hero-title-${videoId}`;
@@ -172,49 +162,6 @@ export function AiHeroPage({
       toast.error("Failed to check export status");
     } finally {
       setIsCheckingExport(false);
-    }
-  };
-
-  // Cloudinary image upload state
-  const [isUploadingImages, setIsUploadingImages] = useState(false);
-  const hasLocalImages = useMemo(() => {
-    const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
-    const matches = Array.from(body.matchAll(imageRegex));
-    return matches.some(
-      (m) => !m[1]!.startsWith("http://") && !m[1]!.startsWith("https://")
-    );
-  }, [body]);
-
-  const handleUploadImages = async (deleteLocalFiles: boolean) => {
-    if (!body.trim()) return;
-    setIsUploadingImages(true);
-    try {
-      const response = await fetch(`/api/videos/${videoId}/upload-images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, deleteLocalFiles }),
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to upload images");
-      }
-      const result = await response.json();
-      if (result.body !== body) {
-        setBody(result.body);
-        toast.success(
-          deleteLocalFiles
-            ? "Images uploaded to Cloudinary and local files deleted"
-            : "Images uploaded to Cloudinary"
-        );
-      } else {
-        toast("No local images found to upload");
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to upload images"
-      );
-    } finally {
-      setIsUploadingImages(false);
     }
   };
 
@@ -362,48 +309,11 @@ export function AiHeroPage({
         </div>
 
         {/* Upload Images to Cloudinary — only shown when body has local image references */}
-        {(hasLocalImages || isUploadingImages) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={isUploadingImages}>
-                {isUploadingImages ? (
-                  <>
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                    Uploading images...
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon className="h-4 w-4" />
-                    Upload Images to Cloudinary
-                  </>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleUploadImages(false)}>
-                <ImageIcon className="h-4 w-4" />
-                <div>
-                  <div>Upload</div>
-                  <p className="text-muted-foreground text-xs">
-                    Upload local images to Cloudinary and update references
-                  </p>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => handleUploadImages(true)}
-              >
-                <Trash2Icon className="h-4 w-4" />
-                <div>
-                  <div>Upload and delete local files</div>
-                  <p className="text-xs opacity-70">
-                    Upload to Cloudinary, then remove the local image files
-                  </p>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <ImageUploadDropdown
+          videoId={videoId}
+          body={body}
+          onBodyChange={setBody}
+        />
 
         {/* SEO Description */}
         <div className="space-y-2">

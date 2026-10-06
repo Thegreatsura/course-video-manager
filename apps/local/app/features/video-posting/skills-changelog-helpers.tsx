@@ -7,10 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import { useConfirmDialog } from "@/features/action-menu/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,7 @@ export function ImageUploadDropdown({
   onBodyChange: (body: string) => void;
 }) {
   const [isUploading, setIsUploading] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const hasLocalImages = useMemo(() => {
     const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
     const matches = Array.from(body.matchAll(imageRegex));
@@ -77,46 +78,58 @@ export function ImageUploadDropdown({
   if (!hasLocalImages && !isUploading) return null;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={isUploading}>
-          {isUploading ? (
-            <>
-              <Loader2Icon className="h-4 w-4 animate-spin" />
-              Uploading images...
-            </>
-          ) : (
-            <>
-              <ImageIcon className="h-4 w-4" />
-              Upload Images to Cloudinary
-            </>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuItem onClick={() => handleUpload(false)}>
-          <ImageIcon className="h-4 w-4" />
-          <div>
-            <div>Upload</div>
-            <p className="text-muted-foreground text-xs">
-              Upload local images to Cloudinary and update references
-            </p>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => handleUpload(true)}
-        >
-          <Trash2Icon className="h-4 w-4" />
-          <div>
-            <div>Upload and delete local files</div>
-            <p className="text-xs opacity-70">
-              Upload to Cloudinary, then remove the local image files
-            </p>
-          </div>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      {confirmDialog}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={isUploading}>
+            {isUploading ? (
+              <>
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+                Uploading images...
+              </>
+            ) : (
+              <>
+                <ImageIcon className="h-4 w-4" />
+                Upload Images to Cloudinary
+              </>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <ActionMenuContent
+          menu="dropdown"
+          align="start"
+          groups={{
+            run: [
+              {
+                label: "Upload",
+                icon: ImageIcon,
+                description:
+                  "Upload local images to Cloudinary and update references",
+                onSelect: () => void handleUpload(false),
+              },
+            ],
+            danger: [
+              {
+                label: "Upload and Delete Local Files",
+                icon: Trash2Icon,
+                description:
+                  "Upload to Cloudinary, then remove the local image files",
+                opensDialog: true,
+                onSelect: () =>
+                  confirm({
+                    title: "Delete local image files?",
+                    description:
+                      "The images are uploaded to Cloudinary, then their local files are deleted. This cannot be undone.",
+                    confirmLabel: "Upload and Delete",
+                    onConfirm: () => void handleUpload(true),
+                  }),
+              },
+            ],
+          }}
+        />
+      </DropdownMenu>
+    </>
   );
 }
 

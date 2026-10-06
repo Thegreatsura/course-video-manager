@@ -1,16 +1,4 @@
 {
-  "components/app-sidebar.tsx": {
-    "count": 4,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
-  "features/article-writer/document-panel.tsx": {
-    "count": 7,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
-  },
-  "features/article-writer/write-toolbar.tsx": {
-    "count": 10,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
-  },
   "features/beats/beat-list.tsx": {
     "count": 5,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
@@ -19,29 +7,13 @@
     "count": 18,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
   },
-  "features/course-view/actions-menu.tsx": {
-    "count": 19,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/course-view/export-status.tsx": {
     "count": 1,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   },
-  "features/course-view/lesson-context-menu.tsx": {
-    "count": 22,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/course-view/video-context-menu.tsx": {
     "count": 18,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/deliverables-calendar/deliverable-card.tsx": {
-    "count": 35,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
-  },
-  "features/deliverables-calendar/week-actions-menu.tsx": {
-    "count": 3,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
   },
   "features/diagrams/diagram-rail.tsx": {
     "count": 5,
@@ -67,17 +39,9 @@
     "count": 1,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   },
-  "features/video-posting/ai-hero-page.tsx": {
-    "count": 3,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
-  },
   "features/video-posting/post-page-thumbnail-selector.tsx": {
     "count": 8,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
-  },
-  "features/video-posting/skills-changelog-helpers.tsx": {
-    "count": 3,
-    "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
   },
   "routes/_app.pitches.$pitchId.tsx": {
     "count": 10,

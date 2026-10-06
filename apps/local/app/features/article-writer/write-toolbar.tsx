@@ -7,21 +7,22 @@ import {
 } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import { useConfirmDialog } from "@/features/action-menu/confirm-dialog";
+import {
+  copyDocumentGroups,
+  readmeGroups,
+  type ReadmeFolder,
+} from "./document-menus";
 import {
   ChevronDown,
   CopyIcon,
   SaveIcon,
   CheckIcon,
-  PlusIcon,
-  FileTextIcon,
   AlertTriangleIcon,
   RadioIcon,
-  FileTypeIcon,
   MessageSquareIcon,
   MessagesSquareIcon,
   SettingsIcon,
@@ -32,7 +33,7 @@ import type { LintViolation } from "./lint-rules";
 import type { Mode } from "./types";
 import { WriteModeDropdown } from "./write-mode-dropdown";
 
-export type SaveTargetFolder = "explainer" | "problem" | "solution";
+export type SaveTargetFolder = ReadmeFolder;
 
 export interface WriteToolbarProps {
   mode: Mode;
@@ -245,19 +246,24 @@ function CopyButtons(props: {
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onClick={onCopyConversationHistory}>
-            <MessagesSquareIcon className="h-4 w-4 mr-2" />
-            Copy Conversation History
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onCopyToClipboard}
-            disabled={!lastAssistantMessageText}
-          >
-            <MessageSquareIcon className="h-4 w-4 mr-2" />
-            Copy Last Message
-          </DropdownMenuItem>
-        </DropdownMenuContent>
+        <ActionMenuContent
+          menu="dropdown"
+          groups={{
+            copy: [
+              {
+                label: "Copy Conversation History",
+                icon: MessagesSquareIcon,
+                onSelect: onCopyConversationHistory,
+              },
+              {
+                label: "Copy Last Message",
+                icon: MessageSquareIcon,
+                disabled: !lastAssistantMessageText,
+                onSelect: onCopyToClipboard,
+              },
+            ],
+          }}
+        />
       </DropdownMenu>
     );
   }
@@ -288,16 +294,13 @@ function CopyButtons(props: {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuItem onClick={onCopyToClipboard}>
-          <FileTextIcon className="h-4 w-4 mr-2" />
-          Copy as Markdown
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCopyAsRichText}>
-          <FileTypeIcon className="h-4 w-4 mr-2" />
-          Copy as Rich Text
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+      <ActionMenuContent
+        menu="dropdown"
+        groups={copyDocumentGroups({
+          onCopyAsMarkdown: onCopyToClipboard,
+          onCopyAsRichText,
+        })}
+      />
     </DropdownMenu>
   );
 }
@@ -353,78 +356,61 @@ function ReadmeDropdown(props: {
     hasUnresolvedScreenshots,
     onWriteToReadme,
   } = props;
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   return (
-    <DropdownMenu>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    status === "streaming" ||
-                    writeToReadmeFetcherState === "submitting" ||
-                    writeToReadmeFetcherState === "loading" ||
-                    !lastAssistantMessageText ||
-                    hasUnresolvedScreenshots
-                  }
-                >
-                  {writeToReadmeFetcherState === "submitting" ||
-                  writeToReadmeFetcherState === "loading" ? (
-                    <>
-                      <SaveIcon className="h-4 w-4 mr-1" />
-                      Writing...
-                    </>
-                  ) : (
-                    <>
-                      <SaveIcon className="h-4 w-4 mr-1" />
-                      Readme
-                      <ChevronDown className="h-4 w-4 ml-1" />
-                    </>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Save to README</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <DropdownMenuContent align="end">
-        {availableFolders.map((folder, index) => (
-          <div key={folder}>
-            {index > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuItem onSelect={() => onWriteToReadme("write", folder)}>
-              <SaveIcon className="h-4 w-4 mr-2" />
-              <div className="flex flex-col">
-                <span className="font-medium">Write to {folder}/readme.md</span>
-                <span className="text-xs text-muted-foreground">
-                  Replace existing content
-                </span>
-              </div>
-            </DropdownMenuItem>
-            {foldersWithReadme.has(folder) && (
-              <DropdownMenuItem
-                onSelect={() => onWriteToReadme("append", folder)}
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">
-                    Append to {folder}/readme.md
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Add to end of existing content
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            )}
-          </div>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      {confirmDialog}
+      <DropdownMenu>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      status === "streaming" ||
+                      writeToReadmeFetcherState === "submitting" ||
+                      writeToReadmeFetcherState === "loading" ||
+                      !lastAssistantMessageText ||
+                      hasUnresolvedScreenshots
+                    }
+                  >
+                    {writeToReadmeFetcherState === "submitting" ||
+                    writeToReadmeFetcherState === "loading" ? (
+                      <>
+                        <SaveIcon className="h-4 w-4 mr-1" />
+                        Writing...
+                      </>
+                    ) : (
+                      <>
+                        <SaveIcon className="h-4 w-4 mr-1" />
+                        Readme
+                        <ChevronDown className="h-4 w-4 ml-1" />
+                      </>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Save to README</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <ActionMenuContent
+          menu="dropdown"
+          align="end"
+          groups={readmeGroups({
+            availableFolders,
+            foldersWithReadme,
+            onWriteToReadme,
+            confirm,
+          })}
+        />
+      </DropdownMenu>
+    </>
   );
 }
