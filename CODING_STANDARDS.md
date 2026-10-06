@@ -18,6 +18,31 @@ retry. Resolve the config at the edge (the layer, or the command's entry point)
 so a missing variable stops the process before any work starts, and let the
 error name the variable.
 
+### Effects are run, never dropped
+
+An Effect is a description of work, not the work. Building one does nothing
+until something runs it, so an Effect that is neither yielded nor returned is
+silently skipped — no error, no log, the write just never happens.
+
+- **Yield or return every Effect.** Inside `Effect.gen`, write `yield* eff`.
+  A bare `eff;` statement is dropped, and `yield eff` without the `*` yields the
+  Effect object itself instead of its result.
+- **Never return an Effect from a generator to be run later.** `return eff`
+  inside `Effect.gen` gives you `Effect<Effect<A>>`, and the inner one is
+  usually dropped by the caller. Write `return yield* eff`.
+- **Never `Effect.run*` inside an Effect.** `runPromise`/`runSync` inside a
+  generator starts a second, detached runtime: it loses the services, the
+  interruption and the typed errors of the one you are in. Yield the Effect, or
+  take a `Runtime` and use `Runtime.run*` at a real boundary.
+- **Never `await` an Effect.** It is not a promise; `await eff` resolves to the
+  Effect object and runs nothing. `await` only what is actually thenable.
+
+Enforced by type-aware oxlint (`typescript/await-thenable`, an error in
+`.oxlintrc.json`). The Effect-specific checks for the first three
+(`floatingEffect`, `missingStarInYieldEffectGen`, `returnEffectInGen`,
+`runEffectInsideEffect` from `@effect/tsgo`) wait on the TypeScript 7 move —
+see `docs/plans/effect-codebase-health.md`.
+
 ## Function signatures
 
 Optional parameters passed to functions should be scrutinised extremely

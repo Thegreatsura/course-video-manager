@@ -30,6 +30,28 @@
         "message": "Use useLocalStorage from @/hooks/use-local-storage. It handles the SSR guard, the stored-value fallback and the save on every change."
       }
     ],
+    // CODING STANDARD: "Effects are run, never dropped" — never `await` an
+    // Effect, only a thenable. Type-aware: `pnpm run lint` passes
+    // `--type-aware`, which needs oxlint-tsgolint.
+    "typescript/await-thenable": "error",
+    // `--type-aware` also switches on every other type-aware rule in
+    // `correctness`. Those are a measured backlog (docs/plans/
+    // effect-codebase-health.md, phase 2) and stay off until each is fixed
+    // and promoted on its own.
+    "typescript/no-array-delete": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/no-duplicate-type-constituents": "off",
+    "typescript/no-floating-promises": "off",
+    "typescript/no-for-in-array": "off",
+    "typescript/no-implied-eval": "off",
+    "typescript/no-meaningless-void-operator": "off",
+    "typescript/no-misused-spread": "off",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-unsafe-unary-minus": "off",
+    "typescript/no-useless-default-assignment": "off",
+    "typescript/require-array-sort-compare": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off",
     // Effect generators legitimately never yield.
     "require-yield": "off",
     // `const { versions, ...rest } = x` is how this repo omits a field. The

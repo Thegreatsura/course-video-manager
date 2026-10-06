@@ -96,6 +96,17 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 
 **Phase 1 — 0-hit rules as errors (one PR, about 1 hour).**
 
+> **Status (2026-10-06): half shipped.** Steps 1 and 5 landed: the coding
+> standard and type-aware `await-thenable` as an error (every other type-aware
+> rule `off`). Steps 2–4 are blocked: `effect-tsgo diagnostics` is not
+> standalone after all. It discovers and runs an installed native `tsc`, found
+> only under the package name `typescript` (or `@typescript/native`) at
+> version ≥ 7, and fails with `DiscoveryError: Unable to discover an installed
+typescript binary` otherwise. The repo has `typescript@^5.8.3` (5.9.3
+> installed) plus `@typescript/native-preview` 7.0.0-dev.20260707.2, which it
+> does not look for. So the Effect rules need the `typescript` dependency moved
+> to exactly `7.0.2` first — a decision, not a lint change.
+
 1. Add a short Effect section to `CODING_STANDARDS.md`: "an Effect is always
    yielded or returned, never dropped; never `Effect.run*` inside an Effect;
    errors in `E` are tagged." That makes the rules eligible to be errors under
