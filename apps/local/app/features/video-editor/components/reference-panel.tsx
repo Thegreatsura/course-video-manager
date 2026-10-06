@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useEffect, useState } from "react";
 
 const COLLAPSED_STORAGE_KEY = "reference-panel-collapsed";
@@ -274,6 +275,15 @@ export const ReferencePanel = (props: {
                   </h4>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
+                  <CopyEntityLinkItems
+                    menu="context"
+                    entity={{
+                      type: "chapter",
+                      id: group.section.id,
+                      videoId: selected.id,
+                    }}
+                  />
+                  <ContextMenuSeparator />
                   <ContextMenuItem
                     onSelect={() =>
                       setModal({
@@ -353,6 +363,15 @@ export const ReferencePanel = (props: {
                     </TooltipContent>
                   </Tooltip>
                   <ContextMenuContent>
+                    <CopyEntityLinkItems
+                      menu="context"
+                      entity={{
+                        type: "clip",
+                        id: clip.id,
+                        videoId: selected.id,
+                      }}
+                    />
+                    <ContextMenuSeparator />
                     <ContextMenuItem
                       onSelect={() =>
                         setModal({

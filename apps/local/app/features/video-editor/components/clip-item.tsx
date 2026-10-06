@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import type { Clip } from "../clip-state-reducer";
 import { VideoEditorContext } from "../video-editor-context";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useContextSelector } from "use-context-selector";
 import {
   DANGEROUS_TEXT_SIMILARITY_THRESHOLD,
@@ -105,6 +106,7 @@ export const ClipItem = (props: ClipItemProps) => {
     VideoEditorContext,
     (ctx) => ctx.onSetInsertionPoint
   );
+  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
   const onRemoveWebLink = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onRemoveWebLink
@@ -358,6 +360,15 @@ export const ClipItem = (props: ClipItemProps) => {
         </button>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {clip.type === "on-database" && (
+          <>
+            <CopyEntityLinkItems
+              menu="context"
+              entity={{ type: "clip", id: clip.databaseId, videoId }}
+            />
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem
           onSelect={() => {
             onSetInsertionPoint("before", clip.frontendId);

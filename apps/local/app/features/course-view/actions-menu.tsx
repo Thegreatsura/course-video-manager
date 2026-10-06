@@ -22,6 +22,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Link, useFetcher } from "react-router";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 
 export function ActionsDropdown({
   currentCourse,
@@ -78,6 +79,10 @@ export function ActionsDropdown({
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Course</DropdownMenuLabel>
         <DropdownMenuGroup>
+          <CopyEntityLinkItems
+            menu="dropdown"
+            entity={{ type: "course", id: currentCourse.id }}
+          />
           <DropdownMenuItem
             onSelect={() =>
               dispatch({
