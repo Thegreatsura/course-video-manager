@@ -23,17 +23,9 @@
     "count": 19,
     "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
   },
-  "features/course-view/export-status.tsx": {
-    "count": 1,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
   "features/course-view/lesson-context-menu.tsx": {
     "count": 22,
     "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
-  "features/course-view/video-context-menu.tsx": {
-    "count": 18,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   },
   "features/deliverables-calendar/deliverable-card.tsx": {
     "count": 35,
@@ -47,10 +39,6 @@
     "count": 5,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
   },
-  "features/video-editor/components/actions-dropdown.tsx": {
-    "count": 26,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
   "features/video-editor/components/chapter-item.tsx": {
     "count": 16,
     "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
@@ -59,25 +47,9 @@
     "count": 31,
     "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
   },
-  "features/video-editor/components/editor-compact-header.tsx": {
-    "count": 2,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
   "features/video-editor/components/reference-panel.tsx": {
     "count": 14,
     "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
-  },
-  "features/video-editor/components/shared-action-items.tsx": {
-    "count": 9,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/video-editor/components/studio-actions-dropdown.tsx": {
-    "count": 9,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/video-editor/components/transcript-word-actions.tsx": {
-    "count": 1,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   },
   "features/video-posting/ai-hero-page.tsx": {
     "count": 3,
@@ -99,20 +71,8 @@
     "count": 4,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
   },
-  "routes/_app.shorts._index.tsx": {
-    "count": 10,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
   "routes/_app.videos.$videoId.thumbnails.tsx": {
     "count": 8,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
-  },
-  "routes/_app.videos.$videoId.tsx": {
-    "count": 4,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "routes/_app.videos._index.tsx": {
-    "count": 17,
-    "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   }
 }

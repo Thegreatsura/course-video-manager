@@ -1,15 +1,9 @@
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { AddStandaloneVideoModal } from "@/components/add-standalone-video-modal";
-import { DeleteVideoModal } from "@/components/delete-video-modal";
-import { RenameVideoModal } from "@/components/rename-video-modal";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { formatSecondsToTimeCode } from "@/services/utils";
@@ -17,19 +11,7 @@ import { CoursePublishService } from "@/services/course-publish-service";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
-import {
-  Archive,
-  ArrowRightLeft,
-  Download,
-  FileX,
-  FolderOpen,
-  PencilIcon,
-  Combine,
-  Plus,
-  Trash2,
-  VideoIcon,
-  VideoOffIcon,
-} from "lucide-react";
+import { Archive, Plus, VideoIcon, VideoOffIcon } from "lucide-react";
 import { useContext, useState } from "react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import type { Route } from "./+types/_app.videos._index";
@@ -71,20 +53,69 @@ export const loader = makeLoader({
 export default function Component(props: Route.ComponentProps) {
   const { videos, archivedVideos, hasExportedVideoMap } = props.loaderData;
   const [isAddVideoOpen, setIsAddVideoOpen] = useState(false);
-  const [videoToDelete, setVideoToDelete] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
-  const [videoToRename, setVideoToRename] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
   const navigate = useNavigate();
   const revealVideoFetcher = useFetcher();
-  const deleteVideoFileFetcher = useFetcher();
   const { startExportUpload } = useContext(UploadContext);
+  const dialogs = useVideoDialogs();
 
   useFocusRevalidate({ enabled: true });
+
+  /** One Video's row: a link to its editor, right-click for its actions. */
+  const renderRow = (
+    video: (typeof videos)[number],
+    { archived }: { archived: boolean }
+  ) => {
+    const totalDuration = video.clips.reduce((acc, clip) => {
+      return acc + (clip.sourceEndTime - clip.sourceStartTime);
+    }, 0);
+    const isExported = hasExportedVideoMap[video.id];
+
+    return (
+      <ContextMenu key={video.id}>
+        <ContextMenuTrigger asChild>
+          <Link
+            to={`/videos/${video.id}/edit`}
+            className="flex items-center justify-between border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-context-menu"
+          >
+            <div className="flex items-center gap-3">
+              {isExported ? (
+                <VideoIcon className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <VideoOffIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
+              )}
+              <span className="font-medium">{video.title}</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {formatSecondsToTimeCode(totalDuration)}
+            </span>
+          </Link>
+        </ContextMenuTrigger>
+        <EntityMenuContent
+          menu="context"
+          entity={{ type: "video", id: video.id }}
+          groups={videoMenuGroups({
+            revealInFileSystem: () =>
+              revealVideoFetcher.submit(
+                {},
+                { method: "post", action: `/api/videos/${video.id}/reveal` }
+              ),
+            rename: () => dialogs.rename(video),
+            createConcatenatedVideo: () =>
+              navigate(`/videos/concatenate?initial=${video.id}`),
+            moveToCourse: archived
+              ? undefined
+              : () => navigate(`/videos/${video.id}/move-to-course`),
+            export: () => startExportUpload(video.id, video.title),
+            purgeExport: isExported
+              ? () => dialogs.confirmPurgeExport(video)
+              : undefined,
+            // An archived Video is already what Delete would make it.
+            delete: archived ? undefined : () => dialogs.confirmDelete(video),
+          })}
+        />
+      </ContextMenu>
+    );
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-background text-foreground">
@@ -109,27 +140,7 @@ export default function Component(props: Route.ComponentProps) {
             </div>
           </div>
 
-          {videoToDelete && (
-            <DeleteVideoModal
-              videoId={videoToDelete.id}
-              videoTitle={videoToDelete.title}
-              open={true}
-              onOpenChange={(open) => {
-                if (!open) setVideoToDelete(null);
-              }}
-            />
-          )}
-
-          {videoToRename && (
-            <RenameVideoModal
-              videoId={videoToRename.id}
-              currentName={videoToRename.title}
-              open={true}
-              onOpenChange={(open) => {
-                if (!open) setVideoToRename(null);
-              }}
-            />
-          )}
+          {dialogs.dialogs}
 
           {videos.length === 0 ? (
             <div className="text-center py-12">
@@ -143,119 +154,7 @@ export default function Component(props: Route.ComponentProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {videos.map((video) => {
-                const totalDuration = video.clips.reduce((acc, clip) => {
-                  return acc + (clip.sourceEndTime - clip.sourceStartTime);
-                }, 0);
-
-                return (
-                  <ContextMenu key={video.id}>
-                    <ContextMenuTrigger asChild>
-                      <Link
-                        to={`/videos/${video.id}/edit`}
-                        className="flex items-center justify-between border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-context-menu"
-                      >
-                        <div className="flex items-center gap-3">
-                          {hasExportedVideoMap[video.id] ? (
-                            <VideoIcon className="w-5 h-5 flex-shrink-0" />
-                          ) : (
-                            <VideoOffIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
-                          )}
-                          <span className="font-medium">{video.title}</span>
-                        </div>
-                        <span className="text-sm text-muted-foreground">
-                          {formatSecondsToTimeCode(totalDuration)}
-                        </span>
-                      </Link>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      <CopyEntityLinkItems
-                        menu="context"
-                        entity={{ type: "video", id: video.id }}
-                      />
-                      <ContextMenuSeparator />
-                      <ContextMenuItem
-                        onSelect={() => {
-                          setVideoToRename({
-                            id: video.id,
-                            title: video.title,
-                          });
-                        }}
-                      >
-                        <PencilIcon className="w-4 h-4" />
-                        Rename
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          startExportUpload(video.id, video.title);
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                        Export
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          navigate(`/videos/concatenate?initial=${video.id}`);
-                        }}
-                      >
-                        <Combine className="w-4 h-4" />
-                        Create Concatenated Video
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          revealVideoFetcher.submit(
-                            {},
-                            {
-                              method: "post",
-                              action: `/api/videos/${video.id}/reveal`,
-                            }
-                          );
-                        }}
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                        Reveal in File System
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          navigate(`/videos/${video.id}/move-to-course`);
-                        }}
-                      >
-                        <ArrowRightLeft className="w-4 h-4" />
-                        Move to Course
-                      </ContextMenuItem>
-                      {hasExportedVideoMap[video.id] && (
-                        <ContextMenuItem
-                          variant="destructive"
-                          onSelect={() => {
-                            deleteVideoFileFetcher.submit(
-                              {},
-                              {
-                                method: "post",
-                                action: `/api/videos/${video.id}/purge-export`,
-                              }
-                            );
-                          }}
-                        >
-                          <FileX className="w-4 h-4" />
-                          Purge Export
-                        </ContextMenuItem>
-                      )}
-                      <ContextMenuItem
-                        variant="destructive"
-                        onSelect={() => {
-                          setVideoToDelete({
-                            id: video.id,
-                            title: video.title,
-                          });
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                );
-              })}
+              {videos.map((video) => renderRow(video, { archived: false }))}
             </div>
           )}
 
@@ -266,106 +165,9 @@ export default function Component(props: Route.ComponentProps) {
                 Archived Videos
               </h2>
               <div className="space-y-2">
-                {archivedVideos.map((video) => {
-                  const totalDuration = video.clips.reduce((acc, clip) => {
-                    return acc + (clip.sourceEndTime - clip.sourceStartTime);
-                  }, 0);
-
-                  return (
-                    <ContextMenu key={video.id}>
-                      <ContextMenuTrigger asChild>
-                        <Link
-                          to={`/videos/${video.id}/edit`}
-                          className="flex items-center justify-between border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-context-menu"
-                        >
-                          <div className="flex items-center gap-3">
-                            {hasExportedVideoMap[video.id] ? (
-                              <VideoIcon className="w-5 h-5 flex-shrink-0" />
-                            ) : (
-                              <VideoOffIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
-                            )}
-                            <span className="font-medium">{video.title}</span>
-                          </div>
-                          <span className="text-sm text-muted-foreground">
-                            {formatSecondsToTimeCode(totalDuration)}
-                          </span>
-                        </Link>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent>
-                        <ContextMenuItem
-                          onSelect={() => {
-                            setVideoToRename({
-                              id: video.id,
-                              title: video.title,
-                            });
-                          }}
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                          Rename
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          onSelect={() => {
-                            startExportUpload(video.id, video.title);
-                          }}
-                        >
-                          <Download className="w-4 h-4" />
-                          Export
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          onSelect={() => {
-                            navigate(`/videos/concatenate?initial=${video.id}`);
-                          }}
-                        >
-                          <Combine className="w-4 h-4" />
-                          Create Concatenated Video
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          onSelect={() => {
-                            revealVideoFetcher.submit(
-                              {},
-                              {
-                                method: "post",
-                                action: `/api/videos/${video.id}/reveal`,
-                              }
-                            );
-                          }}
-                        >
-                          <FolderOpen className="w-4 h-4" />
-                          Reveal in File System
-                        </ContextMenuItem>
-                        {hasExportedVideoMap[video.id] && (
-                          <ContextMenuItem
-                            variant="destructive"
-                            onSelect={() => {
-                              deleteVideoFileFetcher.submit(
-                                {},
-                                {
-                                  method: "post",
-                                  action: `/api/videos/${video.id}/purge-export`,
-                                }
-                              );
-                            }}
-                          >
-                            <FileX className="w-4 h-4" />
-                            Purge Export
-                          </ContextMenuItem>
-                        )}
-                        <ContextMenuItem
-                          variant="destructive"
-                          onSelect={() => {
-                            setVideoToDelete({
-                              id: video.id,
-                              title: video.title,
-                            });
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </ContextMenuItem>
-                      </ContextMenuContent>
-                    </ContextMenu>
-                  );
-                })}
+                {archivedVideos.map((video) =>
+                  renderRow(video, { archived: true })
+                )}
               </div>
             </div>
           )}
