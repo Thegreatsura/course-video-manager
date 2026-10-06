@@ -1,5 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Tldraw, loadSnapshot, type Editor } from "tldraw";
+import {
+  Tldraw,
+  loadSnapshot,
+  type Editor,
+  type TLStoreSnapshot,
+} from "tldraw";
 import "tldraw/tldraw.css";
 import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
@@ -31,11 +36,21 @@ import {
   createHeadAutosaver,
   HEAD_AUTOSAVE_DEBOUNCE_MS,
   type HeadAutosaver,
+  type HeadStatus,
 } from "@/features/diagrams/head-autosaver";
+import { HeadLoadStatus } from "@/features/diagrams/head-load-status";
 
 export const loader = loadDiagramPlaygroundActive;
 
 const EMPTY_MIME_TYPES: string[] = [];
+
+/**
+ * Straight to the store: the canvas is read-only until a head loads, and the
+ * editor refuses to delete shapes on a read-only canvas.
+ */
+const clearCanvas = (ed: Editor) => {
+  ed.store.remove([...ed.getCurrentPageShapeIds()]);
+};
 const EMPTY_EMBEDS: never[] = [];
 
 export default function DiagramPlaygroundActive({
@@ -57,6 +72,8 @@ export default function DiagramPlaygroundActive({
     typeof document !== "undefined" ? document.hasFocus() : false
   );
   const [creating, setCreating] = useState(false);
+  // Mirrors the autosaver's status, which also sets the canvas read-only.
+  const [headStatus, setHeadStatus] = useState<HeadStatus>("loading");
   const initialLoadDone = useRef(false);
 
   // Saves only what differs from the head last loaded or saved, so opening a
@@ -77,28 +94,41 @@ export default function DiagramPlaygroundActive({
     if (activeDiagramId.current && activeDiagramId.current !== id) {
       await autosaver.current?.flush();
     }
-    autosaver.current?.markLoaded(null);
+    autosaver.current?.markLoading();
 
     activeDiagramId.current = id;
     setRefreshKey((k) => k + 1);
 
+    let data: { headScene: TLStoreSnapshot | null } | null = null;
     try {
       const res = await fetch(`/api/diagrams/${id}/head`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.headScene) {
-        loadSnapshot(ed.store, { document: data.headScene });
-        // Covers the palette's search restore, which lands here via
-        // `reloadScene`, as well as opening or switching diagrams.
-        centreCameraOnContent(ed);
-      } else {
-        ed.deleteShapes([...ed.getCurrentPageShapeIds()]);
-      }
-      autosaver.current?.markLoaded(id);
+      if (res.ok) data = await res.json();
     } catch {
-      // Failed to load — keep empty canvas
+      // Network failure — reported as a failed load below.
     }
+    // A later load (switching diagrams again) owns the canvas now.
+    if (activeDiagramId.current !== id) return;
+    if (!data) {
+      // Don't leave the previous diagram's shapes standing in for this one.
+      clearCanvas(ed);
+      autosaver.current?.markFailed();
+      return;
+    }
+    if (data.headScene) {
+      loadSnapshot(ed.store, { document: data.headScene });
+      // Covers the palette's search restore, which lands here via
+      // `reloadScene`, as well as opening or switching diagrams.
+      centreCameraOnContent(ed);
+    } else {
+      clearCanvas(ed);
+    }
+    autosaver.current?.markLoaded(id);
   }, []);
+
+  const retryLoad = useCallback(() => {
+    const id = activeDiagramId.current;
+    if (id) void loadDiagramScene(id);
+  }, [loadDiagramScene]);
 
   const performRestore = useCallback(async (snapshot: Snapshot) => {
     const ed = editorRef.current;
@@ -354,6 +384,12 @@ export default function DiagramPlaygroundActive({
       autosaver.current = createHeadAutosaver({
         store: editor.store,
         debounceMs: HEAD_AUTOSAVE_DEBOUNCE_MS,
+        // The one place the canvas's editability is set: anything but a
+        // loaded head is read-only, so no edit is made that can't be saved.
+        onStatusChange: (status) => {
+          editor.updateInstanceState({ isReadonly: status !== "ready" });
+          setHeadStatus(status);
+        },
         save: async (id, document) => {
           try {
             const res = await fetch(`/api/diagrams/${id}/head`, {
@@ -471,6 +507,9 @@ export default function DiagramPlaygroundActive({
             embeds={EMPTY_EMBEDS}
             shapeUtils={CVM_SHAPE_UTILS}
           />
+          {diagramId && (
+            <HeadLoadStatus status={headStatus} onRetry={retryLoad} />
+          )}
           {diagramId && (
             <button
               onClick={preserveSnapshot}

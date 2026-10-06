@@ -9,7 +9,11 @@ import {
   type TLGeoShape,
   type TLStoreSnapshot,
 } from "tldraw";
-import { createHeadAutosaver, type HeadAutosaver } from "./head-autosaver";
+import {
+  createHeadAutosaver,
+  type HeadAutosaver,
+  type HeadStatus,
+} from "./head-autosaver";
 
 const DEBOUNCE_MS = 10;
 /** Past the store's next-frame listener flush and the debounce together. */
@@ -54,10 +58,11 @@ const storedHead = (): TLStoreSnapshot => {
 let autosaver: HeadAutosaver | null = null;
 afterEach(() => autosaver?.dispose());
 
-/** Opens `d1` the way the Diagram page does: detach, load, mark loaded. */
-const openDiagram = () => {
+/** A Diagram page's autosaver, recording its saves and its latest status. */
+const mount = () => {
   const store = newStore();
   const saves: { diagramId: string; document: TLStoreSnapshot }[] = [];
+  const page = { status: null as HeadStatus | null };
   autosaver = createHeadAutosaver({
     store,
     debounceMs: DEBOUNCE_MS,
@@ -65,13 +70,22 @@ const openDiagram = () => {
       saves.push({ diagramId, document });
       return true;
     },
+    onStatusChange: (status) => {
+      page.status = status;
+    },
   });
-  autosaver.markLoaded(null);
+  return { store, saves, page, autosaver };
+};
+
+/** Opens `d1` the way the Diagram page does: detach, load, mark loaded. */
+const openDiagram = () => {
+  const mounted = mount();
+  mounted.autosaver.markLoading();
   // What `loadSnapshot` does to the document, minus the session state that
   // only a mounted Editor has.
-  store.loadStoreSnapshot(storedHead());
-  autosaver.markLoaded("d1");
-  return { store, saves, autosaver };
+  mounted.store.loadStoreSnapshot(storedHead());
+  mounted.autosaver.markLoaded("d1");
+  return mounted;
 };
 
 describe("createHeadAutosaver", () => {
@@ -93,5 +107,28 @@ describe("createHeadAutosaver", () => {
     expect(Object.keys(saves[0]!.document.store)).toContain(
       createShapeId("box-200")
     );
+  });
+
+  it("keeps a canvas whose head failed to load read-only and unsaved until a retry loads it", async () => {
+    const { store, saves, page, autosaver } = mount();
+    autosaver.markLoading();
+    autosaver.markFailed();
+    store.put([box(100)]);
+    await settle();
+    await autosaver.flush();
+    expect({ status: page.status, saves }).toEqual({
+      status: "failed",
+      saves: [],
+    });
+
+    autosaver.markLoading();
+    store.loadStoreSnapshot(storedHead());
+    autosaver.markLoaded("d1");
+    store.put([box(200)]);
+    await settle();
+    expect({
+      status: page.status,
+      saved: saves.map((s) => s.diagramId),
+    }).toEqual({ status: "ready", saved: ["d1"] });
   });
 });
