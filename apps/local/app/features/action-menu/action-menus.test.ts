@@ -30,6 +30,8 @@ const PICKERS: Record<string, string> = {
  * Only these files may use `ActionMenuContent`.
  */
 const NOT_ENTITY_MENUS: Record<string, string> = {
+  "features/beats/beat-list.tsx":
+    "the Add Beat button picks the new Beat's kind; the Beat rows use EntityMenuContent",
   "features/article-writer/write-toolbar.tsx":
     "copies the writer's conversation or document text",
   "features/article-writer/document-panel.tsx":

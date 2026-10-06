@@ -1,19 +1,12 @@
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
+import { usePitchMenu } from "@/features/pitches/pitch-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,8 +30,6 @@ import {
   MessageSquare,
   MoreHorizontal,
   Plus,
-  Trash2,
-  Unlink,
   Video,
   Youtube,
 } from "lucide-react";
@@ -282,28 +273,27 @@ function PitchVideoItem({
           </div>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        <CopyEntityLinkItems
-          menu="context"
-          entity={{ type: "video", id: video.id }}
-        />
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => {
-            unlinkFetcher.submit(
-              {},
-              {
-                method: "post",
-                action: `/api/videos/${video.id}/unlink-from-pitch`,
-              }
-            );
-          }}
-        >
-          <Unlink className="w-3.5 h-3.5" />
-          Remove from pitch
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <EntityMenuContent
+        menu="context"
+        entity={{ type: "video", id: video.id }}
+        groups={{
+          danger: [
+            {
+              ...STANDARD_ACTIONS.removeFrom,
+              label: "Remove from Pitch",
+              onSelect: () => {
+                unlinkFetcher.submit(
+                  {},
+                  {
+                    method: "post",
+                    action: `/api/videos/${video.id}/unlink-from-pitch`,
+                  }
+                );
+              },
+            },
+          ],
+        }}
+      />
     </ContextMenu>
   );
 }
@@ -312,10 +302,24 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
   const { pitch: initialPitch, videos, hasExportedVideoMap } = props.loaderData;
   const [searchParams] = useSearchParams();
   const backLink = pitchBackLink(searchParams.get("from"));
-  const deleteFetcher = useFetcher();
   const priorityFetcher = useFetcher();
   const effortFetcher = useFetcher();
   const createVideoFetcher = useFetcher<{ id: string }>();
+  const addVideo = () => {
+    createVideoFetcher.submit(
+      {},
+      {
+        method: "post",
+        action: `/api/pitches/${initialPitch.id}/create-video`,
+      }
+    );
+  };
+  const pitchMenu = usePitchMenu({
+    pitch: initialPitch,
+    onAddVideo: addVideo,
+    isAddingVideo: createVideoFetcher.state !== "idle",
+    redirectTo: backLink.href,
+  });
 
   const [title, setTitle] = useState(initialPitch.title);
   const [description, setDescription] = useState(initialPitch.description);
@@ -383,46 +387,14 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => {
-                  createVideoFetcher.submit(
-                    {},
-                    {
-                      method: "post",
-                      action: `/api/pitches/${initialPitch.id}/create-video`,
-                    }
-                  );
-                }}
-                disabled={createVideoFetcher.state !== "idle"}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New video
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <CopyEntityLinkItems
-                menu="dropdown"
-                entity={{ type: "pitch", id: initialPitch.id }}
-              />
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => {
-                  deleteFetcher.submit(
-                    { redirectTo: backLink.href },
-                    {
-                      method: "post",
-                      action: `/api/pitches/${initialPitch.id}/delete`,
-                    }
-                  );
-                }}
-                disabled={deleteFetcher.state !== "idle"}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete pitch
-              </DropdownMenuItem>
-            </DropdownMenuContent>
+            <EntityMenuContent
+              menu="dropdown"
+              align="end"
+              entity={{ type: "pitch", id: initialPitch.id }}
+              groups={pitchMenu.groups}
+            />
           </DropdownMenu>
+          {pitchMenu.deleteDialog}
         </div>
 
         <div className="flex items-center gap-2 mb-8">
@@ -515,15 +487,7 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  createVideoFetcher.submit(
-                    {},
-                    {
-                      method: "post",
-                      action: `/api/pitches/${initialPitch.id}/create-video`,
-                    }
-                  );
-                }}
+                onClick={addVideo}
                 disabled={createVideoFetcher.state !== "idle"}
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
