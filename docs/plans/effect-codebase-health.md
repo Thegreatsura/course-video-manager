@@ -204,6 +204,40 @@ style of the existing guards.
   in non-test code, each against a **shrink-only** legacy list, the same way
   `.oxlintrc.json` handles localStorage.
 
+> **Status (2026-10-06): guards shipped.** `scripts/check-effect-guards.ts`
+> instead of a grep script. It parses each file with `oxc-parser` (0.6s for
+> the repo), because the swallowed catches often span lines and a grep would
+> also count comments. No effect-tsgo rule covers any of the three patterns,
+> and an oxlint JS plugin is still alpha. Node runs the `.ts` file directly
+> (type stripping). It runs in `pnpm run check` with `--all`, so in CI, and on
+> staged files in pre-commit. The allowlist, `scripts/effect-guards-allowlist.json`,
+> is a count per file with a one-line reason. It fails on a new hit and on a
+> stale entry. Test code is out of scope. The standard is "Effects stay
+> inside their boundary" in `CODING_STANDARDS.md`.
+>
+> - **`effect-run`.** The plan's 15 counted only `Effect.run*`. The guard also
+>   counts `runtime.run*`, which puts the real number at **30 in 27 files**.
+>   The boundaries are not in the allowlist: `layer.server.ts`,
+>   `route-action.server.ts`, `create-sse-response.server.ts`, `cli/`, the
+>   Clip Mockup daemon's `server.ts`, `with-db-transaction` and the remote
+>   app's `rpc.ts`/`auth.ts`. Eight routes ran `runtimeLive` by hand with the
+>   same error handling `makeLoader`/`makeAction` gives, and moved onto them. The clip-service
+>   per-video mutex is now an Effect semaphore, so `append-from-obs` no longer
+>   leaves its run. The daemon client's semaphore uses
+>   `Effect.unsafeMakeSemaphore`. The test-only `createDirectClipService`
+>   moved to `test-utils/`. **30 → 19 hits (17 files)**, each with a reason:
+>   deferred loader data, OAuth redirects, Promise adapters into the
+>   clip-service handler, and hand-rolled pipelines whose 404 text differs
+>   from `makeAction`'s.
+> - **`swallowed-catch`.** The plan's 32 measured **35 in 20 files**, because
+>   the guard also counts `catchAllCause` and block-bodied handlers. 19 were
+>   best-effort `fs.remove` of a temp or replaced file. They now go through
+>   `removeBestEffort`, which stays silent on `NotFound` and logs any other
+>   failure as a warning instead of dropping it. **35 → 16 hits (11 files)**,
+>   each with a reason: UI status probes whose fallback is the safe default,
+>   cache sidecars where unreadable means a miss, FFmpeg's per-chunk drain
+>   handlers, and the Dropbox-token check that must reach its "refuse" branch.
+
 **Phase 4 (optional) — one checker instead of two.** Replace
 `@typescript/native-preview` with `typescript@7.0.2` and run
 `effect-tsgo patch` in `prepare`. `tsc` then reports Effect diagnostics during

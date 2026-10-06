@@ -16,12 +16,7 @@ import {
   checkClipZoomEligibility,
   clipZoomIneligibilityMessage,
 } from "@/features/videos/clip-zoom";
-import {
-  createClipService,
-  type ClipService,
-  type ClipServiceEvent,
-  type TimelineItem,
-} from "./clip-service";
+import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import {
   type VideoProcessingAdapter,
   type LoggerAdapter,
@@ -137,17 +132,13 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         }
 
         // Serialize concurrent append-from-obs calls for the same video
-        // via an in-memory mutex to prevent duplicate clip inserts.
-        // runPromiseExit + re-yield keeps typed failures (VersionNotDraftError
-        // from the post-detection guard, #1403) in the error channel.
-        const exit = yield* Effect.promise(() =>
-          withVideoMutex(event.input.videoId, () =>
-            Effect.runPromiseExit(
-              appendFromObsImpl(db, event, videoProcessing, logger)
-            )
-          )
+        // via an in-memory mutex to prevent duplicate clip inserts. Typed
+        // failures (VersionNotDraftError from the post-detection guard,
+        // #1403) stay in the error channel.
+        return yield* withVideoMutex(
+          event.input.videoId,
+          appendFromObsImpl(db, event, videoProcessing, logger)
         );
-        return yield* exit;
       }
 
       case "archive-clips": {
@@ -627,28 +618,3 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
     }
   }
 );
-
-// ============================================================================
-// Direct Transport Factory (for tests)
-// ============================================================================
-
-/**
- * Creates a ClipService that calls the handler directly with the provided
- * database instance. Used for testing with PGlite.
- *
- * @param db - Drizzle database instance
- * @param videoProcessing - VideoProcessingService adapter for OBS functionality
- */
-export function createDirectClipService(
-  db: Database,
-  videoProcessing: VideoProcessingAdapter,
-  logger?: LoggerAdapter
-): ClipService {
-  const send = (event: ClipServiceEvent): Promise<unknown> => {
-    return Effect.runPromise(
-      handleClipServiceEvent(db, event, videoProcessing, logger ?? noopLogger)
-    );
-  };
-
-  return createClipService(send);
-}
