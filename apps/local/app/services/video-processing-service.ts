@@ -12,6 +12,7 @@ import { transcribeFootage } from "./footage-transcription";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { makeVideoExportPasses } from "./video-export-passes";
 import type { SilenceLength } from "@/silence-detection-constants";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 export type PauseType = "none" | "long";
 
@@ -249,9 +250,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
               const transcription = yield* transcribeAudioFile(audioPath);
 
               // Clean up audio file
-              yield* effectFs
-                .remove(audioPath)
-                .pipe(Effect.catchAll(() => Effect.void));
+              yield* removeBestEffort(effectFs, audioPath);
 
               return {
                 id: clip.id,
@@ -321,9 +320,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
 
         const transcription = yield* transcribeAudioFile(audioPath);
 
-        yield* effectFs
-          .remove(audioPath)
-          .pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(effectFs, audioPath);
 
         return transcription;
       });

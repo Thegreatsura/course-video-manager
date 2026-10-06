@@ -89,8 +89,10 @@ inside one run. Each of these patterns drops one of them without a word.
   `catchAll(() => Effect.void)` turns every failure into a normal value with no
   log, including the ones nobody foresaw. Catch the tag you expect
   (`catchTag`), or log what you drop (`Effect.tapError` + `Effect.logWarning`).
-  When silence really is the behaviour, as for best-effort cleanup of a temp
-  file, keep it and say why in the allowlist.
+  To clean up a temp file, use `removeBestEffort` (`services/remove-best-effort.ts`):
+  it is silent when the file is already gone and logs anything else. When
+  silence really is the behaviour, keep the catch and say why in the
+  allowlist.
 - **`Effect.tryPromise`, not `Effect.promise`, for anything that can reject.**
   `Effect.promise` turns a rejection into a defect. A defect is not in `E`,
   `catchAll` never sees it, and `makeAction` cannot map it to a status. Write

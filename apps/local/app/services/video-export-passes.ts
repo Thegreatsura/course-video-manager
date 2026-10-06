@@ -10,6 +10,7 @@ import {
 } from "@/features/videos/video-format";
 import type { PauseType } from "./video-processing-service";
 import type { RenderedOverlay } from "./overlay-compositing";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 /**
  * The ffmpeg passes that turn one Video's Clips into a finished file: the
@@ -110,12 +111,8 @@ export const makeVideoExportPasses = (deps: {
       yield* ffmpegCommands.getVideoDurationInSeconds(outputPath);
 
     // Clean up intermediate files
-    yield* effectFs
-      .remove(normalizedPath)
-      .pipe(Effect.catchAll(() => Effect.void));
-    yield* effectFs
-      .remove(concatenatedPath)
-      .pipe(Effect.catchAll(() => Effect.void));
+    yield* removeBestEffort(effectFs, normalizedPath);
+    yield* removeBestEffort(effectFs, concatenatedPath);
 
     return { outputPath, durationInSeconds };
   });
@@ -167,17 +164,11 @@ export const makeVideoExportPasses = (deps: {
           }
         )
         .pipe(
-          Effect.tapError(() =>
-            effectFs
-              .remove(compositedPath)
-              .pipe(Effect.catchAll(() => Effect.void))
-          )
+          Effect.tapError(() => removeBestEffort(effectFs, compositedPath))
         );
 
       yield* effectFs.copyFile(compositedPath, opts.videoPath);
-      yield* effectFs
-        .remove(compositedPath)
-        .pipe(Effect.catchAll(() => Effect.void));
+      yield* removeBestEffort(effectFs, compositedPath);
 
       return opts.videoPath;
     }
