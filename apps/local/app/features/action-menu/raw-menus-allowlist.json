@@ -1,8 +1,4 @@
 {
-  "components/app-sidebar.tsx": {
-    "count": 4,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/article-writer/document-panel.tsx": {
     "count": 7,
     "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
@@ -18,14 +14,6 @@
   "features/beats/beat-menu-items.tsx": {
     "count": 18,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
-  },
-  "features/course-view/actions-menu.tsx": {
-    "count": 19,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
-  "features/course-view/lesson-context-menu.tsx": {
-    "count": 22,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
   },
   "features/deliverables-calendar/deliverable-card.tsx": {
     "count": 35,
