@@ -38,10 +38,11 @@ silently skipped — no error, no log, the write just never happens.
   Effect object and runs nothing. `await` only what is actually thenable.
 
 Enforced by type-aware oxlint (`typescript/await-thenable`, an error in
-`.oxlintrc.json`). The Effect-specific checks for the first three
-(`floatingEffect`, `missingStarInYieldEffectGen`, `returnEffectInGen`,
-`runEffectInsideEffect` from `@effect/tsgo`) wait on the TypeScript 7 move —
-see `docs/plans/effect-codebase-health.md`.
+`.oxlintrc.json`) and by `@effect/tsgo` (`floatingEffect`,
+`missingStarInYieldEffectGen`, `returnEffectInGen`, `runEffectInsideEffect`,
+errors in each package's `tsconfig.json`, run by `pnpm run lint:effect`). A
+false positive gets `// @effect-diagnostics-next-line <rule>:off` and a reason.
+See `docs/plans/effect-codebase-health.md`.
 
 ## Function signatures
 

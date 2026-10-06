@@ -9,7 +9,8 @@ becomes an error once it is green and a documented coding standard says why.
 - **Typecheck:** `tsgo` from `@typescript/native-preview` 7.0.0-dev.20260707.2,
   one run per package through turbo. That build is stale: `typescript@7.0.2` is
   now `latest` on npm. No TS plugin runs in tsgo, so the Effect language service
-  has never run in CI or in the typecheck.
+  has never run in CI or in the typecheck. (Since replaced by `typescript@7.0.2`
+  `tsc`. See the Phase 1 status.)
 - **Lint:** `oxlint` 1.85, syntax-only, in 0.26s. `correctness` is set to `warn`,
   and today it gives **12 warnings**. The only error-level rule is
   `no-restricted-globals` (localStorage), because it encodes a standard.
@@ -96,16 +97,35 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 
 **Phase 1 — 0-hit rules as errors (one PR, about 1 hour).**
 
-> **Status (2026-10-06): half shipped.** Steps 1 and 5 landed: the coding
-> standard and type-aware `await-thenable` as an error (every other type-aware
-> rule `off`). Steps 2–4 are blocked: `effect-tsgo diagnostics` is not
-> standalone after all. It discovers and runs an installed native `tsc`, found
-> only under the package name `typescript` (or `@typescript/native`) at
-> version ≥ 7, and fails with `DiscoveryError: Unable to discover an installed
-typescript binary` otherwise. The repo has `typescript@^5.8.3` (5.9.3
-> installed) plus `@typescript/native-preview` 7.0.0-dev.20260707.2, which it
-> does not look for. So the Effect rules need the `typescript` dependency moved
-> to exactly `7.0.2` first — a decision, not a lint change.
+> **Status (2026-10-06): shipped.** Steps 1 and 5 landed first (#1784): the
+> coding standard and type-aware `await-thenable` as an error. Steps 2–4 then
+> waited on TypeScript 7, because `effect-tsgo diagnostics` discovers an
+> installed native `tsc` under the package name `typescript` and refused the
+> old `@typescript/native-preview`. The follow-up PR (`chore/typescript-7`):
+>
+> - moves `typescript` to exactly `7.0.2` in every package except
+>   `overlay-renderer`, which Remotion keeps on 5.8.2 and turbo already filters
+>   out. `tsc` replaces `tsgo` in every `typecheck` script, and
+>   `@typescript/native-preview` is gone.
+> - adds `@effect/tsgo` 0.48.1 and a plugin block in the core, local and remote
+>   `tsconfig.json`. `floatingEffect`, `missingStarInYieldEffectGen`,
+>   `returnEffectInGen` and `runEffectInsideEffect` are errors, all at 0 hits.
+>   The other rules that default to error are demoted to `warning`. The rest
+>   keep their defaults and do not gate.
+> - adds `lint:effect` (a turbo task, `dependsOn: ["^build"]`) after `typecheck`
+>   in `pnpm run check` and in pre-commit. It costs about 13s.
+>
+> Step 3 differs from the plan: the ratchet rules are not yet set to `warning`.
+> Only `--severity error` gates. Two caveats came out of the move:
+>
+> - dependency-cruiser 18.x only supports `typescript` <7, because it uses the
+>   TS 5 JS API, which TS 7 no longer ships. A `pnpm.packageExtensions` entry
+>   gives it its own `typescript@5.9.3`.
+> - Vercel builds `apps/remote` with the project's `typescript`. Against TS 7,
+>   `@vercel/node` ≥15 takes its native-compiler path (`tsc` binary) and no
+>   longer uses `transpileModule`.
+>
+> The "Fix, then error" rows (Phase 2) are next.
 
 1. Add a short Effect section to `CODING_STANDARDS.md`: "an Effect is always
    yielded or returned, never dropped; never `Effect.run*` inside an Effect;

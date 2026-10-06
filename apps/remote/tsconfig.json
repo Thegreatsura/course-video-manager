@@ -2,6 +2,34 @@
   "include": ["**/*"],
   "exclude": ["node_modules"],
   "compilerOptions": {
+    // Effect language service, run by `pnpm run lint:effect` (effect-tsgo
+    // diagnostics). Only rules backed by CODING_STANDARDS.md ("Effects are run,
+    // never dropped") are errors; the rest of the rules that default to error
+    // are demoted to warnings so they still report without gating CI.
+    // See docs/plans/effect-codebase-health.md before promoting one.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [],
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingStarInYieldEffectGen": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+          "classSelfMismatch": "warning",
+          "effectFnImplicitAny": "warning",
+          "floatingEffectInVitest": "warning",
+          "missingEffectContext": "warning",
+          "missingEffectError": "warning",
+          "missingLayerContext": "warning",
+          "missingReturnYieldStar": "warning",
+          "nonObjectEffectServiceType": "warning",
+          "overriddenSchemaConstructor": "warning",
+          "schemaLiteralNonFinite": "warning",
+          "schemaOpaqueInstanceMember": "warning"
+        }
+      }
+    ],
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
     "target": "ESNext",
