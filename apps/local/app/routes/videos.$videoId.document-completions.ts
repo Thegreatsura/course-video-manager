@@ -12,7 +12,7 @@ import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
 import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
 import type { DocumentWritingAgentMode } from "@/services/document-writing-agent";
 import { type LanguageModelUsage, type ModelMessage, type UIMessage } from "ai";
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { anthropic } from "@ai-sdk/anthropic";
 import type { WriterCacheStats } from "@/features/article-writer/types";
 
@@ -63,6 +63,11 @@ const chatSchema = Schema.Struct({
   script: Schema.optional(Schema.String),
   animatic: Schema.optional(Schema.String),
 });
+
+/** The model call that starts the Document Writer's stream rejected. */
+class WriterStreamError extends Data.TaggedError("WriterStreamError")<{
+  cause: unknown;
+}> {}
 
 export const action = makeAction({
   input: "json",
@@ -175,17 +180,18 @@ export const action = makeAction({
         animatic: parsed.animatic,
       });
 
-      const result = yield* Effect.promise(async () => {
-        const stream = await (agent.stream({
-          messages: modelMessages,
-        }) as Promise<{
-          toUIMessageStreamResponse: (opts: {
-            messageMetadata: (options: {
-              part: { type: string; totalUsage?: LanguageModelUsage };
-            }) => WriterCacheStats | undefined;
-          }) => Response;
-        }>);
-        return stream;
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          agent.stream({
+            messages: modelMessages,
+          }) as Promise<{
+            toUIMessageStreamResponse: (opts: {
+              messageMetadata: (options: {
+                part: { type: string; totalUsage?: LanguageModelUsage };
+              }) => WriterCacheStats | undefined;
+            }) => Response;
+          }>,
+        catch: (cause) => new WriterStreamError({ cause }),
       });
 
       // A cache miss is silent — Anthropic returns no error when caching does
