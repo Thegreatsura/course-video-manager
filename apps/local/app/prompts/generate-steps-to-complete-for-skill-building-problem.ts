@@ -1,3 +1,4 @@
+import { COMMIT_MAP_INSTRUCTIONS } from "./commit-map-instructions";
 import { getLinkInstructions, type GlobalLink } from "./link-instructions";
 import { getSkillBuildingSharedTemplate } from "./skill-building-shared-template";
 import { SKILL_BUILDING_SOURCE_HIERARCHY } from "./source-hierarchy";
@@ -52,6 +53,8 @@ Create the content for the skill building lesson: a short introduction and a lis
 IMPORTANT - do not attempt to _solve_ the problem for the user, or show them the complete solution. Instead, give them the exact steps they need to take to complete the lesson. We want to teach them to fish, not give them the fish.
 
 ${getLinkInstructions(opts.links)}
+
+${COMMIT_MAP_INSTRUCTIONS}
 </the-ask>
 
 <output-format>

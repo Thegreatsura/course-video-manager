@@ -13,6 +13,7 @@ import {
 } from "@/lib/transcript-builder";
 import { sortByOrder } from "@/lib/sort-by-order";
 import type { BeatKind } from "@/features/beats/beat-kinds";
+import { deriveVideoRole, type VideoRole } from "./lesson-warnings";
 import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
 import { projectVersionPaths } from "@/services/path-projection";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
@@ -211,6 +212,8 @@ export interface WriterContextData {
   script: string;
   /** Quiz ids owned by other videos in this course. */
   quizIds: string[];
+  /** The video's role in its lesson, read off its title — picks the writer's default mode. */
+  videoRole: VideoRole;
 }
 
 export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
@@ -246,6 +249,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     video.chapters
   );
 
+  const videoRole = deriveVideoRole(video.title);
   const lesson = video.lesson;
   const files = yield* listVideoFiles(video.lineageId);
   const fullPath = path.resolve(getVideoFilePath(video.lineageId));
@@ -266,6 +270,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       beats,
       script: video.script ?? "",
       quizIds: [],
+      videoRole,
     } satisfies WriterContextData;
   }
 
@@ -308,5 +313,6 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     beats,
     script: video.script ?? "",
     quizIds,
+    videoRole,
   } satisfies WriterContextData;
 });

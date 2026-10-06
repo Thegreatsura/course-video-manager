@@ -394,4 +394,24 @@ describe("loadWriterContext", () => {
         }).pipe(Effect.provide(testLayer))
     );
   });
+
+  describe("videoRole", () => {
+    it.effect("reads the video's role off its title", () =>
+      Effect.gen(function* () {
+        const problem = yield* createStandaloneVideoWithClips("Problem", ["a"]);
+        const solution = yield* createStandaloneVideoWithClips("Solution", [
+          "b",
+        ]);
+        setupVideoDir(problem.lineageId);
+        setupVideoDir(solution.lineageId);
+
+        expect((yield* loadWriterContext(problem.id)).videoRole).toBe(
+          "problem"
+        );
+        expect((yield* loadWriterContext(solution.id)).videoRole).toBe(
+          "solution"
+        );
+      }).pipe(Effect.provide(testLayer))
+    );
+  });
 });

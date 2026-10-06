@@ -9,6 +9,7 @@ import type {
   SectionWithWordCount,
 } from "@cvm/core/lib/transcript-types";
 import type { BeatKind } from "@/features/beats/beat-kinds";
+import type { VideoRole } from "@/services/lesson-warnings";
 
 export type DocumentAgentTools = {
   writeDocument: typeof writeDocumentTool;
@@ -82,4 +83,6 @@ export interface WriterContext {
   script: string;
   /** Quiz ids owned by other videos in this course — none of them are free. */
   quizIds?: string[];
+  /** The video's role in its lesson — picks the mode the writer opens on. */
+  videoRole?: VideoRole;
 }

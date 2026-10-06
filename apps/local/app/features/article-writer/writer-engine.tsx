@@ -44,6 +44,7 @@ import type { WriteToolbarProps } from "./write-toolbar";
 import type { WriterFieldId } from "./writer-engine-utils";
 import {
   constrainModes,
+  defaultModeForRole,
   loadFieldMessages,
   saveFieldMessages,
 } from "./writer-engine-utils";
@@ -106,7 +107,7 @@ export function WriterEngine({
 
   const { mode: constrainedMode } = constrainModes(
     modes,
-    modes[0] ?? "article"
+    defaultModeForRole(context.videoRole)
   );
   const [mode, setMode] = useState<Mode>(constrainedMode);
   const ctxModel = useContextModel(context, pageFields);
