@@ -1,37 +1,25 @@
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { timelineItemMenuGroups } from "./timeline-item-menu";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangleIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   AudioWaveformIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   FilmIcon,
   ImageIcon,
   LayersIcon,
   Link2Icon,
   Loader2,
   PauseIcon,
+  PinOffIcon,
   PlusIcon,
   RefreshCwIcon,
-  Trash2Icon,
   Workflow,
   XIcon,
   ZoomInIcon,
 } from "lucide-react";
 import type { Clip } from "../clip-state-reducer";
 import { VideoEditorContext } from "../video-editor-context";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useContextSelector } from "use-context-selector";
 import {
   DANGEROUS_TEXT_SIMILARITY_THRESHOLD,
@@ -102,42 +90,9 @@ export const ClipItem = (props: ClipItemProps) => {
     VideoEditorContext,
     (ctx) => ctx.dispatch
   );
-  const onSetInsertionPoint = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onSetInsertionPoint
-  );
-  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
   const onRemoveWebLink = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onRemoveWebLink
-  );
-  const onMoveClip = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onMoveClip
-  );
-  const onTogglePauseForClip = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onTogglePauseForClip
-  );
-  const onToggleZoomForClip = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onToggleZoomForClip
-  );
-  const selectedClipsSet = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.selectedClipsSet
-  );
-  const onAddEffectClipAt = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onAddEffectClipAt
-  );
-  const setIsCreateVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCreateVideoModalOpen
-  );
-  const onUpdateClipDiagramPin = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onUpdateClipDiagramPin
   );
   // Every Overlay that COVERS this Clip, anchored to it or spilling onto it
   // from an earlier one — the same grouping the player preview draws from, so
@@ -359,197 +314,203 @@ export const ClipItem = (props: ClipItemProps) => {
           </div>
         </button>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        {clip.type === "on-database" && (
-          <>
-            <CopyEntityLinkItems
-              menu="context"
-              entity={{ type: "clip", id: clip.databaseId, videoId }}
-            />
-            <ContextMenuSeparator />
-          </>
-        )}
-        <ContextMenuItem
-          onSelect={() => {
-            onSetInsertionPoint("before", clip.frontendId);
-          }}
-        >
-          <ChevronLeftIcon />
-          Insert Before
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            onSetInsertionPoint("after", clip.frontendId);
-          }}
-        >
-          <ChevronRightIcon />
-          Insert After
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={onAddChapterBefore}>
-          <PlusIcon />
-          Add Chapter Before
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onAddChapterAfter}>
-          <PlusIcon />
-          Add Chapter After
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <PlusIcon />
-            Add Effect Before
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem
-              onSelect={() => {
-                onAddEffectClipAt("white-noise", "before", clip.frontendId);
-              }}
-            >
-              <AudioWaveformIcon />
-              White Noise
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <PlusIcon />
-            Add Effect After
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem
-              onSelect={() => {
-                onAddEffectClipAt("white-noise", "after", clip.frontendId);
-              }}
-            >
-              <AudioWaveformIcon />
-              White Noise
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          disabled={isFirstItem}
-          onSelect={() => {
-            onMoveClip(clip.frontendId, "up");
-          }}
-        >
-          <ArrowUpIcon />
-          Move Up
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={isLastItem}
-          onSelect={() => {
-            onMoveClip(clip.frontendId, "down");
-          }}
-        >
-          <ArrowDownIcon />
-          Move Down
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => {
-            onTogglePauseForClip(clip.frontendId);
-          }}
-        >
-          <PauseIcon />
-          {clip.pauseType === "long" ? "Remove Pause" : "Add Pause"}
-        </ContextMenuItem>
-        {/*
-          Offered only where it applies. Roughly nine clips in ten are a Code
-          scene, so a greyed-out entry on every one of them would be noise
-          teaching a rule you already know.
-        */}
-        {clip.type === "on-database" && canZoomClip(clip.scene) && (
-          <ContextMenuItem
-            onSelect={() => {
-              onToggleZoomForClip(clip.frontendId);
-            }}
-          >
-            <ZoomInIcon />
-            {clip.zoomType === "none" ? "Add Zoom" : "Remove Zoom"}
-          </ContextMenuItem>
-        )}
-        <ContextMenuItem
-          disabled={clip.type !== "on-database"}
-          onSelect={() => {
-            dispatch({
-              type: "retranscribe-clip",
-              clipId: clip.frontendId,
-            });
-          }}
-        >
-          <RefreshCwIcon />
-          Re-transcribe
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        {clip.type === "on-database" && clip.diagramSnapshotId && (
-          <ContextMenuItem
-            onSelect={() => {
-              onUpdateClipDiagramPin(
-                clip.frontendId,
-                clip.databaseId,
-                null,
-                null
-              );
-            }}
-          >
-            <XIcon />
-            Unpin Diagram
-          </ContextMenuItem>
-        )}
-        <ContextMenuItem
-          onSelect={async () => {
-            const snapshotId =
-              clip.type === "on-database" ? clip.diagramSnapshotId : null;
-            let resolvedDiagramId: string | null = null;
-            if (snapshotId) {
-              const meta = await fetchMeta(snapshotId);
-              resolvedDiagramId = meta.diagramId;
-            }
-            const result = resolveForClip(
-              { diagramSnapshotId: snapshotId },
-              () => resolvedDiagramId
-            );
-            if (result.kind === "diagram") {
-              openPlaygroundWithDiagram(result.diagramId);
-            } else {
-              openPlayground();
-            }
-          }}
-        >
-          <Workflow />
-          Open Diagram Playground
-        </ContextMenuItem>
-        {selectedClipsSet.size > 0 && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onSelect={() => {
-                setIsCreateVideoModalOpen(true);
-              }}
-            >
-              <FilmIcon />
-              Create New Video from Selection
-            </ContextMenuItem>
-          </>
-        )}
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => {
-            dispatch({
-              type: "delete-clip",
-              clipId: clip.frontendId,
-            });
-          }}
-        >
-          <Trash2Icon />
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <ClipMenuContent
+        clip={clip}
+        isFirstItem={isFirstItem}
+        isLastItem={isLastItem}
+        onAddChapterBefore={onAddChapterBefore}
+        onAddChapterAfter={onAddChapterAfter}
+      />
     </ContextMenu>
   );
+};
+
+/**
+ * A Clip's right-click menu. Mounted only while open, so the editor state it
+ * reads does not re-render every Clip in the timeline.
+ */
+const ClipMenuContent = (props: {
+  clip: Clip;
+  isFirstItem: boolean;
+  isLastItem: boolean;
+  onAddChapterBefore: () => void;
+  onAddChapterAfter: () => void;
+}) => {
+  const { clip } = props;
+  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
+  const dispatch = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.dispatch
+  );
+  const isBeingTranscribed = useContextSelector(VideoEditorContext, (ctx) =>
+    ctx.clipIdsBeingTranscribed.has(clip.frontendId)
+  );
+  const hasSelection = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.selectedClipsSet.size > 0
+  );
+  const onSetInsertionPoint = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onSetInsertionPoint
+  );
+  const onMoveClip = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onMoveClip
+  );
+  const onTogglePauseForClip = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onTogglePauseForClip
+  );
+  const onToggleZoomForClip = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onToggleZoomForClip
+  );
+  const onAddEffectClipAt = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onAddEffectClipAt
+  );
+  const setIsCreateVideoModalOpen = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.setIsCreateVideoModalOpen
+  );
+  const onUpdateClipDiagramPin = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onUpdateClipDiagramPin
+  );
+
+  const onDatabase = clip.type === "on-database" ? clip : null;
+  const shared = timelineItemMenuGroups({
+    onInsert: (position) => onSetInsertionPoint(position, clip.frontendId),
+    onAddChapter: (position) =>
+      position === "before"
+        ? props.onAddChapterBefore()
+        : props.onAddChapterAfter(),
+    onCreateVideoFromSelection: hasSelection
+      ? () => setIsCreateVideoModalOpen(true)
+      : undefined,
+    move: {
+      onMove: (direction) => onMoveClip(clip.frontendId, direction),
+      isFirstItem: props.isFirstItem,
+      isLastItem: props.isLastItem,
+    },
+    delete: {
+      confirms: false,
+      shortcut: "Del",
+      onSelect: () =>
+        dispatch({ type: "delete-clip", clipId: clip.frontendId }),
+    },
+  });
+
+  return (
+    <EntityMenuContent
+      menu="context"
+      entity={
+        onDatabase && { type: "clip", id: onDatabase.databaseId, videoId }
+      }
+      groups={{
+        open: [
+          {
+            label: "Open Diagram Playground",
+            icon: Workflow,
+            onSelect: () => {
+              void openDiagramPlaygroundForClip(
+                onDatabase?.diagramSnapshotId ?? null
+              );
+            },
+          },
+        ],
+        edit: [
+          {
+            label: clip.pauseType === "long" ? "Remove Pause" : "Add Pause",
+            icon: PauseIcon,
+            shortcut: "B",
+            onSelect: () => onTogglePauseForClip(clip.frontendId),
+          },
+          // Only on a scene that can zoom: roughly nine Clips in ten are a
+          // Code scene, and a greyed-out entry on each would be noise. Until
+          // the Clip is saved it applies but cannot run yet.
+          canZoomClip(clip.scene) && {
+            label:
+              onDatabase && onDatabase.zoomType !== "none"
+                ? "Remove Zoom"
+                : "Add Zoom",
+            icon: ZoomInIcon,
+            disabled: !onDatabase,
+            onSelect: () => onToggleZoomForClip(clip.frontendId),
+          },
+          !!onDatabase?.diagramSnapshotId && {
+            label: "Unpin Diagram",
+            icon: PinOffIcon,
+            onSelect: () =>
+              onUpdateClipDiagramPin(
+                clip.frontendId,
+                onDatabase.databaseId,
+                null,
+                null
+              ),
+          },
+        ],
+        create: [
+          ...shared.create,
+          {
+            label: "Add Effect Before",
+            icon: PlusIcon,
+            items: [
+              {
+                label: "White Noise",
+                icon: AudioWaveformIcon,
+                onSelect: () =>
+                  onAddEffectClipAt("white-noise", "before", clip.frontendId),
+              },
+            ],
+          },
+          {
+            label: "Add Effect After",
+            icon: PlusIcon,
+            items: [
+              {
+                label: "White Noise",
+                icon: AudioWaveformIcon,
+                onSelect: () =>
+                  onAddEffectClipAt("white-noise", "after", clip.frontendId),
+              },
+            ],
+          },
+        ],
+        move: shared.move,
+        run: [
+          {
+            label: "Re-transcribe",
+            icon: RefreshCwIcon,
+            // Applies to every Clip, but only a saved one that is not already
+            // being transcribed can run it.
+            disabled: !onDatabase || isBeingTranscribed,
+            onSelect: () =>
+              dispatch({ type: "retranscribe-clip", clipId: clip.frontendId }),
+          },
+        ],
+        danger: shared.danger,
+      }}
+    />
+  );
+};
+
+/** Opens the Diagram Playground on the Clip's pinned Diagram, or empty. */
+const openDiagramPlaygroundForClip = async (snapshotId: string | null) => {
+  let resolvedDiagramId: string | null = null;
+  if (snapshotId) {
+    const meta = await fetchMeta(snapshotId);
+    resolvedDiagramId = meta.diagramId;
+  }
+  const result = resolveForClip(
+    { diagramSnapshotId: snapshotId },
+    () => resolvedDiagramId
+  );
+  if (result.kind === "diagram") {
+    openPlaygroundWithDiagram(result.diagramId);
+  } else {
+    openPlayground();
+  }
 };
 
 const DiagramPinIndicator = (props: {

@@ -62,7 +62,7 @@ export function ChapterNamingModal({
               ? "Name Chapter"
               : modalState?.mode === "add-at"
                 ? "Name Chapter"
-                : "Edit Chapter"}
+                : "Rename Chapter"}
           </DialogTitle>
         </DialogHeader>
         <form className="space-y-4 py-4" onSubmit={handleSubmit}>
