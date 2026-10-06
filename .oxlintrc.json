@@ -52,6 +52,11 @@
         ]
       }
     ],
+    // CODING STANDARD: "Every promise is awaited, handled or marked void".
+    // A ratchet: a warning everywhere, an error in the directories that are
+    // clean (see `overrides`). React handler-heavy UI is the backlog.
+    "typescript/no-floating-promises": "warn",
+    "typescript/no-misused-promises": "warn",
     // `--type-aware` also switches on every other type-aware rule in
     // `correctness`. Those are a measured backlog (docs/plans/
     // effect-codebase-health.md, phase 2) and stay off until each is fixed
@@ -59,7 +64,6 @@
     "typescript/no-array-delete": "off",
     "typescript/no-base-to-string": "off",
     "typescript/no-duplicate-type-constituents": "off",
-    "typescript/no-floating-promises": "off",
     "typescript/no-for-in-array": "off",
     "typescript/no-implied-eval": "off",
     "typescript/no-meaningless-void-operator": "off",
@@ -85,6 +89,25 @@
   },
 
   "overrides": [
+    {
+      // The promise ratchet: these directories are clean of floating and
+      // misused promises, so a new one is an error. Add a directory here once
+      // it reaches 0; the React handler-heavy UI (features/, components/,
+      // hooks/, .tsx routes) is the backlog and stays at warn.
+      "files": [
+        "apps/local/app/services/**",
+        "apps/local/app/cli/**",
+        "apps/local/app/routes/**/*.ts",
+        "apps/remote/**",
+        "packages/**",
+        ".sandcastle/**",
+        "scripts/**"
+      ],
+      "rules": {
+        "typescript/no-floating-promises": "error",
+        "typescript/no-misused-promises": "error"
+      }
+    },
     {
       // The hook itself is the one place raw localStorage belongs.
       "files": ["apps/local/app/hooks/use-local-storage.ts"],

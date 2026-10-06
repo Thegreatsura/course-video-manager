@@ -172,6 +172,20 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 >   retry wrapper); both now throw an `Error`. The other five are React
 >   Router's `throw data(..., { status })`, which is allowed by type
 >   (`DataWithResponseInit`), because rewriting it would change the responses.
+>   (#1790)
+> - `no-floating-promises` / `no-misused-promises`: **warn, ratcheting.**
+>   Re-measured at 139 / 99, which matches the table. They were already nearly
+>   absent outside the React UI: 3 hits, all fixed with the semantics kept. A
+>   daemon signal handler and a clip-service log line stay fire-and-forget,
+>   now as `void` with a reason. A `.sandcastle` semaphore drops a comma
+>   expression that tripped the rule. They are **errors** in
+>   `apps/local/app/services/**`, `apps/local/app/cli/**`,
+>   `apps/local/app/routes/**/*.ts`, `apps/remote/**`, `packages/**`,
+>   `.sandcastle/**` and `scripts/**`. They stay warnings elsewhere: 138 / 97,
+>   almost all in `features/`, `components/`, `hooks/` and `.tsx` routes,
+>   mostly React event handlers. Each of those needs a judgement on whether
+>   the handler should await, so that work is left for a per-directory pass
+>   rather than a mass `void`.
 
 **Phase 3 — custom guards.** Add `scripts/check-effect-boundaries.sh` in the
 style of the existing guards.

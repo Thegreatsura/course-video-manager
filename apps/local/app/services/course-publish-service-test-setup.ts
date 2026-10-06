@@ -151,7 +151,7 @@ export const setupPublishableCourse = async (opts?: {
    * Throw this from every write to a Video's log — a full disk under
    * `.data/logs`. Default: every write lands.
    */
-  throwOnLogWrite?: unknown;
+  throwOnLogWrite?: Error;
 }) => {
   const videoCount = opts?.videoCount ?? 1;
   await truncateAllTables(testDb);
