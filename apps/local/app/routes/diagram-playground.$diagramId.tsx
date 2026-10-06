@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Tldraw, getSnapshot, loadSnapshot, type Editor } from "tldraw";
+import { Tldraw, loadSnapshot, type Editor } from "tldraw";
 import "tldraw/tldraw.css";
 import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
@@ -27,10 +27,13 @@ import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playgro
 import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
 import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundary";
 import { CommandPalette } from "@/features/diagrams/palette/command-palette";
+import {
+  createHeadAutosaver,
+  HEAD_AUTOSAVE_DEBOUNCE_MS,
+  type HeadAutosaver,
+} from "@/features/diagrams/head-autosaver";
 
 export const loader = loadDiagramPlaygroundActive;
-
-const DEBOUNCE_MS = 500;
 
 const EMPTY_MIME_TYPES: string[] = [];
 const EMPTY_EMBEDS: never[] = [];
@@ -42,7 +45,7 @@ export default function DiagramPlaygroundActive({
   const { diagramId } = useParams<{ diagramId: string }>();
   const navigate = useNavigate();
   const editorRef = useRef<Editor | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaver = useRef<HeadAutosaver | null>(null);
   const activeDiagramId = useRef<string | null>(diagramId ?? null);
   const [preserving, setPreserving] = useState(false);
   const preservingRef = useRef(false);
@@ -56,71 +59,46 @@ export default function DiagramPlaygroundActive({
   const [creating, setCreating] = useState(false);
   const initialLoadDone = useRef(false);
 
-  const saveHead = useCallback(async () => {
-    const ed = editorRef.current;
-    const id = activeDiagramId.current;
-    if (!ed || !id) return;
-    const { document } = getSnapshot(ed.store);
-    try {
-      await fetch(`/api/diagrams/${id}/head`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(document),
-      });
-    } catch {
-      // Network errors during autosave are non-fatal
-    }
+  // Saves only what differs from the head last loaded or saved, so opening a
+  // diagram never writes it back. Every flow that leaves the current diagram
+  // must call this first, or up to 500ms of debounced edits is silently lost.
+  const flushPendingSave = useCallback(async () => {
+    await autosaver.current?.flush();
   }, []);
 
-  const scheduleSave = useCallback(() => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveHead(), DEBOUNCE_MS);
-  }, [saveHead]);
+  useEffect(() => () => autosaver.current?.dispose(), []);
 
-  // Every flow that leaves the current diagram must call this first, or up to
-  // 500ms of debounced edits is silently lost.
-  const flushPendingSave = useCallback(async () => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
+  const loadDiagramScene = useCallback(async (id: string) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+
+    // Leaving a diagram saves its edits; reloading the same one (a search
+    // restore has already moved its head) discards them.
+    if (activeDiagramId.current && activeDiagramId.current !== id) {
+      await autosaver.current?.flush();
     }
-    await saveHead();
-  }, [saveHead]);
+    autosaver.current?.markLoaded(null);
 
-  const loadDiagramScene = useCallback(
-    async (id: string) => {
-      const ed = editorRef.current;
-      if (!ed) return;
+    activeDiagramId.current = id;
+    setRefreshKey((k) => k + 1);
 
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
+    try {
+      const res = await fetch(`/api/diagrams/${id}/head`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.headScene) {
+        loadSnapshot(ed.store, { document: data.headScene });
+        // Covers the palette's search restore, which lands here via
+        // `reloadScene`, as well as opening or switching diagrams.
+        centreCameraOnContent(ed);
+      } else {
+        ed.deleteShapes([...ed.getCurrentPageShapeIds()]);
       }
-      if (activeDiagramId.current && activeDiagramId.current !== id) {
-        await saveHead();
-      }
-
-      activeDiagramId.current = id;
-      setRefreshKey((k) => k + 1);
-
-      try {
-        const res = await fetch(`/api/diagrams/${id}/head`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.headScene) {
-          loadSnapshot(ed.store, { document: data.headScene });
-          // Covers the palette's search restore, which lands here via
-          // `reloadScene`, as well as opening or switching diagrams.
-          centreCameraOnContent(ed);
-        } else {
-          ed.deleteShapes([...ed.getCurrentPageShapeIds()]);
-        }
-      } catch {
-        // Failed to load — keep empty canvas
-      }
-    },
-    [saveHead]
-  );
+      autosaver.current?.markLoaded(id);
+    } catch {
+      // Failed to load — keep empty canvas
+    }
+  }, []);
 
   const performRestore = useCallback(async (snapshot: Snapshot) => {
     const ed = editorRef.current;
@@ -139,11 +117,9 @@ export default function DiagramPlaygroundActive({
         return;
       }
 
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
+      // The server has already moved the head to this snapshot.
       loadSnapshot(ed.store, { document: snapshot.scene as never });
+      autosaver.current?.markLoaded(id);
       centreCameraOnContent(ed);
       setRefreshKey((k) => k + 1);
     } catch {
@@ -209,7 +185,7 @@ export default function DiagramPlaygroundActive({
       preservingRef.current = false;
       setPreserving(false);
     }
-  }, [saveHead]);
+  }, [flushPendingSave]);
 
   const recentreDiagram = useCallback(() => {
     const ed = editorRef.current;
@@ -279,26 +255,9 @@ export default function DiagramPlaygroundActive({
       if (msg.type === "loadDiagram") {
         navigate(`/diagram-playground/${msg.diagramId}`, { replace: true });
       } else if (msg.type === "flush") {
-        if (saveTimer.current) {
-          clearTimeout(saveTimer.current);
-          saveTimer.current = null;
-        }
-        const ed = editorRef.current;
-        const id = activeDiagramId.current;
-        if (ed && id) {
-          const { document } = getSnapshot(ed.store);
-          fetch(`/api/diagrams/${id}/head`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(document),
-          })
-            .catch(() => {})
-            .finally(() => {
-              diagramChannel.sendToParent({ type: "flushAck" });
-            });
-        } else {
+        void flushPendingSave().finally(() => {
           diagramChannel.sendToParent({ type: "flushAck" });
-        }
+        });
       } else if (msg.type === "snapshotForClip") {
         const { clipId, diagramId: targetDiagramId } = msg;
         void (async () => {
@@ -310,11 +269,7 @@ export default function DiagramPlaygroundActive({
             const ed = editorRef.current;
             if (!ed || activeDiagramId.current !== targetDiagramId) return;
 
-            if (saveTimer.current) {
-              clearTimeout(saveTimer.current);
-              saveTimer.current = null;
-            }
-            await saveHead();
+            await flushPendingSave();
 
             // Auto-pin thumbnails are best-effort; proceed without one if rendering fails.
             const thumbnailPngBase64 = await renderThumbnailPngBase64(
@@ -353,7 +308,7 @@ export default function DiagramPlaygroundActive({
       }
     });
     return unsub;
-  }, [navigate, saveHead]);
+  }, [navigate, flushPendingSave]);
 
   useEffect(() => {
     function onFocus() {
@@ -395,14 +350,24 @@ export default function DiagramPlaygroundActive({
         return shape;
       });
 
-      editor.store.listen(
-        () => {
-          if (activeDiagramId.current) {
-            scheduleSave();
+      autosaver.current?.dispose();
+      autosaver.current = createHeadAutosaver({
+        store: editor.store,
+        debounceMs: HEAD_AUTOSAVE_DEBOUNCE_MS,
+        save: async (id, document) => {
+          try {
+            const res = await fetch(`/api/diagrams/${id}/head`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(document),
+            });
+            return res.ok;
+          } catch {
+            // Network errors during autosave are non-fatal; the next flush retries.
+            return false;
           }
         },
-        { source: "user", scope: "document" }
-      );
+      });
 
       editor.store.listen(
         () => {
@@ -417,7 +382,7 @@ export default function DiagramPlaygroundActive({
         loadDiagramScene(diagramId);
       }
     },
-    [scheduleSave, diagramId, loadDiagramScene]
+    [diagramId, loadDiagramScene]
   );
 
   const revalidator = useRevalidator();
@@ -481,7 +446,7 @@ export default function DiagramPlaygroundActive({
     } finally {
       setCreating(false);
     }
-  }, [creating, saveHead, navigate]);
+  }, [creating, flushPendingSave, navigate]);
 
   const handleNavigateHome = useCallback(async () => {
     await flushPendingSave();
@@ -490,7 +455,7 @@ export default function DiagramPlaygroundActive({
       diagramId: null,
     });
     navigate("/diagram-playground");
-  }, [saveHead, navigate]);
+  }, [flushPendingSave, navigate]);
 
   const timelineVisible = diagramId && !isFocusMode;
 
