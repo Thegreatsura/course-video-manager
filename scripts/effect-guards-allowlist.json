@@ -90,102 +90,57 @@
     {
       "file": "apps/local/app/routes/_app.videos.$videoId.animatic.tsx",
       "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/routes/api.thumbnails.$thumbnailId.delete.ts",
-      "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/routes/api.thumbnails.$thumbnailId.update.ts",
-      "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "A Clip Mockup file the loader cannot check renders as missing, which is what the Animatic shows for an absent frame or speech file."
     },
     {
       "file": "apps/local/app/routes/api.videos.$videoId.export-file-exists.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "UI status probe: any failure shows as 'not exported', the safe default for the indicator."
     },
     {
       "file": "apps/local/app/routes/api.videos.$videoId.posted-status.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "UI status probe: any failure shows as 'not posted', the safe default for the posting modal's indicators."
     },
     {
       "file": "apps/local/app/routes/api.videos.$videoId.stream.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.upload-images.ts",
-      "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "An export path that cannot be resolved is answered with a 404, the same as a missing file."
     },
     {
       "file": "apps/local/app/routes/api.videos.$videoId.vertical-export-exists.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "UI status probe: any failure (including an unset FINISHED_VIDEOS_DIRECTORY) shows as 'not exported'."
     },
     {
       "file": "apps/local/app/services/course-loader-fs.ts",
       "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "Walking a lesson folder: an unreadable directory or entry is skipped, so one bad file never hides the rest of the listing."
     },
     {
       "file": "apps/local/app/services/export-sha256-sidecar.ts",
       "count": 3,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "The digest sidecar is a cache: a missing, torn or unreadable one reads as 'no digest' and is recomputed (see the file comments)."
     },
     {
       "file": "apps/local/app/services/ffmpeg-commands.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "Per-chunk stderr handler: keeps the drain loop running so a bad chunk never stalls FFmpeg on a full pipe."
     },
     {
       "file": "apps/local/app/services/ffmpeg-run.ts",
       "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "Per-chunk stdout/stderr handlers: keep the drain loop running so a bad chunk never stalls FFmpeg on a full pipe (see the comment)."
     },
     {
       "file": "apps/local/app/services/footage-cache.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/footage-transcription.ts",
-      "count": 3,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/overlay-content-renderer.ts",
-      "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/overlay-render-cache.server.ts",
-      "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "A footage sidecar that is not valid JSON is a cache miss, the same as a missing one."
     },
     {
       "file": "apps/local/app/services/pending-recovery.server.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/render-vertical-video-service.ts",
-      "count": 4,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/video-export-passes.ts",
-      "count": 4,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/video-processing-service.ts",
-      "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "No Dropbox token means 'refuse to classify', handled on the next line; any auth failure must reach that branch."
     }
   ],
   "effect-promise": [

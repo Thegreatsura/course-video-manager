@@ -229,6 +229,14 @@ style of the existing guards.
 >   deferred loader data, OAuth redirects, Promise adapters into the
 >   clip-service handler, and hand-rolled pipelines whose 404 text differs
 >   from `makeAction`'s.
+> - **`swallowed-catch`.** The plan's 32 measured **35 in 20 files**, because
+>   the guard also counts `catchAllCause` and block-bodied handlers. 19 were
+>   best-effort `fs.remove` of a temp or replaced file. They now go through
+>   `removeBestEffort`, which stays silent on `NotFound` and logs any other
+>   failure as a warning instead of dropping it. **35 → 16 hits (11 files)**,
+>   each with a reason: UI status probes whose fallback is the safe default,
+>   cache sidecars where unreadable means a miss, FFmpeg's per-chunk drain
+>   handlers, and the Dropbox-token check that must reach its "refuse" branch.
 
 **Phase 4 (optional) — one checker instead of two.** Replace
 `@typescript/native-preview` with `typescript@7.0.2` and run

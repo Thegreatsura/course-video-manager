@@ -5,6 +5,7 @@ import { makeAction } from "@/services/route-action.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { getVideoFilePath } from "@/services/video-files";
 import { data } from "react-router";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 function decodeDataUrl(dataUrl: string): Uint8Array {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -95,9 +96,7 @@ export const action = makeAction({
           };
         }
       } else if (existingLayers.diagram?.filePath) {
-        yield* fs
-          .remove(existingLayers.diagram.filePath)
-          .pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(fs, existingLayers.diagram.filePath);
       }
 
       let cutoutLayer = null;
@@ -128,9 +127,7 @@ export const action = makeAction({
           };
         }
       } else if (existingLayers.cutout?.filePath) {
-        yield* fs
-          .remove(existingLayers.cutout.filePath)
-          .pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(fs, existingLayers.cutout.filePath);
       }
 
       const layers = {
