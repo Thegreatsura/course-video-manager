@@ -3,24 +3,18 @@ import type {
   Clip,
   ClipOnDatabase,
   ClipOptimisticallyAdded,
-  Chapter,
   FrontendId,
   SessionId,
-  TimelineItem,
 } from "./clip-state-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import {
   DANGEROUS_TEXT_SIMILARITY_THRESHOLD,
   getClipComputedProps,
   getAreAnyClipsDangerous,
-  getClipDuration,
   getClipPercentComplete,
   getIsClipPortrait,
   getIsClipDangerous,
   getLastTranscribedClipId,
-  getChapters,
-  getHasSections,
-  getIsOBSActive,
   getIsLiveStreamPortrait,
   getShouldShowLastFrameOverlay,
   getBackButtonUrl,
@@ -63,14 +57,6 @@ const makeOptimisticClip = (
   soundDetectionId: "sd-1",
   sessionId: "test-session" as SessionId,
   ...overrides,
-});
-
-const makeChapter = (frontendId: FrontendId, name: string): Chapter => ({
-  type: "chapter-on-database",
-  frontendId,
-  databaseId: `db-${frontendId}` as any,
-  name,
-  insertionOrder: null,
 });
 
 const id = (s: string) => s as FrontendId;
@@ -149,31 +135,11 @@ describe("getAreAnyClipsDangerous", () => {
     ];
     expect(getAreAnyClipsDangerous(clips)).toBe(false);
   });
-
-  it("returns false for empty clips", () => {
-    expect(getAreAnyClipsDangerous([])).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
 // Per-clip selectors
 // ---------------------------------------------------------------------------
-
-describe("getClipDuration", () => {
-  it("returns duration for on-database clips", () => {
-    const clip = makeClipOnDatabase({
-      frontendId: id("a"),
-      sourceStartTime: 10,
-      sourceEndTime: 25,
-    });
-    expect(getClipDuration(clip)).toBe(15);
-  });
-
-  it("returns null for optimistic clips", () => {
-    const clip = makeOptimisticClip({ frontendId: id("a") });
-    expect(getClipDuration(clip)).toBeNull();
-  });
-});
 
 describe("getClipPercentComplete", () => {
   it("returns fraction of duration", () => {
@@ -183,11 +149,6 @@ describe("getClipPercentComplete", () => {
       sourceEndTime: 10,
     });
     expect(getClipPercentComplete(clip, 5)).toBe(0.5);
-  });
-
-  it("returns 0 for optimistic clips", () => {
-    const clip = makeOptimisticClip({ frontendId: id("a") });
-    expect(getClipPercentComplete(clip, 5)).toBe(0);
   });
 });
 
@@ -213,11 +174,6 @@ describe("getIsClipPortrait", () => {
       frontendId: id("a"),
       profile: "Default",
     });
-    expect(getIsClipPortrait(clip)).toBe(false);
-  });
-
-  it("returns false for optimistic clips", () => {
-    const clip = makeOptimisticClip({ frontendId: id("a") });
     expect(getIsClipPortrait(clip)).toBe(false);
   });
 });
@@ -248,12 +204,6 @@ describe("getIsClipDangerous", () => {
     ]);
     expect(getIsClipDangerous(clip, map)).toBe(false);
   });
-
-  it("returns false for optimistic clips", () => {
-    const clip = makeOptimisticClip({ frontendId: id("a") });
-    const map = new Map([[id("a"), { timecode: "", nextLevenshtein: 80 }]]);
-    expect(getIsClipDangerous(clip, map)).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -273,44 +223,6 @@ describe("getLastTranscribedClipId", () => {
   it("returns null when no clips have text", () => {
     const clips = [makeClipOnDatabase({ frontendId: id("a"), text: "" })];
     expect(getLastTranscribedClipId(clips)).toBeNull();
-  });
-
-  it("returns null for empty array", () => {
-    expect(getLastTranscribedClipId([])).toBeNull();
-  });
-});
-
-describe("getChapters", () => {
-  it("filters items to chapters only", () => {
-    const items: TimelineItem[] = [
-      makeChapter(id("s1"), "Intro"),
-      makeClipOnDatabase({ frontendId: id("c1") }),
-      makeChapter(id("s2"), "Body"),
-    ];
-    const sections = getChapters(items);
-    expect(sections).toHaveLength(2);
-    expect(sections.map((s) => s.name)).toEqual(["Intro", "Body"]);
-  });
-});
-
-describe("getHasSections", () => {
-  it("returns true when sections exist", () => {
-    const items: TimelineItem[] = [
-      makeChapter(id("s1"), "Intro"),
-      makeClipOnDatabase({ frontendId: id("c1") }),
-    ];
-    expect(getHasSections(items)).toBe(true);
-  });
-
-  it("returns false when no sections", () => {
-    const items: TimelineItem[] = [
-      makeClipOnDatabase({ frontendId: id("c1") }),
-    ];
-    expect(getHasSections(items)).toBe(false);
-  });
-
-  it("returns false for empty array", () => {
-    expect(getHasSections([])).toBe(false);
   });
 });
 
@@ -332,30 +244,10 @@ const obsRecording: OBSConnectionOuterState = {
   latestOutputPath: "/output/path",
 };
 
-describe("getIsOBSActive", () => {
-  it("returns true when OBS is connected", () => {
-    expect(getIsOBSActive(obsConnected)).toBe(true);
-  });
-
-  it("returns true when OBS is recording", () => {
-    expect(getIsOBSActive(obsRecording)).toBe(true);
-  });
-
-  it("returns false when OBS is not running", () => {
-    expect(getIsOBSActive(obsNotRunning)).toBe(false);
-  });
-});
-
 describe("getIsLiveStreamPortrait", () => {
   it("returns true when OBS is active with TikTok profile", () => {
     expect(
       getIsLiveStreamPortrait({ ...obsConnected, profile: "TikTok" })
-    ).toBe(true);
-  });
-
-  it("returns true when OBS is recording with TikTok profile", () => {
-    expect(
-      getIsLiveStreamPortrait({ ...obsRecording, profile: "TikTok" })
     ).toBe(true);
   });
 
@@ -395,10 +287,6 @@ describe("getShouldShowLastFrameOverlay", () => {
       true
     );
   });
-
-  it("returns true when clip and showLastFrame are truthy", () => {
-    expect(getShouldShowLastFrameOverlay(clip, true, obsRecording)).toBe(true);
-  });
 });
 
 describe("getBackButtonUrl", () => {
@@ -412,14 +300,6 @@ describe("getBackButtonUrl", () => {
     expect(getBackButtonUrl(null, "lesson-1", "landscape", null)).toBe(
       "/videos"
     );
-  });
-
-  it("returns /videos when lessonId is missing", () => {
-    expect(getBackButtonUrl("repo-1", null, "landscape", null)).toBe("/videos");
-  });
-
-  it("returns /videos when both are missing", () => {
-    expect(getBackButtonUrl(null, null, "landscape", null)).toBe("/videos");
   });
 
   it("returns /shorts when format is short and video is standalone", () => {
@@ -456,9 +336,5 @@ describe("getShowCenterLine", () => {
 
   it("returns false when OBS is not running", () => {
     expect(getShowCenterLine(obsNotRunning)).toBe(false);
-  });
-
-  it("returns true when OBS is recording with Camera scene", () => {
-    expect(getShowCenterLine({ ...obsRecording, scene: "Camera" })).toBe(true);
   });
 });

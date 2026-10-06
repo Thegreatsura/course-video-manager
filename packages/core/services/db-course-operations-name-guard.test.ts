@@ -96,31 +96,6 @@ describe("createCourse uniqueness guard", () => {
   );
 });
 
-describe("createCourse uniqueness guard (no filePath)", () => {
-  it.effect("sets slug on course creation", () =>
-    Effect.gen(function* () {
-      const courseOps = yield* CourseOperationsService;
-      const course = yield* courseOps.createCourse({
-        name: "Sample Course",
-      });
-      expect(course.slug).toBe("sample-course");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("rejects duplicate course name", () =>
-    Effect.gen(function* () {
-      const courseOps = yield* CourseOperationsService;
-      yield* courseOps.createCourse({ name: "Sample Course" });
-
-      const error = yield* courseOps
-        .createCourse({ name: "Sample Course" })
-        .pipe(Effect.flip);
-
-      expect(error._tag).toBe("CourseNameTakenError");
-    }).pipe(Effect.provide(testLayer))
-  );
-});
-
 describe("updateCourseName uniqueness guard", () => {
   it.effect("updates slug when renaming", () =>
     Effect.gen(function* () {

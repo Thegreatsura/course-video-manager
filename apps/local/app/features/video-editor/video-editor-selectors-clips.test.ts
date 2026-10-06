@@ -10,18 +10,13 @@ import type {
   TimelineItem,
 } from "./clip-state-reducer";
 import {
-  getClips,
-  getCurrentClipIndex,
   getNextClip,
-  getSelectedClipId,
   getClipsToAggressivelyPreload,
   getTotalDuration,
   getShowVideoPlayer,
   getShowLiveStream,
-  getShowLastFrame,
   getShowScrubSlider,
   getDatabaseClipBeforeInsertionPoint,
-  getCurrentClip,
   getAllClipsHaveSilenceDetected,
   getAllClipsHaveText,
 } from "./video-editor-selectors";
@@ -78,43 +73,6 @@ const id = (s: string) => s as FrontendId;
 // Top-level selectors
 // ---------------------------------------------------------------------------
 
-describe("getClips", () => {
-  it("filters out chapters", () => {
-    const items: TimelineItem[] = [
-      makeChapter(id("s1"), "Intro"),
-      makeClipOnDatabase({ frontendId: id("c1") }),
-      makeChapter(id("s2"), "Body"),
-      makeClipOnDatabase({ frontendId: id("c2") }),
-    ];
-    const clips = getClips(items);
-    expect(clips).toHaveLength(2);
-    expect(clips.map((c) => c.frontendId)).toEqual([id("c1"), id("c2")]);
-  });
-
-  it("returns empty array for no clips", () => {
-    expect(getClips([])).toEqual([]);
-  });
-});
-
-describe("getCurrentClipIndex", () => {
-  const clips = [
-    makeClipOnDatabase({ frontendId: id("a") }),
-    makeClipOnDatabase({ frontendId: id("b") }),
-  ];
-
-  it("returns index of matching clip", () => {
-    expect(getCurrentClipIndex(clips, id("b"))).toBe(1);
-  });
-
-  it("returns -1 when not found", () => {
-    expect(getCurrentClipIndex(clips, id("z"))).toBe(-1);
-  });
-
-  it("returns -1 for undefined", () => {
-    expect(getCurrentClipIndex(clips, undefined)).toBe(-1);
-  });
-});
-
 describe("getNextClip", () => {
   const clips = [
     makeClipOnDatabase({ frontendId: id("a") }),
@@ -135,17 +93,6 @@ describe("getNextClip", () => {
   });
 });
 
-describe("getSelectedClipId", () => {
-  it("returns first selected clip", () => {
-    const set = new Set([id("a"), id("b")]);
-    expect(getSelectedClipId(set)).toBe(id("a"));
-  });
-
-  it("returns undefined for empty set", () => {
-    expect(getSelectedClipId(new Set())).toBeUndefined();
-  });
-});
-
 describe("getClipsToAggressivelyPreload", () => {
   const clips = [
     makeClipOnDatabase({ frontendId: id("a") }),
@@ -160,16 +107,6 @@ describe("getClipsToAggressivelyPreload", () => {
       new Set([id("c")])
     );
     expect(result).toEqual([id("a"), id("b"), id("c")]);
-  });
-
-  it("deduplicates nothing (duplicates kept as in current behavior)", () => {
-    // When selected clip IS the next clip, both appear
-    const result = getClipsToAggressivelyPreload(
-      id("a"),
-      clips,
-      new Set([id("b")])
-    );
-    expect(result).toEqual([id("a"), id("b"), id("b")]);
   });
 
   it("handles undefined currentClipId", () => {
@@ -207,10 +144,6 @@ describe("getTotalDuration", () => {
     ];
     expect(getTotalDuration(clips)).toBe(10);
   });
-
-  it("returns 0 for empty array", () => {
-    expect(getTotalDuration([])).toBe(0);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -243,16 +176,6 @@ describe("getShowLiveStream", () => {
 
   it("returns false when no stream", () => {
     expect(getShowLiveStream(false, "paused")).toBe(false);
-  });
-});
-
-describe("getShowLastFrame", () => {
-  it("returns true when flag is set", () => {
-    expect(getShowLastFrame(true)).toBe(true);
-  });
-
-  it("returns false when flag is not set", () => {
-    expect(getShowLastFrame(false)).toBe(false);
   });
 });
 
@@ -373,21 +296,6 @@ describe("getDatabaseClipBeforeInsertionPoint", () => {
 // getCurrentClip
 // ---------------------------------------------------------------------------
 
-describe("getCurrentClip", () => {
-  const clips = [
-    makeClipOnDatabase({ frontendId: id("a") }),
-    makeClipOnDatabase({ frontendId: id("b") }),
-  ];
-
-  it("finds the current clip", () => {
-    expect(getCurrentClip(clips, id("b"))?.frontendId).toBe(id("b"));
-  });
-
-  it("returns undefined when not found", () => {
-    expect(getCurrentClip(clips, id("z"))).toBeUndefined();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // allClips checks
 // ---------------------------------------------------------------------------
@@ -407,10 +315,6 @@ describe("getAllClipsHaveSilenceDetected", () => {
       makeOptimisticClip({ frontendId: id("b") }),
     ];
     expect(getAllClipsHaveSilenceDetected(clips)).toBe(false);
-  });
-
-  it("returns true for empty array", () => {
-    expect(getAllClipsHaveSilenceDetected([])).toBe(true);
   });
 });
 

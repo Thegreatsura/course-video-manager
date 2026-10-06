@@ -364,25 +364,6 @@ describe("makeAction", () => {
     });
   });
 
-  describe("no backup coupling", () => {
-    // Point-in-time recovery on the hosted database replaced the per-action
-    // pg_dump, so an action's only requirement is its own effect's.
-    it("runs an action whose effect needs no services on an empty runtime", async () => {
-      const runtime = makeTestRuntime();
-
-      const action = makeAction(
-        {
-          effect: () => Effect.succeed({ ok: true }),
-        },
-        runtime
-      );
-
-      await expect(
-        action({ request: mockRequest(), params: {} })
-      ).resolves.toEqual({ ok: true });
-    });
-  });
-
   describe("logging", () => {
     it("logs error cause via Console.dir on error", async () => {
       const runtime = makeTestRuntime();
@@ -487,75 +468,6 @@ describe("makeLoader", () => {
       }
     });
 
-    it("maps custom error tags to configured status codes", async () => {
-      const runtime = makeTestRuntime();
-
-      class AiHeroAuthError extends Data.TaggedError("AiHeroAuthError")<{
-        message: string;
-      }> {}
-
-      const loader = makeLoader(
-        {
-          errors: { AiHeroAuthError: 401 },
-          effect: () =>
-            Effect.fail(new AiHeroAuthError({ message: "Not authenticated" })),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-        expect.unreachable("should have thrown");
-      } catch (error) {
-        const defect = extractDieDefect(error);
-        expect(defect.init.status).toBe(401);
-        expect(defect.data).toBe("Not authenticated");
-      }
-    });
-
-    it("maps an error tag with no configured status to 500", async () => {
-      const runtime = makeTestRuntime();
-
-      const loader = makeLoader(
-        {
-          effect: () =>
-            Effect.fail(
-              new SomethingBrokeError({ message: "something broke" })
-            ),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-        expect.unreachable("should have thrown");
-      } catch (error) {
-        const defect = extractDieDefect(error);
-        expect(defect.init.status).toBe(500);
-        expect(defect.data).toBe("Internal server error");
-      }
-    });
-
-    it("propagates Effect.die from inside the effect as-is", async () => {
-      const runtime = makeTestRuntime();
-      const sentinel = { custom: "defect" };
-
-      const loader = makeLoader(
-        {
-          effect: () => Effect.die(sentinel),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-        expect.unreachable("should have thrown");
-      } catch (error) {
-        const defect = extractDieDefect(error);
-        expect(defect).toBe(sentinel);
-      }
-    });
-
     it("uses error.message when NotFoundError is explicitly configured", async () => {
       const runtime = makeTestRuntime();
 
@@ -578,54 +490,6 @@ describe("makeLoader", () => {
         expect(defect.init.status).toBe(404);
         expect(defect.data).toBe("Course version not found");
       }
-    });
-
-    it("custom errors extend rather than replace default mappings", async () => {
-      const runtime = makeTestRuntime();
-
-      type E =
-        { _tag: "ParseError" } | NotFoundError | { _tag: "SomeCustomError" };
-      const loader = makeLoader(
-        {
-          errors: { SomeCustomError: 409 },
-          effect: () => Effect.fail<E>({ _tag: "ParseError" }),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-        expect.unreachable("should have thrown");
-      } catch (error) {
-        const defect = extractDieDefect(error);
-        expect(defect.init.status).toBe(400);
-      }
-    });
-  });
-
-  describe("logging", () => {
-    it("logs error cause via Console.dir on error", async () => {
-      const runtime = makeTestRuntime();
-      const consoleDirSpy = vi
-        .spyOn(console, "dir")
-        .mockImplementation(() => {});
-
-      const loader = makeLoader(
-        {
-          effect: () =>
-            Effect.fail(new SomethingBrokeError({ message: "boom" })),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-      } catch {
-        // expected
-      }
-
-      expect(consoleDirSpy).toHaveBeenCalled();
-      consoleDirSpy.mockRestore();
     });
   });
 });

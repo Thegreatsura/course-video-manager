@@ -105,52 +105,12 @@ describe("CloudinaryMarkdownService", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("preserves alt text", () =>
-    Effect.gen(function* () {
-      const body = "![A detailed diagram of the architecture](arch.png)";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toContain(
-        "![A detailed diagram of the architecture](https://res.cloudinary.com/test/ai-hero-images/arch_1)"
-      );
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("handles empty alt text", () =>
     Effect.gen(function* () {
       const body = "![](image.png)";
       const result = yield* uploadImagesInMarkdown(body, "/base");
       expect(result.body).toBe(
         "![](https://res.cloudinary.com/test/ai-hero-images/image_1)"
-      );
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("processes multiple images", () =>
-    Effect.gen(function* () {
-      const body =
-        "![first](a.png)\n\nSome text\n\n![second](b.png)\n\n![third](c.png)";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toContain(
-        "![first](https://res.cloudinary.com/test/ai-hero-images/a_1)"
-      );
-      expect(result.body).toContain(
-        "![second](https://res.cloudinary.com/test/ai-hero-images/b_2)"
-      );
-      expect(result.body).toContain(
-        "![third](https://res.cloudinary.com/test/ai-hero-images/c_3)"
-      );
-      expect(uploadCounter).toBe(3);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("resolves relative paths from base directory", () =>
-    Effect.gen(function* () {
-      const body = "![img](images/screenshot.png)";
-      yield* uploadImagesInMarkdown(body, "/project/lessons/intro");
-
-      // Verify existsSync was called with the resolved path
-      expect(fs.existsSync).toHaveBeenCalledWith(
-        path.resolve("/project/lessons/intro", "images/screenshot.png")
       );
     }).pipe(Effect.provide(testLayer))
   );

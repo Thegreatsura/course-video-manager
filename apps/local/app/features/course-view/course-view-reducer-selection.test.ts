@@ -9,11 +9,6 @@ const createTester = () =>
   new ReducerTester(courseViewReducer, createInitialCourseViewState());
 
 describe("courseViewReducer — lesson selection", () => {
-  it("46. lessonSelection is null initially", () => {
-    const state = createTester().getState();
-    expect(state.lessonSelection).toBeNull();
-  });
-
   it("47. select-lesson-only: selects one lesson", () => {
     const state = createTester()
       .send({
@@ -163,25 +158,6 @@ describe("courseViewReducer — lesson selection", () => {
     });
   });
 
-  it("55. clear-lesson-selection: clears selection", () => {
-    const state = createTester()
-      .send({
-        type: "select-lesson-only",
-        lessonId: "lesson-1",
-        sectionId: "section-1",
-      })
-      .send({ type: "clear-lesson-selection" })
-      .getState();
-    expect(state.lessonSelection).toBeNull();
-  });
-
-  it("56. clear-lesson-selection: no-op when already null", () => {
-    const state = createTester()
-      .send({ type: "clear-lesson-selection" })
-      .getState();
-    expect(state.lessonSelection).toBeNull();
-  });
-
   it("57. prune-lesson-selection: drops vanished IDs, keeps the rest", () => {
     const state = createTester()
       .send({
@@ -257,23 +233,5 @@ describe("courseViewReducer — lesson selection", () => {
       lessonIds: new Set(["lesson-1"]),
     });
     expect(before).toBe(after);
-  });
-
-  it("63. lesson selection does not affect other state", () => {
-    const state = createTester()
-      .send({ type: "toggle-priority-filter", priority: 1 })
-      .send({ type: "set-add-course-modal-open", open: true })
-      .send({
-        type: "select-lesson-only",
-        lessonId: "lesson-1",
-        sectionId: "section-1",
-      })
-      .getState();
-    expect(state.priorityFilter).toEqual([1]);
-    expect(state.isAddCourseModalOpen).toBe(true);
-    expect(state.lessonSelection).toEqual({
-      sectionId: "section-1",
-      lessonIds: new Set(["lesson-1"]),
-    });
   });
 });

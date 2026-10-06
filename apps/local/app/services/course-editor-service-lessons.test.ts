@@ -89,22 +89,6 @@ describe("CourseEditorService — lessons", () => {
       expect(lessons).toHaveLength(1);
     });
 
-    it("real lesson starts with authoringStatus 'todo'", async () => {
-      const { version } = await createCourseWithVersion();
-      const [section] = await db()
-        .insert(schema.sections)
-        .values({
-          repoVersionId: version.id,
-          title: "01-introduction",
-          order: 0,
-        })
-        .returning();
-
-      const result = await svc().createLesson(section!.id, "Getting Started");
-      const lesson = await getLessonById(result.lessonId);
-      expect(lesson!.authoringStatus).toBe("todo");
-    });
-
     it("creates a real lesson even when the course has no filePath", async () => {
       const { version } = await createCourseWithVersion();
       const s = await svc().createSection(version.id, "Section A", 0);
@@ -124,15 +108,6 @@ describe("CourseEditorService — lessons", () => {
 
       const lesson = await getLessonById(l.lessonId);
       expect(lesson!.title).toBe("new-name");
-    });
-
-    it("returns early when slug is unchanged", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const l = await svc().addLesson(s.sectionId, "My Lesson");
-
-      const result = await svc().updateLessonName(l.lessonId, "my-lesson");
-      expect(result).toMatchObject({ success: true, title: "my-lesson" });
     });
   });
 
@@ -219,29 +194,6 @@ describe("CourseEditorService — lessons", () => {
       expect(archived).toBeDefined();
       expect(archived!.archived).toBe(true);
     });
-
-    it("soft-deletes a real lesson without renumbering siblings", async () => {
-      const { version } = await createCourseWithVersion();
-      const { section, lessons } = await createSectionWithLessons(
-        version.id,
-        "01-intro",
-        0,
-        [
-          { title: "First", order: 0 },
-          { title: "Second", order: 1 },
-          { title: "Third", order: 2 },
-        ]
-      );
-
-      await svc().deleteLesson(lessons[1]!.id);
-
-      const remaining = await getLessons(section.id);
-      expect(remaining).toHaveLength(2);
-
-      const archived = await getLessonById(lessons[1]!.id);
-      expect(archived).toBeDefined();
-      expect(archived!.archived).toBe(true);
-    });
   });
 
   describe("reorder-lessons", () => {
@@ -261,29 +213,6 @@ describe("CourseEditorService — lessons", () => {
       const lessons = await getLessons(s.sectionId);
       expect(lessons.map((l) => l.title)).toEqual(["Gamma", "Beta", "Alpha"]);
     });
-
-    it("reorders real lessons by updating order values only", async () => {
-      const { version } = await createCourseWithVersion();
-      const { section, lessons } = await createSectionWithLessons(
-        version.id,
-        "01-intro",
-        0,
-        [
-          { title: "Alpha", order: 0 },
-          { title: "Beta", order: 1 },
-          { title: "Gamma", order: 2 },
-        ]
-      );
-
-      await svc().reorderLessons(section.id, [
-        lessons[2]!.id,
-        lessons[1]!.id,
-        lessons[0]!.id,
-      ]);
-
-      const reordered = await getLessons(section.id);
-      expect(reordered.map((l) => l.title)).toEqual(["Gamma", "Beta", "Alpha"]);
-    });
   });
 
   describe("move-lesson-to-section", () => {
@@ -299,37 +228,6 @@ describe("CourseEditorService — lessons", () => {
       const target = await getLessons(s2.sectionId);
       expect(target).toHaveLength(1);
       expect(target[0]!.title).toBe("My Lesson");
-    });
-
-    it("moves a real lesson to an empty section and updates paths via planner", async () => {
-      const { version } = await createCourseWithVersion();
-      const { lessons } = await createSectionWithLessons(
-        version.id,
-        "01-basics",
-        0,
-        [
-          {
-            title: "Alpha",
-            order: 0,
-          },
-          {
-            title: "Beta",
-            order: 1,
-          },
-        ]
-      );
-      const { section: s2 } = await createSectionWithLessons(
-        version.id,
-        "02-advanced",
-        1,
-        []
-      );
-
-      await svc().moveLessonToSection(lessons[0]!.id, s2.id);
-
-      const targetLessons = await getLessons(s2.id);
-      expect(targetLessons).toHaveLength(1);
-      expect(targetLessons[0]!.title).toBe("Alpha");
     });
 
     it("renumbers remaining source lessons after a move", async () => {
@@ -400,31 +298,6 @@ describe("CourseEditorService — lessons", () => {
         ]
       );
 
-      expect((await getLessonById(lessons[0]!.id))!.authoringStatus).toBe(
-        "done"
-      );
-
-      await svc().setLessonAuthoringStatus(lessons[0]!.id, "todo");
-      expect((await getLessonById(lessons[0]!.id))!.authoringStatus).toBe(
-        "todo"
-      );
-    });
-
-    it("set-lesson-authoring-status round-trips between done and todo", async () => {
-      const { version } = await createCourseWithVersion();
-      const { lessons } = await createSectionWithLessons(
-        version.id,
-        "01-intro",
-        0,
-        [
-          {
-            title: "Lesson",
-            order: 0,
-          },
-        ]
-      );
-
-      await svc().setLessonAuthoringStatus(lessons[0]!.id, "done");
       expect((await getLessonById(lessons[0]!.id))!.authoringStatus).toBe(
         "done"
       );

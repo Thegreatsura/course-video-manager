@@ -369,6 +369,33 @@ inside the boundary goes in real: never mock your own classes, modules or
 internal collaborators. When something is hard to test without mocking an
 internal, redesign the interface.
 
+### A test earns its place
+
+Every test must be able to fail for a plausible real bug in behavior a user or
+caller observes. If you cannot name that bug, don't write the test. Reviewers
+hold new tests to this.
+
+Worth a test: business rules; parsers and serialisers; data integrity
+(constraints, cascades, the Draft guard, what a copy carries); regressions for a
+real past bug (a test from a `fix:` commit stays); guard and convention tests
+such as `entity-menus.test.ts` and `effect-guards.test.ts`.
+
+Not worth a test:
+
+- **Tautologies**: a mock returning what it was told, a restated constant,
+  config or lookup table, a snapshot of static markup, a type being a type.
+- **Implementation details**: call counts, call order, private helpers or
+  internal state shape. Anything that breaks on a harmless refactor.
+- **Near-duplicates**: the same rule at the same seam with another literal.
+- **Glue**: a pass-through, a one-line mapping, a route that parses and
+  delegates. Test what it delegates to.
+- **Someone else's code**: that zod parses, React renders or drizzle inserts.
+
+Prefer one test at the right seam over the same rule re-checked through the
+CLI, the route and the component.
+[`docs/plans/test-pruning.md`](./docs/plans/test-pruning.md) applies this to
+the existing suite.
+
 Writing, changing or reviewing a test — for the worked good and bad examples,
 the red-flag list, the rule for Remotion renderer packages, and the
 vertical-slice TDD loop, read
