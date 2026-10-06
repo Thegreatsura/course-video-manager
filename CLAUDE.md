@@ -4,6 +4,10 @@
 
 Issues and PRDs live as GitHub issues in `mattpocock/course-video-manager`, managed via the `gh` CLI. See `docs/agents/backlog.md`.
 
+### Landing a change
+
+Every code change lands through a PR from a fresh worktree, merged once `check` is green on an up-to-date branch. Read `docs/agents/merging.md` before you start a change, and again before you merge.
+
 ### Triage labels
 
 Canonical defaults, except `ready-for-agent` is spelled `Sandcastle` in this repo. See `docs/agents/triage-labels.md`.
