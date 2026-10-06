@@ -5,6 +5,7 @@ import { Loader2Icon } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { WriterEngine, type WriterContext } from "./writer-engine";
+import { formatVideoBreadcrumb } from "@/lib/video-breadcrumb";
 import type { Mode, WriterView } from "./types";
 import type { WriterFieldId } from "./writer-engine-utils";
 import {
@@ -149,7 +150,22 @@ export function WriterModal({
       >
         <DialogTitle className="sr-only">{resolvedLabel}</DialogTitle>
         <div className="flex items-center px-4 py-2 border-b">
-          <h2 className="text-sm font-semibold">{resolvedLabel}</h2>
+          {context && (
+            <span
+              className="mr-3 text-lg"
+              data-testid="writer-modal-breadcrumb"
+            >
+              {formatVideoBreadcrumb({
+                isStandalone: context.isStandalone,
+                sectionPath: context.courseStructure?.currentSectionPath ?? "",
+                lessonPath: context.courseStructure?.currentLessonPath ?? "",
+                videoTitle: context.videoTitle,
+              })}
+            </span>
+          )}
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {resolvedLabel}
+          </h2>
         </div>
         <div className="relative flex-1 overflow-hidden">
           {context ? (

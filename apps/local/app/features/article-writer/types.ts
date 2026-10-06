@@ -79,6 +79,7 @@ export interface WriterContext {
   repoId: string | null;
   fullPath: string;
   isStandalone: boolean;
+  videoTitle: string;
   beats: Array<{ kind: BeatKind; title: string; description: string }>;
   /** The video's script — the base Matt improvised from. Empty when unwritten. */
   script: string;

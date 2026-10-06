@@ -1,4 +1,5 @@
 import { AddVideoModal } from "@/components/add-video-modal";
+import { formatVideoBreadcrumb } from "@/lib/video-breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -209,9 +210,12 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
   const backButtonUrl = getBackButtonUrl(repoId, lessonId, format, pitchId);
 
   // Build breadcrumb text
-  const breadcrumb = isStandalone
-    ? videoTitle
-    : `${sectionPath}/${lessonPath}/${videoTitle}`;
+  const breadcrumb = formatVideoBreadcrumb({
+    isStandalone,
+    sectionPath,
+    lessonPath,
+    videoTitle,
+  });
 
   const matches = useMatches();
   const hideParentHeader = matches.some(

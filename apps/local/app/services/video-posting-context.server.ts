@@ -197,6 +197,8 @@ export interface WriterContextData {
   files: Array<{ path: string; size: number; defaultEnabled: boolean }>;
   chapters: SectionWithWordCount[];
   isStandalone: boolean;
+  /** The video's title — the last segment of the writer modal's breadcrumb. */
+  videoTitle: string;
   courseStructure: CourseStructure | null;
   links: Array<{
     id: string;
@@ -274,6 +276,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       files,
       chapters: sections,
       isStandalone: true,
+      videoTitle: video.title,
       courseStructure: null,
       links: globalLinks,
       beats,
@@ -318,6 +321,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     files,
     chapters: sections,
     isStandalone: false,
+    videoTitle: video.title,
     courseStructure,
     links: globalLinks,
     beats,
