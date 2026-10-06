@@ -2,20 +2,18 @@ import { AddCourseModal } from "@/components/add-course-modal";
 import { AddStandaloneVideoModal } from "@/components/add-standalone-video-modal";
 import { SpacedeskModal } from "@/components/spacedesk-modal";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import {
+  CourseMenuContent,
+  type CourseMenuAction,
+  type CourseMenuIntent,
+} from "@/features/course-view/course-menu";
 import { cn } from "@/lib/utils";
 import {
   openPlayground,
@@ -41,6 +39,7 @@ import {
   Link,
   useFetcher,
   useLocation,
+  useNavigate,
   useRouteLoaderData,
 } from "react-router";
 
@@ -67,6 +66,32 @@ export function AppSidebar({ variant }: AppSidebarProps) {
   const selectedCourseId = courseMatch?.[1] ?? null;
 
   const archiveCourseFetcher = useFetcher();
+  const navigate = useNavigate();
+
+  // The same Course menu as the course page's Actions button. Actions that
+  // need the page's dialogs or selected Version go there and run on arrival.
+  const runCourseAction = (courseId: string, action: CourseMenuAction) => {
+    switch (action) {
+      case "rename":
+      case "duplicate":
+      case "export":
+      case "copy-transcript":
+      case "purge-exports": {
+        const state: CourseMenuIntent = { courseMenuAction: action };
+        return void navigate(`/courses/${courseId}`, { state });
+      }
+      case "preview-changelog":
+        return void navigate(`/courses/${courseId}/changelog`);
+      case "publish":
+        return void navigate(`/courses/${courseId}/publish`);
+      case "archive":
+      case "unarchive":
+        return void archiveCourseFetcher.submit(
+          { archived: action === "archive" ? "true" : "false" },
+          { method: "post", action: `/api/courses/${courseId}/archive` }
+        );
+    }
+  };
   const createPitchFetcher = useFetcher();
   const createShortFetcher = useFetcher();
 
@@ -147,27 +172,15 @@ export function AppSidebar({ variant }: AppSidebarProps) {
                   {course.name}
                 </Link>
               </ContextMenuTrigger>
-              <ContextMenuContent>
-                <CopyEntityLinkItems
-                  menu="context"
-                  entity={{ type: "course", id: course.id }}
-                />
-                <ContextMenuSeparator />
-                <ContextMenuItem
-                  onSelect={() => {
-                    archiveCourseFetcher.submit(
-                      { archived: "true" },
-                      {
-                        method: "post",
-                        action: `/api/courses/${course.id}/archive`,
-                      }
-                    );
-                  }}
-                >
-                  <Archive className="w-4 h-4" />
-                  Archive
-                </ContextMenuItem>
-              </ContextMenuContent>
+              <CourseMenuContent
+                menu="context"
+                course={{
+                  id: course.id,
+                  archived: false,
+                  isLatestVersion: true,
+                }}
+                run={(action) => runCourseAction(course.id, action)}
+              />
             </ContextMenu>
           ))}
         </div>
