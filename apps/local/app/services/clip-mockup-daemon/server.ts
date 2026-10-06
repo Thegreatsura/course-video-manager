@@ -247,7 +247,11 @@ const daemon = (version: string) =>
     // -- Stopping ----------------------------------------------------------
     const stop = yield* Deferred.make<string>();
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.once(signal, () => run(Deferred.succeed(stop, signal)));
+      process.once(signal, () => {
+        // Fire-and-forget: a signal handler cannot wait, and completing a
+        // Deferred cannot fail. The main fiber awaits `stop` below.
+        void run(Deferred.succeed(stop, signal));
+      });
     }
     yield* Effect.forkScoped(
       Effect.repeat(

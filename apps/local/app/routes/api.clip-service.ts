@@ -37,7 +37,9 @@ export const action = makeAction({
       const loggerService = yield* VideoEditorLoggerService;
       const logger: LoggerAdapter = {
         log: (videoId, event) => {
-          loggerService.log(videoId, event).pipe(runtimeLive.runPromise);
+          // Fire-and-forget: LoggerAdapter.log returns void so a log line
+          // never holds up the clip-service event it describes.
+          void loggerService.log(videoId, event).pipe(runtimeLive.runPromise);
         },
       };
 

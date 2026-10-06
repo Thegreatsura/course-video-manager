@@ -95,6 +95,23 @@ a loader or action, because that is how a route answers with an error status.
 Enforced by type-aware oxlint (`typescript/only-throw-error`, an error in
 `.oxlintrc.json` that allows `data()`).
 
+### Every promise is awaited, handled or marked void
+
+A promise nobody awaits loses its rejection: the failure turns into an
+unhandled rejection rather than an error the caller sees, and the work it
+started may still be running after the caller has moved on. Await it, or
+`.catch` it where it is made. When fire-and-forget really is the intent (a
+signal handler, a best-effort log line), write `void promise` with a comment
+saying why nothing waits on it. Do not hand an async function to a slot that
+expects a `void` callback either (an event listener, `forEach`), because
+nothing there awaits or catches what it returns.
+
+Enforced by type-aware oxlint (`typescript/no-floating-promises` and
+`typescript/no-misused-promises`) as a ratchet. They are errors in the
+directories listed in `.oxlintrc.json`'s `overrides`, which are services, CLI,
+`.ts` routes, `apps/remote`, `packages` and scripts, and warnings in the
+React UI. A file you touch should leave review with fewer warnings than it had.
+
 ## Function signatures
 
 Optional parameters passed to functions should be scrutinised extremely
