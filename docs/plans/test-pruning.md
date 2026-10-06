@@ -1,7 +1,7 @@
 # Test pruning
 
 Matt's goal: fewer tests, each one earning its place. The bar is the
-"A test earns its place" rule in [`CODING_STANDARDS.md`](../../CODING_STANDARDS.md#a-test-earns-its-place):
+"What earns a test its place" rule in [`TESTING_STANDARDS.md`](../TESTING_STANDARDS.md#what-earns-a-test-its-place):
 a test must be able to fail for a plausible real bug in behavior a user or
 caller observes.
 
