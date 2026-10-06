@@ -81,7 +81,11 @@ export function uploadStageLabel(
       return upload.renderVerticalStage
         ? RENDER_VERTICAL_STAGE_LABELS[upload.renderVerticalStage]
         : null;
-    default:
+    // A plain upload has no stages: its bar streams a byte percentage.
+    case "youtube":
+    case "youtube-shorts":
+    case "ai-hero":
+    case "skills-changelog":
       return null;
   }
 }

@@ -34,6 +34,9 @@
     // Effect, only a thenable. Type-aware: `pnpm run lint` passes
     // `--type-aware`, which needs oxlint-tsgolint.
     "typescript/await-thenable": "error",
+    // CODING STANDARD: "A switch over a union names every member" — no
+    // `default` standing in for the members it happens to cover.
+    "typescript/switch-exhaustiveness-check": "error",
     // `--type-aware` also switches on every other type-aware rule in
     // `correctness`. Those are a measured backlog (docs/plans/
     // effect-codebase-health.md, phase 2) and stay off until each is fixed

@@ -153,7 +153,12 @@ export function applyOptimisticEvent(
       return applyDeleteBeat(loaderData, event.beatId);
     case "move-beat":
       return applyMoveBeat(loaderData, event);
-    default:
+    // Creates have no optimistic row: the new entity appears when the loader
+    // revalidates with its server-assigned id.
+    case "add-lesson":
+    case "create-beat":
+    case "create-real-lesson":
+    case "create-section":
       return loaderData;
   }
 }
