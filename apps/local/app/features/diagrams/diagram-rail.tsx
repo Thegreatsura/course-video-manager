@@ -1,15 +1,11 @@
-import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { useConfirmDelete } from "@/components/confirm-delete-dialog";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 
 export interface RailDiagram {
   id: string;
@@ -41,8 +37,16 @@ export function DiagramRail({
   onCopyContents: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  // Deleting archives the Diagram, and nothing in the app brings one back.
+  const confirmDelete = useConfirmDelete<RailDiagram>({
+    title: "Delete Diagram",
+    description: (d) => `Delete "${d.name}"? This cannot be undone.`,
+    onConfirm: (d) => onDelete(d.id),
+  });
+
   return (
     <>
+      {confirmDelete.dialog}
       <div className="flex items-stretch border-b border-zinc-700">
         <button
           onClick={onNavigateHome}
@@ -100,24 +104,26 @@ export function DiagramRail({
                     </div>
                   </div>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onSelect={() => onCopyContents(d.id)}>
-                    <Copy />
-                    Copy contents
-                  </ContextMenuItem>
-                  <CopyEntityLinkItems
-                    menu="context"
-                    entity={{ type: "diagram", id: d.id }}
-                  />
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    variant="destructive"
-                    onSelect={() => onDelete(d.id)}
-                  >
-                    <Trash2 />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
+                <EntityMenuContent
+                  menu="context"
+                  entity={{ type: "diagram", id: d.id }}
+                  groups={{
+                    copy: [
+                      {
+                        ...STANDARD_ACTIONS.copy,
+                        label: "Copy Contents",
+                        onSelect: () => onCopyContents(d.id),
+                      },
+                    ],
+                    danger: [
+                      {
+                        ...STANDARD_ACTIONS.delete,
+                        opensDialog: true,
+                        onSelect: () => confirmDelete.request(d),
+                      },
+                    ],
+                  }}
+                />
               </ContextMenu>
             );
           })}

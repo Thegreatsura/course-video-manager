@@ -1,5 +1,3 @@
-import { ContextMenuItem } from "@/components/ui/context-menu";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { ActionLeaf } from "@/features/action-menu/action-menu-model";
 import { Fingerprint, Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -57,30 +55,4 @@ export function copyEntityLinkActions(entity: EntityRef | null): ActionLeaf[] {
       },
     },
   ];
-}
-
-/**
- * The same two items for a menu not yet on `EntityMenuContent` — see
- * docs/plans/action-menus.md. New menus use `EntityMenuContent`, which adds
- * them itself. Renders the bare items; the caller places them in a group of
- * their own. `menu` picks the item component.
- */
-export function CopyEntityLinkItems({
-  entity,
-  menu,
-}: {
-  entity: EntityRef;
-  menu: "context" | "dropdown";
-}) {
-  const Item = menu === "context" ? ContextMenuItem : DropdownMenuItem;
-  return (
-    <>
-      {copyEntityLinkActions(entity).map((action) => (
-        <Item key={action.label} onSelect={action.onSelect}>
-          <action.icon className="w-4 h-4" />
-          {action.label}
-        </Item>
-      ))}
-    </>
-  );
 }

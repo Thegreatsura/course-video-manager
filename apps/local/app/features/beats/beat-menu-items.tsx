@@ -1,12 +1,9 @@
-import {
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from "@/components/ui/context-menu";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
-import { Plus, Shapes, Trash2 } from "lucide-react";
+import type {
+  ActionLeaf,
+  ActionMenuGroups,
+} from "@/features/action-menu/action-menu-model";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
+import { Shapes } from "lucide-react";
 import {
   BEAT_KINDS,
   BEAT_KIND_DESCRIPTIONS,
@@ -16,110 +13,65 @@ import {
 } from "./beat-kinds";
 
 /**
- * Five context-menu items, one per Beat kind, each with its distinct icon.
- * Used both to create a Beat of a kind (on a Video) and to reclassify one
- * (on a Beat).
+ * One action-menu leaf per Beat kind, with its icon and description. Used
+ * to create a Beat of a kind (which opens the create-Beat dialog) and to
+ * reclassify one (`current` marks its kind).
  */
-export function BeatKindMenuItems({
-  onSelect,
-}: {
-  onSelect: (kind: BeatKind) => void;
-}) {
-  return (
-    <>
-      {BEAT_KINDS.map((kind) => {
-        const Icon = BEAT_KIND_ICONS[kind];
-        return (
-          <ContextMenuItem
-            key={kind}
-            onSelect={() => onSelect(kind)}
-            className="items-start gap-2"
-          >
-            <Icon className="w-4 h-4 mt-0.5 shrink-0" />
-            <div className="flex flex-col">
-              <span>{BEAT_KIND_LABELS[kind]}</span>
-              <span className="text-xs text-muted-foreground">
-                {BEAT_KIND_DESCRIPTIONS[kind]}
-              </span>
-            </div>
-          </ContextMenuItem>
-        );
-      })}
-    </>
-  );
+export function beatKindLeaves(
+  onSelect: (kind: BeatKind) => void,
+  options: { current?: BeatKind; opensDialog?: boolean } = {}
+): ActionLeaf[] {
+  return BEAT_KINDS.map((kind) => ({
+    label: BEAT_KIND_LABELS[kind],
+    icon: BEAT_KIND_ICONS[kind],
+    description: BEAT_KIND_DESCRIPTIONS[kind],
+    opensDialog: options.opensDialog,
+    checked:
+      options.current === undefined ? undefined : kind === options.current,
+    onSelect: () => onSelect(kind),
+  }));
 }
 
-/** "Add beat ▸ <kind>" submenu for a Video's context menu. */
-export function AddBeatSubMenu({ onAdd }: { onAdd: (kind: BeatKind) => void }) {
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger>
-        <Plus className="w-4 h-4" />
-        Add beat
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent>
-        <BeatKindMenuItems onSelect={onAdd} />
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
-}
-
-/** A Beat's own context menu: change kind, add a neighbour (before/after) + delete. */
-export function BeatContextMenuContent({
+/**
+ * A Beat's actions: change its kind, add a neighbour before/after, delete.
+ * Deleting archives the Beat with no way back in the app, so `onDelete`
+ * should ask first (it carries the ellipsis).
+ */
+export function beatMenuGroups({
+  kind,
   onSetKind,
   onAddBefore,
   onAddAfter,
   onDelete,
-  videoId,
-  beatId,
 }: {
+  kind: BeatKind;
   onSetKind: (kind: BeatKind) => void;
   onAddBefore: (kind: BeatKind) => void;
   onAddAfter: (kind: BeatKind) => void;
   onDelete: () => void;
-  videoId: string;
-  beatId: string;
-}) {
-  return (
-    <>
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>
-          <Shapes className="w-4 h-4" />
-          Change kind
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent>
-          <BeatKindMenuItems onSelect={onSetKind} />
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-      <ContextMenuSeparator />
-      <CopyEntityLinkItems
-        menu="context"
-        entity={{ type: "beat", id: beatId, videoId }}
-      />
-      <ContextMenuSeparator />
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>
-          <Plus className="w-4 h-4" />
-          Add beat before
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent>
-          <BeatKindMenuItems onSelect={onAddBefore} />
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>
-          <Plus className="w-4 h-4" />
-          Add beat after
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent>
-          <BeatKindMenuItems onSelect={onAddAfter} />
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-      <ContextMenuSeparator />
-      <ContextMenuItem variant="destructive" onSelect={onDelete}>
-        <Trash2 className="w-4 h-4" />
-        Delete
-      </ContextMenuItem>
-    </>
-  );
+}): ActionMenuGroups {
+  return {
+    edit: [
+      {
+        label: "Change Kind",
+        icon: Shapes,
+        items: beatKindLeaves(onSetKind, { current: kind }),
+      },
+    ],
+    create: [
+      {
+        ...STANDARD_ACTIONS.add,
+        label: "Add Beat Before",
+        items: beatKindLeaves(onAddBefore, { opensDialog: true }),
+      },
+      {
+        ...STANDARD_ACTIONS.add,
+        label: "Add Beat After",
+        items: beatKindLeaves(onAddAfter, { opensDialog: true }),
+      },
+    ],
+    danger: [
+      { ...STANDARD_ACTIONS.delete, opensDialog: true, onSelect: onDelete },
+    ],
+  };
 }

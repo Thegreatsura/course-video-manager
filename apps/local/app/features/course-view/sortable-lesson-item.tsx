@@ -113,7 +113,6 @@ export function SortableLessonItem({
   submitEvent,
   startExportUpload,
   revealVideoFetcher,
-  deleteVideoFileFetcher,
   submitDeleteVideo,
   allFlatLessons,
   dependencyMap,
@@ -136,7 +135,6 @@ export function SortableLessonItem({
   submitEvent: (event: CourseEditorEvent) => void;
   startExportUpload: (videoId: string, path: string) => void;
   revealVideoFetcher: ReturnType<typeof useFetcher>;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   submitDeleteVideo: (videoId: string) => void;
   allFlatLessons: DependencyLessonItem[];
   dependencyMap: Record<string, string[]>;
@@ -465,7 +463,6 @@ export function SortableLessonItem({
               dispatch={dispatch}
               startExportUpload={startExportUpload}
               revealVideoFetcher={revealVideoFetcher}
-              deleteVideoFileFetcher={deleteVideoFileFetcher}
               submitDeleteVideo={submitDeleteVideo}
             />
           </div>
@@ -481,7 +478,6 @@ export function SortableLessonItem({
             dispatch={dispatch}
             startExportUpload={startExportUpload}
             revealVideoFetcher={revealVideoFetcher}
-            deleteVideoFileFetcher={deleteVideoFileFetcher}
             submitDeleteVideo={submitDeleteVideo}
           />
         )}

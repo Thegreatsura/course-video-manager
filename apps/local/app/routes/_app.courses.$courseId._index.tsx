@@ -206,7 +206,6 @@ export default function Component(props: Route.ComponentProps) {
     [submit]
   );
 
-  const deleteVideoFileFetcher = useFetcher();
   const revealVideoFetcher = useFetcher();
   const archiveCourseFetcher = useFetcher();
 
@@ -329,7 +328,6 @@ export default function Component(props: Route.ComponentProps) {
                             submitEvent={submitEvent}
                             startExportUpload={startExportUpload}
                             revealVideoFetcher={revealVideoFetcher}
-                            deleteVideoFileFetcher={deleteVideoFileFetcher}
                             submitDeleteVideo={submitDeleteVideo}
                             allFlatLessons={allFlatLessons}
                             dependencyMap={dependencyMap}
@@ -388,7 +386,6 @@ export default function Component(props: Route.ComponentProps) {
                         navigate={navigate}
                         startExportUpload={startExportUpload}
                         revealVideoFetcher={revealVideoFetcher}
-                        deleteVideoFileFetcher={deleteVideoFileFetcher}
                         submitDeleteVideo={submitDeleteVideo}
                       />
 

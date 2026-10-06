@@ -1,10 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useState } from "react";
-import {
-  hasLocalStorage,
-  useLocalStorage,
-} from "@/hooks/use-local-storage";
+import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "sonner";
 import { useFetcher } from "react-router";
 import { UploadContext } from "@/features/upload-manager/upload-context";
@@ -260,7 +257,7 @@ export function PostPage({
   const deleteThumbnailFetcher = useFetcher();
 
   const handleDeleteThumbnail = (thumbnailId: string) => {
-    if (!confirm("Delete this thumbnail?")) return;
+    // The Thumbnail menu has already asked (useThumbnailMenu).
     if (thumbnailId === selectedThumbnailId) {
       setSelectedThumbnailId(null);
     }

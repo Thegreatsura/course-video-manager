@@ -1,26 +1,12 @@
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 ("use client");
 
-import { Link } from "react-router";
-import { toast } from "sonner";
+import { Link, useNavigate } from "react-router";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  CheckIcon,
-  ClipboardIcon,
-  DownloadIcon,
-  ImageIcon,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { CheckIcon, ImageIcon, PlusIcon } from "lucide-react";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { useThumbnailMenu } from "@/features/thumbnail-editor/thumbnail-menu";
 
 export function ThumbnailSelector({
   videoId,
@@ -35,6 +21,12 @@ export function ThumbnailSelector({
   onSelectThumbnail: (id: string | null) => void;
   onDeleteThumbnail: (id: string) => void;
 }) {
+  const navigate = useNavigate();
+  const thumbnailMenu = useThumbnailMenu({
+    onEdit: () => navigate(`/videos/${videoId}/thumbnails`),
+    onDelete: onDeleteThumbnail,
+  });
+
   const handleToggle = (thumbnailId: string) => {
     onSelectThumbnail(thumbnailId === selectedThumbnailId ? null : thumbnailId);
   };
@@ -42,6 +34,7 @@ export function ThumbnailSelector({
   return (
     <div className="space-y-2">
       <Label>Thumbnail</Label>
+      {thumbnailMenu.deleteDialog}
       {thumbnails.length === 0 ? (
         <div className="border border-dashed rounded-lg p-6 text-center text-muted-foreground">
           <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -81,57 +74,14 @@ export function ThumbnailSelector({
                       )}
                     </button>
                   </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(
-                            `/api/thumbnails/${thumbnail.id}/image`
-                          );
-                          const blob = await res.blob();
-                          await navigator.clipboard.write([
-                            new ClipboardItem({ [blob.type]: blob }),
-                          ]);
-                          toast("Copied to clipboard");
-                        } catch {
-                          toast.error("Failed to copy to clipboard");
-                        }
-                      }}
-                    >
-                      <ClipboardIcon className="size-4" />
-                      Copy to clipboard
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => {
-                        const a = document.createElement("a");
-                        a.href = `/api/thumbnails/${thumbnail.id}/image`;
-                        a.download = `thumbnail-${thumbnail.id}.png`;
-                        a.click();
-                      }}
-                    >
-                      <DownloadIcon className="size-4" />
-                      Download
-                    </ContextMenuItem>
-                    <ContextMenuItem asChild>
-                      <Link to={`/videos/${videoId}/thumbnails`}>
-                        <PencilIcon className="size-4" />
-                        Edit
-                      </Link>
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <CopyEntityLinkItems
-                      menu="context"
-                      entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
-                    />
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      variant="destructive"
-                      onClick={() => onDeleteThumbnail(thumbnail.id)}
-                    >
-                      <Trash2Icon className="size-4" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
+                  <EntityMenuContent
+                    menu="context"
+                    entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
+                    groups={thumbnailMenu.groupsFor({
+                      id: thumbnail.id,
+                      hasImage: true,
+                    })}
+                  />
                 </ContextMenu>
               );
             })}
