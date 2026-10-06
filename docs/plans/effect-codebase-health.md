@@ -237,6 +237,19 @@ style of the existing guards.
 >   each with a reason: UI status probes whose fallback is the safe default,
 >   cache sidecars where unreadable means a miss, FFmpeg's per-chunk drain
 >   handlers, and the Dropbox-token check that must reach its "refuse" branch.
+> - **`effect-promise`.** Measured at **45 in 9 files**. The plan's 48 also
+>   counted `test-utils/`, which the guard treats as test code. One went with
+>   the clip-service mutex in the `effect-run` PR. The clip-service handler's
+>   36 raw Drizzle calls now go through `dbCall` (`tryPromise` →
+>   `UnknownDBServiceError`). Autofill's two transactional writes do the
+>   same. OBS clip detection fails with `ObsClipDetectionError`. The Document
+>   Writer's model call fails with `WriterStreamError`. **44 → 5 hits**, each
+>   with a reason: three `acquireRelease` file-handle closes, a finalizer that
+>   cannot reject, and an in-memory `File.arrayBuffer()`.
+>   **Behaviour change:** a rejected query or OBS detection in the clip
+>   service is now a typed failure, not a defect. It rolls the transaction
+>   back as before, `catchAll` can see it, and `makeAction` answers 500 as
+>   before. `clip-service-handler.failures.test.ts` pins this.
 
 **Phase 4 (optional) — one checker instead of two.** Replace
 `@typescript/native-preview` with `typescript@7.0.2` and run
