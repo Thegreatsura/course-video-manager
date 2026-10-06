@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import type { Lesson } from "./course-view-types";
 
 export function filterLessons(
@@ -24,7 +25,7 @@ export function filterLessons(
       priorityFilter.includes(lesson.priority ?? 2);
     const passesIconFilter =
       iconFilter.length === 0 || iconFilter.includes(lesson.icon ?? "watch");
-    const passesTodoFilter = !todoFilter || lesson.authoringStatus === "todo";
+    const passesTodoFilter = !todoFilter || isTodoLesson(lesson);
     const passesSearch = (() => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();

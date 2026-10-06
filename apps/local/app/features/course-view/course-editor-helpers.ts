@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
 import type { Section } from "./course-view-types";
 import { arrayMove } from "@dnd-kit/sortable";
@@ -242,7 +243,7 @@ export function computeTodoCount(
           continue;
       }
 
-      if (lesson.authoringStatus === "todo") todo++;
+      if (isTodoLesson(lesson)) todo++;
     }
   }
   return todo;
@@ -252,22 +253,15 @@ export function computeCourseStats(sections: Section[]) {
   let totalLessons = 0;
   let todoCount = 0;
   let doneCount = 0;
-  let unsetCount = 0;
   let totalVideos = 0;
   let totalDurationSeconds = 0;
 
   for (const section of sections) {
     for (const lesson of section.lessons) {
       totalLessons++;
-      // Three states, counted separately, exactly as the publish-readiness
-      // walk counts them (`course-publish-readiness.ts`): `authoringStatus` is
-      // a nullable text column with no DB default, so `unset` is a real third
-      // state and NOT a synonym for done. Deriving done as `total - todo`
-      // reported a legacy course whose Lessons predate the field as 100%
-      // complete.
-      if (lesson.authoringStatus === "todo") todoCount++;
-      else if (lesson.authoringStatus === "done") doneCount++;
-      else unsetCount++;
+      // null authoringStatus means done (see effectiveAuthoringStatus).
+      if (isTodoLesson(lesson)) todoCount++;
+      else doneCount++;
       totalVideos += lesson.videos.length;
       for (const video of lesson.videos) {
         totalDurationSeconds += video.totalDuration;
@@ -282,7 +276,6 @@ export function computeCourseStats(sections: Section[]) {
     totalLessons,
     todoCount,
     doneCount,
-    unsetCount,
     totalVideos,
     totalDurationSeconds,
     percentageComplete,

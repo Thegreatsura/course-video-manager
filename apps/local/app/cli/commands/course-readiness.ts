@@ -178,11 +178,10 @@ OUTPUT (one pretty JSON object)
                         version tree (including Lessons no publish would ship,
                         because those are the work still to do):
                           sections
-                          lessons { total, todo, done, unset }
+                          lessons { total, todo, done }
                           videos  { total, exported, unexported, noClips }
-                        authoringStatus has no default, so a Lesson may be
-                        neither todo nor done: use 'unset' rather than deriving
-                        it, and note total - done overstates remaining work.
+                        a Lesson with no authoringStatus counts as done,
+                        so todo + done === total.
                         noClips = a Video with no Clips yet, so nothing to export.
 
 NOTE ON FLAG ORDER

@@ -82,6 +82,38 @@ function makeVersion(
 }
 
 describe("changelog-service", () => {
+  describe("legacy lessons with no authoringStatus count as done", () => {
+    const withStatus = (
+      status: "todo" | "done" | null,
+      id: string,
+      prev: string | null
+    ) => ({
+      ...makeLesson(id, "01.01-welcome", prev, ["Hello"]),
+      authoringStatus: status,
+    });
+    const versionsWith = (
+      prev: "todo" | "done" | null,
+      cur: "todo" | "done" | null
+    ) => [
+      makeVersion("v2", "v2.0", [
+        makeSection("s2", "01-intro", [withStatus(cur, "l2", "l1")], "s1"),
+      ]),
+      makeVersion("v1", "v1.0", [
+        makeSection("s1", "01-intro", [withStatus(prev, "l1", null)]),
+      ]),
+    ];
+
+    it("reports a null lesson marked todo as Marked TODO", () => {
+      const changelog = generateChangelog(versionsWith(null, "todo"));
+      expect(changelog).toContain("#### Marked TODO");
+    });
+
+    it("reports nothing when a null lesson becomes done", () => {
+      const changelog = generateChangelog(versionsWith(null, "done"));
+      expect(changelog).not.toContain("#### Marked");
+    });
+  });
+
   describe("lesson transitions via empty-section filtering", () => {
     it("detects a lesson appearing (section gained a path) as new", () => {
       // Previous version: the lesson was filtered out (empty section), so it's not in the data
