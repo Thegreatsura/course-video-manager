@@ -1,0 +1,238 @@
+{
+  "effect-run": [
+    {
+      "file": "apps/local/app/features/course-view/course-view-loader.server.ts",
+      "count": 2,
+      "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
+    },
+    {
+      "file": "apps/local/app/features/diagrams/diagram-playground-active.loader.server.ts",
+      "count": 1,
+      "reason": "Hand-rolled 500 pipeline in a loader helper called without route args; move to makeLoader with its caller."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.ai-hero.tsx",
+      "count": 1,
+      "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.edit.tsx",
+      "count": 1,
+      "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.lesson.tsx",
+      "count": 1,
+      "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.move-to-course.tsx",
+      "count": 1,
+      "reason": "Hand-rolled error pipeline with its own 404 text ('Not found'); makeAction would echo the error's message instead."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.skills-changelog.tsx",
+      "count": 1,
+      "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
+    },
+    {
+      "file": "apps/local/app/routes/api.auth.dropbox.callback.ts",
+      "count": 1,
+      "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
+    },
+    {
+      "file": "apps/local/app/routes/api.auth.dropbox.initiate.ts",
+      "count": 1,
+      "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
+    },
+    {
+      "file": "apps/local/app/routes/api.auth.google.callback.ts",
+      "count": 1,
+      "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
+    },
+    {
+      "file": "apps/local/app/routes/api.auth.google.initiate.ts",
+      "count": 1,
+      "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
+    },
+    {
+      "file": "apps/local/app/routes/api.clip-service.ts",
+      "count": 2,
+      "reason": "VideoProcessingAdapter / LoggerAdapter are Promise and void callbacks into the clip-service handler; making the adapters Effect-returning removes both runs."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.autofill-chapters.ts",
+      "count": 1,
+      "reason": "Runs inside a ReadableStream's start callback; moving it onto createSseResponse (the SSE boundary) is the fix."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.stream.ts",
+      "count": 1,
+      "reason": "Range-request loader returning a raw 206/404 Response; the Effect only resolves the export path before plain-Node streaming."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.upload.ts",
+      "count": 1,
+      "reason": "A thumbnail lookup before the action hands off to createSseResponse; fold it into the SSE program to remove."
+    },
+    {
+      "file": "apps/local/app/routes/videos.$videoId.export-to-davinci-resolve.ts",
+      "count": 1,
+      "reason": "Hand-rolled error pipeline with its own 404 text ('Video not found'); makeAction would echo the error's message instead."
+    },
+    {
+      "file": "apps/local/app/services/ffmpeg-video-logger.ts",
+      "count": 1,
+      "reason": "Sync bridge from FFmpeg's plain onLog callback; the log write is synchronous, so runSync is exact (see the file comment)."
+    }
+  ],
+  "swallowed-catch": [
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.animatic.tsx",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.thumbnails.$thumbnailId.delete.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.thumbnails.$thumbnailId.update.ts",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.export-file-exists.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.posted-status.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.stream.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.upload-images.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.vertical-export-exists.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/course-loader-fs.ts",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/export-sha256-sidecar.ts",
+      "count": 3,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/ffmpeg-commands.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/ffmpeg-run.ts",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/footage-cache.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/footage-transcription.ts",
+      "count": 3,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/overlay-content-renderer.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/overlay-render-cache.server.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/pending-recovery.server.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/render-vertical-video-service.ts",
+      "count": 4,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/video-export-passes.ts",
+      "count": 4,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/video-processing-service.ts",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    }
+  ],
+  "effect-promise": [
+    {
+      "file": "apps/local/app/routes/api.video-files.create.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/routes/videos.$videoId.document-completions.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/ai-hero-upload-service.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/autofill-service.ts",
+      "count": 2,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/clip-service-handler.helpers.ts",
+      "count": 14,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/clip-service-handler.ts",
+      "count": 22,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/dropbox-http-client.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/frame-capture-service.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    },
+    {
+      "file": "apps/local/app/services/youtube-upload-service.ts",
+      "count": 1,
+      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+    }
+  ]
+}
