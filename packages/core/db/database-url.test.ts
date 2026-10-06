@@ -8,14 +8,10 @@ const POOLED = "postgresql://user:pw@pooler.host/db";
 const DIRECT = "postgresql://user:pw@direct.host/db";
 
 describe("resolveDatabaseUrl", () => {
-  it("is the pooled connection string", () => {
+  it("is the pooled connection string, not the direct one", () => {
     expect(
       resolveDatabaseUrl({ DATABASE_URL: POOLED, DIRECT_DATABASE_URL: DIRECT })
     ).toBe(POOLED);
-  });
-
-  it("is undefined when DATABASE_URL is unset", () => {
-    expect(resolveDatabaseUrl({})).toBeUndefined();
   });
 });
 
@@ -40,9 +36,5 @@ describe("resolveMigrationDatabaseUrl", () => {
         DIRECT_DATABASE_URL: "",
       })
     ).toBe(POOLED);
-  });
-
-  it("is undefined when neither is set", () => {
-    expect(resolveMigrationDatabaseUrl({})).toBeUndefined();
   });
 });

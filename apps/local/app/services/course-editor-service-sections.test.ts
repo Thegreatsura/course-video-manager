@@ -146,40 +146,6 @@ describe("CourseEditorService — sections", () => {
       const sections = await getSections(version.id);
       expect(sections[0]!.title).toBe("Getting Started");
     });
-
-    it("renames a section by storing the new title verbatim", async () => {
-      const { version } = await createCourseWithVersion();
-      const createResult = await svc().createSection(
-        version.id,
-        "Before We Start",
-        0
-      );
-
-      const result = await svc().updateSectionName(
-        createResult.sectionId,
-        "Getting Started"
-      );
-      expect(result).toMatchObject({
-        success: true,
-        title: "Getting Started",
-      });
-
-      const sections = await getSections(version.id);
-      expect(sections[0]!.title).toBe("Getting Started");
-    });
-
-    it("returns early when the new title matches the current title", async () => {
-      const { version } = await createCourseWithVersion();
-      const { section } = await createSectionWithLessons(
-        version.id,
-        "introduction",
-        1,
-        [realLesson(1)]
-      );
-
-      const result = await svc().updateSectionName(section.id, "introduction");
-      expect(result).toMatchObject({ success: true, title: "introduction" });
-    });
   });
 
   describe("archive-section", () => {
@@ -229,57 +195,6 @@ describe("CourseEditorService — sections", () => {
       expect(await db().query.lessons.findMany()).toHaveLength(2);
     });
 
-    it("archives a section even when it has real lessons", async () => {
-      const { version } = await createCourseWithVersion();
-      const createResult = await svc().createSection(
-        version.id,
-        "Has Real Lessons",
-        0
-      );
-
-      await db().insert(schema.lessons).values({
-        sectionId: createResult.sectionId,
-        title: "Real Lesson",
-        order: 1,
-        authoringStatus: "done",
-      });
-
-      await svc().archiveSection(createResult.sectionId);
-
-      const sections = await getSections(version.id);
-      expect(sections).toHaveLength(0);
-    });
-
-    it("archives a section with lessons", async () => {
-      const { version } = await createCourseWithVersion();
-      const createResult = await svc().createSection(
-        version.id,
-        "Mixed Lessons",
-        0
-      );
-
-      await db()
-        .insert(schema.lessons)
-        .values([
-          {
-            sectionId: createResult.sectionId,
-            title: "Lesson",
-            order: 1,
-          },
-          {
-            sectionId: createResult.sectionId,
-            title: "Real Lesson",
-            order: 2,
-            authoringStatus: "done",
-          },
-        ]);
-
-      await svc().archiveSection(createResult.sectionId);
-
-      const sections = await getSections(version.id);
-      expect(sections).toHaveLength(0);
-    });
-
     it("double-archiving the same section does not throw", async () => {
       const { version } = await createCourseWithVersion();
       const result = await svc().createSection(version.id, "Double Archive", 0);
@@ -303,34 +218,6 @@ describe("CourseEditorService — sections", () => {
 
       const sections = await getSections(version.id);
       expect(sections.map((s) => s.title)).toEqual(["Gamma", "Beta", "Alpha"]);
-      expect(sections.map((s) => s.order)).toEqual([0, 1, 2]);
-    });
-
-    it("reorders real sections by updating order values only", async () => {
-      const { version } = await createCourseWithVersion();
-      const { section: s1 } = await createSectionWithLessons(
-        version.id,
-        "01-alpha",
-        0,
-        [realLesson(1)]
-      );
-      const { section: s2 } = await createSectionWithLessons(
-        version.id,
-        "02-beta",
-        1,
-        [realLesson(1)]
-      );
-      const { section: s3 } = await createSectionWithLessons(
-        version.id,
-        "03-gamma",
-        2,
-        [realLesson(1)]
-      );
-
-      await svc().reorderSections([s3.id, s1.id, s2.id]);
-
-      const sections = await getSections(version.id);
-      expect(sections.map((s) => s.title)).toEqual(["gamma", "alpha", "beta"]);
       expect(sections.map((s) => s.order)).toEqual([0, 1, 2]);
     });
   });

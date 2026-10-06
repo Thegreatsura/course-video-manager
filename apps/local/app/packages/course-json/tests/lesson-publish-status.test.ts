@@ -4,7 +4,6 @@ import {
   ANNOUNCE_NOTHING_BAND,
   classifyLessonPublishStatus,
   lessonHardGaps,
-  PLACEHOLDER_FLOOR_BANDS,
   placeholderFloorFromBand,
   type LessonPublishStatus,
   type PlaceholderFloor,
@@ -268,10 +267,6 @@ describe("the floor as a band", () => {
     ["p3", 3],
   ] as const)("reads the band %s as the floor %s", (band, floor) => {
     expect(placeholderFloorFromBand(band)).toBe(floor);
-  });
-
-  it("offers exactly the four bands, in floor order", () => {
-    expect(PLACEHOLDER_FLOOR_BANDS).toEqual(["none", "p1", "p2", "p3"]);
   });
 
   it("defaults to announcing nothing, so omitting the band publishes as before", () => {

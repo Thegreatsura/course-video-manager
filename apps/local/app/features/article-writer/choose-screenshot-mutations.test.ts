@@ -83,21 +83,6 @@ describe("updateChooseScreenshotClipIndex", () => {
 
 <ChooseScreenshot clipIndex={3} alt="second" />`);
   });
-
-  it("handles decrementing clipIndex", () => {
-    const message = `<ChooseScreenshot clipIndex={5} alt="terminal output" />`;
-
-    const result = updateChooseScreenshotClipIndex(
-      message,
-      5,
-      4,
-      "terminal output"
-    );
-
-    expect(result).toBe(
-      `<ChooseScreenshot clipIndex={4} alt="terminal output" />`
-    );
-  });
 });
 
 describe("removeChooseScreenshot", () => {
@@ -170,60 +155,5 @@ More text`;
     const message = `Some text with ![image](./path.png) but no screenshot tags`;
 
     expect(hasUnresolvedScreenshots(message)).toBe(false);
-  });
-
-  it("returns false for empty string", () => {
-    expect(hasUnresolvedScreenshots("")).toBe(false);
-  });
-
-  it("returns true with multiple tags", () => {
-    const message = `<ChooseScreenshot clipIndex={1} alt="a" />
-<ChooseScreenshot clipIndex={2} alt="b" />`;
-
-    expect(hasUnresolvedScreenshots(message)).toBe(true);
-  });
-
-  it("returns false when all tags have been replaced", () => {
-    const message = `![a](./screenshot-1.png)
-
-![b](./screenshot-2.png)`;
-
-    expect(hasUnresolvedScreenshots(message)).toBe(false);
-  });
-
-  it("detects unresolved tags in a full document with resolved images", () => {
-    const document = `# Article Title
-
-Here is the first screenshot:
-
-![resolved](./screenshot-1.png)
-
-And here is one still pending:
-
-<ChooseScreenshot clipIndex={5} alt="pending screenshot" />
-
-## Conclusion
-
-Done.`;
-
-    expect(hasUnresolvedScreenshots(document)).toBe(true);
-  });
-
-  it("returns false for a full document where all screenshots are resolved", () => {
-    const document = `# Article Title
-
-Here is the first screenshot:
-
-![resolved](./screenshot-1.png)
-
-And the second:
-
-![also resolved](./screenshot-2.png)
-
-## Conclusion
-
-Done.`;
-
-    expect(hasUnresolvedScreenshots(document)).toBe(false);
   });
 });

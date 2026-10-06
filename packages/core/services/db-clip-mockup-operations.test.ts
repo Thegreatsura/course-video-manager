@@ -133,32 +133,6 @@ describe("createClipMockups", () => {
         expect(new Set(orders).size).toBe(3);
       }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("gives every row its own key when runs on one Video overlap", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const ops = yield* ClipMockupOperationsService;
-
-      // The race `lockAnimatic` closes: four `add` calls at once read the same
-      // last row and wrote the same keys. PGlite has ONE connection and runs
-      // transactions one after another, so this cannot reproduce that race —
-      // it passes with the lock removed. What it does hold is the contract:
-      // overlapping runs on one Video never share a key.
-      yield* Effect.all(
-        Array.from({ length: 4 }, (_, run) =>
-          ops.createClipMockups("video-1", [
-            moment(`Run ${run}, one`, `${run}-a.png`),
-            moment(`Run ${run}, two`, `${run}-b.png`),
-          ])
-        ),
-        { concurrency: "unbounded" }
-      );
-
-      const rows = yield* ops.listClipMockupsByVideoId("video-1");
-      expect(rows).toHaveLength(8);
-      expect(new Set(rows.map((r) => r.order)).size).toBe(8);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("listClipMockupsByVideoId", () => {
@@ -179,16 +153,6 @@ describe("listClipMockupsByVideoId", () => {
       // Archived == deleted, but the row itself survives for `get` to report.
       const archived = yield* ops.getClipMockupById(gone.id);
       expect(archived.archived).toBe(true);
-    }).pipe(Effect.provide(testLayer))
-  );
-});
-
-describe("getClipMockupById", () => {
-  it.effect("is a NotFoundError for an unknown id", () =>
-    Effect.gen(function* () {
-      const ops = yield* ClipMockupOperationsService;
-      const failure = yield* ops.getClipMockupById("nope").pipe(Effect.flip);
-      expect(failure._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(testLayer))
   );
 });

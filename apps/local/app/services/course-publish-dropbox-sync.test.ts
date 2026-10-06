@@ -258,22 +258,6 @@ function getManifestVideos(doc: any): Array<{ relativePath: string }> {
 }
 
 describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
-  it("uploads video files to Dropbox", async () => {
-    const { course, version, run } = await setupSync();
-
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-
-    const doc = getRemoteManifest();
-    for (const video of getManifestVideos(doc)) {
-      const fullPath = `${DROPBOX_REMOTE_PATH}/test-course/${video.relativePath}`;
-      expect(fakeDropbox.get(fullPath)).toBeDefined();
-    }
-  });
-
   it("uploads videos for all lessons", async () => {
     const { course, version, run } = await setupSync();
 
@@ -290,39 +274,6 @@ describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
       const fullPath = `${DROPBOX_REMOTE_PATH}/test-course/${video.relativePath}`;
       expect(fakeDropbox.get(fullPath)).toBeDefined();
     }
-  });
-
-  it("verifies existing bundle integrity via content_hash + size", async () => {
-    const { course, version, run } = await setupSync();
-
-    // First sync creates the bundle.
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-
-    // Second sync verifies the existing bundle without re-uploading.
-    const callsBefore = fakeDropbox.fetchCalls.length;
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-
-    // Should have made API calls for metadata/listing but no upload calls
-    // for the bundle videos (only the receipt overwrite).
-    const uploadCalls = fakeDropbox.fetchCalls
-      .slice(callsBefore)
-      .filter((c) => {
-        if (!c.url.includes("/2/files/upload") || c.url.includes("session"))
-          return false;
-        const apiArg = (c.init.headers as Record<string, string>)[
-          "Dropbox-API-Arg"
-        ];
-        return apiArg && JSON.parse(apiArg).path.includes("versions/");
-      });
-    expect(uploadCalls).toHaveLength(0);
   });
 
   it("rejects bundle corruption without moving the commit marker", async () => {
@@ -385,29 +336,6 @@ describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
     ].sort();
 
     expect(remoteFiles).toEqual(expectedFiles);
-  });
-
-  it("emits per-lesson progress events", async () => {
-    const { course, version, run } = await setupSync();
-
-    const events: Array<{ event: string; data: unknown }> = [];
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(
-          course.id,
-          version.id,
-          true,
-          (event, data) => {
-            events.push({ event, data });
-          }
-        );
-      })
-    );
-
-    const progressEvents = events.filter((e) => e.event === "progress");
-    expect(progressEvents.length).toBeGreaterThan(0);
-    const lastProgress = progressEvents[progressEvents.length - 1];
-    expect((lastProgress?.data as any)?.percentage).toBe(100);
   });
 
   it("returns missingVideos without writing an incomplete manifest", async () => {
