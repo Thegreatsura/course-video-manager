@@ -1,6 +1,6 @@
 ---
 name: verify-cvm
-description: "Drive the real Course Video Manager web app in a browser and capture proof of what it did. Use to verify a change before opening a PR, to reproduce a reported UI bug, to see what a page actually renders, or to capture a screenshot of app behaviour. Runs against the PRODUCTION database, so read the write rules before driving."
+description: "Drive the real Course Video Manager web app in a browser and capture proof of what it did. Use to verify a change before opening a PR, to reproduce a reported UI bug, to see what a page actually renders, or to capture a screenshot of app behaviour. Runs on a per-run test clone when ~/.config/cvm/verify.env exists, otherwise on the PRODUCTION database — check which before driving."
 ---
 
 # Verify CVM
@@ -9,11 +9,40 @@ You start a Course Video Manager of your own, drive it through a browser the
 way Matt does, and leave behind evidence a human can read without rerunning
 anything.
 
-**The database is production.** There is no seed data and no test fixture: every
-Course, Video, Clip and Deliverable you see is Matt's real work. So this skill
-is **read-only by default**, and the one thing it always produces is a **Write
-Ledger** — a per-run record of every insert, update and delete the database took
-while you were driving. A clean Ledger is the proof you changed nothing.
+## Which database: test clone or PRODUCTION
+
+`launch` runs in one of two modes, prints which, and records it in the run
+directory so the run never drifts into the other:
+
+```text
+DB: test clone cvm_verify_20261006_141502_88231 (writes allowed, dropped on cleanup)
+DB: PRODUCTION (read-only rules apply)
+```
+
+- **Test clone** — when `~/.config/cvm/verify.env` (or an exported
+  `VERIFY_DATABASE_URL`) names the local template database. `launch` clones the
+  template into a database of the run's own, starts the server on it, and
+  `cleanup` drops it. The data is a recent copy of Matt's real work minus the
+  credential tables, so **writes are allowed**: they land in a database only
+  this run uses. The [Write Ledger](#the-write-ledger) is per run, and every row
+  in it is yours. No `.env` is needed, and file writes go to `scratch/` in the
+  run directory.
+- **PRODUCTION** — when neither is set. Every Course, Video, Clip and
+  Deliverable you see is Matt's real work, so the skill is **read-only by
+  default**, and the Write Ledger is the proof you changed nothing. Read
+  [Writing to production](#writing-to-production) before you touch anything.
+
+`$V mode` prints which mode `launch` would use without connecting to anything.
+
+**Never run `scripts/verify-snapshot.sh` (`pnpm db:verify-snapshot`) or
+`scripts/setup-verify-db.sh`.** The snapshot is the one step that reads
+production; only Matt runs it, from his own terminal, and both scripts refuse an
+agent's shell. If `launch` says the template is missing or Postgres is
+unreachable, stop and tell Matt — do not work around it by falling back to
+production on your own.
+
+The one thing a run always produces is a **Write Ledger** — a per-run record of
+every insert, update and delete the database took while you were driving.
 
 The harness is one script. Every command below is a verb of it:
 
@@ -24,14 +53,17 @@ The harness is one script. Every command below is a verb of it:
 ## Launch
 
 The checkout you drive must be your own — a worktree, not Matt's working copy.
-It needs two things Git does not carry:
+It needs `node_modules`, which Git does not carry:
 
 ```bash
 pnpm install                 # ~seconds from the pnpm store
-ln -s ../../.env .env        # from a .worktrees/<name> worktree; adjust depth otherwise
 ```
 
-`.env` holds `DATABASE_URL`. Without it the server starts and every page 500s.
+**Production mode only** also needs `.env`, which holds `DATABASE_URL`; without
+it the server starts and every page 500s. `ln -s ../../.env .env` from a
+`.worktrees/<name>` worktree (adjust the depth otherwise). In test-clone mode
+**do not** link `.env`: `launch` exports the clone's URL itself, and `.env`
+would only load production's Dropbox and Anthropic keys into your server.
 
 ```bash
 V=.claude/skills/verify-cvm/scripts/verify.sh
@@ -48,6 +80,7 @@ the pid, the port, the browser session name, the server log and all your
 evidence:
 
 ```text
+DB: test clone cvm_verify_20260925_160913_1328614 (writes allowed, dropped on cleanup)
 ready:   http://localhost:5203/  (pid 1328618)
 run:     /…/.verify/run-20260925-160913-1328614
 session: verify-cvm-20260925-160913-1328614
@@ -74,9 +107,11 @@ Two consequences:
 
 - With more than one run live, every verb **requires `VERIFY_RUN`** and refuses
   to guess. With exactly one, it finds it for you.
-- The Write Ledger's counters are database-wide, so **sibling runs show up in
-  each other's Ledgers**. `doctor` names the other live runs for exactly this
-  reason. Read [the Write Ledger](#the-write-ledger) on how to resolve one.
+- In production mode the Write Ledger's counters are database-wide, so
+  **sibling runs show up in each other's Ledgers**. `doctor` names the other
+  live runs for exactly this reason. Read [the Write Ledger](#the-write-ledger)
+  on how to resolve one. Test-clone runs each have their own database, so they
+  never see each other.
 
 ## Doctor
 
@@ -87,12 +122,13 @@ $V doctor
 ```
 
 It reports, read-only: the server process alive, the run's port outside the
-CVM's band, the port owned by _this_ run's pid, `/` answering 200, which database `.env` points at, psql reaching it,
+CVM's band, the port owned by _this_ run's pid, `/` answering 200, which database the run is on (`DB: test clone …` or
+`DB: PRODUCTION …`), psql reaching it,
 and which other verification runs are live. Any FAIL means stop and fix — a
 snapshot taken against someone else's server proves nothing.
 
 **Drive only the port your own run reports.** 5173 is Matt's CVM: it runs all
-day against this same production database, and driving it would type into the
+day against the production database, and driving it would type into the
 window he is looking at. `doctor` fails outright on any port in 5170-5199 for
 that reason. Other ports in the verification band belong to sibling runs.
 
@@ -146,7 +182,12 @@ $V guard check        # writes WRITE-LEDGER.md into the run directory
 updates and deletes each table has taken. It costs a catalog read, never a table
 scan, so run it around every drive.
 
-The counters are **database-wide**: Matt's own instance, the deployed
+**In test-clone mode** the database is this run's alone, so every moved
+counter is this run's own write. Writes are allowed; the Ledger is your record
+of them. Check each table it names is one you meant to write, and report any
+you did not expect — that is a bug the run found. Forensics works the same way.
+
+**In production mode** the counters are **database-wide**: Matt's own instance, the deployed
 `apps/remote` and every sibling verification run write to the same tables. So a
 moved counter is a lead, not a verdict. Name the rows behind it:
 
@@ -159,13 +200,18 @@ inside your window, into `forensics-<table>.txt`. Keep your window tight — run
 `guard baseline` immediately before driving, not at launch — so fewer of
 somebody else's rows fall inside it.
 
-**Report a non-clean Ledger to Matt in your reply, at the top, before anything
+**In production mode, report a non-clean Ledger to Matt in your reply, at the top, before anything
 else** — the table, the row ids from forensics, and what you were driving at the
 time. Say plainly whether you believe it was you, his own instance, or a sibling
 run. This holds even when you are confident it was not you: he asked to hear
 about it either way, and a false alarm costs him one glance.
 
 ## Writing to production
+
+These rules are for **production mode**. In test-clone mode, write whatever the
+verification needs — create, edit, reorder, archive, delete — and skip the
+three rules below. The off-limits pages still hold in both modes: see the last
+paragraph.
 
 Reading proves most things. When a change genuinely needs a write to verify —
 a form submit, a reorder, a status toggle — three rules hold:
@@ -179,8 +225,8 @@ a form submit, a reorder, a status toggle — three rules hold:
    Most CVM nouns soft-delete (`archived`), so the row survives — say so in your
    report rather than claiming you removed it.
 
-Two pages are off limits to writes entirely, because their writes leave the
-database: the **publish page** (`/courses/:id/publish`) Submits a Draft Version
+Two pages are off limits to writes entirely, **in both modes**, because their
+writes leave the database: the **publish page** (`/courses/:id/publish`) Submits a Draft Version
 and ships a Bundle to Dropbox, and **Autofill** on that same page spends
 Anthropic tokens rewriting real Video descriptions and Chapters. Observe them,
 screenshot them, read their counts — press nothing.
@@ -195,8 +241,14 @@ Everything lands in the run directory `launch` printed. What makes it a proof:
   state after, not only the final screen. `$AB screenshot "$VERIFY_RUN/<step>.png"`
   and `$AB snapshot -i -c > "$VERIFY_RUN/<step>.snapshot.txt"`.
 - **The side effect too.** A page that looks right over a row that did not
-  change is a failure. Check the Ledger, and read the row back with `cvm` where
-  the change was meant to persist.
+  change is a failure. Check the Ledger, and read the row back where the change
+  was meant to persist:
+  - **test clone**: `$V sql 'select … from "course-video-manager_video" where …'`
+    (or the query on stdin). It reads this run's clone, read-only, and logs the
+    query and result to `sql.log` in the run directory. **Do not use `cvm` here**
+    — it reads production through the deployed `apps/remote`, so it cannot see
+    your clone's rows.
+  - **production**: read the row back with `cvm`. `sql` refuses production runs.
 - **The console.** `$AB errors` and `$AB console` catch the hydration failure a
   screenshot renders straight through.
 
@@ -212,7 +264,9 @@ $V cleanup --all    # every live run on the box
 
 It kills the pid this run recorded — never a process matched by name, which
 would take Matt's server and every sibling run with it — closes this run's
-browser session, and leaves the rest alone. **The evidence survives**: the run
+browser session, **drops the run's test clone** in test-clone mode, and leaves
+the rest alone. `--all` also drops clones left behind by runs whose server
+already died. **The evidence survives**: the run
 directory is left whole, and its path is printed. Quote that path in your
 report.
 
