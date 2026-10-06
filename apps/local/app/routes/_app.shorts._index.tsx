@@ -224,7 +224,7 @@ export default function ShortsIndex(props: Route.ComponentProps) {
                       postShort: () => post(video, "both"),
                       postToYouTube: () => post(video, "youtube"),
                       postToTikTok: () => post(video, "tiktok"),
-                      delete: () => dialogs.confirmDelete(video),
+                      archive: () => dialogs.archive(video),
                     })}
                   />
                 </ContextMenu>

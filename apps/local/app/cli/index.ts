@@ -34,7 +34,7 @@ Read-mostly: most verbs are READS. A growing set of nouns has WRITE verbs —
 (add/update/move/delete), 'overlay' (add/update/delete), 'section'
 (create/rename/move/archive), 'lesson'
 (create/update/move/archive), 'video'
-(create/move/update/archive), 'file' (add/delete), 'footage' (transcribe), 'pitch'
+(create/move/update/archive/unarchive), 'file' (add/delete), 'footage' (transcribe), 'pitch'
 (create/update), 'deliverable' (create/update/archive) and 'course' (publish).
 Every other verb is read-only, and each verb's own --help is authoritative about
 whether it reads or writes.

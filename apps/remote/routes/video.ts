@@ -5,7 +5,7 @@ import type { RemoteRuntime } from "../runtime.js";
 
 /**
  * The `video` verb group: `cvm video list | get | tree | transcript | script |
- * create | move | update | archive`.
+ * create | move | update | archive | unarchive`.
  *
  * `getVideoDeepById` is here for `cvm file`, which resolves a Video's
  * `lineageId` over HTTP and then reads the Video Files directory off local
@@ -72,4 +72,8 @@ export const videoRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/deleteVideo",
       forward(runtime, VideoOperationsService, "deleteVideo")
+    )
+    .post(
+      "/unarchiveVideo",
+      forward(runtime, VideoOperationsService, "unarchiveVideo")
     );
