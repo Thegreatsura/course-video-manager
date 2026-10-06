@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { MarkdownMonacoEditor } from "@/components/markdown-monaco-editor";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import { useConfirmDialog } from "@/features/action-menu/confirm-dialog";
+import { copyDocumentGroups, readmeGroups } from "./document-menus";
 import {
   Tooltip,
   TooltipContent,
@@ -21,9 +21,6 @@ import {
   CheckIcon,
   ImageIcon,
   Loader2Icon,
-  FileTextIcon,
-  FileTypeIcon,
-  PlusIcon,
   PencilIcon,
   EyeIcon,
   AlertTriangleIcon,
@@ -106,6 +103,7 @@ export const DocumentPanel = memo(function DocumentPanel({
   readOnly = false,
 }: DocumentPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const onDocumentChangeRef = useRef(onDocumentChange);
   onDocumentChangeRef.current = onDocumentChange;
   const readOnlyRef = useRef(readOnly);
@@ -275,6 +273,7 @@ export const DocumentPanel = memo(function DocumentPanel({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {confirmDialog}
       <div className="flex items-center gap-1 px-4 py-2 border-b">
         {/* Copy dropdown */}
         <DropdownMenu>
@@ -313,16 +312,13 @@ export const DocumentPanel = memo(function DocumentPanel({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={onCopyAsMarkdown}>
-              <FileTextIcon className="h-4 w-4 mr-2" />
-              Copy as Markdown
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onCopyAsRichText}>
-              <FileTypeIcon className="h-4 w-4 mr-2" />
-              Copy as Rich Text
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+          <ActionMenuContent
+            menu="dropdown"
+            groups={copyDocumentGroups({
+              onCopyAsMarkdown: () => onCopyAsMarkdown?.(),
+              onCopyAsRichText: () => onCopyAsRichText?.(),
+            })}
+          />
         </DropdownMenu>
 
         {/* Readme dropdown */}
@@ -357,27 +353,15 @@ export const DocumentPanel = memo(function DocumentPanel({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <DropdownMenuContent>
-              {availableFolders.map((folder, index) => (
-                <div key={folder}>
-                  {index > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    onSelect={() => onWriteToReadme("write", folder)}
-                  >
-                    <SaveIcon className="h-4 w-4 mr-2" />
-                    Write to {folder}/readme.md
-                  </DropdownMenuItem>
-                  {foldersWithReadme.has(folder) && (
-                    <DropdownMenuItem
-                      onSelect={() => onWriteToReadme("append", folder)}
-                    >
-                      <PlusIcon className="h-4 w-4 mr-2" />
-                      Append to {folder}/readme.md
-                    </DropdownMenuItem>
-                  )}
-                </div>
-              ))}
-            </DropdownMenuContent>
+            <ActionMenuContent
+              menu="dropdown"
+              groups={readmeGroups({
+                availableFolders,
+                foldersWithReadme,
+                onWriteToReadme,
+                confirm,
+              })}
+            />
           </DropdownMenu>
         )}
 
