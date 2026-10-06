@@ -71,12 +71,13 @@ interface MenuContentProps {
  * entity's actions in canonical group order (CODING_STANDARDS.md, "Action
  * menus") and closes the copy group with Copy Link / Copy ID. Build `groups`
  * once and render it from both doors: `menu="context"` on the right-click and
- * `menu="dropdown"` on the Actions / "…" button.
+ * `menu="dropdown"` on the Actions / "…" button. Pass `entity={null}` while
+ * the entity is still being saved: Copy Link / Copy ID show, disabled.
  */
 export function EntityMenuContent({
   entity,
   ...props
-}: MenuContentProps & { entity: EntityRef }) {
+}: MenuContentProps & { entity: EntityRef | null }) {
   return (
     <MenuContent {...props} appendToCopy={copyEntityLinkActions(entity)} />
   );
