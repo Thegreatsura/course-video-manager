@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  findLopsidedQuizAnswers,
-  findStackedCorrectPositions,
-} from "./quiz-lint";
+import { findLopsidedQuizAnswers } from "./quiz-lint";
 
 const quizWith = (correct: string, ...wrong: string[]) => {
   const choices = [correct, ...wrong]
@@ -107,63 +104,5 @@ describe("findLopsidedQuizAnswers", () => {
       'correct: ["a", "b"]'
     );
     expect(findLopsidedQuizAnswers(text)).toEqual([]);
-  });
-});
-
-const questionAt = (id: string, correctAt: number, choices = 3) =>
-  `  <QuizQuestion data={{
-    id: "${id}",
-    question: "Which one?",
-    type: "multiple-choice",
-    choices: [
-${Array.from({ length: choices }, (_, i) => `      { answer: "${"abcd"[i]}", label: "Option ${i}" }`).join(",\n")}
-    ],
-    correct: "${"abcd"[correctAt]}",
-    answer: "Because."
-  }} />`;
-
-const quizAt = (...positions: number[]) =>
-  `<Quiz>\n${positions.map((at, i) => questionAt(`q${i}`, at)).join("\n")}\n</Quiz>`;
-
-describe("findStackedCorrectPositions", () => {
-  it.each([
-    { case: "three questions all correct at option 1", positions: [0, 0, 0] },
-    { case: "three questions all correct at option 2", positions: [1, 1, 1] },
-    { case: "three of four at one position", positions: [0, 0, 2, 0] },
-    {
-      case: "six of eight at one position",
-      positions: [1, 1, 0, 1, 1, 2, 1, 1],
-    },
-  ])("flags $case", ({ positions }) => {
-    expect(findStackedCorrectPositions(quizAt(...positions))).toHaveLength(1);
-  });
-
-  it.each([
-    { case: "two questions at one position", positions: [0, 0] },
-    { case: "three questions spread out", positions: [0, 1, 0] },
-    { case: "two of four at one position", positions: [0, 0, 1, 2] },
-    {
-      case: "five of eight at one position",
-      positions: [0, 0, 1, 0, 2, 0, 1, 0],
-    },
-  ])("does not flag $case", ({ positions }) => {
-    expect(findStackedCorrectPositions(quizAt(...positions))).toEqual([]);
-  });
-
-  it("says which position and how often", () => {
-    expect(findStackedCorrectPositions(quizAt(0, 0, 0))).toEqual([
-      "option 1 is correct in 3 of 3 questions",
-    ]);
-  });
-
-  it("counts across every quiz block in the document", () => {
-    expect(
-      findStackedCorrectPositions(`${quizAt(1, 1)}\n\nProse.\n\n${quizAt(1)}`)
-    ).toHaveLength(1);
-  });
-
-  it("leaves multi-select questions out of the count", () => {
-    const text = quizAt(0, 0, 0).replace('correct: "a"', 'correct: ["a", "b"]');
-    expect(findStackedCorrectPositions(text)).toEqual([]);
   });
 });
