@@ -1,3 +1,4 @@
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 export const handle = { fullscreen: true };
 
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
@@ -274,6 +275,12 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
                     <PencilIcon className="size-4" />
                     Edit
                   </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <CopyEntityLinkItems
+                    menu="context"
+                    entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
+                  />
+                  <ContextMenuSeparator />
                   <ContextMenuItem
                     variant="destructive"
                     onClick={() => handleDelete(thumbnail.id)}

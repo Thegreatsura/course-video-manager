@@ -1,3 +1,4 @@
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { AddStandaloneVideoModal } from "@/components/add-standalone-video-modal";
 import { DeleteVideoModal } from "@/components/delete-video-modal";
 import { RenameVideoModal } from "@/components/rename-video-modal";
@@ -6,6 +7,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { UploadContext } from "@/features/upload-manager/upload-context";
@@ -167,6 +169,11 @@ export default function Component(props: Route.ComponentProps) {
                       </Link>
                     </ContextMenuTrigger>
                     <ContextMenuContent>
+                      <CopyEntityLinkItems
+                        menu="context"
+                        entity={{ type: "video", id: video.id }}
+                      />
+                      <ContextMenuSeparator />
                       <ContextMenuItem
                         onSelect={() => {
                           setVideoToRename({

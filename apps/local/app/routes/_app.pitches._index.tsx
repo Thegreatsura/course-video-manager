@@ -1,3 +1,4 @@
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import {
   EffortSelector,
   EFFORT_DOT_COLORS,
@@ -18,6 +19,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
@@ -479,6 +481,11 @@ function PitchRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <CopyEntityLinkItems
+          menu="context"
+          entity={{ type: "pitch", id: pitch.id }}
+        />
+        <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
           onSelect={() => {

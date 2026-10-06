@@ -247,6 +247,17 @@ or the `…` button on the entity itself) offer **the same set of actions**. The
 are two doors into one list: an action added to one appears in the other, so
 share the menu items between them rather than writing each list twice.
 
+### Every entity menu can copy its link and ID
+
+Every entity's right-click menu and Actions menu renders
+`<CopyEntityLinkItems entity={…} menu="context" | "dropdown" />`
+(`features/entity-links/`): "Copy Link", which copies the full app URL that opens the entity, and
+"Copy ID", which copies the id that `cvm` takes. Build entity URLs only in `entityDeepLink`. A new
+entity type gets its route there and a test case beside it. Never hand-roll a URL or a clipboard
+item in a menu. `entity-menus.test.ts` fails on any file that opens a menu without these items.
+A menu that is not about an entity, such as a value picker or an upload chooser, goes in that test's
+exemption list with a reason.
+
 ### Order the actions, and group the related ones
 
 Both menus present that shared list in a deliberate order, most-reached action
