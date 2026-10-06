@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import {
   ClipMockupCommentOperationsService,
@@ -34,7 +35,7 @@ import {
 // Options
 // ---------------------------------------------------------------------------
 
-const videoOpt = Options.text("video").pipe(
+const videoOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("Parent Video id (required).")
 );
 
@@ -42,22 +43,25 @@ const bodyOpt = Options.text("body").pipe(
   Options.withDescription("The comment's text. Required.")
 );
 
-const clipMockupOpt = Options.text("clip-mockup").pipe(
+const clipMockupOpt = entityIdOption("clip-mockup", "clip-mockup").pipe(
   Options.withDescription(
     "Pin the comment to this Clip Mockup id (mutually exclusive with --clip-mockup-chapter)."
   ),
   Options.optional
 );
 
-const clipMockupChapterOpt = Options.text("clip-mockup-chapter").pipe(
+const clipMockupChapterOpt = entityIdOption(
+  "clip-mockup-chapter",
+  "clip-mockup-chapter"
+).pipe(
   Options.withDescription(
     "Pin the comment to this Clip Mockup Chapter id (mutually exclusive with --clip-mockup)."
   ),
   Options.optional
 );
 
-const idArg = Args.text({ name: "id" });
-const idArgs = Args.text({ name: "id" }).pipe(Args.repeated);
+const idArg = entityIdArg("clip-mockup-comment");
+const idArgs = entityIdArg("clip-mockup-comment").pipe(Args.repeated);
 
 // ---------------------------------------------------------------------------
 // Shared helpers

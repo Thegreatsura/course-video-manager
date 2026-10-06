@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { Effect } from "effect";
 import { courseSearchCmd } from "./search";
 import { publishCmd } from "./course-publish";
@@ -18,8 +19,8 @@ import {
 // Shared option/arg definitions
 // ---------------------------------------------------------------------------
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
-const id = Args.text({ name: "id" });
+const ids = entityIdArg("course").pipe(Args.repeated);
+const id = entityIdArg("course");
 const archived = Options.boolean("archived");
 const version = Options.text("course-version").pipe(Options.optional);
 const depth = Options.text("depth").pipe(Options.withDefault("1"));

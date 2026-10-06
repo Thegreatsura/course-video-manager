@@ -252,8 +252,11 @@ share the menu items between them rather than writing each list twice.
 Every entity's right-click menu and Actions menu renders
 `<CopyEntityLinkItems entity={…} menu="context" | "dropdown" />`
 (`features/entity-links/`): "Copy Link", which copies the full app URL that opens the entity, and
-"Copy ID", which copies the id that `cvm` takes. Build entity URLs only in `entityDeepLink`. A new
-entity type gets its route there and a test case beside it. Never hand-roll a URL or a clipboard
+"Copy ID", which copies the id that `cvm` takes. Build entity URLs only in `entityDeepLink`, and
+read them back only with its inverse `parseEntityRef`; `cvm` accepts a link anywhere it takes an id
+because every id argument is declared through `cli/entity-id.ts`. A link names its exact entity:
+one shown on a parent's page carries its own id in a `?<type>=<id>` query param. A new entity type
+gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard
 item in a menu. `entity-menus.test.ts` fails on any file that opens a menu without these items.
 A menu that is not about an entity, such as a value picker or an upload chooser, goes in that test's
 exemption list with a reason.

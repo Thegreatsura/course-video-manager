@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { Effect } from "effect";
 import {
   SearchOperationsService,
@@ -141,7 +142,6 @@ const runSearch = (
 // ---------------------------------------------------------------------------
 
 const query = Args.text({ name: "query" });
-const scopeId = Args.text({ name: "id" });
 const typeOpt = Options.text("type").pipe(Options.repeated);
 const limitOpt = Options.integer("limit").pipe(
   Options.withDefault(DEFAULT_LIMIT),
@@ -235,7 +235,7 @@ export const searchCommand = Command.make(
 const makeScopedSearchCmd = (scope: "course" | "section" | "lesson") =>
   Command.make(
     "search",
-    { id: scopeId, query, type: typeOpt, limit: limitOpt },
+    { id: entityIdArg(scope), query, type: typeOpt, limit: limitOpt },
     ({ id, query, type, limit }) => runSearch(scope, id, query, type, limit)
   ).pipe(Command.withDescription(detail(scopedHelp(scope, APPLICABLE[scope]))));
 

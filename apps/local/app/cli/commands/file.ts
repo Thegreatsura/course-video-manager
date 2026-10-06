@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdOption } from "../entity-id";
 import { FileSystem } from "@effect/platform";
 import { Effect, Option } from "effect";
 import path from "node:path";
@@ -31,7 +32,7 @@ import { HELP, LIST_HELP, ADD_HELP, GET_HELP, DELETE_HELP } from "./file.help";
 // Options / Args
 // ---------------------------------------------------------------------------
 
-const videoOption = Options.text("video").pipe(
+const videoOption = entityIdOption("video", "video").pipe(
   Options.withDescription("The Video id whose files to operate on (required).")
 );
 

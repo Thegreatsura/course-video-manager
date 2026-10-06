@@ -1,4 +1,5 @@
-import { Args, Command, Options } from "@effect/cli";
+import { Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Option } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
@@ -36,7 +37,7 @@ import {
  * never disagree.
  */
 
-const courseId = Args.text({ name: "courseId" });
+const courseId = entityIdArg("course", "courseId");
 
 const versionOpt = Options.text("course-version").pipe(
   Options.optional,

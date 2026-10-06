@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdOption } from "../entity-id";
 import { Effect } from "effect";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import {
@@ -112,7 +113,7 @@ EXAMPLES
 // list --course <id>
 // ---------------------------------------------------------------------------
 
-const courseOpt = Options.text("course").pipe(
+const courseOpt = entityIdOption("course", "course").pipe(
   Options.withDescription("id of the owning Course")
 );
 

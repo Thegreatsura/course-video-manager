@@ -1,4 +1,5 @@
-import { Args, Command, Options } from "@effect/cli";
+import { Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { DrizzleService } from "@/services/drizzle-service.server";
@@ -89,7 +90,7 @@ const publishLayer = CoursePublishService.Default.pipe(
 // options / args
 // ---------------------------------------------------------------------------
 
-const courseId = Args.text({ name: "courseId" });
+const courseId = entityIdArg("course", "courseId");
 
 const nameOpt = Options.text("name").pipe(
   Options.withDescription(

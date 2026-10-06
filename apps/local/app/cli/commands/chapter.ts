@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -25,7 +26,7 @@ import {
 // Options / Args
 // ---------------------------------------------------------------------------
 
-const videoOpt = Options.text("video").pipe(
+const videoOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("Parent Video id (required).")
 );
 
@@ -33,22 +34,22 @@ const titleOpt = Options.text("title").pipe(
   Options.withDescription("The Chapter's title (its 'name'). Required.")
 );
 
-const beforeOpt = Options.text("before").pipe(
+const beforeOpt = entityIdOption("before", ["clip", "chapter"]).pipe(
   Options.withDescription(
     "Place immediately before this clip/chapter id (mutually exclusive with --after)."
   ),
   Options.optional
 );
 
-const afterOpt = Options.text("after").pipe(
+const afterOpt = entityIdOption("after", ["clip", "chapter"]).pipe(
   Options.withDescription(
     "Place immediately after this clip/chapter id (mutually exclusive with --before)."
   ),
   Options.optional
 );
 
-const idArg = Args.text({ name: "id" });
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const idArg = entityIdArg("chapter");
+const ids = entityIdArg("chapter").pipe(Args.repeated);
 
 // ---------------------------------------------------------------------------
 // Shared helpers

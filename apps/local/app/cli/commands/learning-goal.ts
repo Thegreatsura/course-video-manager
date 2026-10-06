@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import {
   LearningGoalOperationsService,
@@ -28,7 +29,7 @@ import {
 // Options / Args
 // ---------------------------------------------------------------------------
 
-const sectionOption = Options.text("section").pipe(
+const sectionOption = entityIdOption("section", "section").pipe(
   Options.withDescription("The parent Section id (required).")
 );
 
@@ -49,7 +50,7 @@ const priorityOption = Options.integer("priority").pipe(
   Options.optional
 );
 
-const unlinkBeatOption = Options.text("unlink-beat").pipe(
+const unlinkBeatOption = entityIdOption("unlink-beat", "beat").pipe(
   Options.withDescription(
     "Remove this Beat id's link to the Learning Goal (a single-link removal, " +
       "not a content patch)."
