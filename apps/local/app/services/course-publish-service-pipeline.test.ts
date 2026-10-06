@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
 import { CoursePublishService } from "@/services/course-publish-service";
+import { FFmpegError } from "@/services/ffmpeg-run";
 import {
   VideoProcessingService,
   type PauseType,
@@ -129,7 +130,9 @@ describe("CoursePublishService — export/upload pipelining", () => {
         clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;
       }) =>
         opts.videoId === doomedVideoId
-          ? Effect.fail(new Error("ffmpeg crashed"))
+          ? Effect.fail(
+              new FFmpegError({ cause: null, message: "ffmpeg crashed" })
+            )
           : Effect.sync(() => {
               const outputPath = path.join(
                 finishedVideosDir,

@@ -20,6 +20,8 @@
           "catchUnfailableEffect": "error",
           "tryCatchInEffectGen": "error",
           "schemaSyncInEffect": "error",
+          "globalErrorInEffectFailure": "error",
+          "globalErrorInEffectCatch": "error",
           "classSelfMismatch": "warning",
           "effectFnImplicitAny": "warning",
           "floatingEffectInVitest": "warning",

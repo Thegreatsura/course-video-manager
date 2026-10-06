@@ -205,6 +205,9 @@ const daemon = (version: string) =>
         log(`speak ${request.items.length} line(s)`);
         return run(speak(request));
       }
+      // A plain async function, not an Effect: the `.then` below turns this
+      // rejection into a 400, so it never reaches an Effect's failure channel.
+      // @effect-diagnostics-next-line globalErrorInEffectFailure:off
       throw new Error(`no such request: ${req.method} ${req.url}`);
     };
 

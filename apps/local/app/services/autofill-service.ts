@@ -64,6 +64,14 @@ export class AutofillVersionNotDraftError extends Data.TaggedError(
   "AutofillVersionNotDraftError"
 )<{ readonly versionId: string; readonly commitState: string }> {}
 
+/**
+ * The model's Chapter set named no Clip of the Video it was proposed for, so
+ * there is nothing safe to write.
+ */
+export class AutofillNoValidChaptersError extends Data.TaggedError(
+  "AutofillNoValidChaptersError"
+)<{ readonly message: string }> {}
+
 export type AutofillVideoResult = {
   readonly videoId: string;
   readonly title: string;
@@ -191,11 +199,10 @@ const makeAutofillService = (
           clipIds.has(chapter.beforeClipId)
         );
         if (validChapters.length === 0) {
-          return yield* Effect.fail(
-            new Error(
-              "the model proposed no Chapter naming a clip of this video"
-            )
-          );
+          return yield* new AutofillNoValidChaptersError({
+            message:
+              "the model proposed no Chapter naming a clip of this video",
+          });
         }
       }
 

@@ -62,10 +62,16 @@ meant to name it.
   it reads like protection it does not give: `catchAll` never sees a defect —
   a sync throw inside `Effect.sync`, say. If you mean to swallow defects, say
   so with `catchAllDefect`.
+- **Every error in `E` is tagged.** Fail with a `Data.TaggedError` (or
+  `Schema.TaggedError`), never the global `Error`: untagged errors merge into
+  one indistinct `Error` in `E`, so nothing downstream can `catchTag` one or map
+  it to a status in `makeAction`. Keep the underlying error as `cause`. This
+  applies in tests too; a test that pins the untagged fallback says so beside a
+  suppression comment.
 
 Enforced by `@effect/tsgo` (`missingReturnYieldStar`, `tryCatchInEffectGen`,
-`schemaSyncInEffect`, `catchUnfailableEffect`), errors in each package's
-`tsconfig.json`.
+`schemaSyncInEffect`, `catchUnfailableEffect`, `globalErrorInEffectFailure`,
+`globalErrorInEffectCatch`), errors in each package's `tsconfig.json`.
 
 ## Control flow
 

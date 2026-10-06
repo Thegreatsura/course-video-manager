@@ -145,21 +145,28 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 **Phase 2 — clean up, then promote (about 6 small PRs).** Work through the
 "Fix, then error" rows, one rule per PR, and promote each rule as it reaches 0.
 
-> **Status (2026-10-06): effect-tsgo rules in progress.** All hits were in
-> `apps/local`; core and remote had none.
+> **Status — effect-tsgo rules (2026-10-06): done.** All hits were in
+> `apps/local`; core and remote had none. Every effect-tsgo "Fix, then error"
+> row is now an error in all three `tsconfig.json`s, backed by the "Failures
+> are handled in Effect, not around it" standard.
 >
-> - **Shipped:** `missingReturnYieldStar` (7), `catchUnfailableEffect` (3),
->   `tryCatchInEffectGen` (3) and `schemaSyncInEffect` (1) are fixed and are
->   errors in all three `tsconfig.json`s, backed by the new "Failures are
->   handled in Effect, not around it" standard. One `catchUnfailableEffect`
->   hit was a real bug: the export's best-effort stage-failure log used
->   `catchAll`, which never sees the defect a sync `appendFileSync` throws, so
->   a full disk would have replaced the export's own error. It is now
->   `catchAllDefect`, with a test.
-> - **Next:** `globalErrorInEffectFailure` / `globalErrorInEffectCatch`, in
->   its own PR.
->   The two promise rules ratchet per directory with `overrides`, for example once
->   `app/services/**` is clean.
+> - `missingReturnYieldStar` (7), `catchUnfailableEffect` (3),
+>   `tryCatchInEffectGen` (3) and `schemaSyncInEffect` (1) landed together
+>   (#1789). One `catchUnfailableEffect` hit was a real bug: the export's
+>   best-effort stage-failure log used `catchAll`, which never sees the defect
+>   a sync `appendFileSync` throws, so a full disk would have replaced the
+>   export's own error. It is now `catchAllDefect`, with a test.
+> - `globalErrorInEffectFailure` / `globalErrorInEffectCatch` (14, 9 in tests)
+>   landed on their own. Product code fails with new tagged errors
+>   (`AutofillNoValidChaptersError`, `WslPathConversionError`,
+>   `RevealInExplorerError`) carrying the same messages; tests fail with real
+>   tagged errors (`FFmpegError`) or local ones. Two hits are suppressed with a
+>   reason: the Clip Mockup daemon's `throw` inside a plain async HTTP handler
+>   (not an Effect failure), and one `route-action` test that pins the
+>   untagged-error fallback on purpose.
+
+The two promise rules ratchet per directory with `overrides`, for example once
+`app/services/**` is clean.
 
 > **Status — type-aware oxlint rules (2026-10-06):**
 >

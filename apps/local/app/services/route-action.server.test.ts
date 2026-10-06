@@ -56,6 +56,11 @@ class NotFoundError extends Data.TaggedError("NotFoundError")<{
   message: string;
 }> {}
 
+/** A tagged error no route maps to a status. */
+class SomethingBrokeError extends Data.TaggedError("SomethingBrokeError")<{
+  message: string;
+}> {}
+
 describe("makeAction", () => {
   it("returns success value when effect succeeds", async () => {
     const runtime = makeTestRuntime();
@@ -184,11 +189,37 @@ describe("makeAction", () => {
       }
     });
 
-    it("maps unknown errors to 500", async () => {
+    it("maps an error tag with no configured status to 500", async () => {
       const runtime = makeTestRuntime();
 
       const action = makeAction(
         {
+          effect: () =>
+            Effect.fail(
+              new SomethingBrokeError({ message: "something broke" })
+            ),
+        },
+        runtime
+      );
+
+      try {
+        await action({ request: mockRequest(), params: {} });
+        expect.unreachable("should have thrown");
+      } catch (error) {
+        const defect = extractDieDefect(error);
+        expect(defect.init.status).toBe(500);
+        expect(defect.data).toBe("Internal server error");
+      }
+    });
+
+    it("maps an untagged error to 500", async () => {
+      const runtime = makeTestRuntime();
+
+      const action = makeAction(
+        {
+          // Deliberately untagged: this pins the fallback for an error with
+          // no `_tag` at all, which product code no longer produces.
+          // @effect-diagnostics-next-line globalErrorInEffectFailure:off
           effect: () => Effect.fail(new Error("something broke")),
         },
         runtime
@@ -361,7 +392,8 @@ describe("makeAction", () => {
 
       const action = makeAction(
         {
-          effect: () => Effect.fail(new Error("boom")),
+          effect: () =>
+            Effect.fail(new SomethingBrokeError({ message: "boom" })),
         },
         runtime
       );
@@ -481,12 +513,15 @@ describe("makeLoader", () => {
       }
     });
 
-    it("maps unmapped errors to 500", async () => {
+    it("maps an error tag with no configured status to 500", async () => {
       const runtime = makeTestRuntime();
 
       const loader = makeLoader(
         {
-          effect: () => Effect.fail(new Error("something broke")),
+          effect: () =>
+            Effect.fail(
+              new SomethingBrokeError({ message: "something broke" })
+            ),
         },
         runtime
       );
@@ -577,7 +612,8 @@ describe("makeLoader", () => {
 
       const loader = makeLoader(
         {
-          effect: () => Effect.fail(new Error("boom")),
+          effect: () =>
+            Effect.fail(new SomethingBrokeError({ message: "boom" })),
         },
         runtime
       );
