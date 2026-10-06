@@ -351,91 +351,9 @@ cmd_doctor() {
 }
 
 # --- database write guard -------------------------------------------------
-# pg_stat_user_tables counts every insert, update and delete each table has
-# taken. Reading it costs one catalog scan, never a table scan, so the guard
-# is cheap enough to run around every drive.
-counters() {
-  psql_ro "$1" -c "select relname, n_tup_ins, n_tup_upd, n_tup_del
-              from pg_stat_user_tables order by relname"
-}
-
-cmd_guard_baseline() {
-  local dir; dir="$(run_dir)"
-  date --iso-8601=seconds > "$dir/guard-since.txt"
-  counters "$dir" > "$dir/guard-baseline.txt"
-  log "guard: baseline recorded for $(wc -l < "$dir/guard-baseline.txt") tables"
-}
-
-cmd_guard_check() {
-  local dir; dir="$(run_dir)"
-  [ -f "$dir/guard-baseline.txt" ] || die "no baseline — call 'verify.sh guard baseline' before driving"
-  counters "$dir" > "$dir/guard-after.txt"
-
-  local ledger="$dir/WRITE-LEDGER.md"
-  {
-    echo "# Write Ledger"
-    echo
-    echo "Run: $dir"
-    echo "Window opened: $(cat "$dir/guard-since.txt")"
-    echo "Window closed: $(date --iso-8601=seconds)"
-    echo "Database: $(run_db_label "$dir")"
-    echo
-  } > "$ledger"
-
-  local moved
-  moved="$(join -t'|' -j1 "$dir/guard-baseline.txt" "$dir/guard-after.txt" |
-    awk -F'|' '{ ins=$5-$2; upd=$6-$3; del=$7-$4;
-                 if (ins||upd||del) printf "%s|%d|%d|%d\n", $1, ins, upd, del }')"
-
-  if [ -z "$moved" ]; then
-    echo "No table took an insert, update or delete during the window. Nothing was modified." >> "$ledger"
-    log "guard: clean — no writes"
-  else
-    {
-      echo "**Writes landed during this run.**"
-      echo
-      echo "| Table | Inserted | Updated | Deleted |"
-      echo "| --- | --- | --- | --- |"
-      printf '%s\n' "$moved" | awk -F'|' '{ printf "| %s | %d | %d | %d |\n", $1, $2, $3, $4 }'
-      echo
-      if [ "$(run_mode "$dir")" = test-clone ]; then
-        echo "This run's database is its own test clone: nothing else writes to it, so"
-        echo "every row here is this run's. Writes are allowed — check they are the ones"
-        echo "you meant."
-      else
-        echo "These counters are database-wide. Matt's own CVM, the deployed apps/remote"
-        echo "and any other live verification run write to the same tables, so a row here"
-        echo "is a lead, not a verdict."
-      fi
-      echo "Run 'verify.sh guard forensics <table>' on each one to name the rows."
-    } >> "$ledger"
-    log "guard: WRITES DETECTED — see $ledger"
-    printf '%s\n' "$moved" >&2
-  fi
-  echo "$ledger"
-}
-
-cmd_guard_forensics() {
-  local table="$1"
-  local dir; dir="$(run_dir)"
-  local since="${2:-$(cat "$dir/guard-since.txt")}"
-
-  local cols
-  cols="$(psql_ro "$dir" -c "select column_name from information_schema.columns
-                      where table_schema='public' and table_name='$table'
-                        and column_name in ('created_at','updated_at')")"
-  [ -n "$cols" ] || die "$table has no created_at or updated_at — inspect it by hand"
-
-  local where="" c
-  for c in $cols; do
-    [ -n "$where" ] && where="$where or "
-    where="$where\"$c\" > '$since'"
-  done
-
-  psql_ro "$dir" -c "select * from \"$table\" where $where" |
-    tee "$dir/forensics-$table.txt"
-  log "guard: rows of $table touched since $since written to $dir/forensics-$table.txt"
-}
+# baseline, check (the Write Ledger) and forensics: all in verify-guard.sh.
+# shellcheck source=SCRIPTDIR/verify-guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-guard.sh"
 
 # --- read-back --------------------------------------------------------------
 # The `cvm` CLI reads through the deployed apps/remote, which is PRODUCTION —
