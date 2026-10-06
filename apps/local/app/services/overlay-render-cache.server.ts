@@ -11,6 +11,7 @@ import {
   resolveOverlayRenderPath,
   type OverlayContent,
 } from "./overlay-render-cache";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 /**
  * The Overlay Render Cache: the persistent directory of rendered Overlay
@@ -90,11 +91,7 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
 
         yield* renderer
           .renderOverlayContent(opts.content, scratchPath)
-          .pipe(
-            Effect.tapError(() =>
-              fs.remove(scratchPath).pipe(Effect.catchAll(() => Effect.void))
-            )
-          );
+          .pipe(Effect.tapError(() => removeBestEffort(fs, scratchPath)));
 
         yield* fs
           .rename(scratchPath, cachedPath)
