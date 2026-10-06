@@ -1,4 +1,3 @@
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 export const handle = { fullscreen: true };
 
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
@@ -12,23 +11,16 @@ import {
   Loader2Icon,
   ClipboardIcon,
   XIcon,
-  Trash2Icon,
   PlusIcon,
   ScissorsIcon,
   AlertCircleIcon,
   ArrowLeftIcon,
-  DownloadIcon,
-  PencilIcon,
 } from "lucide-react";
 import { useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { useThumbnailMenu } from "@/features/thumbnail-editor/thumbnail-menu";
 import { Label } from "@/components/ui/label";
 import { CaptureCameraModal } from "@/components/capture-camera-modal";
 import { useThumbnailReducer } from "@/hooks/use-thumbnail-reducer";
@@ -194,13 +186,15 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
     dispatch,
   ]);
 
-  const handleDelete = (thumbnailId: string) => {
-    if (!confirm("Delete this thumbnail?")) return;
-    dispatch({ type: "delete-requested", thumbnailId });
-  };
+  const thumbnailMenu = useThumbnailMenu({
+    onEdit: (thumbnailId) => dispatch({ type: "edit-requested", thumbnailId }),
+    onDelete: (thumbnailId) =>
+      dispatch({ type: "delete-requested", thumbnailId }),
+  });
 
   return (
     <div className="flex h-full">
+      {thumbnailMenu.deleteDialog}
       {/* Left sidebar: saved thumbnails */}
       {thumbnails.length > 0 && (
         <div className="w-48 shrink-0 border-r overflow-y-auto p-3">
@@ -247,48 +241,14 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
                     )}
                   </div>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                  {thumbnail.filePath && (
-                    <>
-                      <ContextMenuItem
-                        onClick={() => {
-                          const a = document.createElement("a");
-                          a.href = `/api/thumbnails/${thumbnail.id}/image`;
-                          a.download = `thumbnail-${thumbnail.id}.png`;
-                          a.click();
-                        }}
-                      >
-                        <DownloadIcon className="size-4" />
-                        Download
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                    </>
-                  )}
-                  <ContextMenuItem
-                    onClick={() =>
-                      dispatch({
-                        type: "edit-requested",
-                        thumbnailId: thumbnail.id,
-                      })
-                    }
-                  >
-                    <PencilIcon className="size-4" />
-                    Edit
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <CopyEntityLinkItems
-                    menu="context"
-                    entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
-                  />
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    variant="destructive"
-                    onClick={() => handleDelete(thumbnail.id)}
-                  >
-                    <Trash2Icon className="size-4" />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
+                <EntityMenuContent
+                  menu="context"
+                  entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
+                  groups={thumbnailMenu.groupsFor({
+                    id: thumbnail.id,
+                    hasImage: !!thumbnail.filePath,
+                  })}
+                />
               </ContextMenu>
             ))}
           </div>

@@ -1,15 +1,14 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useConfirmDelete } from "@/components/confirm-delete-dialog";
+import {
+  ActionMenuContent,
+  EntityMenuContent,
+} from "@/features/action-menu/action-menu";
 import { useLocalStorageBoolean } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
@@ -22,14 +21,8 @@ import {
   SortableBeat,
   useBeatDropPreview,
 } from "./beat-dnd-context";
-import {
-  BEAT_KINDS,
-  BEAT_KIND_ICONS,
-  BEAT_KIND_LABELS,
-  type BeatKind,
-} from "./beat-kinds";
-import { BeatContextMenuContent } from "./beat-menu-items";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import { BEAT_KIND_ICONS, BEAT_KIND_LABELS, type BeatKind } from "./beat-kinds";
+import { beatKindLeaves, beatMenuGroups } from "./beat-menu-items";
 import { BeatDescriptionEditor } from "./beat-description-editor";
 import { useShowBeatDescriptions } from "./beat-descriptions-context";
 import { BeatTitleEditor } from "./beat-title-editor";
@@ -197,22 +190,16 @@ function AddBeatButton({ videoId }: { videoId: string }) {
           Add beat
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {BEAT_KINDS.map((kind) => {
-          const Icon = BEAT_KIND_ICONS[kind];
-          return (
-            <DropdownMenuItem
-              key={kind}
-              onSelect={() =>
-                requestCreateBeat({ videoId, kind, beforeBeatId: null })
-              }
-            >
-              <Icon className="w-4 h-4" />
-              {BEAT_KIND_LABELS[kind]}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
+      <ActionMenuContent
+        menu="dropdown"
+        align="start"
+        groups={{
+          create: beatKindLeaves(
+            (kind) => requestCreateBeat({ videoId, kind, beforeBeatId: null }),
+            { opensDialog: true }
+          ),
+        }}
+      />
     </DropdownMenu>
   );
 }
@@ -299,6 +286,12 @@ function BeatRow({
   const [completed, setCompleted] = useLocalStorageBoolean(
     `beat-completion:${beat.id}`
   );
+  const confirmDelete = useConfirmDelete<BeatListBeat>({
+    title: "Delete Beat",
+    description: (b) =>
+      `Delete "${b.title || BEAT_KIND_LABELS[kind]}"? It is removed from the Video's plan and from any Learning Goal it serves.`,
+    onConfirm: (b) => submitEvent({ type: "delete-beat", beatId: b.id }),
+  });
 
   const titleRow = (
     <div className="flex items-start gap-1.5 text-sm text-foreground/80 cursor-context-menu">
@@ -345,17 +338,14 @@ function BeatRow({
     />
   ) : null;
 
+  const entity = { type: "beat", id: beat.id, videoId: beat.videoId } as const;
+
   if (isReadOnly) {
     return (
       <div>
         <ContextMenu>
           <ContextMenuTrigger asChild>{titleRow}</ContextMenuTrigger>
-          <ContextMenuContent>
-            <CopyEntityLinkItems
-              menu="context"
-              entity={{ type: "beat", id: beat.id, videoId: beat.videoId }}
-            />
-          </ContextMenuContent>
+          <EntityMenuContent menu="context" entity={entity} groups={{}} />
         </ContextMenu>
         {description}
       </div>
@@ -366,38 +356,35 @@ function BeatRow({
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>{titleRow}</ContextMenuTrigger>
-        <ContextMenuContent>
-          <BeatContextMenuContent
-            onSetKind={(nextKind) =>
+        <EntityMenuContent
+          menu="context"
+          entity={entity}
+          groups={beatMenuGroups({
+            kind,
+            onSetKind: (nextKind) =>
               submitEvent({
                 type: "set-beat-kind",
                 beatId: beat.id,
                 kind: nextKind,
-              })
-            }
-            onAddBefore={(kind) =>
+              }),
+            onAddBefore: (kind) =>
               requestCreateBeat({
                 videoId: beat.videoId,
                 kind,
                 beforeBeatId: beat.id,
-              })
-            }
-            onAddAfter={(kind) =>
+              }),
+            onAddAfter: (kind) =>
               requestCreateBeat({
                 videoId: beat.videoId,
                 kind,
                 beforeBeatId: nextBeatId,
-              })
-            }
-            onDelete={() =>
-              submitEvent({ type: "delete-beat", beatId: beat.id })
-            }
-            videoId={beat.videoId}
-            beatId={beat.id}
-          />
-        </ContextMenuContent>
+              }),
+            onDelete: () => confirmDelete.request(beat),
+          })}
+        />
       </ContextMenu>
       {description}
+      {confirmDelete.dialog}
     </div>
   );
 }

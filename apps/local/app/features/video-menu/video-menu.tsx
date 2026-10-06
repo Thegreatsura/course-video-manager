@@ -3,13 +3,8 @@ import type {
   ActionMenuGroups,
 } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
-import {
-  BEAT_KINDS,
-  BEAT_KIND_DESCRIPTIONS,
-  BEAT_KIND_ICONS,
-  BEAT_KIND_LABELS,
-  type BeatKind,
-} from "@/features/beats/beat-kinds";
+import type { BeatKind } from "@/features/beats/beat-kinds";
+import { beatKindLeaves } from "@/features/beats/beat-menu-items";
 import {
   BookOpenIcon,
   ClipboardCopy,
@@ -159,13 +154,7 @@ export function videoMenuGroups(a: VideoMenuActions): ActionMenuGroups {
       a.addBeat && {
         ...STANDARD_ACTIONS.add,
         label: "Add Beat",
-        items: BEAT_KINDS.map((kind) => ({
-          label: BEAT_KIND_LABELS[kind],
-          icon: BEAT_KIND_ICONS[kind],
-          description: BEAT_KIND_DESCRIPTIONS[kind],
-          opensDialog: true,
-          onSelect: () => a.addBeat?.(kind),
-        })),
+        items: beatKindLeaves(a.addBeat, { opensDialog: true }),
       },
       leaf({ ...STANDARD_ACTIONS.duplicate, opensDialog: true }, a.duplicate),
       leaf(
