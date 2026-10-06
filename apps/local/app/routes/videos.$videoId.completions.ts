@@ -1,5 +1,5 @@
 import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
-import { runtimeLive } from "@/services/layer.server";
+import { makeAction } from "@/services/route-action.server";
 import {
   acquireTextWritingContext,
   createModelMessagesForTextWritingAgent,
@@ -7,10 +7,8 @@ import {
 } from "@/services/text-writing-agent";
 import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
 import { type UIMessage } from "ai";
-import { Console, Effect, Schema } from "effect";
-import type { Route } from "./+types/videos.$videoId.completions";
+import { Effect, Schema } from "effect";
 import { anthropic } from "@ai-sdk/anthropic";
-import { data } from "react-router";
 
 const modeSchema = Schema.Union(
   Schema.Literal("article"),
@@ -71,94 +69,87 @@ const chatSchema = Schema.Struct({
   animatic: Schema.optional(Schema.String),
 });
 
-export const action = async (args: Route.ActionArgs) => {
-  const body = await args.request.json();
-  const videoId = args.params.videoId;
+export const action = makeAction({
+  input: "json",
+  effect: ({ params, payload: body }) => {
+    const videoId = params.videoId!;
 
-  return Effect.gen(function* () {
-    const parsed = yield* Schema.decodeUnknown(chatSchema)(body);
-    const messages: UIMessage[] = parsed.messages;
-    const enabledFiles: string[] = [...parsed.enabledFiles];
-    const mode = parsed.mode;
-    const model: string =
-      parsed.model === undefined
-        ? ARTICLE_WRITER_MODEL
-        : parsed.model === "auto"
-          ? "claude-haiku-4-5"
-          : parsed.model;
-    const includeTranscript = parsed.includeTranscript;
-    const enabledSections: string[] = [...parsed.enabledSections];
+    return Effect.gen(function* () {
+      const parsed = yield* Schema.decodeUnknown(chatSchema)(body);
+      const messages: UIMessage[] = parsed.messages;
+      const enabledFiles: string[] = [...parsed.enabledFiles];
+      const mode = parsed.mode;
+      const model: string =
+        parsed.model === undefined
+          ? ARTICLE_WRITER_MODEL
+          : parsed.model === "auto"
+            ? "claude-haiku-4-5"
+            : parsed.model;
+      const includeTranscript = parsed.includeTranscript;
+      const enabledSections: string[] = [...parsed.enabledSections];
 
-    const videoContext = yield* acquireTextWritingContext({
-      videoId,
-      enabledFiles,
-      includeTranscript,
-      enabledSections,
-    });
+      const videoContext = yield* acquireTextWritingContext({
+        videoId,
+        enabledFiles,
+        includeTranscript,
+        enabledSections,
+      });
 
-    // Fetch global links for injection into prompts
-    const linkAuthOps = yield* LinkAuthOperationsService;
-    const links = yield* linkAuthOps.getLinks();
+      // Fetch global links for injection into prompts
+      const linkAuthOps = yield* LinkAuthOperationsService;
+      const links = yield* linkAuthOps.getLinks();
 
-    // Format course structure as indented text tree
-    let courseStructureText: string | undefined;
-    if (parsed.courseStructure) {
-      const cs = parsed.courseStructure;
-      const lines: string[] = [`Course: ${cs.repoName}`];
-      for (const section of cs.sections) {
-        const isCurrent = section.path === cs.currentSectionPath;
-        lines.push(
-          `  ${section.path}/${isCurrent ? "  <-- current section" : ""}`
-        );
-        for (const lesson of section.lessons) {
-          const isCurrentLesson =
-            isCurrent && lesson.path === cs.currentLessonPath;
-          const marker = isCurrentLesson ? "  <-- current lesson" : "";
-          const desc = lesson.description ? ` - ${lesson.description}` : "";
-          lines.push(`    ${lesson.path}/${marker}${desc}`);
+      // Format course structure as indented text tree
+      let courseStructureText: string | undefined;
+      if (parsed.courseStructure) {
+        const cs = parsed.courseStructure;
+        const lines: string[] = [`Course: ${cs.repoName}`];
+        for (const section of cs.sections) {
+          const isCurrent = section.path === cs.currentSectionPath;
+          lines.push(
+            `  ${section.path}/${isCurrent ? "  <-- current section" : ""}`
+          );
+          for (const lesson of section.lessons) {
+            const isCurrentLesson =
+              isCurrent && lesson.path === cs.currentLessonPath;
+            const marker = isCurrentLesson ? "  <-- current lesson" : "";
+            const desc = lesson.description ? ` - ${lesson.description}` : "";
+            lines.push(`    ${lesson.path}/${marker}${desc}`);
+          }
         }
+        courseStructureText = lines.join("\n");
       }
-      courseStructureText = lines.join("\n");
-    }
 
-    const modelMessages = yield* Effect.tryPromise(() =>
-      createModelMessagesForTextWritingAgent({
-        messages,
+      const modelMessages = yield* Effect.tryPromise(() =>
+        createModelMessagesForTextWritingAgent({
+          messages,
+          imageFiles: videoContext.imageFiles,
+        })
+      );
+
+      const agent = createTextWritingAgent({
+        model: anthropic(model),
+        mode: mode,
+        transcript: videoContext.transcript,
+        code: videoContext.textFiles,
         imageFiles: videoContext.imageFiles,
-      })
-    );
+        youtubeChapters: videoContext.youtubeChapters,
+        sectionNames: videoContext.sectionNames,
+        existingQuizIds: videoContext.existingQuizIds,
+        links,
+        courseStructure: courseStructureText,
+        aiHeroUrl: parsed.aiHeroUrl,
+        memory: parsed.memory,
+        beats: parsed.beats,
+        script: parsed.script,
+        animatic: parsed.animatic,
+      });
 
-    const agent = createTextWritingAgent({
-      model: anthropic(model),
-      mode: mode,
-      transcript: videoContext.transcript,
-      code: videoContext.textFiles,
-      imageFiles: videoContext.imageFiles,
-      youtubeChapters: videoContext.youtubeChapters,
-      sectionNames: videoContext.sectionNames,
-      existingQuizIds: videoContext.existingQuizIds,
-      links,
-      courseStructure: courseStructureText,
-      aiHeroUrl: parsed.aiHeroUrl,
-      memory: parsed.memory,
-      beats: parsed.beats,
-      script: parsed.script,
-      animatic: parsed.animatic,
+      const result = yield* Effect.tryPromise(() =>
+        agent.stream({ messages: modelMessages })
+      );
+
+      return result.toUIMessageStreamResponse();
     });
-
-    const result = yield* Effect.tryPromise(() =>
-      agent.stream({ messages: modelMessages })
-    );
-
-    return result.toUIMessageStreamResponse();
-  }).pipe(
-    Effect.tapErrorCause((e) => Console.dir(e, { depth: null })),
-    Effect.catchTag("ParseError", () => {
-      return Effect.die(data("Invalid request", { status: 400 }));
-    }),
-    Effect.catchAll(() => {
-      return Effect.die(data("Internal server error", { status: 500 }));
-    }),
-    runtimeLive.runPromise
-  );
-};
+  },
+});

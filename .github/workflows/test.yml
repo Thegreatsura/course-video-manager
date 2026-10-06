@@ -33,7 +33,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # typecheck, type-aware oxlint, package boundaries, the five file guards, then the
+      # typecheck, Effect diagnostics, type-aware oxlint, package boundaries, the five
+      # file guards and the Effect guards (scripts/check-effect-guards.ts), then the
       # unfiltered test run. One script, the same one a human runs by hand.
       - name: Check
         run: pnpm run check

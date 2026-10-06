@@ -35,7 +35,8 @@
     "check:env-example": "./scripts/check-env-example.sh",
     "check:routes-folder": "./scripts/check-routes-folder.sh",
     "check:response-body": "./scripts/check-response-body.sh",
-    "check": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && pnpm run test"
+    "check:effect-guards": "node scripts/check-effect-guards.ts",
+    "check": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all && pnpm run test"
   },
   "pnpm": {
     "overrides": {
@@ -71,6 +72,7 @@
     "@types/node": "^20",
     "husky": "^9.1.7",
     "lint-staged": "^15.3.0",
+    "oxc-parser": "0.153.0",
     "oxlint": "^1.85.0",
     "oxlint-tsgolint": "7.0.2003",
     "prettier": "^3.4.2",
