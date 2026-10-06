@@ -24,4 +24,8 @@ export const versionRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/getVersionWithSections",
       forward(runtime, VersionOperationsService, "getVersionWithSections")
+    )
+    .post(
+      "/findVersionSuccessor",
+      forward(runtime, VersionOperationsService, "findVersionSuccessor")
     );

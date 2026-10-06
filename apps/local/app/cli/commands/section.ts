@@ -1,5 +1,6 @@
 import { Args, Command, Options } from "@effect/cli";
 import { entityIdArg, entityIdOption } from "../entity-id";
+import { explainStaleId, notFoundOrStale } from "../stale-id";
 import { Effect, Option } from "effect";
 import { sectionSearchCmd } from "./search";
 import { sectionLintCmd } from "./section-lint";
@@ -137,6 +138,7 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
     entity: "section",
     ids,
     includeMemory: full,
+    explainMissing: explainStaleId("section"),
     fetch: (id) =>
       Effect.gen(function* () {
         const svc = yield* ops;
@@ -179,13 +181,8 @@ const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
       .getSectionWithHierarchyById(id)
       .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)));
     if (section === undefined || section.archivedAt !== null) {
-      // Archived (archivedAt non-null) sections are never viewable. Reuse
-      // emitGet's single-id not-found semantics (stderr + exit 2).
-      return yield* emitGet({
-        entity: "section",
-        ids: [id],
-        fetch: () => Effect.succeed(undefined),
-      });
+      // Archived (archivedAt non-null) sections are never viewable.
+      return yield* notFoundOrStale("section", id);
     }
 
     const children =
@@ -332,8 +329,11 @@ const renameCmd = Command.make(
       const svc = yield* ops;
       const section = yield* svc
         .getSectionWithHierarchyById(id)
-        .pipe(Effect.catchTag("NotFoundError", () => notFound("section", id)));
-      if (section.archivedAt !== null) return yield* notFound("section", id);
+        .pipe(
+          Effect.catchTag("NotFoundError", () => notFoundOrStale("section", id))
+        );
+      if (section.archivedAt !== null)
+        return yield* notFoundOrStale("section", id);
 
       yield* assertDraftVersion(section.repoVersionId);
 
@@ -380,8 +380,11 @@ const moveCmd = Command.make(
       const svc = yield* ops;
       const section = yield* svc
         .getSectionWithHierarchyById(id)
-        .pipe(Effect.catchTag("NotFoundError", () => notFound("section", id)));
-      if (section.archivedAt !== null) return yield* notFound("section", id);
+        .pipe(
+          Effect.catchTag("NotFoundError", () => notFoundOrStale("section", id))
+        );
+      if (section.archivedAt !== null)
+        return yield* notFoundOrStale("section", id);
       yield* assertDraftVersion(section.repoVersionId);
 
       if (anchorId === id) {
@@ -429,8 +432,11 @@ const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
     // the last chance to fetch it (and the draft guard needs its version id).
     const section = yield* svc
       .getSectionWithHierarchyById(id)
-      .pipe(Effect.catchTag("NotFoundError", () => notFound("section", id)));
-    if (section.archivedAt !== null) return yield* notFound("section", id);
+      .pipe(
+        Effect.catchTag("NotFoundError", () => notFoundOrStale("section", id))
+      );
+    if (section.archivedAt !== null)
+      return yield* notFoundOrStale("section", id);
     yield* assertDraftVersion(section.repoVersionId);
 
     const archivedAt = new Date();

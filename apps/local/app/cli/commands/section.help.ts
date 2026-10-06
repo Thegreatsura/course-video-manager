@@ -217,25 +217,28 @@ EXAMPLES
   cvm section list --course <courseId> | jq -r 'select(.path=="Scratch") | .id' \\
     | xargs -n1 cvm section archive`;
 
-export const LINT_HELP = `Check ONE Section against the section-authoring quality bar: four checks over its Learning Goals and the Beats of every Video of every active Lesson.
+export const LINT_HELP = `Check ONE Section against the section-authoring quality bar: five checks over its Learning Goals and the Beats of every Video of every active Lesson.
 
 This is the PLANNING-stage counterpart to 'cvm course readiness'. Readiness is
 course-scoped and asks "what stands between this Course and SHIPPING", over
-Lesson/Video fields that reach published output. These four checks are
+Lesson/Video fields that reach published output. These five checks are
 section-scoped and ask "is this Section's plan actually wired up", over Learning
 Goals and Beats — planning artifacts Publish never emits. Neither verb reports
 the other's findings, and a lint finding here never blocks a publish.
 
-THE FOUR CHECKS
+THE FIVE CHECKS
+  noLearningGoals        The Section has no Learning Goals at all. Every Beat in
+                         it then serves nothing, so it also lands in
+                         unlinkedBeats (setup Beats aside).
   orphanedLearningGoals  A Learning Goal no Beat anywhere in the Section serves
                          (its beatIds are empty). The same predicate the course
                          view draws the "noBeats" Learning Goal Warning from.
   unlinkedBeats          A Beat whose kind is NOT 'setup' and which serves no
-                         Learning Goal. Two exemptions, both deliberate: a
-                         'setup' Beat records a playground/repo requirement, not
-                         something the viewer is taught; and a Section with NO
-                         Learning Goals at all exempts every Beat, because there
-                         is nothing yet to serve.
+                         Learning Goal. One exemption: a 'setup' Beat records a
+                         playground/repo requirement, not something the viewer
+                         is taught. Unlike the course view's Beat Warning, a
+                         Section with NO Learning Goals does NOT exempt its
+                         Beats — lint flags them all (see noLearningGoals).
   stubBeats              A Beat whose description is empty or whitespace-only —
                          a placeholder carrying no plan. Applies to every kind,
                          'setup' included.
@@ -245,7 +248,7 @@ THE FOUR CHECKS
                          when the Section has no Quest Beat at all — that is
                          "no quests planned yet", a different and earlier
                          problem, and firing on every Lesson would drown the
-                         other three checks.
+                         other checks.
 
 ARCHIVED ROWS ARE INVISIBLE THROUGHOUT
   Archived Lessons, Videos, Beats and Learning Goals are excluded before any
@@ -265,12 +268,13 @@ A FINDING IS NOT A FAILURE — EXIT 0
 OUTPUT (one pretty JSON object)
   sectionId              The Section checked.
   sectionTitle           Its title, echoed so a report reads without a second call.
-  clean                  true when all four lists are empty.
-  failedChecks[]         Which checks are non-empty, named — the reason 'clean'
-                         is false, in one field. Empty when clean.
+  clean                  true when no check fires.
+  failedChecks[]         Which checks fired, named — the reason 'clean' is
+                         false, in one field. Empty when clean.
   counts                 One integer per check, for a cheap glance:
-                         { orphanedLearningGoals, unlinkedBeats, stubBeats,
-                           questlessLessons }.
+                         { noLearningGoals (0 or 1), orphanedLearningGoals,
+                           unlinkedBeats, stubBeats, questlessLessons }.
+  noLearningGoals          true when the Section has no Learning Goals at all.
   orphanedLearningGoals[]  { id, title }
   unlinkedBeats[]          { id, title, kind, videoId, videoTitle, lessonId,
                              lessonTitle } — every Beat finding carries its full

@@ -94,6 +94,9 @@ const versionService = (client: RpcClient) =>
     getVersionWithSections: rpcMethod((json) =>
       client.rpc.version.getVersionWithSections.$post({ json })
     ),
+    findVersionSuccessor: rpcMethod((json) =>
+      client.rpc.version.findVersionSuccessor.$post({ json })
+    ),
   }) satisfies RemoteService<VersionOperationsService>;
 
 /**
