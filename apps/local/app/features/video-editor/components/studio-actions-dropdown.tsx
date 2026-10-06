@@ -19,6 +19,7 @@ import {
   RevealInFileSystemItem,
 } from "./shared-action-items";
 import { RetranscribeAllClipsItem } from "./transcript-word-actions";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 
 export const StudioActionsDropdown = (props: {
   allClipsHaveSilenceDetected: boolean;
@@ -117,6 +118,11 @@ export const StudioActionsDropdown = (props: {
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
+
+        <CopyEntityLinkItems
+          menu="dropdown"
+          entity={{ type: "video", id: props.videoId }}
+        />
 
         <CopySubmenu
           allClipsHaveText={props.allClipsHaveText}

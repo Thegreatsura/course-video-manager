@@ -6,6 +6,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -14,6 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { cn } from "@/lib/utils";
 import {
   openPlayground,
@@ -146,6 +148,11 @@ export function AppSidebar({ variant }: AppSidebarProps) {
                 </Link>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                <CopyEntityLinkItems
+                  menu="context"
+                  entity={{ type: "course", id: course.id }}
+                />
+                <ContextMenuSeparator />
                 <ContextMenuItem
                   onSelect={() => {
                     archiveCourseFetcher.submit(
