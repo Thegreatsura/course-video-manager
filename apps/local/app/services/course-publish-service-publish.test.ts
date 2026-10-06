@@ -6,6 +6,7 @@ import path from "node:path";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { CoursePublishService } from "@/services/course-publish-service";
+import { FFmpegError } from "@/services/ffmpeg-run";
 import {
   fakeDropbox,
   finishedVideosDir,
@@ -253,7 +254,10 @@ describe("CoursePublishService — publish", () => {
 
   it("fails with PublishValidationError when export fails after retries", async () => {
     const failingMock = Layer.succeed(VideoProcessingService, {
-      exportVideoClips: () => Effect.fail(new Error("ffmpeg crashed")),
+      exportVideoClips: () =>
+        Effect.fail(
+          new FFmpegError({ cause: null, message: "ffmpeg crashed" })
+        ),
     } as any);
     const { course, video, run } = await setup({
       mockVideoProcessing: failingMock,
@@ -346,7 +350,10 @@ describe("CoursePublishService — publish", () => {
 
   it("emits a per-video error event and still fails with PublishValidationError", async () => {
     const failingMock = Layer.succeed(VideoProcessingService, {
-      exportVideoClips: () => Effect.fail(new Error("ffmpeg crashed")),
+      exportVideoClips: () =>
+        Effect.fail(
+          new FFmpegError({ cause: null, message: "ffmpeg crashed" })
+        ),
     } as any);
     const { course, video, run } = await setup({
       mockVideoProcessing: failingMock,

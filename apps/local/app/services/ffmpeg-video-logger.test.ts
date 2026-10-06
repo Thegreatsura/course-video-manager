@@ -1,6 +1,10 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { makeFfmpegLogger } from "./ffmpeg-video-logger";
+
+class DiskFullError extends Data.TaggedError("DiskFullError")<{
+  message: string;
+}> {}
 
 describe("makeFfmpegLogger", () => {
   it("logs a cli-output event stage-prefixed with the joined command", () => {
@@ -29,7 +33,7 @@ describe("makeFfmpegLogger", () => {
 
   it("never throws when the underlying logger fails", () => {
     const fakeLogger = {
-      log: () => Effect.fail(new Error("disk full")),
+      log: () => Effect.fail(new DiskFullError({ message: "disk full" })),
     };
 
     const onLog = makeFfmpegLogger(fakeLogger as any, "video-1", "stage");
