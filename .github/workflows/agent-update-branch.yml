@@ -41,6 +41,10 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          # Push with AGENT_PAT: pushes made with GITHUB_TOKEN don't trigger
+          # workflows, so the required `check` would never run on the new commit
+          # and the PR would stay blocked by the main ruleset.
+          token: ${{ secrets.AGENT_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Ensure branch is checked out by name
         run: git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH"
