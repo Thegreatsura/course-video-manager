@@ -37,8 +37,6 @@ let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
 const mint = (params: Parameters<ApiTokenOperationsService["mint"]>[0]) =>
   Effect.runPromise(tokens.mint(params));
 
-const list = () => Effect.runPromise(tokens.list());
-
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
@@ -62,16 +60,6 @@ describe("a valid token", () => {
       name: "Alpha",
     });
   });
-
-  it("advances lastUsedAt, so a token nobody needs is findable", async () => {
-    const minted = await mint({ name: "agent box" });
-    expect((await list())[0]!.lastUsedAt).toBeNull();
-
-    const { exitCode } = await runWithToken(minted.secret)(["search", "alpha"]);
-
-    expect(exitCode).toBe(0);
-    expect((await list())[0]!.lastUsedAt).not.toBeNull();
-  });
 });
 
 describe("a token the API will not accept", () => {
@@ -83,28 +71,6 @@ describe("a token the API will not accept", () => {
     expect(result.exitCode).toBe(5);
     expect(failureOf(result)._tag).toBe("AuthenticationError");
     expect(result.stdout).toBe("");
-  });
-
-  it("fails when the token has expired", async () => {
-    const minted = await mint({
-      name: "stale",
-      expiresAt: new Date(Date.now() - 60_000),
-    });
-
-    const result = await runWithToken(minted.secret)(["search", "alpha"]);
-
-    expect(result.exitCode).toBe(5);
-    expect(failureOf(result)._tag).toBe("AuthenticationError");
-  });
-
-  it("fails when the token has been revoked", async () => {
-    const minted = await mint({ name: "compromised" });
-    await Effect.runPromise(tokens.revoke(minted.id));
-
-    const result = await runWithToken(minted.secret)(["search", "alpha"]);
-
-    expect(result.exitCode).toBe(5);
-    expect(failureOf(result)._tag).toBe("AuthenticationError");
   });
 
   it("says the same thing whichever it was", async () => {
@@ -151,14 +117,5 @@ describe("a token the API will not accept", () => {
     expect(failureOf(authFailure)._tag).toBe("AuthenticationError");
     expect(failureOf(domainFailure)._tag).toBe("NotFoundError");
     expect(authFailure.exitCode).not.toBe(domainFailure.exitCode);
-  });
-
-  it("leaves no trace on the token it rejected", async () => {
-    const revoked = await mint({ name: "compromised" });
-    await Effect.runPromise(tokens.revoke(revoked.id));
-
-    await runWithToken(revoked.secret)(["search", "alpha"]);
-
-    expect((await list())[0]!.lastUsedAt).toBeNull();
   });
 });

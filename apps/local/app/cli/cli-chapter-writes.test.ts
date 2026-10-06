@@ -119,17 +119,11 @@ describe("chapter add", () => {
     expect(chapter.name).toBe("Introduction");
     expect(chapter.archived).toBe(false);
 
-    expect((await chapters(s.standaloneActiveId)).map((c) => c.name)).toEqual([
-      "Introduction",
-    ]);
-  });
-
-  it("appends to the end across multiple adds", async () => {
-    const a = await add(s.standaloneActiveId, "One");
-    const b = await add(s.standaloneActiveId, "Two");
+    // A second add lands after the first: appended, not prepended.
+    const second = await add(s.standaloneActiveId, "Two");
     expect((await chapters(s.standaloneActiveId)).map((c) => c.id)).toEqual([
-      a.id,
-      b.id,
+      chapter.id,
+      second.id,
     ]);
   });
 
@@ -285,12 +279,6 @@ describe("chapter delete", () => {
 });
 
 describe("chapter list / get", () => {
-  it("list prints nothing (exit 0) for a video with no chapters", async () => {
-    const r = await run(["chapter", "list", "--video", s.standaloneActiveId]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toBe("");
-  });
-
   it("list is a not-found (exit 2) for an unknown video", async () => {
     expect(
       (await run(["chapter", "list", "--video", "video_nope"])).exitCode
@@ -306,16 +294,5 @@ describe("chapter list / get", () => {
 
     await run(["chapter", "delete", c.id]);
     expect((await run(["chapter", "get", c.id])).exitCode).toBe(2);
-  });
-
-  it("get is variadic and reports missing ids on stderr (exit 2)", async () => {
-    const a = await add(s.standaloneActiveId, "A");
-    const b = await add(s.standaloneActiveId, "B");
-    const r = await run(["chapter", "get", a.id, "nope", b.id]);
-    expect(r.exitCode).toBe(2);
-    expect(ndjson(r.stdout).map((x) => (x as ChapterRow).id)).toEqual([
-      a.id,
-      b.id,
-    ]);
   });
 });

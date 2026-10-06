@@ -19,6 +19,7 @@ import { VERSION_NOT_DRAFT_MESSAGE } from "@/services/version-not-draft-message"
 import * as schema from "@/db/schema";
 import {
   createTestDb,
+  createUnreachableDb,
   truncateAllTables,
   type TestDb,
 } from "@/test-utils/pglite";
@@ -251,8 +252,6 @@ describe("every verb group rebuilds the error the service raised", () => {
   it("search", async () => {
     // Search's only failure is the database itself, so this one needs a
     // database that cannot answer.
-    const broken = await createTestDb();
-    await broken.pglite.close();
 
     const error = await Effect.runPromise(
       Effect.flatMap(SearchOperationsService, (svc) =>
@@ -261,7 +260,10 @@ describe("every verb group rebuilds the error the service raised", () => {
           query: "anything",
           types: new Set(["course"]),
         })
-      ).pipe(Effect.flip, Effect.provide(buildWriteLayer(broken.testDb)))
+      ).pipe(
+        Effect.flip,
+        Effect.provide(buildWriteLayer(createUnreachableDb()))
+      )
     );
 
     expect(error._tag).toBe("UnknownDBServiceError");

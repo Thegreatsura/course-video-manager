@@ -35,6 +35,7 @@ import {
   MOVE_HELP,
   UPDATE_HELP,
   ARCHIVE_HELP,
+  UNARCHIVE_HELP,
 } from "./video.help";
 
 // ---------------------------------------------------------------------------
@@ -561,6 +562,36 @@ const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
 ).pipe(Command.withDescription(detail(ARCHIVE_HELP)));
 
 // ---------------------------------------------------------------------------
+// unarchive <id>
+// ---------------------------------------------------------------------------
+
+const unarchiveCmd = Command.make(
+  "unarchive",
+  { id: entityIdArg("video") },
+  ({ id }) =>
+    Effect.gen(function* () {
+      const svc = yield* VideoOperationsService;
+
+      // Mirrors archive: unarchiving a live Video is invalid input.
+      const video = yield* svc
+        .getVideoRowById(id)
+        .pipe(Effect.catchTag("NotFoundError", () => notFound("video", id)));
+      if (!video.archived) {
+        return yield* parseError(`video ${id} is not archived`, "video");
+      }
+
+      const restored = yield* svc
+        .unarchiveVideo(id)
+        .pipe(
+          Effect.catchTag("VideoTitleTakenError", (e) =>
+            parseError(e.message, "video")
+          )
+        );
+      yield* emitObject(restored);
+    })
+).pipe(Command.withDescription(detail(UNARCHIVE_HELP)));
+
+// ---------------------------------------------------------------------------
 // Noun command
 // ---------------------------------------------------------------------------
 
@@ -576,5 +607,6 @@ export const videoCommand = Command.make("video").pipe(
     moveCmd,
     updateCmd,
     archiveCmd,
+    unarchiveCmd,
   ])
 );

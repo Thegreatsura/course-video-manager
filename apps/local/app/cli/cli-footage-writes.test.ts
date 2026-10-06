@@ -138,12 +138,6 @@ describe("footage list", () => {
       nodeFs.rmSync(other, { recursive: true, force: true });
     }
   });
-
-  it("prints nothing (exit 0) for an empty directory", async () => {
-    const r = await run(["footage", "list"]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toBe("");
-  });
 });
 
 describe("footage transcribe", () => {

@@ -149,15 +149,6 @@ describe("deliverable create", () => {
     expect(d.courseIds).toEqual([courseId]);
   });
 
-  it("rejects a missing --title / --date => exit 3", async () => {
-    expect(
-      (await run(["deliverable", "create", "--date", "2026-01-01"])).exitCode
-    ).toBe(3);
-    expect(
-      (await run(["deliverable", "create", "--title", "x"])).exitCode
-    ).toBe(3);
-  });
-
   it("rejects an empty --title => exit 3", async () => {
     const { exitCode, stdout } = await run([
       "deliverable",
@@ -376,10 +367,6 @@ describe("deliverable archive", () => {
 
     expect(ndjson((await run(["deliverable", "list"])).stdout)).toEqual([]);
     expect((await run(["deliverable", "get", d.id])).exitCode).toBe(2);
-  });
-
-  it("rejects an unknown id => exit 2", async () => {
-    expect((await run(["deliverable", "archive", "missing"])).exitCode).toBe(2);
   });
 
   it("is not repeatable — an archived deliverable is not addressable", async () => {

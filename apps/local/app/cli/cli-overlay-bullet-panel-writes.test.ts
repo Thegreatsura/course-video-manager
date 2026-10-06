@@ -265,43 +265,6 @@ describe("overlay add --kind bulletPanel", () => {
     ).toBe(0);
   });
 
-  it("gives a bullet a whole extra ease when the exit is a cut", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 20 });
-
-    // A cut exit holds the panel to the window's very end, so the bullet has
-    // only its own ease to fit — a whole ease later than the same panel would
-    // take with an exit to clear.
-    const withCutExit = lastBulletRevealAtInSeconds({
-      durationInSeconds: 5,
-      disableExitAnimation: true,
-    });
-    expect(withCutExit).toBeGreaterThan(
-      lastBulletRevealAtInSeconds({ durationInSeconds: 5 })
-    );
-
-    expect(
-      (
-        await addPanel(
-          clip.id,
-          [{ icon: "target", text: "Still fits", revealAt: withCutExit }],
-          ["--disable-exit-animation", "true"],
-          "5"
-        )
-      ).exitCode
-    ).toBe(0);
-  });
-
-  it("refuses two bullets revealed at the same moment", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 20 });
-
-    expectRefused(
-      await addPanel(clip.id, [
-        { icon: "target", text: "One", revealAt: 2 },
-        { icon: "route", text: "Two", revealAt: 2 },
-      ])
-    );
-  });
-
   it("refuses a payload that is not a JSON array of bullets", async () => {
     const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 20 });
 

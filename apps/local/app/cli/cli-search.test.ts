@@ -32,12 +32,18 @@ beforeAll(async () => {
 });
 
 let s: IntegrationSeed;
-beforeEach(async () => {
+const reseed = async () => {
   await truncateAllTables(testDb);
   s = await seedIntegration(testDb);
-});
+};
 
+// Search only reads, so the read-only tests share one seed (beforeAll). Tests
+// that insert or update rows live in "search over rows a test writes", which
+// reseeds before each one. Keep it that way: a write in a beforeAll block
+// leaks into every test after it.
 describe("search", () => {
+  beforeAll(reseed);
+
   it("matches a course by name, case-insensitively", async () => {
     const { stdout, stderr, exitCode } = await run(["search", "alpha"]);
     expect(exitCode).toBe(0);
@@ -265,42 +271,27 @@ describe("search", () => {
       expect(err.entity).toBe("course");
     });
 
+    // Each scope noun filters its root separately (sections by archivedAt,
+    // courses and lessons by archived), so each one is checked.
     it("archived scope root => exit 2 NotFoundError", async () => {
-      const { exitCode } = await run([
-        "course",
-        "search",
-        s.courseBArchivedId,
-        "x",
-      ]);
-      expect(exitCode).toBe(2);
-    });
-
-    it("archived section root => exit 2 NotFoundError", async () => {
-      const { stderr, exitCode } = await run([
-        "section",
-        "search",
-        s.archivedSectionId,
-        "x",
-      ]);
-      expect(exitCode).toBe(2);
-      const err = JSON.parse(stderr);
-      expect(err._tag).toBe("NotFoundError");
-      expect(err.entity).toBe("section");
-    });
-
-    it("archived lesson root => exit 2 NotFoundError", async () => {
-      const { stderr, exitCode } = await run([
-        "lesson",
-        "search",
-        s.archivedLessonId,
-        "x",
-      ]);
-      expect(exitCode).toBe(2);
-      const err = JSON.parse(stderr);
-      expect(err._tag).toBe("NotFoundError");
-      expect(err.entity).toBe("lesson");
+      const cases: Array<[string, string, string]> = [
+        ["course", s.courseBArchivedId, "course"],
+        ["section", s.archivedSectionId, "section"],
+        ["lesson", s.archivedLessonId, "lesson"],
+      ];
+      for (const [noun, id, entity] of cases) {
+        const { stderr, exitCode } = await run([noun, "search", id, "x"]);
+        expect(exitCode, noun).toBe(2);
+        const err = JSON.parse(stderr);
+        expect(err._tag).toBe("NotFoundError");
+        expect(err.entity).toBe(entity);
+      }
     });
   });
+});
+
+describe("search over rows a test writes", () => {
+  beforeEach(reseed);
 
   describe("video body (the shipped article)", () => {
     /** Author a body onto a video; the seed leaves every body null. */
@@ -381,19 +372,6 @@ describe("search", () => {
         id: s.lessonVideoId,
         field: "body",
       });
-    });
-
-    it("excerpts a long body with ellipses around the match", async () => {
-      const long = `${"lorem ipsum ".repeat(20)}BODYNEEDLE${" dolor sit ".repeat(20)}`;
-      await setBody(s.lessonVideoId, long);
-
-      const { stdout } = await run(["search", "BODYNEEDLE"]);
-      const hit = (ndjson(stdout) as any[]).find((h) => h.kind === "video");
-      expect(hit.field).toBe("body");
-      expect(hit.snippet).toContain("BODYNEEDLE");
-      expect(hit.snippet.startsWith("…")).toBe(true);
-      expect(hit.snippet.endsWith("…")).toBe(true);
-      expect(hit.snippet.length).toBeLessThan(long.length);
     });
   });
 

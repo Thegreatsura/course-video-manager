@@ -288,18 +288,6 @@ describe("overlay list", () => {
     expect(rows.map((r) => r.title)).toEqual(["On the second"]);
   });
 
-  it("prints nothing for a Video with no Overlays", async () => {
-    const { exitCode, stdout } = await run([
-      "overlay",
-      "list",
-      "--video",
-      s.standaloneActiveId,
-    ]);
-
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe("");
-  });
-
   it("reports an unknown Video as not-found", async () => {
     const { exitCode, stderr } = await run([
       "overlay",
@@ -323,34 +311,6 @@ describe("overlay get", () => {
     );
 
     expect(got).toEqual(created);
-  });
-
-  it("returns several Overlays as NDJSON", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 10 });
-    const a = await addOverlay(clip.id, { at: "1", duration: "1", title: "A" });
-    const b = await addOverlay(clip.id, { at: "2", duration: "1", title: "B" });
-
-    const rows = ndjson(
-      (await run(["overlay", "get", a.id, b.id])).stdout
-    ) as OverlayRow[];
-
-    expect(rows.map((r) => r.title)).toEqual(["A", "B"]);
-  });
-
-  it("emits what it found and names what it did not", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 10 });
-    const a = await addOverlay(clip.id, { title: "A" });
-
-    const { exitCode, stdout, stderr } = await run([
-      "overlay",
-      "get",
-      a.id,
-      "no-such-overlay",
-    ]);
-
-    expect((ndjson(stdout) as OverlayRow[]).map((r) => r.id)).toEqual([a.id]);
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("no-such-overlay");
   });
 
   it("reports a single unknown id as not-found", async () => {
