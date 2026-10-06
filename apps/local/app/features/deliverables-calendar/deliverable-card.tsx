@@ -1,28 +1,18 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { cn } from "@/lib/utils";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+  ActionMenuContent,
+  EntityMenuContent,
+} from "@/features/action-menu/action-menu";
+import { useConfirmDialog } from "@/features/action-menu/confirm-dialog";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import {
   AlertTriangleIcon,
   CheckIcon,
   CircleDashedIcon,
-  CopyIcon,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
+  ReplaceIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -32,7 +22,6 @@ import {
 import {
   CourseBadge,
   PitchBadge,
-  PriorityPill,
   type LinkedCourse,
   type LinkedPitch,
 } from "./deliverable-links";
@@ -52,6 +41,12 @@ export interface DeliverableForCard {
   linkedPitches: LinkedPitch[];
 }
 
+const STATUSES = [
+  { status: "planned", label: "Planned", icon: CircleDashedIcon },
+  { status: "done", label: "Done", icon: CheckIcon },
+  { status: "cancelled", label: "Cancelled", icon: XIcon },
+] as const;
+
 function parseDate(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y!, m! - 1, d!);
@@ -69,62 +64,54 @@ function CourseContextMenu({
   submitLinkUpdate: (courseIds: string[], pitchIds: string[]) => void;
 }) {
   const pitchIds = d.linkedPitches.map((lp) => lp.id);
+  const linked = (id: string) =>
+    id !== course.id && d.linkedCourses.some((lc) => lc.id === id);
   return (
     <ContextMenu>
       <ContextMenuTrigger className="cursor-context-menu">
         <CourseBadge course={course} />
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-56 max-h-[min(20rem,var(--radix-context-menu-content-available-height))]">
-        <CopyEntityLinkItems
-          menu="context"
-          entity={{ type: "course", id: course.id }}
-        />
-        <ContextMenuSeparator />
-        <ContextMenuLabel>Change course</ContextMenuLabel>
-        <ContextMenuSeparator />
-        <ContextMenuRadioGroup
-          value={course.id}
-          onValueChange={(newId) => {
-            submitLinkUpdate(
-              d.linkedCourses.map((lc) =>
-                lc.id === course.id ? newId : lc.id
-              ),
-              pitchIds
-            );
-          }}
-        >
-          {allCourses
-            .slice()
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((co) => (
-              <ContextMenuRadioItem
-                key={co.id}
-                value={co.id}
-                disabled={
-                  d.linkedCourses.some((lc) => lc.id === co.id) &&
-                  co.id !== course.id
-                }
-              >
-                {co.name}
-              </ContextMenuRadioItem>
-            ))}
-        </ContextMenuRadioGroup>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => {
-            submitLinkUpdate(
-              d.linkedCourses
-                .filter((lc) => lc.id !== course.id)
-                .map((lc) => lc.id),
-              pitchIds
-            );
-          }}
-        >
-          <Trash2Icon className="size-3.5" />
-          Remove
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <EntityMenuContent
+        menu="context"
+        entity={{ type: "course", id: course.id }}
+        groups={{
+          edit: [
+            {
+              label: "Change Course",
+              icon: ReplaceIcon,
+              value: course.id,
+              onValueChange: (newId) =>
+                submitLinkUpdate(
+                  d.linkedCourses.map((lc) =>
+                    lc.id === course.id ? newId : lc.id
+                  ),
+                  pitchIds
+                ),
+              options: allCourses
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((co) => ({
+                  value: co.id,
+                  label: co.name,
+                  disabled: linked(co.id),
+                })),
+            },
+          ],
+          danger: [
+            {
+              ...STANDARD_ACTIONS.removeFrom,
+              label: "Remove from Deliverable",
+              onSelect: () =>
+                submitLinkUpdate(
+                  d.linkedCourses
+                    .filter((lc) => lc.id !== course.id)
+                    .map((lc) => lc.id),
+                  pitchIds
+                ),
+            },
+          ],
+        }}
+      />
     </ContextMenu>
   );
 }
@@ -141,82 +128,62 @@ function PitchContextMenu({
   submitLinkUpdate: (courseIds: string[], pitchIds: string[]) => void;
 }) {
   const courseIds = d.linkedCourses.map((lc) => lc.id);
+  const linked = (id: string) =>
+    id !== pitch.id && d.linkedPitches.some((lp) => lp.id === id);
   return (
     <ContextMenu>
       <ContextMenuTrigger className="cursor-context-menu">
         <PitchBadge pitch={pitch} />
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-72 max-h-[min(20rem,var(--radix-context-menu-content-available-height))]">
-        <CopyEntityLinkItems
-          menu="context"
-          entity={{ type: "pitch", id: pitch.id }}
-        />
-        <ContextMenuSeparator />
-        <ContextMenuLabel>Change pitch</ContextMenuLabel>
-        <ContextMenuSeparator />
-        <ContextMenuRadioGroup
-          value={pitch.id}
-          onValueChange={(newId) => {
-            submitLinkUpdate(
-              courseIds,
-              d.linkedPitches.map((lp) => (lp.id === pitch.id ? newId : lp.id))
-            );
-          }}
-        >
-          {PITCH_STATE_ORDER.flatMap((state) => {
-            const inGroup = allPitches
-              .filter((ap) => ap.state === state)
-              .sort((a, b) =>
-                a.priority !== b.priority
-                  ? a.priority - b.priority
-                  : a.title.localeCompare(b.title)
-              );
-            if (inGroup.length === 0) return [];
-            const Icon = PITCH_STATE_META[state].icon;
-            return [
-              <ContextMenuLabel
-                key={`label-${state}`}
-                className="text-[10px] uppercase tracking-wider text-muted-foreground pt-2"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Icon className="size-3" />
-                  {PITCH_STATE_META[state].label}
-                </span>
-              </ContextMenuLabel>,
-              ...inGroup.map((ap) => (
-                <ContextMenuRadioItem
-                  key={ap.id}
-                  value={ap.id}
-                  disabled={
-                    d.linkedPitches.some((lp) => lp.id === ap.id) &&
-                    ap.id !== pitch.id
-                  }
-                >
-                  <span className="flex items-center gap-2">
-                    <PriorityPill p={ap.priority} />
-                    <span className="truncate">{ap.title}</span>
-                  </span>
-                </ContextMenuRadioItem>
-              )),
-            ];
-          })}
-        </ContextMenuRadioGroup>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => {
-            submitLinkUpdate(
-              courseIds,
-              d.linkedPitches
-                .filter((lp) => lp.id !== pitch.id)
-                .map((lp) => lp.id)
-            );
-          }}
-        >
-          <Trash2Icon className="size-3.5" />
-          Remove
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <EntityMenuContent
+        menu="context"
+        entity={{ type: "pitch", id: pitch.id }}
+        groups={{
+          edit: [
+            {
+              label: "Change Pitch",
+              icon: ReplaceIcon,
+              value: pitch.id,
+              onValueChange: (newId) =>
+                submitLinkUpdate(
+                  courseIds,
+                  d.linkedPitches.map((lp) =>
+                    lp.id === pitch.id ? newId : lp.id
+                  )
+                ),
+              options: PITCH_STATE_ORDER.flatMap((state) =>
+                allPitches
+                  .filter((ap) => ap.state === state)
+                  .sort((a, b) =>
+                    a.priority !== b.priority
+                      ? a.priority - b.priority
+                      : a.title.localeCompare(b.title)
+                  )
+                  .map((ap) => ({
+                    value: ap.id,
+                    label: ap.title,
+                    tag: `P${ap.priority}`,
+                    heading: PITCH_STATE_META[state].label,
+                    disabled: linked(ap.id),
+                  }))
+              ),
+            },
+          ],
+          danger: [
+            {
+              ...STANDARD_ACTIONS.removeFrom,
+              label: "Remove from Deliverable",
+              onSelect: () =>
+                submitLinkUpdate(
+                  courseIds,
+                  d.linkedPitches
+                    .filter((lp) => lp.id !== pitch.id)
+                    .map((lp) => lp.id)
+                ),
+            },
+          ],
+        }}
+      />
     </ContextMenu>
   );
 }
@@ -243,6 +210,7 @@ export function DeliverableCard({
   const statusFetcher = useFetcher();
   const archiveFetcher = useFetcher();
   const duplicateFetcher = useFetcher();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   function submitLinkUpdate(courseIds: string[], pitchIds: string[]) {
     const fd = new FormData();
@@ -311,140 +279,135 @@ export function DeliverableCard({
   );
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <li
-          className={cn(
-            "cursor-context-menu rounded-lg border bg-background p-3 flex items-start gap-3",
-            overdue ? "border-red-500/50 bg-red-500/5" : "border-border",
-            cancelled && "opacity-50"
-          )}
-        >
-          {onAddNewForDate ? (
-            <ContextMenu>
-              <ContextMenuTrigger asChild>{dateArea}</ContextMenuTrigger>
-              <ContextMenuContent className="w-48">
-                <ContextMenuItem onSelect={() => onAddNewForDate(d.date)}>
-                  <PlusIcon className="size-3.5 mr-2" />
-                  Add new for {dayLabel}
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          ) : (
-            dateArea
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              {overdue && (
-                <AlertTriangleIcon className="size-3.5 text-red-600 dark:text-red-400 shrink-0" />
-              )}
-              {done && (
-                <CheckIcon className="size-3.5 text-muted-foreground shrink-0" />
-              )}
-              {cancelled && (
-                <XIcon className="size-3.5 text-muted-foreground shrink-0" />
-              )}
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  done && "text-muted-foreground",
-                  cancelled && "line-through text-muted-foreground"
+    <>
+      {confirmDialog}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <li
+            className={cn(
+              "cursor-context-menu rounded-lg border bg-background p-3 flex items-start gap-3",
+              overdue ? "border-red-500/50 bg-red-500/5" : "border-border",
+              cancelled && "opacity-50"
+            )}
+          >
+            {onAddNewForDate ? (
+              <ContextMenu>
+                <ContextMenuTrigger asChild>{dateArea}</ContextMenuTrigger>
+                <ActionMenuContent
+                  menu="context"
+                  groups={{
+                    create: [
+                      {
+                        ...STANDARD_ACTIONS.add,
+                        label: `Add Deliverable on ${dayLabel}`,
+                        opensDialog: true,
+                        onSelect: () => onAddNewForDate(d.date),
+                      },
+                    ],
+                  }}
+                />
+              </ContextMenu>
+            ) : (
+              dateArea
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                {overdue && (
+                  <AlertTriangleIcon className="size-3.5 text-red-600 dark:text-red-400 shrink-0" />
                 )}
-              >
-                {d.title}
-              </span>
-              {overdue && (
-                <span className="text-[10px] uppercase tracking-wider text-red-600 dark:text-red-400">
-                  · Overdue
+                {done && (
+                  <CheckIcon className="size-3.5 text-muted-foreground shrink-0" />
+                )}
+                {cancelled && (
+                  <XIcon className="size-3.5 text-muted-foreground shrink-0" />
+                )}
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    done && "text-muted-foreground",
+                    cancelled && "line-through text-muted-foreground"
+                  )}
+                >
+                  {d.title}
                 </span>
+                {overdue && (
+                  <span className="text-[10px] uppercase tracking-wider text-red-600 dark:text-red-400">
+                    · Overdue
+                  </span>
+                )}
+              </div>
+              {d.notes && (
+                <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>
+              )}
+              {(d.linkedCourses.length > 0 || d.linkedPitches.length > 0) && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {d.linkedCourses.map((c) => (
+                    <CourseContextMenu
+                      key={c.id}
+                      course={c}
+                      d={d}
+                      allCourses={allCourses}
+                      submitLinkUpdate={submitLinkUpdate}
+                    />
+                  ))}
+                  {d.linkedPitches.map((p) => (
+                    <PitchContextMenu
+                      key={p.id}
+                      pitch={p}
+                      d={d}
+                      allPitches={allPitches}
+                      submitLinkUpdate={submitLinkUpdate}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-            {d.notes && (
-              <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>
-            )}
-            {(d.linkedCourses.length > 0 || d.linkedPitches.length > 0) && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {d.linkedCourses.map((c) => (
-                  <CourseContextMenu
-                    key={c.id}
-                    course={c}
-                    d={d}
-                    allCourses={allCourses}
-                    submitLinkUpdate={submitLinkUpdate}
-                  />
-                ))}
-                {d.linkedPitches.map((p) => (
-                  <PitchContextMenu
-                    key={p.id}
-                    pitch={p}
-                    d={d}
-                    allPitches={allPitches}
-                    submitLinkUpdate={submitLinkUpdate}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </li>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={() => setEditing(true)}>
-          <PencilIcon className="size-3.5 mr-2" />
-          Edit…
-        </ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <CircleDashedIcon className="size-3.5 mr-2" />
-            Status
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-40">
-            <ContextMenuItem
-              disabled={d.status === "planned"}
-              onSelect={() => setStatus("planned")}
-            >
-              <CircleDashedIcon className="size-3.5 mr-2" />
-              Planned
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={d.status === "done"}
-              onSelect={() => setStatus("done")}
-            >
-              <CheckIcon className="size-3.5 mr-2" />
-              Done
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={d.status === "cancelled"}
-              onSelect={() => setStatus("cancelled")}
-            >
-              <XIcon className="size-3.5 mr-2" />
-              Cancelled
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <CopyEntityLinkItems
+          </li>
+        </ContextMenuTrigger>
+        <EntityMenuContent
           menu="context"
           entity={{ type: "deliverable", id: d.id }}
+          groups={{
+            edit: [
+              {
+                ...STANDARD_ACTIONS.edit,
+                opensDialog: true,
+                onSelect: () => setEditing(true),
+              },
+              {
+                label: "Set Status",
+                icon: CircleDashedIcon,
+                items: STATUSES.map(({ status, label, icon }) => ({
+                  label,
+                  icon,
+                  checked: d.status === status,
+                  onSelect: () => {
+                    if (d.status !== status) setStatus(status);
+                  },
+                })),
+              },
+            ],
+            create: [{ ...STANDARD_ACTIONS.duplicate, onSelect: duplicate }],
+            danger: [
+              {
+                ...STANDARD_ACTIONS.delete,
+                opensDialog: true,
+                onSelect: () =>
+                  confirm({
+                    title: "Delete deliverable?",
+                    description: `"${d.title}" will be removed from the calendar. This cannot be undone from the app.`,
+                    confirmLabel: "Delete",
+                    onConfirm: () =>
+                      archiveFetcher.submit(new FormData(), {
+                        method: "post",
+                        action: `/api/deliverables/${d.id}/archive`,
+                      }),
+                  }),
+              },
+            ],
+          }}
         />
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={duplicate}>
-          <CopyIcon className="size-3.5 mr-2" />
-          Duplicate
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() =>
-            archiveFetcher.submit(new FormData(), {
-              method: "post",
-              action: `/api/deliverables/${d.id}/archive`,
-            })
-          }
-        >
-          <Trash2Icon className="size-3.5 mr-2" />
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+      </ContextMenu>
+    </>
   );
 }
