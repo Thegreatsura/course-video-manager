@@ -68,6 +68,13 @@ describe("shouldIgnoreKeyboardShortcut", () => {
     expect(shouldIgnoreKeyboardShortcut(makeEvent(target))).toBe(true);
   });
 
+  it("suppresses shortcuts anywhere inside a CodeMirror editor", () => {
+    const target = {
+      closest: (sel: string) => (sel === ".cm-editor" ? {} : null),
+    };
+    expect(shouldIgnoreKeyboardShortcut(makeEvent(target))).toBe(true);
+  });
+
   it("suppresses shortcuts when focused inside a dialog", () => {
     const dialogEl = {};
     const target = {

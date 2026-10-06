@@ -187,6 +187,12 @@ Both pages share one guard for when a key is not the page's to take —
 `app/hooks/should-ignore-keyboard-shortcut.ts`. A new keyboard surface uses it
 rather than writing its own test for inputs, Monaco and dialogs.
 
+A surface that lives INSIDE a dialog — the Article Writer preview, whose L and K
+step through its ChooseScreenshot placeholders — cannot use that guard whole, so
+it uses the guard's `isTypingTarget` half and scopes itself to keys from its own
+dialog. The Video and Animatic pages refuse every key from a dialog, so the two
+L/K meanings never both act on one press.
+
 ## Interface design
 
 ### Deep modules
