@@ -39,14 +39,9 @@ import {
  *
  * An empty Section (one with no Lessons) has no derived numbered path — its path
  * falls back to its title — and is skipped from the numbered course view; it
- * gains a number once it contains at least one Lesson. A section whose path ends
- * in `ARCHIVE` is an ARCHIVE Section (filtered out of the default course view in
- * the app, but still returned here unless it has been archived/deleted). This is
- * an entirely different thing from this file's `archive` VERB below: the
- * `ARCHIVE`-suffix convention is a display filter in the app's UI that leaves
- * the section fully active and readable everywhere in this CLI, while `archive`
+ * gains a number once it contains at least one Lesson. The `archive` verb below
  * is a destructive, one-way soft-delete (sets `archivedAt`) — the same shape as
- * `cvm lesson archive`. See SECTION_HELP / ARCHIVE_HELP for the full contrast.
+ * `cvm lesson archive` — and is the only thing that hides a section.
  *
  * Every verb here calls LessonSectionOperationsService primitives directly and
  * does its own order math in the command handler, the same way `cvm lesson

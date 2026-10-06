@@ -26,8 +26,7 @@ import {
  * The shared course-view loader Effect, used by both the full course page and
  * the Section Workbench. Resolves the selected version, builds the slim
  * section→lesson→video→beat tree (Beat Descriptions included), and kicks
- * off the deferred filesystem/git/transcript work. Sections ending in
- * `ARCHIVE` are dropped here so every consumer agrees on the visible set.
+ * off the deferred filesystem/git/transcript work.
  *
  * The Section Workbench wraps this and narrows `selectedCourse.sections` to a
  * single section — see `_app.courses.$courseId.sections.$sectionId.tsx`.
@@ -71,16 +70,9 @@ export function courseViewEffect(input: {
             return undefined;
           }
 
-          const allSections = course.versions[0]?.sections ?? [];
-
           return {
             ...course,
-            sections: allSections.filter((section) => {
-              // ARCHIVE sections are marked by a title ending in "ARCHIVE".
-              // Detected on the title (the source of truth) rather than the
-              // derived path, which is lowercased and absent for empty sections.
-              return !section.title.toUpperCase().endsWith("ARCHIVE");
-            }),
+            sections: course.versions[0]?.sections ?? [],
           };
         })
       );
