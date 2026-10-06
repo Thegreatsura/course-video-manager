@@ -34,6 +34,7 @@ import type { RemoveBlockHandler } from "components/ui/kibo-ui/ai/response";
 import type { Options } from "react-markdown";
 import type { OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
+import { useScreenshotNavigation } from "./use-screenshot-navigation";
 
 export interface DocumentPanelProps {
   document: string | undefined;
@@ -105,6 +106,8 @@ export const DocumentPanel = memo(function DocumentPanel({
   const scrollFractionRef = useRef(0);
   const previewRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  // L / K walk the preview's ChooseScreenshot placeholders.
+  useScreenshotNavigation(previewRef, !isEditing && Boolean(document));
 
   const handleToggleEditing = useCallback(() => {
     // Capture scroll fraction from the outgoing view
