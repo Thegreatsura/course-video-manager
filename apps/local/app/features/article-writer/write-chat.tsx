@@ -32,6 +32,7 @@ import {
 } from "./choose-screenshot-mutations";
 import { WriteDocumentDisplay, EditDocumentDisplay } from "./tool-call-display";
 import { CacheStatsBadge } from "./cache-stats-badge";
+import { AssistantMessage } from "./assistant-message";
 import { useMessageTextMutation } from "./message-text-mutation";
 
 export interface WriteChatProps {
@@ -211,7 +212,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
               const textContent = partsToText(message.parts);
 
               return (
-                <AIMessage from={message.role} key={message.id}>
+                <AssistantMessage key={message.id}>
                   {message.parts.map((part, partIndex) => {
                     if (part.type === "tool-writeDocument") {
                       return (
@@ -246,7 +247,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
                   {message.metadata && (
                     <CacheStatsBadge stats={message.metadata} />
                   )}
-                </AIMessage>
+                </AssistantMessage>
               );
             })}
             {queuedMessages?.map((text, i) => (
