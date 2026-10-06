@@ -147,47 +147,27 @@
     {
       "file": "apps/local/app/routes/api.video-files.create.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/routes/videos.$videoId.document-completions.ts",
-      "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "The File comes from formData that makeAction has already read into memory; its arrayBuffer() does not reject."
     },
     {
       "file": "apps/local/app/services/ai-hero-upload-service.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/autofill-service.ts",
-      "count": 2,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/clip-service-handler.helpers.ts",
-      "count": 14,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
-    },
-    {
-      "file": "apps/local/app/services/clip-service-handler.ts",
-      "count": 22,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "The release half of acquireRelease must not fail; a FileHandle.close() rejection is a defect by design (tryPromise would have to orDie it anyway)."
     },
     {
       "file": "apps/local/app/services/dropbox-http-client.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "The release half of acquireRelease must not fail; a FileHandle.close() rejection is a defect by design (tryPromise would have to orDie it anyway)."
     },
     {
       "file": "apps/local/app/services/frame-capture-service.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "Scope finalizer that cannot reject: it catches browser.close() itself, and a finalizer has no error channel."
     },
     {
       "file": "apps/local/app/services/youtube-upload-service.ts",
       "count": 1,
-      "reason": "Not yet reviewed (Phase 3: reviewed in its own PR)."
+      "reason": "The release half of acquireRelease must not fail; a FileHandle.close() rejection is a defect by design (tryPromise would have to orDie it anyway)."
     }
   ]
 }
