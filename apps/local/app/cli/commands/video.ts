@@ -53,10 +53,16 @@ const fetchVideoWithClips = (id: string) =>
 interface TreeNode {
   readonly id: string;
   readonly kind: string;
-  readonly name: string;
+  readonly name?: string;
   readonly children?: ReadonlyArray<TreeNode>;
 }
 
+/**
+ * The skeleton is slim by default: a Clip node is just `{ id, kind }`, because
+ * a Clip's only label is its transcribed `text`, and a few hundred of those is
+ * a whole transcript — not a structure. `full` restores the old shape, where a
+ * Clip node's `name` is its text.
+ */
 const buildVideoTree = (
   video: {
     id: string;
@@ -64,12 +70,15 @@ const buildVideoTree = (
     clips: ReadonlyArray<{ id: string; order: string; text: string }>;
     chapters: ReadonlyArray<{ id: string; order: string; name: string }>;
   },
-  depth: number
-): TreeNode => {
+  depth: number,
+  full: boolean
+): TreeNode & { clipCount?: number; chapterCount?: number } => {
   const children: TreeNode[] = [
     ...video.clips.map((c) => ({
       order: c.order,
-      node: { id: c.id, kind: "clip", name: c.text },
+      node: full
+        ? { id: c.id, kind: "clip", name: c.text }
+        : { id: c.id, kind: "clip" },
     })),
     ...video.chapters.map((c) => ({
       order: c.order,
@@ -79,7 +88,15 @@ const buildVideoTree = (
     .sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0))
     .map((x) => x.node);
 
-  const node: TreeNode = { id: video.id, kind: "video", name: video.title };
+  const node = full
+    ? { id: video.id, kind: "video", name: video.title }
+    : {
+        id: video.id,
+        kind: "video",
+        name: video.title,
+        clipCount: video.clips.length,
+        chapterCount: video.chapters.length,
+      };
   // Clips/Chapters are leaves; only the first level of children exists.
   if (depth >= 1) {
     return { ...node, children };
@@ -128,26 +145,29 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
 const treeId = entityIdArg("video");
 const depth = Options.text("depth").pipe(Options.withDefault("1"));
 
-const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
-  Effect.gen(function* () {
-    const levels =
-      depth === "all"
-        ? Number.POSITIVE_INFINITY
-        : /^\d+$/.test(depth)
-          ? Number.parseInt(depth, 10)
-          : NaN;
-    if (Number.isNaN(levels)) {
-      return yield* parseError(
-        `--depth must be a non-negative integer or "all" (got "${depth}")`,
-        "video"
-      );
-    }
-    const video = yield* fetchVideoWithClips(id);
-    if (video === undefined) {
-      return yield* notFound("video", id);
-    }
-    yield* emitObject(buildVideoTree(video, levels));
-  })
+const treeCmd = Command.make(
+  "tree",
+  { id: treeId, depth, full: fullOption },
+  ({ id, depth, full }) =>
+    Effect.gen(function* () {
+      const levels =
+        depth === "all"
+          ? Number.POSITIVE_INFINITY
+          : /^\d+$/.test(depth)
+            ? Number.parseInt(depth, 10)
+            : NaN;
+      if (Number.isNaN(levels)) {
+        return yield* parseError(
+          `--depth must be a non-negative integer or "all" (got "${depth}")`,
+          "video"
+        );
+      }
+      const video = yield* fetchVideoWithClips(id);
+      if (video === undefined) {
+        return yield* notFound("video", id);
+      }
+      yield* emitObject(buildVideoTree(video, levels, full));
+    })
 ).pipe(Command.withDescription(detail(TREE_HELP)));
 
 const transcriptId = entityIdArg("video");

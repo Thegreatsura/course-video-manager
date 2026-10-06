@@ -37,7 +37,7 @@ too, it just drops out of its Lesson with nowhere listing it afterwards.
 Verbs:
   list                 every Standalone Video (active by default; --archived for the archive)
   get <id...>          a Video plus its Clips and Chapters (variadic; NDJSON when >1 id)
-  tree <id>            skeleton: video -> clips/chapters (id/kind/name/children)
+  tree <id>            slim skeleton: video -> clip ids + chapters (--full adds clip text)
   transcript <id>      the ordered text projection (Clips + Chapters as prose)
   script <id>          the Video's teleprompter SCRIPT (internal; never published)
   create --name <n>    create a Video (--lesson <id> | --pitch <id> | neither=standalone; --format for standalone) (WRITE)
@@ -114,11 +114,18 @@ Examples:
 
 export const TREE_HELP = `Print the SKELETON of a Video: its Clips and Chapters as a shallow tree.
 
-Each node is just { id, kind, name, children } — no full entity fields. Use this
-to see a video's shape at a glance, then 'video get'/'cvm clip get' to pull
-detail. A Video's natural children are its non-archived Clips (kind:"clip",
-name = clip text) and Chapters (kind:"chapter", name = chapter name), interleaved
-in timeline order.
+The default output is SLIM: it shows the structure, not the content. Use this
+to see a video's shape at a glance, then 'video get' / 'cvm clip get <id>' to
+pull detail. A Video's natural children are its non-archived Clips and
+Chapters, interleaved in timeline order (array order IS timeline order):
+  video    { id, kind:"video", name, clipCount, chapterCount, children }
+  clip     { id, kind:"clip" }            NO text: a Clip's text is transcript,
+                                          not structure
+  chapter  { id, kind:"chapter", name }   name = the chapter heading
+
+--full   The old, larger shape: each clip node has name = its full clip text,
+         and the video node has no counts. To read the words, prefer
+         'video transcript <id>'.
 
 Depth:
   --depth N      expand N levels (default 1 = video + its direct clips/chapters)
@@ -132,7 +139,8 @@ NOTE ON FLAG ORDER
 Examples:
   cvm video tree <id>
   cvm video tree --depth all <id>
-  cvm video tree <id> | jq '.children[] | select(.kind=="chapter") | .name'`;
+  cvm video tree <id> | jq '.children[] | select(.kind=="chapter") | .name'
+  cvm video tree --full <id>`;
 
 export const TRANSCRIPT_HELP = `Render a Video's TRANSCRIPT — its ordered text projection.
 
