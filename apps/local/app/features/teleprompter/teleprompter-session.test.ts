@@ -207,6 +207,40 @@ describe("session marks", () => {
   });
 });
 
+describe("latest transcript", () => {
+  it("adopts what the editor pushed", () => {
+    const next = reducer(connected(), {
+      type: "editor-state",
+      videoId: "v1",
+      capture: "silence",
+      tab: "script",
+      latestTranscript: "So what is a type?",
+      at: 2000,
+    });
+    expect(next.latestTranscript).toBe("So what is a type?");
+  });
+
+  it("drops another video's transcript when the editor moves on", () => {
+    const next = reducer(connected({ latestTranscript: "Old" }), {
+      type: "editor-state",
+      videoId: "v2",
+      capture: "not-recording",
+      tab: "script",
+      latestTranscript: "Old",
+      at: 2000,
+    });
+    expect(next.latestTranscript).toBe(null);
+  });
+
+  it("clears once the editor goes quiet", () => {
+    const next = reducer(connected({ latestTranscript: "Stale" }), {
+      type: "liveness-checked",
+      at: 1000 + EDITOR_ALIVE_MS + 1,
+    });
+    expect(next.latestTranscript).toBe(null);
+  });
+});
+
 describe("script-pushed", () => {
   it("puts the editor's live text straight on the glass", () => {
     const next = reducer(connected(), {

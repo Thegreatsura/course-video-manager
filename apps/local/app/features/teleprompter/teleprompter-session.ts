@@ -53,6 +53,11 @@ export namespace teleprompterSession {
      * clip reducer.
      */
     marks: ClipMarks;
+    /**
+     * The newest transcribed clip in this recording session, as last pushed by
+     * the editor. `null` when there is none, or nobody to ask.
+     */
+    latestTranscript: string | null;
     content: Content;
     lastScriptPushAt: number;
     /** Whether the crawl is rolling. */
@@ -86,6 +91,8 @@ export namespace teleprompterSession {
         tab: EditorTab;
         /** Absent from an editor running older code; treated as no session. */
         marks?: ClipMarks;
+        /** Absent from an editor running older code; treated as none. */
+        latestTranscript?: string | null;
         at: number;
       }
     /** A bare pong: the editor is still there, and nothing has changed. */
@@ -115,6 +122,7 @@ export namespace teleprompterSession {
     videoId: null,
     capture: "not-recording",
     marks: NO_MARKS,
+    latestTranscript: null,
     content: EMPTY_CONTENT,
     lastScriptPushAt: 0,
     playing: false,
@@ -155,6 +163,9 @@ export namespace teleprompterSession {
           capture: action.capture,
           // A different video's leftovers aren't this video's problem.
           marks: videoChanged ? NO_MARKS : (action.marks ?? NO_MARKS),
+          latestTranscript: videoChanged
+            ? null
+            : (action.latestTranscript ?? null),
           // Recording never starts the crawl: the first words of a take are
           // rarely the first words of the script, so rolling on record puts the
           // glass ahead of the delivery. Play is a deliberate press. The end of
@@ -196,6 +207,7 @@ export namespace teleprompterSession {
           // row of dots reads as a live claim about clips nobody is reporting
           // on any more.
           marks: NO_MARKS,
+          latestTranscript: null,
         };
 
       case "content-fetched": {

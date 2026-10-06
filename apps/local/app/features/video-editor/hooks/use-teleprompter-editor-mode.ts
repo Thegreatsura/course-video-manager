@@ -2,7 +2,8 @@
  * Keep the teleprompter popup in step with this editor.
  *
  * The popup has no picker, so this is the only way it learns which video to
- * show, what capture is doing, and which of Script or Beats you're looking at.
+ * show, what capture is doing, which of Script or Beats you're looking at, and
+ * what this recording session's clips are doing.
  *
  * Two effects, doing two different jobs:
  *
@@ -23,22 +24,35 @@ import {
 } from "@/lib/teleprompter-window";
 import type { CaptureStatus, ClipMarks } from "@/lib/teleprompter-protocol";
 import type { BeatTab } from "../beat-tab";
+import type { RecordingSession, TimelineItem } from "../clip-state-reducer";
+import { useSessionClipMarks } from "../session-clip-marks";
+import { useLatestSessionTranscript } from "../session-latest-transcript";
 
-export type TeleprompterEditorState = {
+export type TeleprompterEditorInput = {
   videoId: string | null;
   capture: CaptureStatus;
   tab: BeatTab;
-  /** One per clip in the current session — see `session-clip-marks.ts`. */
-  marks: ClipMarks;
+  /** The editor's clips and sessions, from which the session state is derived. */
+  items: TimelineItem[];
+  sessions: RecordingSession[];
 };
 
-export function useTeleprompterEditorMode(state: TeleprompterEditorState) {
+export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
+  const { videoId, capture, tab } = input;
+  // One per clip in the current session — see `session-clip-marks.ts`.
+  const marks = useSessionClipMarks(input.items, input.sessions);
+  // See `session-latest-transcript.ts`.
+  const latestTranscript = useLatestSessionTranscript(
+    input.items,
+    input.sessions
+  );
+
+  const state = { videoId, capture, tab, marks, latestTranscript };
   const ref = useRef(state);
   ref.current = state;
 
   useEffect(() => enableTeleprompterEditorMode(() => ref.current), []);
 
-  const { videoId, capture, tab, marks } = state;
   // A fresh array every render would push on every frame of a take, so the
   // dependency is the array's *content*, flattened to a string.
   const marksKey = marks.join(",");
@@ -48,6 +62,7 @@ export function useTeleprompterEditorMode(state: TeleprompterEditorState) {
       capture,
       tab,
       marks: marksKey === "" ? [] : (marksKey.split(",") as ClipMarks),
+      latestTranscript,
     });
-  }, [videoId, capture, tab, marksKey]);
+  }, [videoId, capture, tab, marksKey, latestTranscript]);
 }

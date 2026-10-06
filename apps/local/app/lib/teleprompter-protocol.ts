@@ -15,7 +15,8 @@
  *     + silence-detection indicator so the same status is visible on the glass,
  *     the side panel's active tab, so the glass shows whichever of Script,
  *     Animatic or Beats you're looking at in the editor, and one mark per clip in the
- *     current recording session, so the glass can show clips landing.
+ *     current recording session, so the glass can show clips landing, and the
+ *     newest clip's transcript, so a take can be read back.
  *
  * State is **pushed, not polled**. `editorState` goes out when it changes, so
  * the glass is never more than a message behind the editor. The ping/pong
@@ -113,6 +114,12 @@ export const TeleprompterParentToChild = z.discriminatedUnion("type", [
     capture: CaptureStatus,
     tab: EditorTab,
     marks: ClipMarks.optional(),
+    /**
+     * The transcript of the newest transcribed clip in the current recording
+     * session, deleted ones included, so a fluffed take can be read back on
+     * the glass. Optional for the same stale-popup reason as `marks`.
+     */
+    latestTranscript: z.string().nullable().optional(),
   }),
   /** Heartbeat answer, and nothing more. State travels by `editorState`. */
   z.object({ type: z.literal("pong") }),
