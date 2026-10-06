@@ -134,7 +134,7 @@ const findOrStartDaemon = Effect.gen(function* () {
  * command; a failure is not, so a later call tries again.
  */
 let found: DaemonPaths | undefined;
-const starting = Effect.runSync(Effect.makeSemaphore(1));
+const starting = Effect.unsafeMakeSemaphore(1);
 const ensureDaemon = starting.withPermits(1)(
   Effect.suspend(() =>
     found !== undefined

@@ -188,30 +188,43 @@ export const appendClipsAtInsertionPoint = Effect.fn(
 // Mutex: Serialize append-from-obs calls per videoId
 // ============================================================================
 
-const videoMutexes = new Map<string, Promise<void>>();
-
-export async function withVideoMutex<T>(
-  videoId: string,
-  fn: () => Promise<T>
-): Promise<T> {
-  const prior = videoMutexes.get(videoId) ?? Promise.resolve();
-
-  let releaseMutex: () => void;
-  const gate = new Promise<void>((resolve) => {
-    releaseMutex = resolve;
-  });
-  videoMutexes.set(videoId, gate);
-
-  try {
-    await prior;
-    return await fn();
-  } finally {
-    releaseMutex!();
-    if (videoMutexes.get(videoId) === gate) {
-      videoMutexes.delete(videoId);
-    }
-  }
+interface VideoMutex {
+  readonly semaphore: Effect.Semaphore;
+  users: number;
 }
+
+const videoMutexes = new Map<string, VideoMutex>();
+
+/**
+ * Runs `effect` holding the per-video permit, so concurrent append-from-obs
+ * calls for one video run one at a time. The entry is dropped once the last
+ * waiter is done, so the map never grows with every video ever touched.
+ */
+export const withVideoMutex = <A, E, R>(
+  videoId: string,
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  Effect.suspend(() => {
+    let mutex = videoMutexes.get(videoId);
+    if (!mutex) {
+      mutex = { semaphore: Effect.unsafeMakeSemaphore(1), users: 0 };
+      videoMutexes.set(videoId, mutex);
+    }
+    const held = mutex;
+    held.users++;
+    return held.semaphore
+      .withPermits(1)(effect)
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            held.users--;
+            if (held.users === 0 && videoMutexes.get(videoId) === held) {
+              videoMutexes.delete(videoId);
+            }
+          })
+        )
+      );
+  });
 
 // ============================================================================
 // Helper: append-from-obs implementation (runs inside mutex)

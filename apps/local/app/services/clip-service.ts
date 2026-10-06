@@ -445,7 +445,7 @@ export type ClipServiceTransport = (
 /**
  * Creates a ClipService instance using the provided transport.
  * This is the internal factory - consumers use createHttpClipService() or
- * createDirectClipService() instead.
+ * createDirectClipService() (in test-utils, for tests) instead.
  */
 export function createClipService(send: ClipServiceTransport): ClipService {
   return {

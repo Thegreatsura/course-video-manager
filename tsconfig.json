@@ -2,7 +2,7 @@
   // `.sandcastle/` is deliberately absent: a dot directory never matched the
   // `**/*` glob this program used before the monorepo split, so its harness has
   // never been part of a typecheck. Adding it is a separate job.
-  "include": ["tests/**/*", "vitest.config.ts"],
+  "include": ["tests/**/*", "scripts/**/*.ts", "vitest.config.ts"],
   "exclude": ["node_modules"],
   "compilerOptions": {
     "lib": ["ESNext"],

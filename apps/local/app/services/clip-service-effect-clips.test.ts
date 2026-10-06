@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import {
-  createDirectClipService,
-  type VideoProcessingAdapter,
-} from "./clip-service-handler";
+import { createDirectClipService } from "@/test-utils/direct-clip-service";
+import { type VideoProcessingAdapter } from "./clip-service-handler";
 import type { ClipService, FrontendInsertionPoint } from "./clip-service";
 import {
   createTestDb,
