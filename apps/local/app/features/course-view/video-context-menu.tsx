@@ -12,7 +12,6 @@ import {
   Download,
   FileText,
   FolderOpen,
-  Link2,
   ListTree,
   PencilIcon,
   ScrollText,
@@ -22,7 +21,7 @@ import {
 import { Suspense } from "react";
 import type { useNavigate, useFetcher } from "react-router";
 import type { LoaderData, Section, Lesson, Video } from "./course-view-types";
-import { copyDeepLink } from "./deep-link";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useAutofillChaptersAction } from "./autofill-chapters-context";
 import { PurgeExportMenuItem } from "./export-status";
 import { AddBeatSubMenu } from "@/features/beats/beat-menu-items";
@@ -67,7 +66,6 @@ function MissingContentWarning({
  * beats, organize, video files, and (destructively) delete.
  */
 export function VideoContextMenuItems({
-  courseId,
   video,
   section,
   lesson,
@@ -79,7 +77,6 @@ export function VideoContextMenuItems({
   deleteVideoFileFetcher,
   submitDeleteVideo,
 }: {
-  courseId: string;
   video: Video;
   section: Section;
   lesson: Lesson;
@@ -98,18 +95,10 @@ export function VideoContextMenuItems({
 
   return (
     <ContextMenuContent>
-      <ContextMenuItem
-        onSelect={() =>
-          copyDeepLink({
-            courseId,
-            sectionId: section.id,
-            videoId: video.id,
-          })
-        }
-      >
-        <Link2 className="w-4 h-4" />
-        Copy Deep Link
-      </ContextMenuItem>
+      <CopyEntityLinkItems
+        menu="context"
+        entity={{ type: "video", id: video.id }}
+      />
 
       {!isReadOnly && (
         <>

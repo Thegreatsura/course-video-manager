@@ -457,7 +457,6 @@ export function SortableLessonItem({
         {!compact && visibility.videos && (
           <div className="ml-5 mt-3">
             <VideoThumbnailGrid
-              courseId={courseId}
               videos={lesson.videos}
               section={section}
               lesson={lesson}
@@ -473,7 +472,6 @@ export function SortableLessonItem({
         )}
         {compact && visibility.videos && (
           <LessonBeatTree
-            courseId={courseId}
             lesson={lesson}
             isReadOnly={isReadOnly}
             submitEvent={submitEvent}

@@ -9,13 +9,12 @@ import {
   ArrowDown,
   ArrowUp,
   ClipboardCopy,
-  Link2,
   PencilIcon,
   Plus,
   Trash2,
 } from "lucide-react";
 import type { Lesson } from "./course-view-types";
-import { copyDeepLink } from "./deep-link";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { computeSectionSwap } from "./section-grid-utils";
 
 export function SectionContextMenuItems({
@@ -78,12 +77,10 @@ export function SectionContextMenuItems({
           Copy Section Transcript
         </ContextMenuItem>
       )}
-      <ContextMenuItem
-        onSelect={() => copyDeepLink({ courseId, sectionId: section.id })}
-      >
-        <Link2 className="w-4 h-4" />
-        Copy Deep Link
-      </ContextMenuItem>
+      <CopyEntityLinkItems
+        menu="context"
+        entity={{ type: "section", id: section.id, courseId }}
+      />
       {!isReadOnly && (
         <>
           <ContextMenuSeparator />

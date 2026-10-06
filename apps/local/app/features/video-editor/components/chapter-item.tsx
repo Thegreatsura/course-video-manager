@@ -20,6 +20,7 @@ import { ChapterDivider } from "./chapter-divider";
 import { InsertionPointWithSession } from "./insertion-point-with-session";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { getChapterPercentComplete } from "../video-editor-selectors";
 
 /**
@@ -56,6 +57,7 @@ export const ChapterItem = (props: {
     VideoEditorContext,
     (ctx) => ctx.onSetInsertionPoint
   );
+  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
   const onMoveClip = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onMoveClip
@@ -118,6 +120,19 @@ export const ChapterItem = (props: {
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {props.chapter.type === "chapter-on-database" && (
+            <>
+              <CopyEntityLinkItems
+                menu="context"
+                entity={{
+                  type: "chapter",
+                  id: props.chapter.databaseId,
+                  videoId,
+                }}
+              />
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem
             onSelect={() => {
               onSetInsertionPoint("before", props.chapter.frontendId);

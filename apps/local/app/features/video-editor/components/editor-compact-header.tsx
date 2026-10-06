@@ -1,4 +1,10 @@
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeftIcon,
@@ -38,9 +44,20 @@ export const EditorCompactHeader = (props: {
         </Link>
       </Button>
 
-      <span className="text-sm text-muted-foreground truncate min-w-0">
-        {props.breadcrumb}
-      </span>
+      {/* Right-click the breadcrumb for this Video's link and ID. */}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <span className="text-sm text-muted-foreground truncate min-w-0 cursor-context-menu">
+            {props.breadcrumb}
+          </span>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <CopyEntityLinkItems
+            menu="context"
+            entity={{ type: "video", id: props.videoId }}
+          />
+        </ContextMenuContent>
+      </ContextMenu>
 
       <div className="flex-1" />
 

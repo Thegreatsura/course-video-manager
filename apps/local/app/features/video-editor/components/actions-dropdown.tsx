@@ -40,6 +40,7 @@ import {
   RevealInFileSystemItem,
 } from "./shared-action-items";
 import { RetranscribeAllClipsItem } from "./transcript-word-actions";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 
 export const ActionsDropdown = (props: {
   /** Whether silence detection has completed for all clips */
@@ -232,6 +233,11 @@ export const ActionsDropdown = (props: {
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
+
+        <CopyEntityLinkItems
+          menu="dropdown"
+          entity={{ type: "video", id: props.videoId }}
+        />
 
         <CopySubmenu
           allClipsHaveText={props.allClipsHaveText}
