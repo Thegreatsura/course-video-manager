@@ -1,6 +1,23 @@
 # The exhaustive run. docs/agents/testing.md tells every agent to stay
-# targeted locally because this job runs the whole suite on every PR — so this
-# file is what makes that instruction true.
+# targeted locally because this workflow runs the whole suite on every PR — so
+# this file is what makes that instruction true.
+#
+# `pnpm run check` is the same work in one process: `check:static` + `test`.
+# Here it is split across parallel jobs, because the serial run took ~6.5 min
+# and the ruleset (strict, required context `check`) makes every BEHIND PR pay
+# it again:
+#
+#   static      = pnpm run check:static         (typecheck, lint:effect, oxlint,
+#                                                lint:boundaries, the file guards,
+#                                                the Effect guards)
+#   test-rest   = pnpm run test:ci:rest         (every `test` task except @cvm/local)
+#   test-local  = pnpm run test:ci:local --shard=N/4   (@cvm/local, ~80% of test time)
+#
+# test-rest + test-local together are exactly `pnpm run test`. If you add a
+# step to `check`, add it to one of these jobs too.
+#
+# `check` at the bottom is the one context the ruleset requires. Do not rename
+# it, and do not give any other job that name.
 name: Check
 
 on:
@@ -12,28 +29,96 @@ concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  check:
+  # Docs-only fast path. A PR whose every changed path (old and new side of a
+  # rename) sits under docs/ cannot affect any check: the file-token guard
+  # excludes docs/*, and no test, typecheck or lint reads it. Anything else —
+  # including root *.md, which the token guard does read — runs the full set.
+  # Pushes to main always run the full set.
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > files.txt
+          total=$(wc -l < files.txt)
+          outside=$(grep -cv '^docs/' files.txt || true)
+          echo "changed paths: $total, outside docs/: $outside"
+          # The files API caps at 3000 entries; never trust a truncated list.
+          if [ "$total" -gt 0 ] && [ "$total" -lt 3000 ] && [ "$outside" -eq 0 ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+  static:
+    name: static (typecheck, lint, guards)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm run check:static
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
+  test-rest:
+    name: test (all but @cvm/local)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm run test:ci:rest
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  test-local:
+    name: test @cvm/local (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm run test:ci:local --shard=${{ matrix.shard }}/4
 
-      # typecheck, oxlint, package boundaries, the five file guards, then the
-      # unfiltered test run. One script, the same one a human runs by hand.
-      - name: Check
-        run: pnpm run check
+  # The required status context. Green only if every job above succeeded, or —
+  # on a docs-only PR — was skipped by the fast path.
+  check:
+    needs: [changes, static, test-rest, test-local]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          allowed='["success"]'
+          [ "$DOCS_ONLY" = "true" ] && allowed='["success","skipped"]'
+          echo "$NEEDS" | jq -e --argjson ok "$allowed" '
+            .changes.result == "success" and
+            ([to_entries[] | select(.key != "changes") | .value.result | IN($ok[])] | all)
+          ' > /dev/null || { echo "::error::a required job did not pass"; exit 1; }

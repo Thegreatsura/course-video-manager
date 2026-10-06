@@ -13,6 +13,9 @@ import {
 } from "@/lib/transcript-builder";
 import { sortByOrder } from "@/lib/sort-by-order";
 import type { BeatKind } from "@/features/beats/beat-kinds";
+import { deriveVideoRole, type VideoRole } from "./lesson-warnings";
+import type { AnimaticLine } from "@/features/animatic/animatic-lines";
+import { loadAnimaticLines } from "@/services/animatic-lines.server";
 import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
 import { projectVersionPaths } from "@/services/path-projection";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
@@ -194,6 +197,8 @@ export interface WriterContextData {
   files: Array<{ path: string; size: number; defaultEnabled: boolean }>;
   chapters: SectionWithWordCount[];
   isStandalone: boolean;
+  /** The video's title — the last segment of the writer modal's breadcrumb. */
+  videoTitle: string;
   courseStructure: CourseStructure | null;
   links: Array<{
     id: string;
@@ -209,8 +214,16 @@ export interface WriterContextData {
   }>;
   /** The video's script — the base Matt improvised from. Empty when unwritten. */
   script: string;
+  /**
+   * The video's Animatic read as lines, in Animatic order: every Clip Mockup
+   * line and Clip Mockup Chapter, each carrying its Clip Mockup Comments.
+   * Empty when the video has no Clip Mockups.
+   */
+  animaticLines: AnimaticLine[];
   /** Quiz ids owned by other videos in this course. */
   quizIds: string[];
+  /** The video's role in its lesson, read off its title — picks the writer's default mode. */
+  videoRole: VideoRole;
 }
 
 export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
@@ -222,11 +235,12 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
   const linkAuthOps = yield* LinkAuthOperationsService;
   const beatOps = yield* BeatOperationsService;
 
-  const [video, globalLinks, rawBeats] = yield* Effect.all(
+  const [video, globalLinks, rawBeats, animaticLines] = yield* Effect.all(
     [
       videoOps.getVideoWithClipsById(videoId),
       linkAuthOps.getLinks(),
       beatOps.listBeatsByVideoId(videoId),
+      loadAnimaticLines(videoId),
     ],
     { concurrency: "unbounded" }
   );
@@ -246,6 +260,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     video.chapters
   );
 
+  const videoRole = deriveVideoRole(video.title);
   const lesson = video.lesson;
   const files = yield* listVideoFiles(video.lineageId);
   const fullPath = path.resolve(getVideoFilePath(video.lineageId));
@@ -261,11 +276,14 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       files,
       chapters: sections,
       isStandalone: true,
+      videoTitle: video.title,
       courseStructure: null,
       links: globalLinks,
       beats,
       script: video.script ?? "",
+      animaticLines,
       quizIds: [],
+      videoRole,
     } satisfies WriterContextData;
   }
 
@@ -303,10 +321,13 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     files,
     chapters: sections,
     isStandalone: false,
+    videoTitle: video.title,
     courseStructure,
     links: globalLinks,
     beats,
     script: video.script ?? "",
+    animaticLines,
     quizIds,
+    videoRole,
   } satisfies WriterContextData;
 });

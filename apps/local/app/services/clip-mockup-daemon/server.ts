@@ -205,6 +205,9 @@ const daemon = (version: string) =>
         log(`speak ${request.items.length} line(s)`);
         return run(speak(request));
       }
+      // A plain async function, not an Effect: the `.then` below turns this
+      // rejection into a 400, so it never reaches an Effect's failure channel.
+      // @effect-diagnostics-next-line globalErrorInEffectFailure:off
       throw new Error(`no such request: ${req.method} ${req.url}`);
     };
 
@@ -247,7 +250,11 @@ const daemon = (version: string) =>
     // -- Stopping ----------------------------------------------------------
     const stop = yield* Deferred.make<string>();
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.once(signal, () => run(Deferred.succeed(stop, signal)));
+      process.once(signal, () => {
+        // Fire-and-forget: a signal handler cannot wait, and completing a
+        // Deferred cannot fail. The main fiber awaits `stop` below.
+        void run(Deferred.succeed(stop, signal));
+      });
     }
     yield* Effect.forkScoped(
       Effect.repeat(

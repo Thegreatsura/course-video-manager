@@ -7,6 +7,39 @@
   ],
   "exclude": ["node_modules", "standalone-video-files", "video-files", "build"],
   "compilerOptions": {
+    // Effect language service, run by `pnpm run lint:effect` (effect-tsgo
+    // diagnostics). Only rules backed by CODING_STANDARDS.md (its Effect
+    // section) are errors; the rest of the rules that default to error
+    // are demoted to warnings so they still report without gating CI.
+    // See docs/plans/effect-codebase-health.md before promoting one.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [],
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingStarInYieldEffectGen": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+          "missingReturnYieldStar": "error",
+          "catchUnfailableEffect": "error",
+          "tryCatchInEffectGen": "error",
+          "schemaSyncInEffect": "error",
+          "globalErrorInEffectFailure": "error",
+          "globalErrorInEffectCatch": "error",
+          "classSelfMismatch": "warning",
+          "effectFnImplicitAny": "warning",
+          "floatingEffectInVitest": "warning",
+          "missingEffectContext": "warning",
+          "missingEffectError": "warning",
+          "missingLayerContext": "warning",
+          "nonObjectEffectServiceType": "warning",
+          "overriddenSchemaConstructor": "warning",
+          "schemaLiteralNonFinite": "warning",
+          "schemaOpaqueInstanceMember": "warning"
+        }
+      }
+    ],
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "types": ["node", "vite/client"],
     "target": "ESNext",

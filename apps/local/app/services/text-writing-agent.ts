@@ -19,6 +19,7 @@ import { generateScopingDiscussionPrompt } from "@/prompts/generate-scoping-disc
 import { generateScopingDocumentPrompt } from "@/prompts/generate-scoping-document";
 import type { GlobalLink } from "@/prompts/link-instructions";
 import { getBeatsSection } from "@/prompts/beats-instructions";
+import { getAnimaticSection } from "@/prompts/animatic-instructions";
 import { getScriptSection } from "@/prompts/script-instructions";
 import { CACHE_BREAKPOINT_1H } from "./prompt-cache";
 import {
@@ -64,6 +65,7 @@ export const createTextWritingAgent = (props: {
   memory?: string;
   beats?: string;
   script?: string;
+  animatic?: string;
 }) => {
   const links = props.links ?? [];
   const systemPrompt = (() => {
@@ -191,7 +193,9 @@ export const createTextWritingAgent = (props: {
           links,
         });
       case "article":
-      default:
+      // The document writer owns this mode; when it reaches the text writer
+      // it gets the article prompt.
+      case "seo-description-document":
         return generateArticlePrompt({
           code: props.code,
           transcript: props.transcript,
@@ -214,7 +218,12 @@ export const createTextWritingAgent = (props: {
 
   return new Agent({
     model: props.model,
-    instructions: systemPrompt + memorySection + scriptSection + beatsSection,
+    instructions:
+      systemPrompt +
+      memorySection +
+      scriptSection +
+      beatsSection +
+      getAnimaticSection(props.animatic ?? ""),
   });
 };
 

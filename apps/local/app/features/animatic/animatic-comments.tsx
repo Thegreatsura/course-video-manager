@@ -14,7 +14,8 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useParams } from "react-router";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -118,6 +119,7 @@ export function AnimaticCommentContextMenu(props: {
   readonly children: ReactNode;
 }) {
   const comments = useCommentsOn(props.target);
+  const { videoId } = useParams();
   return (
     <ContextMenu onOpenChange={props.onOpenChange}>
       <ContextMenuTrigger asChild disabled={props.disabled}>
@@ -126,6 +128,19 @@ export function AnimaticCommentContextMenu(props: {
       {/* Focus stays where the item sends it: handed back to the trigger, it
           lands outside the thread as the thread opens, and closes it again. */}
       <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+        {videoId && (
+          <>
+            <CopyEntityLinkItems
+              menu="context"
+              entity={{
+                type: props.target.type,
+                id: props.target.id,
+                videoId,
+              }}
+            />
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onSelect={props.onComment}>
           {comments.length > 0 ? (
             <MessageSquare className="size-4" />
@@ -358,6 +373,14 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(props.comment.body);
   const writer = useCommentWriter();
+  const { videoId } = useParams();
+  const copyItems = (menu: "context" | "dropdown") =>
+    videoId && (
+      <CopyEntityLinkItems
+        menu={menu}
+        entity={{ type: "clip-mockup-comment", id: props.comment.id, videoId }}
+      />
+    );
 
   const save = () => {
     const body = draft.trim();
@@ -450,6 +473,8 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {copyItems("dropdown")}
+              {videoId && <DropdownMenuSeparator />}
               {groups.map((group, i) => [
                 i > 0 && <DropdownMenuSeparator key={`sep-${i}`} />,
                 <DropdownMenuGroup key={`group-${i}`}>
@@ -473,6 +498,8 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
         </li>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {copyItems("context")}
+        {videoId && <ContextMenuSeparator />}
         {groups.map((group, i) => [
           i > 0 && <ContextMenuSeparator key={`sep-${i}`} />,
           <ContextMenuGroup key={`group-${i}`}>

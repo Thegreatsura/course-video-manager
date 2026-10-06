@@ -20,6 +20,7 @@ export type VisibilityKey =
   | "todoMarkers"
   | "dependencies"
   | "videos"
+  | "videoWarnings"
   | "beats"
   | "beatDescriptions"
   | "beatLearningGoals"
@@ -60,6 +61,7 @@ export const VISIBILITY_TREE: VisibilityNode[] = [
   { key: "todoMarkers", label: "To-do markers", parent: "lessons" },
   { key: "dependencies", label: "Dependencies", parent: "lessons" },
   { key: "videos", label: "Videos", parent: "lessons" },
+  { key: "videoWarnings", label: "Video warnings", parent: "videos" },
   { key: "beats", label: "Beats", parent: "videos" },
   { key: "beatDescriptions", label: "Beat descriptions", parent: "beats" },
   {
@@ -89,6 +91,7 @@ export const DEFAULT_VISIBILITY: Record<VisibilityKey, boolean> = {
   todoMarkers: true,
   dependencies: true,
   videos: true,
+  videoWarnings: true,
   beats: true,
   beatDescriptions: false,
   beatLearningGoals: true,

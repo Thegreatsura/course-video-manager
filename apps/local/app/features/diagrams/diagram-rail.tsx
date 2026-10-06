@@ -2,10 +2,12 @@ import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
@@ -103,6 +105,11 @@ export function DiagramRail({
                     <Copy />
                     Copy contents
                   </ContextMenuItem>
+                  <CopyEntityLinkItems
+                    menu="context"
+                    entity={{ type: "diagram", id: d.id }}
+                  />
+                  <ContextMenuSeparator />
                   <ContextMenuItem
                     variant="destructive"
                     onSelect={() => onDelete(d.id)}

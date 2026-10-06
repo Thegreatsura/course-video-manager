@@ -20,7 +20,11 @@ import {
   ANNOUNCE_NOTHING,
   type PlaceholderFloor,
 } from "@/packages/course-json";
-import { validatePublishability as validatePublishabilityCore } from "./course-publish-readiness";
+import {
+  validatePublishability as validatePublishabilityCore,
+  validateVersionPublishability as validateVersionPublishabilityCore,
+  type VersionTree,
+} from "./course-publish-readiness";
 import { findShippingVideos as findShippingVideosCore } from "./course-publish-video-roster";
 import {
   ExportError,
@@ -214,6 +218,19 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           ).pipe(Effect.provide(readinessContext));
         }
       );
+
+      // Same gate over a tree the caller already read (the publish page loader).
+      const validatePublishabilityOfTree = Effect.fn(
+        "validatePublishabilityOfTree"
+      )(function* (
+        version: VersionTree,
+        placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
+      ) {
+        return yield* validateVersionPublishabilityCore(
+          version,
+          placeholderFloor
+        ).pipe(Effect.provide(readinessContext));
+      });
 
       const publishUnlocked = Effect.fn("publishUnlocked")(function* (
         options: PublishOptions
@@ -477,6 +494,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         isExported,
         resolveExportPath,
         validatePublishability,
+        validatePublishabilityOfTree,
         publish,
       };
     }),

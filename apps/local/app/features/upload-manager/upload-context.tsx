@@ -4,15 +4,29 @@ import {
   useEffect,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import { uploadReducer, createInitialUploadState } from "./upload-reducer";
 import { showSuccessToast, showErrorToast } from "./upload-toasts";
 import { startSSEBatchExport } from "./sse-batch-export-client";
 import { uploadTypeRegistry } from "./upload-type-registry";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
+import {
+  HISTORY_STORAGE_KEY,
+  createHistoryStore,
+  parseHistory,
+  type HistoryLookup,
+  type UploadHistoryStore,
+} from "./upload-history";
+import { useLocalStorage } from "@/hooks/use-local-storage";
+import type { CompletedStage } from "./upload-timing";
 
 export interface UploadContextType {
   uploads: uploadReducer.State["uploads"];
+  /** Inputs to the ETA: see `estimateUploads`. */
+  timings: uploadReducer.State["timings"];
+  etaHistory: HistoryLookup;
+  clock: () => number;
   startUpload: (
     videoId: string,
     title: string,
@@ -105,12 +119,53 @@ function initiateFromRegistry(
   config.initiate(action.uploadId, entry, params, dispatch, abortControllers);
 }
 
-export function UploadProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(
+export function UploadProvider({
+  children,
+  clock = Date.now,
+  history,
+}: {
+  children: React.ReactNode;
+  /** Stamps every action, so the reducer and the ETA never read a clock. */
+  clock?: () => number;
+  /** Where finished stage durations are kept. Defaults to localStorage. */
+  history?: UploadHistoryStore;
+}) {
+  const [state, dispatchUnstamped] = useReducer(
     uploadReducer,
     undefined,
     createInitialUploadState
   );
+  const clockRef = useRef(clock);
+  clockRef.current = clock;
+  const [storedHistory, setStoredHistory] =
+    useLocalStorage(HISTORY_STORAGE_KEY);
+  const [historyStore] = useState(
+    () =>
+      history ??
+      createHistoryStore(parseHistory(storedHistory), (data) =>
+        setStoredHistory(JSON.stringify(data))
+      )
+  );
+  const dispatch = useCallback(
+    (action: uploadReducer.Action) =>
+      dispatchUnstamped({ ...action, at: clockRef.current() }),
+    []
+  );
+
+  // Every stage a job finishes goes into the history, exactly once.
+  const persistedStagesRef = useRef(new WeakSet<CompletedStage>());
+  useEffect(() => {
+    for (const timing of Object.values(state.timings)) {
+      for (const stage of timing.completed) {
+        if (persistedStagesRef.current.has(stage)) continue;
+        persistedStagesRef.current.add(stage);
+        historyStore.record(stage.key, {
+          durationMs: stage.durationMs,
+          units: stage.units,
+        });
+      }
+    }
+  }, [state.timings, historyStore]);
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const previousUploadsRef = useRef<uploadReducer.State["uploads"]>({});
@@ -606,6 +661,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     <UploadContext.Provider
       value={{
         uploads: state.uploads,
+        timings: state.timings,
+        etaHistory: historyStore.lookup,
+        clock,
         startUpload,
         startSocialUpload,
         startYoutubeShortsUpload,

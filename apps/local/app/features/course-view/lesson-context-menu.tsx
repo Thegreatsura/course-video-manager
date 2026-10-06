@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -15,13 +16,12 @@ import {
   CheckCircle2,
   FileText,
   FileVideo,
-  Link2,
   ListTodo,
   PencilIcon,
   Plus,
   Trash2,
 } from "lucide-react";
-import { copyDeepLink } from "./deep-link";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 
 export function LessonContextMenuContent({
   courseId,
@@ -64,18 +64,15 @@ export function LessonContextMenuContent({
           <ContextMenuSeparator />
         </>
       )}
-      <ContextMenuItem
-        onSelect={() =>
-          copyDeepLink({
-            courseId,
-            sectionId: section.id,
-            lessonId: lesson.id,
-          })
-        }
-      >
-        <Link2 className="w-4 h-4" />
-        Copy Deep Link
-      </ContextMenuItem>
+      <CopyEntityLinkItems
+        menu="context"
+        entity={{
+          type: "lesson",
+          id: lesson.id,
+          courseId,
+          sectionId: section.id,
+        }}
+      />
       {!isReadOnly && (
         <>
           <ContextMenuSeparator />
@@ -101,7 +98,7 @@ export function LessonContextMenuContent({
             </ContextMenuItem>
           )}
           <ContextMenuSeparator />
-          {lesson.authoringStatus === "done" ? (
+          {!isTodoLesson(lesson) ? (
             <ContextMenuItem
               onSelect={() =>
                 submitEvent({

@@ -1,5 +1,7 @@
 import { AddVideoModal } from "@/components/add-video-modal";
+import { formatVideoBreadcrumb } from "@/lib/video-breadcrumb";
 import { Button } from "@/components/ui/button";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -209,9 +211,12 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
   const backButtonUrl = getBackButtonUrl(repoId, lessonId, format, pitchId);
 
   // Build breadcrumb text
-  const breadcrumb = isStandalone
-    ? videoTitle
-    : `${sectionPath}/${lessonPath}/${videoTitle}`;
+  const breadcrumb = formatVideoBreadcrumb({
+    isStandalone,
+    sectionPath,
+    lessonPath,
+    videoTitle,
+  });
 
   const matches = useMatches();
   const hideParentHeader = matches.some(
@@ -233,8 +238,19 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
                 </Link>
               </Button>
 
-              {/* Breadcrumb */}
-              <h1 className="text-lg">{breadcrumb}</h1>
+              {/* Breadcrumb — right-click it for this Video's link and ID,
+                  on every tab of the Video. */}
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <h1 className="text-lg cursor-context-menu">{breadcrumb}</h1>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <CopyEntityLinkItems
+                    menu="context"
+                    entity={{ type: "video", id: videoId }}
+                  />
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
 
             <div className="flex items-center gap-4">

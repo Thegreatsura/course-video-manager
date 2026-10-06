@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Args, Command, Options } from "@effect/cli";
 import { Effect, Option } from "effect";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -130,7 +131,7 @@ const listCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("video").pipe(Args.repeated);
 
 const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
   emitGet({
@@ -141,7 +142,7 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
   })
 ).pipe(Command.withDescription(detail(GET_HELP)));
 
-const treeId = Args.text({ name: "id" });
+const treeId = entityIdArg("video");
 const depth = Options.text("depth").pipe(Options.withDefault("1"));
 
 const treeCmd = Command.make(
@@ -169,7 +170,7 @@ const treeCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(TREE_HELP)));
 
-const transcriptId = Args.text({ name: "id" });
+const transcriptId = entityIdArg("video");
 
 const transcriptCmd = Command.make(
   "transcript",
@@ -194,7 +195,7 @@ const transcriptCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(TRANSCRIPT_HELP)));
 
-const scriptId = Args.text({ name: "id" });
+const scriptId = entityIdArg("video");
 
 const scriptCmd = Command.make("script", { id: scriptId }, ({ id }) =>
   Effect.gen(function* () {
@@ -218,13 +219,13 @@ const scriptCmd = Command.make("script", { id: scriptId }, ({ id }) =>
 const nameOption = Options.text("name").pipe(
   Options.withDescription("The Video's name (its 'title').")
 );
-const lessonOption = Options.text("lesson").pipe(
+const lessonOption = entityIdOption("lesson", "lesson").pipe(
   Options.withDescription(
     "Parent Lesson id (mutually exclusive with --pitch)."
   ),
   Options.optional
 );
-const pitchOption = Options.text("pitch").pipe(
+const pitchOption = entityIdOption("pitch", "pitch").pipe(
   Options.withDescription(
     "Parent Pitch id (mutually exclusive with --lesson)."
   ),
@@ -323,7 +324,7 @@ const createCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(CREATE_HELP)));
 
-const moveId = Args.text({ name: "id" });
+const moveId = entityIdArg("video");
 
 const moveCmd = Command.make(
   "move",
@@ -371,7 +372,7 @@ const moveCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(MOVE_HELP)));
 
-const updateId = Args.text({ name: "id" });
+const updateId = entityIdArg("video");
 const updateNameOption = Options.text("name").pipe(
   Options.withDescription("The Video's new name (its 'title')."),
   Options.optional
@@ -535,7 +536,7 @@ const updateCmd = Command.make(
 // archive <id>
 // ---------------------------------------------------------------------------
 
-const archiveId = Args.text({ name: "id" });
+const archiveId = entityIdArg("video");
 
 const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
   Effect.gen(function* () {

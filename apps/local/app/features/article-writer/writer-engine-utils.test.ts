@@ -4,6 +4,7 @@ import {
   loadFieldMessages,
   saveFieldMessages,
   constrainModes,
+  defaultModeForRole,
   FIELD_MODES,
   FIELD_LABELS,
 } from "./writer-engine-utils";
@@ -126,5 +127,37 @@ describe("FIELD_LABELS", () => {
     expect(FIELD_LABELS["skills-changelog-body"]).toBe("Skills Changelog Body");
     expect(FIELD_LABELS["newsletter-copy"]).toBe("Newsletter Copy");
     expect(FIELD_LABELS["video-body"]).toBe("Lesson Body");
+  });
+});
+
+describe("defaultModeForRole", () => {
+  it("opens a Problem video on skill-building", () => {
+    expect(defaultModeForRole("problem")).toBe("skill-building");
+  });
+
+  it("opens a Solution video on article", () => {
+    expect(defaultModeForRole("solution")).toBe("article");
+  });
+
+  it("opens everything else on article", () => {
+    expect(defaultModeForRole("explainer")).toBe("article");
+    expect(defaultModeForRole("unknown")).toBe("article");
+    expect(defaultModeForRole(undefined)).toBe("article");
+  });
+
+  it("falls back to the field's first mode when skill-building isn't offered", () => {
+    expect(
+      constrainModes(["article", "article-plan"], defaultModeForRole("problem"))
+        .mode
+    ).toBe("article");
+  });
+
+  it("lands a Problem on skill-building in the lesson body modes", () => {
+    expect(
+      constrainModes(
+        ["article", "skill-building"],
+        defaultModeForRole("problem")
+      ).mode
+    ).toBe("skill-building");
   });
 });

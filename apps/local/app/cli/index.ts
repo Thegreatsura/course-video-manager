@@ -82,6 +82,14 @@ SECTION LINT
   DATA, not a failure: it exits 0 either way, so branch on 'clean'/'failedChecks'.
   It blocks no publish, and 'course readiness' reports none of it.
 
+IDS AND LINKS
+  Any CVM link or id works wherever an id is expected: a positional <id> or an
+  id-valued flag (--video, --section, --before, ...). Paste the "Copy Link" URL
+  from any origin (localhost or deployed), a Lesson's '#id' link, or a legacy
+  'course:.../section:.../video:...' string; cvm reads the id out of it. A link
+  for the wrong kind of entity is refused, exit 3 ("that's a Pitch link, this
+  command wants a Video").
+
 ARCHIVED
   'list' shows ACTIVE records only. Only 'course' and standalone 'video' have a
   viewable archive (use --archived to include it). For every other noun,

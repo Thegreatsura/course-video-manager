@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { anthropic } from "@ai-sdk/anthropic";
 import { APICallError, RetryError, generateText, streamObject } from "ai";
 import { z } from "zod";
+import { coverVideoOpening } from "@/services/cover-video-opening";
 import {
   autofillChaptersSystemPrompt,
   buildChaptersUserMessage,
@@ -24,7 +25,7 @@ import type { GlobalLink } from "@/prompts/link-instructions";
  * regression. Changing either is a deliberate, separate act.
  */
 export const AUTOFILL_DESCRIPTION_MODEL = "claude-haiku-4-5-20251001";
-export const AUTOFILL_CHAPTERS_MODEL = "claude-sonnet-4-5-20250929";
+export const AUTOFILL_CHAPTERS_MODEL = "claude-sonnet-5-5";
 
 /**
  * Anything the provider refused. `retryable` marks the refusals that say
@@ -76,12 +77,18 @@ export type AutofillChapterProposal = {
 };
 
 const proposalSchema = z.object({
-  sections: z.array(
-    z.object({
-      beforeClipId: z.string(),
-      title: z.string(),
-    })
-  ),
+  sections: z
+    .array(
+      z.object({
+        beforeClipId: z
+          .string()
+          .describe("ID of the clip this Chapter starts at (placed before it)"),
+        title: z.string(),
+      })
+    )
+    .describe(
+      "The full Chapter set. Never empty: one entry MUST have beforeClipId equal to the FIRST clip's ID, so every clip belongs to a Chapter."
+    ),
 });
 
 const isCompleteProposal = (value: unknown): value is AutofillChapterProposal =>
@@ -193,7 +200,11 @@ const autofillChapters = (input: AutofillChaptersRequest) =>
       }
       while (emitted < latest.length) accept(latest[emitted++]);
 
-      return accepted;
+      // The prompt asks for a Chapter on the first Clip, but the model does
+      // not always oblige; uncovered opening Clips would belong to no Chapter.
+      const covered = coverVideoOpening(accepted, input.clips);
+      if (covered.length > accepted.length) input.onChapter?.(covered[0]!);
+      return covered;
     },
     catch: toTextGenerationError,
   });

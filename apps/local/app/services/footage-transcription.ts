@@ -10,6 +10,7 @@ import {
   planChunkBoundaries,
   type FootageTranscript,
 } from "./footage-chunking";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 /**
  * Whole-file **Footage** transcription — the ffmpeg + chunking orchestration
@@ -86,7 +87,7 @@ const extractFootageAudio = Effect.fn("extractFootageAudio")(function* (
     )
   );
   if (code !== 0) {
-    yield* new CouldNotExtractFootageAudioError({
+    return yield* new CouldNotExtractFootageAudioError({
       cause: null,
       message: `Failed to extract footage audio, exit code: ${code}`,
     });
@@ -145,7 +146,7 @@ export const transcribeFootage = <E, R>(
 
     if (Number(stat.size) <= WHISPER_MAX_UPLOAD_BYTES) {
       const transcription = yield* deps.transcribeAudioFile(fullAudio);
-      yield* fs.remove(fullAudio).pipe(Effect.catchAll(() => Effect.void));
+      yield* removeBestEffort(fs, fullAudio);
       return transcription;
     }
 
@@ -171,7 +172,7 @@ export const transcribeFootage = <E, R>(
           boundary.end - boundary.start
         );
         const transcription = yield* deps.transcribeAudioFile(chunkAudio);
-        yield* fs.remove(chunkAudio).pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(fs, chunkAudio);
         return {
           offset: boundary.start,
           words: transcription.words,
@@ -180,7 +181,7 @@ export const transcribeFootage = <E, R>(
       })
     );
 
-    yield* fs.remove(fullAudio).pipe(Effect.catchAll(() => Effect.void));
+    yield* removeBestEffort(fs, fullAudio);
 
     return mergeChunkTranscripts(chunks);
   });

@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import {
   type VersionWithStructure,
   type VersionChanges,
@@ -273,7 +274,7 @@ export function generateChangelog(versions: VersionWithStructure[]): string {
         lines.push("#### New Lessons");
         lines.push("");
         for (const lesson of sectionChange.newLessons) {
-          const suffix = lesson.authoringStatus === "todo" ? " (TODO)" : "";
+          const suffix = isTodoLesson(lesson) ? " (TODO)" : "";
           lines.push(`- ${formatCodePath(lesson.lessonPath)}${suffix}`);
           for (const videoTitle of lesson.videoTitles) {
             lines.push(`  - ${formatCodePath(videoTitle)}`);

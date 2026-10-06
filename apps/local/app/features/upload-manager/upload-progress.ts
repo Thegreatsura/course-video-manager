@@ -19,11 +19,12 @@ export interface StageBand {
   width: number;
 }
 
-const EXPORT_STAGE_BANDS: Record<uploadReducer.ExportStage, StageBand> = {
-  queued: { start: 0, width: 0 },
-  "concatenating-clips": { start: 0, width: 80 },
-  "normalizing-audio": { start: 80, width: 19 },
-};
+export const EXPORT_STAGE_BANDS: Record<uploadReducer.ExportStage, StageBand> =
+  {
+    queued: { start: 0, width: 0 },
+    "concatenating-clips": { start: 0, width: 80 },
+    "normalizing-audio": { start: 80, width: 19 },
+  };
 
 // Only the blob upload streams a real byte percentage; Buffer's own pipeline
 // gives us stage transitions and nothing finer.
@@ -56,7 +57,7 @@ export const PUBLISH_STAGE_BANDS: Record<
 
 // The span of a Publish's bar owned by its per-Video tasks. 100 is reserved
 // for the commit receipt landing (UPLOAD_SUCCESS).
-const PUBLISH_WORK_BAND: StageBand = { start: 10, width: 89 };
+export const PUBLISH_WORK_BAND: StageBand = { start: 10, width: 89 };
 
 // A per-Video task under a Publish does two things in sequence — encode, then
 // upload — so its single bar is split in half rather than spent entirely on
@@ -93,7 +94,7 @@ export const AUTOFILL_STAGE_BANDS: Record<
 
 // An Autofill's whole bar is its children: unlike a Publish it has no
 // prologue worth a band of its own. 100 is reserved for the run settling.
-const AUTOFILL_WORK_BAND: StageBand = { start: 2, width: 97 };
+export const AUTOFILL_WORK_BAND: StageBand = { start: 2, width: 97 };
 
 export const RENDER_VERTICAL_STAGE_BANDS: Record<
   uploadReducer.RenderVerticalStage,

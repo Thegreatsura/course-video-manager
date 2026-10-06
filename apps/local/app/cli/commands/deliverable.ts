@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdsOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
@@ -57,14 +58,12 @@ const statusOption = Options.choice("status", [...STATUSES]).pipe(
   Options.optional
 );
 
-const courseOption = Options.text("course").pipe(
-  Options.withDescription("Link a Course by id (repeatable)."),
-  Options.repeated
+const courseOption = entityIdsOption("course", "course").pipe(
+  Options.withDescription("Link a Course by id (repeatable).")
 );
 
-const pitchOption = Options.text("pitch").pipe(
-  Options.withDescription("Link a Pitch by id (repeatable)."),
-  Options.repeated
+const pitchOption = entityIdsOption("pitch", "pitch").pipe(
+  Options.withDescription("Link a Pitch by id (repeatable).")
 );
 
 const clearCoursesOption = Options.boolean("clear-courses").pipe(
@@ -75,7 +74,7 @@ const clearPitchesOption = Options.boolean("clear-pitches").pipe(
   Options.withDescription("Remove every Pitch link.")
 );
 
-const idArg = Args.text({ name: "id" });
+const idArg = entityIdArg("deliverable");
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -196,7 +195,7 @@ const listCmd = Command.make("list", {}, () =>
   })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("deliverable").pipe(Args.repeated);
 
 // An unknown OR archived id resolves to undefined — archived is
 // deleted-equivalent here, and the CLI owns not-found detection (emitGet maps

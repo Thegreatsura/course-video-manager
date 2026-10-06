@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import { type DependencyLessonItem } from "@/components/dependency-selector";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
@@ -10,10 +11,6 @@ import {
 } from "@dnd-kit/sortable";
 import { X } from "lucide-react";
 import { useNavigate, useFetcher } from "react-router";
-
-function isTodoLesson(lesson: Lesson): boolean {
-  return lesson.authoringStatus === "todo";
-}
 
 export function NextTodoCard({
   courseId,

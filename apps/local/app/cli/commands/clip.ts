@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -111,7 +112,7 @@ import {
  *     | jq -r '.. | objects | select(.kind=="clip") | .id' \
  *     | xargs cvm clip get
  */
-const videoOpt = Options.text("video").pipe(
+const videoOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("Parent Video id whose clips to list")
 );
 
@@ -134,7 +135,7 @@ const listCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("clip").pipe(Args.repeated);
 
 const getCmd = Command.make(
   "get",
@@ -192,23 +193,23 @@ const endOpt = Options.float("end").pipe(
   Options.optional
 );
 
-const beforeOpt = Options.text("before").pipe(
+const beforeOpt = entityIdOption("before", ["clip", "chapter"]).pipe(
   Options.withDescription(
     "Place immediately before this clip id (mutually exclusive with --after)."
   ),
   Options.optional
 );
 
-const afterOpt = Options.text("after").pipe(
+const afterOpt = entityIdOption("after", ["clip", "chapter"]).pipe(
   Options.withDescription(
     "Place immediately after this clip id (mutually exclusive with --before)."
   ),
   Options.optional
 );
 
-const idArg = Args.text({ name: "id" });
+const idArg = entityIdArg("clip");
 
-const videoAddOpt = Options.text("video").pipe(
+const videoAddOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("The Video id to add the clip to (required).")
 );
 

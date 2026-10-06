@@ -19,12 +19,21 @@ export type RecordedLogLine = {
  * there. It also makes the log assertable: a test can state that a failed
  * export explained itself, which is the whole reason the events exist.
  */
-export const createFakeVideoEditorLogger = () => {
+export const createFakeVideoEditorLogger = (opts?: {
+  /**
+   * Throw this from every write, as the real logger's `appendFileSync` does
+   * on a full disk — so the write dies rather than fails.
+   *
+   * Default: every write lands.
+   */
+  throwOnWrite?: Error;
+}) => {
   const lines: RecordedLogLine[] = [];
 
   const layer = Layer.succeed(VideoEditorLoggerService, {
     log: (videoId: string, event: LogEvent) =>
       Effect.sync(() => {
+        if (opts?.throwOnWrite !== undefined) throw opts.throwOnWrite;
         lines.push({ videoId, event });
       }),
     getLogPath: (videoId: string) => `/fake-logs/${videoId}.log`,

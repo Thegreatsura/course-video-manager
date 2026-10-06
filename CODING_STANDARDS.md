@@ -18,6 +18,140 @@ retry. Resolve the config at the edge (the layer, or the command's entry point)
 so a missing variable stops the process before any work starts, and let the
 error name the variable.
 
+### Effects are run, never dropped
+
+An Effect is a description of work, not the work. Building one does nothing
+until something runs it, so an Effect that is neither yielded nor returned is
+silently skipped — no error, no log, the write just never happens.
+
+- **Yield or return every Effect.** Inside `Effect.gen`, write `yield* eff`.
+  A bare `eff;` statement is dropped, and `yield eff` without the `*` yields the
+  Effect object itself instead of its result.
+- **Never return an Effect from a generator to be run later.** `return eff`
+  inside `Effect.gen` gives you `Effect<Effect<A>>`, and the inner one is
+  usually dropped by the caller. Write `return yield* eff`.
+- **Never `Effect.run*` inside an Effect.** `runPromise`/`runSync` inside a
+  generator starts a second, detached runtime: it loses the services, the
+  interruption and the typed errors of the one you are in. Yield the Effect, or
+  take a `Runtime` and use `Runtime.run*` at a real boundary.
+- **Never `await` an Effect.** It is not a promise; `await eff` resolves to the
+  Effect object and runs nothing. `await` only what is actually thenable.
+
+Enforced by type-aware oxlint (`typescript/await-thenable`, an error in
+`.oxlintrc.json`) and by `@effect/tsgo` (`floatingEffect`,
+`missingStarInYieldEffectGen`, `returnEffectInGen`, `runEffectInsideEffect`,
+errors in each package's `tsconfig.json`, run by `pnpm run lint:effect`). A
+false positive gets `// @effect-diagnostics-next-line <rule>:off` and a reason.
+See `docs/plans/effect-codebase-health.md`.
+
+### Failures are handled in Effect, not around it
+
+Inside `Effect.gen`, a failure is a value in `E`, not a thrown exception. Code
+that throws, or that catches by hand, hides the failure from the type that is
+meant to name it.
+
+- **`return yield*` a failure.** `return yield* new FooError(...)` tells the
+  reader, and the type checker, that the generator ends there. A bare
+  `yield* new FooError(...)` reads as if the code below it could still run.
+- **No `try/catch` inside a generator.** Wrap the throwing call in
+  `Effect.try` (or `Effect.tryPromise`) so its failure lands in `E`; if the call
+  cannot throw, delete the `try`.
+- **No `*Sync` Schema decode inside an Effect.** `Schema.decodeUnknownSync`
+  throws; `Schema.decodeUnknown` fails with a typed `ParseError`.
+- **Never `catch*` an Effect that cannot fail.** The handler is dead code, and
+  it reads like protection it does not give: `catchAll` never sees a defect —
+  a sync throw inside `Effect.sync`, say. If you mean to swallow defects, say
+  so with `catchAllDefect`.
+- **Every error in `E` is tagged.** Fail with a `Data.TaggedError` (or
+  `Schema.TaggedError`), never the global `Error`: untagged errors merge into
+  one indistinct `Error` in `E`, so nothing downstream can `catchTag` one or map
+  it to a status in `makeAction`. Keep the underlying error as `cause`. This
+  applies in tests too; a test that pins the untagged fallback says so beside a
+  suppression comment.
+
+Enforced by `@effect/tsgo` (`missingReturnYieldStar`, `tryCatchInEffectGen`,
+`schemaSyncInEffect`, `catchUnfailableEffect`, `globalErrorInEffectFailure`,
+`globalErrorInEffectCatch`), errors in each package's `tsconfig.json`.
+
+### Effects stay inside their boundary
+
+An Effect keeps its services, interruption and typed errors only while it stays
+inside one run. Each of these patterns drops one of them without a word.
+
+- **Run an Effect only at a boundary.** A route goes through `makeLoader` /
+  `makeAction` (`route-action.server.ts`). The CLI, a daemon's entry point,
+  `createSseResponse` and `withDbTransaction` are the other edges. An
+  `Effect.run*` or `runtime.run*` anywhere else is a second, detached run. A
+  callback that must return a Promise is the usual cause: make it return an
+  Effect instead. For a module-level semaphore, write
+  `Effect.unsafeMakeSemaphore(1)`, not `Effect.runSync(Effect.makeSemaphore(1))`.
+- **Never swallow a failure silently.** `catchAll(() => Effect.succeed(x))` or
+  `catchAll(() => Effect.void)` turns every failure into a normal value with no
+  log, including the ones nobody foresaw. Catch the tag you expect
+  (`catchTag`), or log what you drop (`Effect.tapError` + `Effect.logWarning`).
+  To clean up a temp file, use `removeBestEffort` (`services/remove-best-effort.ts`):
+  it is silent when the file is already gone and logs anything else. When
+  silence really is the behaviour, keep the catch and say why in the
+  allowlist.
+- **`Effect.tryPromise`, not `Effect.promise`, for anything that can reject.**
+  `Effect.promise` turns a rejection into a defect. A defect is not in `E`,
+  `catchAll` never sees it, and `makeAction` cannot map it to a status. Write
+  `Effect.tryPromise({ try, catch: (cause) => new FooError({ cause }) })`. For
+  a Drizzle call, the error is `UnknownDBServiceError`.
+
+Enforced by `scripts/check-effect-guards.ts`, which runs in `pnpm run check`,
+CI and the pre-commit hook. It parses each non-test file and holds the three
+patterns to a shrink-only allowlist, `scripts/effect-guards-allowlist.json`: a
+count per file and a one-line reason. A new hit fails. So does an entry whose
+count is higher than its file's, so a fix must also lower the list. Test code
+(`*.test.ts`, `test-utils/`, `*-test-setup.ts`, `*-test-harness.ts`) is out of
+scope.
+
+## Control flow
+
+### A switch over a union names every member
+
+A `switch` on a union type lists every member as its own `case`, even the ones
+that share a branch. A `default` that quietly absorbs the leftover members also
+absorbs the member someone adds next month, and that new member takes the
+fallback branch without anyone deciding it should — a new clip-service write
+event would skip the Draft guard. Without a `default`, adding a member breaks
+the lint until each switch says what to do with it.
+
+Enforced by type-aware oxlint (`typescript/switch-exhaustiveness-check`, an
+error in `.oxlintrc.json`).
+
+## Errors
+
+### Throw Errors, not values
+
+Outside Effect, throw an `Error` or a subclass of one. A thrown string or plain
+object has no stack and fails every `instanceof Error` check downstream, so the
+handler that logs or maps it loses track of where it came from. Inside Effect,
+fail with a tagged error instead (`Effect.fail(new XError(...))`), never with
+`throw`. The one exception is React Router's `throw data(..., { status })` in
+a loader or action, because that is how a route answers with an error status.
+
+Enforced by type-aware oxlint (`typescript/only-throw-error`, an error in
+`.oxlintrc.json` that allows `data()`).
+
+### Every promise is awaited, handled or marked void
+
+A promise nobody awaits loses its rejection: the failure turns into an
+unhandled rejection rather than an error the caller sees, and the work it
+started may still be running after the caller has moved on. Await it, or
+`.catch` it where it is made. When fire-and-forget really is the intent (a
+signal handler, a best-effort log line), write `void promise` with a comment
+saying why nothing waits on it. Do not hand an async function to a slot that
+expects a `void` callback either (an event listener, `forEach`), because
+nothing there awaits or catches what it returns.
+
+Enforced by type-aware oxlint (`typescript/no-floating-promises` and
+`typescript/no-misused-promises`) as a ratchet. They are errors in the
+directories listed in `.oxlintrc.json`'s `overrides`, which are services, CLI,
+`.ts` routes, `apps/remote`, `packages` and scripts, and warnings in the
+React UI. A file you touch should leave review with fewer warnings than it had.
+
 ## Function signatures
 
 Optional parameters passed to functions should be scrutinised extremely
@@ -113,6 +247,20 @@ or the `…` button on the entity itself) offer **the same set of actions**. The
 are two doors into one list: an action added to one appears in the other, so
 share the menu items between them rather than writing each list twice.
 
+### Every entity menu can copy its link and ID
+
+Every entity's right-click menu and Actions menu renders
+`<CopyEntityLinkItems entity={…} menu="context" | "dropdown" />`
+(`features/entity-links/`): "Copy Link", which copies the full app URL that opens the entity, and
+"Copy ID", which copies the id that `cvm` takes. Build entity URLs only in `entityDeepLink`, and
+read them back only with its inverse `parseEntityRef`; `cvm` accepts a link anywhere it takes an id
+because every id argument is declared through `cli/entity-id.ts`. A link names its exact entity:
+one shown on a parent's page carries its own id in a `?<type>=<id>` query param. A new entity type
+gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard
+item in a menu. `entity-menus.test.ts` fails on any file that opens a menu without these items.
+A menu that is not about an entity, such as a value picker or an upload chooser, goes in that test's
+exemption list with a reason.
+
 ### Order the actions, and group the related ones
 
 Both menus present that shared list in a deliberate order, most-reached action
@@ -186,6 +334,12 @@ the list of moments on the left, the picture on the right.
 Both pages share one guard for when a key is not the page's to take —
 `app/hooks/should-ignore-keyboard-shortcut.ts`. A new keyboard surface uses it
 rather than writing its own test for inputs, Monaco and dialogs.
+
+A surface that lives INSIDE a dialog — the Article Writer preview, whose L and K
+step through its ChooseScreenshot placeholders — cannot use that guard whole, so
+it uses the guard's `isTypingTarget` half and scopes itself to keys from its own
+dialog. The Video and Animatic pages refuse every key from a dialog, so the two
+L/K meanings never both act on one press.
 
 ## Interface design
 

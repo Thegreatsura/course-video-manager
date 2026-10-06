@@ -2,6 +2,17 @@ import type { Database } from "./drizzle-service.server.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
 import { Cause, Effect, Exit } from "effect";
 
+/**
+ * Thrown inside the driver's transaction callback only to make it roll back.
+ * The real failure travels in `failureCause`, never in this error.
+ */
+class TransactionRollback extends Error {
+  constructor() {
+    super("withDbTransaction: rolling back a failed Effect");
+    this.name = "TransactionRollback";
+  }
+}
+
 export const withDbTransaction = <A, E>(
   db: Database,
   fn: (tx: Database) => Effect.Effect<A, E>
@@ -13,7 +24,7 @@ export const withDbTransaction = <A, E>(
       const exit = await Effect.runPromiseExit(fn(tx));
       if (Exit.isFailure(exit)) {
         failureCause = exit.cause;
-        throw exit;
+        throw new TransactionRollback();
       }
       return exit.value;
     })

@@ -5,17 +5,34 @@
 import { clips, chapters, videos } from "@/db/schema";
 import { compareOrderStrings } from "@/lib/sort-by-order";
 import { and, asc, eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
 import type {
   ClipServiceEvent,
   CreateVideoFromSelectionInput,
 } from "./clip-service";
 import type { Database } from "@/services/drizzle-service.server";
+import { UnknownDBServiceError } from "@/services/db-service-errors";
 import { requireDraftVersionForVideo } from "@/services/draft-guard.server";
 import { withDbTransaction } from "@/services/with-db-transaction.server";
 import type { LogEvent } from "./video-editor-logger-service";
 import type { SilenceLength } from "@/silence-detection-constants";
+
+// ============================================================================
+// Errors and the Drizzle bridge
+// ============================================================================
+
+/** A Drizzle call whose rejection lands in E, not as a defect. */
+export const dbCall = <T>(fn: () => Promise<T>) =>
+  Effect.tryPromise({
+    try: fn,
+    catch: (cause) => new UnknownDBServiceError({ cause }),
+  });
+
+/** The OBS clip detection behind append-from-obs rejected. */
+export class ObsClipDetectionError extends Data.TaggedError(
+  "ObsClipDetectionError"
+)<{ cause: unknown }> {}
 
 // ============================================================================
 // Types
@@ -74,14 +91,14 @@ export const getOrderedItems = Effect.fn("getOrderedItems")(function* (
   db: Database,
   videoId: string
 ) {
-  const allClips = yield* Effect.promise(() =>
+  const allClips = yield* dbCall(() =>
     db.query.clips.findMany({
       where: and(eq(clips.videoId, videoId), eq(clips.archived, false)),
       orderBy: asc(clips.order),
     })
   );
 
-  const allChapters = yield* Effect.promise(() =>
+  const allChapters = yield* dbCall(() =>
     db.query.chapters.findMany({
       where: and(eq(chapters.videoId, videoId), eq(chapters.archived, false)),
       orderBy: asc(chapters.order),
@@ -104,7 +121,7 @@ export const getOrderedItems = Effect.fn("getOrderedItems")(function* (
 // ============================================================================
 
 export const touchVideoUpdatedAt = (db: Database, videoId: string) =>
-  Effect.promise(() =>
+  dbCall(() =>
     db
       .update(videos)
       .set({ updatedAt: new Date() })
@@ -177,7 +194,7 @@ export const appendClipsAtInsertionPoint = Effect.fn(
     text: "",
   }));
 
-  const clipsResult = yield* Effect.promise(() =>
+  const clipsResult = yield* dbCall(() =>
     db.insert(clips).values(insertValues).returning()
   );
 
@@ -188,30 +205,43 @@ export const appendClipsAtInsertionPoint = Effect.fn(
 // Mutex: Serialize append-from-obs calls per videoId
 // ============================================================================
 
-const videoMutexes = new Map<string, Promise<void>>();
-
-export async function withVideoMutex<T>(
-  videoId: string,
-  fn: () => Promise<T>
-): Promise<T> {
-  const prior = videoMutexes.get(videoId) ?? Promise.resolve();
-
-  let releaseMutex: () => void;
-  const gate = new Promise<void>((resolve) => {
-    releaseMutex = resolve;
-  });
-  videoMutexes.set(videoId, gate);
-
-  try {
-    await prior;
-    return await fn();
-  } finally {
-    releaseMutex!();
-    if (videoMutexes.get(videoId) === gate) {
-      videoMutexes.delete(videoId);
-    }
-  }
+interface VideoMutex {
+  readonly semaphore: Effect.Semaphore;
+  users: number;
 }
+
+const videoMutexes = new Map<string, VideoMutex>();
+
+/**
+ * Runs `effect` holding the per-video permit, so concurrent append-from-obs
+ * calls for one video run one at a time. The entry is dropped once the last
+ * waiter is done, so the map never grows with every video ever touched.
+ */
+export const withVideoMutex = <A, E, R>(
+  videoId: string,
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  Effect.suspend(() => {
+    let mutex = videoMutexes.get(videoId);
+    if (!mutex) {
+      mutex = { semaphore: Effect.unsafeMakeSemaphore(1), users: 0 };
+      videoMutexes.set(videoId, mutex);
+    }
+    const held = mutex;
+    held.users++;
+    return held.semaphore
+      .withPermits(1)(effect)
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            held.users--;
+            if (held.users === 0 && videoMutexes.get(videoId) === held) {
+              videoMutexes.delete(videoId);
+            }
+          })
+        )
+      );
+  });
 
 // ============================================================================
 // Helper: append-from-obs implementation (runs inside mutex)
@@ -230,7 +260,7 @@ export const appendFromObsImpl = (
     const resolvedFilePath = filePath ? windowsToWSL(filePath) : undefined;
 
     // Get all clips (including archived) to find the last clip with this input video
-    const allClipsIncludingArchived = yield* Effect.promise(() =>
+    const allClipsIncludingArchived = yield* dbCall(() =>
       db.query.clips.findMany({
         where: eq(clips.videoId, videoId),
       })
@@ -250,13 +280,15 @@ export const appendFromObsImpl = (
         : undefined;
 
     // Call CLI to detect clips
-    const latestOBSVideoClips = yield* Effect.promise(() =>
-      videoProcessing.getLatestOBSVideoClips({
-        filePath: resolvedFilePath,
-        startTime: resolvedStartTime,
-        silenceLength: event.input.silenceLength,
-      })
-    );
+    const latestOBSVideoClips = yield* Effect.tryPromise({
+      try: () =>
+        videoProcessing.getLatestOBSVideoClips({
+          filePath: resolvedFilePath,
+          startTime: resolvedStartTime,
+          silenceLength: event.input.silenceLength,
+        }),
+      catch: (cause) => new ObsClipDetectionError({ cause }),
+    });
 
     if (latestOBSVideoClips.clips.length === 0) {
       logger.log(videoId, {
@@ -271,7 +303,7 @@ export const appendFromObsImpl = (
     }
 
     // Re-fetch clips for deduplication (in case they changed during CLI detection)
-    const allClipsForDedup = yield* Effect.promise(() =>
+    const allClipsForDedup = yield* dbCall(() =>
       db.query.clips.findMany({
         where: eq(clips.videoId, videoId),
       })
@@ -393,7 +425,7 @@ export const createEffectClipAtPositionImpl = Effect.fn(
 
   const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
 
-  const [clip] = yield* Effect.promise(() =>
+  const [clip] = yield* dbCall(() =>
     db
       .insert(clips)
       .values({
@@ -443,7 +475,7 @@ export const handleCreateVideoFromSelection = Effect.fn(
   const { sourceVideoId, clipIds, chapterIds, title, mode } = input;
 
   // Get the source video to inherit lessonId
-  const sourceVideo = yield* Effect.promise(() =>
+  const sourceVideo = yield* dbCall(() =>
     db.query.videos.findFirst({
       where: eq(videos.id, sourceVideoId),
     })
@@ -454,7 +486,7 @@ export const handleCreateVideoFromSelection = Effect.fn(
   }
 
   // Create the new video
-  const [newVideo] = yield* Effect.promise(() =>
+  const [newVideo] = yield* dbCall(() =>
     db
       .insert(videos)
       .values({
@@ -494,7 +526,7 @@ export const handleCreateVideoFromSelection = Effect.fn(
     const order = orders[i]!;
 
     if (item.type === "clip") {
-      yield* Effect.promise(() =>
+      yield* dbCall(() =>
         db.insert(clips).values({
           videoId: newVideo.id,
           videoFilename: item.videoFilename,
@@ -510,7 +542,7 @@ export const handleCreateVideoFromSelection = Effect.fn(
         })
       );
     } else {
-      yield* Effect.promise(() =>
+      yield* dbCall(() =>
         db.insert(chapters).values({
           videoId: newVideo.id,
           name: item.name,
@@ -524,13 +556,13 @@ export const handleCreateVideoFromSelection = Effect.fn(
   // In move mode, archive the originals from the source video
   if (mode === "move") {
     for (const clipId of clipIds) {
-      yield* Effect.promise(() =>
+      yield* dbCall(() =>
         db.update(clips).set({ archived: true }).where(eq(clips.id, clipId))
       );
     }
 
     for (const chapterId of chapterIds) {
-      yield* Effect.promise(() =>
+      yield* dbCall(() =>
         db
           .update(chapters)
           .set({ archived: true })

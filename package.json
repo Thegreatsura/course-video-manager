@@ -11,12 +11,15 @@
     "dev": "./scripts/run-with-log.sh dev",
     "start": "./scripts/run-with-log.sh start",
     "test": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer",
+    "test:ci:rest": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer --filter=!@cvm/local",
+    "test:ci:local": "turbo run build --filter=@cvm/local^... && pnpm --filter @cvm/local exec vitest run",
     "test:watch": "turbo run test:watch --filter=!@cvm/overlay-renderer",
     "typecheck": "turbo run typecheck typecheck:root --filter=!@cvm/overlay-renderer",
     "lint:boundaries": "turbo run lint:boundaries --filter=!@cvm/overlay-renderer",
-    "lint": "oxlint",
+    "lint:effect": "turbo run lint:effect --filter=!@cvm/overlay-renderer",
+    "lint": "oxlint --type-aware",
     "test:root": "vitest run",
-    "typecheck:root": "tsgo",
+    "typecheck:root": "tsc",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
@@ -27,6 +30,8 @@
     "db:backfill-search-text": "pnpm --filter @cvm/local run db:backfill-search-text",
     "db:studio": "pnpm --filter @cvm/core run db:studio",
     "db:clone-local": "pnpm --filter @cvm/local run db:clone-local",
+    "db:verify-snapshot": "./scripts/verify-snapshot.sh",
+    "setup:verify-db": "./scripts/setup-verify-db.sh",
     "gen:lucide-icons": "pnpm --filter @cvm/local run gen:lucide-icons",
     "sandcastle": "tsx ./.sandcastle/main.ts",
     "check:file-tokens": "./scripts/check-file-tokens.sh",
@@ -34,15 +39,17 @@
     "check:env-example": "./scripts/check-env-example.sh",
     "check:routes-folder": "./scripts/check-routes-folder.sh",
     "check:response-body": "./scripts/check-response-body.sh",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && pnpm run test"
+    "check:effect-guards": "node scripts/check-effect-guards.ts",
+    "check:static": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all",
+    "check": "pnpm run check:static && pnpm run test"
   },
   "pnpm": {
     "overrides": {
-      "@ai-sdk/anthropic": "3.0.58",
-      "@ai-sdk/provider": "3.0.8",
-      "@ai-sdk/provider-utils": "4.0.19",
-      "@ai-sdk/react": "3.0.118",
-      "ai": "6.0.116",
+      "@ai-sdk/anthropic": "3.0.127",
+      "@ai-sdk/provider": "3.0.18",
+      "@ai-sdk/provider-utils": "4.0.57",
+      "@ai-sdk/react": "3.0.304",
+      "ai": "6.0.301",
       "@types/hast": "3.0.4"
     },
     "peerDependencyRules": {
@@ -52,6 +59,13 @@
       "ignoreMissing": [
         "better-sqlite3"
       ]
+    },
+    "packageExtensions": {
+      "dependency-cruiser": {
+        "dependencies": {
+          "typescript": "5.9.3"
+        }
+      }
     }
   },
   "lint-staged": {
@@ -59,15 +73,17 @@
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.10.0",
+    "@effect/tsgo": "0.48.1",
     "@types/node": "^20",
-    "@typescript/native-preview": "^7.0.0-dev.20260304.1",
     "husky": "^9.1.7",
     "lint-staged": "^15.3.0",
+    "oxc-parser": "0.153.0",
     "oxlint": "^1.85.0",
+    "oxlint-tsgolint": "7.0.2003",
     "prettier": "^3.4.2",
     "tsx": "^4.20.5",
     "turbo": "^2.5.6",
-    "typescript": "^5.8.3",
+    "typescript": "7.0.2",
     "vitest": "^3",
     "zod": "^4.4.3"
   }

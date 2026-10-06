@@ -335,6 +335,9 @@ describe("AutofillService — failure isolation", () => {
     );
 
     expect(result.results[0]?.status).toBe("failed");
+    expect(result.results[0]?.message).toBe(
+      "the model proposed no Chapter naming a clip of this video"
+    );
     const videoId = videoIds["01-invented/Explainer"]!;
     expect(await Effect.runPromise(readChapters(testDb, videoId))).toHaveLength(
       0

@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { Effect, Option } from "effect";
 import {
   PitchOperationsService,
@@ -212,7 +213,7 @@ const listCmd = Command.make("list", { state: stateOption }, ({ state }) =>
   })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("pitch").pipe(Args.repeated);
 
 const getCmd = Command.make("get", { ids }, ({ ids }) =>
   emitGet({
@@ -373,7 +374,7 @@ const updateTitleOption = Options.text("title").pipe(
   Options.withDescription("New pitch title (rename)."),
   Options.optional
 );
-const idArg = Args.text({ name: "id" });
+const idArg = entityIdArg("pitch");
 
 const updateCmd = Command.make(
   "update",

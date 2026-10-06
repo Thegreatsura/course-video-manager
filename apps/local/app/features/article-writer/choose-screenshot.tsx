@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
+import { CHOOSE_SCREENSHOT_ATTR } from "./screenshot-navigation";
+
+const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
 export interface ChooseScreenshotProps {
   clipIndex: number;
@@ -74,7 +77,10 @@ export function ChooseScreenshot({
 
   if (!clip) {
     return (
-      <div className="my-4 rounded-lg border border-destructive bg-destructive/10 p-4">
+      <div
+        {...navAnchor}
+        className="transition-shadow my-4 rounded-lg border border-destructive bg-destructive/10 p-4"
+      >
         <div className="flex items-center gap-2 text-destructive">
           <AlertTriangleIcon className="h-4 w-4" />
           <span className="text-sm font-medium">
@@ -89,7 +95,10 @@ export function ChooseScreenshot({
 
   if (isStreaming) {
     return (
-      <div className="my-4 rounded-lg border border-border bg-muted/50 p-4">
+      <div
+        {...navAnchor}
+        className="transition-shadow my-4 rounded-lg border border-border bg-muted/50 p-4"
+      >
         <p className="mb-2 text-xs text-muted-foreground">
           Clip {clipIndex} — {alt}
         </p>
@@ -109,7 +118,10 @@ export function ChooseScreenshot({
   }
 
   return (
-    <div className="my-4 rounded-lg border border-border bg-muted/50 p-4 relative">
+    <div
+      {...navAnchor}
+      className="transition-shadow my-4 rounded-lg border border-border bg-muted/50 p-4 relative"
+    >
       <Button
         variant="ghost"
         size="icon"

@@ -8,7 +8,8 @@
     "./*": "./*.ts"
   },
   "scripts": {
-    "typecheck": "tsgo",
+    "typecheck": "tsc",
+    "lint:effect": "effect-tsgo diagnostics --project tsconfig.json --severity error",
     "lint:boundaries": "depcruise app.ts auth.ts index.ts runtime.ts version.ts routes",
     "vercel-build": "pnpm --filter @cvm/core run build"
   },
@@ -22,8 +23,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/pg": "^8.21.0",
-    "@typescript/native-preview": "^7.0.0-dev.20260304.1",
     "dependency-cruiser": "^18.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "7.0.2"
   }
 }

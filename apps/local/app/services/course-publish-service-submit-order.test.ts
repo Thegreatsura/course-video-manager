@@ -5,6 +5,7 @@ import path from "node:path";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { CoursePublishService } from "@/services/course-publish-service";
+import { FFmpegError } from "@/services/ffmpeg-run";
 import { computeExportHash, toExportClips } from "@/services/export-hash";
 import { courseVersions as courseVersionsTable } from "@/db/schema";
 import {
@@ -123,7 +124,10 @@ describe("CoursePublishService — Submit before export", () => {
 
   it("Discards the Pending Version when export fails, leaving no version to reconcile", async () => {
     const failingMock = Layer.succeed(VideoProcessingService, {
-      exportVideoClips: () => Effect.fail(new Error("ffmpeg crashed")),
+      exportVideoClips: () =>
+        Effect.fail(
+          new FFmpegError({ cause: null, message: "ffmpeg crashed" })
+        ),
     } as any);
     const { course, run } = await setup({ mockVideoProcessing: failingMock });
 

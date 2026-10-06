@@ -26,8 +26,11 @@ export function toWriterContext(data: WriterContextData): WriterContext {
     repoId: data.repoId,
     fullPath: data.fullPath,
     isStandalone: data.isStandalone,
+    videoTitle: data.videoTitle,
     beats: data.beats,
     script: data.script,
+    videoRole: data.videoRole,
+    animaticLines: data.animaticLines,
   };
 }
 

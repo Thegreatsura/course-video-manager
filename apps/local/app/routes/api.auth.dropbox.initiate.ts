@@ -28,9 +28,6 @@ export const loader = async ({ request }: { request: Request }) => {
       );
     }),
     Effect.withConfigProvider(ConfigProvider.fromEnv()),
-    Effect.catchAll(() => {
-      return Effect.die(new Response("Internal server error", { status: 500 }));
-    }),
     runtimeLive.runPromise
   );
 };

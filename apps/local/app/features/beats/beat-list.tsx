@@ -29,6 +29,7 @@ import {
   type BeatKind,
 } from "./beat-kinds";
 import { BeatContextMenuContent } from "./beat-menu-items";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { BeatDescriptionEditor } from "./beat-description-editor";
 import { useShowBeatDescriptions } from "./beat-descriptions-context";
 import { BeatTitleEditor } from "./beat-title-editor";
@@ -87,8 +88,6 @@ export function BeatList({
   showDescriptions,
   showAddButton = true,
   showLearningGoals = true,
-  courseId,
-  sectionId,
   sectionLearningGoals,
   className,
 }: {
@@ -120,8 +119,6 @@ export function BeatList({
    * about which Learning Goal a Beat serves. Defaults on.
    */
   showLearningGoals?: boolean;
-  courseId?: string;
-  sectionId?: string;
   /**
    * The parent Section's Learning Goals, as picker options for each row's
    * `BeatLearningGoalsPicker`. Absent (the video editor's Beats tab, the
@@ -151,8 +148,6 @@ export function BeatList({
             showDescription={showDescription}
             showLearningGoals={showLearningGoals}
             submitEvent={submitEvent}
-            courseId={courseId}
-            sectionId={sectionId}
             sectionLearningGoals={sectionLearningGoals}
           />
         ))}
@@ -178,8 +173,6 @@ export function BeatList({
                 showDescription={showDescription}
                 showLearningGoals={showLearningGoals}
                 submitEvent={submitEvent}
-                courseId={courseId}
-                sectionId={sectionId}
                 sectionLearningGoals={sectionLearningGoals}
               />
             </SortableBeat>
@@ -290,8 +283,6 @@ function BeatRow({
   showDescription,
   showLearningGoals,
   submitEvent,
-  courseId,
-  sectionId,
   sectionLearningGoals,
 }: {
   beat: BeatListBeat;
@@ -300,8 +291,6 @@ function BeatRow({
   showDescription: boolean;
   showLearningGoals: boolean;
   submitEvent: (event: CourseEditorEvent) => void;
-  courseId?: string;
-  sectionId?: string;
   sectionLearningGoals?: BeatLearningGoalOption[];
 }) {
   const kind = beat.kind as BeatKind;
@@ -359,7 +348,15 @@ function BeatRow({
   if (isReadOnly) {
     return (
       <div>
-        {titleRow}
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{titleRow}</ContextMenuTrigger>
+          <ContextMenuContent>
+            <CopyEntityLinkItems
+              menu="context"
+              entity={{ type: "beat", id: beat.id, videoId: beat.videoId }}
+            />
+          </ContextMenuContent>
+        </ContextMenu>
         {description}
       </div>
     );
@@ -395,8 +392,6 @@ function BeatRow({
             onDelete={() =>
               submitEvent({ type: "delete-beat", beatId: beat.id })
             }
-            courseId={courseId}
-            sectionId={sectionId}
             videoId={beat.videoId}
             beatId={beat.id}
           />

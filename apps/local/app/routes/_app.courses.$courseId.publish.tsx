@@ -52,7 +52,11 @@ export const loader = makeLoader({
       const [course, allVersions] = yield* Effect.all(
         [
           courseOps.getCourseById(params.courseId!),
-          versionOps.getAllVersionsWithStructure(params.courseId!),
+          // Metadata only: the page reads the latest Version's id and meta and
+          // the previous Version's name. Loading every Version's full tree
+          // (every Clip and Chapter of every past release) here cost seconds
+          // and grew with each publish.
+          versionOps.getCourseVersions(params.courseId!),
         ],
         { concurrency: "unbounded" }
       );
@@ -65,21 +69,23 @@ export const loader = makeLoader({
       // Get previous published version name (allVersions is sorted newest first)
       const previousVersion = allVersions.length > 1 ? allVersions[1] : null;
 
+      // One read of the latest Version's tree, shared by the validation gate
+      // and by the Autofill and lesson statuses below.
+      const versionTree = yield* versionOps.getVersionWithSections(
+        latestVersion.id
+      );
       // Validation is computed for BOTH toggle positions in a single pass so the
       // publish page can flip instantly with no server round-trip. `withTodo` is
       // the default (everything ships); `withoutTodo` is what ships when to-do
       // Lessons are withheld.
       const { withTodo, withoutTodo } =
-        yield* publishService.validatePublishability(latestVersion.id);
+        yield* publishService.validatePublishabilityOfTree(versionTree);
 
       // The Autofill's candidate rule, read for BOTH toggle positions on the
       // same terms as the readiness lists — so the button's count is the same
       // rule the run itself uses (see selectAutofillCandidates). Deliberately
       // NOT folded into Publish Readiness: the Autofill is a UI-only feature
       // for now, and `cvm course readiness` must not grow a field for it.
-      const versionTree = yield* versionOps.getVersionWithSections(
-        latestVersion.id
-      );
       const autofillWithTodo = selectAutofillCandidates(
         versionTree.sections,
         true
@@ -119,7 +125,13 @@ export const loader = makeLoader({
         courseName: course.name,
       });
 
-      const { sections: _, ...latestVersionMeta } = latestVersion;
+      const latestVersionMeta = {
+        id: latestVersion.id,
+        name: latestVersion.name,
+        description: latestVersion.description,
+        commitState: latestVersion.commitState,
+        createdAt: latestVersion.createdAt,
+      };
       return {
         course,
         pendingRecovery,

@@ -245,3 +245,41 @@ describe("UploadRow for a per-Video task under a Publish", () => {
     expect(html).toContain("HTTP 400: insufficient_space");
   });
 });
+
+describe("UploadRow ETA", () => {
+  const youtube: uploadReducer.UploadEntry = {
+    ...base,
+    progress: 42,
+    uploadType: "youtube",
+    youtubeVideoId: null,
+  };
+  const renderWithEta = (
+    upload: uploadReducer.UploadEntry,
+    eta: Parameters<typeof UploadRow>[0]["eta"]
+  ) =>
+    renderToStaticMarkup(
+      <UploadRow upload={upload} onDismiss={() => {}} eta={eta} />
+    );
+
+  it("shows the time left beside the percent", () => {
+    expect(
+      renderWithEta(youtube, { kind: "remaining", ms: 180_000, scope: "job" })
+    ).toContain("42% · ~3m left");
+  });
+
+  it("says when it is only the current stage it can estimate", () => {
+    expect(
+      renderWithEta(youtube, { kind: "remaining", ms: 30_000, scope: "stage" })
+    ).toContain("42% · ~30s left in stage");
+  });
+
+  it("says it is estimating until it has a basis", () => {
+    expect(renderWithEta(youtube, { kind: "estimating" })).toContain(
+      "42% · estimating…"
+    );
+  });
+
+  it("shows just the percent with no estimate at all", () => {
+    expect(renderWithEta(youtube, { kind: "none" })).not.toContain("·");
+  });
+});

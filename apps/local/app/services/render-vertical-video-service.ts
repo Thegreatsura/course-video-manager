@@ -15,6 +15,7 @@ import {
   splitSubtitleSegments,
   type SubtitleSegment,
 } from "@/lib/subtitle-chunks";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 export type RenderVerticalStage =
   "concatenating-clips" | "transcribing" | "rendering-overlay" | "compositing";
@@ -86,9 +87,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           );
 
           // Clean up raw concatenated file
-          yield* effectFs
-            .remove(rawConcatenatedPath)
-            .pipe(Effect.catchAll(() => Effect.void));
+          yield* removeBestEffort(effectFs, rawConcatenatedPath);
 
           // Step 2: Transcribe the concatenated video in a single pass. Because
           // Whisper runs on the already concatenated + normalized audio, its
@@ -164,12 +163,8 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           );
 
           // Clean up intermediate files
-          yield* effectFs
-            .remove(overlayPath)
-            .pipe(Effect.catchAll(() => Effect.void));
-          yield* effectFs
-            .remove(concatenatedPath)
-            .pipe(Effect.catchAll(() => Effect.void));
+          yield* removeBestEffort(effectFs, overlayPath);
+          yield* removeBestEffort(effectFs, concatenatedPath);
 
           return outputPath;
         }
@@ -256,7 +251,7 @@ function renderOverlay(
 
         const exitCode = yield* process.exitCode;
         if (exitCode !== 0) {
-          yield* new RenderVerticalError({
+          return yield* new RenderVerticalError({
             cause: null,
             message: `Overlay renderer exited with code ${exitCode}: ${stderr}`,
           });
@@ -267,7 +262,7 @@ function renderOverlay(
     );
 
     // Clean up props file
-    yield* effectFs.remove(propsFile).pipe(Effect.catchAll(() => Effect.void));
+    yield* removeBestEffort(effectFs, propsFile);
 
     return result;
   });

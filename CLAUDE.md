@@ -4,6 +4,10 @@
 
 Issues and PRDs live as GitHub issues in `mattpocock/course-video-manager`, managed via the `gh` CLI. See `docs/agents/backlog.md`.
 
+### Landing a change
+
+Every code change lands through a PR from a fresh worktree, merged once `check` is green on an up-to-date branch. Read `docs/agents/merging.md` before you start a change, and again before you merge.
+
 ### Triage labels
 
 Canonical defaults, except `ready-for-agent` is spelled `Sandcastle` in this repo. See `docs/agents/triage-labels.md`.
@@ -43,7 +47,7 @@ Two tiers — don't run a package's full suite by hand. While iterating, run onl
 
 ### Checks
 
-`pnpm run check` runs everything CI runs, in CI's order: typecheck, oxlint, package boundaries, the five file guards, then the unfiltered test suite (`.github/workflows/test.yml`). Pre-commit runs the fast half, less `check:response-body`, which is CI-only to keep the commit loop short. Each guard in `scripts/` takes `--all` to sweep every tracked file instead of the staged ones. Oxlint is **advisory**: its `correctness` warnings are a standing backlog cleared by hand, so a warning in a file you touch is an invitation, not a blocker — only rules that encode a documented coding standard are errors, and those are green.
+`pnpm run check` runs everything CI runs (`check:static` then `test`; CI runs the same scripts as parallel jobs — see the header of `.github/workflows/test.yml`): typecheck (TypeScript 7 `tsc`), the Effect diagnostics (`lint:effect`, `effect-tsgo` — see the Effect section of `CODING_STANDARDS.md`), oxlint (type-aware, so it needs `oxlint-tsgolint`), package boundaries, the five file guards, then the unfiltered test suite (`.github/workflows/test.yml`). Pre-commit runs the fast half (including `lint:effect`), less `check:response-body`, which is CI-only to keep the commit loop short. Each guard in `scripts/` takes `--all` to sweep every tracked file instead of the staged ones. Oxlint is **advisory**: its `correctness` warnings are a standing backlog cleared by hand, so a warning in a file you touch is an invitation, not a blocker — only rules that encode a documented coding standard are errors, and those are green. The same policy governs the Effect rules in each package's `tsconfig.json`. `typescript`, `@effect/tsgo` and `oxlint-tsgolint` are pinned exactly and move together; dependency-cruiser still needs the TS 5 JS API, which a `pnpm.packageExtensions` entry gives it.
 
 ### Coding standards
 

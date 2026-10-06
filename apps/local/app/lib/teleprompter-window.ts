@@ -25,6 +25,8 @@ export type TeleprompterEditorState = {
   tab: EditorTab;
   /** This session's clips, for the marks display on the glass. */
   marks?: ClipMarks;
+  /** The newest transcribed clip in this session, for the glass's corner. */
+  latestTranscript?: string | null;
 };
 
 /**

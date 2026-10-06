@@ -1,4 +1,5 @@
-import { Args, Command, Options } from "@effect/cli";
+import { Command, Options } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Option } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
@@ -36,7 +37,7 @@ import {
  * never disagree.
  */
 
-const courseId = Args.text({ name: "courseId" });
+const courseId = entityIdArg("course", "courseId");
 
 const versionOpt = Options.text("course-version").pipe(
   Options.optional,
@@ -178,11 +179,10 @@ OUTPUT (one pretty JSON object)
                         version tree (including Lessons no publish would ship,
                         because those are the work still to do):
                           sections
-                          lessons { total, todo, done, unset }
+                          lessons { total, todo, done }
                           videos  { total, exported, unexported, noClips }
-                        authoringStatus has no default, so a Lesson may be
-                        neither todo nor done: use 'unset' rather than deriving
-                        it, and note total - done overstates remaining work.
+                        a Lesson with no authoringStatus counts as done,
+                        so todo + done === total.
                         noClips = a Video with no Clips yet, so nothing to export.
 
 NOTE ON FLAG ORDER

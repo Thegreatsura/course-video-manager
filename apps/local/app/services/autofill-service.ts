@@ -21,6 +21,7 @@ import {
   type AutofillChapterProposal,
 } from "./text-generation-service";
 import { withDbTransaction } from "@/services/with-db-transaction.server";
+import { UnknownDBServiceError } from "@/services/db-service-errors";
 
 /**
  * THE AUTOFILL — a review-free generation pass that writes every shipping
@@ -63,6 +64,14 @@ const retrySchedule = Schedule.exponential("500 millis").pipe(
 export class AutofillVersionNotDraftError extends Data.TaggedError(
   "AutofillVersionNotDraftError"
 )<{ readonly versionId: string; readonly commitState: string }> {}
+
+/**
+ * The model's Chapter set named no Clip of the Video it was proposed for, so
+ * there is nothing safe to write.
+ */
+export class AutofillNoValidChaptersError extends Data.TaggedError(
+  "AutofillNoValidChaptersError"
+)<{ readonly message: string }> {}
 
 export type AutofillVideoResult = {
   readonly videoId: string;
@@ -120,21 +129,25 @@ const makeAutofillService = (
       Effect.gen(function* () {
         yield* requireDraftVersionForVideo(tx, input.videoId);
         if (input.description !== null) {
-          yield* Effect.promise(() =>
-            tx
-              .update(videos)
-              .set({ description: input.description, updatedAt: new Date() })
-              .where(eq(videos.id, input.videoId))
-          );
+          yield* Effect.tryPromise({
+            try: () =>
+              tx
+                .update(videos)
+                .set({ description: input.description, updatedAt: new Date() })
+                .where(eq(videos.id, input.videoId)),
+            catch: (cause) => new UnknownDBServiceError({ cause }),
+          });
         }
         if (input.chapters !== null) {
           const chapters = input.chapters;
-          yield* Effect.promise(() =>
-            replaceVideoChapters(tx, {
-              videoId: input.videoId,
-              proposals: chapters,
-            })
-          );
+          yield* Effect.tryPromise({
+            try: () =>
+              replaceVideoChapters(tx, {
+                videoId: input.videoId,
+                proposals: chapters,
+              }),
+            catch: (cause) => new UnknownDBServiceError({ cause }),
+          });
         }
       })
     );
@@ -191,11 +204,10 @@ const makeAutofillService = (
           clipIds.has(chapter.beforeClipId)
         );
         if (validChapters.length === 0) {
-          return yield* Effect.fail(
-            new Error(
-              "the model proposed no Chapter naming a clip of this video"
-            )
-          );
+          return yield* new AutofillNoValidChaptersError({
+            message:
+              "the model proposed no Chapter naming a clip of this video",
+          });
         }
       }
 

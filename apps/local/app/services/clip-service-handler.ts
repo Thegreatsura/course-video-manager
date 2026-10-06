@@ -16,12 +16,7 @@ import {
   checkClipZoomEligibility,
   clipZoomIneligibilityMessage,
 } from "@/features/videos/clip-zoom";
-import {
-  createClipService,
-  type ClipService,
-  type ClipServiceEvent,
-  type TimelineItem,
-} from "./clip-service";
+import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import {
   type VideoProcessingAdapter,
   type LoggerAdapter,
@@ -30,6 +25,7 @@ import {
   touchVideoUpdatedAt,
   appendClipsAtInsertionPoint,
   withVideoMutex,
+  dbCall,
   appendFromObsImpl,
   createEffectClipAtPositionImpl,
   handleCreateVideoFromSelection,
@@ -75,7 +71,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
   ) {
     switch (event.type) {
       case "create-video": {
-        const [video] = yield* Effect.promise(() =>
+        const [video] = yield* dbCall(() =>
           db
             .insert(videos)
             .values({
@@ -137,29 +133,25 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         }
 
         // Serialize concurrent append-from-obs calls for the same video
-        // via an in-memory mutex to prevent duplicate clip inserts.
-        // runPromiseExit + re-yield keeps typed failures (VersionNotDraftError
-        // from the post-detection guard, #1403) in the error channel.
-        const exit = yield* Effect.promise(() =>
-          withVideoMutex(event.input.videoId, () =>
-            Effect.runPromiseExit(
-              appendFromObsImpl(db, event, videoProcessing, logger)
-            )
-          )
+        // via an in-memory mutex to prevent duplicate clip inserts. Typed
+        // failures (VersionNotDraftError from the post-detection guard,
+        // #1403) stay in the error channel.
+        return yield* withVideoMutex(
+          event.input.videoId,
+          appendFromObsImpl(db, event, videoProcessing, logger)
         );
-        return yield* exit;
       }
 
       case "archive-clips": {
         for (const clipId of event.clipIds) {
-          yield* Effect.promise(() =>
+          yield* dbCall(() =>
             db.update(clips).set({ archived: true }).where(eq(clips.id, clipId))
           );
         }
 
         // We need the videoId for logging — look up from first clip
         if (event.clipIds.length > 0) {
-          const firstClip = yield* Effect.promise(() =>
+          const firstClip = yield* dbCall(() =>
             db.query.clips.findFirst({
               where: eq(clips.id, event.clipIds[0]!),
             })
@@ -177,7 +169,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
       case "unarchive-clips": {
         for (const clipId of event.clipIds) {
-          yield* Effect.promise(() =>
+          yield* dbCall(() =>
             db
               .update(clips)
               .set({ archived: false })
@@ -186,7 +178,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         }
 
         if (event.clipIds.length > 0) {
-          const firstClip = yield* Effect.promise(() =>
+          const firstClip = yield* dbCall(() =>
             db.query.clips.findFirst({
               where: eq(clips.id, event.clipIds[0]!),
             })
@@ -204,7 +196,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
       case "update-clips": {
         for (const clip of event.clips) {
-          yield* Effect.promise(() =>
+          yield* dbCall(() =>
             db
               .update(clips)
               .set({
@@ -217,7 +209,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         }
 
         if (event.clips.length > 0) {
-          const firstClip = yield* Effect.promise(() =>
+          const firstClip = yield* dbCall(() =>
             db.query.clips.findFirst({
               where: eq(clips.id, event.clips[0]!.id),
             })
@@ -239,14 +231,14 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "update-pause": {
-        yield* Effect.promise(() =>
+        yield* dbCall(() =>
           db
             .update(clips)
             .set({ pauseType: event.pauseType })
             .where(eq(clips.id, event.clipId))
         );
 
-        const clip = yield* Effect.promise(() =>
+        const clip = yield* dbCall(() =>
           db.query.clips.findFirst({
             where: eq(clips.id, event.clipId),
           })
@@ -267,7 +259,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         // so every caller inherits it. The editor hides the affordance on an
         // ineligible clip and the CLI pre-checks to report a clean typed
         // error, but neither of those is what makes the rule hold.
-        const clip = yield* Effect.promise(() =>
+        const clip = yield* dbCall(() =>
           db.query.clips.findFirst({
             where: eq(clips.id, event.clipId),
           })
@@ -281,7 +273,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
           throw new Error(clipZoomIneligibilityMessage(ineligibility));
         }
 
-        yield* Effect.promise(() =>
+        yield* dbCall(() =>
           db
             .update(clips)
             .set({ zoomType: event.zoomType })
@@ -298,7 +290,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "reorder-clip": {
-        const clip = yield* Effect.promise(() =>
+        const clip = yield* dbCall(() =>
           db.query.clips.findFirst({
             where: eq(clips.id, event.clipId),
           })
@@ -337,7 +329,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
           newOrder = order!;
         }
 
-        yield* Effect.promise(() =>
+        yield* dbCall(() =>
           db
             .update(clips)
             .set({ order: newOrder })
@@ -402,7 +394,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
         const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
 
-        const [chapter] = yield* Effect.promise(() =>
+        const [chapter] = yield* dbCall(() =>
           db
             .insert(chapters)
             .values({
@@ -460,7 +452,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
         const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
 
-        const [chapter] = yield* Effect.promise(() =>
+        const [chapter] = yield* dbCall(() =>
           db
             .insert(chapters)
             .values({
@@ -489,14 +481,14 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "update-chapter": {
-        yield* Effect.promise(() =>
+        yield* dbCall(() =>
           db
             .update(chapters)
             .set({ name: event.name })
             .where(eq(chapters.id, event.chapterId))
         );
 
-        const section = yield* Effect.promise(() =>
+        const section = yield* dbCall(() =>
           db.query.chapters.findFirst({
             where: eq(chapters.id, event.chapterId),
           })
@@ -514,7 +506,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
       case "archive-chapters": {
         for (const chapterId of event.chapterIds) {
-          yield* Effect.promise(() =>
+          yield* dbCall(() =>
             db
               .update(chapters)
               .set({ archived: true })
@@ -523,7 +515,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         }
 
         if (event.chapterIds.length > 0) {
-          const firstSection = yield* Effect.promise(() =>
+          const firstSection = yield* dbCall(() =>
             db.query.chapters.findFirst({
               where: eq(chapters.id, event.chapterIds[0]!),
             })
@@ -540,7 +532,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "reorder-chapter": {
-        const chapter = yield* Effect.promise(() =>
+        const chapter = yield* dbCall(() =>
           db.query.chapters.findFirst({
             where: eq(chapters.id, event.chapterId),
           })
@@ -579,7 +571,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
           newOrder = order!;
         }
 
-        yield* Effect.promise(() =>
+        yield* dbCall(() =>
           db
             .update(chapters)
             .set({ order: newOrder })
@@ -607,7 +599,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       case "autofill-chapters": {
         const { videoId, sections: proposed } = event.input;
 
-        const inserted = yield* Effect.promise(() =>
+        const inserted = yield* dbCall(() =>
           replaceVideoChapters(db, { videoId, proposals: proposed })
         );
 
@@ -627,28 +619,3 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
     }
   }
 );
-
-// ============================================================================
-// Direct Transport Factory (for tests)
-// ============================================================================
-
-/**
- * Creates a ClipService that calls the handler directly with the provided
- * database instance. Used for testing with PGlite.
- *
- * @param db - Drizzle database instance
- * @param videoProcessing - VideoProcessingService adapter for OBS functionality
- */
-export function createDirectClipService(
-  db: Database,
-  videoProcessing: VideoProcessingAdapter,
-  logger?: LoggerAdapter
-): ClipService {
-  const send = (event: ClipServiceEvent): Promise<unknown> => {
-    return Effect.runPromise(
-      handleClipServiceEvent(db, event, videoProcessing, logger ?? noopLogger)
-    );
-  };
-
-  return createClipService(send);
-}

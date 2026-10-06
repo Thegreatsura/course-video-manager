@@ -64,6 +64,17 @@ describe("buildDocumentWritingSystemMessage", () => {
     expect(message.content).toContain("UNIQUE_MEMORY_MARKER");
   });
 
+  // The Animatic and its comments change between writing sessions, not
+  // within one, so they ride inside the 1h breakpoint like the beats.
+  it("includes the Animatic in the cached block", () => {
+    const message = buildDocumentWritingSystemMessage(
+      baseContext({ animatic: 'Mockup 1: "UNIQUE_ANIMATIC_MARKER"' })
+    );
+
+    expect(message.content).toContain("UNIQUE_ANIMATIC_MARKER");
+    expect(message.providerOptions).toEqual(CACHE_BREAKPOINT_1H);
+  });
+
   // The counterpart to the rule above: page fields churn (in the SEO writer
   // they are the entire lesson body), so they must never reach the system
   // prompt. The route sends them as a message behind the breakpoint instead.

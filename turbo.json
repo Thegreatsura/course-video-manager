@@ -22,6 +22,9 @@
       "outputs": []
     },
     "lint:boundaries": {},
+    "lint:effect": {
+      "dependsOn": ["^build"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

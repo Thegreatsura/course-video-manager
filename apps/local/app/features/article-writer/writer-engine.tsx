@@ -44,6 +44,7 @@ import type { WriteToolbarProps } from "./write-toolbar";
 import type { WriterFieldId } from "./writer-engine-utils";
 import {
   constrainModes,
+  defaultModeForRole,
   loadFieldMessages,
   saveFieldMessages,
 } from "./writer-engine-utils";
@@ -106,7 +107,7 @@ export function WriterEngine({
 
   const { mode: constrainedMode } = constrainModes(
     modes,
-    modes[0] ?? "article"
+    defaultModeForRole(context.videoRole)
   );
   const [mode, setMode] = useState<Mode>(constrainedMode);
   const ctxModel = useContextModel(context, pageFields);
@@ -339,18 +340,7 @@ export function WriterEngine({
         ctxModel.includeCourseStructure && courseStructure
           ? courseStructure
           : undefined,
-      memory:
-        ctxModel.memoryEnabled && ctxModel.memoryText
-          ? ctxModel.memoryText
-          : undefined,
-      beats:
-        ctxModel.beatsEnabled && ctxModel.beatsText
-          ? ctxModel.beatsText
-          : undefined,
-      script:
-        ctxModel.scriptEnabled && ctxModel.scriptText
-          ? ctxModel.scriptText
-          : undefined,
+      ...ctxModel.promptTexts,
       pageFields: enabledPageFields,
     };
     // Ref, not state: a lint fix sends in the same tick as it rewrites.
@@ -366,12 +356,7 @@ export function WriterEngine({
     pageFields,
     ctxModel.includeCourseStructure,
     courseStructure,
-    ctxModel.memoryEnabled,
-    ctxModel.memoryText,
-    ctxModel.beatsEnabled,
-    ctxModel.beatsText,
-    ctxModel.scriptEnabled,
-    ctxModel.scriptText,
+    ctxModel.promptTexts,
     isDocumentMode,
     documentRef,
     mode,
@@ -583,6 +568,7 @@ export function WriterEngine({
                   preprocessMarkdown={docPreprocessMarkdown}
                   onRemoveBlock={handleRemoveDocBlock}
                   onDocumentChange={updateDocument}
+                  readOnly={isGenerating}
                 />
               </QuizProvider>
             </ChooseScreenshotProvider>
@@ -718,6 +704,7 @@ export function WriterEngine({
                   onDocumentChange={updateDocument}
                   violations={violations}
                   onFixLintViolations={handleFixLintViolations}
+                  readOnly={isGenerating}
                 />
               </QuizProvider>
             </ChooseScreenshotProvider>

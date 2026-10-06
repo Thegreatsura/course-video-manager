@@ -30,6 +30,50 @@
         "message": "Use useLocalStorage from @/hooks/use-local-storage. It handles the SSR guard, the stored-value fallback and the save on every change."
       }
     ],
+    // CODING STANDARD: "Effects are run, never dropped" — never `await` an
+    // Effect, only a thenable. Type-aware: `pnpm run lint` passes
+    // `--type-aware`, which needs oxlint-tsgolint.
+    "typescript/await-thenable": "error",
+    // CODING STANDARD: "A switch over a union names every member" — no
+    // `default` standing in for the members it happens to cover.
+    "typescript/switch-exhaustiveness-check": "error",
+    // CODING STANDARD: "Throw Errors, not values". React Router's `data()`
+    // is the one exception: a thrown `data(...)` is how a loader or action
+    // answers with an error status.
+    "typescript/only-throw-error": [
+      "error",
+      {
+        "allow": [
+          {
+            "from": "package",
+            "package": "react-router",
+            "name": "DataWithResponseInit"
+          }
+        ]
+      }
+    ],
+    // CODING STANDARD: "Every promise is awaited, handled or marked void".
+    // A ratchet: a warning everywhere, an error in the directories that are
+    // clean (see `overrides`). React handler-heavy UI is the backlog.
+    "typescript/no-floating-promises": "warn",
+    "typescript/no-misused-promises": "warn",
+    // `--type-aware` also switches on every other type-aware rule in
+    // `correctness`. Those are a measured backlog (docs/plans/
+    // effect-codebase-health.md, phase 2) and stay off until each is fixed
+    // and promoted on its own.
+    "typescript/no-array-delete": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/no-duplicate-type-constituents": "off",
+    "typescript/no-for-in-array": "off",
+    "typescript/no-implied-eval": "off",
+    "typescript/no-meaningless-void-operator": "off",
+    "typescript/no-misused-spread": "off",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-unsafe-unary-minus": "off",
+    "typescript/no-useless-default-assignment": "off",
+    "typescript/require-array-sort-compare": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off",
     // Effect generators legitimately never yield.
     "require-yield": "off",
     // `const { versions, ...rest } = x` is how this repo omits a field. The
@@ -45,6 +89,25 @@
   },
 
   "overrides": [
+    {
+      // The promise ratchet: these directories are clean of floating and
+      // misused promises, so a new one is an error. Add a directory here once
+      // it reaches 0; the React handler-heavy UI (features/, components/,
+      // hooks/, .tsx routes) is the backlog and stays at warn.
+      "files": [
+        "apps/local/app/services/**",
+        "apps/local/app/cli/**",
+        "apps/local/app/routes/**/*.ts",
+        "apps/remote/**",
+        "packages/**",
+        ".sandcastle/**",
+        "scripts/**"
+      ],
+      "rules": {
+        "typescript/no-floating-promises": "error",
+        "typescript/no-misused-promises": "error"
+      }
+    },
     {
       // The hook itself is the one place raw localStorage belongs.
       "files": ["apps/local/app/hooks/use-local-storage.ts"],

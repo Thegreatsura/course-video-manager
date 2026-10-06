@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { data } from "react-router";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { makeAction } from "@/services/route-action.server";
@@ -7,23 +7,45 @@ import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 
-const wslPathToWindows = (wslPath: string): Effect.Effect<string, Error> => {
+class WslPathConversionError extends Data.TaggedError(
+  "WslPathConversionError"
+)<{ readonly cause: unknown; readonly message: string }> {}
+
+class RevealInExplorerError extends Data.TaggedError("RevealInExplorerError")<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
+
+const wslPathToWindows = (
+  wslPath: string
+): Effect.Effect<string, WslPathConversionError> => {
   return Effect.tryPromise({
     try: async () => {
       const { stdout } = await execAsync(`wslpath -w "${wslPath}"`);
       return stdout.trim();
     },
-    catch: (e) => new Error(`Failed to convert path: ${e}`),
+    catch: (e) =>
+      new WslPathConversionError({
+        cause: e,
+        message: `Failed to convert path: ${e}`,
+      }),
   });
 };
 
-const revealInExplorer = (windowsPath: string): Effect.Effect<void, Error> => {
-  return Effect.async<void, Error>((resume) => {
+const revealInExplorer = (
+  windowsPath: string
+): Effect.Effect<void, RevealInExplorerError> => {
+  return Effect.async<void, RevealInExplorerError>((resume) => {
     const command = `powershell.exe -c "explorer.exe '/select,\\"${windowsPath}\\"'"`;
     exec(command, (error) => {
       if (error && typeof error.code === "string") {
         resume(
-          Effect.fail(new Error(`Failed to reveal file: ${error.message}`))
+          Effect.fail(
+            new RevealInExplorerError({
+              cause: error,
+              message: `Failed to reveal file: ${error.message}`,
+            })
+          )
         );
       } else {
         resume(Effect.succeed(undefined));

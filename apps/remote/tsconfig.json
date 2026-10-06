@@ -2,8 +2,46 @@
   "include": ["**/*"],
   "exclude": ["node_modules"],
   "compilerOptions": {
+    // Effect language service, run by `pnpm run lint:effect` (effect-tsgo
+    // diagnostics). Only rules backed by CODING_STANDARDS.md (its Effect
+    // section) are errors; the rest of the rules that default to error
+    // are demoted to warnings so they still report without gating CI.
+    // See docs/plans/effect-codebase-health.md before promoting one.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [],
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingStarInYieldEffectGen": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+          "missingReturnYieldStar": "error",
+          "catchUnfailableEffect": "error",
+          "tryCatchInEffectGen": "error",
+          "schemaSyncInEffect": "error",
+          "globalErrorInEffectFailure": "error",
+          "globalErrorInEffectCatch": "error",
+          "classSelfMismatch": "warning",
+          "effectFnImplicitAny": "warning",
+          "floatingEffectInVitest": "warning",
+          "missingEffectContext": "warning",
+          "missingEffectError": "warning",
+          "missingLayerContext": "warning",
+          "nonObjectEffectServiceType": "warning",
+          "overriddenSchemaConstructor": "warning",
+          "schemaLiteralNonFinite": "warning",
+          "schemaOpaqueInstanceMember": "warning"
+        }
+      }
+    ],
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
+    // Explicit, so it resolves relative to THIS file. @vercel/node's TS 7 path
+    // compiles via a generated tsconfig in the OS temp dir that `extends` this
+    // one; without typeRoots, TS looks for @types next to that temp file and
+    // fails with TS2688 "Cannot find type definition file for 'node'".
+    "typeRoots": ["./node_modules/@types"],
     "target": "ESNext",
     // See packages/core/tsconfig.json. This app is not bundled at all: Vercel
     // transpiles each file and Node's own ESM loader links them, so every

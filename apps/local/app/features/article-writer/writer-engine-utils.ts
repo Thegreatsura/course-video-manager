@@ -1,4 +1,5 @@
 import type { Mode } from "./types";
+import type { VideoRole } from "@/services/lesson-warnings";
 import { hasLocalStorage } from "@/hooks/use-local-storage";
 
 export type WriterFieldId =
@@ -83,4 +84,15 @@ export function constrainModes(
   if (modes.includes(currentMode))
     return { mode: currentMode, isConstrained: true };
   return { mode: modes[0]!, isConstrained: true };
+}
+
+/**
+ * The mode the writer opens on, from the video's role in its lesson. A Problem
+ * video's body is the steps to complete, so it opens on skill-building;
+ * everything else — Solution, Explainer, standalone — opens on article.
+ * Pass the result through {@link constrainModes}: a field that doesn't offer
+ * skill-building still lands on its own first mode.
+ */
+export function defaultModeForRole(role: VideoRole | undefined): Mode {
+  return role === "problem" ? "skill-building" : "article";
 }

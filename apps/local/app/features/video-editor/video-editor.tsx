@@ -18,7 +18,6 @@ import { useChapterModal } from "./hooks/use-chapter-modal";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
 import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
-import { useSessionClipMarks } from "./session-clip-marks";
 import { useTeleprompterConnected } from "./hooks/use-teleprompter-connected";
 import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
@@ -181,7 +180,6 @@ export const VideoEditor = (props: {
   );
 
   // This session's clips and their states, for the teleprompter's glass.
-  const sessionClipMarks = useSessionClipMarks(props.items, props.sessions);
 
   useEffect(() => enableVideoEditorMode(), []);
 
@@ -342,7 +340,8 @@ export const VideoEditor = (props: {
       ? props.speechDetectorState.type
       : "not-recording",
     tab: activeTab,
-    marks: sessionClipMarks,
+    items: props.items,
+    sessions: props.sessions,
   });
   useTeleprompterShortcuts();
 

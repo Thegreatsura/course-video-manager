@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import {
   ClipMockupOperationsService,
@@ -52,7 +53,7 @@ import {
 // Options / Args
 // ---------------------------------------------------------------------------
 
-const videoOption = Options.text("video").pipe(
+const videoOption = entityIdOption("video", "video").pipe(
   Options.withDescription(
     "The parent Video id whose Animatic to operate on (required)."
   )
@@ -74,7 +75,7 @@ const clipMockupsJsonOption = Options.text("clip-mockups-json").pipe(
  * `--at` position is counted in, so it is optional there and refused next to a
  * bare <id>.
  */
-const videoAddressOption = Options.text("video").pipe(
+const videoAddressOption = entityIdOption("video", "video").pipe(
   Options.withDescription(
     "The parent Video id to count --at positions in (use with --at, instead of a bare <id>)."
   ),
@@ -88,14 +89,20 @@ const atOption = Options.integer("at").pipe(
   Options.optional
 );
 
-const beforeOption = Options.text("before").pipe(
+const beforeOption = entityIdOption("before", [
+  "clip-mockup",
+  "clip-mockup-chapter",
+]).pipe(
   Options.withDescription(
     "Place immediately before this Clip Mockup id (mutually exclusive with --after)."
   ),
   Options.optional
 );
 
-const afterOption = Options.text("after").pipe(
+const afterOption = entityIdOption("after", [
+  "clip-mockup",
+  "clip-mockup-chapter",
+]).pipe(
   Options.withDescription(
     "Place immediately after this Clip Mockup id (mutually exclusive with --before)."
   ),
@@ -113,8 +120,8 @@ const withChaptersOption = Options.boolean("with-chapters").pipe(
   )
 );
 
-const optionalIdArg = Args.text({ name: "id" }).pipe(Args.optional);
-const idsArg = Args.text({ name: "id" }).pipe(Args.repeated);
+const optionalIdArg = entityIdArg("clip-mockup").pipe(Args.optional);
+const idsArg = entityIdArg("clip-mockup").pipe(Args.repeated);
 
 // ---------------------------------------------------------------------------
 // Shared helpers
