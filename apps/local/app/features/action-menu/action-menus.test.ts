@@ -2,21 +2,23 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { labelProblems } from "./action-menu-model";
-import allowlist from "./raw-menus-allowlist.json";
 
 /**
  * The guard behind CODING_STANDARDS.md's "Action menus". Every action menu in
  * `app/` renders through `EntityMenuContent` (or `ActionMenuContent`, for a
  * menu not about an entity), which owns the order, the separators, the
  * destructive styling, the ellipsis and Copy Link / Copy ID. Hand-built menu
- * code — a raw `ContextMenuItem`, `DropdownMenuSeparator`… — is held to a
- * shrink-only allowlist, `raw-menus-allowlist.json`, while
- * docs/plans/action-menus.md migrates it: a new hit fails, and so does an
- * entry whose count is higher than its file's, so a migration must also
- * lower (or drop) its entry.
+ * code — a raw `ContextMenuItem`, `DropdownMenuSeparator`… — fails outright
+ * anywhere but a value picker (`PICKERS`). If a menu needs something the
+ * model lacks, extend `action-menu-model.ts` (with a test) rather than build
+ * the menu by hand.
  */
 
-/** Value pickers: they choose a value, they do not act on a thing. Exempt for good. */
+/**
+ * Value pickers: they choose a value, they do not act on a thing. Exempt for
+ * good. A choice *inside* an action menu (a Deliverable's Course) is not a
+ * picker file: it is an `ActionPicker` item in that menu's groups.
+ */
 const PICKERS: Record<string, string> = {
   "components/effort-selector.tsx": "picks a Pitch's effort",
   "components/priority-selector.tsx": "picks a Pitch's priority",
@@ -48,10 +50,9 @@ const APP_ROOT = join(import.meta.dirname, "..", "..");
 
 /** Hand-built menu parts. The root and the Trigger stay raw; everything inside is the primitive's job. */
 const RAW =
-  /<(?:(?:ContextMenu|DropdownMenu)(?:Content|Item|CheckboxItem|RadioItem|RadioGroup|Sub|SubTrigger|SubContent|Separator|Label|Group|Shortcut)|CopyEntityLinkItems)\b/g;
+  /<(?:ContextMenu|DropdownMenu)(?:Content|Item|CheckboxItem|RadioItem|RadioGroup|Sub|SubTrigger|SubContent|Separator|Label|Group|Shortcut)\b/g;
 const ENTITY_MENU = /<EntityMenuContent\b/g;
 const ACTION_MENU = /<ActionMenuContent\b/g;
-const OPENS_MENU = /<(ContextMenuContent|DropdownMenuContent)\b/g;
 /** A label written as a string literal: `label: "…"`. */
 const LITERAL_LABEL = /\blabel:\s*"([^"]*)"/g;
 
@@ -81,11 +82,8 @@ const files = tsxFiles(APP_ROOT)
       raw: count(source, RAW),
       entityMenus: count(source, ENTITY_MENU),
       actionMenus: count(source, ACTION_MENU),
-      opensRawMenu: count(source, OPENS_MENU) > 0,
     };
   });
-
-const allowed: Record<string, { count: number; reason: string }> = allowlist;
 
 describe("action menus", () => {
   it("finds the app's menus (the scan is not silently empty)", () => {
@@ -94,27 +92,14 @@ describe("action menus", () => {
     ).toBeGreaterThan(20);
   });
 
-  it("builds no new menu by hand (raw-menus-allowlist.json only shrinks)", () => {
-    const over = files
+  it("builds no menu by hand", () => {
+    const handBuilt = files
       .filter((f) => !(f.path in PICKERS))
-      .filter((f) => f.raw > (allowed[f.path]?.count ?? 0))
+      .filter((f) => f.raw > 0)
       .map((f) => `${f.path}: ${f.raw} raw menu parts`);
     expect(
-      over,
-      "Render these menus with <EntityMenuContent> / <ActionMenuContent> (features/action-menu) instead of raw ContextMenu*/DropdownMenu* parts"
-    ).toEqual([]);
-  });
-
-  it("lists no more raw menu parts than a file has", () => {
-    const stale = Object.entries(allowed)
-      .filter(([path, entry]) => {
-        const file = files.find((f) => f.path === path);
-        return (file?.raw ?? 0) < entry.count;
-      })
-      .map(([path]) => path);
-    expect(
-      stale,
-      "These files have fewer raw menu parts than raw-menus-allowlist.json says — lower their count, or drop the entry at 0"
+      handBuilt,
+      'Render these menus with <EntityMenuContent> (or <ActionMenuContent> for a menu not about an entity) from features/action-menu instead of raw ContextMenu*/DropdownMenu* parts — see CODING_STANDARDS.md, "Action menus"'
     ).toEqual([]);
   });
 
@@ -125,18 +110,6 @@ describe("action menus", () => {
     expect(
       misused,
       "Use <EntityMenuContent entity={…}> so the menu can copy its link and ID, or add the file to NOT_ENTITY_MENUS with the reason"
-    ).toEqual([]);
-  });
-
-  it("gives every hand-built entity menu Copy Link / Copy ID until it migrates", () => {
-    const missing = files
-      .filter((f) => f.opensRawMenu)
-      .filter((f) => !(f.path in PICKERS) && !(f.path in NOT_ENTITY_MENUS))
-      .filter((f) => !f.source.includes("<CopyEntityLinkItems"))
-      .map((f) => f.path);
-    expect(
-      missing,
-      "Move these menus onto <EntityMenuContent>, which adds Copy Link / Copy ID itself"
     ).toEqual([]);
   });
 
@@ -157,10 +130,18 @@ describe("action menus", () => {
     const menuPaths = files
       .filter((f) => f.raw + f.entityMenus + f.actionMenus > 0)
       .map((f) => f.path);
+    const actionMenuPaths = files
+      .filter((f) => f.actionMenus > 0)
+      .map((f) => f.path);
     const stale = [
-      ...Object.keys(PICKERS),
-      ...Object.keys(NOT_ENTITY_MENUS),
-    ].filter((path) => !menuPaths.includes(path));
-    expect(stale, "These files no longer open a menu; drop them").toEqual([]);
+      ...Object.keys(PICKERS).filter((path) => !menuPaths.includes(path)),
+      ...Object.keys(NOT_ENTITY_MENUS).filter(
+        (path) => !actionMenuPaths.includes(path)
+      ),
+    ];
+    expect(
+      stale,
+      "These files no longer open a picker / an ActionMenuContent; drop them"
+    ).toEqual([]);
   });
 });

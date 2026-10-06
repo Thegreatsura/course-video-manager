@@ -24,7 +24,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { copyEntityLinkActions } from "@/features/entity-links/copy-entity-link-items";
+import { copyEntityLinkActions } from "@/features/entity-links/copy-entity-link-actions";
 import type { EntityRef } from "@/features/entity-links/entity-deep-link";
 import { CheckIcon } from "lucide-react";
 import { Fragment } from "react";
