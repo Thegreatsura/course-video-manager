@@ -3,7 +3,9 @@ import { cn } from "@/lib/utils";
 import { LiveMediaStream } from "./live-media-stream";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { RecordingSignalIndicator } from "./timeline-indicators";
-import { StudioActionsDropdown } from "./studio-actions-dropdown";
+import { ActionsDropdown } from "./actions-dropdown";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
+import { useEditorVideoActions } from "../editor-video-menu";
 import { MissingWordTimingBadge } from "./transcript-word-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
 import type { ClipOverlay } from "../overlay-preview";
@@ -15,17 +17,9 @@ import {
 } from "../video-editor-selectors";
 import { formatSecondsToTimeCode } from "@/services/utils";
 import { SendIcon, VideoOffIcon } from "lucide-react";
-import { useFetcher } from "react-router";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
-import {
-  useState,
-  useCallback,
-  useContext,
-  useEffect,
-  type ChangeEvent,
-} from "react";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useState, useCallback, type ChangeEvent } from "react";
 import {
   ShortsPostingModal,
   type ShortsPostingMode,
@@ -113,42 +107,7 @@ export const PortraitStudioPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.allClipsHaveSilenceDetected
   );
-  const allClipsHaveText = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.allClipsHaveText
-  );
-  const { startExportUpload, startRenderVerticalUpload } =
-    useContext(UploadContext);
   const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
-  const isCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isCopied
-  );
-  const copyTranscriptToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyTranscriptToClipboard
-  );
-  const youtubeChapters = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.youtubeChapters
-  );
-  const isChaptersCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isChaptersCopied
-  );
-  const copyYoutubeChaptersToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyYoutubeChaptersToClipboard
-  );
-  const setIsRenameVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsRenameVideoModalOpen
-  );
-  const setIsCopyVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCopyVideoModalOpen
-  );
-  const revealVideoFetcher = useFetcher();
 
   const [isPostingModalOpen, setIsPostingModalOpen] = useState(false);
   const [postingMode, setPostingMode] = useState<ShortsPostingMode>("both");
@@ -157,26 +116,13 @@ export const PortraitStudioPanel = () => {
     setIsPostingModalOpen(true);
   }, []);
 
-  const [exportFileExists, setExportFileExists] = useState(false);
-  useEffect(() => {
-    fetch(`/api/videos/${videoId}/export-file-exists`)
-      .then((res) => res.json())
-      .then((data: { exists: boolean }) => setExportFileExists(data.exists))
-      .catch(() => setExportFileExists(false));
-  }, [videoId]);
-
-  const [isLogPathCopied, setIsLogPathCopied] = useState(false);
-  const copyLogPathToClipboard = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/videos/${videoId}/log-path`);
-      const logPath = await res.text();
-      await navigator.clipboard.writeText(logPath);
-      setIsLogPathCopied(true);
-      setTimeout(() => setIsLogPathCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy log path:", error);
-    }
-  }, [videoId]);
+  const editorVideoActions = useEditorVideoActions();
+  const menuGroups = videoMenuGroups({
+    ...editorVideoActions,
+    postShort: () => openPostingModal("both"),
+    postToYouTube: () => openPostingModal("youtube"),
+    postToTikTok: () => openPostingModal("tiktok"),
+  });
 
   const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
   const showCenterLine = getShowCenterLineSelector(obsConnectorState);
@@ -284,39 +230,10 @@ export const PortraitStudioPanel = () => {
         </span>
         <MissingWordTimingBadge />
         <div className="flex gap-1 shrink-0">
-          <StudioActionsDropdown
-            allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
-            allClipsHaveText={allClipsHaveText}
-            onExport={() => startExportUpload(videoId, videoTitle)}
-            onRenderVertical={() =>
-              startRenderVerticalUpload(videoId, videoTitle)
-            }
-            onPostShorts={() => openPostingModal("both")}
-            onPostYoutube={() => openPostingModal("youtube")}
-            onPostTiktok={() => openPostingModal("tiktok")}
+          <ActionsDropdown
             videoId={videoId}
-            isCopied={isCopied}
-            copyTranscriptToClipboard={copyTranscriptToClipboard}
-            youtubeChapters={youtubeChapters}
-            isChaptersCopied={isChaptersCopied}
-            copyYoutubeChaptersToClipboard={copyYoutubeChaptersToClipboard}
-            onRenameVideoClick={() => setIsRenameVideoModalOpen(true)}
-            onCopyVideoClick={() => setIsCopyVideoModalOpen(true)}
-            onRevealInFileSystem={
-              exportFileExists
-                ? () => {
-                    revealVideoFetcher.submit(
-                      {},
-                      {
-                        method: "post",
-                        action: `/api/videos/${videoId}/reveal`,
-                      }
-                    );
-                  }
-                : undefined
-            }
-            isLogPathCopied={isLogPathCopied}
-            copyLogPathToClipboard={copyLogPathToClipboard}
+            groups={menuGroups}
+            allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
           />
           <Button size="sm" onClick={() => openPostingModal("both")}>
             <SendIcon className="w-3.5 h-3.5 mr-1" />

@@ -26,7 +26,9 @@ import {
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
 import { ClipboardIcon, VideoOffIcon } from "lucide-react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
+import { useEditorVideoActions } from "../editor-video-menu";
 import { useContextSelector } from "use-context-selector";
 import {
   VideoEditorContext,
@@ -37,11 +39,8 @@ import {
   useState,
   useMemo,
   useCallback,
-  useContext,
-  useEffect,
   type ChangeEvent,
 } from "react";
-import { UploadContext } from "@/features/upload-manager/upload-context";
 import {
   resolveForVideo,
   type ResolverTimelineItem,
@@ -54,10 +53,6 @@ import {
 import { teleprompterChannel } from "@/lib/teleprompter-protocol";
 
 export const VideoPlayerPanel = () => {
-  const videoTitle = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.videoTitle
-  );
   const lessonId = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.lessonId
@@ -157,8 +152,6 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.allClipsHaveText
   );
-  const { startExportUpload, startRenderVerticalUpload } =
-    useContext(UploadContext);
   const exportToDavinciResolveFetcher = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.exportToDavinciResolveFetcher
@@ -176,41 +169,9 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.setReferenceVideoId
   );
-  const hasBeats = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.hasBeats
-  );
-  const onShowBeatPanel = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onShowBeatPanel
-  );
-  const onShowScriptPanel = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onShowScriptPanel
-  );
   const onOpenAutofillChaptersModal = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onOpenAutofillChaptersModal
-  );
-  const isCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isCopied
-  );
-  const copyTranscriptToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyTranscriptToClipboard
-  );
-  const youtubeChapters = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.youtubeChapters
-  );
-  const isChaptersCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isChaptersCopied
-  );
-  const copyYoutubeChaptersToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyYoutubeChaptersToClipboard
   );
   const isAddVideoModalOpen = useContextSelector(
     VideoEditorContext,
@@ -224,14 +185,6 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.onAddNoteFromClipboard
   );
-  const setIsRenameVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsRenameVideoModalOpen
-  );
-  const setIsCopyVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCopyVideoModalOpen
-  );
   const items = useContextSelector(VideoEditorContext, (ctx) => ctx.items);
   const fsData = useContextSelector(VideoEditorContext, (ctx) => ctx.fsData);
   const selectedClipsSet = useContextSelector(
@@ -242,29 +195,9 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.videoCount
   );
-  const revealVideoFetcher = useFetcher();
   const openInVSCodeFetcher = useFetcher();
-
-  const [exportFileExists, setExportFileExists] = useState(false);
-  useEffect(() => {
-    fetch(`/api/videos/${videoId}/export-file-exists`)
-      .then((res) => res.json())
-      .then((data: { exists: boolean }) => setExportFileExists(data.exists))
-      .catch(() => setExportFileExists(false));
-  }, [videoId]);
-
-  const [isLogPathCopied, setIsLogPathCopied] = useState(false);
-  const copyLogPathToClipboard = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/videos/${videoId}/log-path`);
-      const logPath = await res.text();
-      await navigator.clipboard.writeText(logPath);
-      setIsLogPathCopied(true);
-      setTimeout(() => setIsLogPathCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy log path:", error);
-    }
-  }, [videoId]);
+  const editorVideoActions = useEditorVideoActions();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<"suggestions" | "toc" | "links">(
     "suggestions"
@@ -353,6 +286,45 @@ export const VideoPlayerPanel = () => {
     }
   }, [items, insertionPoint]);
 
+  const isReferenceOpen =
+    referenceVideoId !== null &&
+    referenceCandidates.some((c) => c.id === referenceVideoId);
+  const menuGroups = videoMenuGroups({
+    ...editorVideoActions,
+    openTeleprompter: () => teleprompterChannel.open(),
+    openDiagramPlayground: () => void handleOpenDiagramPlayground(),
+    reference: isReferenceOpen
+      ? { close: () => setReferenceVideoId(null) }
+      : { candidates: referenceCandidates, open: setReferenceVideoId },
+    openInVSCode: lessonId
+      ? () =>
+          openInVSCodeFetcher.submit(
+            {},
+            { method: "post", action: `/api/videos/${videoId}/open-in-vscode` }
+          )
+      : undefined,
+    editLessonBody: lessonId
+      ? () => setIsLessonBodyWriterOpen(true)
+      : undefined,
+    autofillDescription: lessonId
+      ? () => setIsSeoDescriptionOpen(true)
+      : undefined,
+    autofillChapters: {
+      onSelect: onOpenAutofillChaptersModal,
+      disabled: !allClipsHaveText,
+      description: allClipsHaveText
+        ? undefined
+        : "Waiting for transcription to complete",
+    },
+    addVideoToLesson: lessonId ? () => setIsAddVideoModalOpen(true) : undefined,
+    createConcatenatedVideo: () =>
+      navigate(`/videos/concatenate?initial=${videoId}`),
+    exportToDavinciResolve: () =>
+      exportToDavinciResolveFetcher.submit(null, {
+        method: "post",
+        action: `/videos/${videoId}/export-to-davinci-resolve`,
+      }),
+  });
   return (
     <>
       <div className="lg:flex-1 relative order-1 lg:order-2 overflow-y-auto h-full">
@@ -455,62 +427,10 @@ export const VideoPlayerPanel = () => {
 
           <div className="flex gap-2 mt-4">
             <ActionsDropdown
-              allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
-              allClipsHaveText={allClipsHaveText}
-              onExport={() => startExportUpload(videoId, videoTitle)}
-              onRenderVertical={() =>
-                startRenderVerticalUpload(videoId, videoTitle)
-              }
-              exportToDavinciResolveFetcher={exportToDavinciResolveFetcher}
               videoId={videoId}
-              lessonId={lessonId}
-              isCopied={isCopied}
-              copyTranscriptToClipboard={copyTranscriptToClipboard}
-              youtubeChapters={youtubeChapters}
-              isChaptersCopied={isChaptersCopied}
-              copyYoutubeChaptersToClipboard={copyYoutubeChaptersToClipboard}
-              onAddVideoClick={() => setIsAddVideoModalOpen(true)}
-              onRenameVideoClick={() => setIsRenameVideoModalOpen(true)}
-              onCopyVideoClick={() => setIsCopyVideoModalOpen(true)}
-              onRevealInFileSystem={
-                exportFileExists
-                  ? () => {
-                      revealVideoFetcher.submit(
-                        {},
-                        {
-                          method: "post",
-                          action: `/api/videos/${videoId}/reveal`,
-                        }
-                      );
-                    }
-                  : undefined
-              }
-              onOpenInVSCode={
-                lessonId
-                  ? () => {
-                      openInVSCodeFetcher.submit(
-                        {},
-                        {
-                          method: "post",
-                          action: `/api/videos/${videoId}/open-in-vscode`,
-                        }
-                      );
-                    }
-                  : undefined
-              }
-              isLogPathCopied={isLogPathCopied}
-              copyLogPathToClipboard={copyLogPathToClipboard}
-              referenceCandidates={referenceCandidates}
-              referenceVideoId={referenceVideoId}
-              setReferenceVideoId={setReferenceVideoId}
-              hasBeats={hasBeats}
-              onShowBeatPanel={onShowBeatPanel}
-              onShowScriptPanel={onShowScriptPanel}
-              onAutofillChaptersClick={onOpenAutofillChaptersModal}
-              onOpenDiagramPlayground={handleOpenDiagramPlayground}
-              onOpenTeleprompter={() => teleprompterChannel.open()}
-              onEditLessonBodyClick={() => setIsLessonBodyWriterOpen(true)}
-              onAutofillDescriptionClick={() => setIsSeoDescriptionOpen(true)}
+              groups={menuGroups}
+              allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
+              isPending={exportToDavinciResolveFetcher.state === "submitting"}
             />
             <Button variant="secondary" onClick={onAddNoteFromClipboard}>
               <ClipboardIcon className="w-4 h-4 mr-1" />
