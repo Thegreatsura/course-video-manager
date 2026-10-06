@@ -568,6 +568,7 @@ export function WriterEngine({
                   preprocessMarkdown={docPreprocessMarkdown}
                   onRemoveBlock={handleRemoveDocBlock}
                   onDocumentChange={updateDocument}
+                  readOnly={isGenerating}
                 />
               </QuizProvider>
             </ChooseScreenshotProvider>
@@ -703,6 +704,7 @@ export function WriterEngine({
                   onDocumentChange={updateDocument}
                   violations={violations}
                   onFixLintViolations={handleFixLintViolations}
+                  readOnly={isGenerating}
                 />
               </QuizProvider>
             </ChooseScreenshotProvider>
