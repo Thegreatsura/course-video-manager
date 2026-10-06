@@ -195,24 +195,19 @@ describe("course readiness", () => {
       total: 1,
       todo: 0,
       done: 1,
-      unset: 0,
     });
     expect(out.progress.videos.total).toBe(1);
     expect(out.progress.videos.unexported).toBe(1);
     expect(out.progress.videos.noClips).toBe(0);
   });
 
-  // authoringStatus is a nullable column with no DB default, so the three
-  // buckets must still sum to total — a sweep deriving "remaining = total -
-  // done" would otherwise over-count.
-  it("counts a lesson with no authoringStatus as unset, and the buckets sum", async () => {
+  it("counts a lesson with no authoringStatus as done", async () => {
     await testDb.update(schema.lessons).set({ authoringStatus: null });
 
     const res = await run(["course", "readiness", s.courseAId]);
 
     const { lessons } = JSON.parse(res.stdout).progress;
-    expect(lessons).toEqual({ total: 1, todo: 0, done: 0, unset: 1 });
-    expect(lessons.todo + lessons.done + lessons.unset).toBe(lessons.total);
+    expect(lessons).toEqual({ total: 1, todo: 0, done: 1 });
   });
 
   it("measures the pinned version when --course-version is given", async () => {
@@ -262,7 +257,6 @@ describe("course readiness", () => {
       total: 1,
       todo: 1,
       done: 0,
-      unset: 0,
     });
   });
 

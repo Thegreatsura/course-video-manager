@@ -26,6 +26,8 @@
 // the control the author can flip. The hard gaps travel on the verdict either
 // way, so a withheld Lesson can always say what is wrong with it too.
 
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
+
 /**
  * The lowest Lesson Priority band whose unshippable Lessons ship as Placeholder
  * Lessons. Four positions: announce nothing (`null`, the default), P1, P2, P3.
@@ -167,7 +169,7 @@ export const classifyLessonPublishStatus = (
     return { status: "placeholder", hardGaps };
   }
 
-  if (!options.includeTodoLessons && lesson.authoringStatus === "todo") {
+  if (!options.includeTodoLessons && isTodoLesson(lesson)) {
     return { status: "withheld", reason: "todo", hardGaps };
   }
 

@@ -1,3 +1,7 @@
+import {
+  effectiveAuthoringStatus,
+  isTodoLesson,
+} from "@cvm/core/lib/authoring-status";
 import type { TranscriptItem } from "@/lib/transcript-builder";
 import { toDiffArray } from "@/lib/transcript-builder";
 
@@ -217,7 +221,7 @@ export function detectChanges(
 
     for (const lesson of section.lessons) {
       const currentHasContent = lessonHasContent(lesson);
-      const isTodo = lesson.authoringStatus === "todo";
+      const isTodo = isTodoLesson(lesson);
 
       if (!lesson.previousVersionLessonId) {
         if (currentHasContent || isTodo) {
@@ -241,12 +245,11 @@ export function detectChanges(
           }
         } else {
           const prevHadContent = lessonHasContent(prevLesson.lesson);
-          const prevStatus = prevLesson.lesson.authoringStatus;
-          const curStatus = lesson.authoringStatus;
-          const statusFlipped =
-            prevStatus !== null &&
-            curStatus !== null &&
-            prevStatus !== curStatus;
+          const prevStatus = effectiveAuthoringStatus(
+            prevLesson.lesson.authoringStatus
+          );
+          const curStatus = effectiveAuthoringStatus(lesson.authoringStatus);
+          const statusFlipped = prevStatus !== curStatus;
 
           if (statusFlipped) {
             if (prevStatus === "todo" && curStatus === "done") {

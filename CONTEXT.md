@@ -99,7 +99,7 @@ _Avoid_: Version number, Build version
 ### Authoring lifecycle
 
 **Lesson Authoring Status**:
-A marker on a **Lesson** in each version: todo (the default for a new Lesson) or done. A Published Version keeps the status each Lesson had when it was published. Every Lesson has one. It is different from **Pitch State**. Its changes appear in the **Marked Ready** and **Marked TODO** changelog groups.
+A marker on a **Lesson** in each version: todo (the default for a new Lesson) or done. A Published Version keeps the status each Lesson had when it was published. A Lesson with no stored status (a legacy Lesson) is done: null means done everywhere, read through one shared helper. It is different from **Pitch State**. Its changes appear in the **Marked Ready** and **Marked TODO** changelog groups.
 _Avoid_: TODO flag, Completion
 
 **Marked Ready** / **Marked TODO**:

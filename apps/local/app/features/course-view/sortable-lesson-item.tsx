@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import { AddVideoModal } from "@/components/add-video-modal";
 import { DeleteLessonModal } from "@/components/delete-lesson-modal";
 import { EditLessonDescriptionModal } from "@/components/edit-lesson-description-modal";
@@ -382,22 +383,21 @@ export function SortableLessonItem({
                     dependencyMap={dependencyMap}
                   />
                 )}
-                {visibility.todoMarkers &&
-                  lesson.authoringStatus === "todo" && (
-                    <button
-                      className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-foreground text-background hover:opacity-80 transition-opacity shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        submitEvent({
-                          type: "set-lesson-authoring-status",
-                          lessonId: lesson.id,
-                          status: "done",
-                        });
-                      }}
-                    >
-                      todo
-                    </button>
-                  )}
+                {visibility.todoMarkers && isTodoLesson(lesson) && (
+                  <button
+                    className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-foreground text-background hover:opacity-80 transition-opacity shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      submitEvent({
+                        type: "set-lesson-authoring-status",
+                        lessonId: lesson.id,
+                        status: "done",
+                      });
+                    }}
+                  >
+                    todo
+                  </button>
+                )}
                 {!isReadOnly &&
                   lesson.lessonWarnings &&
                   lesson.lessonWarnings.length > 0 && (

@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -101,7 +102,7 @@ export function LessonContextMenuContent({
             </ContextMenuItem>
           )}
           <ContextMenuSeparator />
-          {lesson.authoringStatus === "done" ? (
+          {!isTodoLesson(lesson) ? (
             <ContextMenuItem
               onSelect={() =>
                 submitEvent({

@@ -1,3 +1,4 @@
+import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import { Config, Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
@@ -213,19 +214,15 @@ export const validatePublishability = Effect.fn("validatePublishability")(
     // lists answer "can this ship?"; progress answers "how far along is it?".
     const progress = {
       sections: version.sections.length,
-      // `unset` is not padding: authoringStatus is a nullable text column with
-      // no DB default, so a Lesson can carry neither status. Counting it keeps
-      // todo + done + unset === total, which is what a caller deriving
-      // "remaining = total - done" needs in order not to over-count.
-      lessons: { total: 0, todo: 0, done: 0, unset: 0 },
+      // null authoringStatus means done, so todo + done === total.
+      lessons: { total: 0, todo: 0, done: 0 },
       videos: { total: 0, exported: 0, unexported: 0, noClips: 0 },
     };
     for (const section of version.sections) {
       for (const lesson of section.lessons) {
         progress.lessons.total += 1;
-        if (lesson.authoringStatus === "todo") progress.lessons.todo += 1;
-        else if (lesson.authoringStatus === "done") progress.lessons.done += 1;
-        else progress.lessons.unset += 1;
+        if (isTodoLesson(lesson)) progress.lessons.todo += 1;
+        else progress.lessons.done += 1;
         for (const video of lesson.videos) {
           if (video.archived) continue;
           progress.videos.total += 1;
