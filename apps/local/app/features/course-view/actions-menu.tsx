@@ -1,28 +1,19 @@
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import type { LoaderData } from "./course-view-types";
+import { ChevronDown } from "lucide-react";
+import { useEffect } from "react";
+import { useFetcher, useLocation, useNavigate } from "react-router";
 import {
-  Archive,
-  ChevronDown,
-  Copy,
-  Download,
-  FileText,
-  FileX,
-  PencilIcon,
-  ClipboardCopy,
-  Upload,
-} from "lucide-react";
-import { Link, useFetcher } from "react-router";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+  CourseMenuContent,
+  readCourseMenuIntent,
+  type CourseMenuAction,
+  type CourseMenuFacts,
+} from "./course-menu";
 
 export function ActionsDropdown({
   currentCourse,
@@ -37,6 +28,50 @@ export function ActionsDropdown({
   archiveCourseFetcher: ReturnType<typeof useFetcher>;
   handleBatchExport: () => void;
 }) {
+  const navigate = useNavigate();
+
+  const course: CourseMenuFacts = {
+    id: currentCourse.id,
+    archived: currentCourse.archived,
+    isLatestVersion: data.isLatestVersion,
+    hasVersion: !!data.selectedVersion,
+    hasPreviousVersion: !!data.selectedVersion && data.versions.length > 1,
+    hasLessons: currentCourse.sections.some((s) => s.lessons.length > 0),
+  };
+
+  const run = (action: CourseMenuAction) => {
+    switch (action) {
+      case "preview-changelog":
+        return void navigate(`/courses/${currentCourse.id}/changelog`);
+      case "publish":
+        return void navigate(`/courses/${currentCourse.id}/publish`);
+      case "export":
+        return handleBatchExport();
+      case "rename":
+        return dispatch({ type: "set-rename-course-modal-open", open: true });
+      case "duplicate":
+        return dispatch({
+          type: "set-duplicate-course-modal-open",
+          open: true,
+        });
+      case "copy-transcript":
+        return dispatch({ type: "set-copy-transcript-modal-open", open: true });
+      case "purge-exports":
+        return dispatch({ type: "set-purge-exports-modal-open", open: true });
+      case "archive":
+      case "unarchive":
+        return void archiveCourseFetcher.submit(
+          { archived: action === "archive" ? "true" : "false" },
+          {
+            method: "post",
+            action: `/api/courses/${currentCourse.id}/archive`,
+          }
+        );
+    }
+  };
+
+  useCourseMenuIntent(run);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -45,169 +80,35 @@ export function ActionsDropdown({
           <ChevronDown className="w-4 h-4 ml-1" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
-        {data.isLatestVersion && (
-          <>
-            <DropdownMenuItem
-              disabled={!data.selectedVersion}
-              onSelect={() => {
-                handleBatchExport();
-              }}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              <div className="flex flex-col">
-                <span className="font-medium">Export</span>
-                <span className="text-xs text-muted-foreground">
-                  Export videos not yet exported
-                </span>
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to={`/courses/${currentCourse.id}/publish`}>
-                <Upload className="w-4 h-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">Publish</span>
-                  <span className="text-xs text-muted-foreground">
-                    Review changes and publish to Dropbox
-                  </span>
-                </div>
-              </Link>
-            </DropdownMenuItem>
-          </>
-        )}
-
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Course</DropdownMenuLabel>
-        <DropdownMenuGroup>
-          <CopyEntityLinkItems
-            menu="dropdown"
-            entity={{ type: "course", id: currentCourse.id }}
-          />
-          <DropdownMenuItem
-            onSelect={() =>
-              dispatch({
-                type: "set-rename-course-modal-open",
-                open: true,
-              })
-            }
-          >
-            <PencilIcon className="w-4 h-4 mr-2" />
-            <div className="flex flex-col">
-              <span className="font-medium">Rename Course</span>
-              <span className="text-xs text-muted-foreground">
-                Change course name
-              </span>
-            </div>
-          </DropdownMenuItem>
-          {currentCourse.sections.some((s) => s.lessons.length > 0) && (
-            <DropdownMenuItem
-              onSelect={() =>
-                dispatch({
-                  type: "set-copy-transcript-modal-open",
-                  open: true,
-                })
-              }
-            >
-              <ClipboardCopy className="w-4 h-4 mr-2" />
-              <div className="flex flex-col">
-                <span className="font-medium">Copy Course Transcript</span>
-                <span className="text-xs text-muted-foreground">
-                  Copy all transcripts to clipboard
-                </span>
-              </div>
-            </DropdownMenuItem>
-          )}
-          {!currentCourse.archived && (
-            <DropdownMenuItem
-              onSelect={() =>
-                dispatch({
-                  type: "set-duplicate-course-modal-open",
-                  open: true,
-                })
-              }
-            >
-              <Copy className="w-4 h-4 mr-2" />
-              <div className="flex flex-col">
-                <span className="font-medium">Duplicate Course</span>
-                <span className="text-xs text-muted-foreground">
-                  Create a copy of this course
-                </span>
-              </div>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onSelect={() => {
-              archiveCourseFetcher.submit(
-                {
-                  archived: currentCourse.archived ? "false" : "true",
-                },
-                {
-                  method: "post",
-                  action: `/api/courses/${currentCourse.id}/archive`,
-                }
-              );
-            }}
-          >
-            <Archive className="w-4 h-4 mr-2" />
-            <div className="flex flex-col">
-              <span className="font-medium">
-                {currentCourse.archived ? "Unarchive" : "Archive"} Course
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {currentCourse.archived
-                  ? "Restore course to active list"
-                  : "Hide course from main view"}
-              </span>
-            </div>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        {data.selectedVersion && data.versions.length > 1 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Version</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link to={`/courses/${currentCourse.id}/changelog`}>
-                  <FileText className="w-4 h-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">Preview Changelog</span>
-                    <span className="text-xs text-muted-foreground">
-                      View changes between versions
-                    </span>
-                  </div>
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-
-        {data.selectedVersion && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Storage</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() =>
-                  dispatch({
-                    type: "set-purge-exports-modal-open",
-                    open: true,
-                  })
-                }
-                className="text-destructive focus:text-destructive"
-              >
-                <FileX className="w-4 h-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">Purge Exports</span>
-                  <span className="text-xs text-muted-foreground">
-                    Purge exported videos from disk
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-      </DropdownMenuContent>
+      <CourseMenuContent
+        menu="dropdown"
+        align="start"
+        course={course}
+        run={run}
+      />
     </DropdownMenu>
   );
+}
+
+/**
+ * Runs a Course action the sidebar's right-click sent here (a
+ * `CourseMenuIntent`) once on arrival, then clears it from history so Back
+ * does not reopen the dialog.
+ */
+function useCourseMenuIntent(run: (action: CourseMenuAction) => void) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const action = readCourseMenuIntent(location.state);
+    if (!action) return;
+    run(action);
+    void navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+      preventScrollReset: true,
+    });
+    // Once per arrival: location.key changes with every navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 }
