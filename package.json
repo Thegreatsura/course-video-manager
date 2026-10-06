@@ -38,11 +38,11 @@
   },
   "pnpm": {
     "overrides": {
-      "@ai-sdk/anthropic": "3.0.58",
-      "@ai-sdk/provider": "3.0.8",
-      "@ai-sdk/provider-utils": "4.0.19",
-      "@ai-sdk/react": "3.0.118",
-      "ai": "6.0.116",
+      "@ai-sdk/anthropic": "3.0.127",
+      "@ai-sdk/provider": "3.0.18",
+      "@ai-sdk/provider-utils": "4.0.57",
+      "@ai-sdk/react": "3.0.304",
+      "ai": "6.0.301",
       "@types/hast": "3.0.4"
     },
     "peerDependencyRules": {
