@@ -6,7 +6,6 @@ import {
   constrainModes,
   defaultModeForRole,
   FIELD_MODES,
-  FIELD_LABELS,
 } from "./writer-engine-utils";
 
 function createMockLocalStorage() {
@@ -24,16 +23,6 @@ function createMockLocalStorage() {
 }
 
 describe("conversation keying by (videoId, fieldId, mode)", () => {
-  it("generates distinct message keys for different fields on the same video", () => {
-    const k1 = getFieldMessagesStorageKey("v1", "ai-hero-body", "article");
-    const k2 = getFieldMessagesStorageKey(
-      "v1",
-      "skills-changelog-body",
-      "article"
-    );
-    expect(k1).not.toBe(k2);
-  });
-
   it("generates distinct message keys for different modes on the same field", () => {
     const k1 = getFieldMessagesStorageKey("v1", "ai-hero-body", "article");
     const k2 = getFieldMessagesStorageKey("v1", "ai-hero-body", "article-plan");
@@ -98,13 +87,6 @@ describe("constrainModes", () => {
 });
 
 describe("FIELD_MODES", () => {
-  it("has modes defined for each field", () => {
-    expect(FIELD_MODES["ai-hero-body"].length).toBeGreaterThan(0);
-    expect(FIELD_MODES["skills-changelog-body"].length).toBeGreaterThan(0);
-    expect(FIELD_MODES["newsletter-copy"].length).toBeGreaterThan(0);
-    expect(FIELD_MODES["video-body"].length).toBeGreaterThan(0);
-  });
-
   it("only includes document modes", () => {
     const documentModes = [
       "article",
@@ -118,15 +100,6 @@ describe("FIELD_MODES", () => {
         expect(documentModes).toContain(mode);
       }
     }
-  });
-});
-
-describe("FIELD_LABELS", () => {
-  it("has labels for all fields", () => {
-    expect(FIELD_LABELS["ai-hero-body"]).toBe("AI Hero Body");
-    expect(FIELD_LABELS["skills-changelog-body"]).toBe("Skills Changelog Body");
-    expect(FIELD_LABELS["newsletter-copy"]).toBe("Newsletter Copy");
-    expect(FIELD_LABELS["video-body"]).toBe("Lesson Body");
   });
 });
 

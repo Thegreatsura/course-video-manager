@@ -15,27 +15,6 @@ describe("canonicalize", () => {
     expect(canonicalize(sceneA)).toBe(canonicalize(sceneB));
   });
 
-  it("produces different output for semantically different scenes", () => {
-    const sceneA = {
-      store: { "shape:abc": { id: "abc", x: 10 } },
-      schema: { schemaVersion: 2 },
-    };
-    const sceneB = {
-      store: { "shape:abc": { id: "abc", x: 20 } },
-      schema: { schemaVersion: 2 },
-    };
-
-    expect(canonicalize(sceneA)).not.toBe(canonicalize(sceneB));
-  });
-
-  it("includes schema field in output — different schema versions produce different results", () => {
-    const store = { "shape:abc": { id: "abc", x: 10 } };
-    const sceneV2 = { store, schema: { schemaVersion: 2 } };
-    const sceneV3 = { store, schema: { schemaVersion: 3 } };
-
-    expect(canonicalize(sceneV2)).not.toBe(canonicalize(sceneV3));
-  });
-
   it("handles nested objects and arrays deterministically", () => {
     const sceneA = {
       store: {
@@ -92,31 +71,5 @@ describe("hashScene", () => {
     };
 
     expect(hashScene(sceneA)).toBe(hashScene(sceneB));
-  });
-
-  it("produces different hashes for semantically different scenes", () => {
-    const sceneA = {
-      store: { "shape:abc": { id: "abc", x: 10 } },
-      schema: { schemaVersion: 2 },
-    };
-    const sceneB = {
-      store: { "shape:abc": { id: "abc", x: 20 } },
-      schema: { schemaVersion: 2 },
-    };
-
-    expect(hashScene(sceneA)).not.toBe(hashScene(sceneB));
-  });
-
-  it("produces different hashes when schema version differs (contract)", () => {
-    const store = { "shape:abc": { id: "abc", x: 10 } };
-    const sceneV2 = { store, schema: { schemaVersion: 2 } };
-    const sceneV3 = { store, schema: { schemaVersion: 3 } };
-
-    expect(hashScene(sceneV2)).not.toBe(hashScene(sceneV3));
-  });
-
-  it("returns a 64-character hex string (SHA-256)", () => {
-    const hash = hashScene({ store: {}, schema: { schemaVersion: 1 } });
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 });

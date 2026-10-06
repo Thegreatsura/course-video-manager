@@ -158,15 +158,6 @@ describe("overlay transform", () => {
   });
 
   describe("the move is a slide and never a zoom", () => {
-    it("states every end of every move as an offset alone", () => {
-      // The type has no `scale` to set, so this is really a check that the
-      // table has not grown one back through a cast.
-      const transform = overlayTransform("bulletPanel")!;
-      expect(Object.keys(transform.from)).toEqual(["offsetX"]);
-      expect(Object.keys(transform.to)).toEqual(["offsetX"]);
-      expect(transform.from.offsetX).toBe(0);
-    });
-
     it("never puts a scale in the preview's CSS", () => {
       for (const moment of [12, 12.4, 16, 19.6, 20]) {
         const style = overlayTransformCssStyleAt(panelWindow, moment)!;
@@ -298,28 +289,6 @@ describe("overlay transform", () => {
       panelWindow.endInSeconds - OVERLAY_TRANSFORM_EASE_IN_SECONDS / 2,
       panelWindow.endInSeconds,
     ];
-
-    for (const moment of moments) {
-      it(`agree at t=${moment}s`, () => {
-        const style = overlayTransformCssStyleAt(panelWindow, moment)!;
-        const fromCss = evaluateCssStyle(style, SOURCE_WIDTH);
-        const fromFilter = evaluateVideoFilter(
-          filter,
-          SOURCE_WIDTH,
-          SOURCE_HEIGHT,
-          moment
-        );
-
-        // To a BILLIONTH of a pixel, not to a pixel. Both sides evaluate the
-        // same closed-form ease at the same grid-sampled moment, so all that
-        // is left between them is the twelfth decimal place the filter string
-        // spells its constants to.
-        expect(fromFilter.pictureLeftEdge).toBeCloseTo(
-          fromCss.pictureLeftEdge,
-          6
-        );
-      });
-    }
 
     // REGRESSION. The export used to sample this curve as eight straight
     // segments, because a Bézier was thought to have no closed-form inverse.

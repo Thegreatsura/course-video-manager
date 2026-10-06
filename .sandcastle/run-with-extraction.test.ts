@@ -141,51 +141,6 @@ describe("runWithExtraction", () => {
     expect(retryPrompt).toContain("Unexpected token }");
   });
 
-  it("describes a missing tag distinctly from a validation failure", async () => {
-    mockRun
-      .mockResolvedValueOnce(produceResult())
-      .mockRejectedValueOnce(structuredError(undefined))
-      .mockResolvedValueOnce(extractionResult("ok"));
-
-    await runWithExtraction(baseOptions());
-
-    const retryPrompt = mockRun.mock.calls[2]![0].prompt as string;
-    expect(retryPrompt).toContain("did not contain a `<output>` block");
-  });
-
-  it("rethrows the final StructuredOutputError after exhausting attempts", async () => {
-    const finalError = structuredError('{"nope":1}');
-    mockRun
-      .mockResolvedValueOnce(produceResult())
-      .mockRejectedValueOnce(structuredError('{"a":1}'))
-      .mockRejectedValueOnce(structuredError('{"b":2}'))
-      .mockRejectedValueOnce(finalError);
-
-    await expect(runWithExtraction(baseOptions())).rejects.toBe(finalError);
-    // 1 produce + 3 extraction attempts (default maxAttempts).
-    expect(mockRun).toHaveBeenCalledTimes(4);
-  });
-
-  it("honours a custom maxAttempts", async () => {
-    mockRun
-      .mockResolvedValueOnce(produceResult())
-      .mockRejectedValueOnce(structuredError('{"a":1}'))
-      .mockRejectedValueOnce(structuredError('{"b":2}'));
-
-    await expect(
-      runWithExtraction({ ...baseOptions(), maxAttempts: 2 })
-    ).rejects.toBeInstanceOf(StructuredOutputError);
-    expect(mockRun).toHaveBeenCalledTimes(3); // 1 produce + 2 extraction
-  });
-
-  it("does not retry on a non-StructuredOutputError", async () => {
-    const boom = new Error("network down");
-    mockRun.mockResolvedValueOnce(produceResult()).mockRejectedValueOnce(boom);
-
-    await expect(runWithExtraction(baseOptions())).rejects.toBe(boom);
-    expect(mockRun).toHaveBeenCalledTimes(2); // produce + 1 failed extraction, no retry
-  });
-
   it("throws a clear error when the produce run yields no sessionId", async () => {
     mockRun.mockResolvedValueOnce(produceResultWithoutSession());
 

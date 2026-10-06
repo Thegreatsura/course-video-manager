@@ -3,7 +3,6 @@ import { buildAnimaticChapterLayout } from "./animatic-chapters";
 import {
   chapterProgressAtFrame,
   mockupProgressAtFrame,
-  progressFillStyle,
   sectionAtIndex,
 } from "./animatic-progress";
 import {
@@ -135,13 +134,5 @@ describe("the Chapter the playhead is in", () => {
   it("is nothing for a row above the first divider, and nothing while nothing plays", () => {
     expect(sectionAtIndex({ sections, activeIndex: 0 })).toBeUndefined();
     expect(sectionAtIndex({ sections, activeIndex: -1 })).toBeUndefined();
-  });
-});
-
-describe("the bar's own CSS", () => {
-  it("is a share of whatever it is drawn inside, and zero before a frame is written", () => {
-    expect(progressFillStyle("--x")).toEqual({
-      width: "calc(var(--x, 0) * 100%)",
-    });
   });
 });

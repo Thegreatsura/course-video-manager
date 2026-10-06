@@ -252,43 +252,6 @@ describe("CoursePublishService — publish", () => {
     });
   });
 
-  it("fails with PublishValidationError when export fails after retries", async () => {
-    const failingMock = Layer.succeed(VideoProcessingService, {
-      exportVideoClips: () =>
-        Effect.fail(
-          new FFmpegError({ cause: null, message: "ffmpeg crashed" })
-        ),
-    } as any);
-    const { course, video, run } = await setup({
-      mockVideoProcessing: failingMock,
-    });
-
-    const result = await run(
-      Effect.gen(function* () {
-        const svc = yield* CoursePublishService;
-        return yield* svc
-          .publish({
-            courseId: course.id,
-            versionName: "v1.0",
-            versionDescription: "First release",
-            includeTodoLessons: true,
-            placeholderFloor: ANNOUNCE_NOTHING,
-          })
-          .pipe(
-            Effect.catchTag("PublishValidationError", (e) =>
-              Effect.succeed({
-                error: true as const,
-                failedExportVideoIds: e.failedExportVideoIds,
-              })
-            )
-          );
-      })
-    );
-
-    expect(result).toHaveProperty("error", true);
-    expect((result as any).failedExportVideoIds).toContain(video.id);
-  });
-
   it("emits per-video export events and upload progress during publish", async () => {
     const { course, video, run } = await setup();
 

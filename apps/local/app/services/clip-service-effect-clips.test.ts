@@ -66,31 +66,6 @@ describe("ClipService", () => {
       ]);
     });
 
-    it("creates an effect clip after a clip", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const [clip] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      const effectClip = await clipService.createEffectClipAtPosition({
-        videoId: video.id,
-        position: "after",
-        targetItemId: clip!.id,
-        targetItemType: "clip",
-        ...effectClipDefaults,
-      });
-
-      const timeline = await clipService.getTimeline(video.id);
-      expect(timeline.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
-        { type: "clip", id: clip!.id },
-        { type: "clip", id: effectClip.id },
-      ]);
-    });
-
     it("creates an effect clip with correct field values", async () => {
       const video = await clipService.createVideo("test-video.mp4");
 

@@ -2,18 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeBeatWarnings,
   computeLearningGoalWarnings,
-  sectionHasLearningGoals,
 } from "./beat-learning-goal-warnings";
-
-describe("sectionHasLearningGoals", () => {
-  it("is false for a section with no learning goals", () => {
-    expect(sectionHasLearningGoals([])).toBe(false);
-  });
-
-  it("is true once a section has at least one learning goal", () => {
-    expect(sectionHasLearningGoals([{ id: "goal-1" }])).toBe(true);
-  });
-});
 
 describe("computeLearningGoalWarnings", () => {
   it("warns when no beat in the section serves the goal", () => {

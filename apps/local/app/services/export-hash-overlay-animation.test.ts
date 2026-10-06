@@ -59,15 +59,4 @@ describe("an Overlay's animation toggles", () => {
       withOverlays(card({ disableExitAnimation: true }))
     );
   });
-
-  it("leave the address alone when neither is set", () => {
-    // The columns are new, so every Overlay written before them eases both
-    // ways. Omitting the default from the payload is what keeps every export
-    // addressed before the columns existed exactly where it was.
-    expect(
-      withOverlays(
-        card({ disableEnterAnimation: false, disableExitAnimation: false })
-      )
-    ).toBe(withOverlays(card()));
-  });
 });

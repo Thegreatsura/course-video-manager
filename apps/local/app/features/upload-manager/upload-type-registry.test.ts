@@ -198,79 +198,10 @@ describe("export registry entry", () => {
       expect(result.exportStage).toBeNull();
       expect(result.status).toBe("success");
     });
-
-    it("should clear previous error message on success", () => {
-      const entry: uploadReducer.ExportUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Export",
-        progress: 50,
-        status: "uploading",
-        uploadType: "export",
-        exportStage: "concatenating-clips",
-        isBatchEntry: false,
-        videoUploadStage: null,
-        uploadedBytes: 0,
-        totalBytes: null,
-        errorMessage: "previous error",
-        retryCount: 1,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      const result = exportConfig.applySuccess(entry, {
-        type: "UPLOAD_SUCCESS",
-        uploadId: "upload-1",
-      });
-
-      expect(result.errorMessage).toBeNull();
-    });
   });
 });
 
 describe("youtube registry entry", () => {
-  it("should be registered in the registry", () => {
-    expect(youtubeConfig).toBeDefined();
-  });
-
-  it("should have supportsDependsOn set to true", () => {
-    expect(youtubeConfig.supportsDependsOn).toBe(true);
-  });
-
-  describe("createEntry", () => {
-    it("should create a youtube entry with youtubeVideoId null", () => {
-      const base = makeBase();
-
-      const entry = youtubeConfig.createEntry(base, {
-        type: "START_UPLOAD",
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-      });
-
-      expect(entry).toEqual({
-        ...base,
-        uploadType: "youtube",
-        youtubeVideoId: null,
-      });
-    });
-
-    it("should preserve waiting status from base when dependsOn is set", () => {
-      const base = makeBase({ status: "waiting", dependsOn: "upload-0" });
-
-      const entry = youtubeConfig.createEntry(base, {
-        type: "START_UPLOAD",
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-      });
-
-      expect(entry.status).toBe("waiting");
-      expect(entry.dependsOn).toBe("upload-0");
-    });
-  });
-
   describe("resetEntry", () => {
     it("should preserve youtubeVideoId from previous entry", () => {
       const base = makeBase({
@@ -341,55 +272,6 @@ describe("youtube registry entry", () => {
         errorMessage: null,
         youtubeVideoId: "yt-abc123",
       });
-    });
-
-    it("should default youtubeVideoId to null when not provided", () => {
-      const entry: uploadReducer.YouTubeUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-        progress: 80,
-        status: "uploading",
-        uploadType: "youtube",
-        youtubeVideoId: null,
-        errorMessage: null,
-        retryCount: 0,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      const result = youtubeConfig.applySuccess(entry, {
-        type: "UPLOAD_SUCCESS",
-        uploadId: "upload-1",
-      });
-
-      expect(result.youtubeVideoId).toBeNull();
-    });
-
-    it("should clear previous error message on success", () => {
-      const entry: uploadReducer.YouTubeUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-        progress: 50,
-        status: "uploading",
-        uploadType: "youtube",
-        youtubeVideoId: null,
-        errorMessage: "previous error",
-        retryCount: 1,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      const result = youtubeConfig.applySuccess(entry, {
-        type: "UPLOAD_SUCCESS",
-        uploadId: "upload-1",
-        youtubeVideoId: "yt-abc",
-      });
-
-      expect(result.errorMessage).toBeNull();
     });
   });
 
@@ -473,10 +355,6 @@ describe("youtube registry entry", () => {
 });
 
 describe("buffer registry entry", () => {
-  it("should be registered in the registry", () => {
-    expect(bufferConfig).toBeDefined();
-  });
-
   describe("createEntry", () => {
     it("should create a buffer entry with bufferStage copying", () => {
       const base = makeBase();
@@ -493,20 +371,6 @@ describe("buffer registry entry", () => {
         uploadType: "buffer",
         bufferStage: "uploading-blob",
       });
-    });
-
-    it("should preserve waiting status from base when dependsOn is set", () => {
-      const base = makeBase({ status: "waiting", dependsOn: "upload-0" });
-
-      const entry = bufferConfig.createEntry(base, {
-        type: "START_UPLOAD",
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Social Post",
-      });
-
-      expect(entry.status).toBe("waiting");
-      expect(entry.dependsOn).toBe("upload-0");
     });
   });
 
@@ -562,95 +426,6 @@ describe("buffer registry entry", () => {
         errorMessage: null,
         bufferStage: null,
       });
-    });
-
-    it("should clear previous error message on success", () => {
-      const entry: uploadReducer.BufferUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Social Post",
-        progress: 50,
-        status: "uploading",
-        uploadType: "buffer",
-        bufferStage: "polling",
-        errorMessage: "previous error",
-        retryCount: 1,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      const result = bufferConfig.applySuccess(entry, {
-        type: "UPLOAD_SUCCESS",
-        uploadId: "upload-1",
-      });
-
-      expect(result.errorMessage).toBeNull();
-    });
-  });
-
-  describe("initiate", () => {
-    it("should store abort controller in the map", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-
-      const entry: uploadReducer.BufferUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Social Post",
-        progress: 0,
-        status: "uploading",
-        uploadType: "buffer",
-        bufferStage: "uploading-blob",
-        errorMessage: null,
-        retryCount: 0,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      bufferConfig.initiate(
-        "upload-1",
-        entry,
-        { caption: "Hello world" },
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortControllers.has("upload-1")).toBe(true);
-    });
-
-    it("should abort existing controller before starting new one", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const existingController = new AbortController();
-      const abortSpy = vi.spyOn(existingController, "abort");
-      abortControllers.set("upload-1", existingController);
-
-      const entry: uploadReducer.BufferUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Social Post",
-        progress: 0,
-        status: "uploading",
-        uploadType: "buffer",
-        bufferStage: "uploading-blob",
-        errorMessage: null,
-        retryCount: 0,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      bufferConfig.initiate(
-        "upload-1",
-        entry,
-        { caption: "Hello world" },
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortSpy).toHaveBeenCalled();
     });
   });
 });

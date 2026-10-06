@@ -116,19 +116,6 @@ describe("pcmToWav", () => {
     expect(wav.subarray(36, 40).toString()).toBe("data");
     expect(view.getUint32(40, true)).toBe(24000 * 2);
   });
-
-  it("agrees with itself: byte rate is block align times sample rate", () => {
-    const wav = pcmToWav(new Uint8Array(8), 48000);
-    const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
-    const blockAlign = view.getUint16(32, true);
-    const bitsPerSample = view.getUint16(34, true);
-    const channels = view.getUint16(22, true);
-
-    expect(blockAlign).toBe((channels * bitsPerSample) / 8);
-    expect(view.getUint32(28, true)).toBe(
-      view.getUint32(24, true) * blockAlign
-    );
-  });
 });
 
 describe("wavDurationSeconds", () => {

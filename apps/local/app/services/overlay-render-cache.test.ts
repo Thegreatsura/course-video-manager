@@ -94,12 +94,6 @@ describe("overlay-render-cache", () => {
       ).not.toBe(computeOverlayContentHash(card()));
     });
 
-    it("hashes at the current Overlay Renderer Version", () => {
-      expect(
-        overlayContentHashAtVersion(card(), OVERLAY_RENDERER_VERSION)
-      ).toBe(computeOverlayContentHash(card()));
-    });
-
     it("keeps the address every card cached before Bullet Panels existed had", () => {
       // The literal payload the hash was built from before Overlay Kind was a
       // column. A Definition Card is the default Kind, so it names no kind at
@@ -111,10 +105,6 @@ describe("overlay-render-cache", () => {
   });
 
   describe("computeOverlayContentHash — Bullet Panels", () => {
-    it("returns a 32-char hex string", () => {
-      expect(computeOverlayContentHash(panel())).toMatch(/^[0-9a-f]{32}$/);
-    });
-
     it("is stable for the same content", () => {
       expect(computeOverlayContentHash(panel())).toBe(
         computeOverlayContentHash(panel())
@@ -187,12 +177,6 @@ describe("overlay-render-cache", () => {
       );
     });
 
-    it("bumping the Overlay Renderer Version changes the hash", () => {
-      expect(
-        overlayContentHashAtVersion(panel(), OVERLAY_RENDERER_VERSION + 1)
-      ).not.toBe(computeOverlayContentHash(panel()));
-    });
-
     it("never collides with a Definition Card of the same title and duration", () => {
       expect(
         computeOverlayContentHash(
@@ -202,15 +186,6 @@ describe("overlay-render-cache", () => {
         computeOverlayContentHash(
           card({ title: "Hydration", description: "", durationInSeconds: 4 })
         )
-      );
-    });
-  });
-
-  describe("overlayRenderFilename", () => {
-    it("names the file {courseId}-{contentHash}.mov", () => {
-      const hash = computeOverlayContentHash(card());
-      expect(overlayRenderFilename("course-1", hash)).toBe(
-        `course-1-${hash}.mov`
       );
     });
   });

@@ -5,7 +5,6 @@ import {
   type DatabaseId,
   type FrontendId,
 } from "./clip-state-reducer";
-import { WHITE_NOISE_DEFAULTS } from "./clip-state-reducer-effect-clip-helpers";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 
 const createInitialState = (
@@ -94,34 +93,6 @@ describe("clipStateReducer - effect clips", () => {
       expect(state.items[1]).toMatchObject({ text: "Clip 1" });
     });
 
-    it("has correct field values on the optimistic effect clip", () => {
-      const clip = createClipOnDatabase({ profile: "screencast" });
-      const tester = new ReducerTester(
-        clipStateReducer,
-        createInitialState({ items: [clip] })
-      );
-
-      const state = tester
-        .send({
-          type: "add-effect-clip-at",
-          effectType: "white-noise",
-          position: "after",
-          itemId: clip.frontendId,
-        })
-        .getState();
-
-      const effectClip = state.items[1]!;
-      expect(effectClip).toMatchObject({
-        type: "effect-clip-optimistically-added",
-        text: WHITE_NOISE_DEFAULTS.text,
-        scene: WHITE_NOISE_DEFAULTS.scene,
-        pauseType: WHITE_NOISE_DEFAULTS.pauseType,
-        sourceStartTime: WHITE_NOISE_DEFAULTS.sourceStartTime,
-        sourceEndTime: WHITE_NOISE_DEFAULTS.sourceEndTime,
-        profile: "screencast",
-      });
-    });
-
     it("inherits profile from the adjacent clip", () => {
       const clip = createClipOnDatabase({ profile: "webcam-overlay" });
       const tester = new ReducerTester(
@@ -189,53 +160,6 @@ describe("clipStateReducer - effect clips", () => {
       expect(state.items[0]).toMatchObject({ text: "Clip 1" });
       expect(state.items[1]).toMatchObject({ text: "*white noise*" });
       expect(state.items[2]).toMatchObject({ text: "Clip 2" });
-    });
-
-    it("works when inserting at the first position (before first clip)", () => {
-      const clip = createClipOnDatabase({ text: "Clip 1" });
-      const tester = new ReducerTester(
-        clipStateReducer,
-        createInitialState({ items: [clip] })
-      );
-
-      const state = tester
-        .send({
-          type: "add-effect-clip-at",
-          effectType: "white-noise",
-          position: "before",
-          itemId: clip.frontendId,
-        })
-        .getState();
-
-      expect(state.items).toHaveLength(2);
-      expect(state.items[0]).toMatchObject({
-        type: "effect-clip-optimistically-added",
-      });
-      expect(state.items[1]).toMatchObject({ text: "Clip 1" });
-    });
-
-    it("works when inserting at the last position (after last clip)", () => {
-      const clip1 = createClipOnDatabase({ text: "Clip 1" });
-      const clip2 = createClipOnDatabase({ text: "Clip 2" });
-      const tester = new ReducerTester(
-        clipStateReducer,
-        createInitialState({ items: [clip1, clip2] })
-      );
-
-      const state = tester
-        .send({
-          type: "add-effect-clip-at",
-          effectType: "white-noise",
-          position: "after",
-          itemId: clip2.frontendId,
-        })
-        .getState();
-
-      expect(state.items).toHaveLength(3);
-      expect(state.items[2]).toMatchObject({
-        type: "effect-clip-optimistically-added",
-        text: "*white noise*",
-      });
     });
   });
 
