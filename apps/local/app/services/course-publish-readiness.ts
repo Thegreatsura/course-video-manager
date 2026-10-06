@@ -103,147 +103,165 @@ export const validatePublishability = Effect.fn("validatePublishability")(
     placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
   ) {
     const versionOps = yield* VersionOperationsService;
-    const effectFs = yield* FileSystem.FileSystem;
-    const finishedVideosDirectory = yield* Config.string(
-      "FINISHED_VIDEOS_DIRECTORY"
-    );
-
     const version = yield* versionOps.getVersionWithSections(versionId);
-    const courseId = version.repo.id;
-
-    // Title lookup for the unexported set, built on the same walk as the
-    // existence checks so the ids and their human labels can never drift.
-    const titleById = new Map<string, string>();
-    const exportedById = new Map<string, boolean>();
-    for (const section of version.sections) {
-      for (const lesson of section.lessons) {
-        for (const video of lesson.videos) {
-          // Archived videos are already filtered out of the shipping set by
-          // computeShippingSections, so they can never reach one of the four
-          // outstanding-work lists —
-          // skipping them here just spares a pointless stat() per archived row.
-          if (video.archived) continue;
-          titleById.set(
-            video.id,
-            `${section.path}/${lesson.path}/${video.title}`
-          );
-          if (video.clips.length === 0) continue;
-          const hash = computeExportHash(
-            toExportClips(video.clips),
-            video.format
-          );
-          if (!hash) continue;
-          const filePath = resolveExportPathPure(
-            finishedVideosDirectory,
-            courseId,
-            hash
-          );
-          exportedById.set(video.id, yield* effectFs.exists(filePath));
-        }
-      }
-    }
-
-    const evaluate = (includeTodoLessons: boolean) => {
-      // THE LESSONS THAT SHIP — the asset set, and the only Lessons a gate may
-      // speak about. Floor-independent by construction (see
-      // computeShippingSections), and the very same walk `course publish` uses
-      // to build its export roster, so `exportsRequired` can never name a
-      // Video that publish would not render.
-      const shippingSections = computeShippingSections(
-        version.sections,
-        includeTodoLessons
-      );
-
-      const unexportedVideoIds: string[] = [];
-      for (const section of shippingSections) {
-        for (const lesson of section.lessons) {
-          for (const video of lesson.videos) {
-            if (exportedById.get(video.id) === false) {
-              unexportedVideoIds.push(video.id);
-            }
-          }
-        }
-      }
-
-      const courseViewLints = collectCourseViewLints(shippingSections);
-      const courseViewLintCount = courseViewLints.length;
-
-      // Publish blockers computed from the exact same walk buildCourseJson
-      // uses (its backstop), so the pre-publish warnings and the build
-      // failure can never disagree — see collectPublishBlockers. It narrows to
-      // the shipping Lessons itself, so the whole tree is the right argument:
-      // both lists come back already silent about a Placeholder Lesson.
-      const { invalidLessonCombos, incompleteVideos } = collectPublishBlockers(
-        version.sections,
-        includeTodoLessons
-      );
-
-      // What this floor announces, and what it drops — the one walk the publish
-      // page reads too, so the cards and the manifest cannot disagree.
-      const { ships, placeholderLessons, withheldLessons } =
-        collectLessonPublishStatuses(version.sections, {
-          includeTodoLessons,
-          placeholderFloor,
-        });
-
-      return {
-        unexportedVideoIds,
-        // The same set, carrying `section/lesson/title` labels — so a caller
-        // naming the outstanding videos never has to re-walk the tree.
-        unexportedVideos: unexportedVideoIds.map((id): UnexportedVideo => ({
-          id,
-          title: titleById.get(id) ?? id,
-        })),
-        courseViewLintCount,
-        courseViewLints,
-        invalidLessonCombos,
-        incompleteVideos,
-        // The three Lesson Publish Status counts, so a caller that publishes
-        // can report what it announced and what it withheld without walking the
-        // tree a second time. `ships` plus the two list lengths is every Lesson
-        // in the version tree.
-        ships,
-        placeholderLessons,
-        withheldLessons,
-      };
-    };
-
-    // PROGRESS is deliberately toggle-independent and walks the WHOLE version
-    // tree, not the effective output: a Lesson with no Videos yet is filtered
-    // out of every publish, but it is exactly the work still to do. The four
-    // lists answer "can this ship?"; progress answers "how far along is it?".
-    const progress = {
-      sections: version.sections.length,
-      // null authoringStatus means done, so todo + done === total.
-      lessons: { total: 0, todo: 0, done: 0 },
-      videos: { total: 0, exported: 0, unexported: 0, noClips: 0 },
-    };
-    for (const section of version.sections) {
-      for (const lesson of section.lessons) {
-        progress.lessons.total += 1;
-        if (isTodoLesson(lesson)) progress.lessons.todo += 1;
-        else progress.lessons.done += 1;
-        for (const video of lesson.videos) {
-          if (video.archived) continue;
-          progress.videos.total += 1;
-          const exported = exportedById.get(video.id);
-          if (exported === undefined) progress.videos.noClips += 1;
-          else if (exported) progress.videos.exported += 1;
-          else progress.videos.unexported += 1;
-        }
-      }
-    }
-
-    return {
-      courseId,
-      versionId: version.id,
-      progress,
-      withTodo: evaluate(true),
-      withoutTodo: evaluate(false),
-    };
+    return yield* validateVersionPublishability(version, placeholderFloor);
   }
 );
 
+/** A Version with its full tree, as `getVersionWithSections` returns it. */
+export type VersionTree = Effect.Effect.Success<
+  ReturnType<VersionOperationsService["getVersionWithSections"]>
+>;
+
+/**
+ * `validatePublishability` over a tree the caller already holds, so a caller
+ * that needs the tree for other work (the publish page loader) reads it once.
+ */
+export const validateVersionPublishability = Effect.fn(
+  "validateVersionPublishability"
+)(function* (
+  version: VersionTree,
+  placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
+) {
+  const effectFs = yield* FileSystem.FileSystem;
+  const finishedVideosDirectory = yield* Config.string(
+    "FINISHED_VIDEOS_DIRECTORY"
+  );
+
+  const courseId = version.repo.id;
+
+  // Title lookup for the unexported set, built on the same walk as the
+  // existence checks so the ids and their human labels can never drift.
+  const titleById = new Map<string, string>();
+  const exportedById = new Map<string, boolean>();
+  for (const section of version.sections) {
+    for (const lesson of section.lessons) {
+      for (const video of lesson.videos) {
+        // Archived videos are already filtered out of the shipping set by
+        // computeShippingSections, so they can never reach one of the four
+        // outstanding-work lists —
+        // skipping them here just spares a pointless stat() per archived row.
+        if (video.archived) continue;
+        titleById.set(
+          video.id,
+          `${section.path}/${lesson.path}/${video.title}`
+        );
+        if (video.clips.length === 0) continue;
+        const hash = computeExportHash(
+          toExportClips(video.clips),
+          video.format
+        );
+        if (!hash) continue;
+        const filePath = resolveExportPathPure(
+          finishedVideosDirectory,
+          courseId,
+          hash
+        );
+        exportedById.set(video.id, yield* effectFs.exists(filePath));
+      }
+    }
+  }
+
+  const evaluate = (includeTodoLessons: boolean) => {
+    // THE LESSONS THAT SHIP — the asset set, and the only Lessons a gate may
+    // speak about. Floor-independent by construction (see
+    // computeShippingSections), and the very same walk `course publish` uses
+    // to build its export roster, so `exportsRequired` can never name a
+    // Video that publish would not render.
+    const shippingSections = computeShippingSections(
+      version.sections,
+      includeTodoLessons
+    );
+
+    const unexportedVideoIds: string[] = [];
+    for (const section of shippingSections) {
+      for (const lesson of section.lessons) {
+        for (const video of lesson.videos) {
+          if (exportedById.get(video.id) === false) {
+            unexportedVideoIds.push(video.id);
+          }
+        }
+      }
+    }
+
+    const courseViewLints = collectCourseViewLints(shippingSections);
+    const courseViewLintCount = courseViewLints.length;
+
+    // Publish blockers computed from the exact same walk buildCourseJson
+    // uses (its backstop), so the pre-publish warnings and the build
+    // failure can never disagree — see collectPublishBlockers. It narrows to
+    // the shipping Lessons itself, so the whole tree is the right argument:
+    // both lists come back already silent about a Placeholder Lesson.
+    const { invalidLessonCombos, incompleteVideos } = collectPublishBlockers(
+      version.sections,
+      includeTodoLessons
+    );
+
+    // What this floor announces, and what it drops — the one walk the publish
+    // page reads too, so the cards and the manifest cannot disagree.
+    const { ships, placeholderLessons, withheldLessons } =
+      collectLessonPublishStatuses(version.sections, {
+        includeTodoLessons,
+        placeholderFloor,
+      });
+
+    return {
+      unexportedVideoIds,
+      // The same set, carrying `section/lesson/title` labels — so a caller
+      // naming the outstanding videos never has to re-walk the tree.
+      unexportedVideos: unexportedVideoIds.map((id): UnexportedVideo => ({
+        id,
+        title: titleById.get(id) ?? id,
+      })),
+      courseViewLintCount,
+      courseViewLints,
+      invalidLessonCombos,
+      incompleteVideos,
+      // The three Lesson Publish Status counts, so a caller that publishes
+      // can report what it announced and what it withheld without walking the
+      // tree a second time. `ships` plus the two list lengths is every Lesson
+      // in the version tree.
+      ships,
+      placeholderLessons,
+      withheldLessons,
+    };
+  };
+
+  // PROGRESS is deliberately toggle-independent and walks the WHOLE version
+  // tree, not the effective output: a Lesson with no Videos yet is filtered
+  // out of every publish, but it is exactly the work still to do. The four
+  // lists answer "can this ship?"; progress answers "how far along is it?".
+  const progress = {
+    sections: version.sections.length,
+    // null authoringStatus means done, so todo + done === total.
+    lessons: { total: 0, todo: 0, done: 0 },
+    videos: { total: 0, exported: 0, unexported: 0, noClips: 0 },
+  };
+  for (const section of version.sections) {
+    for (const lesson of section.lessons) {
+      progress.lessons.total += 1;
+      if (isTodoLesson(lesson)) progress.lessons.todo += 1;
+      else progress.lessons.done += 1;
+      for (const video of lesson.videos) {
+        if (video.archived) continue;
+        progress.videos.total += 1;
+        const exported = exportedById.get(video.id);
+        if (exported === undefined) progress.videos.noClips += 1;
+        else if (exported) progress.videos.exported += 1;
+        else progress.videos.unexported += 1;
+      }
+    }
+  }
+
+  return {
+    courseId,
+    versionId: version.id,
+    progress,
+    withTodo: evaluate(true),
+    withoutTodo: evaluate(false),
+  };
+});
+
 export type PublishReadiness = Effect.Effect.Success<
-  ReturnType<typeof validatePublishability>
+  ReturnType<typeof validateVersionPublishability>
 >;
