@@ -342,20 +342,6 @@ describe("cvm clip-mockup: ordering and addressing", () => {
     expect((await list(s.standaloneActiveId))[0]!.line).toBe("One");
   });
 
-  it("update with both an html page and an image is invalid input, exit 3", async () => {
-    const created = await add(s.standaloneActiveId, "One");
-    const page = nodePath.join(sourceDir, "page.html");
-    nodeFs.writeFileSync(page, "<html></html>");
-
-    const r = await update([
-      { id: created.id, html: page, image: sourceImage("x.png") },
-    ]);
-    expect(r.exitCode).toBe(3);
-    expect(failureOf(r).message).toContain(
-      'entry 1 has both "html" and "image"'
-    );
-  });
-
   it("update with an unknown key is invalid input, exit 3", async () => {
     const created = await add(s.standaloneActiveId, "One");
 

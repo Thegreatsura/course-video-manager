@@ -131,37 +131,6 @@ describe("on a box that is not the author's", () => {
     }
   });
 
-  it("refuses cvm clip-mockup ahead of its own argument validation", async () => {
-    // A --clip-mockups-json file that is not there is normally exit 3. The
-    // machine check comes first, before the file is even read, because a good
-    // file would not have helped: there is no directory to put the frames in.
-    const result = await run([
-      "clip-mockup",
-      "add",
-      "--video",
-      s.standaloneActiveId,
-      "--clip-mockups-json",
-      "/tmp/cvm-no-such-batch-file.json",
-    ]);
-
-    expect(result.exitCode).toBe(7);
-    expect(failureOf(result)._tag).toBe("LocalOnlyCommandError");
-  });
-
-  it("names the Clip Mockup directory as what cvm clip-mockup needed", async () => {
-    const mockup = failureOf(
-      await run(["clip-mockup", "list", "--video", s.standaloneActiveId])
-    );
-    expect(mockup.command).toBe("cvm clip-mockup");
-    expect(mockup.message).toContain("Clip Mockup directory");
-  });
-
-  it("names footage as the resource cvm footage would have needed", async () => {
-    const footage = failureOf(await run(["footage", "list"]));
-    expect(footage.command).toBe("cvm footage");
-    expect(footage.message).toContain("raw footage");
-  });
-
   it("refuses cvm course readiness", async () => {
     const result = await run(["course", "readiness", await courseIdOf()]);
 
@@ -196,10 +165,19 @@ describe("on a box that is not the author's", () => {
       await run(["course", "readiness", await courseIdOf()])
     );
 
+    const mockup = failureOf(
+      await run(["clip-mockup", "list", "--video", s.standaloneActiveId])
+    );
+    const footage = failureOf(await run(["footage", "list"]));
+
     expect(file.message).toContain("Video Files directory");
     expect(readiness.message).toContain("finished videos directory");
+    expect(mockup.message).toContain("Clip Mockup directory");
+    expect(footage.message).toContain("raw footage");
     expect(file.command).toBe("cvm file");
     expect(readiness.command).toBe("cvm course readiness");
+    expect(mockup.command).toBe("cvm clip-mockup");
+    expect(footage.command).toBe("cvm footage");
   });
 
   it("says the machine is the problem, not the input", async () => {

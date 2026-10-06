@@ -294,6 +294,9 @@ describe("cvm clip-mockup --html", () => {
 
     expect(r.exitCode).toBe(3);
     expect(failureOf(r)._tag).toBe("ParseError");
+    expect(failureOf(r).message).toContain(
+      'entry 1 has both "html" and "image"'
+    );
     expect(capture.calls).toEqual([]);
     const rows = await list(s.standaloneActiveId);
     expect(rows[0]!.imagePath).toBe(created.imagePath);

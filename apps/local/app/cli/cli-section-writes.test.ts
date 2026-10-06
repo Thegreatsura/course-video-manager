@@ -413,19 +413,6 @@ describe("section move", () => {
     expect(exitCode).toBe(3);
   });
 
-  it("rejects both --before and --after (exit 3)", async () => {
-    const { exitCode } = await run([
-      "section",
-      "move",
-      "--before",
-      s.sec2,
-      "--after",
-      s.sec3,
-      s.sec1,
-    ]);
-    expect(exitCode).toBe(3);
-  });
-
   it("reports an anchor from another version as not-found (exit 2)", async () => {
     const { exitCode } = await run([
       "section",

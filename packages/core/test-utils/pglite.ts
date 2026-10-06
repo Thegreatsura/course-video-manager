@@ -43,17 +43,46 @@ export const createTestDb = async () => {
   return { pglite, testDb };
 };
 
+/** Every public table, quoted — read once per database, the schema never changes mid-file. */
+const tableListCache = new WeakMap<TestDb, string>();
+
+const quotedTableList = async (testDb: TestDb): Promise<string> => {
+  const cached = tableListCache.get(testDb);
+  if (cached !== undefined) return cached;
+  const { rows } = await testDb.execute<{ tablename: string }>(
+    sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
+  );
+  const list = rows
+    .map((r) => `"${r.tablename.replaceAll('"', '""')}"`)
+    .join(", ");
+  tableListCache.set(testDb, list);
+  return list;
+};
+
 /**
  * Truncates every table in the public schema with CASCADE.
  *
  * Call this in `beforeEach` to give each test a clean database
  * without the overhead of recreating the PGlite instance.
+ *
+ * One TRUNCATE naming every table, not one per table: under PGlite the
+ * per-table loop cost ~90ms per call — most of a typical DB test's runtime —
+ * against ~15ms for the single statement.
  */
 export const truncateAllTables = async (testDb: TestDb) => {
-  await testDb.execute(sql`DO $$ DECLARE r RECORD;
-    BEGIN
-      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-        EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
-      END LOOP;
-    END $$;`);
+  const tables = await quotedTableList(testDb);
+  if (tables.length === 0) return;
+  await testDb.execute(sql.raw(`TRUNCATE TABLE ${tables} CASCADE`));
+};
+
+/**
+ * A database that cannot answer: every query rejects.
+ *
+ * For tests of the "the database itself failed" path. Cheaper than closing a
+ * real PGlite, whose `close()` takes about a second.
+ */
+export const createUnreachableDb = (): TestDb => {
+  const down = () => Promise.reject(new Error("database is unreachable"));
+  const client = { query: down, exec: down, transaction: down };
+  return drizzle({ client: client as unknown as PGlite, schema });
 };
