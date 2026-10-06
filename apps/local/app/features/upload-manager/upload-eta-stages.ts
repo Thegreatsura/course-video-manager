@@ -99,7 +99,10 @@ export const timingStage = (
       if (upload.parentUploadId) return "writing";
       if (upload.autofillStage === "writing") return "work";
       return upload.autofillStage ?? "starting";
-    default:
+    case "youtube":
+    case "youtube-shorts":
+    case "ai-hero":
+    case "skills-changelog":
       return "upload";
   }
 };
@@ -151,7 +154,10 @@ export const stagePlan = (
       return upload.parentUploadId
         ? ["writing"]
         : ["starting", "selecting", "work"];
-    default:
+    case "youtube":
+    case "youtube-shorts":
+    case "ai-hero":
+    case "skills-changelog":
       return ["upload"];
   }
 };
@@ -183,7 +189,10 @@ export const stageBand = (
       return stage === "work" ? AUTOFILL_WORK_BAND : null;
     case "render-vertical":
       return null;
-    default:
+    case "youtube":
+    case "youtube-shorts":
+    case "ai-hero":
+    case "skills-changelog":
       return stage === "upload" ? WHOLE_BAR : null;
   }
 };

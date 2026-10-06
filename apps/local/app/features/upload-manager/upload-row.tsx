@@ -66,7 +66,8 @@ function StatusIcon({ upload }: { upload: uploadReducer.UploadEntry }) {
             return <Send className="size-4 text-blue-500 shrink-0" />;
           case "cleaning-up":
             return <Cloud className="size-4 text-blue-500 shrink-0" />;
-          default:
+          case "uploading-blob":
+          case null:
             return <Upload className="size-4 text-blue-500 shrink-0" />;
         }
       }
@@ -232,6 +233,10 @@ function SuccessDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
     case "skills-changelog":
     case "render-vertical":
       return <SuccessBadge label="Complete" />;
+    case "autofill":
+      // An autofill run's result lands in the Video itself; there is no
+      // destination to name.
+      return null;
   }
 }
 

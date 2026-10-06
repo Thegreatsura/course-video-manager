@@ -193,7 +193,9 @@ export const createTextWritingAgent = (props: {
           links,
         });
       case "article":
-      default:
+      // The document writer owns this mode; when it reaches the text writer
+      // it gets the article prompt.
+      case "seo-description-document":
         return generateArticlePrompt({
           code: props.code,
           transcript: props.transcript,

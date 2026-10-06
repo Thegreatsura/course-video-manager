@@ -65,7 +65,9 @@ export const requireDraftForClipServiceEvent = Effect.fn(
       return yield* requireDraftVersionForChapter(db, event.chapterId);
     case "archive-chapters":
       return yield* requireDraftVersionForChapters(db, event.chapterIds);
-    default:
+    // A read, and a Video created standalone, have no owning Version to guard.
+    case "get-timeline":
+    case "create-video":
       return;
   }
 });
@@ -87,7 +89,21 @@ export const withClipServiceWriteClosure = <A, E>(
     case "get-timeline":
     case "append-from-obs":
       return run(db);
-    default:
+    case "append-clips":
+    case "create-chapter-at-insertion-point":
+    case "create-chapter-at-position":
+    case "create-effect-clip-at-position":
+    case "autofill-chapters":
+    case "create-video-from-selection":
+    case "archive-clips":
+    case "unarchive-clips":
+    case "update-clips":
+    case "update-pause":
+    case "update-zoom":
+    case "reorder-clip":
+    case "update-chapter":
+    case "reorder-chapter":
+    case "archive-chapters":
       return withDbTransaction(db, (tx) =>
         Effect.gen(function* () {
           yield* requireDraftForClipServiceEvent(tx, event);

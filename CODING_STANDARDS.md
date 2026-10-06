@@ -44,6 +44,20 @@ errors in each package's `tsconfig.json`, run by `pnpm run lint:effect`). A
 false positive gets `// @effect-diagnostics-next-line <rule>:off` and a reason.
 See `docs/plans/effect-codebase-health.md`.
 
+## Control flow
+
+### A switch over a union names every member
+
+A `switch` on a union type lists every member as its own `case`, even the ones
+that share a branch. A `default` that quietly absorbs the leftover members also
+absorbs the member someone adds next month, and that new member takes the
+fallback branch without anyone deciding it should — a new clip-service write
+event would skip the Draft guard. Without a `default`, adding a member breaks
+the lint until each switch says what to do with it.
+
+Enforced by type-aware oxlint (`typescript/switch-exhaustiveness-check`, an
+error in `.oxlintrc.json`).
+
 ## Function signatures
 
 Optional parameters passed to functions should be scrutinised extremely
