@@ -28,6 +28,8 @@
     "db:backfill-search-text": "pnpm --filter @cvm/local run db:backfill-search-text",
     "db:studio": "pnpm --filter @cvm/core run db:studio",
     "db:clone-local": "pnpm --filter @cvm/local run db:clone-local",
+    "db:verify-snapshot": "./scripts/verify-snapshot.sh",
+    "setup:verify-db": "./scripts/setup-verify-db.sh",
     "gen:lucide-icons": "pnpm --filter @cvm/local run gen:lucide-icons",
     "sandcastle": "tsx ./.sandcastle/main.ts",
     "check:file-tokens": "./scripts/check-file-tokens.sh",
