@@ -1,12 +1,8 @@
 import type { ReactElement } from "react";
 import { useFetcher } from "react-router";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { CopyIcon, PlusIcon } from "lucide-react";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 
 interface DuplicableItem {
   id: string;
@@ -38,18 +34,24 @@ export function WeekContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={onAddNew}>
-          <PlusIcon className="size-3.5 mr-2" />
-          Add new
-        </ContextMenuItem>
-        {count > 0 && (
-          <ContextMenuItem onSelect={duplicate}>
-            <CopyIcon className="size-3.5 mr-2" />
-            Duplicate to next week
-          </ContextMenuItem>
-        )}
-      </ContextMenuContent>
+      <ActionMenuContent
+        menu="context"
+        groups={{
+          create: [
+            {
+              ...STANDARD_ACTIONS.add,
+              label: "Add Deliverable",
+              opensDialog: true,
+              onSelect: onAddNew,
+            },
+            count > 0 && {
+              ...STANDARD_ACTIONS.duplicate,
+              label: "Duplicate to Next Week",
+              onSelect: duplicate,
+            },
+          ],
+        }}
+      />
     </ContextMenu>
   );
 }
