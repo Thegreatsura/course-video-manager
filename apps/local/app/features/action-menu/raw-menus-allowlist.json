@@ -51,21 +51,9 @@
     "count": 26,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
   },
-  "features/video-editor/components/chapter-item.tsx": {
-    "count": 16,
-    "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
-  },
-  "features/video-editor/components/clip-item.tsx": {
-    "count": 31,
-    "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
-  },
   "features/video-editor/components/editor-compact-header.tsx": {
     "count": 2,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/video-editor/components/reference-panel.tsx": {
-    "count": 14,
-    "reason": "Hand-built; migrates in Batch 3 of docs/plans/action-menus.md."
   },
   "features/video-editor/components/shared-action-items.tsx": {
     "count": 9,
