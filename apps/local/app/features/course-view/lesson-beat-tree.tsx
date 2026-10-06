@@ -1,10 +1,9 @@
-import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { Link, type useNavigate, type useFetcher } from "react-router";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
 import { BeatList } from "@/features/beats/beat-list";
-import { VideoContextMenuItems } from "./video-context-menu";
+import { VideoContextMenu } from "./video-context-menu";
 import { useCourseViewVisibility } from "./course-view-visibility";
 import { VideoWarningIndicator } from "./video-warning-indicator";
 import type { LoaderData, Lesson, Section, Video } from "./course-view-types";
@@ -25,7 +24,6 @@ type VideoMenuProps = {
   dispatch: (action: courseViewReducer.Action) => void;
   startExportUpload: (videoId: string, path: string) => void;
   revealVideoFetcher: ReturnType<typeof useFetcher>;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   submitDeleteVideo: (videoId: string) => void;
 };
 
@@ -98,14 +96,9 @@ function VideoBeatNode({
   return (
     <div className="text-xs">
       <div className="flex items-center gap-1.5 mb-1 min-w-0">
-        <ContextMenu>
-          <ContextMenuTrigger asChild>{videoRow}</ContextMenuTrigger>
-          <VideoContextMenuItems
-            video={video}
-            lesson={lesson}
-            {...videoMenuProps}
-          />
-        </ContextMenu>
+        <VideoContextMenu video={video} lesson={lesson} {...videoMenuProps}>
+          {videoRow}
+        </VideoContextMenu>
         <VideoWarningIndicator
           warnings={video.warnings}
           isReadOnly={isReadOnly}

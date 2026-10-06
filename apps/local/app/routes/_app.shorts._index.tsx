@@ -1,13 +1,7 @@
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
-import { DeleteVideoModal } from "@/components/delete-video-modal";
-import { RenameVideoModal } from "@/components/rename-video-modal";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import {
   ShortsPostingModal,
   type ShortsPostingMode,
@@ -28,28 +22,10 @@ import { VideoPostOperationsService } from "@/services/db-video-post-operations.
 import { makeLoader } from "@/services/route-action.server";
 import { Effect, Config } from "effect";
 import { FileSystem } from "@effect/platform";
-import {
-  Clapperboard,
-  Download,
-  FolderOpen,
-  PencilIcon,
-  Plus,
-  SendIcon,
-  Trash2,
-  VideoIcon,
-} from "lucide-react";
+import { Clapperboard, Plus, VideoIcon } from "lucide-react";
 import { useContext, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import type { Route } from "./+types/_app.shorts._index";
-
-const POST_OPTIONS: Array<{
-  label: string;
-  mode: ShortsPostingMode;
-}> = [
-  { label: "Post Short", mode: "both" },
-  { label: "Post to YouTube", mode: "youtube" },
-  { label: "Post to TikTok", mode: "tiktok" },
-];
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "CVM - Shorts" }];
@@ -118,23 +94,20 @@ function RecordTile() {
 
 export default function ShortsIndex(props: Route.ComponentProps) {
   const { shorts, exportedMap, postedMap } = props.loaderData;
-  const [videoToDelete, setVideoToDelete] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
-  const [videoToRename, setVideoToRename] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
   const [videoToPost, setVideoToPost] = useState<{
     id: string;
     title: string;
     mode: ShortsPostingMode;
   } | null>(null);
   const revealFetcher = useFetcher();
+  const dialogs = useVideoDialogs();
   const { startExportUpload } = useContext(UploadContext);
 
   useFocusRevalidate({ enabled: true });
+  const post = (
+    video: { id: string; title: string },
+    mode: ShortsPostingMode
+  ) => setVideoToPost({ id: video.id, title: video.title, mode });
   useUploadRevalidate([
     "buffer",
     "youtube-shorts",
@@ -153,27 +126,7 @@ export default function ShortsIndex(props: Route.ComponentProps) {
             </h1>
           </div>
 
-          {videoToDelete && (
-            <DeleteVideoModal
-              videoId={videoToDelete.id}
-              videoTitle={videoToDelete.title}
-              open={true}
-              onOpenChange={(open) => {
-                if (!open) setVideoToDelete(null);
-              }}
-            />
-          )}
-
-          {videoToRename && (
-            <RenameVideoModal
-              videoId={videoToRename.id}
-              currentName={videoToRename.title}
-              open={true}
-              onOpenChange={(open) => {
-                if (!open) setVideoToRename(null);
-              }}
-            />
-          )}
+          {dialogs.dialogs}
 
           {videoToPost && (
             <ShortsPostingModal
@@ -254,73 +207,26 @@ export default function ShortsIndex(props: Route.ComponentProps) {
                       </div>
                     </Link>
                   </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    {POST_OPTIONS.map((option) => (
-                      <ContextMenuItem
-                        key={option.mode}
-                        onSelect={() =>
-                          setVideoToPost({
-                            id: video.id,
-                            title: video.title,
-                            mode: option.mode,
-                          })
-                        }
-                      >
-                        <SendIcon className="w-4 h-4" />
-                        {option.label}
-                      </ContextMenuItem>
-                    ))}
-                    <ContextMenuSeparator />
-                    <CopyEntityLinkItems
-                      menu="context"
-                      entity={{ type: "video", id: video.id }}
-                    />
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() =>
-                        setVideoToRename({
-                          id: video.id,
-                          title: video.title,
-                        })
-                      }
-                    >
-                      <PencilIcon className="w-4 h-4" />
-                      Rename
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => startExportUpload(video.id, video.title)}
-                    >
-                      <Download className="w-4 h-4" />
-                      Export
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() =>
+                  <EntityMenuContent
+                    menu="context"
+                    entity={{ type: "video", id: video.id }}
+                    groups={videoMenuGroups({
+                      revealInFileSystem: () =>
                         revealFetcher.submit(
                           {},
                           {
                             method: "post",
                             action: `/api/videos/${video.id}/reveal`,
                           }
-                        )
-                      }
-                    >
-                      <FolderOpen className="w-4 h-4" />
-                      Reveal in File System
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      variant="destructive"
-                      onSelect={() =>
-                        setVideoToDelete({
-                          id: video.id,
-                          title: video.title,
-                        })
-                      }
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
+                        ),
+                      rename: () => dialogs.rename(video),
+                      export: () => startExportUpload(video.id, video.title),
+                      postShort: () => post(video, "both"),
+                      postToYouTube: () => post(video, "youtube"),
+                      postToTikTok: () => post(video, "tiktok"),
+                      delete: () => dialogs.confirmDelete(video),
+                    })}
+                  />
                 </ContextMenu>
               );
             })}

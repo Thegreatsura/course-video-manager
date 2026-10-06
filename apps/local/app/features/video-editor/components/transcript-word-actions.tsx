@@ -1,5 +1,4 @@
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { getRetranscribableClipIds } from "../video-editor-selectors";
@@ -31,7 +30,7 @@ export const MissingWordTimingBadge = () => {
   return (
     <span
       className="text-amber-500 text-xs font-medium inline-flex items-center shrink-0"
-      title="Clips transcribed before word-level timing existed are never backfilled. Run 'Re-transcribe all clips' from the Actions menu to add it."
+      title="Clips transcribed before word-level timing existed are never backfilled. Run 'Re-transcribe All Clips' from the Actions menu to add it."
     >
       <AlertTriangleIcon className="size-3.5 mr-1" />
       Missing word timing
@@ -40,32 +39,20 @@ export const MissingWordTimingBadge = () => {
 };
 
 /**
- * "Re-transcribe all clips" — the backfill for the badge above (#1571),
- * scoped to this Video rather than the whole library.
+ * "Re-transcribe All Clips" — the backfill for the badge above (#1571),
+ * scoped to this Video rather than the whole library. The Actions menu offers
+ * it in both editors.
  */
-export const RetranscribeAllClipsItem = () => {
+export const useRetranscribeAllClips = () => {
   const clips = useContextSelector(VideoEditorContext, (ctx) => ctx.clips);
   const dispatch = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.dispatch
   );
 
-  return (
-    <DropdownMenuItem
-      onSelect={() =>
-        dispatch({
-          type: "retranscribe-clips",
-          clipIds: getRetranscribableClipIds(clips),
-        })
-      }
-    >
-      <RefreshCwIcon className="w-4 h-4 mr-2" />
-      <div className="flex flex-col">
-        <span className="font-medium">Re-transcribe all clips</span>
-        <span className="text-xs text-muted-foreground">
-          Transcribe every clip in this video again, with word timing
-        </span>
-      </div>
-    </DropdownMenuItem>
-  );
+  return () =>
+    dispatch({
+      type: "retranscribe-clips",
+      clipIds: getRetranscribableClipIds(clips),
+    });
 };

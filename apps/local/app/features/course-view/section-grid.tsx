@@ -76,7 +76,6 @@ export function SectionGrid({
   navigate,
   startExportUpload,
   revealVideoFetcher,
-  deleteVideoFileFetcher,
   submitDeleteVideo,
   singleColumn = false,
 }: {
@@ -117,7 +116,6 @@ export function SectionGrid({
   navigate: ReturnType<typeof useNavigate>;
   startExportUpload: (videoId: string, path: string) => void;
   revealVideoFetcher: ReturnType<typeof useFetcher>;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   submitDeleteVideo: (videoId: string) => void;
 }) {
   const displaySections = currentCourse.sections;
@@ -254,7 +252,6 @@ export function SectionGrid({
                     navigate={navigate}
                     startExportUpload={startExportUpload}
                     revealVideoFetcher={revealVideoFetcher}
-                    deleteVideoFileFetcher={deleteVideoFileFetcher}
                     submitDeleteVideo={submitDeleteVideo}
                     isReadOnly={isReadOnly}
                     allSectionIds={allSectionIds}
