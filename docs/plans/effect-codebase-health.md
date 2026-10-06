@@ -166,6 +166,12 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 > - `switch-exhaustiveness-check`: **error.** Re-measured at 10, not 7: the
 >   rule's default counts a `default` branch over a union as not exhaustive.
 >   Every switch now names each member; no branch changed what it returns.
+>   (#1788)
+> - `only-throw-error`: **error.** 7 hits. Two threw non-Errors (the
+>   transaction rollback signal in `with-db-transaction` and `.sandcastle`'s
+>   retry wrapper); both now throw an `Error`. The other five are React
+>   Router's `throw data(..., { status })`, which is allowed by type
+>   (`DataWithResponseInit`), because rewriting it would change the responses.
 
 **Phase 3 — custom guards.** Add `scripts/check-effect-boundaries.sh` in the
 style of the existing guards.

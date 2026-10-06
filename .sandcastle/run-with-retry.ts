@@ -94,5 +94,7 @@ export async function runWithRetry<T>(
     }
   }
 
-  throw lastError;
+  // Every attempt either returned or set lastError, so it is only unset when
+  // maxAttempts < 1 and the loop never ran.
+  throw lastError ?? new Error("runWithRetry: maxAttempts must be at least 1");
 }

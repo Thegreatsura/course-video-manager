@@ -81,6 +81,20 @@ the lint until each switch says what to do with it.
 Enforced by type-aware oxlint (`typescript/switch-exhaustiveness-check`, an
 error in `.oxlintrc.json`).
 
+## Errors
+
+### Throw Errors, not values
+
+Outside Effect, throw an `Error` or a subclass of one. A thrown string or plain
+object has no stack and fails every `instanceof Error` check downstream, so the
+handler that logs or maps it loses track of where it came from. Inside Effect,
+fail with a tagged error instead (`Effect.fail(new XError(...))`), never with
+`throw`. The one exception is React Router's `throw data(..., { status })` in
+a loader or action, because that is how a route answers with an error status.
+
+Enforced by type-aware oxlint (`typescript/only-throw-error`, an error in
+`.oxlintrc.json` that allows `data()`).
+
 ## Function signatures
 
 Optional parameters passed to functions should be scrutinised extremely
