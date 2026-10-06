@@ -34,9 +34,10 @@ const NOT_ENTITY_MENUS: Record<string, string> = {
     "copies the writer's conversation or document text",
   "features/article-writer/document-panel.tsx":
     "copies or writes out the writer's document text",
+  "features/deliverables-calendar/deliverable-card.tsx":
+    "its date area's menu acts on a calendar day, not an entity",
   "features/deliverables-calendar/week-actions-menu.tsx":
     "acts on a calendar week, not an entity",
-  "features/video-posting/ai-hero-page.tsx": "an image-upload chooser",
   "features/video-posting/skills-changelog-helpers.tsx":
     "an image-upload chooser",
 };
