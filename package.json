@@ -11,6 +11,8 @@
     "dev": "./scripts/run-with-log.sh dev",
     "start": "./scripts/run-with-log.sh start",
     "test": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer",
+    "test:ci:rest": "turbo run test test:root --concurrency=1 --filter=!@cvm/overlay-renderer --filter=!@cvm/local",
+    "test:ci:local": "turbo run build --filter=@cvm/local^... && pnpm --filter @cvm/local exec vitest run",
     "test:watch": "turbo run test:watch --filter=!@cvm/overlay-renderer",
     "typecheck": "turbo run typecheck typecheck:root --filter=!@cvm/overlay-renderer",
     "lint:boundaries": "turbo run lint:boundaries --filter=!@cvm/overlay-renderer",
@@ -38,7 +40,8 @@
     "check:routes-folder": "./scripts/check-routes-folder.sh",
     "check:response-body": "./scripts/check-response-body.sh",
     "check:effect-guards": "node scripts/check-effect-guards.ts",
-    "check": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all && pnpm run test"
+    "check:static": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all",
+    "check": "pnpm run check:static && pnpm run test"
   },
   "pnpm": {
     "overrides": {
