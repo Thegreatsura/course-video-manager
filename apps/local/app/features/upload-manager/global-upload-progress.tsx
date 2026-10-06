@@ -2,6 +2,8 @@ import { useContext, useEffect, useCallback } from "react";
 import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { UploadContext } from "./upload-context";
 import { UploadRow } from "./upload-row";
+import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
+import { formatRemaining } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -15,7 +17,8 @@ const CIRCLE_RADIUS = 16;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
 export function GlobalUploadProgress() {
-  const { uploads, dismissUpload } = useContext(UploadContext);
+  const { uploads, dismissUpload, timings, etaHistory, clock } =
+    useContext(UploadContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const uploadEntries = Object.values(uploads);
@@ -34,6 +37,22 @@ export function GlobalUploadProgress() {
       u.status === "waiting"
   );
   const isActive = activeUploads.length > 0;
+
+  // Re-read the clock every second while anything runs, so an ETA counts down
+  // between progress events rather than only when one arrives.
+  const [now, setNow] = useState(clock);
+  useEffect(() => {
+    if (!isActive) return;
+    setNow(clock());
+    const interval = setInterval(() => setNow(clock()), 1000);
+    return () => clearInterval(interval);
+  }, [isActive, clock]);
+  const etas = estimateUploads(uploads, {
+    timings,
+    history: etaHistory,
+    now,
+  });
+  const allDoneMs = allDoneEta(uploads, etas);
 
   const completedCount = rootEntries.filter(
     (u) => u.status === "success"
@@ -139,6 +158,11 @@ export function GlobalUploadProgress() {
                   {activeUploads.length} active
                 </Badge>
               )}
+              {isActive && allDoneMs !== null && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  all done in {formatRemaining(allDoneMs)}
+                </span>
+              )}
               {completedCount > 0 && (
                 <Badge variant="secondary" className="text-xs text-green-500">
                   {completedCount} done
@@ -160,13 +184,18 @@ export function GlobalUploadProgress() {
               <div className="space-y-0 divide-y">
                 {rootEntries.map((upload) => (
                   <div key={upload.uploadId}>
-                    <UploadRow upload={upload} onDismiss={handleDismiss} />
+                    <UploadRow
+                      upload={upload}
+                      onDismiss={handleDismiss}
+                      eta={etas[upload.uploadId]}
+                    />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow
                         key={child.uploadId}
                         upload={child}
                         onDismiss={handleDismiss}
                         nested
+                        eta={etas[child.uploadId]}
                       />
                     ))}
                   </div>
