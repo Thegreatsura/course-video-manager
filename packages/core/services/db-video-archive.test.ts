@@ -5,6 +5,13 @@ import { VideoOperationsService } from "./db-video-operations.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import {
+  courses,
+  courseVersions,
+  lessons,
+  sections,
+  videos,
+} from "../db/schema.js";
+import {
   createTestDb,
   truncateAllTables,
   type TestDb,
@@ -101,5 +108,67 @@ describe("deleteVideo", () => {
       expect(again.id).toBe(video.id);
       expect(again.archived).toBe(true);
     }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("unarchiveVideo", () => {
+  it.effect(
+    "returns a Video to its Lesson, or to Standalone when that Lesson is archived",
+    () =>
+      Effect.gen(function* () {
+        const [course] = yield* Effect.promise(() =>
+          testDb.insert(courses).values({ name: "course" }).returning()
+        );
+        const [version] = yield* Effect.promise(() =>
+          testDb
+            .insert(courseVersions)
+            .values({ repoId: course!.id, name: "v1" })
+            .returning()
+        );
+        yield* Effect.promise(() =>
+          testDb
+            .insert(sections)
+            .values({ id: "section", repoVersionId: version!.id, order: 1 })
+        );
+        yield* Effect.promise(() =>
+          testDb.insert(lessons).values([
+            { id: "lesson-live", sectionId: "section", order: 1 },
+            {
+              id: "lesson-gone",
+              sectionId: "section",
+              order: 2,
+              archived: true,
+            },
+          ])
+        );
+        yield* Effect.promise(() =>
+          testDb.insert(videos).values([
+            {
+              id: "video-home",
+              lessonId: "lesson-live",
+              title: "a.mp4",
+              originalFootagePath: "/a",
+              archived: true,
+            },
+            {
+              id: "video-orphan",
+              lessonId: "lesson-gone",
+              title: "b.mp4",
+              originalFootagePath: "/b",
+              archived: true,
+            },
+          ])
+        );
+        const videoOps = yield* VideoOperationsService;
+
+        const home = yield* videoOps.unarchiveVideo("video-home");
+        const orphan = yield* videoOps.unarchiveVideo("video-orphan");
+
+        expect(home).toMatchObject({
+          archived: false,
+          lessonId: "lesson-live",
+        });
+        expect(orphan).toMatchObject({ archived: false, lessonId: null });
+      }).pipe(Effect.provide(testLayer))
   );
 });

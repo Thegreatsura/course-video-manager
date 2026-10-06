@@ -109,8 +109,9 @@ export default function Component(props: Route.ComponentProps) {
             purgeExport: isExported
               ? () => dialogs.confirmPurgeExport(video)
               : undefined,
-            // An archived Video is already what Delete would make it.
-            delete: archived ? undefined : () => dialogs.confirmDelete(video),
+            // An archived Video offers the way back instead of the way in.
+            unarchive: archived ? () => dialogs.unarchive(video) : undefined,
+            archive: archived ? undefined : () => dialogs.archive(video),
           })}
         />
       </ContextMenu>

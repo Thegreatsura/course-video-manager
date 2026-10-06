@@ -139,8 +139,7 @@ function VideoMenu({
           purgeExport: isExported
             ? () => dialogs.confirmPurgeExport(video)
             : undefined,
-          delete: () =>
-            dialogs.confirmDelete(video, () => submitDeleteVideo(video.id)),
+          archive: () => submitDeleteVideo(video.id),
         }),
         export: () => startExportUpload(video.id, videoPath),
       })}
