@@ -52,7 +52,11 @@ export const loader = makeLoader({
       const [course, allVersions] = yield* Effect.all(
         [
           courseOps.getCourseById(params.courseId!),
-          versionOps.getAllVersionsWithStructure(params.courseId!),
+          // Metadata only: the page reads the latest Version's id and meta and
+          // the previous Version's name. Loading every Version's full tree
+          // (every Clip and Chapter of every past release) here cost seconds
+          // and grew with each publish.
+          versionOps.getCourseVersions(params.courseId!),
         ],
         { concurrency: "unbounded" }
       );
@@ -119,7 +123,13 @@ export const loader = makeLoader({
         courseName: course.name,
       });
 
-      const { sections: _, ...latestVersionMeta } = latestVersion;
+      const latestVersionMeta = {
+        id: latestVersion.id,
+        name: latestVersion.name,
+        description: latestVersion.description,
+        commitState: latestVersion.commitState,
+        createdAt: latestVersion.createdAt,
+      };
       return {
         course,
         pendingRecovery,
