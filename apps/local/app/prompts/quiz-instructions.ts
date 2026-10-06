@@ -37,6 +37,7 @@ Write the choices like this:
 - Every wrong choice is something a real reader would actually do. A choice nobody would pick makes the question free.
 - The correct answer is the same length as the wrong ones. A reader who spots the longest choice never reads the question.
 - The explanation says why the wrong choices are wrong, not only why the right one is right.
+- The correct answer sits in a different position from question to question. A reader who sees it first every time stops reading the choices.
 
 Each question carries an \`id\` that names the concept it tests — \`subagent-context-isolation\`, never \`quiz-1\`. Reader answers are keyed to the id, so it must be unique across the whole course.
 
@@ -58,6 +59,6 @@ ${takenSection}Write the quiz exactly like this, with every value a literal — 
 
 \`type\` is always \`"multiple-choice"\`. A question needs two or more choices, each with a short stable \`answer\` key and a \`label\`. \`correct\` names one choice's \`answer\`; an array of them makes the question multi-select, graded as an exact set — every correct answer and no others, or no credit — so use it only where that severity is earned.
 
-Two optional fields: \`allowMultiple\` shows checkboxes when only one answer is correct, and \`shuffleChoices\` (default true) can be set false to hold the authored order. Choice order is shuffled for the reader, so where you put the correct answer makes no difference.
+Two optional fields: \`allowMultiple\` shows checkboxes when only one answer is correct, and \`shuffleChoices\` (default true) can be set false to hold the authored order. Choice order is shuffled for the reader by default, but vary where you put the correct answer anyway: with \`shuffleChoices\` false the authored order is what the reader sees.
 `.trim();
 };

@@ -8,6 +8,7 @@ import {
 import { LEADING_HEADING_PATTERN, stripLeadingHeadings } from "./lint-fix";
 import {
   findLopsidedQuizAnswers,
+  findStackedCorrectPositions,
   findTakenQuizIds,
   fixTakenQuizIds,
 } from "./quiz-lint";
@@ -232,6 +233,18 @@ export const BASE_LINT_RULES: LintRule[] = [
     detect: (text) => findLopsidedQuizAnswers(text),
     fixInstruction: (matches) =>
       `In these quiz questions the correct answer's length gives it away: ${matches.join("; ")}. Rebalance the choices so all of them are a similar length — trim the correct answer to its essential claim, or flesh out the wrong choices with equally specific detail. Keep the same choice correct and keep every wrong choice plausible.`,
+  },
+  {
+    id: "quiz-correct-position-stacked",
+    name: "Quiz Correct Answers Stacked",
+    description:
+      "Correct answers that all sit at the same option position form a pattern a reader learns",
+    modes: null,
+    // Never scanned: `detect` reads every question in the document at once.
+    pattern: /(?!)/,
+    detect: (text) => findStackedCorrectPositions(text),
+    fixInstruction: (matches) =>
+      `The quiz's correct answers sit in the same position: ${matches.join("; ")}. Reorder the choices within each question so the correct answer's position varies from question to question. Move whole choices only — do not change the text of any choice, its \`answer\` key, or which choice \`correct\` names.`,
   },
   // The commit map rules. All of them read the block's shape, so all of them
   // wait for the writer to stop. None has a deterministic fix: only the author

@@ -135,3 +135,46 @@ export function findLopsidedQuizAnswers(text: string): string[] {
   }
   return found;
 }
+
+/**
+ * Generated quizzes put the correct answer in the same slot — nearly always the
+ * first — and a reader who notices stops reading the question. Three questions
+ * all in one slot is past chance (1 in 9 with three choices, 1 in 16 with
+ * four); from four questions on, three in four sharing a slot is enough. Fewer
+ * than three is too few to call a pattern. Multi-select questions have no
+ * single position and are left out.
+ */
+const STACKED_MIN_QUESTIONS = 3;
+const STACKED_MAJORITY_FROM = 4;
+const STACKED_MAJORITY = 0.75;
+
+/**
+ * Describes the document's correct answers when one option position holds all
+ * of them (or a clear majority), or returns nothing.
+ */
+export function findStackedCorrectPositions(text: string): string[] {
+  const positions: number[] = [];
+  for (const block of parseQuizBlocks(text)) {
+    for (const { data } of block.questions) {
+      if (!data || typeof data.correct !== "string") continue;
+      if (!Array.isArray(data.choices)) continue;
+      const at = data.choices.findIndex((c) => c?.answer === data.correct);
+      if (at !== -1) positions.push(at);
+    }
+  }
+  if (positions.length < STACKED_MIN_QUESTIONS) return [];
+
+  const counts = new Map<number, number>();
+  for (const at of positions) counts.set(at, (counts.get(at) ?? 0) + 1);
+  const [position, count] = [...counts].sort((a, b) => b[1] - a[1])[0]!;
+
+  const stacked =
+    count === positions.length ||
+    (positions.length >= STACKED_MAJORITY_FROM &&
+      count / positions.length >= STACKED_MAJORITY);
+  return stacked
+    ? [
+        `option ${position + 1} is correct in ${count} of ${positions.length} questions`,
+      ]
+    : [];
+}
