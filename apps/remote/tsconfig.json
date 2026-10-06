@@ -32,6 +32,11 @@
     ],
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
+    // Explicit, so it resolves relative to THIS file. @vercel/node's TS 7 path
+    // compiles via a generated tsconfig in the OS temp dir that `extends` this
+    // one; without typeRoots, TS looks for @types next to that temp file and
+    // fails with TS2688 "Cannot find type definition file for 'node'".
+    "typeRoots": ["./node_modules/@types"],
     "target": "ESNext",
     // See packages/core/tsconfig.json. This app is not bundled at all: Vercel
     // transpiles each file and Node's own ESM loader links them, so every
