@@ -13,17 +13,21 @@ import {
 import { Link } from "react-router";
 import type { uploadReducer } from "./upload-reducer";
 import { uploadStageLabel } from "./upload-stage-labels";
+import { etaLabel, type UploadEta } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
 
 export function UploadRow({
   upload,
   onDismiss,
   nested = false,
+  eta,
 }: {
   upload: uploadReducer.UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
   /** A child task, indented under the parent job that spawned it. */
   nested?: boolean;
+  /** Its time to finish, from `estimateUploads`. */
+  eta?: UploadEta;
 }) {
   return (
     <div
@@ -34,7 +38,7 @@ export function UploadRow({
       <StatusIcon upload={upload} />
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate">{upload.title}</p>
-        <UploadStatusDetail upload={upload} />
+        <UploadStatusDetail upload={upload} eta={eta} />
       </div>
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
         <button
@@ -92,15 +96,18 @@ function StatusIcon({ upload }: { upload: uploadReducer.UploadEntry }) {
  * The inline per-job progress bar. Every unfinished job gets one, so the modal
  * reads as one column of bars rather than a mix of bars and prose: `label`
  * names the stage (when the job type has stages) and `percent` fills the bar.
+ * `remaining` is the ETA's text, shown after the percent.
  */
 function InlineProgress({
   label,
   percent,
   tone,
+  remaining = null,
 }: {
   label: string | null;
   percent: number;
   tone: "active" | "retrying";
+  remaining?: string | null;
 }) {
   return (
     <div className="flex items-center gap-2 mt-0.5">
@@ -126,14 +133,20 @@ function InlineProgress({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="text-xs text-muted-foreground w-8 text-right">
-        {percent}%
+      <span className="text-xs text-muted-foreground min-w-8 text-right whitespace-nowrap shrink-0">
+        {percent}%{remaining && ` · ${remaining}`}
       </span>
     </div>
   );
 }
 
-function UploadStatusDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
+function UploadStatusDetail({
+  upload,
+  eta,
+}: {
+  upload: uploadReducer.UploadEntry;
+  eta?: UploadEta;
+}) {
   switch (upload.status) {
     case "waiting":
       return (
@@ -145,6 +158,7 @@ function UploadStatusDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
           label={uploadStageLabel(upload)}
           percent={upload.progress}
           tone="active"
+          remaining={eta ? etaLabel(eta) : null}
         />
       );
     case "retrying":

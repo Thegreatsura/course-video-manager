@@ -16,6 +16,7 @@ import {
   streamedProgressBand,
   withDerivedParentProgress,
 } from "./upload-progress";
+import { trackTimings, type UploadTiming } from "./upload-timing";
 
 export namespace uploadReducer {
   export type UploadStatus =
@@ -147,9 +148,14 @@ export namespace uploadReducer {
 
   export interface State {
     uploads: Record<string, UploadEntry>;
+    /** When each job's stages started and how its bar has moved: the ETA's input. */
+    timings: Record<string, UploadTiming>;
   }
 
-  export type Action =
+  /** `at`: the provider's clock reading, so the reducer never reads one. */
+  export type Action = ActionBody & { at?: number };
+
+  type ActionBody =
     | {
         type: "START_UPLOAD";
         uploadId: string;
@@ -230,6 +236,7 @@ export namespace uploadReducer {
 
 export const createInitialUploadState = (): uploadReducer.State => ({
   uploads: {},
+  timings: {},
 });
 
 export const uploadReducer = (
@@ -239,7 +246,7 @@ export const uploadReducer = (
   const next = reduceUploads(state, action);
   if (next === state) return state;
   const uploads = withDerivedParentProgress(next.uploads);
-  return uploads === next.uploads ? next : { ...next, uploads };
+  return { ...next, uploads, timings: trackTimings(state, uploads, action) };
 };
 
 const reduceUploads = (
