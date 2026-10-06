@@ -29,6 +29,7 @@ export function toWriterContext(data: WriterContextData): WriterContext {
     beats: data.beats,
     script: data.script,
     videoRole: data.videoRole,
+    animaticLines: data.animaticLines,
   };
 }
 

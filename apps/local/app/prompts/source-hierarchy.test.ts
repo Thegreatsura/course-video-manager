@@ -8,13 +8,17 @@ import {
 } from "./source-hierarchy";
 
 describe("SOURCE_HIERARCHY", () => {
-  it("names the three rungs in fidelity order", () => {
-    expect(SOURCE_HIERARCHY).toContain("beats");
-    expect(SOURCE_HIERARCHY).toContain("script");
-    expect(SOURCE_HIERARCHY).toContain("transcript");
-    expect(SOURCE_HIERARCHY.indexOf("beats")).toBeLessThan(
-      SOURCE_HIERARCHY.indexOf("script")
+  it("names the four rungs in fidelity order", () => {
+    expect(SOURCE_HIERARCHY).toContain(
+      "**beats → Animatic → script → transcript**"
     );
+  });
+
+  it("treats the Animatic as a plan the transcript overrules", () => {
+    expect(SOURCE_HIERARCHY).toContain(
+      "A mockup line is not words said on camera"
+    );
+    expect(SOURCE_HIERARCHY).toContain("was cut — drop it");
   });
 
   it("states the transcript is the scope ceiling, not a mandate", () => {
@@ -46,6 +50,15 @@ describe("SOURCE_HIERARCHY", () => {
   it("frames attached files as supporting material, never a source of claims", () => {
     expect(SOURCE_HIERARCHY).toContain("supporting material");
     expect(SOURCE_HIERARCHY).toContain("never themselves a source of claims");
+  });
+
+  it("makes an author's comment about the output an instruction, and lets the transcript win on what was said", () => {
+    expect(SOURCE_HIERARCHY).toContain(
+      "author's comments sit outside the ladder"
+    );
+    expect(SOURCE_HIERARCHY).toContain("is an instruction from the author");
+    expect(SOURCE_HIERARCHY).toContain("the transcript wins");
+    expect(SOURCE_HIERARCHY).toContain("never quote it");
   });
 
   it("tolerates missing lower rungs", () => {

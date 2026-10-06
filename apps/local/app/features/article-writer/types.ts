@@ -10,6 +10,7 @@ import type {
 } from "@cvm/core/lib/transcript-types";
 import type { BeatKind } from "@/features/beats/beat-kinds";
 import type { VideoRole } from "@/services/lesson-warnings";
+import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 
 export type DocumentAgentTools = {
   writeDocument: typeof writeDocumentTool;
@@ -81,6 +82,8 @@ export interface WriterContext {
   beats: Array<{ kind: BeatKind; title: string; description: string }>;
   /** The video's script — the base Matt improvised from. Empty when unwritten. */
   script: string;
+  /** The video's Animatic as lines, comments attached. Empty when it has none. */
+  animaticLines: readonly AnimaticLine[];
   /** Quiz ids owned by other videos in this course — none of them are free. */
   quizIds?: string[];
   /** The video's role in its lesson — picks the mode the writer opens on. */
