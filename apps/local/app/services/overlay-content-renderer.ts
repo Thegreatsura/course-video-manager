@@ -10,6 +10,7 @@ import {
   OVERLAY_RENDER_FRAME,
   type OverlayContent,
 } from "./overlay-render-cache";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 export class OverlayContentRenderError extends Data.TaggedError(
   "OverlayContentRenderError"
@@ -207,7 +208,7 @@ export class OverlayContentRendererService extends Effect.Service<OverlayContent
           })
         );
 
-        yield* fs.remove(propsFile).pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(fs, propsFile);
       });
 
       return { renderOverlayContent };

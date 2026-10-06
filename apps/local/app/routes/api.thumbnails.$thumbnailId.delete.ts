@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { makeAction } from "@/services/route-action.server";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 export const action = makeAction({
   errors: { NotFoundError: 404 },
@@ -37,7 +38,7 @@ export const action = makeAction({
       }
 
       for (const filePath of filesToDelete) {
-        yield* fs.remove(filePath).pipe(Effect.catchAll(() => Effect.void));
+        yield* removeBestEffort(fs, filePath);
       }
 
       yield* thumbnailOps.deleteThumbnail(params.thumbnailId!);

@@ -5,6 +5,7 @@ import { makeAction } from "@/services/route-action.server";
 import { getVideoFilePath } from "@/services/video-files";
 import { FileSystem } from "@effect/platform";
 import path from "node:path";
+import { removeBestEffort } from "@/services/remove-best-effort";
 
 const RequestSchema = Schema.Struct({
   body: Schema.String,
@@ -39,7 +40,7 @@ export const action = makeAction({
 
       if (deleteLocalFiles && result.uploadedFilePaths.length > 0) {
         for (const filePath of result.uploadedFilePaths) {
-          yield* fs.remove(filePath).pipe(Effect.catchAll(() => Effect.void));
+          yield* removeBestEffort(fs, filePath);
         }
       }
 

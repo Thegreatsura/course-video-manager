@@ -73,6 +73,40 @@ Enforced by `@effect/tsgo` (`missingReturnYieldStar`, `tryCatchInEffectGen`,
 `schemaSyncInEffect`, `catchUnfailableEffect`, `globalErrorInEffectFailure`,
 `globalErrorInEffectCatch`), errors in each package's `tsconfig.json`.
 
+### Effects stay inside their boundary
+
+An Effect keeps its services, interruption and typed errors only while it stays
+inside one run. Each of these patterns drops one of them without a word.
+
+- **Run an Effect only at a boundary.** A route goes through `makeLoader` /
+  `makeAction` (`route-action.server.ts`). The CLI, a daemon's entry point,
+  `createSseResponse` and `withDbTransaction` are the other edges. An
+  `Effect.run*` or `runtime.run*` anywhere else is a second, detached run. A
+  callback that must return a Promise is the usual cause: make it return an
+  Effect instead. For a module-level semaphore, write
+  `Effect.unsafeMakeSemaphore(1)`, not `Effect.runSync(Effect.makeSemaphore(1))`.
+- **Never swallow a failure silently.** `catchAll(() => Effect.succeed(x))` or
+  `catchAll(() => Effect.void)` turns every failure into a normal value with no
+  log, including the ones nobody foresaw. Catch the tag you expect
+  (`catchTag`), or log what you drop (`Effect.tapError` + `Effect.logWarning`).
+  To clean up a temp file, use `removeBestEffort` (`services/remove-best-effort.ts`):
+  it is silent when the file is already gone and logs anything else. When
+  silence really is the behaviour, keep the catch and say why in the
+  allowlist.
+- **`Effect.tryPromise`, not `Effect.promise`, for anything that can reject.**
+  `Effect.promise` turns a rejection into a defect. A defect is not in `E`,
+  `catchAll` never sees it, and `makeAction` cannot map it to a status. Write
+  `Effect.tryPromise({ try, catch: (cause) => new FooError({ cause }) })`. For
+  a Drizzle call, the error is `UnknownDBServiceError`.
+
+Enforced by `scripts/check-effect-guards.ts`, which runs in `pnpm run check`,
+CI and the pre-commit hook. It parses each non-test file and holds the three
+patterns to a shrink-only allowlist, `scripts/effect-guards-allowlist.json`: a
+count per file and a one-line reason. A new hit fails. So does an entry whose
+count is higher than its file's, so a fix must also lower the list. Test code
+(`*.test.ts`, `test-utils/`, `*-test-setup.ts`, `*-test-harness.ts`) is out of
+scope.
+
 ## Control flow
 
 ### A switch over a union names every member
