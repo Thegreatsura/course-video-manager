@@ -26,7 +26,7 @@ export const createFakeVideoEditorLogger = (opts?: {
    *
    * Default: every write lands.
    */
-  throwOnWrite?: unknown;
+  throwOnWrite?: Error;
 }) => {
   const lines: RecordedLogLine[] = [];
 
