@@ -71,6 +71,12 @@ export interface DocumentPanelProps {
    * so toggling never reflows. Copy and lint live in the modal's bottom bar.
    */
   variant?: "full" | "modal";
+  /**
+   * True while the model is generating. The editor turns read-only and the
+   * paste button is disabled, because a manual edit mid-stream races the
+   * agent's writeDocument/editDocument tool calls.
+   */
+  readOnly?: boolean;
 }
 
 export const DocumentPanel = memo(function DocumentPanel({
@@ -96,10 +102,19 @@ export const DocumentPanel = memo(function DocumentPanel({
   onFixLintViolations,
   sessionTimer,
   variant = "full",
+  readOnly = false,
 }: DocumentPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const onDocumentChangeRef = useRef(onDocumentChange);
   onDocumentChangeRef.current = onDocumentChange;
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+
+  // Monaco's readOnly blocks typing, but a Ctrl/Cmd+S save or a late onChange
+  // would still write back the editor's (stale) value over the stream.
+  const handleEditorChange = useCallback((value: string) => {
+    if (!readOnlyRef.current) onDocumentChangeRef.current?.(value);
+  }, []);
 
   // Scroll position preservation between edit/preview
   const scrollFractionRef = useRef(0);
@@ -152,6 +167,7 @@ export const DocumentPanel = memo(function DocumentPanel({
   }, []);
 
   const handlePasteFromClipboard = useCallback(async () => {
+    if (readOnlyRef.current) return;
     try {
       const text = await navigator.clipboard.readText();
       if (text.trim()) {
@@ -184,17 +200,21 @@ export const DocumentPanel = memo(function DocumentPanel({
             </>
           )}
         </Button>
+        {isEditing && readOnly && <GeneratingBadge className="right-28" />}
         {isEditing ? (
-          <div className="h-full overflow-hidden">
+          <div
+            className={`h-full overflow-hidden transition-opacity ${readOnly ? "opacity-60" : ""}`}
+          >
             <MarkdownMonacoEditor
               value={document ?? ""}
-              onChange={(value) => onDocumentChange?.(value)}
-              onSave={(value) => onDocumentChangeRef.current?.(value)}
+              onChange={handleEditorChange}
+              onSave={handleEditorChange}
               editorRef={editorRef}
               onMount={handleEditorMount}
               options={{
                 padding: { top: 20, bottom: 20 },
                 scrollBeyondLastLine: false,
+                ...readOnlyOptions(readOnly),
               }}
               fallback={
                 <div className="p-5 text-sm text-muted-foreground">
@@ -240,6 +260,7 @@ export const DocumentPanel = memo(function DocumentPanel({
             variant="outline"
             size="sm"
             onClick={handlePasteFromClipboard}
+            disabled={readOnly}
           >
             <ClipboardPasteIcon className="h-4 w-4 mr-2" />
             Paste from Clipboard
@@ -422,6 +443,8 @@ export const DocumentPanel = memo(function DocumentPanel({
         {/* Session timer */}
         {sessionTimer}
 
+        {isEditing && readOnly && <GeneratingBadge />}
+
         {/* Edit / Preview toggle */}
         <Button variant="ghost" size="sm" onClick={handleToggleEditing}>
           {isEditing ? (
@@ -438,22 +461,27 @@ export const DocumentPanel = memo(function DocumentPanel({
         </Button>
       </div>
       {isEditing ? (
-        <MarkdownMonacoEditor
-          value={document}
-          onChange={(value) => onDocumentChange?.(value)}
-          onSave={(value) => onDocumentChangeRef.current?.(value)}
-          editorRef={editorRef}
-          onMount={handleEditorMount}
-          options={{
-            padding: { top: 16, bottom: 16 },
-            scrollBeyondLastLine: true,
-          }}
-          fallback={
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              Loading editor…
-            </div>
-          }
-        />
+        <div
+          className={`min-h-0 flex-1 transition-opacity ${readOnly ? "opacity-60" : ""}`}
+        >
+          <MarkdownMonacoEditor
+            value={document}
+            onChange={handleEditorChange}
+            onSave={handleEditorChange}
+            editorRef={editorRef}
+            onMount={handleEditorMount}
+            options={{
+              padding: { top: 16, bottom: 16 },
+              scrollBeyondLastLine: true,
+              ...readOnlyOptions(readOnly),
+            }}
+            fallback={
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                Loading editor…
+              </div>
+            }
+          />
+        </div>
       ) : (
         <div
           ref={previewRef}
@@ -474,3 +502,21 @@ export const DocumentPanel = memo(function DocumentPanel({
     </div>
   );
 });
+
+const readOnlyOptions = (
+  readOnly: boolean
+): Monaco.editor.IStandaloneEditorConstructionOptions => ({
+  readOnly,
+  readOnlyMessage: { value: "Read-only while the model is generating." },
+});
+
+function GeneratingBadge({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`flex items-center gap-1 text-xs text-muted-foreground ${className ? `absolute top-3 z-10 ${className}` : "mr-2"}`}
+    >
+      <Loader2Icon className="size-3 animate-spin" />
+      Generating… read-only
+    </span>
+  );
+}
