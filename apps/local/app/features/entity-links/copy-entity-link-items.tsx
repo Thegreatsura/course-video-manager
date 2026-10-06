@@ -1,5 +1,6 @@
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import type { ActionLeaf } from "@/features/action-menu/action-menu-model";
 import { Fingerprint, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,11 +19,38 @@ async function copy(text: string, what: string) {
 }
 
 /**
- * "Copy Link" and "Copy ID" for one entity — every entity's right-click menu
- * and Actions menu carries these two items (CODING_STANDARDS.md, "Every
- * entity menu can copy its link and ID"; enforced by entity-menus.test.ts). Renders the bare items; the caller
- * places them in a group of their own. `menu` picks the item component, since
- * a context menu and a dropdown each need their own.
+ * "Copy Link" and "Copy ID" for one entity, as action-menu leaves.
+ * `EntityMenuContent` closes every entity menu's copy group with these
+ * (CODING_STANDARDS.md, "Action menus").
+ */
+export function copyEntityLinkActions(entity: EntityRef): ActionLeaf[] {
+  const label = ENTITY_LABELS[entity.type];
+  return [
+    {
+      label: "Copy Link",
+      icon: Link2,
+      onSelect: () => {
+        void copy(
+          entityDeepLink(entity, window.location.origin),
+          `${label} link`
+        );
+      },
+    },
+    {
+      label: "Copy ID",
+      icon: Fingerprint,
+      onSelect: () => {
+        void copy(entity.id, `${label} ID`);
+      },
+    },
+  ];
+}
+
+/**
+ * The same two items for a menu not yet on `EntityMenuContent` — see
+ * docs/plans/action-menus.md. New menus use `EntityMenuContent`, which adds
+ * them itself. Renders the bare items; the caller places them in a group of
+ * their own. `menu` picks the item component.
  */
 export function CopyEntityLinkItems({
   entity,
@@ -32,29 +60,14 @@ export function CopyEntityLinkItems({
   menu: "context" | "dropdown";
 }) {
   const Item = menu === "context" ? ContextMenuItem : DropdownMenuItem;
-  const label = ENTITY_LABELS[entity.type];
-
   return (
     <>
-      <Item
-        onSelect={() => {
-          void copy(
-            entityDeepLink(entity, window.location.origin),
-            `${label} link`
-          );
-        }}
-      >
-        <Link2 className="w-4 h-4" />
-        Copy Link
-      </Item>
-      <Item
-        onSelect={() => {
-          void copy(entity.id, `${label} ID`);
-        }}
-      >
-        <Fingerprint className="w-4 h-4" />
-        Copy ID
-      </Item>
+      {copyEntityLinkActions(entity).map((action) => (
+        <Item key={action.label} onSelect={action.onSelect}>
+          <action.icon className="w-4 h-4" />
+          {action.label}
+        </Item>
+      ))}
     </>
   );
 }
