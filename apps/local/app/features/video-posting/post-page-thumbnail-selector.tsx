@@ -1,4 +1,5 @@
-"use client";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+("use client");
 
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -117,6 +118,11 @@ export function ThumbnailSelector({
                         Edit
                       </Link>
                     </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <CopyEntityLinkItems
+                      menu="context"
+                      entity={{ type: "thumbnail", id: thumbnail.id, videoId }}
+                    />
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       variant="destructive"

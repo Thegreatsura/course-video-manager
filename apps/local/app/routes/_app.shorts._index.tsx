@@ -1,3 +1,4 @@
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { DeleteVideoModal } from "@/components/delete-video-modal";
 import { RenameVideoModal } from "@/components/rename-video-modal";
 import {
@@ -269,6 +270,11 @@ export default function ShortsIndex(props: Route.ComponentProps) {
                         {option.label}
                       </ContextMenuItem>
                     ))}
+                    <ContextMenuSeparator />
+                    <CopyEntityLinkItems
+                      menu="context"
+                      entity={{ type: "video", id: video.id }}
+                    />
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       onSelect={() =>
