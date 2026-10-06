@@ -1,26 +1,11 @@
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  FilmIcon,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import type { Chapter } from "../clip-state-reducer";
 import { ChapterDivider } from "./chapter-divider";
 import { InsertionPointWithSession } from "./insertion-point-with-session";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import { timelineItemMenuGroups } from "./timeline-item-menu";
 import { getChapterPercentComplete } from "../video-editor-selectors";
 
 /**
@@ -52,19 +37,6 @@ export const ChapterItem = (props: {
   const dispatch = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.dispatch
-  );
-  const onSetInsertionPoint = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onSetInsertionPoint
-  );
-  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
-  const onMoveClip = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onMoveClip
-  );
-  const setIsCreateVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCreateVideoModalOpen
   );
   const items = useContextSelector(VideoEditorContext, (ctx) => ctx.items);
   const currentClipId = useContextSelector(
@@ -119,100 +91,89 @@ export const ChapterItem = (props: {
             }}
           />
         </ContextMenuTrigger>
-        <ContextMenuContent>
-          {props.chapter.type === "chapter-on-database" && (
-            <>
-              <CopyEntityLinkItems
-                menu="context"
-                entity={{
-                  type: "chapter",
-                  id: props.chapter.databaseId,
-                  videoId,
-                }}
-              />
-              <ContextMenuSeparator />
-            </>
-          )}
-          <ContextMenuItem
-            onSelect={() => {
-              onSetInsertionPoint("before", props.chapter.frontendId);
-            }}
-          >
-            <ChevronLeftIcon />
-            Insert Before
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              onSetInsertionPoint("after", props.chapter.frontendId);
-            }}
-          >
-            <ChevronRightIcon />
-            Insert After
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={props.onAddChapterBefore}>
-            <PlusIcon />
-            Add Chapter Before
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={props.onAddChapterAfter}>
-            <PlusIcon />
-            Add Chapter After
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={props.onEditChapter}>
-            <PencilIcon />
-            Edit
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={props.isFirstItem}
-            onSelect={() => {
-              onMoveClip(props.chapter.frontendId, "up");
-            }}
-          >
-            <ArrowUpIcon />
-            Move Up
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={props.isLastItem}
-            onSelect={() => {
-              onMoveClip(props.chapter.frontendId, "down");
-            }}
-          >
-            <ArrowDownIcon />
-            Move Down
-          </ContextMenuItem>
-          {selectedClipsSet.size > 0 && (
-            <>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                onSelect={() => {
-                  setIsCreateVideoModalOpen(true);
-                }}
-              >
-                <FilmIcon />
-                Create New Video from Selection
-              </ContextMenuItem>
-            </>
-          )}
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              dispatch({
-                type: "delete-clip",
-                clipId: props.chapter.frontendId,
-              });
-            }}
-          >
-            <Trash2Icon />
-            Delete
-          </ContextMenuItem>
-        </ContextMenuContent>
+        <ChapterMenuContent
+          chapter={props.chapter}
+          isFirstItem={props.isFirstItem}
+          isLastItem={props.isLastItem}
+          onEditChapter={props.onEditChapter}
+          onAddChapterBefore={props.onAddChapterBefore}
+          onAddChapterAfter={props.onAddChapterAfter}
+        />
       </ContextMenu>
       {insertionPoint.type === "after-chapter" &&
         insertionPoint.frontendChapterId === props.chapter.frontendId && (
           <InsertionPointWithSession />
         )}
     </div>
+  );
+};
+
+/**
+ * A Chapter's right-click menu. Mounted only while open, so the editor state
+ * it reads does not re-render every Chapter in the timeline.
+ */
+const ChapterMenuContent = (props: {
+  chapter: Chapter;
+  isFirstItem: boolean;
+  isLastItem: boolean;
+  onEditChapter: () => void;
+  onAddChapterBefore: () => void;
+  onAddChapterAfter: () => void;
+}) => {
+  const { chapter } = props;
+  const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
+  const dispatch = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.dispatch
+  );
+  const hasSelection = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.selectedClipsSet.size > 0
+  );
+  const onSetInsertionPoint = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onSetInsertionPoint
+  );
+  const onMoveClip = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onMoveClip
+  );
+  const setIsCreateVideoModalOpen = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.setIsCreateVideoModalOpen
+  );
+
+  return (
+    <EntityMenuContent
+      menu="context"
+      entity={
+        chapter.type === "chapter-on-database"
+          ? { type: "chapter", id: chapter.databaseId, videoId }
+          : null
+      }
+      groups={timelineItemMenuGroups({
+        onRename: props.onEditChapter,
+        onInsert: (position) =>
+          onSetInsertionPoint(position, chapter.frontendId),
+        onAddChapter: (position) =>
+          position === "before"
+            ? props.onAddChapterBefore()
+            : props.onAddChapterAfter(),
+        onCreateVideoFromSelection: hasSelection
+          ? () => setIsCreateVideoModalOpen(true)
+          : undefined,
+        move: {
+          onMove: (direction) => onMoveClip(chapter.frontendId, direction),
+          isFirstItem: props.isFirstItem,
+          isLastItem: props.isLastItem,
+        },
+        delete: {
+          confirms: false,
+          shortcut: "Del",
+          onSelect: () =>
+            dispatch({ type: "delete-clip", clipId: chapter.frontendId }),
+        },
+      })}
+    />
   );
 };
