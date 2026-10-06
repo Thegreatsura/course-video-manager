@@ -20,7 +20,7 @@ async function copy(text: string, what: string) {
 /**
  * "Copy Link" and "Copy ID" for one entity — every entity's right-click menu
  * and Actions menu carries these two items (CODING_STANDARDS.md, "Every
- * entity menu can copy its link and ID"). Renders the bare items; the caller
+ * entity menu can copy its link and ID"; enforced by entity-menus.test.ts). Renders the bare items; the caller
  * places them in a group of their own. `menu` picks the item component, since
  * a context menu and a dropdown each need their own.
  */

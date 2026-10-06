@@ -1,14 +1,17 @@
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -280,6 +283,11 @@ function PitchVideoItem({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <CopyEntityLinkItems
+          menu="context"
+          entity={{ type: "video", id: video.id }}
+        />
+        <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
           onSelect={() => {
@@ -391,6 +399,12 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
                 <Plus className="w-3.5 h-3.5" />
                 New video
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <CopyEntityLinkItems
+                menu="dropdown"
+                entity={{ type: "pitch", id: initialPitch.id }}
+              />
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => {

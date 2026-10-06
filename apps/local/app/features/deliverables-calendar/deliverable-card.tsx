@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { cn } from "@/lib/utils";
+import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -74,6 +75,11 @@ function CourseContextMenu({
         <CourseBadge course={course} />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56 max-h-[min(20rem,var(--radix-context-menu-content-available-height))]">
+        <CopyEntityLinkItems
+          menu="context"
+          entity={{ type: "course", id: course.id }}
+        />
+        <ContextMenuSeparator />
         <ContextMenuLabel>Change course</ContextMenuLabel>
         <ContextMenuSeparator />
         <ContextMenuRadioGroup
@@ -141,6 +147,11 @@ function PitchContextMenu({
         <PitchBadge pitch={pitch} />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-72 max-h-[min(20rem,var(--radix-context-menu-content-available-height))]">
+        <CopyEntityLinkItems
+          menu="context"
+          entity={{ type: "pitch", id: pitch.id }}
+        />
+        <ContextMenuSeparator />
         <ContextMenuLabel>Change pitch</ContextMenuLabel>
         <ContextMenuSeparator />
         <ContextMenuRadioGroup
@@ -410,6 +421,11 @@ export function DeliverableCard({
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
+        <ContextMenuSeparator />
+        <CopyEntityLinkItems
+          menu="context"
+          entity={{ type: "deliverable", id: d.id }}
+        />
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={duplicate}>
           <CopyIcon className="size-3.5 mr-2" />
