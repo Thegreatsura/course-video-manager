@@ -51,10 +51,15 @@ export function useEditorVideoMenuRef(): GroupsRef | null {
 
 /**
  * The Video actions both editors offer — the landscape editor and the
- * portrait Studio — wired to the editor's context. Each panel spreads these
- * into `videoMenuGroups` beside its own.
+ * portrait Studio — wired to the editor's context. `common` goes in the
+ * Actions menu. `rare` is what the landscape editor moves out of it, to its
+ * More tab, to keep the menu near a dozen items (CODING_STANDARDS.md, "Action
+ * menus", rule 9); the Studio's shorter menu keeps both.
  */
-export function useEditorVideoActions(): VideoMenuActions {
+export function useEditorVideoActions(): {
+  common: VideoMenuActions;
+  rare: VideoMenuActions;
+} {
   const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
   const videoTitle = useContextSelector(
     VideoEditorContext,
@@ -98,19 +103,10 @@ export function useEditorVideoActions(): VideoMenuActions {
       .catch(() => setExportFileExists(false));
   }, [videoId]);
 
-  return {
-    revealInFileSystem: exportFileExists
-      ? () =>
-          revealVideoFetcher.submit(
-            {},
-            { method: "post", action: `/api/videos/${videoId}/reveal` }
-          )
-      : undefined,
+  const common: VideoMenuActions = {
     rename: () => setIsRenameVideoModalOpen(true),
     duplicate: () => setIsCopyVideoModalOpen(true),
     export: () => startExportUpload(videoId, videoTitle),
-    renderVerticalShort: () => startRenderVerticalUpload(videoId, videoTitle),
-    retranscribeAllClips,
     copyTranscript: {
       onSelect: () =>
         void copyTranscriptToClipboard().then(() =>
@@ -121,6 +117,17 @@ export function useEditorVideoActions(): VideoMenuActions {
         ? undefined
         : "Waiting for transcription to complete",
     },
+  };
+  const rare: VideoMenuActions = {
+    revealInFileSystem: exportFileExists
+      ? () =>
+          revealVideoFetcher.submit(
+            {},
+            { method: "post", action: `/api/videos/${videoId}/reveal` }
+          )
+      : undefined,
+    renderVerticalShort: () => startRenderVerticalUpload(videoId, videoTitle),
+    retranscribeAllClips,
     copyYouTubeChapters:
       youtubeChapters.length > 0
         ? () =>
@@ -130,6 +137,7 @@ export function useEditorVideoActions(): VideoMenuActions {
         : undefined,
     copyLogPath: () => void copyLogPath(videoId),
   };
+  return { common, rare };
 }
 
 async function copyLogPath(videoId: string) {

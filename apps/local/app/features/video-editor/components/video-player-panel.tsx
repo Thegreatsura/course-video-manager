@@ -13,6 +13,7 @@ import { VideoPlayerStatusStrip } from "./video-player-status-strip";
 import { LessonBodyWriterModal } from "@/features/lesson-writer/lesson-body-writer-modal";
 import { AutofillDescriptionModal } from "@/features/lesson-writer/autofill-description-modal";
 import { VideoPlayerLinksTab } from "./video-player-links-tab";
+import { VideoMoreActions } from "./video-more-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
 import {
   getLastTranscribedClipId as getLastTranscribedClipIdSelector,
@@ -199,9 +200,9 @@ export const VideoPlayerPanel = () => {
   const editorVideoActions = useEditorVideoActions();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"suggestions" | "toc" | "links">(
-    "suggestions"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "suggestions" | "toc" | "links" | "more"
+  >("suggestions");
 
   // Suggestion state from context (shared with ClipTimeline)
   const setSuggestionState = useContextSelector(
@@ -289,13 +290,9 @@ export const VideoPlayerPanel = () => {
   const isReferenceOpen =
     referenceVideoId !== null &&
     referenceCandidates.some((c) => c.id === referenceVideoId);
-  const menuGroups = videoMenuGroups({
-    ...editorVideoActions,
-    openTeleprompter: () => teleprompterChannel.open(),
-    openDiagramPlayground: () => void handleOpenDiagramPlayground(),
-    reference: isReferenceOpen
-      ? { close: () => setReferenceVideoId(null) }
-      : { candidates: referenceCandidates, open: setReferenceVideoId },
+  // Rare actions live in the More tab, not the menu (rule 9).
+  const moreGroups = videoMenuGroups({
+    ...editorVideoActions.rare,
     openInVSCode: lessonId
       ? () =>
           openInVSCodeFetcher.submit(
@@ -303,6 +300,21 @@ export const VideoPlayerPanel = () => {
             { method: "post", action: `/api/videos/${videoId}/open-in-vscode` }
           )
       : undefined,
+    createConcatenatedVideo: () =>
+      navigate(`/videos/concatenate?initial=${videoId}`),
+    exportToDavinciResolve: () =>
+      exportToDavinciResolveFetcher.submit(null, {
+        method: "post",
+        action: `/videos/${videoId}/export-to-davinci-resolve`,
+      }),
+  });
+  const menuGroups = videoMenuGroups({
+    ...editorVideoActions.common,
+    openTeleprompter: () => teleprompterChannel.open(),
+    openDiagramPlayground: () => void handleOpenDiagramPlayground(),
+    reference: isReferenceOpen
+      ? { close: () => setReferenceVideoId(null) }
+      : { candidates: referenceCandidates, open: setReferenceVideoId },
     editLessonBody: lessonId
       ? () => setIsLessonBodyWriterOpen(true)
       : undefined,
@@ -317,13 +329,6 @@ export const VideoPlayerPanel = () => {
         : "Waiting for transcription to complete",
     },
     addVideoToLesson: lessonId ? () => setIsAddVideoModalOpen(true) : undefined,
-    createConcatenatedVideo: () =>
-      navigate(`/videos/concatenate?initial=${videoId}`),
-    exportToDavinciResolve: () =>
-      exportToDavinciResolveFetcher.submit(null, {
-        method: "post",
-        action: `/videos/${videoId}/export-to-davinci-resolve`,
-      }),
   });
   return (
     <>
@@ -441,41 +446,27 @@ export const VideoPlayerPanel = () => {
           {/* Tabbed panel for Suggestions and Table of Contents */}
           <div className="mt-6 border-t border-border pt-4">
             <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setActiveTab("suggestions")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                  activeTab === "suggestions"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Suggestions
-              </button>
-              {hasSections && (
+              {(
+                [
+                  ["suggestions", "Suggestions"],
+                  ...(hasSections ? [["toc", "Sections"] as const] : []),
+                  ["links", "Links"],
+                  ["more", "More"],
+                ] as const
+              ).map(([tab, label]) => (
                 <button
-                  onClick={() => setActiveTab("toc")}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
                   className={cn(
                     "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                    activeTab === "toc"
+                    activeTab === tab
                       ? "bg-muted text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Sections
+                  {label}
                 </button>
-              )}
-              <button
-                onClick={() => setActiveTab("links")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                  activeTab === "links"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Links
-              </button>
+              ))}
             </div>
 
             {activeTab === "suggestions" && (
@@ -507,6 +498,8 @@ export const VideoPlayerPanel = () => {
             )}
 
             {activeTab === "links" && <VideoPlayerLinksTab />}
+
+            {activeTab === "more" && <VideoMoreActions groups={moreGroups} />}
           </div>
         </div>
       </div>
