@@ -86,7 +86,7 @@ const extractFootageAudio = Effect.fn("extractFootageAudio")(function* (
     )
   );
   if (code !== 0) {
-    yield* new CouldNotExtractFootageAudioError({
+    return yield* new CouldNotExtractFootageAudioError({
       cause: null,
       message: `Failed to extract footage audio, exit code: ${code}`,
     });

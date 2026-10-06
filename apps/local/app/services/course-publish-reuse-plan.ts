@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { download, listFolder } from "./dropbox-http-client";
 
 /**
@@ -127,14 +127,12 @@ export const planBundleReuse = Effect.fn("planBundleReuse")(function* (input: {
   }).pipe(Effect.catchTag("DropboxApiError", () => Effect.succeed(null)));
   if (receipt === null) return EMPTY_REUSE_PLAN;
 
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(receipt.toString("utf-8"));
-  } catch {
-    return EMPTY_REUSE_PLAN;
-  }
+  const manifest = yield* Effect.try((): unknown =>
+    JSON.parse(receipt.toString("utf-8"))
+  ).pipe(Effect.option);
+  if (Option.isNone(manifest)) return EMPTY_REUSE_PLAN;
 
-  const manifestVideos = collectManifestVideos(manifest);
+  const manifestVideos = collectManifestVideos(manifest.value);
   if (manifestVideos.length === 0) return EMPTY_REUSE_PLAN;
 
   const bundleDir = bundleDirOf(manifestVideos[0]!.relativePath);

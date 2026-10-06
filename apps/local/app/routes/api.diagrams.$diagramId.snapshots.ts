@@ -29,16 +29,11 @@ export const action = makeAction({
         );
       }
 
-      let thumbnailPng: Buffer | undefined;
-      if (thumbnailBase64) {
-        try {
-          thumbnailPng = Buffer.from(thumbnailBase64, "base64");
-        } catch {
-          return yield* Effect.die(
-            data("Invalid thumbnail encoding", { status: 400 })
-          );
-        }
-      }
+      // `Buffer.from(_, "base64")` never throws: it skips characters outside
+      // the alphabet, so there is no invalid encoding to reject here.
+      const thumbnailPng = thumbnailBase64
+        ? Buffer.from(thumbnailBase64, "base64")
+        : undefined;
 
       const diagramOps = yield* DiagramOperationsService;
 

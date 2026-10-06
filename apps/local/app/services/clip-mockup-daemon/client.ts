@@ -65,13 +65,14 @@ const request = (
   });
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, text: string) =>
-  Effect.try({
-    try: () => Schema.decodeUnknownSync(schema)(JSON.parse(text)),
-    catch: () =>
-      new DaemonUnavailable({
-        message: `the daemon answered with something unreadable: ${text.slice(0, 200)}`,
-      }),
-  });
+  Schema.decodeUnknown(Schema.parseJson(schema))(text).pipe(
+    Effect.mapError(
+      () =>
+        new DaemonUnavailable({
+          message: `the daemon answered with something unreadable: ${text.slice(0, 200)}`,
+        })
+    )
+  );
 
 const ping = (paths: DaemonPaths) =>
   request(paths.socket, "GET", "/version").pipe(

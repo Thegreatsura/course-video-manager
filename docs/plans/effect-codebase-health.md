@@ -144,8 +144,22 @@ missing-star rule has 0 hits, and `Effect.orDie` appears once.
 
 **Phase 2 — clean up, then promote (about 6 small PRs).** Work through the
 "Fix, then error" rows, one rule per PR, and promote each rule as it reaches 0.
-The two promise rules ratchet per directory with `overrides`, for example once
-`app/services/**` is clean.
+
+> **Status (2026-10-06): effect-tsgo rules in progress.** All hits were in
+> `apps/local`; core and remote had none.
+>
+> - **Shipped:** `missingReturnYieldStar` (7), `catchUnfailableEffect` (3),
+>   `tryCatchInEffectGen` (3) and `schemaSyncInEffect` (1) are fixed and are
+>   errors in all three `tsconfig.json`s, backed by the new "Failures are
+>   handled in Effect, not around it" standard. One `catchUnfailableEffect`
+>   hit was a real bug: the export's best-effort stage-failure log used
+>   `catchAll`, which never sees the defect a sync `appendFileSync` throws, so
+>   a full disk would have replaced the export's own error. It is now
+>   `catchAllDefect`, with a test.
+> - **Next:** `globalErrorInEffectFailure` / `globalErrorInEffectCatch`, in
+>   its own PR.
+>   The two promise rules ratchet per directory with `overrides`, for example once
+>   `app/services/**` is clean.
 
 > **Status — type-aware oxlint rules (2026-10-06):**
 >

@@ -315,6 +315,24 @@ describe("Definition Cards in a course export", () => {
       ]);
     });
 
+    it("still fails with the export's own error when the log cannot be written", async () => {
+      const { video, run } = await setup({
+        failCardRenderWith: cardRenderFailure,
+        throwOnLogWrite: new Error("ENOSPC: no space left on device"),
+      });
+
+      await addOverlay(video.id, 0, {
+        at: 2,
+        durationInSeconds: 4,
+        title: "Monomorphism",
+        description: "Never collapses two inputs into one output.",
+      });
+
+      const failure = run(exportVideo(video.id));
+      await expect(failure).rejects.toThrow(/Failed to composite Overlays/);
+      await expect(failure).rejects.not.toThrow(/ENOSPC/);
+    });
+
     it("stays quiet when every stage succeeds", async () => {
       const { video, run, videoLog } = await setup();
 

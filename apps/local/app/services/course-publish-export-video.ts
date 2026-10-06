@@ -65,7 +65,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
     /** Deleting a file we are replacing is never a reason to fail. */
     const removeQuietly = (filePath: string) =>
-      effectFs.remove(filePath).pipe(Effect.catchAll(() => Effect.void));
+      effectFs.remove(filePath).pipe(Effect.catchAllDefect(() => Effect.void));
 
     /**
      * Write why a stage failed into the Video's own log, beside the
@@ -85,7 +85,9 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
             message: cause instanceof Error ? cause.message : String(cause),
             cause: formatFailureCause(cause),
           })
-          .pipe(Effect.catchAll(() => Effect.void));
+          // The real logger writes with `appendFileSync`, so a full disk is a
+          // defect, not a failure: swallow defects, as `makeFfmpegLogger` does.
+          .pipe(Effect.catchAllDefect(() => Effect.void));
 
     const video = yield* videoOps.getVideoWithClipsById(videoId);
     const courseId = video.lesson?.section.repoVersion.repo.id;

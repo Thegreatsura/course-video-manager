@@ -44,6 +44,29 @@ errors in each package's `tsconfig.json`, run by `pnpm run lint:effect`). A
 false positive gets `// @effect-diagnostics-next-line <rule>:off` and a reason.
 See `docs/plans/effect-codebase-health.md`.
 
+### Failures are handled in Effect, not around it
+
+Inside `Effect.gen`, a failure is a value in `E`, not a thrown exception. Code
+that throws, or that catches by hand, hides the failure from the type that is
+meant to name it.
+
+- **`return yield*` a failure.** `return yield* new FooError(...)` tells the
+  reader, and the type checker, that the generator ends there. A bare
+  `yield* new FooError(...)` reads as if the code below it could still run.
+- **No `try/catch` inside a generator.** Wrap the throwing call in
+  `Effect.try` (or `Effect.tryPromise`) so its failure lands in `E`; if the call
+  cannot throw, delete the `try`.
+- **No `*Sync` Schema decode inside an Effect.** `Schema.decodeUnknownSync`
+  throws; `Schema.decodeUnknown` fails with a typed `ParseError`.
+- **Never `catch*` an Effect that cannot fail.** The handler is dead code, and
+  it reads like protection it does not give: `catchAll` never sees a defect —
+  a sync throw inside `Effect.sync`, say. If you mean to swallow defects, say
+  so with `catchAllDefect`.
+
+Enforced by `@effect/tsgo` (`missingReturnYieldStar`, `tryCatchInEffectGen`,
+`schemaSyncInEffect`, `catchUnfailableEffect`), errors in each package's
+`tsconfig.json`.
+
 ## Control flow
 
 ### A switch over a union names every member

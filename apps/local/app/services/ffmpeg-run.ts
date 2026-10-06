@@ -212,7 +212,7 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
           Effect.mapError((e) => toError(e, `: ${e.message}`, stderrTail))
         );
         if (code !== 0) {
-          yield* toError(null, `, exit code: ${code}`, stderrTail);
+          return yield* toError(null, `, exit code: ${code}`, stderrTail);
         }
       })
     );

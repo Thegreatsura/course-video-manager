@@ -49,9 +49,7 @@ export const action = makeAction({
         normalizePayload(payload)
       );
 
-      try {
-        new URL(parsed.url);
-      } catch {
+      if (!URL.canParse(parsed.url)) {
         return yield* Effect.die(data("Invalid URL format", { status: 400 }));
       }
 
