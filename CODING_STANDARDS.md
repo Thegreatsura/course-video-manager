@@ -388,7 +388,7 @@ inside the boundary goes in real: never mock your own classes, modules or
 internal collaborators. When something is hard to test without mocking an
 internal, redesign the interface.
 
-Writing, changing or reviewing a test — for the worked good and bad examples,
-the red-flag list, the rule for Remotion renderer packages, and the
-vertical-slice TDD loop, read
+Every test must be able to fail for a plausible real bug a user or caller
+would see; if you can't name the bug, don't write it. For what earns a place,
+worked examples, red flags, Remotion and TDD, read
 [`TESTING_STANDARDS.md`](./docs/TESTING_STANDARDS.md).

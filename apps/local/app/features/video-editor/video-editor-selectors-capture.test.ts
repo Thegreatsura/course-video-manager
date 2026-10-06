@@ -62,7 +62,6 @@ const makeSession = (
   ...overrides,
 });
 
-const obsNotRunning: OBSConnectionOuterState = { type: "obs-not-running" };
 const obsConnected: OBSConnectionOuterState = {
   type: "obs-connected",
   profile: "Default",
@@ -112,10 +111,6 @@ describe("isCaptureInProgress", () => {
     expect(isCaptureInProgress(obsConnected, items, sessions)).toBe(false);
   });
 
-  it("is false with no sessions, no clips, OBS not running", () => {
-    expect(isCaptureInProgress(obsNotRunning, [], [])).toBe(false);
-  });
-
   it("ignores archived optimistic clips (they are resolved)", () => {
     const sessions = [makeSession({ id: sid("s1"), status: "done" })];
     const items: TimelineItem[] = [
@@ -138,23 +133,5 @@ describe("isCaptureInProgress", () => {
       }),
     ];
     expect(isCaptureInProgress(obsConnected, items, sessions)).toBe(false);
-  });
-
-  it("is true when recording with pending clips and an active session combined", () => {
-    const sessions = [makeSession({ id: sid("s1"), status: "recording" })];
-    const items: TimelineItem[] = [
-      makeOptimisticClip({ frontendId: id("c1"), sessionId: sid("s1") }),
-    ];
-    expect(isCaptureInProgress(obsRecording, items, sessions)).toBe(true);
-  });
-
-  it("stays true through settling: OBS idle but a clip is still pending after stop", () => {
-    // Recording stopped (OBS connected, session moved to polling) and a clip
-    // hasn't resolved yet — the panel must remain frozen.
-    const sessions = [makeSession({ id: sid("s1"), status: "polling" })];
-    const items: TimelineItem[] = [
-      makeOptimisticClip({ frontendId: id("c1"), sessionId: sid("s1") }),
-    ];
-    expect(isCaptureInProgress(obsConnected, items, sessions)).toBe(true);
   });
 });

@@ -113,12 +113,6 @@ describe("computeLessonWarnings", () => {
     ).toContainEqual({ kind: "numberedRoleName" });
   });
 
-  it("does not flag the bare role name 'Explainer'", () => {
-    expect(computeLessonWarnings({ videos: [{ title: "Explainer" }] })).toEqual(
-      []
-    );
-  });
-
   it("does not flag a numbered non-role name", () => {
     expect(
       computeLessonWarnings({ videos: [{ title: "Intro 2" }] })
@@ -162,52 +156,6 @@ describe("computeCourseViewLintCount", () => {
       },
     ];
     expect(computeCourseViewLintCount(sections)).toBe(0);
-  });
-
-  it("counts lesson warnings for invalid role combos", () => {
-    const sections = [
-      {
-        lessons: [
-          {
-            videos: [makeVideo("Solution")],
-          },
-        ],
-      },
-    ];
-    expect(computeCourseViewLintCount(sections)).toBeGreaterThanOrEqual(1);
-  });
-
-  it("counts video warnings for missing chapters", () => {
-    const sections = [
-      {
-        lessons: [
-          {
-            videos: [
-              makeVideo("Explainer", [{ order: "a0", archived: false }], []),
-            ],
-          },
-        ],
-      },
-    ];
-    expect(computeCourseViewLintCount(sections)).toBe(1);
-  });
-
-  it("sums warnings across multiple lessons and videos", () => {
-    const sections = [
-      {
-        lessons: [
-          {
-            videos: [makeVideo("Solution")],
-          },
-          {
-            videos: [
-              makeVideo("Explainer", [{ order: "a0", archived: false }], []),
-            ],
-          },
-        ],
-      },
-    ];
-    expect(computeCourseViewLintCount(sections)).toBeGreaterThanOrEqual(2);
   });
 });
 

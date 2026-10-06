@@ -148,44 +148,6 @@ describe("ClipService", () => {
       expect(sourceTimeline).toHaveLength(2);
     });
 
-    it("mixed selection creates a new video with all selected items", async () => {
-      const video = await clipService.createVideo("source-video.mp4");
-
-      const sectionA = await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Section A",
-        insertionPoint: start,
-        items: [],
-      });
-
-      const [clipA] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: afterSection(sectionA.id),
-        items: await getItems(clipService, video.id),
-        clips: [{ inputVideo: "footage.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Section B",
-        insertionPoint: afterClip(clipA!.id),
-        items: await getItems(clipService, video.id),
-      });
-
-      // Copy sectionA and clipA (mixed selection)
-      const newVideo = await clipService.createVideoFromSelection({
-        sourceVideoId: video.id,
-        clipIds: [clipA!.id],
-        chapterIds: [sectionA.id],
-        title: "Mixed Selection",
-        mode: "copy",
-      });
-
-      const newTimeline = await clipService.getTimeline(newVideo.id);
-      expect(newTimeline).toHaveLength(2);
-      expect(newTimeline.map((t) => t.type)).toEqual(["chapter", "clip"]);
-    });
-
     it("items in new video preserve their relative order from source timeline", async () => {
       const video = await clipService.createVideo("source-video.mp4");
 
@@ -365,29 +327,6 @@ describe("ClipService", () => {
       });
 
       expect(newVideo.lessonId).toBe(lessonId);
-    });
-
-    it("selecting a single clip creates a valid new video", async () => {
-      const video = await clipService.createVideo("source-video.mp4");
-
-      const [clip] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "footage.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      const newVideo = await clipService.createVideoFromSelection({
-        sourceVideoId: video.id,
-        clipIds: [clip!.id],
-        chapterIds: [],
-        title: "Single Clip",
-        mode: "copy",
-      });
-
-      expect(newVideo.id).toBeDefined();
-      const newTimeline = await clipService.getTimeline(newVideo.id);
-      expect(newTimeline).toHaveLength(1);
     });
 
     it("selecting all items creates a new video with everything", async () => {

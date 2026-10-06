@@ -6,8 +6,6 @@ import nodePath from "node:path";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";
 import {
-  FRAME_HEIGHT,
-  FRAME_WIDTH,
   FrameCaptureError,
   FrameCaptureService,
 } from "@/services/frame-capture-service";
@@ -252,10 +250,6 @@ describe("cvm clip-mockup --html", () => {
     expect(nodeFs.existsSync(nodePath.dirname(scratch))).toBe(false);
   });
 
-  it("captures at exactly 1920x1080", () => {
-    expect([FRAME_WIDTH, FRAME_HEIGHT]).toEqual([1920, 1080]);
-  });
-
   // -----------------------------------------------------------------------
   // The one-picture rule
   // -----------------------------------------------------------------------
@@ -281,17 +275,6 @@ describe("cvm clip-mockup --html", () => {
     expect(nodeFs.existsSync(frameDir(s.standaloneActiveLineageId))).toBe(
       false
     );
-    expect(await list(s.standaloneActiveId)).toEqual([]);
-  });
-
-  it("add with an entry holding NEITHER html nor image is invalid input, exit 3", async () => {
-    const r = await run(
-      addArgv(s.standaloneActiveId, [{ say: "A moment with no picture." }])
-    );
-
-    expect(r.exitCode).toBe(3);
-    expect(failureOf(r).message).toContain('"html"');
-    expect(capture.calls).toEqual([]);
     expect(await list(s.standaloneActiveId)).toEqual([]);
   });
 

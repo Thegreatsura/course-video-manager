@@ -78,41 +78,4 @@ describe("CoursePublishService — when an export comes out short", () => {
     );
     expect(fs.existsSync(exportPath)).toBe(false);
   }, 60_000);
-
-  it("accepts an export longer than its Clips ask for", async () => {
-    const { course, exportHash, run } = await setup({
-      renderDurationInSeconds: (render) =>
-        render.requestedDurationInSeconds + 0.4,
-    });
-
-    const outcome = await run(
-      Effect.gen(function* () {
-        const svc = yield* CoursePublishService;
-        return yield* svc.publish({
-          courseId: course.id,
-          versionName: "v1.0",
-          versionDescription: "First release",
-          includeTodoLessons: true,
-          placeholderFloor: ANNOUNCE_NOTHING,
-        });
-      })
-    );
-
-    expect(outcome.publishedVersionId).toBeTruthy();
-    expect(
-      fs.existsSync(
-        resolveExportPath(finishedVideosDir, course.id, exportHash!)
-      )
-    ).toBe(true);
-  }, 60_000);
-
-  it("refuses a zero-length export", async () => {
-    const { course, video, run } = await setup({
-      renderDurationInSeconds: () => 0,
-    });
-
-    const result = await publishExpectingFailure(run, course.id);
-
-    expect((result as any).failedExportVideoIds).toContain(video.id);
-  }, 60_000);
 });

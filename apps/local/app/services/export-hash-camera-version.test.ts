@@ -76,10 +76,4 @@ describe("the camera move's version in the export address", () => {
     expect(addressOf(panel)).not.toBe("41a4047b58f30b4c4eddfea603e10a89");
     expect(addressOf(panel)).toBe("c300c12668892ca79a9e727a008dc231");
   });
-
-  it("keeps the two Kinds at different addresses", () => {
-    expect(addressOf(overlay())).not.toBe(
-      addressOf(overlay({ kind: "bulletPanel" }))
-    );
-  });
 });

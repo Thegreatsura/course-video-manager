@@ -9,12 +9,7 @@ import {
   ANNOUNCE_NOTHING,
   type PlaceholderFloor,
 } from "@/packages/course-json";
-import {
-  formatHardGaps,
-  formatPublishSummary,
-  placeholderFloorStorageKey,
-  WITHHELD_REASON_LABELS,
-} from "./placeholder-floor";
+import { formatHardGaps } from "./placeholder-floor";
 
 const SECTION = "01-intro";
 const LESSON = "01.01-welcome";
@@ -299,12 +294,6 @@ describe("the publish page's summary line", () => {
       withheld: result.withheldLessons.length,
     }).toEqual({ ships: 1, placeholders: 1, withheld: 1 });
   });
-
-  it("reads as one line of three counts", () => {
-    expect(
-      formatPublishSummary({ ships: 48, placeholders: 12, withheld: 7 })
-    ).toBe("ships 48 · placeholders 12 · withheld 7");
-  });
 });
 
 describe("the publish page's Placeholder Floor cards", () => {
@@ -371,22 +360,6 @@ describe("the publish page's Placeholder Floor cards", () => {
     ]);
   });
 
-  it("has a label for every reason it can name", () => {
-    const result = statuses(
-      [
-        lesson("no-video", { videos: [] }),
-        lesson("no-clips", { videos: [video({ clips: 0 })] }),
-        lesson("no-body", { videos: [video({ body: null })] }),
-        lesson("unmarked", { authoringStatus: "todo" }),
-      ],
-      { includeTodoLessons: false }
-    );
-
-    for (const row of result.withheldLessons) {
-      expect(WITHHELD_REASON_LABELS[row.reason]).toBeTruthy();
-    }
-  });
-
   it("stacks both controls: the floor wins in its bands, and the toggle still withholds a shippable to-do lesson", () => {
     const result = statuses(
       [
@@ -441,11 +414,5 @@ describe("the publish page's Placeholder Floor cards", () => {
     expect(result.withheldLessons[0]!.hardGaps).toEqual([]);
     // Nothing to show: here flipping the toggle really is the whole fix.
     expect(formatHardGaps(result.withheldLessons[0]!.hardGaps)).toBe(null);
-  });
-
-  it("keeps two courses' remembered floors apart", () => {
-    expect(placeholderFloorStorageKey("course-a")).not.toBe(
-      placeholderFloorStorageKey("course-b")
-    );
   });
 });

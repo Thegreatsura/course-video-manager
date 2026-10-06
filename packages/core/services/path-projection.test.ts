@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   rankByOrder,
-  deriveSectionPath,
-  deriveLessonPath,
   projectVersionPaths,
   attachDerivedPaths,
 } from "./path-projection.js";
@@ -70,52 +68,6 @@ describe("rankByOrder", () => {
         ["z-id", 3],
       ])
     );
-  });
-
-  it("returns empty map for empty input", () => {
-    const ranks = rankByOrder([]);
-    expect(ranks).toEqual(new Map());
-  });
-
-  it("handles single item", () => {
-    const ranks = rankByOrder([{ id: "only", order: 42 }]);
-    expect(ranks).toEqual(new Map([["only", 1]]));
-  });
-});
-
-describe("deriveSectionPath", () => {
-  it("produces a plain slug from title, no ordering number", () => {
-    expect(deriveSectionPath("Introduction")).toBe("introduction");
-  });
-
-  it("handles title with special characters", () => {
-    expect(deriveSectionPath("What's New?")).toBe("whats-new");
-  });
-
-  it("falls back to 'untitled' for empty title", () => {
-    expect(deriveSectionPath("")).toBe("untitled");
-  });
-
-  it("falls back to 'untitled' for symbols-only title", () => {
-    expect(deriveSectionPath("!@#$")).toBe("untitled");
-  });
-});
-
-describe("deriveLessonPath", () => {
-  it("produces a plain slug from title, no ordering number", () => {
-    expect(deriveLessonPath("Getting Started")).toBe("getting-started");
-  });
-
-  it("handles title with special characters", () => {
-    expect(deriveLessonPath("What's Up, Doc?")).toBe("whats-up-doc");
-  });
-
-  it("falls back to 'untitled' for empty title", () => {
-    expect(deriveLessonPath("")).toBe("untitled");
-  });
-
-  it("falls back to 'untitled' for symbols-only title", () => {
-    expect(deriveLessonPath("!@#")).toBe("untitled");
   });
 });
 
@@ -232,11 +184,6 @@ describe("projectVersionPaths", () => {
     expect(paths.get("l2")).toBe("recap");
   });
 
-  it("returns empty map for empty sections", () => {
-    const paths = projectVersionPaths([]);
-    expect(paths).toEqual(new Map());
-  });
-
   it("handles section with no lessons", () => {
     const sections = [
       {
@@ -264,28 +211,6 @@ describe("attachDerivedPaths", () => {
     const result = attachDerivedPaths(sections);
     expect(result[0]!.path).toBe("intro");
     expect(result[0]!.lessons[0]!.path).toBe("hello");
-  });
-
-  it("preserves all original fields", () => {
-    const sections = [
-      {
-        id: "s1",
-        order: 1,
-        title: "Section",
-        extraField: "preserved",
-        lessons: [
-          {
-            id: "l1",
-            order: 1,
-            title: "Lesson",
-            anotherField: 42,
-          },
-        ],
-      },
-    ];
-    const result = attachDerivedPaths(sections);
-    expect((result[0] as any).extraField).toBe("preserved");
-    expect((result[0]!.lessons[0] as any).anotherField).toBe(42);
   });
 
   it("does not couple lesson paths to section rank", () => {

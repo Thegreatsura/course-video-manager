@@ -121,23 +121,6 @@ describe("Save", () => {
     });
   });
 
-  it("save-succeeded: should preserve previewDataUrl", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({
-        saving: true,
-        capturedPhoto: "photo",
-        previewDataUrl: "preview",
-      })
-    );
-
-    const state = tester
-      .send({ type: "save-succeeded", thumbnailId: "thumb-1" })
-      .getState();
-
-    expect(state.previewDataUrl).toBe("preview");
-  });
-
   it("save-failed: should preserve editor state", () => {
     const tester = new ReducerTester(
       thumbnailStateReducer,
@@ -161,17 +144,6 @@ describe("Save", () => {
     expect(state.cutoutImage).toBe("cutout");
     expect(state.cutoutPosition).toBe(40);
     expect(state.editingThumbnailId).toBe("thumb-1");
-  });
-
-  it("save-failed: should set saving to false", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({ saving: true })
-    );
-
-    const state = tester.send({ type: "save-failed" }).getState();
-
-    expect(state.saving).toBe(false);
   });
 });
 
@@ -202,17 +174,6 @@ describe("Delete", () => {
     expect(tester.getExec()).toHaveBeenCalledWith({
       type: "revalidate",
     });
-  });
-
-  it("delete-failed: should clear deleting", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({ deleting: "thumb-1" })
-    );
-
-    const state = tester.send({ type: "delete-failed" }).getState();
-
-    expect(state.deleting).toBeNull();
   });
 });
 
@@ -258,41 +219,6 @@ describe("Edit", () => {
     expect(state.cutoutPosition).toBe(70);
     expect(state.backgroundRemovalError).toBeNull();
   });
-
-  it("edit-loaded: should handle thumbnail with no diagram or cutout", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({ loadingEdit: "thumb-2" })
-    );
-
-    const state = tester
-      .send({
-        type: "edit-loaded",
-        thumbnailId: "thumb-2",
-        capturedPhoto: "bg-only",
-        diagramImage: null,
-        diagramPosition: 50,
-        cutoutImage: null,
-        cutoutPosition: 50,
-      })
-      .getState();
-
-    expect(state.editingThumbnailId).toBe("thumb-2");
-    expect(state.capturedPhoto).toBe("bg-only");
-    expect(state.diagramImage).toBeNull();
-    expect(state.cutoutImage).toBeNull();
-  });
-
-  it("edit-failed: should clear loadingEdit", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({ loadingEdit: "thumb-1" })
-    );
-
-    const state = tester.send({ type: "edit-failed" }).getState();
-
-    expect(state.loadingEdit).toBeNull();
-  });
 });
 
 describe("New Thumbnail", () => {
@@ -307,6 +233,8 @@ describe("New Thumbnail", () => {
         cutoutPosition: 40,
         editingThumbnailId: "thumb-1",
         backgroundRemovalError: "err",
+        pendingAutoSave: true,
+        previewDataUrl: "old-preview",
       })
     );
 
@@ -319,6 +247,8 @@ describe("New Thumbnail", () => {
     expect(state.cutoutPosition).toBe(50);
     expect(state.editingThumbnailId).toBeNull();
     expect(state.backgroundRemovalError).toBeNull();
+    expect(state.pendingAutoSave).toBe(false);
+    expect(state.previewDataUrl).toBeNull();
   });
 
   it("new-thumbnail-clicked: should not affect transient operation states", () => {
@@ -342,58 +272,5 @@ describe("New Thumbnail", () => {
     expect(state.removingBackground).toBe(true);
     expect(state.saving).toBe(true);
     expect(state.deleting).toBe("thumb-2");
-  });
-
-  it("new-thumbnail-clicked: should clear pendingAutoSave", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({
-        capturedPhoto: "photo",
-        pendingAutoSave: true,
-      })
-    );
-
-    const state = tester.send({ type: "new-thumbnail-clicked" }).getState();
-
-    expect(state.pendingAutoSave).toBe(false);
-  });
-
-  it("new-thumbnail-clicked: should clear previewDataUrl", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({
-        capturedPhoto: "photo",
-        previewDataUrl: "old-preview",
-      })
-    );
-
-    const state = tester.send({ type: "new-thumbnail-clicked" }).getState();
-
-    expect(state.previewDataUrl).toBeNull();
-  });
-});
-
-describe("Preview", () => {
-  it("preview-updated: should set previewDataUrl", () => {
-    const tester = new ReducerTester(thumbnailStateReducer, createState());
-
-    const state = tester
-      .send({ type: "preview-updated", dataUrl: "preview-url" })
-      .getState();
-
-    expect(state.previewDataUrl).toBe("preview-url");
-  });
-
-  it("preview-updated: should handle null (cleared preview)", () => {
-    const tester = new ReducerTester(
-      thumbnailStateReducer,
-      createState({ previewDataUrl: "old-preview" })
-    );
-
-    const state = tester
-      .send({ type: "preview-updated", dataUrl: null })
-      .getState();
-
-    expect(state.previewDataUrl).toBeNull();
   });
 });

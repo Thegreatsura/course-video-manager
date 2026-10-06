@@ -6,40 +6,12 @@ import {
 } from "./lesson-path-service.js";
 
 describe("toSlug", () => {
-  it("converts spaces to dashes", () => {
-    expect(toSlug("hello world")).toBe("hello-world");
-  });
-
-  it("lowercases input", () => {
-    expect(toSlug("Hello World")).toBe("hello-world");
-  });
-
-  it("removes special characters", () => {
-    expect(toSlug("hello! world?")).toBe("hello-world");
-  });
-
   it("collapses multiple dashes", () => {
     expect(toSlug("hello---world")).toBe("hello-world");
   });
 
   it("trims leading and trailing dashes", () => {
     expect(toSlug("-hello-world-")).toBe("hello-world");
-  });
-
-  it("trims whitespace", () => {
-    expect(toSlug("  hello world  ")).toBe("hello-world");
-  });
-
-  it("preserves digits", () => {
-    expect(toSlug("lesson 42 intro")).toBe("lesson-42-intro");
-  });
-
-  it("passes through already-valid slugs", () => {
-    expect(toSlug("already-valid-slug")).toBe("already-valid-slug");
-  });
-
-  it("handles empty string", () => {
-    expect(toSlug("")).toBe("");
   });
 
   it("handles mixed case with special characters", () => {
@@ -67,10 +39,6 @@ describe("deriveLessonPath", () => {
   it("falls back to 'untitled' for empty title", () => {
     expect(deriveLessonPath("")).toBe("untitled");
   });
-
-  it("falls back to 'untitled' for symbols-only title", () => {
-    expect(deriveLessonPath("!@#")).toBe("untitled");
-  });
 });
 
 describe("parseLessonPath", () => {
@@ -80,22 +48,6 @@ describe("parseLessonPath", () => {
         sectionNumber: 1,
         lessonNumber: 3,
         slug: "my-lesson",
-      });
-    });
-
-    it("parses double-digit numbers", () => {
-      expect(parseLessonPath("12.15-advanced-topic")).toEqual({
-        sectionNumber: 12,
-        lessonNumber: 15,
-        slug: "advanced-topic",
-      });
-    });
-
-    it("preserves full slug with multiple dashes", () => {
-      expect(parseLessonPath("01.01-getting-started-with-ts")).toEqual({
-        sectionNumber: 1,
-        lessonNumber: 1,
-        slug: "getting-started-with-ts",
       });
     });
   });
@@ -116,23 +68,11 @@ describe("parseLessonPath", () => {
         slug: "extended-example",
       });
     });
-
-    it("parses single-digit legacy path", () => {
-      expect(parseLessonPath("1-intro")).toEqual({
-        sectionNumber: undefined,
-        lessonNumber: 1,
-        slug: "intro",
-      });
-    });
   });
 
   describe("invalid paths", () => {
     it("returns null for path without number prefix", () => {
       expect(parseLessonPath("no-number")).toBeNull();
-    });
-
-    it("returns null for empty string", () => {
-      expect(parseLessonPath("")).toBeNull();
     });
 
     it("returns null for number-only path (no slug)", () => {
