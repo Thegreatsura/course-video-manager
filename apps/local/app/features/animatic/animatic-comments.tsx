@@ -1,36 +1,20 @@
-import {
-  MessageSquare,
-  MessageSquarePlus,
-  MoreHorizontal,
-  PencilIcon,
-  Trash2,
-} from "lucide-react";
+import { MessageSquare, MessageSquarePlus, MoreHorizontal } from "lucide-react";
 import {
   createContext,
   useContext,
   useMemo,
   useRef,
   useState,
-  type ComponentType,
   type ReactNode,
 } from "react";
 import { useFetcher, useParams } from "react-router";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -119,7 +103,8 @@ export function AnimaticCommentContextMenu(props: {
   readonly children: ReactNode;
 }) {
   const comments = useCommentsOn(props.target);
-  const { videoId } = useParams();
+  const videoId = useVideoIdParam();
+  const count = comments.length;
   return (
     <ContextMenu onOpenChange={props.onOpenChange}>
       <ContextMenuTrigger asChild disabled={props.disabled}>
@@ -127,33 +112,39 @@ export function AnimaticCommentContextMenu(props: {
       </ContextMenuTrigger>
       {/* Focus stays where the item sends it: handed back to the trigger, it
           lands outside the thread as the thread opens, and closes it again. */}
-      <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
-        {videoId && (
-          <>
-            <CopyEntityLinkItems
-              menu="context"
-              entity={{
-                type: props.target.type,
-                id: props.target.id,
-                videoId,
-              }}
-            />
-            <ContextMenuSeparator />
-          </>
-        )}
-        <ContextMenuItem onSelect={props.onComment}>
-          {comments.length > 0 ? (
-            <MessageSquare className="size-4" />
-          ) : (
-            <MessageSquarePlus className="size-4" />
-          )}
-          {comments.length > 0
-            ? `Comments (${comments.length})`
-            : "Add a comment"}
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <EntityMenuContent
+        menu="context"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        entity={{ type: props.target.type, id: props.target.id, videoId }}
+        groups={{
+          open: [
+            count > 0 && {
+              label: `View Comments (${count})`,
+              icon: MessageSquare,
+              onSelect: props.onComment,
+            },
+          ],
+          create: [
+            count === 0 && {
+              label: "Add Comment",
+              icon: MessageSquarePlus,
+              opensDialog: true,
+              onSelect: props.onComment,
+            },
+          ],
+        }}
+      />
     </ContextMenu>
   );
+}
+
+/** Every Animatic surface renders under `/videos/:videoId/animatic`. */
+function useVideoIdParam(): string {
+  const { videoId } = useParams();
+  if (!videoId) {
+    throw new Error("Animatic comments render only under /videos/:videoId");
+  }
+  return videoId;
 }
 
 /**
@@ -358,13 +349,6 @@ export function AnimaticCommentThread(props: {
   );
 }
 
-interface CommentAction {
-  readonly label: string;
-  readonly icon: ComponentType<{ className?: string }>;
-  readonly onSelect: () => void;
-  readonly destructive?: true;
-}
-
 /**
  * One comment, with the SAME ACTIONS on right-click and behind its `…`
  * button: edit first, delete last and on its own.
@@ -373,14 +357,12 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(props.comment.body);
   const writer = useCommentWriter();
-  const { videoId } = useParams();
-  const copyItems = (menu: "context" | "dropdown") =>
-    videoId && (
-      <CopyEntityLinkItems
-        menu={menu}
-        entity={{ type: "clip-mockup-comment", id: props.comment.id, videoId }}
-      />
-    );
+  const videoId = useVideoIdParam();
+  const entity = {
+    type: "clip-mockup-comment",
+    id: props.comment.id,
+    videoId,
+  } as const;
 
   const save = () => {
     const body = draft.trim();
@@ -391,11 +373,10 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
     setEditing(false);
   };
 
-  const groups: readonly (readonly CommentAction[])[] = [
-    [
+  const groups: ActionMenuGroups = {
+    edit: [
       {
-        label: "Edit",
-        icon: PencilIcon,
+        ...STANDARD_ACTIONS.edit,
         // The draft starts from the body as it is NOW, which a poll may have
         // changed since this comment first rendered.
         onSelect: () => {
@@ -404,16 +385,14 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
         },
       },
     ],
-    [
+    danger: [
       {
-        label: "Delete",
-        icon: Trash2,
-        destructive: true,
+        ...STANDARD_ACTIONS.delete,
         onSelect: () =>
           writer.submit({ type: "delete", commentId: props.comment.id }),
       },
     ],
-  ];
+  };
 
   if (editing) {
     return (
@@ -472,50 +451,19 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
                 <MoreHorizontal className="size-3.5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {copyItems("dropdown")}
-              {videoId && <DropdownMenuSeparator />}
-              {groups.map((group, i) => [
-                i > 0 && <DropdownMenuSeparator key={`sep-${i}`} />,
-                <DropdownMenuGroup key={`group-${i}`}>
-                  {group.map((action) => (
-                    <DropdownMenuItem
-                      key={action.label}
-                      variant={action.destructive ? "destructive" : "default"}
-                      onSelect={action.onSelect}
-                    >
-                      <action.icon className="size-4" />
-                      {action.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>,
-              ])}
-            </DropdownMenuContent>
+            <EntityMenuContent
+              menu="dropdown"
+              align="end"
+              entity={entity}
+              groups={groups}
+            />
           </DropdownMenu>
           {writer.error && (
             <p className="text-xs text-destructive">{writer.error}</p>
           )}
         </li>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        {copyItems("context")}
-        {videoId && <ContextMenuSeparator />}
-        {groups.map((group, i) => [
-          i > 0 && <ContextMenuSeparator key={`sep-${i}`} />,
-          <ContextMenuGroup key={`group-${i}`}>
-            {group.map((action) => (
-              <ContextMenuItem
-                key={action.label}
-                variant={action.destructive ? "destructive" : "default"}
-                onSelect={action.onSelect}
-              >
-                <action.icon className="size-4" />
-                {action.label}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuGroup>,
-        ])}
-      </ContextMenuContent>
+      <EntityMenuContent menu="context" entity={entity} groups={groups} />
     </ContextMenu>
   );
 }

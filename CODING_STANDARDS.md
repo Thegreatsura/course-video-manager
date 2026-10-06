@@ -243,9 +243,7 @@ Beat, Pitch, Deliverable — answers a right-click with a context menu. An entit
 with actions and no right-click handler is an unfinished entity.
 
 The right-click menu and the entity's **Actions menu** (the `Actions` dropdown,
-or the `…` button on the entity itself) offer **the same set of actions**. They
-are two doors into one list: an action added to one appears in the other, so
-share the menu items between them rather than writing each list twice.
+or the `…` button) offer **the same set of actions** — see "Action menus".
 
 ### Every entity menu can copy its link and ID
 
@@ -256,26 +254,7 @@ Every entity's right-click menu and Actions menu renders
 read them back only with its inverse `parseEntityRef`; `cvm` accepts a link anywhere it takes an id
 because every id argument is declared through `cli/entity-id.ts`. A link names its exact entity:
 one shown on a parent's page carries its own id in a `?<type>=<id>` query param. A new entity type
-gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard
-item in a menu. `entity-menus.test.ts` fails on any file that opens a menu without these items.
-A menu that is not about an entity, such as a value picker or an upload chooser, goes in that test's
-exemption list with a reason.
-
-### Order the actions, and group the related ones
-
-Both menus present that shared list in a deliberate order, most-reached action
-first and the destructive ones (archive, delete) last. Related actions sit
-together in a group — everything that moves the entity, everything that exports
-it, everything that ends its life — with `DropdownMenuGroup` and a
-`DropdownMenuSeparator` between groups, and a `DropdownMenuLabel` where the
-group's name helps the reader. Adding an action means choosing the group it
-belongs to, not appending to the end of the list.
-
-### Context menu items carry an icon
-
-Context menu items should always include a leading icon (from `lucide-react`),
-matching the style of the surrounding items. When adding a new menu item, pick
-an icon that conveys the action.
+gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard item in a menu: `EntityMenuContent` (below) adds both, and `action-menus.test.ts` fails on a hand-built entity menu without them.
 
 ### Filters stay in sync with the entity
 
@@ -285,6 +264,46 @@ state), every filter, count, and badge that surfaces that concept must be
 updated to take the new field into account. Filters are part of the entity's
 definition, not a one-time UI feature — drift between them and the data shape
 produces silently-wrong results.
+
+## Action menus
+
+An action menu lists verbs that act on one thing; a value picker is exempt.
+Distilled from Apple's HIG, NN/g and Fluent; see `docs/plans/action-menus.md`.
+
+**Build every action menu with `EntityMenuContent`** (`ActionMenuContent` for
+one not about an entity) from `features/action-menu/`. Declare each action
+under its kind of group, taking common labels and icons from
+`STANDARD_ACTIONS`; the component owns order, separators, destructive styling,
+the ellipsis and Copy Link / Copy ID.
+
+1. **One list, two doors.** An entity's right-click menu and its Actions / `…`
+   dropdown render the same `groups`, built once.
+2. **Groups come in one order:** `open` → `edit` → `create` → `move` → `run`
+   (export, render, post) → `copy` (clipboard; Copy Link / Copy ID close it) →
+   `danger`. Separators sit between groups only. A new action picks its group;
+   it is never appended to the end.
+3. **Labels are verb-first Title Case, without articles** ("Add Lesson
+   Before"). An action on the menu's own entity drops its noun ("Rename", not
+   "Rename Video"). A toggle names what it will do ("Mark as Done").
+4. **Same action, same words, same icon** everywhere (`STANDARD_ACTIONS`).
+   "Copy …" only means the clipboard; a second entity is "Duplicate". Say
+   "Archive" when the app offers Unarchive, "Remove from …" when only a link is
+   cut, "Delete" otherwise.
+5. **An ellipsis means "asks for more first".** Set `opensDialog` on an item
+   that opens a dialog, form or thread; never type "…" into a label.
+6. **Destructive goes last, in red, in `danger`.** One that cannot be undone
+   (Delete, Purge Export) confirms first, so carries the ellipsis; an undoable
+   one (Archive, Remove from Pitch) acts at once.
+7. **Hide what does not apply; disable what cannot run yet.** Omit an action
+   that never applies in this state (read-only Version, Video never exported);
+   disable one that applies but is blocked (first item's Move Up, a request in
+   flight, transcription unfinished).
+8. **Every item has an icon**, drawn by the primitive at one size. Show a
+   `shortcut` wherever the action has one.
+9. **One level of submenu at most**, for a choice among siblings (a Beat kind,
+   a target Section). Past about a dozen items, move rare actions to the page.
+
+Enforced by `features/action-menu/action-menus.test.ts`: raw menu parts are held to the shrink-only `raw-menus-allowlist.json`; literal labels must be Title Case.
 
 ## React Router data flow
 
