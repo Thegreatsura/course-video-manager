@@ -69,21 +69,23 @@ export const loader = makeLoader({
       // Get previous published version name (allVersions is sorted newest first)
       const previousVersion = allVersions.length > 1 ? allVersions[1] : null;
 
+      // One read of the latest Version's tree, shared by the validation gate
+      // and by the Autofill and lesson statuses below.
+      const versionTree = yield* versionOps.getVersionWithSections(
+        latestVersion.id
+      );
       // Validation is computed for BOTH toggle positions in a single pass so the
       // publish page can flip instantly with no server round-trip. `withTodo` is
       // the default (everything ships); `withoutTodo` is what ships when to-do
       // Lessons are withheld.
       const { withTodo, withoutTodo } =
-        yield* publishService.validatePublishability(latestVersion.id);
+        yield* publishService.validatePublishabilityOfTree(versionTree);
 
       // The Autofill's candidate rule, read for BOTH toggle positions on the
       // same terms as the readiness lists — so the button's count is the same
       // rule the run itself uses (see selectAutofillCandidates). Deliberately
       // NOT folded into Publish Readiness: the Autofill is a UI-only feature
       // for now, and `cvm course readiness` must not grow a field for it.
-      const versionTree = yield* versionOps.getVersionWithSections(
-        latestVersion.id
-      );
       const autofillWithTodo = selectAutofillCandidates(
         versionTree.sections,
         true
