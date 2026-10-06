@@ -24,7 +24,7 @@ import type { GlobalLink } from "@/prompts/link-instructions";
  * regression. Changing either is a deliberate, separate act.
  */
 export const AUTOFILL_DESCRIPTION_MODEL = "claude-haiku-4-5-20251001";
-export const AUTOFILL_CHAPTERS_MODEL = "claude-sonnet-4-5-20250929";
+export const AUTOFILL_CHAPTERS_MODEL = "claude-sonnet-5-5";
 
 /**
  * Anything the provider refused. `retryable` marks the refusals that say

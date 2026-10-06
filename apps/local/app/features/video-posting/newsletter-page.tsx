@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  hasLocalStorage,
-  useLocalStorage,
-} from "@/hooks/use-local-storage";
+import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -80,7 +77,7 @@ export const NewsletterPagePanel = (props: NewsletterPagePanelProps) => {
             },
           ],
           mode: "newsletter",
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-5-5",
           enabledFiles: Array.from(enabledFiles),
           includeTranscript: transcriptEnabled,
           enabledSections: Array.from(enabledSections),
