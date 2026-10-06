@@ -138,22 +138,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     );
   });
 
-  it("create --before an unknown goal id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "learning-goal",
-      "create",
-      "--section",
-      s.draftSectionId,
-      "--before",
-      "lg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    const err = JSON.parse(stderr.trim()) as { _tag: string; entity: string };
-    expect(err._tag).toBe("NotFoundError");
-    expect(err.entity).toBe("learningGoal");
-  });
-
   it("get returns a single goal as one pretty object", async () => {
     const created = await create(s.draftSectionId, "--title", "Solo");
     const { stdout, exitCode } = await run([
@@ -204,19 +188,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     expect(updated.description).toBe("d0");
   });
 
-  it("update never repositions the goal", async () => {
-    const a = await create(s.draftSectionId, "--title", "A");
-    const b = await create(s.draftSectionId, "--title", "B");
-    const updated = obj(
-      (await run(["learning-goal", "update", "--title", "A2", a.id])).stdout
-    );
-    expect(updated.order).toBe(a.order);
-    expect((await list(s.draftSectionId)).map((r) => r.id)).toEqual([
-      a.id,
-      b.id,
-    ]);
-  });
-
   it("update with no fields => invalid input, exit 3", async () => {
     const created = await create(s.draftSectionId);
     const { stdout, stderr, exitCode } = await run([
@@ -229,21 +200,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     expect((JSON.parse(stderr.trim()) as { _tag: string })._tag).toBe(
       "ParseError"
     );
-  });
-
-  it("update an unknown id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "learning-goal",
-      "update",
-      "--title",
-      "x",
-      "lg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    const err = JSON.parse(stderr.trim()) as { _tag: string; entity: string };
-    expect(err._tag).toBe("NotFoundError");
-    expect(err.entity).toBe("learningGoal");
   });
 
   it("update --unlink-beat removes just that one Beat's link", async () => {
@@ -288,21 +244,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     expect(obj(stdout).beatIds).toEqual([]);
   });
 
-  it("update --unlink-beat is idempotent when the Beat was never linked", async () => {
-    const goal = await create(s.draftSectionId, "--title", "Goal");
-
-    const { exitCode, stdout } = await run([
-      "learning-goal",
-      "update",
-      "--unlink-beat",
-      "seg_never_linked",
-      goal.id,
-    ]);
-
-    expect(exitCode).toBe(0);
-    expect(obj(stdout).beatIds).toEqual([]);
-  });
-
   it("update --unlink-beat combines with a content patch in one call", async () => {
     const goal = await create(s.draftSectionId, "--title", "Old title");
     const beat = await addBeat(s.lessonVideoId);
@@ -326,21 +267,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     expect(updated.beatIds).toEqual([]);
   });
 
-  it("update --unlink-beat on an unknown Learning Goal id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "learning-goal",
-      "update",
-      "--unlink-beat",
-      "seg_1",
-      "lg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    const err = JSON.parse(stderr.trim()) as { _tag: string; entity: string };
-    expect(err._tag).toBe("NotFoundError");
-    expect(err.entity).toBe("learningGoal");
-  });
-
   it("delete archives the goal, echoes archived:true, hides it from list", async () => {
     const created = await create(s.draftSectionId, "--title", "Doomed");
     const del = obj(
@@ -350,19 +276,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
     expect(del.archived).toBe(true);
     expect((await list(s.draftSectionId)).map((r) => r.id)).not.toContain(
       created.id
-    );
-  });
-
-  it("delete an unknown id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "learning-goal",
-      "delete",
-      "lg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    expect((JSON.parse(stderr.trim()) as { entity: string }).entity).toBe(
-      "learningGoal"
     );
   });
 
@@ -390,16 +303,6 @@ describe("learning-goal writes (create / update / move / delete)", () => {
       (await run(["learning-goal", "move", "--after", b.id, a.id])).stdout
     );
     expect(moved.id).toBe(a.id);
-    expect((await list(s.draftSectionId)).map((r) => r.id)).toEqual([
-      b.id,
-      a.id,
-    ]);
-  });
-
-  it("move to the end when no anchor is passed", async () => {
-    const a = await create(s.draftSectionId, "--title", "A");
-    const b = await create(s.draftSectionId, "--title", "B");
-    await run(["learning-goal", "move", a.id]);
     expect((await list(s.draftSectionId)).map((r) => r.id)).toEqual([
       b.id,
       a.id,

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import {
   createTestDb,
+  createUnreachableDb,
   truncateAllTables,
   type TestDb,
 } from "@/test-utils/pglite";
@@ -27,16 +28,23 @@ beforeAll(async () => {
 });
 
 let s: IntegrationSeed;
-beforeEach(async () => {
+const reseed = async () => {
   await truncateAllTables(testDb);
   s = await seedIntegration(testDb);
-});
+};
+
+// Most of these tests only read, so a describe whose tests never write shares
+// one seed (beforeAll(reseed)). A describe with any test that writes, or
+// truncates, reseeds before each test (beforeEach(reseed)). Adding a write to
+// a beforeAll describe leaks it into every test after it: switch the hook.
 
 // ===========================================================================
 // NDJSON serialization
 // ===========================================================================
 
 describe("output contract: NDJSON / single object / empty", () => {
+  beforeEach(reseed);
+
   it("list emits one raw COMPACT object per line", async () => {
     const { stdout, stderr, exitCode } = await run(["course", "list"]);
     expect(exitCode).toBe(0);
@@ -116,47 +124,37 @@ describe("output contract: NDJSON / single object / empty", () => {
 // ===========================================================================
 
 describe("uniform display name on every list", () => {
+  beforeAll(reseed);
+
   const nameOf = (stdout: string) =>
     (ndjson(stdout) as { id: string; name: string | null }[]).map((r) => [
       r.id,
       r.name,
     ]);
 
-  it("section list carries name mirroring path", async () => {
-    const { stdout, exitCode } = await run([
-      "section",
-      "list",
-      "--course",
-      s.courseAId,
-    ]);
-    expect(exitCode).toBe(0);
-    expect(nameOf(stdout)).toContainEqual([s.draftSectionId, "01-intro"]);
-  });
-
-  it("lesson list carries name = title", async () => {
-    const { stdout, exitCode } = await run([
-      "lesson",
-      "list",
-      "--section",
-      s.draftSectionId,
-    ]);
-    expect(exitCode).toBe(0);
-    expect(nameOf(stdout)).toContainEqual([s.lessonId, "Welcome"]);
-  });
-
-  it("video list carries name mirroring path", async () => {
-    const { stdout, exitCode } = await run(["video", "list"]);
-    expect(exitCode).toBe(0);
-    expect(nameOf(stdout)).toContainEqual([
-      s.standaloneActiveId,
-      "standalone-active.mp4",
-    ]);
-  });
-
-  it("pitch list carries name = title (the noun the report was about)", async () => {
-    const { stdout, exitCode } = await run(["pitch", "list"]);
-    expect(exitCode).toBe(0);
-    expect(nameOf(stdout)).toContainEqual([s.pitchActiveId, "Active pitch"]);
+  // One test, four call sites: each noun's list wires withName itself, so a
+  // noun that drops it is a real regression. The fallback chain (name, title,
+  // path) is helpers.test.ts's job.
+  it("section, lesson, video and pitch lists each carry a name", async () => {
+    const cases: Array<[ReadonlyArray<string>, string, string]> = [
+      [
+        ["section", "list", "--course", s.courseAId],
+        s.draftSectionId,
+        "01-intro",
+      ],
+      [
+        ["lesson", "list", "--section", s.draftSectionId],
+        s.lessonId,
+        "Welcome",
+      ],
+      [["video", "list"], s.standaloneActiveId, "standalone-active.mp4"],
+      [["pitch", "list"], s.pitchActiveId, "Active pitch"],
+    ];
+    for (const [argv, id, name] of cases) {
+      const { stdout, exitCode } = await run(argv);
+      expect(exitCode).toBe(0);
+      expect(nameOf(stdout)).toContainEqual([id, name]);
+    }
   });
 });
 
@@ -165,6 +163,8 @@ describe("uniform display name on every list", () => {
 // ===========================================================================
 
 describe("error -> exit code mapping", () => {
+  beforeAll(reseed);
+
   it("NotFoundError => exit 2 with _tag on stderr, stdout pure", async () => {
     const { stdout, stderr, exitCode } = await run([
       "course",
@@ -222,9 +222,7 @@ describe("error -> exit code mapping", () => {
   });
 
   it("db/internal failure => exit 4 DatabaseError", async () => {
-    const broken = await createTestDb();
-    await broken.pglite.close();
-    const brokenRun = makeRun(buildWriteLayer(broken.testDb));
+    const brokenRun = makeRun(buildWriteLayer(createUnreachableDb()));
     const { stdout, stderr, exitCode } = await brokenRun(["course", "list"]);
     expect(exitCode).toBe(4);
     expect(stdout).toBe("");
@@ -238,6 +236,8 @@ describe("error -> exit code mapping", () => {
 // ===========================================================================
 
 describe("multi-id get partial failure", () => {
+  beforeAll(reseed);
+
   it("emits found on stdout, missing ids on stderr, exit 2", async () => {
     const { stdout, stderr, exitCode } = await run([
       "video",
@@ -268,6 +268,8 @@ describe("multi-id get partial failure", () => {
 // ===========================================================================
 
 describe("archived filtering", () => {
+  beforeAll(reseed);
+
   it("course list defaults to ACTIVE only", async () => {
     const rows = ndjson((await run(["course", "list"])).stdout) as {
       id: string;
@@ -482,6 +484,8 @@ describe("archived filtering", () => {
 // ===========================================================================
 
 describe("version resolution defaults to Draft", () => {
+  beforeAll(reseed);
+
   it("section list --course resolves the DRAFT version", async () => {
     const rows = ndjson(
       (await run(["section", "list", "--course", s.courseAId])).stdout
@@ -505,6 +509,8 @@ describe("version resolution defaults to Draft", () => {
 // ===========================================================================
 
 describe("tree skeleton + depth", () => {
+  beforeAll(reseed);
+
   const kindsAtDepth = (node: any): Set<string> => {
     const kinds = new Set<string>();
     const walk = (n: any) => {
@@ -576,6 +582,8 @@ describe("tree skeleton + depth", () => {
 // ===========================================================================
 
 describe("embedded course memory is stripped by default", () => {
+  beforeEach(reseed);
+
   beforeEach(async () => {
     await testDb
       .update(schema.courses)
@@ -639,6 +647,8 @@ describe("embedded course memory is stripped by default", () => {
 // ===========================================================================
 
 describe("compact list projections default on, --full opts out", () => {
+  beforeEach(reseed);
+
   it("section list defaults to { id, name } (order omitted — the stream is already ordered)", async () => {
     const rows = ndjson(
       (await run(["section", "list", "--course", s.courseAId])).stdout

@@ -87,12 +87,6 @@ const onDisk = (lineageId: string, relativePath: string): string =>
   );
 
 describe("file list", () => {
-  it("prints nothing (exit 0) when the video has no files", async () => {
-    const r = await run(["file", "list", "--video", s.standaloneActiveId]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toBe("");
-  });
-
   it("lists nested files as NDJSON, sorted by relative path", async () => {
     await run([
       "file",

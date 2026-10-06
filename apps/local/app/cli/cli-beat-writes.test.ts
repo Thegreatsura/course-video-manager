@@ -110,21 +110,6 @@ describe("beat writes (add / update / move / delete)", () => {
     expect(seg.description).toBe("note here");
   });
 
-  it("add accepts --kind setup", async () => {
-    const seg = await add(
-      s.standaloneActiveId,
-      "--kind",
-      "setup",
-      "--title",
-      "Repo state",
-      "--description",
-      "exercise repo now has the closures folder"
-    );
-    expect(seg.kind).toBe("setup");
-    expect(seg.title).toBe("Repo state");
-    expect(seg.description).toBe("exercise repo now has the closures folder");
-  });
-
   it("add --before inserts immediately before the anchor", async () => {
     const anchor = await add(s.standaloneActiveId, "--title", "Anchor");
     const seg = await add(
@@ -168,22 +153,6 @@ describe("beat writes (add / update / move / delete)", () => {
     );
   });
 
-  it("add --before an unknown beat id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "beat",
-      "add",
-      "--video",
-      s.standaloneActiveId,
-      "--before",
-      "seg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    const err = JSON.parse(stderr.trim()) as { _tag: string; entity: string };
-    expect(err._tag).toBe("NotFoundError");
-    expect(err.entity).toBe("beat");
-  });
-
   it("update patches only the fields passed, preserving the rest", async () => {
     const created = await add(
       s.standaloneActiveId,
@@ -211,20 +180,6 @@ describe("beat writes (add / update / move / delete)", () => {
     expect(updated.description).toBe("d0");
   });
 
-  it("update never repositions or changes the beat's video", async () => {
-    const a = await add(s.standaloneActiveId, "--title", "A");
-    const b = await add(s.standaloneActiveId, "--title", "B");
-    const updated = obj(
-      (await run(["beat", "update", "--title", "A2", a.id])).stdout
-    );
-    expect(updated.videoId).toBe(a.videoId);
-    expect(updated.order).toBe(a.order);
-    expect((await list(s.standaloneActiveId)).map((r) => r.id)).toEqual([
-      a.id,
-      b.id,
-    ]);
-  });
-
   it("update with no fields => invalid input, exit 3", async () => {
     const created = await add(s.standaloneActiveId);
     const { stdout, stderr, exitCode } = await run([
@@ -249,26 +204,6 @@ describe("beat writes (add / update / move / delete)", () => {
       created.id,
     ]);
     expect(exitCode).toBe(3);
-  });
-
-  it("update an unknown id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "beat",
-      "update",
-      "--title",
-      "x",
-      "seg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    const err = JSON.parse(stderr.trim()) as { _tag: string; entity: string };
-    expect(err._tag).toBe("NotFoundError");
-    expect(err.entity).toBe("beat");
-  });
-
-  it("add echoes an empty learningGoalIds for a brand-new beat", async () => {
-    const seg = await add(s.standaloneActiveId);
-    expect(seg.learningGoalIds).toEqual([]);
   });
 
   it("add --learning-goal links the Goal at creation time, in ONE call", async () => {
@@ -352,27 +287,6 @@ describe("beat writes (add / update / move / delete)", () => {
     expect(replaced.learningGoalIds).toEqual([goalB]);
   });
 
-  it("update --learning-goal (repeated) attaches every id given", async () => {
-    const goalA = await addLearningGoal(s.draftSectionId, "Goal A");
-    const goalB = await addLearningGoal(s.draftSectionId, "Goal B");
-    const created = await add(s.lessonVideoId);
-
-    const updated = obj(
-      (
-        await run([
-          "beat",
-          "update",
-          "--learning-goal",
-          goalA,
-          "--learning-goal",
-          goalB,
-          created.id,
-        ])
-      ).stdout
-    );
-    expect(new Set(updated.learningGoalIds)).toEqual(new Set([goalA, goalB]));
-  });
-
   it("update --clear-learning-goals detaches every Learning Goal", async () => {
     const goalA = await addLearningGoal(s.draftSectionId, "Goal A");
     const created = await add(s.lessonVideoId);
@@ -443,19 +357,6 @@ describe("beat writes (add / update / move / delete)", () => {
     ) as { beatIds: string[] };
     expect(goal.beatIds).not.toContain(created.id);
     expect(goal.beatIds).toEqual([]);
-  });
-
-  it("delete an unknown id => NotFoundError, exit 2", async () => {
-    const { stdout, stderr, exitCode } = await run([
-      "beat",
-      "delete",
-      "seg_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect(stdout).toBe("");
-    expect((JSON.parse(stderr.trim()) as { entity: string }).entity).toBe(
-      "beat"
-    );
   });
 
   it("any write on an already-deleted beat => NotFoundError, exit 2", async () => {

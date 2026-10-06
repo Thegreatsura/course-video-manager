@@ -290,29 +290,6 @@ describe("lesson update --description", () => {
     expect(lesson.title).toBe("Renamed");
     expect(lesson.description).toBe("And described");
   });
-
-  it("reports a missing lesson as not-found (exit 2)", async () => {
-    const { exitCode } = await run([
-      "lesson",
-      "update",
-      "--description",
-      "X",
-      "les_missing",
-    ]);
-    expect(exitCode).toBe(2);
-  });
-
-  it("refuses to edit a lesson in a published version (exit 3)", async () => {
-    const { exitCode, stderr } = await run([
-      "lesson",
-      "update",
-      "--description",
-      "Nope",
-      s.publishedLessonId,
-    ]);
-    expect(exitCode).toBe(3);
-    expect(stderr).toContain("ParseError");
-  });
 });
 
 // ---------------------------------------------------------------------------

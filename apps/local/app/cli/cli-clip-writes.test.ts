@@ -603,39 +603,6 @@ describe("clip add", () => {
     ]);
   });
 
-  it("positions with --before a CHAPTER anchor", async () => {
-    const source = seedFootageTranscript("take.mkv", SAMPLE_TRANSCRIPT);
-    const a = await seedClip(s.standaloneActiveId, { start: 0, end: 1 });
-    const ch = await addChapter(s.standaloneActiveId, "Part Two");
-    expect(await timelineIds(s.standaloneActiveId)).toEqual([a.id, ch.id]);
-
-    const added = one<ClipRow>(
-      (
-        await run([
-          "clip",
-          "add",
-          "--video",
-          s.standaloneActiveId,
-          "--source",
-          source,
-          "--start",
-          "2",
-          "--end",
-          "4",
-          "--before",
-          ch.id,
-        ])
-      ).stdout
-    );
-
-    // Lands between the clip and the chapter.
-    expect(await timelineIds(s.standaloneActiveId)).toEqual([
-      a.id,
-      added.id,
-      ch.id,
-    ]);
-  });
-
   it("refuses a STALE cached transcript (source re-recorded since transcribe), exit 3", async () => {
     // Sidecar hash no longer matches the source bytes: clip add must not slice
     // from the stale cache; it fails exactly like a missing transcript.

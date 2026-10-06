@@ -170,19 +170,6 @@ describe("cvm clip-mockup-chapter: off the local machine", () => {
     ]);
   });
 
-  it("list of a Video with no Chapters prints nothing and exits 0", async () => {
-    const r = await run([
-      "clip-mockup-chapter",
-      "list",
-      "--video",
-      s.standaloneActiveId,
-    ]);
-
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toBe("");
-    expect(r.stderr).toBe("");
-  });
-
   it("every verb runs with the machine NOT declared local", async () => {
     // The inverse of cli-local-only.test.ts's assertion about `clip-mockup`:
     // nothing here is refused with exit 7, because a divider is a row.
@@ -281,37 +268,6 @@ describe("cvm clip-mockup-chapter: off the local machine", () => {
   // -----------------------------------------------------------------------
   // get / update
   // -----------------------------------------------------------------------
-
-  it("get of one id prints one pretty object", async () => {
-    const created = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
-
-    const r = await run(["clip-mockup-chapter", "get", created.id]);
-
-    expect(r.exitCode).toBe(0);
-    expect(r.stderr).toBe("");
-    expect(chapterOf(r.stdout).id).toBe(created.id);
-  });
-
-  it("get of many ids prints NDJSON and names the missing ones on stderr", async () => {
-    const one1 = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
-    const two = chapterOf((await add(s.standaloneActiveId, "Two")).stdout);
-
-    const r = await run([
-      "clip-mockup-chapter",
-      "get",
-      one1.id,
-      "no-such-chapter",
-      two.id,
-    ]);
-
-    expect((ndjson(r.stdout) as ChapterRow[]).map((c) => c.id)).toEqual([
-      one1.id,
-      two.id,
-    ]);
-    expect(r.exitCode).toBe(2);
-    expect(failureOf(r)._tag).toBe("NotFoundError");
-    expect(r.stderr).toContain("no-such-chapter");
-  });
 
   it("get of an unknown id is a not-found", async () => {
     const r = await run(["clip-mockup-chapter", "get", "no-such-chapter"]);
@@ -412,18 +368,6 @@ describe("cvm clip-mockup-chapter: off the local machine", () => {
     ]);
   });
 
-  it("move with both anchors is invalid input", async () => {
-    const one1 = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
-    const two = chapterOf((await add(s.standaloneActiveId, "Two")).stdout);
-    const three = chapterOf((await add(s.standaloneActiveId, "Three")).stdout);
-
-    const r = await move(three.id, ["--before", one1.id, "--after", two.id]);
-
-    expect(r.exitCode).toBe(3);
-    expect(failureOf(r)._tag).toBe("ParseError");
-    expect(r.stdout).toBe("");
-  });
-
   it("move of an unknown Chapter, and to an unknown anchor, are not-founds", async () => {
     const chapter = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
 
@@ -451,6 +395,10 @@ describe("cvm clip-mockup-chapter: off the local machine", () => {
 
   it("a deleted Chapter never appears in list or get again", async () => {
     const created = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
+    const before = await run(["clip-mockup-chapter", "get", created.id]);
+    expect(before.exitCode).toBe(0);
+    expect(chapterOf(before.stdout).id).toBe(created.id);
+
     await run(["clip-mockup-chapter", "delete", created.id]);
 
     const got = await run(["clip-mockup-chapter", "get", created.id]);

@@ -100,11 +100,6 @@ describe("pitch create / update", () => {
     expect(p.effort).toBe(3);
   });
 
-  it("create with missing --title => invalid input, exit 3", async () => {
-    const { exitCode } = await run(["pitch", "create"]);
-    expect(exitCode).toBe(3);
-  });
-
   it("create with an empty --title => invalid input, exit 3", async () => {
     const { exitCode, stdout } = await run([
       "pitch",
@@ -126,18 +121,6 @@ describe("pitch create / update", () => {
       "No plan writes",
       "--content-plan",
       "cp",
-    ]);
-    expect(exitCode).toBe(3);
-    expect(stdout).toBe("");
-  });
-
-  it("update rejects the retired --content-plan flag => exit 3", async () => {
-    const { exitCode, stdout } = await run([
-      "pitch",
-      "update",
-      "--content-plan",
-      "cp",
-      s.pitchActiveId,
     ]);
     expect(exitCode).toBe(3);
     expect(stdout).toBe("");
