@@ -29,7 +29,7 @@ export function useDocumentFlow(opts: {
     tool: "writeDocument" | "editDocument";
     toolCallId: string;
     output: string;
-  }) => Promise<void>;
+  }) => void | PromiseLike<void>;
   /** Notified on every document change, including AI-driven ones. */
   onDocumentChange?: (document: string) => void;
 }) {

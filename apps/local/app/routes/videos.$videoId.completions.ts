@@ -5,6 +5,7 @@ import {
   createModelMessagesForTextWritingAgent,
   createTextWritingAgent,
 } from "@/services/text-writing-agent";
+import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
 import { type UIMessage } from "ai";
 import { Console, Effect, Schema } from "effect";
 import type { Route } from "./+types/videos.$videoId.completions";
@@ -54,7 +55,8 @@ const chatSchema = Schema.Struct({
   messages: Schema.Any,
   enabledFiles: Schema.Array(Schema.String),
   mode: modeSchema,
-  model: Schema.String,
+  // The Article Writer sends no model; it always runs on ARTICLE_WRITER_MODEL.
+  model: Schema.optional(Schema.String),
   includeTranscript: Schema.optionalWith(Schema.Boolean, {
     default: () => true,
   }),
@@ -79,7 +81,11 @@ export const action = async (args: Route.ActionArgs) => {
     const enabledFiles: string[] = [...parsed.enabledFiles];
     const mode = parsed.mode;
     const model: string =
-      parsed.model === "auto" ? "claude-haiku-4-5" : parsed.model;
+      parsed.model === undefined
+        ? ARTICLE_WRITER_MODEL
+        : parsed.model === "auto"
+          ? "claude-haiku-4-5"
+          : parsed.model;
     const includeTranscript = parsed.includeTranscript;
     const enabledSections: string[] = [...parsed.enabledSections];
 

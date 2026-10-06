@@ -9,6 +9,7 @@ import {
   formatRelatedFields,
 } from "@/services/document-writing-agent";
 import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
+import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
 import type { DocumentWritingAgentMode } from "@/services/document-writing-agent";
 import { type LanguageModelUsage, type ModelMessage, type UIMessage } from "ai";
 import { Console, Effect, Schema } from "effect";
@@ -16,16 +17,6 @@ import type { Route } from "./+types/videos.$videoId.document-completions";
 import { anthropic } from "@ai-sdk/anthropic";
 import { data } from "react-router";
 import type { WriterCacheStats } from "@/features/article-writer/types";
-
-/**
- * The one model the document writer uses.
- *
- * This was a user-facing dropdown with an "auto" setting that picked Haiku
- * before the first draft existed and Sonnet afterwards. That flip meant the
- * expensive first request warmed a cache on one model and every later request
- * read from another — so the cache was never once hit. One model, always.
- */
-export const DOCUMENT_WRITER_MODEL = "claude-sonnet-4-6";
 
 const courseStructureSchema = Schema.Struct({
   repoName: Schema.String,
@@ -170,7 +161,7 @@ export const action = async (args: Route.ActionArgs) => {
     }
 
     const agent = createDocumentWritingAgent({
-      model: anthropic(DOCUMENT_WRITER_MODEL),
+      model: anthropic(ARTICLE_WRITER_MODEL),
       mode: parsed.mode as DocumentWritingAgentMode,
       transcript: videoContext.transcript,
       code: videoContext.textFiles,
