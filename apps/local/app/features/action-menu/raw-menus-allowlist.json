@@ -1,8 +1,4 @@
 {
-  "components/app-sidebar.tsx": {
-    "count": 4,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/beats/beat-list.tsx": {
     "count": 5,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
@@ -11,17 +7,9 @@
     "count": 18,
     "reason": "Hand-built; migrates in Batch 4 of docs/plans/action-menus.md."
   },
-  "features/course-view/actions-menu.tsx": {
-    "count": 19,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/course-view/export-status.tsx": {
     "count": 1,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/course-view/lesson-context-menu.tsx": {
-    "count": 22,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
   },
   "features/course-view/video-context-menu.tsx": {
     "count": 18,

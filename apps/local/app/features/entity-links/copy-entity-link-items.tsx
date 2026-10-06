@@ -21,9 +21,22 @@ async function copy(text: string, what: string) {
 /**
  * "Copy Link" and "Copy ID" for one entity, as action-menu leaves.
  * `EntityMenuContent` closes every entity menu's copy group with these
- * (CODING_STANDARDS.md, "Action menus").
+ * (CODING_STANDARDS.md, "Action menus"). `null` is an entity still being
+ * saved — a Clip mid-recording, a Chapter just added: it has no id to copy
+ * yet, so both show disabled rather than vanish.
  */
-export function copyEntityLinkActions(entity: EntityRef): ActionLeaf[] {
+export function copyEntityLinkActions(entity: EntityRef | null): ActionLeaf[] {
+  if (entity === null) {
+    return [
+      { label: "Copy Link", icon: Link2, disabled: true, onSelect: () => {} },
+      {
+        label: "Copy ID",
+        icon: Fingerprint,
+        disabled: true,
+        onSelect: () => {},
+      },
+    ];
+  }
   const label = ENTITY_LABELS[entity.type];
   return [
     {
