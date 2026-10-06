@@ -1,5 +1,5 @@
 import { type Database } from "./drizzle-service.server.js";
-import { videos } from "../db/schema.js";
+import { lessons, videos } from "../db/schema.js";
 import {
   NotFoundError,
   UnknownDBServiceError,
@@ -140,6 +140,82 @@ export const createVideoWriteOps = (db: Database) => {
     return updated;
   });
 
+  /**
+   * Unarchive a Video — the undo of `deleteVideo`. The Video goes back where
+   * it was: a Standalone or pitch-bound one keeps its (lack of a) parent, and a
+   * lesson-bound one returns to its Lesson (Videos have no position of their
+   * own; a Lesson lists them by title). If that Lesson — or its Section — has
+   * been archived since, there is nowhere live to return to, so the Video comes
+   * back as a Standalone Video instead, where /videos shows it and "Move to
+   * Lesson" can re-home it.
+   *
+   * Returning to the Lesson re-checks the (lessonId, title) guard: a live
+   * sibling may have taken the title while this one was archived
+   * (VideoTitleTakenError). Draft-guarded like every lesson-bound write.
+   */
+  const unarchiveVideo = Effect.fn("unarchiveVideo")(function* (
+    videoId: string
+  ) {
+    yield* requireDraftVersionForVideo(db, videoId);
+    const current = yield* makeDbCall(() =>
+      db.query.videos.findFirst({
+        where: eq(videos.id, videoId),
+        columns: { title: true, lessonId: true },
+      })
+    );
+
+    if (!current) {
+      return yield* new NotFoundError({
+        type: "unarchiveVideo",
+        params: { videoId },
+      });
+    }
+
+    let lessonId = current.lessonId;
+    if (lessonId) {
+      const lesson = yield* makeDbCall(() =>
+        db.query.lessons.findFirst({
+          where: eq(lessons.id, lessonId!),
+          columns: { archived: true },
+          with: { section: { columns: { archivedAt: true } } },
+        })
+      );
+      if (!lesson || lesson.archived || lesson.section.archivedAt) {
+        lessonId = null;
+      }
+    }
+
+    if (lessonId) {
+      const clash = yield* makeDbCall(() =>
+        db.query.videos.findFirst({
+          where: and(
+            eq(videos.lessonId, lessonId),
+            eq(videos.title, current.title),
+            eq(videos.archived, false),
+            ne(videos.id, videoId)
+          ),
+          columns: { id: true },
+        })
+      );
+      if (clash) {
+        return yield* new VideoTitleTakenError({
+          title: current.title,
+          message: `Video name "${current.title}" is already taken in its lesson; rename one first`,
+        });
+      }
+    }
+
+    const [updated] = yield* makeDbCall(() =>
+      db
+        .update(videos)
+        .set({ archived: false, lessonId, updatedAt: new Date() })
+        .where(eq(videos.id, videoId))
+        .returning()
+    );
+
+    return updated!;
+  });
+
   const updateVideoBody = Effect.fn("updateVideoBody")(function* (opts: {
     videoId: string;
     body: string | null;
@@ -257,6 +333,7 @@ export const createVideoWriteOps = (db: Database) => {
     linkVideoToPitch,
     unlinkVideoFromPitch,
     moveVideoToLesson,
+    unarchiveVideo,
     updateVideoBody,
     updateVideoScript,
     updateVideoDescription,
@@ -275,6 +352,7 @@ export const videoWriteMethods = [
   "createVideo",
   "updateVideo",
   "deleteVideo",
+  "unarchiveVideo",
   "updateVideoTitle",
   "copyVideo",
   "updateVideoLesson",

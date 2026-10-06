@@ -18,15 +18,14 @@ interface VideoRef {
 
 type Pending =
   | { kind: "rename"; video: VideoRef }
-  | { kind: "delete"; video: VideoRef; onDelete: () => void }
   | { kind: "purge-export"; video: VideoRef };
 
 /**
- * The dialogs a Video's action menu opens: Rename, and the confirmations in
- * front of its two irreversible actions — Delete and Purge Export
- * (CODING_STANDARDS.md, "Action menus", rule 6). Render `dialogs` OUTSIDE the
- * menu: a menu's content unmounts as it closes, and a dialog inside it would
- * go with it.
+ * The dialogs a Video's action menu opens: Rename, and the confirmation in
+ * front of its one irreversible action, Purge Export — plus the two undoable
+ * ones that need none, Archive and Unarchive (CODING_STANDARDS.md, "Action
+ * menus", rule 6). Render `dialogs` OUTSIDE the menu: a menu's content
+ * unmounts as it closes, and a dialog inside it would go with it.
  */
 export function useVideoDialogs() {
   const [pending, setPending] = useState<Pending | null>(null);
@@ -47,16 +46,6 @@ export function useVideoDialogs() {
         onOpenChange={(open) => !open && close()}
       />
     );
-  } else if (pending?.kind === "delete") {
-    dialogs = (
-      <ConfirmDialog
-        title="Delete Video"
-        description={`Delete "${pending.video.title}"? The Video and its Clips are archived.`}
-        confirmLabel="Delete"
-        onConfirm={pending.onDelete}
-        onClose={close}
-      />
-    );
   } else if (pending?.kind === "purge-export") {
     const videoId = pending.video.id;
     dialogs = (
@@ -72,15 +61,12 @@ export function useVideoDialogs() {
 
   return {
     rename: (video: VideoRef) => setPending({ kind: "rename", video }),
-    /** Confirms, then archives the Video — via `onDelete` if the surface deletes optimistically. */
-    confirmDelete: (video: VideoRef, onDelete?: () => void) =>
-      setPending({
-        kind: "delete",
-        video,
-        onDelete:
-          onDelete ??
-          (() => submit("/api/videos/delete", { videoId: video.id })),
-      }),
+    /** Archives the Video at once; Unarchive undoes it. */
+    archive: (video: VideoRef) =>
+      submit("/api/videos/delete", { videoId: video.id }),
+    /** Puts an archived Video back where it was. */
+    unarchive: (video: VideoRef) =>
+      submit(`/api/videos/${video.id}/unarchive`, {}),
     confirmPurgeExport: (video: VideoRef) =>
       setPending({ kind: "purge-export", video }),
     dialogs,

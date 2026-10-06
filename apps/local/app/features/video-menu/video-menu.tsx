@@ -56,6 +56,8 @@ export interface VideoMenuActions {
   editScript?: VideoAction;
   autofillDescription?: VideoAction;
   autofillChapters?: VideoAction;
+  /** Only on an archived Video: puts it back where it was. */
+  unarchive?: VideoAction;
   // create
   addBeat?: (kind: BeatKind) => void;
   duplicate?: VideoAction;
@@ -79,8 +81,8 @@ export interface VideoMenuActions {
   // danger
   /** Confirms first: deletes the exported file from disk. */
   purgeExport?: VideoAction;
-  /** Confirms first: archives the Video and its Clips. */
-  delete?: VideoAction;
+  /** Undoable (see `unarchive`), so it acts at once: archives the Video and its Clips. */
+  archive?: VideoAction;
 }
 
 type LeafLook = Omit<ActionLeaf, "onSelect">;
@@ -149,6 +151,7 @@ export function videoMenuGroups(a: VideoMenuActions): ActionMenuGroups {
         { label: "Autofill Chapters", icon: Sparkles, opensDialog: true },
         a.autofillChapters
       ),
+      leaf(STANDARD_ACTIONS.unarchive, a.unarchive),
     ],
     create: [
       a.addBeat && {
@@ -228,7 +231,7 @@ export function videoMenuGroups(a: VideoMenuActions): ActionMenuGroups {
         { label: "Purge Export", icon: FileX, opensDialog: true },
         a.purgeExport
       ),
-      leaf({ ...STANDARD_ACTIONS.delete, opensDialog: true }, a.delete),
+      leaf(STANDARD_ACTIONS.archive, a.archive),
     ],
   };
 }

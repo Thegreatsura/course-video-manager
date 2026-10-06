@@ -244,14 +244,13 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
         ? () => navigate(`/videos/${videoId}/move-to-course`)
         : undefined,
     export: () => startExportUpload(videoId, videoTitle),
-    delete: () =>
-      dialogs.confirmDelete(video, () => {
-        void submit(
-          { videoId },
-          { method: "post", action: "/api/videos/delete", navigate: false }
-        );
-        void navigate(backButtonUrl);
-      }),
+    archive: () => {
+      void submit(
+        { videoId },
+        { method: "post", action: "/api/videos/delete", navigate: false }
+      );
+      void navigate(backButtonUrl);
+    },
   });
 
   // Build breadcrumb text
