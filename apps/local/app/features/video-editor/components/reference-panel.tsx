@@ -1,17 +1,15 @@
 import { cn } from "@/lib/utils";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { timelineItemMenuGroups } from "./timeline-item-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,10 +17,7 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
-  PencilIcon,
-  PlusIcon,
   Sparkles,
-  Trash2Icon,
   X,
 } from "lucide-react";
 import {
@@ -31,7 +26,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useEffect, useState } from "react";
 
 const COLLAPSED_STORAGE_KEY = "reference-panel-collapsed";
@@ -112,6 +106,7 @@ type ModalState =
       defaultName: string;
     }
   | { mode: "edit"; chapterId: string; currentName: string }
+  | { mode: "delete"; chapterId: string; name: string }
   | null;
 
 export const ReferencePanel = (props: {
@@ -178,6 +173,7 @@ export const ReferencePanel = (props: {
     const formData = new FormData(e.currentTarget);
     const name = (formData.get("name") as string).trim();
     if (!name) return;
+    if (modal.mode === "delete") return;
     if (modal.mode === "add-at") {
       props.onAddChapterAt({
         videoId: selected.id,
@@ -274,66 +270,39 @@ export const ReferencePanel = (props: {
                     <span>{group.section.name}</span>
                   </h4>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <CopyEntityLinkItems
-                    menu="context"
-                    entity={{
-                      type: "chapter",
-                      id: group.section.id,
-                      videoId: selected.id,
-                    }}
-                  />
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    onSelect={() =>
+                <EntityMenuContent
+                  menu="context"
+                  entity={{
+                    type: "chapter",
+                    id: group.section.id,
+                    videoId: selected.id,
+                  }}
+                  groups={timelineItemMenuGroups({
+                    onRename: () =>
                       setModal({
                         mode: "edit",
                         chapterId: group.section!.id,
                         currentName: group.section!.name,
-                      })
-                    }
-                  >
-                    <PencilIcon />
-                    Edit
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    onSelect={() =>
+                      }),
+                    onAddChapter: (position) =>
                       setModal({
                         mode: "add-at",
                         targetItemId: group.section!.id,
                         targetItemType: "chapter",
-                        position: "before",
+                        position,
                         defaultName: defaultChapterName,
-                      })
-                    }
-                  >
-                    <PlusIcon />
-                    Add Chapter Before
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onSelect={() =>
-                      setModal({
-                        mode: "add-at",
-                        targetItemId: group.section!.id,
-                        targetItemType: "chapter",
-                        position: "after",
-                        defaultName: defaultChapterName,
-                      })
-                    }
-                  >
-                    <PlusIcon />
-                    Add Chapter After
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    variant="destructive"
-                    onSelect={() => props.onDeleteChapter(group.section!.id)}
-                  >
-                    <Trash2Icon />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
+                      }),
+                    delete: {
+                      confirms: true,
+                      onSelect: () =>
+                        setModal({
+                          mode: "delete",
+                          chapterId: group.section!.id,
+                          name: group.section!.name,
+                        }),
+                    },
+                  })}
+                />
               </ContextMenu>
             )}
             <div
@@ -362,45 +331,24 @@ export const ReferencePanel = (props: {
                       />
                     </TooltipContent>
                   </Tooltip>
-                  <ContextMenuContent>
-                    <CopyEntityLinkItems
-                      menu="context"
-                      entity={{
-                        type: "clip",
-                        id: clip.id,
-                        videoId: selected.id,
-                      }}
-                    />
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() =>
+                  <EntityMenuContent
+                    menu="context"
+                    entity={{
+                      type: "clip",
+                      id: clip.id,
+                      videoId: selected.id,
+                    }}
+                    groups={timelineItemMenuGroups({
+                      onAddChapter: (position) =>
                         setModal({
                           mode: "add-at",
                           targetItemId: clip.id,
                           targetItemType: "clip",
-                          position: "before",
+                          position,
                           defaultName: defaultChapterName,
-                        })
-                      }
-                    >
-                      <PlusIcon />
-                      Add Chapter Before
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() =>
-                        setModal({
-                          mode: "add-at",
-                          targetItemId: clip.id,
-                          targetItemType: "clip",
-                          position: "after",
-                          defaultName: defaultChapterName,
-                        })
-                      }
-                    >
-                      <PlusIcon />
-                      Add Chapter After
-                    </ContextMenuItem>
-                  </ContextMenuContent>
+                        }),
+                    })}
+                  />
                 </ContextMenu>
               ))}
             </div>
@@ -409,13 +357,45 @@ export const ReferencePanel = (props: {
       </div>
 
       <Dialog
-        open={modal !== null}
+        open={modal?.mode === "delete"}
+        onOpenChange={(open) => !open && setModal(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Chapter</DialogTitle>
+            <DialogDescription>
+              Delete &ldquo;{modal?.mode === "delete" ? modal.name : ""}
+              &rdquo; from {selected.title}? Its Clips stay; only the Chapter
+              heading goes.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (modal?.mode === "delete") {
+                  props.onDeleteChapter(modal.chapterId);
+                }
+                setModal(null);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={modal !== null && modal.mode !== "delete"}
         onOpenChange={(open) => !open && setModal(null)}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {modal?.mode === "edit" ? "Edit Chapter" : "Name Chapter"}
+              {modal?.mode === "edit" ? "Rename Chapter" : "Name Chapter"}
             </DialogTitle>
           </DialogHeader>
           <form className="space-y-4 py-4" onSubmit={handleSubmit}>
