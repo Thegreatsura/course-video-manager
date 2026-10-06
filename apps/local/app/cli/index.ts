@@ -186,9 +186,7 @@ WRITES
     section
             create/rename/move/      create a section in a Version, rename it,
             archive                  reorder it, or soft-delete it ('archive'
-                                     is one-way, no restore — do NOT confuse
-                                     with the unrelated 'ARCHIVE'-suffix title
-                                     convention, see 'cvm section --help')
+                                     is one-way, no restore)
     lesson
             create/update/move/      create a lesson, rename its title,
             archive                  reorder / re-home it, or soft-delete it
