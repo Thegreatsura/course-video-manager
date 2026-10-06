@@ -77,6 +77,33 @@ describe("layoutActionMenu", () => {
     expect(submenu?.kind).toBe("submenu");
     expect(submenu?.kind === "submenu" && submenu.items.length).toBe(1);
   });
+
+  it("lays out a picker as runs of options under their headings", () => {
+    const [group] = layoutActionMenu({
+      edit: [
+        {
+          label: "Change Pitch",
+          icon: Plus,
+          value: "b",
+          onValueChange: noop,
+          options: [
+            { value: "a", label: "A", heading: "Live" },
+            { value: "b", label: "B", heading: "Live" },
+            { value: "c", label: "C", heading: "Idea" },
+          ],
+        },
+      ],
+    });
+    const picker = group?.items[0];
+    expect(picker?.kind).toBe("picker");
+    expect(
+      picker?.kind === "picker" &&
+        picker.runs.map((r) => [r.heading, r.options.map((o) => o.value)])
+    ).toEqual([
+      ["Live", ["a", "b"]],
+      ["Idea", ["c"]],
+    ]);
+  });
 });
 
 describe("labelProblems", () => {

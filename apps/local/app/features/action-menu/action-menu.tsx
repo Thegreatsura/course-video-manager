@@ -2,6 +2,9 @@ import {
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuSub,
@@ -12,6 +15,9 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuSub,
@@ -27,6 +33,7 @@ import {
   type ActionLeaf,
   type ActionMenuGroups,
   type LaidOutLeaf,
+  type LaidOutPicker,
 } from "./action-menu-model";
 
 /** Which door the menu opens from: a right-click, or a button (Actions / "…"). */
@@ -37,6 +44,9 @@ const PARTS = {
     Content: ContextMenuContent,
     Group: ContextMenuGroup,
     Item: ContextMenuItem,
+    Label: ContextMenuLabel,
+    RadioGroup: ContextMenuRadioGroup,
+    RadioItem: ContextMenuRadioItem,
     Separator: ContextMenuSeparator,
     Shortcut: ContextMenuShortcut,
     Sub: ContextMenuSub,
@@ -47,6 +57,9 @@ const PARTS = {
     Content: DropdownMenuContent,
     Group: DropdownMenuGroup,
     Item: DropdownMenuItem,
+    Label: DropdownMenuLabel,
+    RadioGroup: DropdownMenuRadioGroup,
+    RadioItem: DropdownMenuRadioItem,
     Separator: DropdownMenuSeparator,
     Shortcut: DropdownMenuShortcut,
     Sub: DropdownMenuSub,
@@ -114,7 +127,9 @@ function MenuContent({
           {i > 0 && <P.Separator />}
           <P.Group>
             {items.map((item) =>
-              item.kind === "submenu" ? (
+              item.kind === "picker" ? (
+                <Picker key={item.key} picker={item} menu={menu} />
+              ) : item.kind === "submenu" ? (
                 <P.Sub key={item.key}>
                   <P.SubTrigger
                     data-variant={item.destructive ? "destructive" : "default"}
@@ -162,5 +177,45 @@ function Leaf({ leaf, menu }: { leaf: LaidOutLeaf; menu: MenuDoor }) {
       {leaf.checked && <CheckIcon className="ml-auto" />}
       {leaf.shortcut && <P.Shortcut>{leaf.shortcut}</P.Shortcut>}
     </P.Item>
+  );
+}
+
+/** A value picker: a submenu of radio options, the current one marked. */
+function Picker({ picker, menu }: { picker: LaidOutPicker; menu: MenuDoor }) {
+  const P = PARTS[menu];
+  return (
+    <P.Sub>
+      <P.SubTrigger>
+        <picker.icon />
+        {picker.label}
+      </P.SubTrigger>
+      <P.SubContent className="max-h-80 max-w-80 overflow-y-auto">
+        <P.RadioGroup value={picker.value} onValueChange={picker.onValueChange}>
+          {picker.runs.map((run, i) => (
+            <Fragment key={`${i}-${run.heading ?? ""}`}>
+              {run.heading && (
+                <P.Label className="text-xs text-muted-foreground">
+                  {run.heading}
+                </P.Label>
+              )}
+              {run.options.map((option) => (
+                <P.RadioItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.disabled}
+                >
+                  {option.tag && (
+                    <span className="rounded-sm bg-muted px-1 text-[10px] font-medium tabular-nums">
+                      {option.tag}
+                    </span>
+                  )}
+                  <span className="truncate">{option.label}</span>
+                </P.RadioItem>
+              ))}
+            </Fragment>
+          ))}
+        </P.RadioGroup>
+      </P.SubContent>
+    </P.Sub>
   );
 }
