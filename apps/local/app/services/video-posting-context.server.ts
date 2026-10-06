@@ -14,6 +14,8 @@ import {
 import { sortByOrder } from "@/lib/sort-by-order";
 import type { BeatKind } from "@/features/beats/beat-kinds";
 import { deriveVideoRole, type VideoRole } from "./lesson-warnings";
+import type { AnimaticLine } from "@/features/animatic/animatic-lines";
+import { loadAnimaticLines } from "@/services/animatic-lines.server";
 import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
 import { projectVersionPaths } from "@/services/path-projection";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
@@ -210,6 +212,12 @@ export interface WriterContextData {
   }>;
   /** The video's script — the base Matt improvised from. Empty when unwritten. */
   script: string;
+  /**
+   * The video's Animatic read as lines, in Animatic order: every Clip Mockup
+   * line and Clip Mockup Chapter, each carrying its Clip Mockup Comments.
+   * Empty when the video has no Clip Mockups.
+   */
+  animaticLines: AnimaticLine[];
   /** Quiz ids owned by other videos in this course. */
   quizIds: string[];
   /** The video's role in its lesson, read off its title — picks the writer's default mode. */
@@ -225,11 +233,12 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
   const linkAuthOps = yield* LinkAuthOperationsService;
   const beatOps = yield* BeatOperationsService;
 
-  const [video, globalLinks, rawBeats] = yield* Effect.all(
+  const [video, globalLinks, rawBeats, animaticLines] = yield* Effect.all(
     [
       videoOps.getVideoWithClipsById(videoId),
       linkAuthOps.getLinks(),
       beatOps.listBeatsByVideoId(videoId),
+      loadAnimaticLines(videoId),
     ],
     { concurrency: "unbounded" }
   );
@@ -269,6 +278,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       links: globalLinks,
       beats,
       script: video.script ?? "",
+      animaticLines,
       quizIds: [],
       videoRole,
     } satisfies WriterContextData;
@@ -312,6 +322,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     links: globalLinks,
     beats,
     script: video.script ?? "",
+    animaticLines,
     quizIds,
     videoRole,
   } satisfies WriterContextData;

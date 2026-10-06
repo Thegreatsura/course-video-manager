@@ -4,6 +4,7 @@ import { generateNewsletterPrompt } from "@/prompts/generate-newsletter";
 import { generateSeoDescriptionPrompt } from "@/prompts/generate-seo-description";
 import type { GlobalLink } from "@/prompts/link-instructions";
 import { getBeatsSection } from "@/prompts/beats-instructions";
+import { getAnimaticSection } from "@/prompts/animatic-instructions";
 import { getScriptSection } from "@/prompts/script-instructions";
 import {
   ToolLoopAgent as Agent,
@@ -106,6 +107,8 @@ export type DocumentWritingContext = {
   beats?: string;
   /** The video's script — the base Matt improvised from. */
   script?: string;
+  /** Pre-formatted Animatic: Clip Mockup lines, chapters and comments. */
+  animatic?: string;
 };
 
 /**
@@ -211,6 +214,8 @@ After calling a tool, you may add a brief conversational message explaining what
 
   const scriptSection = getScriptSection(props.script ?? "");
 
+  const animaticSection = getAnimaticSection(props.animatic ?? "");
+
   return {
     role: "system",
     content:
@@ -218,6 +223,7 @@ After calling a tool, you may add a brief conversational message explaining what
       documentInstructions +
       scriptSection +
       beatsSection +
+      animaticSection +
       memorySection,
     providerOptions: CACHE_BREAKPOINT_1H,
   };

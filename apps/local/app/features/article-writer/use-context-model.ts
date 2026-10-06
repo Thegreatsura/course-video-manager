@@ -13,9 +13,22 @@ import {
   COURSE_STRUCTURE_STORAGE_KEY,
   BEATS_ENABLED_STORAGE_KEY,
   SCRIPT_ENABLED_STORAGE_KEY,
+  ANIMATIC_ENABLED_STORAGE_KEY,
   LINKS_DISABLED_STORAGE_KEY,
 } from "./write-utils";
 import { formatBeatsContext } from "./format-beats-context";
+import { formatAnimaticContext } from "./format-animatic-context";
+
+/**
+ * The single-text sources as the completion routes take them: each one's text
+ * when it is switched on and non-empty, else `undefined`.
+ */
+export interface PromptTexts {
+  memory: string | undefined;
+  beats: string | undefined;
+  script: string | undefined;
+  animatic: string | undefined;
+}
 
 export interface ContextModel {
   sources: SourceView[];
@@ -30,6 +43,7 @@ export interface ContextModel {
   memoryEnabled: boolean;
   beatsEnabled: boolean;
   scriptEnabled: boolean;
+  animaticEnabled: boolean;
 
   // Mutation callbacks
   toggleItem: (itemId: string) => void;
@@ -52,6 +66,12 @@ export interface ContextModel {
 
   // Script (read-only; empty when the video has no script)
   scriptText: string;
+
+  // Animatic (read-only formatted text; empty when the video has none)
+  animaticText: string;
+
+  // What the completion routes are sent for memory, beats, script and animatic
+  promptTexts: PromptTexts;
 
   // Links (read from context, mutation via callbacks on the host)
   links: Array<{
@@ -108,6 +128,16 @@ export function useContextModel(
     true
   );
   const scriptText = context.script;
+  // The pre-filming plan plus the author's own Clip Mockup Comments, so on
+  // wherever the video has an Animatic.
+  const [animaticEnabled, setAnimaticEnabled] = useLocalStorageBoolean(
+    ANIMATIC_ENABLED_STORAGE_KEY,
+    true
+  );
+  const animaticText = useMemo(
+    () => formatAnimaticContext(context.animaticLines),
+    [context.animaticLines]
+  );
 
   // ── Build sources ─────────────────────────────────────────────────────────
 
@@ -282,6 +312,30 @@ export function useContextModel(
       });
     }
 
+    // 5b. Animatic (only if the video has Clip Mockups)
+    if (animaticText.length > 0) {
+      const tokens = estimateTokens(animaticText);
+      const on = animaticEnabled;
+      result.push({
+        key: "animatic",
+        label: "Animatic",
+        note: "the Clip Mockup lines under their chapters, with the author's comments (text only, no stills)",
+        items: [
+          {
+            id: "animatic",
+            label: "Animatic",
+            text: animaticText,
+            on,
+            tokens,
+          },
+        ],
+        onCount: on ? 1 : 0,
+        check: on,
+        atomic: true,
+        tokens: on ? tokens : 0,
+      });
+    }
+
     // 6. Course structure (only if present)
     if (context.courseStructure !== null) {
       const text = JSON.stringify(context.courseStructure);
@@ -341,6 +395,7 @@ export function useContextModel(
     memoryText,
     beatsText,
     scriptText,
+    animaticText,
     enabledSections,
     enabledFiles,
     enabledFields,
@@ -351,6 +406,7 @@ export function useContextModel(
     memoryEnabled,
     beatsEnabled,
     scriptEnabled,
+    animaticEnabled,
   ]);
 
   const totalTokens = useMemo(
@@ -424,6 +480,10 @@ export function useContextModel(
         setScriptEnabled((prev) => !prev);
         return;
       }
+      if (itemId === "animatic") {
+        setAnimaticEnabled((prev) => !prev);
+        return;
+      }
       if (itemId === "courseStructure") {
         setIncludeCourseStructure((prev) => !prev);
         return;
@@ -487,6 +547,9 @@ export function useContextModel(
         case "script":
           setScriptEnabled((prev) => !prev);
           break;
+        case "animatic":
+          setAnimaticEnabled((prev) => !prev);
+          break;
         case "courseStructure":
           setIncludeCourseStructure((prev) => !prev);
           break;
@@ -528,6 +591,25 @@ export function useContextModel(
     [context.links]
   );
 
+  const promptTexts = useMemo(
+    (): PromptTexts => ({
+      memory: memoryEnabled && memoryText ? memoryText : undefined,
+      beats: beatsEnabled && beatsText ? beatsText : undefined,
+      script: scriptEnabled && scriptText ? scriptText : undefined,
+      animatic: animaticEnabled && animaticText ? animaticText : undefined,
+    }),
+    [
+      memoryEnabled,
+      memoryText,
+      beatsEnabled,
+      beatsText,
+      scriptEnabled,
+      scriptText,
+      animaticEnabled,
+      animaticText,
+    ]
+  );
+
   // ── Return ────────────────────────────────────────────────────────────────
 
   return {
@@ -542,6 +624,7 @@ export function useContextModel(
     memoryEnabled,
     beatsEnabled,
     scriptEnabled,
+    animaticEnabled,
 
     toggleItem,
     toggleSource,
@@ -559,6 +642,10 @@ export function useContextModel(
     beatsText,
 
     scriptText,
+
+    animaticText,
+
+    promptTexts,
 
     links,
   };

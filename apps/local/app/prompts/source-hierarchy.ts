@@ -1,7 +1,8 @@
 /**
  * The rules ranking the documents a writing prompt is handed.
  *
- * A video's plan climbs a fidelity ladder — beats → script → transcript — and
+ * A video's plan climbs a fidelity ladder — beats → Animatic → script →
+ * transcript — and
  * authority migrates upward: each rung is authored from the one below, then the
  * lower one goes stale. Filming turns the script into the transcript, and from
  * then on the transcript is the truth. These constants put that ladder in front
@@ -10,15 +11,17 @@
  */
 export const SOURCE_HIERARCHY = `### Source hierarchy
 
-The documents you have been given sit on a three-rung ladder — **beats → script → transcript**. Each rung was authored from the one below it, and the video was filmed from the script. Authority migrates upward: the transcript is what was actually said on camera, so the transcript is the truth.
+The documents you have been given sit on a four-rung ladder — **beats → Animatic → script → transcript**. Each rung was authored from the one below it, and the video was filmed from the script or the Animatic. Authority migrates upward: the transcript is what was actually said on camera, so the transcript is the truth.
 
 - **The transcript sets the scope.** It is a ceiling, not a mandate. Never make a claim that was not made on camera — if it is not in the transcript, it was not taught, and it does not belong in your output. Within that boundary, still select ruthlessly: cut tangents, repetition and dead air.
 - **The script is the base the presenter improvised from**, not a record of what was said. It is authoritative for spelling and naming only — technical terms, identifiers, file paths, commands, product names — because the transcript is a machine transcription and will garble them. Where the video states a definition loosely, the script's phrasing is a reference for tightening it. Anything present in the script but absent from the transcript was cut while filming: drop it.
 - **The transcript is authoritative for leading words** and for vocabulary generally. When a term differs between script and transcript, apply an orthographic test. If the transcript's version is a plausible mis-hearing of the script's — the same sounds, the wrong letters — it is a transcription error, so use the script's spelling. If it is a genuinely different word, the presenter renamed it on camera, so use the transcript's. When in doubt, follow the transcript: it is what the viewer heard.
 - **The beats are a stale sketch.** They record the video's intended emphasis — which moves were considered load-bearing — and nothing more. They are not a source of content, scope or ordering. A beat not reflected in the transcript was cut from the video: ignore it.
+- **The Animatic is the plan of the picture and the words.** Each mockup is one moment decided before filming: what was to be on screen, and the line to be said over it. It is more concrete than the beats, so it is a good guide to what was on screen and to the intended shape of the video, but it is still a plan. A mockup line is not words said on camera: where the transcript differs, the transcript wins, and a mockup with nothing matching it in the transcript was cut — drop it.
+- **The author's comments sit outside the ladder.** They are the author's own notes, pinned to one mockup or one chapter of the Animatic. Many were written as reminders for the take. A comment about what to say or show on camera is a plan: the transcript records whether it happened, and where the two disagree about what was said, the transcript wins. A comment about the written output — a point to stress, a correction, a thing to add or leave out — is an instruction from the author: follow it. It is the one source that can widen the scope past the transcript. A comment is never words said on camera, so never quote it or present it as the transcript.
 - **Attached files are supporting material.** They show what was on screen — code, notes, session logs. They supply evidence and detail for claims the transcript already makes, and they are never themselves a source of claims.
 
-Lower rungs may be absent — most videos have no script, and some have no beats. Work with whichever documents you were actually given.`;
+Lower rungs may be absent — most videos have no script, and some have no beats, Animatic or comments. Work with whichever documents you were actually given.`;
 
 export const ARTICLE_SOURCE_HIERARCHY = `${SOURCE_HIERARCHY}
 
