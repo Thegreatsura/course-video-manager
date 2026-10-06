@@ -1,4 +1,5 @@
 import { Args, Options } from "@effect/cli";
+import { entityIdOption } from "../entity-id";
 import { OVERLAY_KINDS } from "@/features/videos/overlay-kind";
 
 /**
@@ -12,22 +13,22 @@ import { OVERLAY_KINDS } from "@/features/videos/overlay-kind";
  * are the one-line `--help` summaries `@effect/cli` prints beside each flag.
  */
 
-export const videoOpt = Options.text("video").pipe(
+export const videoOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("The Video id whose Overlays to list (required).")
 );
 
-export const clipFilterOpt = Options.text("clip").pipe(
+export const clipFilterOpt = entityIdOption("clip", "clip").pipe(
   Options.withDescription(
     "Narrow the listing to the Overlays anchored to this Clip id."
   ),
   Options.optional
 );
 
-export const clipAddOpt = Options.text("clip").pipe(
+export const clipAddOpt = entityIdOption("clip", "clip").pipe(
   Options.withDescription("The anchor Clip id (required).")
 );
 
-export const clipUpdateOpt = Options.text("clip").pipe(
+export const clipUpdateOpt = entityIdOption("clip", "clip").pipe(
   Options.withDescription(
     "Re-anchor the Overlay to this Clip id, which must be in the SAME Video " +
       "(the offset stays Clip-relative)."

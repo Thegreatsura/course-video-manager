@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { lessonSearchCmd } from "./search";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
@@ -67,7 +68,7 @@ const assertDraftLesson = (lesson: {
 // list --section <id>
 // ---------------------------------------------------------------------------
 
-const section = Options.text("section");
+const section = entityIdOption("section", "section");
 
 const listCmd = Command.make("list", { section }, ({ section }) =>
   Effect.gen(function* () {
@@ -81,7 +82,7 @@ const listCmd = Command.make("list", { section }, ({ section }) =>
 // get <id...>
 // ---------------------------------------------------------------------------
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("lesson").pipe(Args.repeated);
 
 const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
   emitGet({
@@ -109,7 +110,7 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
 // tree <id> [--depth N|all]
 // ---------------------------------------------------------------------------
 
-const treeId = Args.text({ name: "id" });
+const treeId = entityIdArg("lesson");
 const depth = Options.text("depth").pipe(Options.withDefault("1"));
 
 const parseDepth = (raw: string) =>
@@ -189,19 +190,19 @@ const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
 // create --section <id> --title <t> [--before|--after <lessonId>]
 // ---------------------------------------------------------------------------
 
-const createSection = Options.text("section").pipe(
+const createSection = entityIdOption("section", "section").pipe(
   Options.withDescription("The Section id to create the lesson in (required).")
 );
 const createTitle = Options.text("title").pipe(
   Options.withDescription("The lesson title (also slugified into its path).")
 );
-const beforeOption = Options.text("before").pipe(
+const beforeOption = entityIdOption("before", "lesson").pipe(
   Options.withDescription(
     "Place immediately before this lesson id (mutually exclusive with --after)."
   ),
   Options.optional
 );
-const afterOption = Options.text("after").pipe(
+const afterOption = entityIdOption("after", "lesson").pipe(
   Options.withDescription(
     "Place immediately after this lesson id (mutually exclusive with --before)."
   ),
@@ -271,7 +272,7 @@ const createCmd = Command.make(
 // update <id> --title <t>
 // ---------------------------------------------------------------------------
 
-const updateId = Args.text({ name: "id" });
+const updateId = entityIdArg("lesson");
 const updateTitle = Options.text("title").pipe(
   Options.withDescription(
     "The lesson's new display title (the slug/path is left unchanged)."
@@ -352,20 +353,20 @@ const updateCmd = Command.make(
 // move <id> [--section <id>] [--before|--after <lessonId>]
 // ---------------------------------------------------------------------------
 
-const moveId = Args.text({ name: "id" });
-const moveSection = Options.text("section").pipe(
+const moveId = entityIdArg("lesson");
+const moveSection = entityIdOption("section", "section").pipe(
   Options.withDescription(
     "Destination Section id (omit to reorder within the current section)."
   ),
   Options.optional
 );
-const moveBefore = Options.text("before").pipe(
+const moveBefore = entityIdOption("before", "lesson").pipe(
   Options.withDescription(
     "Place immediately before this lesson id (mutually exclusive with --after)."
   ),
   Options.optional
 );
-const moveAfter = Options.text("after").pipe(
+const moveAfter = entityIdOption("after", "lesson").pipe(
   Options.withDescription(
     "Place immediately after this lesson id (mutually exclusive with --before)."
   ),
@@ -461,7 +462,7 @@ const moveCmd = Command.make(
 // archive <id>
 // ---------------------------------------------------------------------------
 
-const archiveId = Args.text({ name: "id" });
+const archiveId = entityIdArg("lesson");
 
 const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
   Effect.gen(function* () {

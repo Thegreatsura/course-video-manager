@@ -1,4 +1,5 @@
-import { Args, Command, Options } from "@effect/cli";
+import { Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
@@ -26,37 +27,37 @@ import {
 // Options / Args
 // ---------------------------------------------------------------------------
 
-const videoListOption = Options.text("video").pipe(
+const videoListOption = entityIdOption("video", "video").pipe(
   Options.withDescription("The parent Video id whose Beat plan to list."),
   Options.optional
 );
 
-const lessonListOption = Options.text("lesson").pipe(
+const lessonListOption = entityIdOption("lesson", "lesson").pipe(
   Options.withDescription(
     "The parent Lesson id whose Videos' Beat plans to list."
   ),
   Options.optional
 );
 
-const sectionListOption = Options.text("section").pipe(
+const sectionListOption = entityIdOption("section", "section").pipe(
   Options.withDescription(
     "The parent Section id whose Lessons' Beat plans to list."
   ),
   Options.optional
 );
 
-const videoTargetOption = Options.text("video").pipe(
+const videoTargetOption = entityIdOption("video", "video").pipe(
   Options.withDescription("The target Video id for the Beat (required).")
 );
 
-const videoAddOption = Options.text("video").pipe(
+const videoAddOption = entityIdOption("video", "video").pipe(
   Options.withDescription(
     "The target Video id (mutually exclusive with --pitch)."
   ),
   Options.optional
 );
 
-const pitchAddOption = Options.text("pitch").pipe(
+const pitchAddOption = entityIdOption("pitch", "pitch").pipe(
   Options.withDescription(
     "Target a Pitch's video instead of --video: resolves the pitch's single " +
       "video (auto-creating one if the pitch has none; error if it has more " +
@@ -84,14 +85,14 @@ const descriptionOption = Options.text("description").pipe(
   Options.optional
 );
 
-const beforeOption = Options.text("before").pipe(
+const beforeOption = entityIdOption("before", "beat").pipe(
   Options.withDescription(
     "Place immediately before this beat id (mutually exclusive with --after)."
   ),
   Options.optional
 );
 
-const afterOption = Options.text("after").pipe(
+const afterOption = entityIdOption("after", "beat").pipe(
   Options.withDescription(
     "Place immediately after this beat id (mutually exclusive with --before)."
   ),
@@ -118,7 +119,7 @@ const clearLearningGoalsOption = Options.boolean("clear-learning-goals").pipe(
   )
 );
 
-const idArg = Args.text({ name: "id" });
+const idArg = entityIdArg("beat");
 
 // ---------------------------------------------------------------------------
 // Shared helpers

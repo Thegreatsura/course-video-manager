@@ -1,4 +1,5 @@
-import { Args, Command } from "@effect/cli";
+import { Command } from "@effect/cli";
+import { entityIdArg } from "../entity-id";
 import { Effect } from "effect";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
@@ -25,7 +26,7 @@ import { LINT_HELP } from "./section.help";
  * on a Remote Box.
  */
 
-const sectionId = Args.text({ name: "sectionId" });
+const sectionId = entityIdArg("section", "sectionId");
 
 export const sectionLintCmd = Command.make(
   "lint",

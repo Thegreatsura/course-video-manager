@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { sectionSearchCmd } from "./search";
 import { sectionLintCmd } from "./section-lint";
@@ -107,7 +108,7 @@ const resolveScopedVersion = (
   });
 
 const version = Options.text("course-version").pipe(Options.optional);
-const course = Options.text("course").pipe(Options.optional);
+const course = entityIdOption("course", "course").pipe(Options.optional);
 
 const listCmd = Command.make(
   "list",
@@ -129,7 +130,7 @@ const listCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
-const ids = Args.text({ name: "id" }).pipe(Args.repeated);
+const ids = entityIdArg("section").pipe(Args.repeated);
 
 const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
   emitGet({
@@ -156,7 +157,7 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
 );
 
 const depth = Options.text("depth").pipe(Options.withDefault("1"));
-const treeId = Args.text({ name: "id" });
+const treeId = entityIdArg("section");
 
 const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
   Effect.gen(function* () {
@@ -244,13 +245,13 @@ const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
 const createTitle = Options.text("title").pipe(
   Options.withDescription("The section title (also its display path).")
 );
-const createBefore = Options.text("before").pipe(
+const createBefore = entityIdOption("before", "section").pipe(
   Options.withDescription(
     "Place immediately before this section id (mutually exclusive with --after)."
   ),
   Options.optional
 );
-const createAfter = Options.text("after").pipe(
+const createAfter = entityIdOption("after", "section").pipe(
   Options.withDescription(
     "Place immediately after this section id (mutually exclusive with --before)."
   ),
@@ -314,7 +315,7 @@ const createCmd = Command.make(
 // rename <id> --title <t>
 // ---------------------------------------------------------------------------
 
-const renameId = Args.text({ name: "id" });
+const renameId = entityIdArg("section");
 const renameTitle = Options.text("title").pipe(
   Options.withDescription("The section's new display title.")
 );
@@ -347,14 +348,14 @@ const renameCmd = Command.make(
 // move <id> [--before|--after <sectionId>]
 // ---------------------------------------------------------------------------
 
-const moveId = Args.text({ name: "id" });
-const moveBefore = Options.text("before").pipe(
+const moveId = entityIdArg("section");
+const moveBefore = entityIdOption("before", "section").pipe(
   Options.withDescription(
     "Place immediately before this section id (mutually exclusive with --after)."
   ),
   Options.optional
 );
-const moveAfter = Options.text("after").pipe(
+const moveAfter = entityIdOption("after", "section").pipe(
   Options.withDescription(
     "Place immediately after this section id (mutually exclusive with --before)."
   ),
@@ -418,7 +419,7 @@ const moveCmd = Command.make(
 // archive <id>
 // ---------------------------------------------------------------------------
 
-const archiveId = Args.text({ name: "id" });
+const archiveId = entityIdArg("section");
 
 const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
   Effect.gen(function* () {

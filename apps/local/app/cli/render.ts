@@ -1,4 +1,4 @@
-import { ValidationError } from "@effect/cli";
+import { HelpDoc, ValidationError } from "@effect/cli";
 import { Cause, Effect, Option } from "effect";
 import { CliOutput } from "./output";
 
@@ -136,9 +136,21 @@ export const renderToExitCode = <E, R>(
           // surfaced HelpRequested is treated as a clean exit.
           if (ValidationError.isValidationError(error)) {
             if (error._tag === "HelpRequested") return 0;
+            // A bad value's own explanation (e.g. "that's a Pitch link, this
+            // command wants a Video" from ./entity-id.ts) rides along, so the
+            // agent learns what to pass instead of just that it was wrong.
+            const detail =
+              error._tag === "InvalidValue" || error._tag === "InvalidArgument"
+                ? HelpDoc.toAnsiText(error.error)
+                    // eslint-disable-next-line no-control-regex
+                    .replace(/\x1b\[[0-9;]*m/g, "")
+                    .trim()
+                : "";
             yield* out.stderr(
               serializeError("ParseError", {
-                message: `invalid CLI input (${error._tag})`,
+                message:
+                  `invalid CLI input (${error._tag})` +
+                  (detail ? `: ${detail}` : ""),
               }) + "\n"
             );
             return 3;

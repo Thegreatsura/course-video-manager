@@ -1,4 +1,5 @@
 import { Args, Command, Options } from "@effect/cli";
+import { entityIdArg, entityIdOption } from "../entity-id";
 import { Effect, Option } from "effect";
 import { ClipMockupChapterOperationsService } from "@/services/db-clip-mockup-chapter-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -44,7 +45,7 @@ import {
 // Options
 // ---------------------------------------------------------------------------
 
-const videoOpt = Options.text("video").pipe(
+const videoOpt = entityIdOption("video", "video").pipe(
   Options.withDescription("Parent Video id (required).")
 );
 
@@ -52,22 +53,28 @@ const titleOpt = Options.text("title").pipe(
   Options.withDescription("The Chapter's title (its 'name'). Required.")
 );
 
-const beforeOpt = Options.text("before").pipe(
+const beforeOpt = entityIdOption("before", [
+  "clip-mockup",
+  "clip-mockup-chapter",
+]).pipe(
   Options.withDescription(
     "Place immediately before this Clip Mockup or Chapter id (mutually exclusive with --after)."
   ),
   Options.optional
 );
 
-const afterOpt = Options.text("after").pipe(
+const afterOpt = entityIdOption("after", [
+  "clip-mockup",
+  "clip-mockup-chapter",
+]).pipe(
   Options.withDescription(
     "Place immediately after this Clip Mockup or Chapter id (mutually exclusive with --before)."
   ),
   Options.optional
 );
 
-const idArg = Args.text({ name: "id" });
-const idArgs = Args.text({ name: "id" }).pipe(Args.repeated);
+const idArg = entityIdArg("clip-mockup-chapter");
+const idArgs = entityIdArg("clip-mockup-chapter").pipe(Args.repeated);
 
 // ---------------------------------------------------------------------------
 // Shared helpers
