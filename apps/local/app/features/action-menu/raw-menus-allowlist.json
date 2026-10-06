@@ -1,8 +1,4 @@
 {
-  "components/app-sidebar.tsx": {
-    "count": 4,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/article-writer/document-panel.tsx": {
     "count": 7,
     "reason": "Hand-built; migrates in Batch 5 of docs/plans/action-menus.md."
@@ -15,17 +11,9 @@
     "count": 4,
     "reason": "AddBeatSubMenu only, kept for the course view's Video menu; delete it when Batch 2 of docs/plans/action-menus.md stops importing it."
   },
-  "features/course-view/actions-menu.tsx": {
-    "count": 19,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
-  },
   "features/course-view/export-status.tsx": {
     "count": 1,
     "reason": "Hand-built; migrates in Batch 2 of docs/plans/action-menus.md."
-  },
-  "features/course-view/lesson-context-menu.tsx": {
-    "count": 22,
-    "reason": "Hand-built; migrates in Batch 1 of docs/plans/action-menus.md."
   },
   "features/course-view/video-context-menu.tsx": {
     "count": 18,

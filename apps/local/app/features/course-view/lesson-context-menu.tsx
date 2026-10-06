@@ -1,27 +1,17 @@
 import { isTodoLesson } from "@cvm/core/lib/authoring-status";
-import {
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
 import type { Lesson, Section } from "./course-view-types";
 import type { useNavigate } from "react-router";
 import {
-  ArrowRightLeft,
   CheckCircle2,
   FileText,
   FileVideo,
+  FolderInput,
   ListTodo,
-  PencilIcon,
-  Plus,
-  Trash2,
 } from "lucide-react";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 
 export function LessonContextMenuContent({
   courseId,
@@ -48,153 +38,123 @@ export function LessonContextMenuContent({
   startEditingTitle: () => void;
   startEditingDescription: () => void;
 }) {
+  const otherSections = allSections.filter((s) => s.id !== section.id);
+  const canEdit = !isReadOnly;
+
   return (
-    <ContextMenuContent>
-      {compact && lesson.videos.length > 0 && (
-        <>
-          {lesson.videos.map((video) => (
-            <ContextMenuItem
-              key={video.id}
-              onSelect={() => navigate(`/videos/${video.id}/edit`)}
-            >
-              <FileVideo className="w-4 h-4" />
-              {video.title}
-            </ContextMenuItem>
-          ))}
-          <ContextMenuSeparator />
-        </>
-      )}
-      <CopyEntityLinkItems
-        menu="context"
-        entity={{
-          type: "lesson",
-          id: lesson.id,
-          courseId,
-          sectionId: section.id,
-        }}
-      />
-      {!isReadOnly && (
-        <>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() =>
+    <EntityMenuContent
+      menu="context"
+      entity={{
+        type: "lesson",
+        id: lesson.id,
+        courseId,
+        sectionId: section.id,
+      }}
+      groups={{
+        open: compact
+          ? lesson.videos.map((video) => ({
+              label: video.title,
+              icon: FileVideo,
+              onSelect: () => void navigate(`/videos/${video.id}/edit`),
+            }))
+          : [],
+        edit: [
+          canEdit && {
+            ...STANDARD_ACTIONS.rename,
+            onSelect: startEditingTitle,
+          },
+          canEdit &&
+            compact && {
+              label: "Edit Description",
+              icon: FileText,
+              onSelect: startEditingDescription,
+            },
+          canEdit &&
+            (isTodoLesson(lesson)
+              ? {
+                  label: "Mark as Done",
+                  icon: CheckCircle2,
+                  onSelect: () =>
+                    submitEvent({
+                      type: "set-lesson-authoring-status",
+                      lessonId: lesson.id,
+                      status: "done",
+                    }),
+                }
+              : {
+                  label: "Mark as TODO",
+                  icon: ListTodo,
+                  onSelect: () =>
+                    submitEvent({
+                      type: "set-lesson-authoring-status",
+                      lessonId: lesson.id,
+                      status: "todo",
+                    }),
+                }),
+        ],
+        create: [
+          canEdit && {
+            ...STANDARD_ACTIONS.add,
+            label: "Add Video",
+            opensDialog: true,
+            onSelect: () =>
               dispatch({
                 type: "set-add-video-to-lesson-id",
                 lessonId: lesson.id,
-              })
-            }
-          >
-            <Plus className="w-4 h-4" />
-            Add Video
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={startEditingTitle}>
-            <PencilIcon className="w-4 h-4" />
-            Rename
-          </ContextMenuItem>
-          {compact && (
-            <ContextMenuItem onSelect={startEditingDescription}>
-              <FileText className="w-4 h-4" />
-              Edit Description
-            </ContextMenuItem>
-          )}
-          <ContextMenuSeparator />
-          {!isTodoLesson(lesson) ? (
-            <ContextMenuItem
-              onSelect={() =>
-                submitEvent({
-                  type: "set-lesson-authoring-status",
-                  lessonId: lesson.id,
-                  status: "todo",
-                })
-              }
-            >
-              <ListTodo className="w-4 h-4" />
-              Mark as TODO
-            </ContextMenuItem>
-          ) : (
-            <ContextMenuItem
-              onSelect={() =>
-                submitEvent({
-                  type: "set-lesson-authoring-status",
-                  lessonId: lesson.id,
-                  status: "done",
-                })
-              }
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Mark as Done
-            </ContextMenuItem>
-          )}
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() =>
+              }),
+          },
+          canEdit && {
+            ...STANDARD_ACTIONS.add,
+            label: "Add Lesson Before",
+            opensDialog: true,
+            onSelect: () =>
               dispatch({
                 type: "set-insert-lesson",
                 sectionId: section.id,
                 adjacentLessonId: lesson.id,
                 position: "before",
-              })
-            }
-          >
-            <Plus className="w-4 h-4" />
-            Add Lesson Before
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() =>
+              }),
+          },
+          canEdit && {
+            ...STANDARD_ACTIONS.add,
+            label: "Add Lesson After",
+            opensDialog: true,
+            onSelect: () =>
               dispatch({
                 type: "set-insert-lesson",
                 sectionId: section.id,
                 adjacentLessonId: lesson.id,
                 position: "after",
-              })
-            }
-          >
-            <Plus className="w-4 h-4" />
-            Add Lesson After
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <ArrowRightLeft className="w-4 h-4" />
-              Move to Section
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {allSections
-                .filter((s) => s.id !== section.id)
-                .map((targetSection) => (
-                  <ContextMenuItem
-                    key={targetSection.id}
-                    onSelect={() =>
-                      submitEvent({
-                        type: "move-lesson-to-section",
-                        lessonId: lesson.id,
-                        targetSectionId: targetSection.id,
-                      })
-                    }
-                  >
-                    {targetSection.path}
-                  </ContextMenuItem>
-                ))}
-              {allSections.filter((s) => s.id !== section.id).length === 0 && (
-                <ContextMenuItem disabled>No other sections</ContextMenuItem>
-              )}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              dispatch({
-                type: "set-delete-lesson-id",
-                lessonId: lesson.id,
-              });
-            }}
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </ContextMenuItem>
-        </>
-      )}
-    </ContextMenuContent>
+              }),
+          },
+        ],
+        move: [
+          canEdit &&
+            otherSections.length > 0 && {
+              ...STANDARD_ACTIONS.moveTo,
+              label: "Move to Section",
+              items: otherSections.map((targetSection) => ({
+                label: targetSection.path,
+                icon: FolderInput,
+                onSelect: () =>
+                  submitEvent({
+                    type: "move-lesson-to-section",
+                    lessonId: lesson.id,
+                    targetSectionId: targetSection.id,
+                  }),
+              })),
+            },
+        ],
+        danger: [
+          canEdit && {
+            ...STANDARD_ACTIONS.delete,
+            // A dialog confirms first, listing any files on disk.
+            opensDialog: true,
+            onSelect: () =>
+              dispatch({ type: "set-delete-lesson-id", lessonId: lesson.id }),
+          },
+        ],
+      }}
+    />
   );
 }
