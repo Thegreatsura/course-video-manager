@@ -190,6 +190,9 @@ export function linkStyle(): React.CSSProperties {
     // the letters it belongs to.
     textDecorationThickness: "1px",
     textUnderlineOffset: "0.18em",
+    // Shown whole, so a long address breaks wherever it has to rather than
+    // running off a short measure.
+    overflowWrap: "anywhere",
   };
 }
 

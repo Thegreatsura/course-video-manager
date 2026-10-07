@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { links } from "./glass-links-test-helpers";
 import { ScriptMarkdown } from "./script-markdown";
-import { TYPE } from "./teleprompter-settings";
 
 const render = (markdown: string) =>
   renderToStaticMarkup(<ScriptMarkdown>{markdown}</ScriptMarkdown>);
@@ -61,13 +60,11 @@ describe("ScriptMarkdown links", () => {
     );
   });
 
-  it("shortens a URL too long to fit the measure", () => {
+  it("shows a URL longer than the measure in full", () => {
     const url = "https://example.com/a/really/long/path/that/goes/on?q=1";
     const [link] = links(render(`Go to ${url} now.`));
     expect(link?.href).toBe(url);
-    expect(link?.text.startsWith("example.com/")).toBe(true);
-    expect(link?.text.endsWith("…")).toBe(true);
-    expect(link?.text.length).toBeLessThanOrEqual(TYPE.measure);
+    expect(link?.text).toBe("example.com/a/really/long/path/that/goes/on?q=1");
   });
 
   // A written label is prose: the author chose those words to be read aloud.
