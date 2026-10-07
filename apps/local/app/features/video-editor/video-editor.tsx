@@ -150,8 +150,7 @@ export const VideoEditor = (props: {
     itemId: FrontendId
   ) => void;
   onRestoreClip: (clipId: FrontendId) => void;
-  onPermanentlyRemoveArchived: (sessionId: SessionId) => void;
-  onClearAllArchived: () => void;
+  onPermanentlyRemoveArchived: (scope: SessionId | "all") => void;
   error: EditorError | null;
   onCreateVideoFromSelection: (
     clipIds: FrontendId[],
@@ -257,7 +256,7 @@ export const VideoEditor = (props: {
     dispatch,
     onDeleteLatestInsertedClip: props.onDeleteLatestInsertedClip,
     onTogglePause: props.onTogglePause,
-    onClearAllArchived: props.onClearAllArchived,
+    onPermanentlyRemoveArchived: props.onPermanentlyRemoveArchived,
     setChapterNamingModal,
     generateDefaultChapterName,
   });

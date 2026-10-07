@@ -140,7 +140,11 @@ export type VideoEditorContextType = {
   onAddChapterAfter: (itemId: FrontendId, defaultName: string) => void;
   generateDefaultChapterName: () => string;
   onRestoreClip: (clipId: FrontendId) => void;
-  onPermanentlyRemoveArchived: (sessionId: SessionId) => void;
+  /**
+   * A Recording Session's "Clear all": drops its archived and orphaned clips
+   * from the panel. "all" does the same for every Recording Session at once.
+   */
+  onPermanentlyRemoveArchived: (scope: SessionId | "all") => void;
 
   // Clipboard
   copyTranscriptToClipboard: () => Promise<void>;
