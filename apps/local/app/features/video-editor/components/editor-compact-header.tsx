@@ -1,10 +1,6 @@
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeftIcon,
@@ -13,7 +9,9 @@ import {
   SendIcon,
   PlayIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
+import { useEditorVideoMenuRef } from "../editor-video-menu";
 
 export const EditorCompactHeader = (props: {
   backButtonUrl: string;
@@ -26,6 +24,9 @@ export const EditorCompactHeader = (props: {
   /** True iff this Video has ≥1 Clip Mockup, so there is an Animatic to watch. */
   hasAnimatic: boolean;
 }) => {
+  const videoMenu = useEditorVideoMenuRef();
+  // Re-renders as the menu opens, so it reads the latest published groups.
+  const [, setIsMenuOpen] = useState(false);
   const tabs = [
     { id: "edit", label: "Video", path: "edit", icon: VideoIcon },
     {
@@ -44,19 +45,19 @@ export const EditorCompactHeader = (props: {
         </Link>
       </Button>
 
-      {/* Right-click the breadcrumb for this Video's link and ID. */}
-      <ContextMenu>
+      {/* Right-click the breadcrumb for this Video's menu: the same groups
+          as the Actions dropdown, read as the menu opens. */}
+      <ContextMenu onOpenChange={setIsMenuOpen}>
         <ContextMenuTrigger asChild>
           <span className="text-sm text-muted-foreground truncate min-w-0 cursor-context-menu">
             {props.breadcrumb}
           </span>
         </ContextMenuTrigger>
-        <ContextMenuContent>
-          <CopyEntityLinkItems
-            menu="context"
-            entity={{ type: "video", id: props.videoId }}
-          />
-        </ContextMenuContent>
+        <EntityMenuContent
+          menu="context"
+          entity={{ type: "video", id: props.videoId }}
+          groups={videoMenu?.current ?? {}}
+        />
       </ContextMenu>
 
       <div className="flex-1" />

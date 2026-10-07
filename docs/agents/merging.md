@@ -11,4 +11,6 @@
    3. `gh pr merge <pr> --merge`. Leave off `--delete-branch`: `main` is checked out in another worktree, so the local cleanup fails.
    4. `git push origin --delete <branch>`, then `git worktree remove .claude/worktrees/<name>`.
 
+**Waiting and polling.** Prefer `gh pr checks <pr> --watch` to a hand-rolled loop. Any wait or poll loop you do write gets a timeout (`timeout 900 bash -c 'until …; do sleep 5; done'`) and writes its logs inside your own worktree, never shared `/tmp`: a loop waiting on a file that never appears there runs for hours after you finish. Before you finish, stop every background command you started.
+
 The ruleset is the only gate, and it holds for agents without exception: merge through the loop above, every time. `--admin`, ruleset bypass and direct pushes to `main` are reserved for the human admin.

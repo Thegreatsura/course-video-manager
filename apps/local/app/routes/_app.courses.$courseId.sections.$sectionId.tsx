@@ -211,7 +211,6 @@ export default function Component(props: Route.ComponentProps) {
     [submit]
   );
 
-  const deleteVideoFileFetcher = useFetcher();
   const revealVideoFetcher = useFetcher();
 
   const sensors = useSensors(
@@ -330,7 +329,6 @@ export default function Component(props: Route.ComponentProps) {
                         navigate={navigate}
                         startExportUpload={startExportUpload}
                         revealVideoFetcher={revealVideoFetcher}
-                        deleteVideoFileFetcher={deleteVideoFileFetcher}
                         submitDeleteVideo={submitDeleteVideo}
                       />
                     </TabsContent>

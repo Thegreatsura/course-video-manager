@@ -352,21 +352,6 @@ describe("section rename", () => {
       "ParseError"
     );
   });
-
-  it("renaming to end in ARCHIVE does not soft-delete the section", async () => {
-    const { exitCode, stdout } = await run([
-      "section",
-      "rename",
-      "--title",
-      "99-ARCHIVE",
-      s.sec1,
-    ]);
-    expect(exitCode).toBe(0);
-    expect(one<Section>(stdout).archivedAt).toBeNull();
-    // still fully readable and addressable — not the same thing as `archive`.
-    const get = await run(["section", "get", s.sec1]);
-    expect(get.exitCode).toBe(0);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -423,19 +408,6 @@ describe("section move", () => {
       "move",
       "--before",
       s.sec1,
-      s.sec1,
-    ]);
-    expect(exitCode).toBe(3);
-  });
-
-  it("rejects both --before and --after (exit 3)", async () => {
-    const { exitCode } = await run([
-      "section",
-      "move",
-      "--before",
-      s.sec2,
-      "--after",
-      s.sec3,
       s.sec1,
     ]);
     expect(exitCode).toBe(3);

@@ -1,13 +1,12 @@
 import { AddVideoModal } from "@/components/add-video-modal";
 import { formatVideoBreadcrumb } from "@/lib/video-breadcrumb";
 import { Button } from "@/components/ui/button";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
+import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { getBackButtonUrl } from "@/features/video-editor/video-editor-selectors";
 import { cn } from "@/lib/utils";
 import { type VideoFormat } from "@/features/videos/video-format";
@@ -19,7 +18,6 @@ import {
   BookOpenIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  Plus,
   VideoIcon,
   SendIcon,
   YoutubeIcon,
@@ -28,8 +26,16 @@ import {
   HistoryIcon,
   PlayIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, Outlet, useLocation, useMatches } from "react-router";
+import { useContext, useMemo, useState } from "react";
+import {
+  Link,
+  Outlet,
+  useFetcher,
+  useLocation,
+  useMatches,
+  useNavigate,
+  useSubmit,
+} from "react-router";
 import type { Route } from "./+types/_app.videos.$videoId";
 
 export const loader = makeLoader({
@@ -65,6 +71,7 @@ export const loader = makeLoader({
           sectionPath: null,
           repoId: null,
           lessonId: null,
+          sectionId: null,
           pitchId: video.pitchId,
           isStandalone: true,
           format: video.format,
@@ -84,6 +91,7 @@ export const loader = makeLoader({
         sectionPath: lesson.section.title,
         repoId: lesson.section.repoVersion.repoId,
         lessonId: lesson.id,
+        sectionId: lesson.section.id,
         pitchId: video.pitchId,
         isStandalone: false,
         format: video.format,
@@ -165,6 +173,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
     sectionPath,
     repoId,
     lessonId,
+    sectionId,
     pitchId,
     isStandalone,
     format,
@@ -210,6 +219,40 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
 
   const backButtonUrl = getBackButtonUrl(repoId, lessonId, format, pitchId);
 
+  // The Video's menu on the breadcrumb, for every tab outside the editor (the
+  // editor's own breadcrumb carries its fuller list). Only what this page
+  // knows enough to run.
+  const navigate = useNavigate();
+  const submit = useSubmit();
+  const revealFetcher = useFetcher();
+  const { startExportUpload } = useContext(UploadContext);
+  const dialogs = useVideoDialogs();
+  const video = { id: videoId, title: videoTitle };
+  const videoGroups = videoMenuGroups({
+    revealInFileSystem: () =>
+      revealFetcher.submit(
+        {},
+        { method: "post", action: `/api/videos/${videoId}/reveal` }
+      ),
+    rename: () => dialogs.rename(video),
+    createConcatenatedVideo:
+      videoFormat === "short"
+        ? undefined
+        : () => navigate(`/videos/concatenate?initial=${videoId}`),
+    moveToCourse:
+      isStandalone && videoFormat !== "short"
+        ? () => navigate(`/videos/${videoId}/move-to-course`)
+        : undefined,
+    export: () => startExportUpload(videoId, videoTitle),
+    archive: () => {
+      void submit(
+        { videoId },
+        { method: "post", action: "/api/videos/delete", navigate: false }
+      );
+      void navigate(backButtonUrl);
+    },
+  });
+
   // Build breadcrumb text
   const breadcrumb = formatVideoBreadcrumb({
     isStandalone,
@@ -238,18 +281,17 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
                 </Link>
               </Button>
 
-              {/* Breadcrumb — right-click it for this Video's link and ID,
-                  on every tab of the Video. */}
+              {/* Breadcrumb — right-click it for this Video's menu, on every
+                  tab of the Video. */}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <h1 className="text-lg cursor-context-menu">{breadcrumb}</h1>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <CopyEntityLinkItems
-                    menu="context"
-                    entity={{ type: "video", id: videoId }}
-                  />
-                </ContextMenuContent>
+                <EntityMenuContent
+                  menu="context"
+                  entity={{ type: "video", id: videoId }}
+                  groups={videoGroups}
+                />
               </ContextMenu>
             </div>
 
@@ -321,15 +363,28 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
                         </Link>
                       </Button>
                     </ContextMenuTrigger>
-                    {lessonId && (
-                      <ContextMenuContent>
-                        <ContextMenuItem
-                          onSelect={() => setAddVideoModalOpen(true)}
-                        >
-                          <Plus className="w-4 h-4" />
-                          Add New Video
-                        </ContextMenuItem>
-                      </ContextMenuContent>
+                    {/* The next Video belongs to this Lesson: its menu is the
+                        Lesson's. */}
+                    {lessonId && repoId && sectionId && (
+                      <EntityMenuContent
+                        menu="context"
+                        entity={{
+                          type: "lesson",
+                          id: lessonId,
+                          courseId: repoId,
+                          sectionId,
+                        }}
+                        groups={{
+                          create: [
+                            {
+                              ...STANDARD_ACTIONS.add,
+                              label: "Add Video",
+                              opensDialog: true,
+                              onSelect: () => setAddVideoModalOpen(true),
+                            },
+                          ],
+                        }}
+                      />
                     )}
                   </ContextMenu>
                 ) : null}
@@ -364,6 +419,8 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
       <div className="flex-1 min-h-0 overflow-hidden">
         <Outlet />
       </div>
+
+      {dialogs.dialogs}
 
       <AddVideoModal
         lessonId={lessonId ?? undefined}

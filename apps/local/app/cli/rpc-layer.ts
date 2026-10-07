@@ -208,6 +208,9 @@ const videoService = (client: RpcClient) =>
     deleteVideo: rpcMethod((json) =>
       client.rpc.video.deleteVideo.$post({ json })
     ),
+    unarchiveVideo: rpcMethod((json) =>
+      client.rpc.video.unarchiveVideo.$post({ json })
+    ),
   }) satisfies RemoteService<VideoOperationsService>;
 
 const clipService = (client: RpcClient) =>

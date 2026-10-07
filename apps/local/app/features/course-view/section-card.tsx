@@ -61,7 +61,6 @@ export function SectionCard({
   navigate,
   startExportUpload,
   revealVideoFetcher,
-  deleteVideoFileFetcher,
   submitDeleteVideo,
   isReadOnly,
   allSectionIds,
@@ -96,7 +95,6 @@ export function SectionCard({
   navigate: ReturnType<typeof useNavigate>;
   startExportUpload: (videoId: string, path: string) => void;
   revealVideoFetcher: ReturnType<typeof useFetcher>;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   submitDeleteVideo: (videoId: string) => void;
   allSectionIds: string[];
   allFlatLessons: DependencyLessonItem[];
@@ -262,9 +260,6 @@ export function SectionCard({
                                   submitEvent={submitEvent}
                                   startExportUpload={startExportUpload}
                                   revealVideoFetcher={revealVideoFetcher}
-                                  deleteVideoFileFetcher={
-                                    deleteVideoFileFetcher
-                                  }
                                   submitDeleteVideo={submitDeleteVideo}
                                   allSections={currentCourse.sections}
                                   dependencyMap={dependencyMap}

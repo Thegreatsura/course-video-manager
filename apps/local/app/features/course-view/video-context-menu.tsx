@@ -1,82 +1,16 @@
-import {
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
-import {
-  AlertTriangle,
-  ArrowRightLeft,
-  Combine,
-  Copy,
-  Download,
-  FileText,
-  FolderOpen,
-  ListTree,
-  PencilIcon,
-  ScrollText,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
-import { Suspense } from "react";
+import { useRequestCreateBeat } from "@/features/beats/create-beat-dialog";
+import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
+import { Suspense, use, type ReactNode } from "react";
 import type { useNavigate, useFetcher } from "react-router";
 import type { LoaderData, Section, Lesson, Video } from "./course-view-types";
-import { CopyEntityLinkItems } from "@/features/entity-links/copy-entity-link-items";
 import { useAutofillChaptersAction } from "./autofill-chapters-context";
-import { PurgeExportMenuItem } from "./export-status";
-import { AddBeatSubMenu } from "@/features/beats/beat-menu-items";
-import { useRequestCreateBeat } from "@/features/beats/create-beat-dialog";
 import { VIDEO_WARNING_LABELS } from "./video-warning-labels";
-import type { VideoWarning, VideoWarningKind } from "@/services/video-warnings";
 
-/**
- * Trailing amber triangle on an action-menu item whose content the Video is
- * still missing — so the gap is visible at the point where you'd go fill it.
- * Renders nothing when that content is already there.
- */
-function MissingContentWarning({
-  warnings,
-  kind,
-}: {
-  warnings: VideoWarning[];
-  kind: VideoWarningKind;
-}) {
-  if (!warnings.some((w) => w.kind === kind)) return null;
-
-  const label = VIDEO_WARNING_LABELS[kind];
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className="ml-auto inline-flex items-center"
-    >
-      <AlertTriangle className="w-3 h-3 text-amber-500" />
-    </span>
-  );
-}
-
-/**
- * The full set of video context-menu items, shared between the expanded
- * thumbnail grid and the compact beat tree so right-clicking a Video offers
- * the same actions in both views. Wrap in a `<ContextMenu>`/`<ContextMenuTrigger>`
- * at the call site.
- *
- * Grouped into sections divided by separators: deep link, lesson content,
- * beats, organize, video files, and (destructively) delete.
- */
-export function VideoContextMenuItems({
-  video,
-  section,
-  lesson,
-  data,
-  navigate,
-  dispatch,
-  startExportUpload,
-  revealVideoFetcher,
-  deleteVideoFileFetcher,
-  submitDeleteVideo,
-}: {
+interface VideoContextMenuProps {
   video: Video;
   section: Section;
   lesson: Lesson;
@@ -85,188 +19,130 @@ export function VideoContextMenuItems({
   dispatch: (action: courseViewReducer.Action) => void;
   startExportUpload: (videoId: string, path: string) => void;
   revealVideoFetcher: ReturnType<typeof useFetcher>;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
   submitDeleteVideo: (videoId: string) => void;
-}) {
+}
+
+/**
+ * A Video's right-click menu in the course view, shared between the expanded
+ * thumbnail grid and the compact beat tree so right-clicking a Video offers
+ * the same actions in both views. `children` is the trigger. The list itself
+ * is `videoMenuGroups`, the one every Video menu in the app renders.
+ */
+export function VideoContextMenu({
+  children,
+  ...props
+}: VideoContextMenuProps & { children: ReactNode }) {
+  const dialogs = useVideoDialogs();
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        {/* Purge Export shows only once the deferred export map says the
+            Video is exported; until it streams in, the menu goes without. */}
+        <Suspense
+          fallback={
+            <VideoMenu {...props} dialogs={dialogs} isExported={false} />
+          }
+        >
+          <VideoMenuOnceExportKnown {...props} dialogs={dialogs} />
+        </Suspense>
+      </ContextMenu>
+      {dialogs.dialogs}
+    </>
+  );
+}
+
+type MenuProps = VideoContextMenuProps & {
+  dialogs: ReturnType<typeof useVideoDialogs>;
+};
+
+function VideoMenuOnceExportKnown(props: MenuProps) {
+  const map = use(props.data.hasExportedVideoMap);
+  return <VideoMenu {...props} isExported={!!map[props.video.id]} />;
+}
+
+function VideoMenu({
+  video,
+  section,
+  lesson,
+  data,
+  navigate,
+  dispatch,
+  startExportUpload,
+  revealVideoFetcher,
+  submitDeleteVideo,
+  dialogs,
+  isExported,
+}: MenuProps & { isExported: boolean }) {
   const openAutofillChapters = useAutofillChaptersAction();
   const requestCreateBeat = useRequestCreateBeat();
-  const isReadOnly = !data.isLatestVersion;
-  const canAutofillChapters = !isReadOnly && video.clipCount > 0;
+  const canEdit = data.isLatestVersion;
+  const videoPath = `${section.title}/${lesson.path}/${video.title}`;
+  const missingBody = video.warnings.some((w) => w.kind === "missingBody");
 
   return (
-    <ContextMenuContent>
-      <CopyEntityLinkItems
-        menu="context"
-        entity={{ type: "video", id: video.id }}
-      />
-
-      {!isReadOnly && (
-        <>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-lesson-body-writer",
-                videoId: video.id,
-              });
-            }}
-          >
-            <FileText className="w-4 h-4" />
-            Edit Lesson Body
-            <MissingContentWarning
-              warnings={video.warnings}
-              kind="missingBody"
-            />
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-script-editor",
-                videoId: video.id,
-              });
-            }}
-          >
-            <ScrollText className="w-4 h-4" />
-            Edit Script
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-seo-description",
-                videoId: video.id,
-              });
-            }}
-          >
-            <Sparkles className="w-4 h-4" />
-            Autofill description
-          </ContextMenuItem>
-          {canAutofillChapters && (
-            <ContextMenuItem
-              onSelect={() => {
-                openAutofillChapters({
-                  videoId: video.id,
-                  videoLabel: `${section.title}/${lesson.path}/${video.title}`,
-                });
-              }}
-            >
-              <ListTree className="w-4 h-4" />
-              Autofill chapters
-            </ContextMenuItem>
-          )}
-
-          <ContextMenuSeparator />
-          <AddBeatSubMenu
-            onAdd={(kind) =>
-              requestCreateBeat({
-                videoId: video.id,
-                kind,
-                beforeBeatId: null,
-              })
-            }
-          />
-
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-rename-video",
-                videoId: video.id,
-                videoTitle: video.title,
-              });
-            }}
-          >
-            <PencilIcon className="w-4 h-4" />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-copy-video",
-                videoId: video.id,
-                videoTitle: video.title,
-                clipCount: video.clipCount,
-                beatCount: video.beats.length,
-                hasScript: video.hasScript,
-              });
-            }}
-          >
-            <Copy className="w-4 h-4" />
-            Copy Video
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              dispatch({
-                type: "open-move-video",
-                videoId: video.id,
-                videoTitle: video.title,
-                currentLessonId: lesson.id,
-              });
-            }}
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-            Move to Lesson
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={() => {
-              navigate(`/videos/concatenate?initial=${video.id}`);
-            }}
-          >
-            <Combine className="w-4 h-4" />
-            Create Concatenated Video
-          </ContextMenuItem>
-        </>
-      )}
-
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        onSelect={() => {
-          startExportUpload(
-            video.id,
-            `${section.title}/${lesson.path}/${video.title}`
-          );
-        }}
-      >
-        <Download className="w-4 h-4" />
-        Export
-      </ContextMenuItem>
-      <ContextMenuItem
-        onSelect={() => {
+    <EntityMenuContent
+      menu="context"
+      entity={{ type: "video", id: video.id }}
+      groups={videoMenuGroups({
+        revealInFileSystem: () =>
           revealVideoFetcher.submit(
             {},
-            {
-              method: "post",
-              action: `/api/videos/${video.id}/reveal`,
-            }
-          );
-        }}
-      >
-        <FolderOpen className="w-4 h-4" />
-        Reveal in File System
-      </ContextMenuItem>
-      {!isReadOnly && (
-        <Suspense>
-          <PurgeExportMenuItem
-            videoId={video.id}
-            hasExportedVideoMap={data.hasExportedVideoMap}
-            deleteVideoFileFetcher={deleteVideoFileFetcher}
-          />
-        </Suspense>
-      )}
-
-      {!isReadOnly && (
-        <>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              submitDeleteVideo(video.id);
-            }}
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </ContextMenuItem>
-        </>
-      )}
-    </ContextMenuContent>
+            { method: "post", action: `/api/videos/${video.id}/reveal` }
+          ),
+        ...(canEdit && {
+          rename: () =>
+            dispatch({
+              type: "open-rename-video",
+              videoId: video.id,
+              videoTitle: video.title,
+            }),
+          editLessonBody: {
+            onSelect: () =>
+              dispatch({ type: "open-lesson-body-writer", videoId: video.id }),
+            description: missingBody
+              ? VIDEO_WARNING_LABELS.missingBody
+              : undefined,
+          },
+          editScript: () =>
+            dispatch({ type: "open-script-editor", videoId: video.id }),
+          autofillDescription: () =>
+            dispatch({ type: "open-seo-description", videoId: video.id }),
+          autofillChapters:
+            video.clipCount > 0
+              ? () =>
+                  openAutofillChapters({
+                    videoId: video.id,
+                    videoLabel: videoPath,
+                  })
+              : undefined,
+          addBeat: (kind) =>
+            requestCreateBeat({ videoId: video.id, kind, beforeBeatId: null }),
+          duplicate: () =>
+            dispatch({
+              type: "open-copy-video",
+              videoId: video.id,
+              videoTitle: video.title,
+              clipCount: video.clipCount,
+              beatCount: video.beats.length,
+              hasScript: video.hasScript,
+            }),
+          createConcatenatedVideo: () =>
+            navigate(`/videos/concatenate?initial=${video.id}`),
+          moveToLesson: () =>
+            dispatch({
+              type: "open-move-video",
+              videoId: video.id,
+              videoTitle: video.title,
+              currentLessonId: lesson.id,
+            }),
+          purgeExport: isExported
+            ? () => dialogs.confirmPurgeExport(video)
+            : undefined,
+          archive: () => submitDeleteVideo(video.id),
+        }),
+        export: () => startExportUpload(video.id, videoPath),
+      })}
+    />
   );
 }

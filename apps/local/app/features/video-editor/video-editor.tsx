@@ -1,4 +1,5 @@
 import { EditorCompactHeader } from "./components/editor-compact-header";
+import { EditorVideoMenuProvider } from "./editor-video-menu";
 import { EditorModals } from "./components/editor-modals";
 import { VideoPlayerPanel } from "./components/video-player-panel";
 import { PortraitStudioPanel } from "./components/portrait-studio-panel";
@@ -647,13 +648,15 @@ export const VideoEditor = (props: {
 
   return (
     <VideoEditorContext.Provider value={contextValue}>
-      <div className="flex flex-col h-full p-2 gap-2">
-        {props.navigation && <EditorCompactHeader {...props.navigation} />}
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-2">
-          {body}
+      <EditorVideoMenuProvider>
+        <div className="flex flex-col h-full p-2 gap-2">
+          {props.navigation && <EditorCompactHeader {...props.navigation} />}
+          <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-2">
+            {body}
+          </div>
         </div>
-      </div>
-      {modals}
+        {modals}
+      </EditorVideoMenuProvider>
     </VideoEditorContext.Provider>
   );
 };

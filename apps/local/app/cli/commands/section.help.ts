@@ -16,18 +16,12 @@ WHAT IS A SECTION
   contains at least one Lesson. Archived (deleted) sections are ALWAYS filtered
   out and are never visible — there is no --archived flag for sections.
 
-TWO DIFFERENT THINGS NAMED "ARCHIVE" — DO NOT CONFUSE THEM
-  1. 'cvm section archive <id>' (below) is a WRITE verb: a hard, one-way
-     soft-delete. It sets archivedAt and the section then behaves exactly like
-     a deleted row everywhere in this CLI — same as 'cvm lesson archive'.
-  2. An "ARCHIVE Section" is an unrelated, pre-existing APP convention: any
-     section whose title/path ends in the literal text "ARCHIVE" is filtered
-     out of the default course view in the app's UI, but is NOT archived in
-     the sense above — it still shows up in 'cvm section list'/'get' like any
-     other active section. Renaming a section to end in "ARCHIVE" (via 'cvm
-     section rename') only hides it from that one UI view; it does not touch
-     archivedAt and 'cvm section archive' is still a separate, later step if
-     you actually want to delete it.
+ARCHIVING
+  'cvm section archive <id>' (below) is a WRITE verb: a hard, one-way
+  soft-delete. It sets archivedAt and the section then behaves exactly like a
+  deleted row everywhere in this CLI — same as 'cvm lesson archive'. It is the
+  ONLY thing that hides a section: a title is just a title, so naming a section
+  "... ARCHIVE" hides nothing.
 
 OUTPUT FIELDS
   id            section id (use with 'get' / 'tree').
@@ -56,7 +50,7 @@ VERBS
   move <id> [--before|--after <sectionId>]
                         Reorder a section within its Version (WRITE).
   archive <id>          Hard, one-way soft-delete of a section (WRITE) — see
-                        "TWO DIFFERENT THINGS NAMED ARCHIVE" above.
+                        "ARCHIVING" above.
 
 WRITES only ever target the Draft (latest) version.
 
@@ -155,22 +149,15 @@ EXAMPLES
 export const RENAME_HELP = `Rename a section by id. Requires --title <t> (a non-empty display title — an
 empty/whitespace-only value is invalid input, exit 3).
 
-This ONLY changes the section's title/display path — it is NOT the same as the
-app's "ARCHIVE Section" convention: renaming a section so its title ends in the
-literal text "ARCHIVE" hides it from the default course view in the app's UI,
-but does nothing else — the section stays fully active in this CLI (still shows
-in 'list'/'get', still editable). See 'cvm section --help' for the full
-distinction from the destructive 'archive' verb below.
+This ONLY changes the section's title/display path. It never hides or archives
+the section, whatever the title says — use 'cvm section archive' for that.
 
 Editing a section in a published (frozen) version is refused (exit 3); edits go
 to the Draft. Echoes the renamed section with its Version/Course hierarchy (as
 'get').
 
 EXAMPLES
-  cvm section rename <sectionId> --title "A clearer title"
-  cvm section rename <sectionId> --title "99-ARCHIVE"   # hides from the course
-                                                          # view only — does NOT
-                                                          # archive the section`;
+  cvm section rename <sectionId> --title "A clearer title"`;
 
 export const MOVE_HELP = `Reorder a section within its Course Version.
 
@@ -204,10 +191,6 @@ longer address it. Editing a published (frozen) version is refused (exit 3);
 archiving only ever targets the Draft. Echoes the archived section (shaped like
 'get', with archivedAt set) one last time — since 'archive' does not re-fetch
 after the write.
-
-DO NOT CONFUSE with the app's "ARCHIVE Section" title convention (a section
-whose title ends in "ARCHIVE" is merely hidden from the default course view,
-NOT deleted) — see 'cvm section --help'. This verb is the destructive one.
 
 ONE-WAY DOOR. There is no CLI verb, no HTTP route and no UI action that
 un-archives a section — reach for it accordingly.

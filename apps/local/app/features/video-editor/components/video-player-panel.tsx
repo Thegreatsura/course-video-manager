@@ -13,6 +13,7 @@ import { VideoPlayerStatusStrip } from "./video-player-status-strip";
 import { LessonBodyWriterModal } from "@/features/lesson-writer/lesson-body-writer-modal";
 import { AutofillDescriptionModal } from "@/features/lesson-writer/autofill-description-modal";
 import { VideoPlayerLinksTab } from "./video-player-links-tab";
+import { VideoMoreActions } from "./video-more-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
 import {
   getLastTranscribedClipId as getLastTranscribedClipIdSelector,
@@ -26,7 +27,9 @@ import {
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
 import { ClipboardIcon, VideoOffIcon } from "lucide-react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
+import { videoMenuGroups } from "@/features/video-menu/video-menu";
+import { useEditorVideoActions } from "../editor-video-menu";
 import { useContextSelector } from "use-context-selector";
 import {
   VideoEditorContext,
@@ -37,11 +40,8 @@ import {
   useState,
   useMemo,
   useCallback,
-  useContext,
-  useEffect,
   type ChangeEvent,
 } from "react";
-import { UploadContext } from "@/features/upload-manager/upload-context";
 import {
   resolveForVideo,
   type ResolverTimelineItem,
@@ -54,10 +54,6 @@ import {
 import { teleprompterChannel } from "@/lib/teleprompter-protocol";
 
 export const VideoPlayerPanel = () => {
-  const videoTitle = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.videoTitle
-  );
   const lessonId = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.lessonId
@@ -157,8 +153,6 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.allClipsHaveText
   );
-  const { startExportUpload, startRenderVerticalUpload } =
-    useContext(UploadContext);
   const exportToDavinciResolveFetcher = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.exportToDavinciResolveFetcher
@@ -176,41 +170,9 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.setReferenceVideoId
   );
-  const hasBeats = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.hasBeats
-  );
-  const onShowBeatPanel = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onShowBeatPanel
-  );
-  const onShowScriptPanel = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onShowScriptPanel
-  );
   const onOpenAutofillChaptersModal = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onOpenAutofillChaptersModal
-  );
-  const isCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isCopied
-  );
-  const copyTranscriptToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyTranscriptToClipboard
-  );
-  const youtubeChapters = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.youtubeChapters
-  );
-  const isChaptersCopied = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isChaptersCopied
-  );
-  const copyYoutubeChaptersToClipboard = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.copyYoutubeChaptersToClipboard
   );
   const isAddVideoModalOpen = useContextSelector(
     VideoEditorContext,
@@ -224,14 +186,6 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.onAddNoteFromClipboard
   );
-  const setIsRenameVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsRenameVideoModalOpen
-  );
-  const setIsCopyVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCopyVideoModalOpen
-  );
   const items = useContextSelector(VideoEditorContext, (ctx) => ctx.items);
   const fsData = useContextSelector(VideoEditorContext, (ctx) => ctx.fsData);
   const selectedClipsSet = useContextSelector(
@@ -242,33 +196,13 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.videoCount
   );
-  const revealVideoFetcher = useFetcher();
   const openInVSCodeFetcher = useFetcher();
+  const editorVideoActions = useEditorVideoActions();
+  const navigate = useNavigate();
 
-  const [exportFileExists, setExportFileExists] = useState(false);
-  useEffect(() => {
-    fetch(`/api/videos/${videoId}/export-file-exists`)
-      .then((res) => res.json())
-      .then((data: { exists: boolean }) => setExportFileExists(data.exists))
-      .catch(() => setExportFileExists(false));
-  }, [videoId]);
-
-  const [isLogPathCopied, setIsLogPathCopied] = useState(false);
-  const copyLogPathToClipboard = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/videos/${videoId}/log-path`);
-      const logPath = await res.text();
-      await navigator.clipboard.writeText(logPath);
-      setIsLogPathCopied(true);
-      setTimeout(() => setIsLogPathCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy log path:", error);
-    }
-  }, [videoId]);
-
-  const [activeTab, setActiveTab] = useState<"suggestions" | "toc" | "links">(
-    "suggestions"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "suggestions" | "toc" | "links" | "more"
+  >("suggestions");
 
   // Suggestion state from context (shared with ClipTimeline)
   const setSuggestionState = useContextSelector(
@@ -353,6 +287,49 @@ export const VideoPlayerPanel = () => {
     }
   }, [items, insertionPoint]);
 
+  const isReferenceOpen =
+    referenceVideoId !== null &&
+    referenceCandidates.some((c) => c.id === referenceVideoId);
+  // Rare actions live in the More tab, not the menu (rule 9).
+  const moreGroups = videoMenuGroups({
+    ...editorVideoActions.rare,
+    openInVSCode: lessonId
+      ? () =>
+          openInVSCodeFetcher.submit(
+            {},
+            { method: "post", action: `/api/videos/${videoId}/open-in-vscode` }
+          )
+      : undefined,
+    createConcatenatedVideo: () =>
+      navigate(`/videos/concatenate?initial=${videoId}`),
+    exportToDavinciResolve: () =>
+      exportToDavinciResolveFetcher.submit(null, {
+        method: "post",
+        action: `/videos/${videoId}/export-to-davinci-resolve`,
+      }),
+  });
+  const menuGroups = videoMenuGroups({
+    ...editorVideoActions.common,
+    openTeleprompter: () => teleprompterChannel.open(),
+    openDiagramPlayground: () => void handleOpenDiagramPlayground(),
+    reference: isReferenceOpen
+      ? { close: () => setReferenceVideoId(null) }
+      : { candidates: referenceCandidates, open: setReferenceVideoId },
+    editLessonBody: lessonId
+      ? () => setIsLessonBodyWriterOpen(true)
+      : undefined,
+    autofillDescription: lessonId
+      ? () => setIsSeoDescriptionOpen(true)
+      : undefined,
+    autofillChapters: {
+      onSelect: onOpenAutofillChaptersModal,
+      disabled: !allClipsHaveText,
+      description: allClipsHaveText
+        ? undefined
+        : "Waiting for transcription to complete",
+    },
+    addVideoToLesson: lessonId ? () => setIsAddVideoModalOpen(true) : undefined,
+  });
   return (
     <>
       <div className="lg:flex-1 relative order-1 lg:order-2 overflow-y-auto h-full">
@@ -455,62 +432,10 @@ export const VideoPlayerPanel = () => {
 
           <div className="flex gap-2 mt-4">
             <ActionsDropdown
-              allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
-              allClipsHaveText={allClipsHaveText}
-              onExport={() => startExportUpload(videoId, videoTitle)}
-              onRenderVertical={() =>
-                startRenderVerticalUpload(videoId, videoTitle)
-              }
-              exportToDavinciResolveFetcher={exportToDavinciResolveFetcher}
               videoId={videoId}
-              lessonId={lessonId}
-              isCopied={isCopied}
-              copyTranscriptToClipboard={copyTranscriptToClipboard}
-              youtubeChapters={youtubeChapters}
-              isChaptersCopied={isChaptersCopied}
-              copyYoutubeChaptersToClipboard={copyYoutubeChaptersToClipboard}
-              onAddVideoClick={() => setIsAddVideoModalOpen(true)}
-              onRenameVideoClick={() => setIsRenameVideoModalOpen(true)}
-              onCopyVideoClick={() => setIsCopyVideoModalOpen(true)}
-              onRevealInFileSystem={
-                exportFileExists
-                  ? () => {
-                      revealVideoFetcher.submit(
-                        {},
-                        {
-                          method: "post",
-                          action: `/api/videos/${videoId}/reveal`,
-                        }
-                      );
-                    }
-                  : undefined
-              }
-              onOpenInVSCode={
-                lessonId
-                  ? () => {
-                      openInVSCodeFetcher.submit(
-                        {},
-                        {
-                          method: "post",
-                          action: `/api/videos/${videoId}/open-in-vscode`,
-                        }
-                      );
-                    }
-                  : undefined
-              }
-              isLogPathCopied={isLogPathCopied}
-              copyLogPathToClipboard={copyLogPathToClipboard}
-              referenceCandidates={referenceCandidates}
-              referenceVideoId={referenceVideoId}
-              setReferenceVideoId={setReferenceVideoId}
-              hasBeats={hasBeats}
-              onShowBeatPanel={onShowBeatPanel}
-              onShowScriptPanel={onShowScriptPanel}
-              onAutofillChaptersClick={onOpenAutofillChaptersModal}
-              onOpenDiagramPlayground={handleOpenDiagramPlayground}
-              onOpenTeleprompter={() => teleprompterChannel.open()}
-              onEditLessonBodyClick={() => setIsLessonBodyWriterOpen(true)}
-              onAutofillDescriptionClick={() => setIsSeoDescriptionOpen(true)}
+              groups={menuGroups}
+              allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
+              isPending={exportToDavinciResolveFetcher.state === "submitting"}
             />
             <Button variant="secondary" onClick={onAddNoteFromClipboard}>
               <ClipboardIcon className="w-4 h-4 mr-1" />
@@ -521,41 +446,27 @@ export const VideoPlayerPanel = () => {
           {/* Tabbed panel for Suggestions and Table of Contents */}
           <div className="mt-6 border-t border-border pt-4">
             <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setActiveTab("suggestions")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                  activeTab === "suggestions"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Suggestions
-              </button>
-              {hasSections && (
+              {(
+                [
+                  ["suggestions", "Suggestions"],
+                  ...(hasSections ? [["toc", "Sections"] as const] : []),
+                  ["links", "Links"],
+                  ["more", "More"],
+                ] as const
+              ).map(([tab, label]) => (
                 <button
-                  onClick={() => setActiveTab("toc")}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
                   className={cn(
                     "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                    activeTab === "toc"
+                    activeTab === tab
                       ? "bg-muted text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Sections
+                  {label}
                 </button>
-              )}
-              <button
-                onClick={() => setActiveTab("links")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded transition-colors",
-                  activeTab === "links"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Links
-              </button>
+              ))}
             </div>
 
             {activeTab === "suggestions" && (
@@ -587,6 +498,8 @@ export const VideoPlayerPanel = () => {
             )}
 
             {activeTab === "links" && <VideoPlayerLinksTab />}
+
+            {activeTab === "more" && <VideoMoreActions groups={moreGroups} />}
           </div>
         </div>
       </div>

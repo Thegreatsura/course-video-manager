@@ -11,10 +11,8 @@ import {
   Link2Icon,
   Loader2,
   PauseIcon,
-  PinOffIcon,
   PlusIcon,
   RefreshCwIcon,
-  Workflow,
   XIcon,
   ZoomInIcon,
 } from "lucide-react";
@@ -274,6 +272,8 @@ export const ClipItem = (props: ClipItemProps) => {
               <DiagramPinIndicator
                 snapshotId={clip.diagramSnapshotId}
                 diagramName={clip.diagramName}
+                clipFrontendId={clip.frontendId}
+                clipDatabaseId={clip.databaseId}
               />
             )}
 
@@ -373,11 +373,6 @@ const ClipMenuContent = (props: {
     VideoEditorContext,
     (ctx) => ctx.setIsCreateVideoModalOpen
   );
-  const onUpdateClipDiagramPin = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.onUpdateClipDiagramPin
-  );
-
   const onDatabase = clip.type === "on-database" ? clip : null;
   const shared = timelineItemMenuGroups({
     onInsert: (position) => onSetInsertionPoint(position, clip.frontendId),
@@ -408,17 +403,9 @@ const ClipMenuContent = (props: {
         onDatabase && { type: "clip", id: onDatabase.databaseId, videoId }
       }
       groups={{
-        open: [
-          {
-            label: "Open Diagram Playground",
-            icon: Workflow,
-            onSelect: () => {
-              void openDiagramPlaygroundForClip(
-                onDatabase?.diagramSnapshotId ?? null
-              );
-            },
-          },
-        ],
+        // Opening and unpinning a pinned Diagram live on the Clip's pin
+        // badge, and Open Diagram Playground on the Video's Actions menu
+        // (rule 9: keep the menu near a dozen items).
         edit: [
           {
             label: clip.pauseType === "long" ? "Remove Pause" : "Add Pause",
@@ -438,43 +425,18 @@ const ClipMenuContent = (props: {
             disabled: !onDatabase,
             onSelect: () => onToggleZoomForClip(clip.frontendId),
           },
-          !!onDatabase?.diagramSnapshotId && {
-            label: "Unpin Diagram",
-            icon: PinOffIcon,
-            onSelect: () =>
-              onUpdateClipDiagramPin(
-                clip.frontendId,
-                onDatabase.databaseId,
-                null,
-                null
-              ),
-          },
         ],
         create: [
           ...shared.create,
           {
-            label: "Add Effect Before",
+            label: "Add Effect",
             icon: PlusIcon,
-            items: [
-              {
-                label: "White Noise",
-                icon: AudioWaveformIcon,
-                onSelect: () =>
-                  onAddEffectClipAt("white-noise", "before", clip.frontendId),
-              },
-            ],
-          },
-          {
-            label: "Add Effect After",
-            icon: PlusIcon,
-            items: [
-              {
-                label: "White Noise",
-                icon: AudioWaveformIcon,
-                onSelect: () =>
-                  onAddEffectClipAt("white-noise", "after", clip.frontendId),
-              },
-            ],
+            items: (["before", "after"] as const).map((position) => ({
+              label: `White Noise ${position === "before" ? "Before" : "After"}`,
+              icon: AudioWaveformIcon,
+              onSelect: () =>
+                onAddEffectClipAt("white-noise", position, clip.frontendId),
+            })),
           },
         ],
         move: shared.move,
@@ -513,12 +475,22 @@ const openDiagramPlaygroundForClip = async (snapshotId: string | null) => {
   }
 };
 
+/**
+ * The Clip's pinned Diagram. Click it to open the Diagram Playground on it;
+ * the x unpins it. Both moved here from the Clip's menu (rule 9).
+ */
 const DiagramPinIndicator = (props: {
   snapshotId: string;
   diagramName: string | null;
+  clipFrontendId: Clip["frontendId"];
+  clipDatabaseId: Extract<Clip, { type: "on-database" }>["databaseId"];
 }) => {
   const { scene, diagramId, contentHash } = useDiagramSnapshotMeta(
     props.snapshotId
+  );
+  const onUpdateClipDiagramPin = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onUpdateClipDiagramPin
   );
 
   return (
@@ -533,9 +505,34 @@ const DiagramPinIndicator = (props: {
       ) : (
         <ImageIcon className="w-3 h-3 text-muted-foreground flex-shrink-0" />
       )}
-      <span className="text-xs text-muted-foreground truncate">
+      <button
+        type="button"
+        title="Open in Diagram Playground"
+        className="text-xs text-muted-foreground truncate hover:text-foreground hover:underline"
+        onClick={(e) => {
+          e.stopPropagation();
+          void openDiagramPlaygroundForClip(props.snapshotId);
+        }}
+      >
         {props.diagramName ?? "Diagram"}
-      </span>
+      </button>
+      <button
+        type="button"
+        aria-label="Unpin Diagram"
+        title="Unpin Diagram"
+        className="shrink-0 rounded text-muted-foreground hover:text-foreground"
+        onClick={(e) => {
+          e.stopPropagation();
+          onUpdateClipDiagramPin(
+            props.clipFrontendId,
+            props.clipDatabaseId,
+            null,
+            null
+          );
+        }}
+      >
+        <XIcon className="w-3 h-3" />
+      </button>
     </div>
   );
 };

@@ -1,8 +1,6 @@
-import { ContextMenuItem } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
-import { FileVideo, FileX } from "lucide-react";
+import { FileVideo } from "lucide-react";
 import { use } from "react";
-import type { useFetcher } from "react-router";
 
 type ExportedVideoMap = Promise<Record<string, boolean>>;
 
@@ -49,36 +47,5 @@ export function UnexportedDot({
   if (map[videoId]) return null;
   return (
     <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-red-500" />
-  );
-}
-
-/** "Purge Export" context-menu item, shown only once the video is exported. */
-export function PurgeExportMenuItem({
-  videoId,
-  hasExportedVideoMap,
-  deleteVideoFileFetcher,
-}: {
-  videoId: string;
-  hasExportedVideoMap: ExportedVideoMap;
-  deleteVideoFileFetcher: ReturnType<typeof useFetcher>;
-}) {
-  const map = use(hasExportedVideoMap);
-  if (!map[videoId]) return null;
-  return (
-    <ContextMenuItem
-      variant="destructive"
-      onSelect={() => {
-        deleteVideoFileFetcher.submit(
-          {},
-          {
-            method: "post",
-            action: `/api/videos/${videoId}/purge-export`,
-          }
-        );
-      }}
-    >
-      <FileX className="w-4 h-4" />
-      Purge Export
-    </ContextMenuItem>
   );
 }

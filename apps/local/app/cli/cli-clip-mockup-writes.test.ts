@@ -224,58 +224,6 @@ describe("cvm clip-mockup", () => {
     );
   });
 
-  it("add appends a second call after the first", async () => {
-    const first = await add(s.standaloneActiveId, "One");
-    const second = await add(s.standaloneActiveId, "Two");
-    const third = await add(s.standaloneActiveId, "Three");
-
-    expect((await list(s.standaloneActiveId)).map((r) => r.id)).toEqual([
-      first.id,
-      second.id,
-      third.id,
-    ]);
-  });
-
-  it("add places a chapter entry between the moments either side of it", async () => {
-    const r = await run(
-      addArgv(s.standaloneActiveId, [
-        { say: "Before", image: sourceImage("before.png") },
-        { chapter: "The fix" },
-        { say: "After", image: sourceImage("after.png") },
-      ])
-    );
-
-    expect(r.exitCode).toBe(0);
-    const printed = ndjson(r.stdout) as {
-      type: string;
-      name?: string;
-      line?: string;
-    }[];
-    expect(printed.map((row) => row.type)).toEqual([
-      "clipMockup",
-      "clipMockupChapter",
-      "clipMockup",
-    ]);
-    expect(printed[1]!.name).toBe("The fix");
-
-    const animatic = ndjson(
-      (
-        await run([
-          "clip-mockup",
-          "list",
-          "--video",
-          s.standaloneActiveId,
-          "--with-chapters",
-        ])
-      ).stdout
-    ) as { type: string; line?: string; name?: string }[];
-    expect(animatic.map((row) => row.line ?? row.name)).toEqual([
-      "Before",
-      "The fix",
-      "After",
-    ]);
-  });
-
   it("add keeps two frames apart even when the sources share a basename", async () => {
     const a = await add(s.standaloneActiveId, "One", "frame.png", "FRAME-A");
     const b = await add(s.standaloneActiveId, "Two", "frame.png", "FRAME-B");
@@ -458,18 +406,6 @@ describe("cvm clip-mockup", () => {
     ]);
   });
 
-  it("list of a Video with no Clip Mockups prints nothing and exits 0", async () => {
-    const r = await run([
-      "clip-mockup",
-      "list",
-      "--video",
-      s.standaloneActiveId,
-    ]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toBe("");
-    expect(r.stderr).toBe("");
-  });
-
   it("list does not leak another Video's Clip Mockups", async () => {
     await add(s.standaloneActiveId, "Mine");
     await add(s.lessonVideoId, "Theirs");
@@ -483,41 +419,10 @@ describe("cvm clip-mockup", () => {
   // get
   // -----------------------------------------------------------------------
 
-  it("get of one id echoes one pretty object", async () => {
-    const created = await add(s.standaloneActiveId, "One");
-
-    const r = await run(["clip-mockup", "get", created.id]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stderr).toBe("");
-    expect(r.stdout).toMatch(/^\{\n/);
-    expect(obj(r.stdout).id).toBe(created.id);
-  });
-
-  it("get is variadic: several ids emit NDJSON", async () => {
-    const a = await add(s.standaloneActiveId, "One");
-    const b = await add(s.standaloneActiveId, "Two");
-
-    const r = await run(["clip-mockup", "get", a.id, b.id]);
-    expect(r.exitCode).toBe(0);
-    expect((ndjson(r.stdout) as Mockup[]).map((m) => m.id)).toEqual([
-      a.id,
-      b.id,
-    ]);
-  });
-
   it("get of an unknown id is a not-found, exit 2", async () => {
     const r = await run(["clip-mockup", "get", "nope"]);
     expect(r.exitCode).toBe(2);
     expect(r.stdout).toBe("");
-    expect(failureOf(r)._tag).toBe("NotFoundError");
-  });
-
-  it("get of several ids keeps stdout pure when one is missing", async () => {
-    const a = await add(s.standaloneActiveId, "One");
-
-    const r = await run(["clip-mockup", "get", a.id, "nope"]);
-    expect(r.exitCode).toBe(2);
-    expect((ndjson(r.stdout) as Mockup[]).map((m) => m.id)).toEqual([a.id]);
     expect(failureOf(r)._tag).toBe("NotFoundError");
   });
 

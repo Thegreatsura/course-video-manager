@@ -200,6 +200,23 @@ inside your window, into `forensics-<table>.txt`. Keep your window tight — run
 `guard baseline` immediately before driving, not at launch — so fewer of
 somebody else's rows fall inside it.
 
+**The `api_token` line is background, not a write.** Every `cvm` call, from
+any agent anywhere, authenticates against the deployed `apps/remote`, and a
+successful authenticate bumps that token's `last_used_at`. So in production
+`course-video-manager_api_token` takes updates in almost every window, none of
+them yours. `guard` fingerprints every token row minus `last_used_at` at
+baseline and at check. When the table took only updates and every id and
+fingerprint is unchanged, the Ledger prints it on its own line instead of in
+the writes table:
+
+```text
+Background (apps/remote token usage — expected): course-video-manager_api_token: 2 update(s), last_used_at only (tokens: cvm_ece4b913).
+```
+
+Do not run forensics on that line or report it. Anything else on `api_token`
+— an insert, a delete, a revoke, a changed name or expiry — still lands in
+the writes table like any other table and gets the full treatment below.
+
 **In production mode, report a non-clean Ledger to Matt in your reply, at the top, before anything
 else** — the table, the row ids from forensics, and what you were driving at the
 time. Say plainly whether you believe it was you, his own instance, or a sibling

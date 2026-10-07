@@ -1,15 +1,9 @@
-import {
-  ContextMenuItem,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from "@/components/ui/context-menu";
 import type {
   ActionLeaf,
   ActionMenuGroups,
 } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
-import { Plus, Shapes } from "lucide-react";
+import { Shapes } from "lucide-react";
 import {
   BEAT_KINDS,
   BEAT_KIND_DESCRIPTIONS,
@@ -80,56 +74,4 @@ export function beatMenuGroups({
       { ...STANDARD_ACTIONS.delete, opensDialog: true, onSelect: onDelete },
     ],
   };
-}
-
-/**
- * @deprecated Hand-built; only the course view's Video menu still uses it,
- * via {@link AddBeatSubMenu}. Delete both once that menu builds its "Add
- * Beat" leaves itself (Batch 2 of docs/plans/action-menus.md).
- */
-function BeatKindMenuItems({
-  onSelect,
-}: {
-  onSelect: (kind: BeatKind) => void;
-}) {
-  return (
-    <>
-      {BEAT_KINDS.map((kind) => {
-        const Icon = BEAT_KIND_ICONS[kind];
-        return (
-          <ContextMenuItem
-            key={kind}
-            onSelect={() => onSelect(kind)}
-            className="items-start gap-2"
-          >
-            <Icon className="w-4 h-4 mt-0.5 shrink-0" />
-            <div className="flex flex-col">
-              <span>{BEAT_KIND_LABELS[kind]}</span>
-              <span className="text-xs text-muted-foreground">
-                {BEAT_KIND_DESCRIPTIONS[kind]}
-              </span>
-            </div>
-          </ContextMenuItem>
-        );
-      })}
-    </>
-  );
-}
-
-/**
- * "Add beat ▸ <kind>" submenu for a Video's context menu.
- * @deprecated See {@link BeatKindMenuItems}.
- */
-export function AddBeatSubMenu({ onAdd }: { onAdd: (kind: BeatKind) => void }) {
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger>
-        <Plus className="w-4 h-4" />
-        Add beat
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent>
-        <BeatKindMenuItems onSelect={onAdd} />
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
 }

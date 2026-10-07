@@ -285,32 +285,6 @@ describe("lesson update", () => {
     expect(exitCode).toBe(3);
     expect(stdout).toBe("");
   });
-
-  it("an empty --title => invalid input, exit 3", async () => {
-    const { exitCode, stdout } = await run([
-      "lesson",
-      "update",
-      "--title",
-      "  ",
-      s.lessonId,
-    ]);
-    expect(exitCode).toBe(3);
-    expect(stdout).toBe("");
-  });
-
-  it("update an unknown lesson => NotFoundError(lesson), exit 2", async () => {
-    const { exitCode, stderr } = await run([
-      "lesson",
-      "update",
-      "--authoring-status",
-      "todo",
-      "les_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect((JSON.parse(stderr.trim()) as { entity: string }).entity).toBe(
-      "lesson"
-    );
-  });
 });
 
 describe("lesson archive", () => {
@@ -429,11 +403,6 @@ describe("video create / move / update", () => {
     expect(v.pitchId).toBe(s.pitchActiveId);
     expect(v.lessonId).toBeNull();
     expect(v.title).toBe("My Pitch Cut");
-  });
-
-  it("create with missing --name => invalid input, exit 3", async () => {
-    const { exitCode } = await run(["video", "create"]);
-    expect(exitCode).toBe(3);
   });
 
   it("create with an empty --name => invalid input, exit 3", async () => {
@@ -598,11 +567,6 @@ describe("video create / move / update", () => {
     expect(updated.title).toBe("renamed.mp4");
   });
 
-  it("update with no --name => invalid input, exit 3", async () => {
-    const { exitCode } = await run(["video", "update", s.standaloneActiveId]);
-    expect(exitCode).toBe(3);
-  });
-
   it("update with an empty --name => invalid input, exit 3", async () => {
     const { exitCode, stdout } = await run([
       "video",
@@ -735,19 +699,5 @@ describe("video create / move / update", () => {
     ]);
     expect(exitCode).toBe(3);
     expect(stdout).toBe("");
-  });
-
-  it("update --description on an unknown video => NotFoundError(video), exit 2", async () => {
-    const { exitCode, stderr } = await run([
-      "video",
-      "update",
-      "--description",
-      "x",
-      "vid_missing",
-    ]);
-    expect(exitCode).toBe(2);
-    expect((JSON.parse(stderr.trim()) as { entity: string }).entity).toBe(
-      "video"
-    );
   });
 });

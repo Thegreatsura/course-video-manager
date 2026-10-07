@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copyEntityLinkActions } from "./copy-entity-link-items";
+import { copyEntityLinkActions } from "./copy-entity-link-actions";
 
 describe("copyEntityLinkActions", () => {
   it("offers Copy Link and Copy ID disabled while the entity is still being saved", () => {

@@ -30,7 +30,7 @@ the UI's recent-5). 'get', 'tree' and 'transcript' accept ANY video id
 (standalone or lesson-bound).
 
 Archived Videos are soft-deleted (hidden from active views); 'archive' is the
-verb that soft-deletes one. Only Standalone Videos have a real viewable archive
+verb that soft-deletes one and 'unarchive' brings one back. Only Standalone Videos have a real viewable archive
 — pass --archived to 'list' to see them. A lesson-bound Video can be archived
 too, it just drops out of its Lesson with nowhere listing it afterwards.
 
@@ -44,6 +44,7 @@ Verbs:
   move <id>            re-home a Video to a lesson/pitch (--lesson | --pitch) (WRITE)
   update <id>          patch a Video's name / body / SEO description / script / format (WRITE)
   archive <id>         soft-delete a Video (WRITE)
+  unarchive <id>       restore an archived Video to where it was (WRITE)
 
 Worked example (find a video, then read it):
   cvm video list | jq -r '.id'                     # map name -> id
@@ -283,8 +284,7 @@ Works on ANY Video:
                   with VersionNotDraftError (exit 3), same as every other
                   structural write.
 
-There is NO restore verb — treat this as one-way from the CLI (the app's
-standalone-videos page can still un-archive a Standalone Video). An archived
+'video unarchive' undoes it. An archived
 Video is still addressable: 'video get <id>' returns it with archived:true,
 which is why re-archiving one is invalid input (exit 3) rather than a not-found.
 An unknown id is a not-found (exit 2). Echoes the archived row.
@@ -292,3 +292,24 @@ An unknown id is a not-found (exit 2). Echoes the archived row.
 Examples:
   cvm video archive vid_123
   cvm video list --archived | jq -r '.id'   # what is in the archive now`;
+
+export const UNARCHIVE_HELP = `Unarchive a Video by id — the undo of 'archive'. Flips 'archived' back to
+false; its Clips, Chapters and Beats come back with it.
+
+The Video goes back where it was:
+  Standalone      back in 'video list' (still on its Pitch, if it had one).
+  Lesson-bound    back in its Lesson. If a live Video in that Lesson has taken
+                  its name meanwhile, refused (exit 3) — rename one first. If
+                  the Lesson or its Section has itself been archived, there is
+                  nowhere live to go back to, so the Video comes back as a
+                  Standalone Video instead; 'video move --lesson' re-homes it.
+                  Its Course Version must be the DRAFT (VersionNotDraftError,
+                  exit 3), as for 'archive'.
+
+Unarchiving a Video that is not archived is invalid input (exit 3); an unknown
+id is a not-found (exit 2). Echoes the restored row — check 'lessonId' to see
+where it landed.
+
+Examples:
+  cvm video list --archived | jq -r '.id'
+  cvm video unarchive vid_123`;

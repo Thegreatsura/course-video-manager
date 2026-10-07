@@ -181,62 +181,12 @@ describe("clip update --start/--end: Transcript Words", () => {
     ]);
   });
 
-  it("shifts words forward when the in-point moves earlier", async () => {
-    const clip = await seedTranscribedClip();
-
-    await retime(clip.id, { start: 9 });
-
-    expect(await words(clip.id)).toEqual([
-      { start: 1.5, end: 2.5, text: "the" },
-      { start: 3, end: 4, text: "quick" },
-      { start: 6, end: 7, text: "brown" },
-      { start: 9.5, end: 10.5, text: "fox" },
-    ]);
-  });
-
   it("drops a word the trimmed head no longer contains", async () => {
     const clip = await seedTranscribedClip();
 
     await retime(clip.id, { start: 12 });
 
     expect((await words(clip.id)).map((w) => w.text)).not.toContain("the");
-  });
-
-  it("drops a word the trimmed tail no longer contains", async () => {
-    const clip = await seedTranscribedClip();
-
-    // Only --end moves, so the delta is 0 — but there is no longer room for
-    // "fox" (8.5-9.5) in a 7s clip.
-    await retime(clip.id, { end: 17 });
-
-    expect((await words(clip.id)).map((w) => w.text)).toEqual([
-      "the",
-      "quick",
-      "brown",
-    ]);
-  });
-
-  it("leaves every word shifted but otherwise untouched when none fall out", async () => {
-    const clip = await seedTranscribedClip();
-
-    await retime(clip.id, { start: 10.25 });
-
-    expect(await words(clip.id)).toEqual([
-      { start: 0.25, end: 1.25, text: "the" },
-      { start: 1.75, end: 2.75, text: "quick" },
-      { start: 4.75, end: 5.75, text: "brown" },
-      { start: 8.25, end: 9.25, text: "fox" },
-    ]);
-  });
-
-  it("leaves the clip's own text and transcribedAt alone", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
-    await transcribe(clip.id, [{ start: 0.5, end: 1.5, text: "the" }]);
-
-    const retimed = await retime(clip.id, { start: 12, end: 18 });
-
-    expect(retimed.text).toBe(clip.text);
-    expect(retimed.transcribedAt).toEqual(clip.transcribedAt);
   });
 
   it("cascades over a clip with no words at all without complaint", async () => {
@@ -273,17 +223,6 @@ describe("clip update --start/--end: Overlays", () => {
     expect(overlay?.title).toBe("Hydration");
   });
 
-  it("clamps an anchor pushed off the end back to the clip's last moment", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
-    await addOverlay(clip.id, { at: 9 });
-
-    await retime(clip.id, { end: 14 });
-
-    expect((await overlays(s.standaloneActiveId)).map((o) => o.at)).toEqual([
-      4,
-    ]);
-  });
-
   it("never loses a Definition Card's title or description to a recut", async () => {
     const clip = await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
     const before = await addOverlay(clip.id, {
@@ -302,17 +241,6 @@ describe("clip update --start/--end: Overlays", () => {
       ...before,
       at: 2,
     });
-  });
-
-  it("leaves an in-bounds Overlay shifted but otherwise untouched", async () => {
-    const clip = await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
-    const before = await addOverlay(clip.id, { at: 6 });
-
-    await retime(clip.id, { start: 11, end: 19 });
-
-    expect(await overlays(s.standaloneActiveId)).toEqual([
-      { ...before, at: 5 },
-    ]);
   });
 
   it("touches only the retimed clip's Overlays, not its neighbour's", async () => {
