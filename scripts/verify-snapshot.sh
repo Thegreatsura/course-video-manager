@@ -114,12 +114,34 @@ for t in "${CREDENTIAL_TABLES[@]}"; do
 done
 DUMP_ARGS=(-Fc --no-owner --no-acl -n public -n drizzle "${EXCLUDES[@]}")
 
+# Production's sslmode verifies the server certificate, so libpq needs root
+# certificates. On the host, `sslrootcert=system` finds them. Inside the
+# postgres:17 container it does not: the image ships no ca-certificates, so
+# its system store is empty, and without a root libpq looks for
+# /root/.postgresql/root.crt and fails. So copy the HOST's CA bundle into the
+# container and point PGSSLROOTCERT at it — verification stays fully on.
+CONTAINER_CA="/tmp/cvm-host-ca.crt"
+host_ca_bundle() {
+  local f
+  for f in "${VERIFY_PG_CA_BUNDLE:-}" /etc/ssl/certs/ca-certificates.crt \
+           /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+    [ -n "$f" ] && [ -s "$f" ] && { printf '%s\n' "$f"; return 0; }
+  done
+  return 1
+}
+
 dump_production() {
   case "$TOOLS" in
     # PlanetScale wants the system root certificate on this box (see verify.sh).
     local:*)  PGSSLROOTCERT=system "${TOOLS#local:}/pg_dump" "${DUMP_ARGS[@]}" -d "$PROD_URL" ;;
-    # Same invocation `pnpm db:clone-local` uses, which reaches production.
-    docker:*) docker exec "${TOOLS#docker:}" pg_dump "${DUMP_ARGS[@]}" -d "$PROD_URL" ;;
+    docker:*)
+      local ca
+      ca="$(host_ca_bundle)" ||
+        die "no CA bundle on this host to hand the $CONTAINER container — install ca-certificates, or set VERIFY_PG_CA_BUNDLE"
+      docker cp -L "$ca" "${TOOLS#docker:}:$CONTAINER_CA" > /dev/null ||
+        die "could not copy $ca into the $CONTAINER container"
+      docker exec -e PGSSLROOTCERT="$CONTAINER_CA" "${TOOLS#docker:}" \
+        pg_dump "${DUMP_ARGS[@]}" -d "$PROD_URL" ;;
   esac
 }
 
