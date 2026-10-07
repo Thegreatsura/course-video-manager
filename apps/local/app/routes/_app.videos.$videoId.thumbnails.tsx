@@ -1,3 +1,7 @@
+import {
+  deepLinkAnchor,
+  useDeepLinkFocus,
+} from "@/features/entity-links/use-deep-link-focus";
 export const handle = { fullscreen: true };
 
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
@@ -186,6 +190,17 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
     dispatch,
   ]);
 
+  // A copied `?thumbnail=` link opens its Thumbnail for editing.
+  useDeepLinkFocus({
+    types: ["thumbnail"],
+    candidates: thumbnails.map((t) => ({
+      type: "thumbnail",
+      id: t.id,
+      key: t.id,
+    })),
+    onFocus: ({ id }) => dispatch({ type: "edit-requested", thumbnailId: id }),
+  });
+
   const thumbnailMenu = useThumbnailMenu({
     onEdit: (thumbnailId) => dispatch({ type: "edit-requested", thumbnailId }),
     onDelete: (thumbnailId) =>
@@ -206,6 +221,7 @@ export default function ThumbnailsPage({ loaderData }: Route.ComponentProps) {
               <ContextMenu key={thumbnail.id}>
                 <ContextMenuTrigger asChild>
                   <div
+                    {...deepLinkAnchor(thumbnail.id)}
                     className={`group relative rounded-lg overflow-hidden cursor-pointer transition-all ${
                       state.editingThumbnailId === thumbnail.id
                         ? "ring-2 ring-ring border border-ring"

@@ -10,7 +10,6 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
 const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },
@@ -31,6 +30,7 @@ const createClipOnDatabase = (
   sourceEndTime: 10,
   text: "Hello world",
   transcribedAt: new Date(),
+  transcriptionStatus: "done",
   scene: "main",
   profile: "main-camera",
   insertionOrder: 1,

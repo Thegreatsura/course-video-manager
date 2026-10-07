@@ -63,7 +63,6 @@ export namespace courseViewReducer {
     addVideoToLessonId: string | null;
     editLessonId: string | null;
     editSectionId: string | null;
-    deleteLessonId: string | null;
     archiveSectionId: string | null;
     editDescriptionLessonId: string | null;
     lessonBodyWriterVideoId: string | null;
@@ -121,7 +120,6 @@ export namespace courseViewReducer {
     | { type: "set-add-video-to-lesson-id"; lessonId: string | null }
     | { type: "set-edit-lesson-id"; lessonId: string | null }
     | { type: "set-edit-section-id"; sectionId: string | null }
-    | { type: "set-delete-lesson-id"; lessonId: string | null }
     | { type: "set-archive-section-id"; sectionId: string | null }
     | { type: "set-edit-description-lesson-id"; lessonId: string | null }
     | { type: "open-lesson-body-writer"; videoId: string }
@@ -219,7 +217,6 @@ export function createInitialCourseViewState(): courseViewReducer.State {
     addVideoToLessonId: null,
     editLessonId: null,
     editSectionId: null,
-    deleteLessonId: null,
     archiveSectionId: null,
     editDescriptionLessonId: null,
     lessonBodyWriterVideoId: null,
@@ -308,8 +305,6 @@ export const courseViewReducer: EffectReducer<
       return { ...state, editLessonId: action.lessonId };
     case "set-edit-section-id":
       return { ...state, editSectionId: action.sectionId };
-    case "set-delete-lesson-id":
-      return { ...state, deleteLessonId: action.lessonId };
     case "set-archive-section-id":
       return { ...state, archiveSectionId: action.sectionId };
     case "set-edit-description-lesson-id":

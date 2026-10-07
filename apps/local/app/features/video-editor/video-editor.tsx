@@ -101,7 +101,6 @@ export const VideoEditor = (props: {
   silenceLength: SilenceLength;
   onSilenceLengthChange: (silenceLength: SilenceLength) => void;
   isRecordingActive: boolean;
-  clipIdsBeingTranscribed: Set<FrontendId>;
   onClipsRemoved: (clipIds: FrontendId[]) => void;
   onClipsRetranscribe: (clipIds: FrontendId[]) => void;
   fsData: Promise<{
@@ -179,12 +178,11 @@ export const VideoEditor = (props: {
     [props.items, props.sessions]
   );
 
-  // This session's clips and their states, for the teleprompter's glass.
-
   useEffect(() => enableVideoEditorMode(), []);
 
   const { state, dispatch } = useVideoEditor({
     items: timelineItems,
+    allItems: props.items,
     clips: clips,
     insertionPoint: props.insertionPoint,
     onClipsRemoved: props.onClipsRemoved,
@@ -453,7 +451,6 @@ export const VideoEditor = (props: {
       setSilenceLength: props.onSilenceLengthChange,
       isRecordingActive: props.isRecordingActive,
       isTeleprompterConnected,
-      clipIdsBeingTranscribed: props.clipIdsBeingTranscribed,
 
       // Callbacks
       onSetInsertionPoint: props.onSetInsertionPoint,
@@ -550,7 +547,6 @@ export const VideoEditor = (props: {
       props.onSilenceLengthChange,
       props.isRecordingActive,
       isTeleprompterConnected,
-      props.clipIdsBeingTranscribed,
       props.onSetInsertionPoint,
       props.onMoveClip,
       props.onTogglePauseForClip,

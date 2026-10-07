@@ -4,11 +4,12 @@ import {
 } from "@/features/action-menu/action-menu";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
-import { FileText, FileX, Upload } from "lucide-react";
+import { Archive, FileText, FileX, Upload } from "lucide-react";
 
 /** Every action the Course menu offers. The door that renders the menu decides how each one runs. */
 export type CourseMenuAction =
   | "preview-changelog"
+  | "view-archived-lessons"
   | "rename"
   | "unarchive"
   | "duplicate"
@@ -46,6 +47,12 @@ export function courseMenuGroups(
         icon: FileText,
         disabled: course.hasPreviousVersion === false,
         onSelect: () => run("preview-changelog"),
+      },
+      // Archived Lessons can only come back into the Draft.
+      course.isLatestVersion && {
+        label: "View Archived Lessons",
+        icon: Archive,
+        onSelect: () => run("view-archived-lessons"),
       },
     ],
     edit: [

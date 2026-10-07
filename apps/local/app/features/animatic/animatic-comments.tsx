@@ -84,6 +84,11 @@ export function AnimaticCommentsProvider(props: {
   );
 }
 
+/** Every comment of the Video, keyed by the Clip Mockup or Chapter it is on. */
+export function useCommentsByParent() {
+  return useContext(AnimaticCommentsContext);
+}
+
 function useCommentsOn(target: AnimaticCommentTarget) {
   return useContext(AnimaticCommentsContext).get(target.id) ?? NO_COMMENTS;
 }

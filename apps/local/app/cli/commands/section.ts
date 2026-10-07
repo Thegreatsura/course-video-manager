@@ -41,8 +41,9 @@ import {
  * An empty Section (one with no Lessons) has no derived numbered path — its path
  * falls back to its title — and is skipped from the numbered course view; it
  * gains a number once it contains at least one Lesson. The `archive` verb below
- * is a destructive, one-way soft-delete (sets `archivedAt`) — the same shape as
- * `cvm lesson archive` — and is the only thing that hides a section.
+ * is a destructive, one-way soft-delete (sets `archivedAt`) — unlike
+ * `cvm lesson archive`, it has no unarchive — and is the only thing that hides
+ * a section.
  *
  * Every verb here calls LessonSectionOperationsService primitives directly and
  * does its own order math in the command handler, the same way `cvm lesson

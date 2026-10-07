@@ -20,6 +20,7 @@ const makeClip = (
   sourceEndTime: 5,
   text: "hello",
   transcribedAt: new Date(),
+  transcriptionStatus: "done",
   scene: null,
   profile: null,
   insertionOrder: null,

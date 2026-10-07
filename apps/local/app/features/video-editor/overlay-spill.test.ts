@@ -140,6 +140,7 @@ const databaseClip = (props: {
   sourceEndTime: props.sourceEndTime,
   text: "",
   transcribedAt: null,
+  transcriptionStatus: "done",
   scene: null,
   profile: null,
   insertionOrder: null,

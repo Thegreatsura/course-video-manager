@@ -274,6 +274,10 @@ _Avoid_: Cursor, Drop target
 The process of getting a clip's text from its audio.
 _Avoid_: Caption, Subtitle
 
+**Transcription Status**:
+Where a **Clip**'s **Transcription** stands, stored on the Clip: **queued** (recorded, no text yet, a Transcription asked for), **transcribing** (running), **failed** (the last attempt did not finish) or **done** (it finished; the text may be empty, because nothing was said). A failed Transcription changes nothing but the status: the Clip keeps any text and **Transcript Words** it had, and transcribing it again is the fix, so the editor shows it as failed with a retry, never as still transcribing. A Clip that gets its text another way (an **Effect Clip**, a Clip cut from **Footage**) starts done. Every copy of the Clip carries its status.
+_Avoid_: transcribedAt (only says when text last landed, not whether one is coming)
+
 ### Overlays and transitions
 
 **Overlay Template** and **Transition** are **not yet implemented**: they are a design in progress, the planned replacement for today's **Effect Clip** and **Clip Zoom**. Treat those two terms as proposed. **Transform** exists today in one narrow form only (see that entry).
@@ -429,7 +433,7 @@ An ordering value that lets an item go between two others without renumbering th
 _Avoid_: Sort order, Position
 
 **Archive**:
-Soft deletion: hiding an entity from active views while keeping it. What can be done after depends on the noun. For most (Beat, Clip Mockup, Chapter, Learning Goal, Section, Lesson) it cannot be undone. Archived Courses and Videos can be listed and restored: an unarchived Video goes back to its Lesson, or comes back Standalone if that Lesson has been archived too. A **Clip** can be reviewed and restored too, so a Clip deleted by mistake can be found and brought back.
+Soft deletion: hiding an entity from active views while keeping it. What can be done after depends on the noun. For most (Beat, Clip Mockup, Chapter, Learning Goal, Section) it cannot be undone. Archived Courses, Videos and Lessons can be listed and restored: an unarchived Video goes back to its Lesson, or comes back Standalone if that Lesson has been archived too. An unarchived Lesson goes back to its Section with its Videos, in its old place if no Lesson has taken it since and at the end of the Section if one has; only a Lesson of the **Draft Version** can be restored, and doing so counts as a write (**Has Changes**). A Lesson whose Section is archived cannot come back. A **Clip** can be reviewed and restored too, so a Clip deleted by mistake can be found and brought back.
 _Avoid_: Delete, Remove
 
 ### Dependencies
