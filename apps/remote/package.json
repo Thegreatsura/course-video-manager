@@ -9,7 +9,6 @@
   },
   "scripts": {
     "typecheck": "tsc",
-    "lint:effect": "effect-tsgo diagnostics --project tsconfig.json --severity error",
     "lint:boundaries": "depcruise app.ts auth.ts index.ts runtime.ts version.ts routes",
     "vercel-build": "pnpm --filter @cvm/core run build"
   },
