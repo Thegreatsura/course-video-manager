@@ -378,7 +378,6 @@ Can I simplify the parameters? Can I hide more complexity inside?
 1. **Accept dependencies, don't create them** — pass external dependencies in rather than constructing them internally.
 2. **Return results, don't produce side effects** — a function that returns a value is easier to test than one that mutates state.
 3. **Small surface area** — fewer methods = fewer tests needed, fewer params = simpler test setup.
-4. Frontend state: `docs/FRONTEND_STATE.md`.
 
 ## Testing
 
@@ -393,5 +392,5 @@ internal, redesign the interface.
 
 Every test must be able to fail for a plausible real bug a user or caller
 would see; if you can't name the bug, don't write it. For what earns a place,
-worked examples, red flags, Remotion and TDD, read
+component tests, worked examples, red flags, Remotion and TDD, read
 [`TESTING_STANDARDS.md`](./docs/TESTING_STANDARDS.md).

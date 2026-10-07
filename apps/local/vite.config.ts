@@ -27,6 +27,8 @@ const COMMON_EXCLUDE = [
   "**/node_modules/**",
   "**/dist/**",
   "**/.react-router/**",
+  // Component tests run in a real browser under vitest.browser.config.ts.
+  "**/*.browser.test.tsx",
 ];
 
 // Git worktrees symlink node_modules back to the main checkout. Vite's dev-time
