@@ -222,6 +222,13 @@ export function useDiagramPlaygroundReducer() {
       "show-error": (_state, effect) => {
         toast.error(effect.message);
       },
+      // The store listener on the route reports the flip back as
+      // `focus-mode-changed`.
+      "set-focus-mode": (_state, effect) => {
+        editorRef.current?.updateInstanceState({
+          isFocusMode: effect.isFocusMode,
+        });
+      },
     }
   );
 

@@ -246,4 +246,40 @@ describe("diagramPlaygroundReducer", () => {
       },
     ]);
   });
+
+  it("hides the sidebar when a recording starts and shows it when it stops", () => {
+    const tester = openPage()
+      .resetExec()
+      .send({ type: "recording-status-reported", recording: true });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "set-focus-mode", isFocusMode: true },
+    ]);
+
+    tester
+      .send({ type: "focus-mode-changed", isFocusMode: true })
+      // The editor repeats its status on every heartbeat.
+      .send({ type: "recording-status-reported", recording: true })
+      .send({ type: "recording-status-reported", recording: false })
+      .send({ type: "recording-status-reported", recording: false });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "set-focus-mode", isFocusMode: true },
+      { type: "set-focus-mode", isFocusMode: false },
+    ]);
+  });
+
+  it("a sidebar toggled by hand during a recording stays as it was put", () => {
+    const tester = openPage()
+      .resetExec()
+      .send({ type: "recording-status-reported", recording: true })
+      .send({ type: "focus-mode-changed", isFocusMode: true })
+      .send({ type: "focus-mode-changed", isFocusMode: false })
+      .send({ type: "recording-status-reported", recording: true });
+
+    expect(tester.getState().isFocusMode).toBe(false);
+    expect(tester.getEffects()).toEqual([
+      { type: "set-focus-mode", isFocusMode: true },
+    ]);
+  });
 });
