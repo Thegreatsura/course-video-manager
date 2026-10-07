@@ -392,5 +392,5 @@ internal, redesign the interface.
 
 Every test must be able to fail for a plausible real bug a user or caller
 would see; if you can't name the bug, don't write it. For what earns a place,
-worked examples, red flags, Remotion and TDD, read
+component tests, worked examples, red flags, Remotion and TDD, read
 [`TESTING_STANDARDS.md`](./docs/TESTING_STANDARDS.md).
