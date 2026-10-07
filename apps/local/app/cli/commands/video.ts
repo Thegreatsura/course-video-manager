@@ -134,12 +134,27 @@ const listCmd = Command.make(
 
 const ids = entityIdArg("video").pipe(Args.repeated);
 
+/**
+ * `get` carries NO Clips. On a filmed Video they ran to ~350KB — every Clip
+ * with its overlays, words and search vectors — which buried the row an agent
+ * asked for and broke `jq` downstream. `clipCount` says whether there are any;
+ * `cvm clip list --video <id>` is the read for the Clips themselves.
+ */
+const fetchVideoWithoutClips = (id: string) =>
+  fetchVideoWithClips(id).pipe(
+    Effect.map((video) => {
+      if (video === undefined) return undefined;
+      const { clips, ...rest } = video;
+      return { ...rest, clipCount: clips.length };
+    })
+  );
+
 const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
   emitGet({
     entity: "video",
     ids,
     includeMemory: full,
-    fetch: fetchVideoWithClips,
+    fetch: fetchVideoWithoutClips,
   })
 ).pipe(Command.withDescription(detail(GET_HELP)));
 

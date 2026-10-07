@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import type { UnknownDBServiceError } from "@/services/db-service-errors";
 import { CliOutput } from "./output";
+import type { StaleIdExplanation } from "./stale-id";
 import {
   NotFoundError,
   notFound,
@@ -247,14 +248,22 @@ export const fullOption = Options.boolean("full").pipe(
  *   })
  * )
  */
-export const emitGet = <A, E, R>(params: {
+export const emitGet = <A, E, R, R2 = never>(params: {
   readonly entity: string;
   readonly ids: ReadonlyArray<string>;
   readonly fetch: (id: string) => Effect.Effect<A | null | undefined, E, R>;
   readonly includeMemory?: boolean;
-}): Effect.Effect<void, E | NotFoundError, R | CliOutput> =>
+  /**
+   * Say why a missing id is missing, when there is more to say than "absent"
+   * — e.g. {@link explainStaleId} for ids from an older Course Version. Its
+   * message and `currentId` ride along on the NotFoundError.
+   */
+  readonly explainMissing?: (
+    id: string
+  ) => Effect.Effect<StaleIdExplanation | undefined, never, R2>;
+}): Effect.Effect<void, E | NotFoundError, R | R2 | CliOutput> =>
   Effect.gen(function* () {
-    const { entity, ids, fetch, includeMemory } = params;
+    const { entity, ids, fetch, includeMemory, explainMissing } = params;
     const rows = yield* Effect.all(
       ids.map((id) =>
         fetch(id).pipe(Effect.map((row) => ({ id, row: row ?? undefined })))
@@ -265,12 +274,32 @@ export const emitGet = <A, E, R>(params: {
     const found = rows.filter((r) => r.row !== undefined);
     const missing = rows.filter((r) => r.row === undefined).map((r) => r.id);
 
+    const explained = explainMissing
+      ? yield* Effect.all(
+          missing.map((id) =>
+            explainMissing(id).pipe(Effect.map((why) => ({ id, why })))
+          ),
+          { concurrency: "unbounded" }
+        )
+      : [];
+    const stale = explained.flatMap(({ id, why }) =>
+      why === undefined ? [] : [{ id, ...why }]
+    );
+
     if (ids.length === 1) {
       if (found.length === 1) {
         yield* emitObject(found[0]!.row, { includeMemory });
         return;
       }
-      return yield* notFound(entity, ids[0]!);
+      const why = stale[0];
+      return yield* why === undefined
+        ? notFound(entity, ids[0]!)
+        : new NotFoundError({
+            entity,
+            id: ids[0]!,
+            message: why.message,
+            currentId: why.currentId,
+          });
     }
 
     yield* emitNdjson(
@@ -278,7 +307,16 @@ export const emitGet = <A, E, R>(params: {
       { includeMemory }
     );
     if (missing.length > 0) {
-      return yield* notFoundMany(entity, missing);
+      return yield* stale.length === 0
+        ? notFoundMany(entity, missing)
+        : new NotFoundError({
+            entity,
+            ids: missing,
+            message: stale.map((s) => s.message).join("; "),
+            currentIds: Object.fromEntries(
+              stale.map((s) => [s.id, s.currentId])
+            ),
+          });
     }
   });
 

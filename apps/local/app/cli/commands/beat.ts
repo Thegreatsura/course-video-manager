@@ -99,18 +99,25 @@ const afterOption = entityIdOption("after", "beat").pipe(
   Options.optional
 );
 
-const learningGoalOption = Options.text("learning-goal").pipe(
-  Options.withDescription(
-    "Attach a Learning Goal by id (repeatable). Replaces the Beat's full set."
-  ),
-  Options.repeated
+/**
+ * `Options.repeated` alone renders as REQUIRED in the USAGE line
+ * (`--learning-goal text...`) although zero occurrences parse fine. The
+ * default of `[]` changes nothing about parsing; it makes the usage line say
+ * `[--learning-goal text...]`, which is the truth.
+ */
+const optionalLearningGoals = (description: string) =>
+  Options.text("learning-goal").pipe(
+    Options.withDescription(description),
+    Options.repeated,
+    Options.withDefault<ReadonlyArray<string>>([])
+  );
+
+const learningGoalOption = optionalLearningGoals(
+  "Optional. Attach a Learning Goal by id (repeatable). Replaces the Beat's full set."
 );
 
-const learningGoalAddOption = Options.text("learning-goal").pipe(
-  Options.withDescription(
-    "Attach a Learning Goal by id at creation time (repeatable)."
-  ),
-  Options.repeated
+const learningGoalAddOption = optionalLearningGoals(
+  "Optional. Attach a Learning Goal by id at creation time (repeatable)."
 );
 
 const clearLearningGoalsOption = Options.boolean("clear-learning-goals").pipe(

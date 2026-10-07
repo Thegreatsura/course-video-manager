@@ -177,9 +177,9 @@ describe("section lint", () => {
     expect(out.failedChecks).toContain("unlinkedBeats");
   });
 
-  // Both exemptions, because each one on its own would make the check useless
-  // in a different way if it were dropped.
-  it("exempts a setup Beat, and exempts every Beat while the Section has no Goals", async () => {
+  // A setup Beat records a playground requirement, not something taught, so
+  // it never needs a Goal — with or without Goals in the Section.
+  it("exempts a setup Beat", async () => {
     const setupBeat = await addBeat({
       videoId: s.lessonVideoId,
       kind: "setup",
@@ -187,18 +187,50 @@ describe("section lint", () => {
       order: "0005",
     });
 
-    // No Learning Goals in the Section yet: nothing to serve, nothing to warn.
     const before = await lint();
-    expect(before.out.unlinkedBeats).toEqual([]);
-
-    // With a Goal present the setup Beat is STILL exempt — only the seed's
-    // definition Beat is reported.
     await addLearningGoal("Understand feedback loops");
     const after = await lint();
-    expect(after.out.counts.unlinkedBeats).toBe(1);
-    expect(
-      after.out.unlinkedBeats.map((b: { id: string }) => b.id)
-    ).not.toContain(setupBeat.id);
+
+    for (const { out } of [before, after]) {
+      expect(out.counts.unlinkedBeats).toBe(1);
+      expect(out.unlinkedBeats.map((b: { id: string }) => b.id)).not.toContain(
+        setupBeat.id
+      );
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Check 0 — no Learning Goals at all
+  // -------------------------------------------------------------------------
+
+  // The case lint once called clean: a Section with no Goals and no Beat linked
+  // to anything. The course view stays quiet about an unplanned Section; lint
+  // is the quality bar and must not.
+  it("flags a Section with no Learning Goals, and every Beat it leaves loose", async () => {
+    const beat = await activeBeat();
+
+    const { res, out } = await lint();
+
+    expect(res.exitCode).toBe(0);
+    expect(out.noLearningGoals).toBe(true);
+    expect(out.counts.noLearningGoals).toBe(1);
+    expect(out.unlinkedBeats.map((b: { id: string }) => b.id)).toEqual([
+      beat.id,
+    ]);
+    expect(out.failedChecks).toEqual(
+      expect.arrayContaining(["noLearningGoals", "unlinkedBeats"])
+    );
+    expect(out.clean).toBe(false);
+  });
+
+  it("drops noLearningGoals once the Section has a Goal", async () => {
+    await addLearningGoal("Understand feedback loops");
+
+    const { out } = await lint();
+
+    expect(out.noLearningGoals).toBe(false);
+    expect(out.counts.noLearningGoals).toBe(0);
+    expect(out.failedChecks).not.toContain("noLearningGoals");
   });
 
   // -------------------------------------------------------------------------
@@ -333,6 +365,7 @@ describe("section lint", () => {
     expect(out.clean).toBe(true);
     expect(out.failedChecks).toEqual([]);
     expect(out.counts).toEqual({
+      noLearningGoals: 0,
       orphanedLearningGoals: 0,
       unlinkedBeats: 0,
       stubBeats: 0,

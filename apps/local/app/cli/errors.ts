@@ -25,6 +25,14 @@ export class NotFoundError extends Data.TaggedError("NotFoundError")<{
   readonly id?: string;
   /** Present for multi-id `get` partial failure: every missing id. */
   readonly ids?: ReadonlyArray<string>;
+  /**
+   * Present when a missing id belonged to an OLDER Course Version: what to do
+   * instead, in words, plus the Draft's equivalent id(s) to retry with
+   * (`currentId` for a single id, `currentIds` old -> new for several).
+   */
+  readonly message?: string;
+  readonly currentId?: string;
+  readonly currentIds?: Readonly<Record<string, string>>;
 }> {}
 
 export class ParseError extends Data.TaggedError("ParseError")<{

@@ -77,8 +77,9 @@ PUBLISH READINESS
 
 SECTION LINT
   'cvm section lint <sectionId>' is the PLANNING-stage counterpart: it checks one
-  Section's plan — orphaned Learning Goals, Beats serving no Learning Goal, stub
-  Beats with no description, and quest pacing across its Lessons. Findings are
+  Section's plan — no Learning Goals at all, orphaned Learning Goals, Beats
+  serving no Learning Goal, stub Beats with no description, and quest pacing
+  across its Lessons. Findings are
   DATA, not a failure: it exits 0 either way, so branch on 'clean'/'failedChecks'.
   It blocks no publish, and 'course readiness' reports none of it.
 

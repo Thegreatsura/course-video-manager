@@ -23,14 +23,32 @@ process.env.TSX_TSCONFIG_PATH ??= resolve(here, "../../tsconfig.json");
 const { tsImport } = await import("tsx/esm/api");
 const { runCli } = await tsImport("./main.ts", import.meta.url);
 
+/**
+ * Exit only once stdout and stderr have flushed. When stdout is a PIPE
+ * (`cvm … | jq`), Node writes to it asynchronously, so a bare process.exit
+ * drops everything past the first 64KB still sitting in the pipe buffer — a
+ * large `course tree --depth all` reached jq cut off mid-object. An empty
+ * write's callback fires only after every write queued before it, so waiting
+ * on one per stream guarantees the output is complete before exiting.
+ */
+const flushThenExit = (code) => {
+  let pending = 2;
+  const done = () => {
+    pending -= 1;
+    if (pending === 0) process.exit(code);
+  };
+  process.stdout.write("", done);
+  process.stderr.write("", done);
+};
+
 runCli(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => flushThenExit(code),
   (cause) => {
     // Last-resort guard: runCli is designed never to reject, but if something
     // escapes, render a clean DatabaseError (never a raw stack) and exit 4.
     process.stderr.write(
       JSON.stringify({ _tag: "DatabaseError", message: String(cause) }) + "\n"
     );
-    process.exit(4);
+    flushThenExit(4);
   }
 );

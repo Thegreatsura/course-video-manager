@@ -1,14 +1,14 @@
 /**
  * Section Lint — the section-authoring quality bar, as code.
  *
- * Four checks over ONE Section's Learning Goals and the Beats across all its
+ * Five checks over ONE Section's Learning Goals and the Beats across all its
  * Lessons' Videos. Pure and derived, never stored — the same category as
  * beat-learning-goal-warnings.ts (whose two predicates this reuses outright)
  * and video-warnings.ts.
  *
  * WHY THIS IS NOT `course readiness`. Readiness answers "what stands between
  * this Course and SHIPPING", course-scoped, over Lesson/Video fields that reach
- * published output. These four are PLANNING-stage questions about one Section's
+ * published output. These five are PLANNING-stage questions about one Section's
  * Goal-to-Beat linkage and Beat shape — fields (a Beat, its description, a
  * Learning Goal) that Publish never emits. CONTEXT.md is explicit that a Beat
  * Warning is "deliberately excluded from Publish Readiness": a planning nag,
@@ -67,10 +67,11 @@ export interface SectionLintInput {
 // ---------------------------------------------------------------------------
 
 /**
- * The four checks, in report order. Doubles as the vocabulary of
+ * The five checks, in report order. Doubles as the vocabulary of
  * `failedChecks` — an agent can branch on these names without parsing prose.
  */
 export const SECTION_LINT_CHECKS = [
+  "noLearningGoals",
   "orphanedLearningGoals",
   "unlinkedBeats",
   "stubBeats",
@@ -109,6 +110,8 @@ export interface SectionLintReport {
   readonly clean: boolean;
   readonly failedChecks: ReadonlyArray<SectionLintCheck>;
   readonly counts: Record<SectionLintCheck, number>;
+  /** The Section has no Learning Goals at all — nothing for a Beat to serve. */
+  readonly noLearningGoals: boolean;
   readonly orphanedLearningGoals: ReadonlyArray<OrphanedLearningGoal>;
   readonly unlinkedBeats: ReadonlyArray<SectionLintBeatFinding>;
   readonly stubBeats: ReadonlyArray<SectionLintBeatFinding>;
@@ -174,14 +177,19 @@ export const computeSectionLint = (
     .map((goal) => ({ id: goal.id, title: goal.title }));
 
   // 2. UNLINKED BEATS — a non-`setup` Beat serving no Learning Goal. Same
-  // delegation, so the `setup` exemption and the "Section has no Goals yet"
-  // exemption are stated in exactly one place (beat-learning-goal-warnings.ts).
+  // delegation, so the `setup` exemption is stated in exactly one place
+  // (beat-learning-goal-warnings.ts). The Beat Warning's OTHER exemption — a
+  // Section with no Goals yet — is deliberately NOT taken here: the course view
+  // keeps quiet about a Section nobody has planned, but lint is the quality
+  // bar, and a Section whose Beats serve nothing is exactly what it must catch
+  // (it once reported a Section with no Goals and no linked Beat as clean).
+  // `noLearningGoals` names the cause; this lists every Beat it leaves loose.
   const unlinkedBeats = beats
     .filter(
       (beat) =>
         computeBeatWarnings({
           kind: beat.kind,
-          sectionHasLearningGoals: hasGoals,
+          sectionHasLearningGoals: true,
           learningGoalIds: beat.learningGoalIds,
         }).length > 0
     )
@@ -201,7 +209,7 @@ export const computeSectionLint = (
   // Quests elsewhere, is where the bunching shows. A Section with NO Quest Beat
   // at all is exempt — that is "no quests planned yet", an earlier and
   // different problem, and firing on every Lesson of an unstarted Section would
-  // drown the other three checks.
+  // drown the other checks.
   const perLesson: QuestPacingLesson[] = input.lessons.map((lesson) => ({
     id: lesson.id,
     title: lesson.title,
@@ -221,8 +229,12 @@ export const computeSectionLint = (
     questlessLessons,
   };
 
-  const failedChecks = SECTION_LINT_CHECKS.filter(
-    (check) => lists[check].length > 0
+  // 0. NO LEARNING GOALS — the Section has none at all, so no Beat can serve
+  // one and orphanedLearningGoals can never fire.
+  const noLearningGoals = !hasGoals;
+
+  const failedChecks = SECTION_LINT_CHECKS.filter((check) =>
+    check === "noLearningGoals" ? noLearningGoals : lists[check].length > 0
   );
 
   return {
@@ -231,11 +243,13 @@ export const computeSectionLint = (
     clean: failedChecks.length === 0,
     failedChecks,
     counts: {
+      noLearningGoals: noLearningGoals ? 1 : 0,
       orphanedLearningGoals: orphanedLearningGoals.length,
       unlinkedBeats: unlinkedBeats.length,
       stubBeats: stubBeats.length,
       questlessLessons: questlessLessons.length,
     },
+    noLearningGoals,
     ...lists,
     questPacing: { totalQuests, lessons: perLesson },
   };
