@@ -192,6 +192,12 @@ export type RecordingSession = {
 export type ClipReducerState = {
   items: TimelineItem[];
   clipIdsBeingTranscribed: Set<FrontendId>;
+  /**
+   * The Clips known to have Transcript Words: seeded from the loader, then
+   * kept up to date by every transcription that lands in this window. Read by
+   * `transcript-word-status.ts`.
+   */
+  clipIdsWithTranscriptWords: Set<DatabaseId>;
   insertionPoint: FrontendInsertionPoint;
   insertionOrder: number;
   /**
@@ -272,6 +278,7 @@ export type ClipReducerAction =
       clips: {
         databaseId: DatabaseId;
         text: string;
+        hasTranscriptWords: boolean;
       }[];
     }
   | {

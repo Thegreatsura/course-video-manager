@@ -11,6 +11,7 @@ const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
   clipIdsBeingTranscribed: new Set(),
+  clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },
   insertionOrder: 0,

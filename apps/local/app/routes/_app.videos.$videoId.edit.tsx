@@ -41,6 +41,11 @@ import type { Route } from "./+types/_app.videos.$videoId.edit";
 export const handle = { fullscreen: true, hideParentHeader: true };
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { getBackButtonUrl } from "@/features/video-editor/video-editor-selectors";
+import { anyClipsMissingTranscriptWords } from "@/features/video-editor/transcript-word-status";
+import {
+  toTranscribedClipEvent,
+  type TranscribedClip,
+} from "@/features/video-editor/transcribe-clips-response";
 import type { loader as parentLoader } from "./_app.videos.$videoId";
 import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
 import { sortByOrder } from "@/lib/sort-by-order";
@@ -147,11 +152,11 @@ export const loader = makeLoader({
       const hasScript = script != null && script !== "";
 
       // Clips transcribed before Transcript Words existed are never backfilled
-      // (#1567), so the editor shows an alert and offers a re-transcribe pass
-      // scoped to this Video. Asked as one boolean rather than shipping every
-      // word to the client, which the editor has no other use for.
-      const anyClipsMissingTranscriptWords =
-        yield* clipOps.anyClipsMissingTranscriptWords(videoId);
+      // (#1567), so the editor warns and offers a re-transcribe pass. It seeds
+      // its clip state with these ids and decides the warning itself, since
+      // only it knows which Clips are being transcribed right now.
+      const clipIdsWithTranscriptWords =
+        yield* clipOps.listClipIdsWithTranscriptWords(videoId);
 
       const whiteNoiseAssetPath = path.join(
         process.cwd(),
@@ -167,7 +172,7 @@ export const loader = makeLoader({
       return {
         video: slimVideo,
         hasScript,
-        anyClipsMissingTranscriptWords,
+        clipIdsWithTranscriptWords,
         items: sortedItems,
         waveformData: undefined,
         videoCount: lesson?.videos.length ?? 1,
@@ -280,6 +285,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   const initialState: clipStateReducer.State = {
     items: initialItems,
     clipIdsBeingTranscribed: new Set() satisfies Set<FrontendId>,
+    clipIdsWithTranscriptWords: new Set(
+      props.loaderData.clipIdsWithTranscriptWords as DatabaseId[]
+    ),
     insertionOrder: 0,
     insertionPoint: getDefaultInsertionPoint(initialItems),
     error: null,
@@ -379,9 +387,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   return (
     <VideoEditor
       videoFormat={props.loaderData.video.format as "landscape" | "short"}
-      anyClipsMissingTranscriptWords={
-        props.loaderData.anyClipsMissingTranscriptWords
-      }
+      anyClipsMissingTranscriptWords={anyClipsMissingTranscriptWords(clipState)}
       navigation={navigation}
       onClipsRemoved={(clipIds) => {
         dispatch({ type: "clips-deleted", clipIds: clipIds });
@@ -408,18 +414,11 @@ export const ComponentInner = (props: Route.ComponentProps) => {
             }
             return res.json();
           })
-          .then((clips: DB.Clip[]) => {
+          .then((clips: TranscribedClip[]) => {
             dispatch({
               type: "clips-transcribed",
-              clips: clips.map((clip) => ({
-                databaseId: clip.id,
-                text: clip.text,
-              })),
+              clips: clips.map(toTranscribedClipEvent),
             });
-            // A transcription rewrites the clip's Transcript Words, so the
-            // loader's missing-words flag is now stale — re-run it or the
-            // alert stays up until the page is reloaded.
-            revalidator.revalidate();
           })
           .catch((error) => {
             dispatch({

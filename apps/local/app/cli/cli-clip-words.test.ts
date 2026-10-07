@@ -282,53 +282,50 @@ describe("clip add", () => {
 });
 
 // ===========================================================================
-// The flag behind the Video edit page's "missing Transcript Words" alert
-// (#1571). Nothing backfills words for Clips transcribed before they existed,
-// so this is how a Video says it needs a re-transcribe pass.
+// The ids the Video editor seeds its "missing word timing" warning with
+// (#1571). Nothing backfills words for Clips transcribed before they existed;
+// the editor decides the warning itself from these ids plus the Clips it is
+// transcribing right now (see transcript-word-status.ts).
 // ===========================================================================
 
-const anyMissing = (videoId: string): Promise<boolean> =>
+const withWords = (videoId: string): Promise<string[]> =>
   Effect.gen(function* () {
     const clipOps = yield* ClipOperationsService;
-    return yield* clipOps.anyClipsMissingTranscriptWords(videoId);
+    return yield* clipOps.listClipIdsWithTranscriptWords(videoId);
   }).pipe(Effect.provide(seedLayer), Effect.runPromise);
 
-describe("anyClipsMissingTranscriptWords", () => {
-  it("is false for a video with no clips at all", async () => {
-    expect(await anyMissing(s.standaloneActiveId)).toBe(false);
+describe("listClipIdsWithTranscriptWords", () => {
+  it("is empty for a video with no clips at all", async () => {
+    expect(await withWords(s.standaloneActiveId)).toEqual([]);
   });
 
-  it("is true when one of the video's clips has never been transcribed", async () => {
+  it("lists only the clips that have words, once each", async () => {
     const transcribed = await seedClip(s.standaloneActiveId, {
       start: 0,
       end: 10,
     });
-    await transcribe(transcribed.id, [{ start: 0, end: 1, text: "hello" }]);
+    await transcribe(transcribed.id, [
+      { start: 0, end: 1, text: "hello" },
+      { start: 1, end: 2, text: "there" },
+    ]);
     await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
 
-    expect(await anyMissing(s.standaloneActiveId)).toBe(true);
-  });
-
-  it("is false once every clip in the video has words", async () => {
-    const first = await seedClip(s.standaloneActiveId, { start: 0, end: 10 });
-    const second = await seedClip(s.standaloneActiveId, { start: 10, end: 20 });
-    await transcribe(first.id, [{ start: 0, end: 1, text: "hello" }]);
-    await transcribe(second.id, [{ start: 0, end: 1, text: "world" }]);
-
-    expect(await anyMissing(s.standaloneActiveId)).toBe(false);
+    expect(await withWords(s.standaloneActiveId)).toEqual([transcribed.id]);
   });
 
   it("looks only at the video asked about, not the rest of the library", async () => {
-    await seedClip(s.lessonVideoId, { start: 0, end: 10 });
+    const clip = await seedClip(s.lessonVideoId, { start: 0, end: 10 });
+    await transcribe(clip.id, [{ start: 0, end: 1, text: "hello" }]);
 
-    expect(await anyMissing(s.standaloneActiveId)).toBe(false);
-    expect(await anyMissing(s.lessonVideoId)).toBe(true);
+    expect(await withWords(s.standaloneActiveId)).toEqual([]);
+    expect(await withWords(s.lessonVideoId)).toEqual([clip.id]);
   });
 
   it("ignores archived clips, which are not part of the video any more", async () => {
     const clip = await seedClip(s.standaloneActiveId, { start: 0, end: 10 });
+    await transcribe(clip.id, [{ start: 0, end: 1, text: "hello" }]);
     await run(["clip", "delete", clip.id]);
 
-    expect(await anyMissing(s.standaloneActiveId)).toBe(false);
+    expect(await withWords(s.standaloneActiveId)).toEqual([]);
   });
 });
