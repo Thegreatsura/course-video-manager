@@ -5,14 +5,14 @@ import {
   type HeadingRank,
 } from "./heading-sections";
 
-/** Rows as strings: "## x" is an H2, "### x" an H3, "# x" an H1. */
+/** Rows as strings: "# x" is an H1, "## x" an H2, "### x" an H3. */
 const rankOf = (row: string): HeadingRank =>
   row.startsWith("### ")
     ? "h3"
     : row.startsWith("## ")
       ? "h2"
       : row.startsWith("# ")
-        ? "break"
+        ? "h1"
         : null;
 
 /** A compact picture of the tree: a section is [heading, ...children]. */
@@ -49,11 +49,26 @@ describe("nestHeadingSections", () => {
     ]);
   });
 
-  it("closes every open section at an H1, which stays a plain row", () => {
-    expect(nest(["## A", "### A1", "x", "# Part two", "y"])).toEqual([
-      ["## A", ["### A1", "x"]],
-      "# Part two",
-      "y",
+  // ~1 Script in 16 uses several H1s as its main sections.
+  it("nests H2s and H3s inside their H1, ending all three at the next H1", () => {
+    expect(
+      nest(["# Part one", "## A", "### A1", "x", "# Part two", "y", "## B"])
+    ).toEqual([
+      ["# Part one", ["## A", ["### A1", "x"]]],
+      ["# Part two", "y", ["## B"]],
+    ]);
+  });
+
+  // Most Scripts open with a single H1 title: it holds the whole Script.
+  it("holds the whole Script inside a single title H1", () => {
+    expect(nest(["# Title", "intro", "## A", "a", "## B", "b"])).toEqual([
+      ["# Title", "intro", ["## A", "a"], ["## B", "b"]],
+    ]);
+  });
+
+  it("nests an H3 straight under an H1 when there is no H2 between", () => {
+    expect(nest(["# T", "### Sub", "x", "## A", "a"])).toEqual([
+      ["# T", ["### Sub", "x"], ["## A", "a"]],
     ]);
   });
 });

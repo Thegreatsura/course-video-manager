@@ -6,10 +6,11 @@ import { parseScriptBlocks } from "./script-blocks";
 import { TeleprompterCrawl } from "./teleprompter-crawl";
 
 /**
- * The pinned H2/H3 are pure CSS sticky, so whether they pin is a question
- * only a real browser with the real stylesheet can answer: each one must sit
- * at the top of the glass while its section is on screen, and be pushed off by
- * the next heading of its rank.
+ * The pinned H1/H2/H3 are CSS sticky, offset by each other's laid-out height,
+ * so whether they pin is a question only a real browser with the real
+ * stylesheet can answer: each one must sit directly under the levels above it
+ * while its section is on screen — however many lines those wrapped onto — and
+ * be pushed off by the next heading of its rank or higher.
  */
 
 const prose = (n: number) =>
@@ -17,15 +18,21 @@ const prose = (n: number) =>
     " "
   );
 
+/** Far longer than one line of the 25ch measure, so its bar wraps. */
+const LONG_H2 =
+  "Alpha, a heading long enough to wrap onto several lines of the glass";
+
 const SCRIPT = [
-  "# Title",
+  "# Part one",
   prose(4),
-  "## Alpha",
+  `## ${LONG_H2}`,
   prose(20),
   "### Alpha one",
   prose(40),
   "### Alpha two",
   prose(40),
+  "# Part two",
+  prose(10),
   "## Beta",
   prose(40),
 ].join("\n\n");
@@ -36,6 +43,12 @@ function Glass(props: { children: React.ReactNode }) {
       {props.children}
     </div>
   );
+}
+
+function heightOf(glass: HTMLElement, name: string) {
+  return [...glass.querySelectorAll<HTMLElement>("[data-sticky-heading]")]
+    .find((el) => el.textContent === name)!
+    .getBoundingClientRect().height;
 }
 
 /** Where each heading sits, relative to the top of the glass. */
@@ -62,7 +75,7 @@ function sectionStart(glass: HTMLElement, name: string, scroller: HTMLElement) {
 }
 
 describe("pinned headings on the glass", () => {
-  it("pins the current H2 and, under it, the current H3 as the Script crawls", async () => {
+  it("stacks the current H1, H2 and H3, each under the real height of the ones above", async () => {
     const screen = render(
       <Glass>
         <TeleprompterCrawl
@@ -90,18 +103,26 @@ describe("pinned headings on the glass", () => {
     };
 
     await wheelTo(Math.round(sectionStart(glass, "Alpha two", scroller)) + 200);
+    const h1Height = heightOf(glass, "Part one");
+    const h2Height = heightOf(glass, LONG_H2);
+    // Wrapped, not cut to one line.
+    expect(h2Height).toBeGreaterThan(h1Height * 2);
+    // The offsets follow layout through the browser's ResizeObserver.
+    await expect
+      .poll(() => headingTops(glass)["Alpha two"])
+      .toBe(Math.round(h1Height + h2Height));
     const inAlphaTwo = headingTops(glass);
-    const h2Height = glass
-      .querySelector<HTMLElement>("[data-sticky-heading=h2]")!
-      .getBoundingClientRect().height;
-    expect(inAlphaTwo["Alpha"]).toBe(0);
-    expect(inAlphaTwo["Alpha two"]).toBe(Math.round(h2Height));
+    expect(inAlphaTwo["Part one"]).toBe(0);
+    expect(inAlphaTwo[LONG_H2]).toBe(Math.round(h1Height));
     expect(inAlphaTwo["Alpha one"]).toBeLessThan(0);
 
+    // A new H1 pushes the whole stack off.
     await wheelTo(Math.round(sectionStart(glass, "Beta", scroller)) + 200);
     const inBeta = headingTops(glass);
-    expect(inBeta["Beta"]).toBe(0);
-    expect(inBeta["Alpha"]).toBeLessThan(0);
+    expect(inBeta["Part two"]).toBe(0);
+    expect(inBeta["Beta"]).toBe(Math.round(heightOf(glass, "Part two")));
+    expect(inBeta["Part one"]).toBeLessThan(0);
+    expect(inBeta[LONG_H2]).toBeLessThan(0);
     expect(inBeta["Alpha two"]).toBeLessThan(0);
   });
 
