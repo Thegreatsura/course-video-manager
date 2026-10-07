@@ -11,6 +11,8 @@ import {
   clipMockupComments,
   thumbnails,
   videos,
+  learningGoals,
+  beatLearningGoals,
 } from "../db/schema.js";
 import {
   NotLatestVersionError,
@@ -30,6 +32,13 @@ import {
   copyClipMockupCommentValues,
   newIdsFor,
 } from "./clip-mockup-comment-copy.js";
+import {
+  clipChildrenWith,
+  copyBeatLearningGoalValues,
+  copyClipChildren,
+  copyLearningGoalValues,
+  insertInChunks,
+} from "./copy-child-rows.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) =>
   Effect.tryPromise({
@@ -44,6 +53,10 @@ const makeDbCall = <T>(fn: () => Promise<T>) =>
  * here answers one question — "what does a CourseVersion snapshot carry
  * forward?" — so the per-entity insert list that grows with every new child
  * table lives in one file of its own, away from the version readers.
+ *
+ * A new child table of a Section, Lesson, Video, Clip or Beat must be decided
+ * for this copy (and duplicateCourse, and the Video copy) in
+ * copy-paths-table-guard.test.ts, or CI fails.
  *
  * Both exits from `copyVersionStructureInDb` are here: `copyVersionStructure`
  * (which freezes its source itself; no app path calls it any more, only tests
@@ -109,6 +122,10 @@ export const createVersionCopyOps = (db: Database) => {
           ),
           orderBy: asc(sections.order),
           with: {
+            learningGoals: {
+              orderBy: asc(learningGoals.order),
+              where: eq(learningGoals.archived, false),
+            },
             lessons: {
               orderBy: asc(lessons.order),
               where: eq(lessons.archived, false),
@@ -120,6 +137,7 @@ export const createVersionCopyOps = (db: Database) => {
                     clips: {
                       orderBy: asc(clips.order),
                       where: eq(clips.archived, false),
+                      with: clipChildrenWith,
                     },
                     chapters: {
                       orderBy: asc(chapters.order),
@@ -128,6 +146,7 @@ export const createVersionCopyOps = (db: Database) => {
                     beats: {
                       orderBy: asc(beats.order),
                       where: eq(beats.archived, false),
+                      with: { beatLearningGoals: true },
                     },
                     clipMockups: {
                       orderBy: asc(clipMockups.order),
@@ -152,6 +171,14 @@ export const createVersionCopyOps = (db: Database) => {
         newVideoId: string;
       }> = [];
 
+      // Learning Goals get their new ids up front, version-wide: a Beat may
+      // serve a Goal of another Section, and its links are written last, once
+      // every Goal exists.
+      const goalIds = newIdsFor(
+        sourceSections.flatMap((section) => section.learningGoals)
+      );
+      const beatLinkValues: (typeof beatLearningGoals.$inferInsert)[] = [];
+
       for (const sourceSection of sourceSections) {
         const [newSection] = yield* makeDbCall(() =>
           transaction
@@ -168,6 +195,17 @@ export const createVersionCopyOps = (db: Database) => {
         );
 
         if (!newSection) continue;
+
+        const goalValues = copyLearningGoalValues(
+          sourceSection.learningGoals,
+          newSection.id,
+          goalIds
+        );
+        if (goalValues.length > 0) {
+          yield* makeDbCall(() =>
+            transaction.insert(learningGoals).values(goalValues)
+          );
+        }
 
         for (const sourceLesson of sourceSection.lessons) {
           const [newLesson] = yield* makeDbCall(() =>
@@ -214,10 +252,12 @@ export const createVersionCopyOps = (db: Database) => {
               newVideoId: newVideo.id,
             });
 
+            const clipIds = newIdsFor(sourceVideo.clips);
             if (sourceVideo.clips.length > 0) {
               yield* makeDbCall(() =>
                 transaction.insert(clips).values(
                   sourceVideo.clips.map((clip) => ({
+                    id: clipIds.get(clip.id)!,
                     videoId: newVideo.id,
                     videoFilename: clip.videoFilename,
                     sourceStartTime: clip.sourceStartTime,
@@ -236,6 +276,9 @@ export const createVersionCopyOps = (db: Database) => {
                   }))
                 )
               );
+              yield* makeDbCall(() =>
+                copyClipChildren(transaction, sourceVideo.clips, clipIds)
+              );
             }
 
             if (sourceVideo.chapters.length > 0) {
@@ -251,10 +294,19 @@ export const createVersionCopyOps = (db: Database) => {
               );
             }
 
+            const beatIds = newIdsFor(sourceVideo.beats);
+            beatLinkValues.push(
+              ...copyBeatLearningGoalValues(
+                sourceVideo.beats.flatMap((beat) => beat.beatLearningGoals),
+                beatIds,
+                (goalId) => goalIds.get(goalId)
+              )
+            );
             if (sourceVideo.beats.length > 0) {
               yield* makeDbCall(() =>
                 transaction.insert(beats).values(
                   sourceVideo.beats.map((beat) => ({
+                    id: beatIds.get(beat.id)!,
                     videoId: newVideo.id,
                     kind: beat.kind,
                     title: beat.title,
@@ -329,6 +381,10 @@ export const createVersionCopyOps = (db: Database) => {
           }
         }
       }
+
+      yield* makeDbCall(() =>
+        insertInChunks(transaction, beatLearningGoals, beatLinkValues)
+      );
 
       return { version: newVersion, videoIdMappings };
     });

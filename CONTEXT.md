@@ -19,7 +19,7 @@ A single learning unit within a Section. A Lesson is known by its title, which i
 _Avoid_: Exercise, Tutorial, Step
 
 **Learning Goal**:
-One thing a learner should come away knowing from a **Section**, written BEFORE the Section's Lessons, Videos and Beats are planned. It has a title, a description and a priority, and is ordered within its Section. It is the first step of the authoring flow: Learning Goals → Lessons, Videos and Beats → Script → recording → article. Every **Beat** in the Section is expected to serve at least one Learning Goal (see **Learning Goal Warning**). The link between the two is set from the Beat side, not from the Learning Goal. Deleting one is an **Archive**, and it removes its links to Beats.
+One thing a learner should come away knowing from a **Section**, written BEFORE the Section's Lessons, Videos and Beats are planned. It has a title, a description and a priority, and is ordered within its Section. It is the first step of the authoring flow: Learning Goals → Lessons, Videos and Beats → Script → recording → article. Every **Beat** in the Section is expected to serve at least one Learning Goal (see **Learning Goal Warning**). The link between the two is set from the Beat side, not from the Learning Goal. Deleting one is an **Archive**, and it removes its links to Beats. A new Draft (**Submit**) and a duplicated Course get a copy of every live Learning Goal, with its links to the copied Beats; a duplicated Video keeps serving the same Learning Goals.
 _Avoid_: Objective, Outcome (used loosely elsewhere in course-authoring writing; this is the specific planning-stage entity)
 
 ### Course versions
@@ -144,14 +144,14 @@ A named divider in a Video's timeline that groups the Clips below it. Maps one t
 _Avoid_: Clip group, Divider, Marker, Section (ambiguous with course Section), Clip Mockup Chapter (a different noun: the **Animatic**'s dividers, which group **Clip Mockups** before filming)
 
 **Video Post**:
-A record of a **Video** posted to an external platform: which platform, where, and when. It belongs to the Video.
+A record of a **Video** posted to an external platform: which platform, where, and when. It belongs to the Video, and to that Video row only: no copy of a Video (a new Draft, a duplicated Course or Video) carries it, because the copy was never posted.
 
 **Optimistic Clip**:
 A clip shown during recording before it is saved.
 _Avoid_: Pending clip, Temporary clip
 
 **Clip Web Link**:
-A web page that was on screen while a **Clip** was recorded. A Clip can have many. They are shown with the Clip and noted in the **Transcript**, so the writer knows which page went with each moment. Different from the global **Link** list: a Clip Web Link belongs to one Clip and one moment.
+A web page that was on screen while a **Clip** was recorded. A Clip can have many. They are shown with the Clip and noted in the **Transcript**, so the writer knows which page went with each moment. Different from the global **Link** list: a Clip Web Link belongs to one Clip and one moment. Every copy of the Clip (a new Draft, a duplicated Course or Video) carries its Clip Web Links.
 _Avoid_: Link (reserved for the global reference-URL list), Clip URL, On-screen link (informal, ok in prose)
 
 **Transcript**:
@@ -159,7 +159,7 @@ The ordered text of a **Video**: its **Clips** and **Chapters** together, in tim
 _Avoid_: Clip text (only covers Clips), Joined clips, Caption (reserved for the per-clip transcription product)
 
 **Transcript Word**:
-One spoken word of a **Clip**, with the start and end time it was said at. The times are measured from the Clip's own start, not from the Footage and not from the finished Video. A Clip's words are written all at once by a **Transcription** and are never edited one by one. A Clip transcribed before Transcript Words existed has none, which is a normal state; transcribing it again fixes it. Its purpose is to point at an exact spoken moment inside a Clip, which the Transcript cannot do. Recutting the Clip moves its words with it (see **Retiming Cascade**).
+One spoken word of a **Clip**, with the start and end time it was said at. The times are measured from the Clip's own start, not from the Footage and not from the finished Video. A Clip's words are written all at once by a **Transcription** and are never edited one by one. A Clip transcribed before Transcript Words existed has none, which is a normal state; transcribing it again fixes it. Its purpose is to point at an exact spoken moment inside a Clip, which the Transcript cannot do. Recutting the Clip moves its words with it (see **Retiming Cascade**). Every copy of the Clip carries its words.
 _Avoid_: Word timing / Timestamped word (informal, ok in prose), Caption, Subtitle (a rendered product, not this timing data)
 
 **Video File**:
@@ -279,7 +279,7 @@ _Avoid_: Caption, Subtitle
 **Overlay Template** and **Transition** are **not yet implemented**: they are a design in progress, the planned replacement for today's **Effect Clip** and **Clip Zoom**. Treat those two terms as proposed. **Transform** exists today in one narrow form only (see that entry).
 
 **Overlay**:
-A rendered visual layer shown on top of a Video's footage. It starts at a moment inside a specific **Clip**, so moving or trimming earlier Clips carries it along. Its length does not depend on that Clip: it can run on across later Clips, but never past the end of the Video. Different from a **Transition**, which replaces footage at a cut instead of sitting on top of it. It can carry a **Transform**, visible content, or both; its **Overlay Kind** names which content it carries and whether it has a Transform. Each Kind needs its own content. Its **Animation Toggles** control how it enters and leaves. At most one Overlay is visible at any moment in the whole Video: Overlays never overlap, and one that would is refused. Shortening an Overlay is refused if a **Bullet** would no longer fit. An Overlay cannot move to another Video. Deleting one is permanent, because nothing else refers to it. Recutting its Clip moves it with the Clip (see **Retiming Cascade**).
+A rendered visual layer shown on top of a Video's footage. It starts at a moment inside a specific **Clip**, so moving or trimming earlier Clips carries it along. Its length does not depend on that Clip: it can run on across later Clips, but never past the end of the Video. Different from a **Transition**, which replaces footage at a cut instead of sitting on top of it. It can carry a **Transform**, visible content, or both; its **Overlay Kind** names which content it carries and whether it has a Transform. Each Kind needs its own content. Its **Animation Toggles** control how it enters and leaves. At most one Overlay is visible at any moment in the whole Video: Overlays never overlap, and one that would is refused. Shortening an Overlay is refused if a **Bullet** would no longer fit. An Overlay cannot move to another Video. Deleting one is permanent, because nothing else refers to it. Recutting its Clip moves it with the Clip (see **Retiming Cascade**). Every copy of the Clip carries its Overlays.
 _Avoid_: Layer, Track, Effect
 
 **Overlay Kind**:
