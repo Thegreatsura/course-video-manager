@@ -470,11 +470,12 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       onRestoreClip={(clipId) => {
         dispatch({ type: "restore-clip", clipId });
       }}
-      onPermanentlyRemoveArchived={(sessionId) => {
-        dispatch({ type: "permanently-remove-archived", sessionId });
-      }}
-      onClearAllArchived={() => {
-        dispatch({ type: "permanently-remove-all-archived" });
+      onPermanentlyRemoveArchived={(scope) => {
+        dispatch(
+          scope === "all"
+            ? { type: "permanently-remove-all-archived" }
+            : { type: "permanently-remove-archived", sessionId: scope }
+        );
       }}
       obsConnectorState={obsConnector.state}
       items={clipState.items}

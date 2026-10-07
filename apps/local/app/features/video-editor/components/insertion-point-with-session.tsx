@@ -2,6 +2,7 @@ import { PlusIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { SessionPanel } from "./recording-session-panel";
+import { ClearAllRecordingSessionsButton } from "./clear-all-recording-sessions-button";
 import { INSERTION_POINT_ID, RECORDING_SESSION_PANELS_ID } from "../constants";
 
 /**
@@ -36,6 +37,7 @@ export const InsertionPointWithSession = () => {
       >
         <div className="overflow-hidden">
           <div id={RECORDING_SESSION_PANELS_ID} className="space-y-3 pt-3">
+            <ClearAllRecordingSessionsButton />
             {sessionPanels.map((panel) => (
               <SessionPanel key={panel.sessionId} panel={panel} />
             ))}

@@ -123,6 +123,14 @@ export const getSessionPanels = (
   return panels;
 };
 
+/**
+ * How many clips every Recording Session's "Clear all" would clear together:
+ * the archived and orphaned clips across all session panels. Zero means the
+ * clear-all-sessions button has nothing to do and is hidden.
+ */
+export const countClipsToClear = (panels: SessionPanelData[]): number =>
+  panels.reduce((total, panel) => total + panel.archivedClips.length, 0);
+
 export const getClips = (items: TimelineItem[]): Clip[] => {
   return items.filter(isClip);
 };

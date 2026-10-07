@@ -10,6 +10,7 @@ import type { ChapterNamingModal } from "../types";
  * - toggle-last-frame-of-video: Toggles the last frame setting for clips
  * - toggle-pause: Toggles pause between clips
  * - add-chapter: Opens modal to create a new chapter
+ * - clear-all-archived: Clears every Recording Session, as the panel button does
  *
  * The socket is opened once per mount and closed on unmount. The handlers are
  * held in a ref rather than listed as effect deps: several of them are inline
@@ -22,7 +23,7 @@ export function useWebSocket(params: {
   dispatch: (action: { type: "toggle-last-frame-of-video" }) => void;
   onDeleteLatestInsertedClip: () => void;
   onTogglePause: () => void;
-  onClearAllArchived: () => void;
+  onPermanentlyRemoveArchived: (scope: "all") => void;
   setChapterNamingModal: (modal: ChapterNamingModal) => void;
   generateDefaultChapterName: () => string;
 }) {
@@ -54,7 +55,7 @@ export function useWebSocket(params: {
           defaultName: handlers.generateDefaultChapterName(),
         });
       } else if (data.type === "clear-all-archived") {
-        handlers.onClearAllArchived();
+        handlers.onPermanentlyRemoveArchived("all");
       }
     });
     return () => {
