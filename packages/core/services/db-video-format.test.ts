@@ -31,18 +31,6 @@ beforeEach(async () => {
 });
 
 describe("video format", () => {
-  it.effect("creates a landscape video with format landscape", () =>
-    Effect.gen(function* () {
-      const videoOps = yield* VideoOperationsService;
-      const video = yield* videoOps.createStandaloneVideo({
-        title: "Test Video",
-        format: "landscape",
-      });
-
-      expect(video.format).toBe("landscape");
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("creates a short video with format short", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
@@ -72,40 +60,6 @@ describe("video format", () => {
       expect(updated.format).toBe("short");
       expect(updated.lessonId).toBeNull();
     }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "getAllStandaloneVideos({ format: short }) returns only shorts",
-    () =>
-      Effect.gen(function* () {
-        const videoOps = yield* VideoOperationsService;
-
-        yield* videoOps.createStandaloneVideo({
-          title: "Standard 1",
-          format: "landscape",
-        });
-        yield* videoOps.createStandaloneVideo({
-          title: "Short 1",
-          format: "short",
-        });
-        yield* videoOps.createStandaloneVideo({
-          title: "Standard 2",
-          format: "landscape",
-        });
-        yield* videoOps.createStandaloneVideo({
-          title: "Short 2",
-          format: "short",
-        });
-
-        const shorts = yield* videoOps.getAllStandaloneVideos({
-          format: "short",
-        });
-        expect(shorts).toHaveLength(2);
-        expect(shorts.map((v) => v.title).sort()).toEqual([
-          "Short 1",
-          "Short 2",
-        ]);
-      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect(

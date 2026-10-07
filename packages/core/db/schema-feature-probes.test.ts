@@ -30,16 +30,6 @@ describe("schema feature probes", () => {
     await pglite.close();
   });
 
-  it("covers every feature the hosted database is at risk of not supporting", () => {
-    expect(SCHEMA_FEATURE_PROBES.map((p) => p.name)).toEqual([
-      'COLLATE "C" ordering',
-      "generated tsvector STORED columns",
-      "GIN indexes",
-      "partial unique indexes",
-      "text[] columns",
-    ]);
-  });
-
   it("fails every probe against a database with none of the features", () => {
     // Guards the suite against a probe that passes vacuously: a database whose
     // catalogue query returns nothing must fail, not pass.

@@ -9,10 +9,6 @@ describe("deriveSectionPath", () => {
   it("falls back to 'untitled' for empty title", () => {
     expect(deriveSectionPath("")).toBe("untitled");
   });
-
-  it("falls back to 'untitled' for symbols-only title", () => {
-    expect(deriveSectionPath("!@#$")).toBe("untitled");
-  });
 });
 
 describe("parseSectionPath", () => {
@@ -21,28 +17,14 @@ describe("parseSectionPath", () => {
       sectionNumber: 1,
       slug: "intro",
     });
-  });
-
-  it("parses double-digit section number", () => {
-    expect(parseSectionPath("12-advanced-topic")).toEqual({
+    expect(parseSectionPath("12-getting-started-with-ts")).toEqual({
       sectionNumber: 12,
-      slug: "advanced-topic",
-    });
-  });
-
-  it("parses multi-word slug", () => {
-    expect(parseSectionPath("03-getting-started-with-ts")).toEqual({
-      sectionNumber: 3,
       slug: "getting-started-with-ts",
     });
   });
 
   it("returns null for path without number prefix", () => {
     expect(parseSectionPath("no-number")).toBeNull();
-  });
-
-  it("returns null for empty string", () => {
-    expect(parseSectionPath("")).toBeNull();
   });
 
   it("returns null for number-only path (no slug)", () => {

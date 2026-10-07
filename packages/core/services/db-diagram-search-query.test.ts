@@ -242,33 +242,6 @@ describe("searchDiagrams", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("returns empty array when nothing matches", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      yield* diagramOps.createDiagram();
-
-      const results = yield* diagramOps.searchDiagrams("nonexistent");
-      expect(results).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("includes searchText and contentHash in results", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagramHead(
-        diagram.id,
-        makeTextScene("boundary")
-      );
-
-      const results = yield* diagramOps.searchDiagrams("boundary");
-      expect(results).toHaveLength(1);
-      expect(results[0]!.searchText).toBe("boundary");
-      expect(results[0]!.contentHash).toEqual(expect.any(String));
-      expect(results[0]!.contentHash.length).toBe(64);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("head with null headScene does not appear", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;

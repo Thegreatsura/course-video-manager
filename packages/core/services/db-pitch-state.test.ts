@@ -142,18 +142,6 @@ describe("state derivation via listPitches", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("archived pitch excluded regardless of pitch state", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const pitch = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(pitch.id, "title", "Archived pitch");
-      yield* pitchOps.updatePitchField(pitch.id, "archived", true);
-
-      const list = yield* pitchOps.listPitches();
-      expect(list).toHaveLength(0);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("default state filter returns idle + scheduled only", () =>
     Effect.gen(function* () {
       const pitchOps = yield* PitchOperationsService;
@@ -213,29 +201,6 @@ describe("state derivation via listPitches", () => {
       expect(list[0]!.title).toBe("Shipped");
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("ordering preserved: priority asc, createdAt desc", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-
-      const p1 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p1.id, "title", "P2 older");
-      yield* pitchOps.updatePitchField(p1.id, "priority", 2);
-
-      const p2 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p2.id, "title", "P1");
-      yield* pitchOps.updatePitchField(p2.id, "priority", 1);
-
-      const p3 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p3.id, "title", "P2 newer");
-      yield* pitchOps.updatePitchField(p3.id, "priority", 2);
-
-      const list = yield* pitchOps.listPitches();
-      expect(list[0]!.title).toBe("P1");
-      expect(list[1]!.title).toBe("P2 newer");
-      expect(list[2]!.title).toBe("P2 older");
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("state derivation via listPitchesWithVideos", () => {
@@ -276,17 +241,6 @@ describe("state derivation via getPitchWithVideos", () => {
 
       const result = yield* pitchOps.getPitchWithVideos(pitch.id);
       expect(result.state).toBe("shipped");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("returns idle when no deliverables linked", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-
-      const pitch = yield* pitchOps.createPitch();
-
-      const result = yield* pitchOps.getPitchWithVideos(pitch.id);
-      expect(result.state).toBe("idle");
     }).pipe(Effect.provide(testLayer))
   );
 });

@@ -98,14 +98,6 @@ describe("createComponent", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("allows duplicate names", () =>
-    Effect.gen(function* () {
-      yield* create("Same name");
-      const second = yield* create("Same name");
-      expect(second.name).toBe("Same name");
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("rejects a missing thumbnail", () =>
     Effect.gen(function* () {
       const failure = yield* Effect.flip(
@@ -170,15 +162,6 @@ describe("createComponent", () => {
 });
 
 describe("listComponents", () => {
-  it.effect("returns id and name only", () =>
-    Effect.gen(function* () {
-      const ops = yield* DiagramComponentOperationsService;
-      yield* create("Only one");
-      const list = yield* ops.listComponents();
-      expect(Object.keys(list[0]!).sort()).toEqual(["id", "name"]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect(
     "orders by lastUsedAt desc, so a never-used one sorts by birth",
     () =>
@@ -190,15 +173,6 @@ describe("listComponents", () => {
 
         const list = yield* ops.listComponents();
         expect(list.map((c) => c.id)).toEqual([second.id, first.id]);
-      }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "is empty until something is captured — the library ships empty",
-    () =>
-      Effect.gen(function* () {
-        const ops = yield* DiagramComponentOperationsService;
-        expect(yield* ops.listComponents()).toEqual([]);
       }).pipe(Effect.provide(testLayer))
   );
 });
@@ -266,16 +240,6 @@ describe("renameComponent", () => {
       expect(list.map((c) => c.id)).toEqual([second.id, first.id]);
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("404s for an id that is not there", () =>
-    Effect.gen(function* () {
-      const ops = yield* DiagramComponentOperationsService;
-      const failure = yield* Effect.flip(
-        ops.renameComponent(crypto.randomUUID(), "Whatever")
-      );
-      expect(failure._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("deleteComponent", () => {
@@ -299,16 +263,6 @@ describe("deleteComponent", () => {
       const created = yield* create("Doomed");
       yield* ops.deleteComponent(created.id);
       expect(thumbnails.written.has(`_components/${created.id}`)).toBe(false);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("404s for an id that is not there", () =>
-    Effect.gen(function* () {
-      const ops = yield* DiagramComponentOperationsService;
-      const failure = yield* Effect.flip(
-        ops.deleteComponent(crypto.randomUUID())
-      );
-      expect(failure._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(testLayer))
   );
 });

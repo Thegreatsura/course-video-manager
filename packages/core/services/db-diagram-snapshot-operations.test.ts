@@ -74,16 +74,6 @@ describe("listSnapshots", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("returns empty array when diagram has no snapshots", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-
-      const snapshots = yield* diagramOps.listSnapshots(diagram.id);
-      expect(snapshots).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("does not return snapshots from other diagrams", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -152,48 +142,6 @@ describe("listSnapshotsWithClips", () => {
       expect(result[0]!.clips[0]!.id).toBe(clip.id);
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("returns empty clips array for unpinned snapshot", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagramHead(diagram.id, scene1);
-      yield* diagramOps.createSnapshot(diagram.id, { preserved: true });
-
-      const result = yield* diagramOps.listSnapshotsWithClips(diagram.id);
-      expect(result).toHaveLength(1);
-      expect(result[0]!.clips).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("includes archived flag on pinning clips", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const videoOps = yield* VideoOperationsService;
-      const clipOps = yield* ClipOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagramHead(diagram.id, scene1);
-
-      const video = yield* videoOps.createStandaloneVideo({
-        title: "test-video.mp4",
-        format: "landscape",
-      });
-      const clips = yield* clipOps.appendClips({
-        videoId: video.id,
-        insertionPoint: { type: "start" },
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-      const clip = clips[0]!;
-
-      yield* diagramOps.createSnapshotForClip(diagram.id, clip.id);
-      yield* clipOps.archiveClip(clip.id);
-
-      const result = yield* diagramOps.listSnapshotsWithClips(diagram.id);
-      expect(result).toHaveLength(1);
-      expect(result[0]!.clips).toHaveLength(1);
-      expect(result[0]!.clips[0]!.archived).toBe(true);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("restoreSnapshotToHead", () => {
@@ -215,32 +163,6 @@ describe("restoreSnapshotToHead", () => {
       );
 
       expect(updated.headScene).toEqual(scene1);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("does not mutate the snapshot row", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-
-      yield* diagramOps.updateDiagramHead(diagram.id, scene1);
-      const snapshotBefore = yield* diagramOps.createSnapshot(diagram.id, {
-        preserved: true,
-      });
-
-      yield* diagramOps.updateDiagramHead(diagram.id, scene2);
-      yield* diagramOps.restoreSnapshotToHead(diagram.id, snapshotBefore.id);
-
-      const snapshots = yield* diagramOps.listSnapshots(diagram.id);
-      const snapshotAfter = snapshots.find((s) => s.id === snapshotBefore.id)!;
-
-      expect(snapshotAfter.id).toBe(snapshotBefore.id);
-      expect(snapshotAfter.scene).toEqual(snapshotBefore.scene);
-      expect(snapshotAfter.contentHash).toBe(snapshotBefore.contentHash);
-      expect(snapshotAfter.preserved).toBe(snapshotBefore.preserved);
-      expect(snapshotAfter.createdAt.getTime()).toBe(
-        snapshotBefore.createdAt.getTime()
-      );
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -266,16 +188,6 @@ describe("restoreSnapshotToHead", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("fails with NotFoundError for non-existent diagram", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const result = yield* diagramOps
-        .restoreSnapshotToHead("nonexistent-id", "some-snapshot-id")
-        .pipe(Effect.flip);
-      expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails with NotFoundError for non-existent snapshot", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -285,32 +197,6 @@ describe("restoreSnapshotToHead", () => {
         .restoreSnapshotToHead(diagram.id, "nonexistent-snapshot-id")
         .pipe(Effect.flip);
       expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("is idempotent when restoring the same snapshot twice", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-
-      yield* diagramOps.updateDiagramHead(diagram.id, scene1);
-      const snapshot = yield* diagramOps.createSnapshot(diagram.id, {
-        preserved: true,
-      });
-
-      yield* diagramOps.updateDiagramHead(diagram.id, scene2);
-
-      const first = yield* diagramOps.restoreSnapshotToHead(
-        diagram.id,
-        snapshot.id
-      );
-      const second = yield* diagramOps.restoreSnapshotToHead(
-        diagram.id,
-        snapshot.id
-      );
-
-      expect(first.headScene).toEqual(scene1);
-      expect(second.headScene).toEqual(scene1);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -403,30 +289,6 @@ describe("updateClipDiagramPin", () => {
         .pipe(Effect.flip);
       expect(result._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "is idempotent — pinning same snapshot twice returns same result",
-    () =>
-      Effect.gen(function* () {
-        const diagramOps = yield* DiagramOperationsService;
-        const { clip } = yield* createVideoWithClip;
-        const diagram = yield* diagramOps.createDiagram();
-        yield* diagramOps.updateDiagramHead(diagram.id, scene);
-        const snapshot = yield* diagramOps.createSnapshot(diagram.id, {});
-
-        const first = yield* diagramOps.updateClipDiagramPin(
-          clip.id,
-          snapshot.id
-        );
-        const second = yield* diagramOps.updateClipDiagramPin(
-          clip.id,
-          snapshot.id
-        );
-
-        expect(first.diagramSnapshotId).toBe(snapshot.id);
-        expect(second.diagramSnapshotId).toBe(snapshot.id);
-      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect(

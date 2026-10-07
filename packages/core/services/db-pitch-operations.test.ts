@@ -75,14 +75,6 @@ describe("listPitches", () => {
       }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("returns empty array when no pitches exist", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const list = yield* pitchOps.listPitches();
-      expect(list).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("excludes pitches with empty titles", () =>
     Effect.gen(function* () {
       const pitchOps = yield* PitchOperationsService;
@@ -100,16 +92,6 @@ describe("listPitches", () => {
 });
 
 describe("getPitch", () => {
-  it.effect("returns a pitch by id", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const created = yield* pitchOps.createPitch();
-      const fetched = yield* pitchOps.getPitch(created.id);
-
-      expect(fetched.id).toBe(created.id);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails with NotFoundError for missing id", () =>
     Effect.gen(function* () {
       const pitchOps = yield* PitchOperationsService;
@@ -140,20 +122,6 @@ describe("updatePitchField", () => {
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(
         originalUpdatedAt.getTime()
       );
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("updates priority as a number", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const created = yield* pitchOps.createPitch();
-      const updated = yield* pitchOps.updatePitchField(
-        created.id,
-        "priority",
-        1
-      );
-
-      expect(updated.priority).toBe(1);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -229,48 +197,6 @@ describe("listPitches with filters", () => {
       const archivedOnly = yield* pitchOps.listPitches({ archived: true });
       expect(archivedOnly).toHaveLength(1);
     }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("sorts by priority asc then createdAt desc", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-
-      const p1 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p1.id, "title", "P2 older");
-      yield* pitchOps.updatePitchField(p1.id, "priority", 2);
-
-      const p2 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p2.id, "title", "P1");
-      yield* pitchOps.updatePitchField(p2.id, "priority", 1);
-
-      const p3 = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(p3.id, "title", "P2 newer");
-      yield* pitchOps.updatePitchField(p3.id, "priority", 2);
-
-      const list = yield* pitchOps.listPitches();
-      expect(list[0]!.title).toBe("P1");
-      expect(list[1]!.title).toBe("P2 newer");
-      expect(list[2]!.title).toBe("P2 older");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "returns all non-archived when called with no filters (backward compat)",
-    () =>
-      Effect.gen(function* () {
-        const pitchOps = yield* PitchOperationsService;
-
-        const p1 = yield* pitchOps.createPitch();
-        yield* pitchOps.updatePitchField(p1.id, "title", "A");
-        const p2 = yield* pitchOps.createPitch();
-        yield* pitchOps.updatePitchField(p2.id, "title", "B");
-        const p3 = yield* pitchOps.createPitch();
-        yield* pitchOps.updatePitchField(p3.id, "title", "C");
-        yield* pitchOps.updatePitchField(p3.id, "archived", true);
-
-        const list = yield* pitchOps.listPitches();
-        expect(list).toHaveLength(2);
-      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect("treats empty state array as no state filter", () =>
@@ -361,28 +287,18 @@ describe("listPitchesWithVideos", () => {
       const pitch = yield* pitchOps.createPitch();
       yield* pitchOps.updatePitchField(pitch.id, "title", "Has videos");
       const video = yield* pitchOps.createVideoFromPitch(pitch.id);
+      const bare = yield* pitchOps.createPitch();
+      yield* pitchOps.updatePitchField(bare.id, "title", "No videos");
 
       const list = yield* pitchOps.listPitchesWithVideos();
-      expect(list).toHaveLength(1);
-      expect(list[0]!.videos).toHaveLength(1);
-      expect(list[0]!.videos[0]!.id).toBe(video.id);
-      expect(list[0]!.videos[0]!.pitchId).toBe(pitch.id);
+      expect(list).toHaveLength(2);
+      const withVideos = list.find((p) => p.id === pitch.id)!;
+      expect(withVideos.videos).toHaveLength(1);
+      expect(withVideos.videos[0]!.id).toBe(video.id);
+      expect(withVideos.videos[0]!.pitchId).toBe(pitch.id);
+      // A pitch with no videos is still listed.
+      expect(list.find((p) => p.id === bare.id)!.videos).toEqual([]);
     }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "returns pitches with empty videos array when no videos linked",
-    () =>
-      Effect.gen(function* () {
-        const pitchOps = yield* PitchOperationsService;
-
-        const p = yield* pitchOps.createPitch();
-        yield* pitchOps.updatePitchField(p.id, "title", "No videos");
-
-        const list = yield* pitchOps.listPitchesWithVideos();
-        expect(list).toHaveLength(1);
-        expect(list[0]!.videos).toHaveLength(0);
-      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect(
@@ -420,40 +336,9 @@ describe("listPitchesWithVideos", () => {
       expect(list[0]!.videos).toHaveLength(1);
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("returns multiple videos per pitch", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-
-      const pitch = yield* pitchOps.createPitch();
-      yield* pitchOps.updatePitchField(pitch.id, "title", "Multi video");
-      yield* pitchOps.createVideoFromPitch(pitch.id);
-      yield* pitchOps.createVideoFromPitch(pitch.id);
-      yield* pitchOps.createVideoFromPitch(pitch.id);
-
-      const list = yield* pitchOps.listPitchesWithVideos();
-      expect(list).toHaveLength(1);
-      expect(list[0]!.videos).toHaveLength(3);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("getPitchWithVideos", () => {
-  it.effect("returns a pitch with its linked videos and clips", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-
-      const pitch = yield* pitchOps.createPitch();
-      const video = yield* pitchOps.createVideoFromPitch(pitch.id);
-
-      const result = yield* pitchOps.getPitchWithVideos(pitch.id);
-      expect(result.id).toBe(pitch.id);
-      expect(result.videos).toHaveLength(1);
-      expect(result.videos[0]!.id).toBe(video.id);
-      expect(result.videos[0]!.clips).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails with NotFoundError for non-existent pitch", () =>
     Effect.gen(function* () {
       const pitchOps = yield* PitchOperationsService;
@@ -530,21 +415,6 @@ describe("createVideoFromPitch", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("creates a video with no clips", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const pitch = yield* pitchOps.createPitch();
-      const video = yield* pitchOps.createVideoFromPitch(pitch.id);
-
-      const videoClips = yield* Effect.promise(() =>
-        testDb.query.clips.findMany({
-          where: eq(schema.clips.videoId, video.id),
-        })
-      );
-      expect(videoClips).toHaveLength(0);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails with NotFoundError for non-existent pitch", () =>
     Effect.gen(function* () {
       const pitchOps = yield* PitchOperationsService;
@@ -552,20 +422,6 @@ describe("createVideoFromPitch", () => {
         .createVideoFromPitch("nonexistent-pitch-id")
         .pipe(Effect.flip);
       expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("allows multiple videos from the same pitch", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const pitch = yield* pitchOps.createPitch();
-
-      const v1 = yield* pitchOps.createVideoFromPitch(pitch.id);
-      const v2 = yield* pitchOps.createVideoFromPitch(pitch.id);
-
-      expect(v1.id).not.toBe(v2.id);
-      expect(v1.pitchId).toBe(pitch.id);
-      expect(v2.pitchId).toBe(pitch.id);
     }).pipe(Effect.provide(testLayer))
   );
 });

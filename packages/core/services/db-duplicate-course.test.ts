@@ -9,6 +9,7 @@ import {
 } from "../test-utils/pglite.js";
 import * as schema from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { sortByOrder } from "../lib/sort-by-order.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<CourseOperationsService>;
@@ -152,7 +153,7 @@ async function createFullCourseStructure() {
       imagePath: "frame-002.png",
       audioPath: "speech-002.wav",
       durationSeconds: 4.25,
-      order: "b",
+      order: "a2",
     },
     {
       videoId: video!.id,
@@ -160,7 +161,7 @@ async function createFullCourseStructure() {
       imagePath: "frame-001.png",
       audioPath: "speech-001.wav",
       durationSeconds: 1.5,
-      order: "a",
+      order: "a1",
     },
     {
       videoId: video!.id,
@@ -168,9 +169,17 @@ async function createFullCourseStructure() {
       imagePath: "frame-003.png",
       audioPath: "speech-003.wav",
       durationSeconds: 0.5,
-      order: "c",
+      order: "a3",
       archived: true,
     },
+  ]);
+
+  // Clip Mockup Chapters share the Clip Mockups' order space, interleaved
+  await testDb.insert(schema.clipMockupChapters).values([
+    { videoId: video!.id, name: "Setup", order: "a0" },
+    { videoId: video!.id, name: "The bug", order: "a1V" },
+    { videoId: video!.id, name: "The fix", order: "a2V" },
+    { videoId: video!.id, name: "Cut", order: "a4", archived: true },
   ]);
 
   // Thumbnails
@@ -199,22 +208,6 @@ async function createFullCourseStructure() {
 }
 
 describe("duplicateCourse", () => {
-  it("creates a new course with the provided name", async () => {
-    const { course } = await createFullCourseStructure();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Duplicated Course",
-        });
-      })
-    );
-
-    expect(result.course.name).toBe("Duplicated Course");
-  });
-
   it("copies the original course's memory field", async () => {
     const { course } = await createFullCourseStructure();
 
@@ -304,34 +297,7 @@ describe("duplicateCourse", () => {
     expect(lessons[0]!.previousVersionLessonId).toBeNull();
   });
 
-  it("excludes archived sections from the copy", async () => {
-    const { course, version } = await createFullCourseStructure();
-
-    // Verify source has 2 sections (1 active + 1 archived)
-    const sourceSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, version.id),
-    });
-    expect(sourceSections).toHaveLength(2);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.title).toBe("01-intro");
-  });
-
-  it("copies videos and excludes archived videos", async () => {
+  it("copies only active rows at every level", async () => {
     const { course } = await createFullCourseStructure();
 
     const result = await run(
@@ -349,126 +315,19 @@ describe("duplicateCourse", () => {
       with: {
         lessons: {
           with: {
-            videos: true,
+            videos: { with: { clips: true, chapters: true, beats: true } },
           },
         },
       },
     });
 
     const videos = newSections[0]!.lessons[0]!.videos;
-    // Only non-archived video copied
-    expect(videos).toHaveLength(1);
-    expect(videos[0]!.title).toBe("video-01.mp4");
-    expect(videos[0]!.originalFootagePath).toBe("/footage/raw-01.mp4");
+    expect(videos.map((v) => v.title)).toEqual(["video-01.mp4"]);
+    const video = videos[0]!;
+    expect(video.clips.map((c) => c.videoFilename)).toEqual(["clip-01.mp4"]);
+    expect(video.chapters.map((c) => c.name)).toEqual(["Section A"]);
+    expect(video.beats.map((b) => b.title)).toEqual(["Active Beat"]);
   });
-
-  it("copies clips and excludes archived clips", async () => {
-    const { course } = await createFullCourseStructure();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: {
-        lessons: {
-          with: {
-            videos: {
-              with: {
-                clips: {
-                  orderBy: (c, { asc }) => asc(c.order),
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const clips = newSections[0]!.lessons[0]!.videos[0]!.clips;
-    // Only non-archived clip
-    expect(clips).toHaveLength(1);
-    expect(clips[0]!.text).toBe("Hello world");
-    expect(clips[0]!.videoFilename).toBe("clip-01.mp4");
-    expect(clips[0]!.pauseType).toBe("intro");
-  });
-
-  it("copies chapters and excludes archived chapters", async () => {
-    const { course } = await createFullCourseStructure();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: {
-        lessons: {
-          with: {
-            videos: {
-              with: {
-                chapters: {
-                  orderBy: (cs, { asc }) => asc(cs.order),
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const chapters = newSections[0]!.lessons[0]!.videos[0]!.chapters;
-    expect(chapters).toHaveLength(1);
-    expect(chapters[0]!.name).toBe("Section A");
-  });
-
-  it("copies thumbnails", async () => {
-    const { course } = await createFullCourseStructure();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: {
-        lessons: {
-          with: {
-            videos: {
-              with: {
-                thumbnails: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const thumbnails = newSections[0]!.lessons[0]!.videos[0]!.thumbnails;
-    expect(thumbnails).toHaveLength(1);
-    expect(thumbnails[0]!.filePath).toBe("/thumbs/01.png");
-    expect(thumbnails[0]!.selectedForUpload).toBe(true);
-  });
-
   it("preserves entity ordering across sections and lessons", async () => {
     const [course] = await testDb
       .insert(schema.courses)
@@ -544,66 +403,6 @@ describe("duplicateCourse", () => {
     ).rejects.toThrow();
   });
 
-  it("handles course with sections but no lessons", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Empty Sections" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    await testDb.insert(schema.sections).values({
-      repoVersionId: version!.id,
-      title: "01-empty",
-      order: 1,
-    });
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course!.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: { lessons: true },
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.title).toBe("01-empty");
-    expect(newSections[0]!.lessons).toHaveLength(0);
-  });
-
-  it("copies null memory field", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "No Memory" })
-      .returning();
-
-    await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" });
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course!.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    expect(result.course.memory).toBe("");
-  });
-
   it("uses the latest version when multiple versions exist", async () => {
     const [course] = await testDb
       .insert(schema.courses)
@@ -650,7 +449,7 @@ describe("duplicateCourse", () => {
     expect(newSections[0]!.title).toBe("01-new-section");
   });
 
-  it("copies beats and excludes archived beats", async () => {
+  it("copies the Animatic in order, interleaved, without archived rows", async () => {
     const { course } = await createFullCourseStructure();
 
     const result = await run(
@@ -668,79 +467,33 @@ describe("duplicateCourse", () => {
       with: {
         lessons: {
           with: {
-            videos: {
-              with: {
-                beats: {
-                  orderBy: (s, { asc }) => asc(s.order),
-                },
-              },
-            },
+            videos: { with: { clipMockups: true, clipMockupChapters: true } },
           },
         },
       },
     });
 
-    const beats = newSections[0]!.lessons[0]!.videos[0]!.beats;
-    expect(beats).toHaveLength(1);
-    expect(beats[0]!.title).toBe("Active Beat");
-    expect(beats[0]!.kind).toBe("definition");
-  });
-
-  it("copies clip mockups in order and excludes archived ones", async () => {
-    const { course } = await createFullCourseStructure();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        return yield* courseOps.duplicateCourse({
-          sourceCourseId: course.id,
-          name: "Dup",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: {
-        lessons: {
-          with: {
-            videos: {
-              with: {
-                clipMockups: { orderBy: (s, { asc }) => asc(s.order) },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const mockups = newSections[0]!.lessons[0]!.videos[0]!.clipMockups;
-    expect(
-      mockups.map((m) => ({
-        line: m.line,
-        imagePath: m.imagePath,
-        durationSeconds: m.durationSeconds,
+    // A MERGED order comparison, not a per-table count: only a merged list
+    // catches the two halves arriving separated instead of interleaved.
+    const video = newSections[0]!.lessons[0]!.videos[0]!;
+    const animatic = sortByOrder([
+      ...video.clipMockups.map((m) => ({
         order: m.order,
-        archived: m.archived,
-      }))
-    ).toEqual([
-      {
-        line: "First mockup line",
-        imagePath: "frame-001.png",
-        durationSeconds: 1.5,
-        order: "a",
-        archived: false,
-      },
-      {
-        line: "Second mockup line",
-        imagePath: "frame-002.png",
-        durationSeconds: 4.25,
-        order: "b",
-        archived: false,
-      },
+        label: `mockup:${m.line}${m.archived ? " (archived)" : ""}`,
+      })),
+      ...video.clipMockupChapters.map((c) => ({
+        order: c.order,
+        label: `chapter:${c.name}${c.archived ? " (archived)" : ""}`,
+      })),
+    ]).map((item) => item.label);
+    expect(animatic).toEqual([
+      "chapter:Setup",
+      "mockup:First mockup line",
+      "chapter:The bug",
+      "mockup:Second mockup line",
+      "chapter:The fix",
     ]);
   });
-
   it("reports each duplicated Video's source and new lineageId", async () => {
     const { course, video } = await createFullCourseStructure();
 

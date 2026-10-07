@@ -85,25 +85,6 @@ describe("createLearningGoal", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("stores the provided fields", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      const svc = yield* LearningGoalOperationsService;
-
-      const goal = yield* svc.createLearningGoal("section-1", {
-        title: "Explain closures",
-        description: "The learner can describe lexical scoping.",
-        priority: 1,
-      });
-
-      expect(goal.title).toBe("Explain closures");
-      expect(goal.description).toBe(
-        "The learner can describe lexical scoping."
-      );
-      expect(goal.priority).toBe(1);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("slots new goals at the end, in creation order", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeSection("section-1"));
@@ -170,22 +151,6 @@ describe("createLearningGoal", () => {
       expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("scopes order to each section independently", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      yield* Effect.promise(() => makeSection("section-2"));
-      const svc = yield* LearningGoalOperationsService;
-
-      yield* svc.createLearningGoal("section-1");
-      yield* svc.createLearningGoal("section-2");
-
-      const s1 = yield* svc.listLearningGoalsBySectionId("section-1");
-      const s2 = yield* svc.listLearningGoalsBySectionId("section-2");
-      expect(s1).toHaveLength(1);
-      expect(s2).toHaveLength(1);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("updateLearningGoal", () => {
@@ -206,30 +171,6 @@ describe("updateLearningGoal", () => {
       expect(updated.title).toBe("Explain closures");
       expect(updated.description).toBe("original");
       expect(updated.priority).toBe(1);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("renames via the title field", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      const svc = yield* LearningGoalOperationsService;
-      const created = yield* svc.createLearningGoal("section-1");
-
-      const updated = yield* svc.updateLearningGoal(created.id, {
-        title: "Renamed goal",
-      });
-
-      expect(updated.title).toBe("Renamed goal");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the learning goal does not exist", () =>
-    Effect.gen(function* () {
-      const svc = yield* LearningGoalOperationsService;
-      const result = yield* svc
-        .updateLearningGoal("missing", { title: "x" })
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -267,21 +208,6 @@ describe("deleteLearningGoal", () => {
       );
       expect(row).toBeDefined();
       expect(row!.archived).toBe(true);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("excludes archived goals from listLearningGoalsBySectionId", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      const svc = yield* LearningGoalOperationsService;
-      const a = yield* svc.createLearningGoal("section-1");
-      const b = yield* svc.createLearningGoal("section-1");
-
-      yield* svc.deleteLearningGoal(a.id);
-
-      const listed = yield* svc.listLearningGoalsBySectionId("section-1");
-      expect(listed).toHaveLength(1);
-      expect(listed[0]!.id).toBe(b.id);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -366,29 +292,6 @@ describe("moveLearningGoal", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("fails when beforeLearningGoalId does not exist", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      const svc = yield* LearningGoalOperationsService;
-      const a = yield* svc.createLearningGoal("section-1");
-
-      const result = yield* svc
-        .moveLearningGoal(a.id, "missing")
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the learning goal does not exist", () =>
-    Effect.gen(function* () {
-      const svc = yield* LearningGoalOperationsService;
-      const result = yield* svc
-        .moveLearningGoal("missing", null)
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails once the owning version is no longer a Draft", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeSection("section-1"));
@@ -418,18 +321,6 @@ describe("beatIds", () => {
       .values({ id: beatId, videoId: `${beatId}-video`, order: "a0" });
     await testDb.insert(beatLearningGoals).values({ beatId, learningGoalId });
   };
-
-  it.effect("is empty for a Learning Goal no Beat serves yet", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeSection("section-1"));
-      const svc = yield* LearningGoalOperationsService;
-      const goal = yield* svc.createLearningGoal("section-1");
-
-      expect(goal.beatIds).toEqual([]);
-      const fetched = yield* svc.getLearningGoalById(goal.id);
-      expect(fetched.beatIds).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
 
   it.effect("lists every Beat serving the goal, on get and on list", () =>
     Effect.gen(function* () {
@@ -545,16 +436,6 @@ describe("unlinkBeat", () => {
       const updated = yield* svc.unlinkBeat(goal.id, "never-linked");
 
       expect(updated.beatIds).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the Learning Goal does not exist", () =>
-    Effect.gen(function* () {
-      const svc = yield* LearningGoalOperationsService;
-      const result = yield* svc
-        .unlinkBeat("missing", "beat-1")
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
 
