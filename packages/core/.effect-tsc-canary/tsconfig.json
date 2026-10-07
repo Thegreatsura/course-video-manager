@@ -1,0 +1,7 @@
+{
+  // The canary for scripts/check-effect-tsc.ts. It inherits core's compiler
+  // options, Effect plugin block included, and checks only canary.ts. The
+  // folder starts with a dot, so core's own `**/*` include never sees it.
+  "extends": "../tsconfig.json",
+  "include": ["canary.ts"]
+}

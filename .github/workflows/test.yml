@@ -7,7 +7,7 @@
 # and the ruleset (strict, required context `check`) makes every BEHIND PR pay
 # it again:
 #
-#   static      = pnpm run check:static         (typecheck, lint:effect, oxlint,
+#   static      = pnpm run check:static         (typecheck + Effect rules, oxlint,
 #                                                lint:boundaries, the file guards,
 #                                                the Effect guards, the frontend
 #                                                state guard)

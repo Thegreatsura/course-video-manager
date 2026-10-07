@@ -26,7 +26,8 @@ silently skipped — no error, no log, the write just never happens.
 Enforced by type-aware oxlint (`typescript/await-thenable`, an error in
 `.oxlintrc.json`) and by `@effect/tsgo` (`floatingEffect`,
 `missingStarInYieldEffectGen`, `returnEffectInGen`, `runEffectInsideEffect`,
-errors in each package's `tsconfig.json`, run by `pnpm run lint:effect`). A
+errors in each package's `tsconfig.json`, reported by `pnpm run typecheck`,
+whose `tsc` the root `prepare` script patches with `effect-tsgo patch`). A
 false positive gets `// @effect-diagnostics-next-line <rule>:off` and a reason.
 See [`plans/effect-codebase-health.md`](./plans/effect-codebase-health.md).
 
