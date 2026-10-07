@@ -8,31 +8,21 @@
  *
  *   pnpm --filter @cvm/local db:repair-version-children            # dry run
  *   pnpm --filter @cvm/local db:repair-version-children --apply    # write
+ *
+ * Reads the repo-root .env (see ./script-database-url.ts); set DATABASE_URL
+ * in the environment to point it elsewhere.
  */
-import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@cvm/core/db/schema";
-import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import { courseNames } from "@cvm/core/services/clip-carry-repair.server";
 import { runVersionChildrenRepair } from "@cvm/core/services/version-children-repair.server";
-
-// The author's environment lives in the repo-root .env, which nothing loads
-// for a bare `tsx` run — same convention as packages/core/drizzle.config.ts.
-// A variable already set in the shell wins over the file.
-try {
-  process.loadEnvFile(fileURLToPath(new URL("../../../.env", import.meta.url)));
-} catch {
-  // No .env — the environment supplies the variables directly.
-}
+import { scriptDatabaseUrl } from "./script-database-url";
 
 const apply = process.argv.includes("--apply");
-const url = resolveDatabaseUrl();
-if (!url) {
-  console.error("DATABASE_URL is not set");
-  process.exit(1);
-}
-const host = new URL(url).host;
+const { url, host } = scriptDatabaseUrl();
+// Announce before anything runs: with --apply, runVersionChildrenRepair writes.
+console.log(`${apply ? "APPLY" : "DRY RUN"} against ${host}`);
 
 const pool = new Pool({ connectionString: url });
 const db = drizzle(pool, { schema });
@@ -55,7 +45,6 @@ const inCourse = <T extends { courseId: string }>(rows: T[], id: string) =>
   rows.filter((row) => row.courseId === id);
 const distinct = (values: string[]) => new Set(values).size;
 
-console.log(`${apply ? "APPLY" : "DRY RUN"} against ${host}`);
 for (const id of courseIds) {
   const goals = inCourse(plan.goals, id);
   const webLinks = inCourse(plan.webLinks, id);
