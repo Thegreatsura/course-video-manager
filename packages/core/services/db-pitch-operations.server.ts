@@ -212,6 +212,23 @@ const createPitchOperations = (db: Database) => {
           videos: {
             where: eq(videos.archived, false),
             with: {
+              // Where the Video sits in a Course, when it belongs to a Lesson:
+              // the links the Pitch page copies name the whole hierarchy, and
+              // its export is looked for under the Course, where it is written.
+              lesson: {
+                columns: { id: true },
+                with: {
+                  section: {
+                    columns: { id: true },
+                    with: {
+                      repoVersion: {
+                        columns: { repoId: true },
+                        with: { repo: { columns: { id: true } } },
+                      },
+                    },
+                  },
+                },
+              },
               clips: {
                 orderBy: asc(clips.order),
                 where: eq(clips.archived, false),

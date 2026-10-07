@@ -5,6 +5,8 @@ import type {
   FrontendInsertionPoint,
   TimelineItem,
 } from "../clip-state-reducer";
+import { useDeepLinkFocus } from "@/features/entity-links/use-deep-link-focus";
+import { editorDeepLinkCandidates } from "../deep-link-candidates";
 import {
   makeVideoEditorReducer,
   type videoStateReducer,
@@ -12,6 +14,8 @@ import {
 
 export const useVideoEditor = (props: {
   items: TimelineItem[];
+  /** Every item, archived ones too — what a copied link may name. */
+  allItems: TimelineItem[];
   clips: Clip[];
   insertionPoint: FrontendInsertionPoint;
   onClipsRemoved: (clipIds: FrontendId[]) => void;
@@ -75,6 +79,17 @@ export const useVideoEditor = (props: {
       },
     }
   );
+
+  // A copied `?clip=` / `?chapter=` link selects its item once it loads.
+  useDeepLinkFocus({
+    types: ["clip", "chapter"],
+    candidates: editorDeepLinkCandidates(props.allItems),
+    onFocus: (candidate) =>
+      dispatch({
+        type: "deep-link-target-found",
+        itemId: candidate.key as FrontendId,
+      }),
+  });
 
   return {
     state,

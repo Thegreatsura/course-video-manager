@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { AnimaticChapterRow } from "./animatic-chapters";
@@ -41,6 +42,7 @@ export const AnimaticMockupRow = (props: {
         <button
           type="button"
           data-animatic-index={index}
+          {...deepLinkAnchor(segment.mockup.id)}
           // A clicked row keeps the keys working: the shared guard ignores a
           // keydown on a plain button, and the author's next act after clicking a
           // moment is SPACE.

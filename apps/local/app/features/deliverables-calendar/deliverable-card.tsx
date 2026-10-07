@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { cn } from "@/lib/utils";
@@ -284,6 +285,7 @@ export function DeliverableCard({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <li
+            {...deepLinkAnchor(d.id)}
             className={cn(
               "cursor-context-menu rounded-lg border bg-background p-3 flex items-start gap-3",
               overdue ? "border-red-500/50 bg-red-500/5" : "border-border",

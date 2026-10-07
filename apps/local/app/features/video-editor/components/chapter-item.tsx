@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import type { Chapter } from "../clip-state-reducer";
@@ -58,7 +59,10 @@ export const ChapterItem = (props: {
       })
     : null;
   return (
-    <div>
+    <div
+      {...(props.chapter.type === "chapter-on-database" &&
+        deepLinkAnchor(props.chapter.databaseId))}
+    >
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <ChapterDivider

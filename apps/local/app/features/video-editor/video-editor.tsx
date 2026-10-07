@@ -178,12 +178,11 @@ export const VideoEditor = (props: {
     [props.items, props.sessions]
   );
 
-  // This session's clips and their states, for the teleprompter's glass.
-
   useEffect(() => enableVideoEditorMode(), []);
 
   const { state, dispatch } = useVideoEditor({
     items: timelineItems,
+    allItems: props.items,
     clips: clips,
     insertionPoint: props.insertionPoint,
     onClipsRemoved: props.onClipsRemoved,

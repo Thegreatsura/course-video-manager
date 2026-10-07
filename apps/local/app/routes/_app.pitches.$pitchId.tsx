@@ -41,6 +41,11 @@ import { BeatDndProvider } from "@/features/beats/beat-dnd-context";
 import { CreateBeatDialogProvider } from "@/features/beats/create-beat-dialog";
 import { BeatList } from "@/features/beats/beat-list";
 import { pitchBackLink } from "@/features/pitches/pitch-back-link";
+import type {
+  FindLessonPlace,
+  LessonPlace,
+} from "@/features/entity-links/entity-deep-link";
+import { LessonPlaceProvider } from "@/features/entity-links/lesson-place-context";
 import type { Route } from "./+types/_app.pitches.$pitchId";
 
 export const meta: Route.MetaFunction = ({ data: loaderData }) => {
@@ -51,6 +56,8 @@ export const meta: Route.MetaFunction = ({ data: loaderData }) => {
 interface PitchVideo {
   id: string;
   title: string;
+  /** Its place in a Course, when the Video also belongs to a Lesson. */
+  inLesson: LessonPlace | null;
   firstClipId: string | null;
   totalDuration: number;
   beats: {
@@ -85,6 +92,13 @@ export const loader = makeLoader({
       const videos: PitchVideo[] = pitchRaw.videos.map((v) => ({
         id: v.id,
         title: v.title,
+        inLesson: v.lesson
+          ? {
+              courseId: v.lesson.section.repoVersion.repoId,
+              sectionId: v.lesson.section.id,
+              lessonId: v.lesson.id,
+            }
+          : null,
         firstClipId: v.clips[0]?.id ?? null,
         totalDuration: v.clips.reduce(
           (acc, c) => acc + (c.sourceEndTime - c.sourceStartTime),
@@ -337,6 +351,12 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
 
   const { save, saveState } = usePitchAutoSave(initialPitch.id);
 
+  // A Video that also belongs to a Lesson copies links naming its place.
+  const findLessonPlace = useCallback<FindLessonPlace>(
+    (videoId) => videos.find((v) => v.id === videoId)?.inLesson ?? undefined,
+    [videos]
+  );
+
   const submit = useSubmit();
   const submitEvent = useCallback(
     (event: CourseEditorEvent) => {
@@ -449,52 +469,54 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
             </div>
           )}
 
-          <ChannelSection icon={<Video className="size-4" />} title="Videos">
-            {videos.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No videos yet. Click "Add video" below to create one.
-              </p>
-            ) : (
-              <CreateBeatDialogProvider submitEvent={submitEvent}>
-                <BeatDndProvider
-                  videos={videos.map((v) => ({
-                    id: v.id,
-                    beats: v.beats,
-                  }))}
-                  onMove={(drop) =>
-                    submitEvent({
-                      type: "move-beat",
-                      beatId: drop.beatId,
-                      targetVideoId: drop.targetVideoId,
-                      beforeBeatId: drop.beforeBeatId,
-                    })
-                  }
+          <LessonPlaceProvider value={findLessonPlace}>
+            <ChannelSection icon={<Video className="size-4" />} title="Videos">
+              {videos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No videos yet. Click "Add video" below to create one.
+                </p>
+              ) : (
+                <CreateBeatDialogProvider submitEvent={submitEvent}>
+                  <BeatDndProvider
+                    videos={videos.map((v) => ({
+                      id: v.id,
+                      beats: v.beats,
+                    }))}
+                    onMove={(drop) =>
+                      submitEvent({
+                        type: "move-beat",
+                        beatId: drop.beatId,
+                        targetVideoId: drop.targetVideoId,
+                        beforeBeatId: drop.beforeBeatId,
+                      })
+                    }
+                  >
+                    <div className="space-y-5">
+                      {videos.map((video) => (
+                        <PitchVideoItem
+                          key={video.id}
+                          video={video}
+                          hasExportedVideo={!!hasExportedVideoMap[video.id]}
+                          submitEvent={submitEvent}
+                        />
+                      ))}
+                    </div>
+                  </BeatDndProvider>
+                </CreateBeatDialogProvider>
+              )}
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addVideo}
+                  disabled={createVideoFetcher.state !== "idle"}
                 >
-                  <div className="space-y-5">
-                    {videos.map((video) => (
-                      <PitchVideoItem
-                        key={video.id}
-                        video={video}
-                        hasExportedVideo={!!hasExportedVideoMap[video.id]}
-                        submitEvent={submitEvent}
-                      />
-                    ))}
-                  </div>
-                </BeatDndProvider>
-              </CreateBeatDialogProvider>
-            )}
-            <div className="pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addVideo}
-                disabled={createVideoFetcher.state !== "idle"}
-              >
-                <Plus className="w-3.5 h-3.5 mr-1" />
-                Add video
-              </Button>
-            </div>
-          </ChannelSection>
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add video
+                </Button>
+              </div>
+            </ChannelSection>
+          </LessonPlaceProvider>
 
           <ChannelSection icon={<Youtube className="size-4" />} title="YouTube">
             <div className="space-y-1.5">
