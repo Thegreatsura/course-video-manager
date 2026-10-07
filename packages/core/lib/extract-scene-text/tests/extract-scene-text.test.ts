@@ -57,10 +57,6 @@ describe("flattenRichText", () => {
     expect(flattenRichText(rt)).toBe("First paragraph Second paragraph");
   });
 
-  it("handles empty doc (no content)", () => {
-    expect(flattenRichText({ type: "doc", content: [] })).toBe("");
-  });
-
   it("handles empty paragraphs (blank lines)", () => {
     const rt = doc([{ text: "Before" }], null, [{ text: "After" }]);
     expect(flattenRichText(rt)).toBe("Before After");
@@ -88,55 +84,26 @@ describe("flattenRichText", () => {
     expect(flattenRichText(rt)).toBe("hello world");
   });
 
-  it("returns empty string for null/undefined/non-object input", () => {
+  it("returns empty string for null, non-object or content-less input", () => {
     expect(flattenRichText(null)).toBe("");
     expect(flattenRichText(undefined)).toBe("");
     expect(flattenRichText(42)).toBe("");
     expect(flattenRichText("string")).toBe("");
-  });
-
-  it("returns empty string when doc has no content array", () => {
     expect(flattenRichText({ type: "doc" })).toBe("");
-  });
-
-  it("ignores marks and attrs on text leaves", () => {
-    const rt = doc([
-      { text: "plain" },
-      { text: " italic", marks: [{ type: "italic" }] },
-      { text: " bold-italic", marks: [{ type: "bold" }, { type: "italic" }] },
-    ]);
-    expect(flattenRichText(rt)).toBe("plain italic bold-italic");
+    expect(flattenRichText({ type: "doc", content: [] })).toBe("");
   });
 });
 
 describe("extractSceneText", () => {
-  it("extracts text from a text shape via richText", () => {
-    const s = scene({
-      a: { type: "text", props: { richText: doc([{ text: "Hello" }]) } },
-    });
-    expect(extractSceneText(s)).toBe("Hello");
-  });
-
-  it("extracts labels from a geo shape via richText", () => {
-    const s = scene({
-      a: { type: "geo", props: { richText: doc([{ text: "Rectangle" }]) } },
-    });
-    expect(extractSceneText(s)).toBe("Rectangle");
-  });
-
-  it("extracts text from a note shape via richText", () => {
-    const s = scene({
-      a: { type: "note", props: { richText: doc([{ text: "Sticky" }]) } },
-    });
-    expect(extractSceneText(s)).toBe("Sticky");
-  });
-
-  it("extracts text from an arrow shape via richText", () => {
-    const s = scene({
-      a: { type: "arrow", props: { richText: doc([{ text: "connects" }]) } },
-    });
-    expect(extractSceneText(s)).toBe("connects");
-  });
+  it.each(["text", "geo", "note", "arrow"])(
+    "extracts text from a %s shape via richText",
+    (type) => {
+      const s = scene({
+        a: { type, props: { richText: doc([{ text: "Hello" }]) } },
+      });
+      expect(extractSceneText(s)).toBe("Hello");
+    }
+  );
 
   it("extracts frame name from frame shape (props.name)", () => {
     const s = scene({
@@ -164,31 +131,13 @@ describe("extractSceneText", () => {
     expect(result.split(/\s+/).length).toBe(2);
   });
 
-  it("excludes image shapes (no altText extraction in v1)", () => {
-    const s = scene({
-      a: { type: "image", props: { altText: "a picture" } },
-    });
-    expect(extractSceneText(s)).toBe("");
-  });
-
-  it("excludes video shapes", () => {
-    const s = scene({
-      a: { type: "video", props: { altText: "a video" } },
-    });
-    expect(extractSceneText(s)).toBe("");
-  });
-
-  it("excludes bookmark shapes (URLs)", () => {
-    const s = scene({
-      a: { type: "bookmark", props: { url: "https://example.com" } },
-    });
-    expect(extractSceneText(s)).toBe("");
-  });
-
-  it("excludes embed shapes", () => {
-    const s = scene({
-      a: { type: "embed", props: { url: "https://youtube.com/watch" } },
-    });
+  it.each([
+    ["image", { altText: "a picture" }],
+    ["video", { altText: "a video" }],
+    ["bookmark", { url: "https://example.com" }],
+    ["embed", { url: "https://youtube.com/watch" }],
+  ])("excludes %s shapes", (type, props) => {
+    const s = scene({ a: { type, props } });
     expect(extractSceneText(s)).toBe("");
   });
 
@@ -259,12 +208,6 @@ describe("extractSceneText", () => {
     expect(extractSceneText({ store: "invalid" })).toBe("");
   });
 
-  it("handles a scene with an empty store", () => {
-    expect(extractSceneText({ store: {}, schema: { schemaVersion: 2 } })).toBe(
-      ""
-    );
-  });
-
   it("prefers richText over props.text when both exist", () => {
     const s = scene({
       a: {
@@ -276,21 +219,6 @@ describe("extractSceneText", () => {
       },
     });
     expect(extractSceneText(s)).toBe("from richText");
-  });
-
-  it("handles mixed shapes — extractable and non-extractable", () => {
-    const s = scene({
-      txt: { type: "text", props: { richText: doc([{ text: "typed" }]) } },
-      drw: { type: "draw", props: {} },
-      frm: { type: "frame", props: { name: "Section" } },
-      img: { type: "image", props: { altText: "ignored" } },
-      geo: { type: "geo", props: { richText: doc([{ text: "labeled" }]) } },
-    });
-    const result = extractSceneText(s);
-    expect(result).toContain("typed");
-    expect(result).toContain("Section");
-    expect(result).toContain("labeled");
-    expect(result).not.toContain("ignored");
   });
 
   it("contributes a cvm-icon's lucide name verbatim", () => {

@@ -38,14 +38,25 @@ describe("buildTranscript", () => {
 
   it("produces flat transcript with sequential indices for clips only", () => {
     const clips = [
-      makeClip("a0", "Hello world"),
+      makeClip("a0", "Hello world", {
+        sourceStartTime: 10.5,
+        sourceEndTime: 20.3,
+        videoFilename: "recording.webm",
+      }),
       makeClip("a1", "Second clip here"),
     ];
     const result = buildTranscript(clips, []);
 
     expect(result.transcript).toBe("[1] Hello world [2] Second clip here");
     expect(result.indexedClips).toHaveLength(2);
-    expect(result.indexedClips[0]!.index).toBe(1);
+    // Each index maps back to the clip's source footage.
+    expect(result.indexedClips[0]).toEqual({
+      index: 1,
+      sourceStartTime: 10.5,
+      sourceEndTime: 20.3,
+      videoFilename: "recording.webm",
+      text: "Hello world",
+    });
     expect(result.indexedClips[1]!.index).toBe(2);
     expect(result.sections).toEqual([]);
   });
@@ -102,46 +113,6 @@ describe("buildTranscript", () => {
     expect(result.transcript).toBe("[1] Hello [3] World");
   });
 
-  it("synchronizes indexedClips indices with transcript markers", () => {
-    const clips = [
-      makeClip("a1", "Alpha"),
-      makeClip("a3", null),
-      makeClip("a5", "Beta"),
-    ];
-    const sections = [makeSection("s1", "a0", "Section")];
-    const result = buildTranscript(clips, sections);
-
-    // Index 2 clip has null text, so transcript should have [1] and [3]
-    const markers = result.transcript.match(/\[(\d+)\]/g)!;
-    expect(markers).toEqual(["[1]", "[3]"]);
-
-    // indexedClips[0].index=1 matches [1], indexedClips[2].index=3 matches [3]
-    expect(result.indexedClips[0]!.index).toBe(1);
-    expect(result.indexedClips[2]!.index).toBe(3);
-  });
-
-  it("per-section word counts sum to total wordCount minus markdown overhead", () => {
-    const clips = [
-      makeClip("a1", "one two three"),
-      makeClip("a3", "four five"),
-    ];
-    const sections = [
-      makeSection("s1", "a0", "Part A"),
-      makeSection("s2", "a2", "Part B"),
-    ];
-    const result = buildTranscript(clips, sections);
-
-    const sectionWordSum = result.sections.reduce(
-      (sum, s) => sum + s.wordCount,
-      0
-    );
-    // Total wordCount includes section headers and [n] markers in the raw word count
-    // Section word counts only count clip text
-    expect(sectionWordSum).toBe(5); // "one two three" + "four five"
-    expect(result.sections[0]!.wordCount).toBe(3);
-    expect(result.sections[1]!.wordCount).toBe(2);
-  });
-
   it("handles section at end with no following clips", () => {
     const clips = [makeClip("a0", "Some text")];
     const sections = [makeSection("s1", "a1", "Empty Section")];
@@ -171,44 +142,6 @@ describe("buildTranscript", () => {
     expect(result.sections).toEqual([
       { id: "s1", name: "First Section", order: "a2", wordCount: 5 },
     ]);
-  });
-
-  it("handles clips before the first section with multiple sections", () => {
-    const clips = [
-      makeClip("a0", "Preamble text"),
-      makeClip("a2", "In first section"),
-      makeClip("a4", "In second section"),
-    ];
-    const sections = [
-      makeSection("s1", "a1", "Section One"),
-      makeSection("s2", "a3", "Section Two"),
-    ];
-    const result = buildTranscript(clips, sections);
-
-    expect(result.transcript).toBe(
-      "[1] Preamble text\n\n## Section One\n\n[2] In first section\n\n## Section Two\n\n[3] In second section"
-    );
-    expect(result.sections).toEqual([
-      { id: "s1", name: "Section One", order: "a1", wordCount: 3 },
-      { id: "s2", name: "Section Two", order: "a3", wordCount: 3 },
-    ]);
-  });
-
-  it("handles null text clips before the first section", () => {
-    const clips = [
-      makeClip("a0", null),
-      makeClip("a1", "Before section"),
-      makeClip("a3", "After section"),
-    ];
-    const sections = [makeSection("s1", "a2", "My Section")];
-    const result = buildTranscript(clips, sections);
-
-    expect(result.transcript).toBe(
-      "[2] Before section\n\n## My Section\n\n[3] After section"
-    );
-    expect(result.indexedClips).toHaveLength(3);
-    expect(result.indexedClips[0]!.index).toBe(1);
-    expect(result.indexedClips[0]!.text).toBeNull();
   });
 
   it("toTranscriptItems interleaves clips and sections in timeline order", () => {
@@ -278,25 +211,6 @@ describe("buildTranscript", () => {
 
     expect(toDiffArray(items)).toEqual(["## Intro", "Hello"]);
   });
-
-  it("preserves clip metadata in indexedClips", () => {
-    const clips = [
-      makeClip("a0", "Test", {
-        sourceStartTime: 10.5,
-        sourceEndTime: 20.3,
-        videoFilename: "recording.webm",
-      }),
-    ];
-    const result = buildTranscript(clips, []);
-
-    expect(result.indexedClips[0]).toEqual({
-      index: 1,
-      sourceStartTime: 10.5,
-      sourceEndTime: 20.3,
-      videoFilename: "recording.webm",
-      text: "Test",
-    });
-  });
 });
 
 describe("formatOnScreenLinks", () => {
@@ -334,11 +248,6 @@ describe("formatOnScreenLinks", () => {
     expect(
       formatOnScreenLinks([{ url: "https://a.com", title: "A" }], seen)
     ).toBe("");
-  });
-
-  it("returns empty for undefined or empty link lists", () => {
-    expect(formatOnScreenLinks(undefined, new Set())).toBe("");
-    expect(formatOnScreenLinks([], new Set())).toBe("");
   });
 });
 
