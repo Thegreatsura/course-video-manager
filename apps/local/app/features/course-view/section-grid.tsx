@@ -65,7 +65,6 @@ export function SectionGrid({
   insertPosition,
   editSectionId,
   addVideoToLessonId,
-  deleteLessonId,
   editDescriptionLessonId,
   archiveSectionId,
   collapsedSections,
@@ -105,7 +104,6 @@ export function SectionGrid({
   insertPosition: "before" | "after" | null;
   editSectionId: string | null;
   addVideoToLessonId: string | null;
-  deleteLessonId: string | null;
   editDescriptionLessonId: string | null;
   archiveSectionId: string | null;
   collapsedSections: ReadonlySet<string>;
@@ -241,7 +239,6 @@ export function SectionGrid({
                     insertPosition={insertPosition}
                     editSectionId={editSectionId}
                     addVideoToLessonId={addVideoToLessonId}
-                    deleteLessonId={deleteLessonId}
                     editDescriptionLessonId={editDescriptionLessonId}
                     archiveSectionId={archiveSectionId}
                     collapsedSections={collapsedSections}

@@ -50,7 +50,6 @@ export function SectionCard({
   insertPosition,
   editSectionId,
   addVideoToLessonId,
-  deleteLessonId,
   editDescriptionLessonId,
   archiveSectionId,
   collapsedSections,
@@ -84,7 +83,6 @@ export function SectionCard({
   insertPosition: "before" | "after" | null;
   editSectionId: string | null;
   addVideoToLessonId: string | null;
-  deleteLessonId: string | null;
   editDescriptionLessonId: string | null;
   archiveSectionId: string | null;
   collapsedSections: ReadonlySet<string>;
@@ -252,7 +250,6 @@ export function SectionCard({
                                   navigate={navigate}
                                   allFlatLessons={allFlatLessons}
                                   addVideoToLessonId={addVideoToLessonId}
-                                  deleteLessonId={deleteLessonId}
                                   editDescriptionLessonId={
                                     editDescriptionLessonId
                                   }

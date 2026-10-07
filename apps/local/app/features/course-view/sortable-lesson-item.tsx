@@ -1,6 +1,5 @@
 import { isTodoLesson } from "@cvm/core/lib/authoring-status";
 import { AddVideoModal } from "@/components/add-video-modal";
-import { DeleteLessonModal } from "@/components/delete-lesson-modal";
 import { EditLessonDescriptionModal } from "@/components/edit-lesson-description-modal";
 import {
   DependencySelector,
@@ -51,16 +50,12 @@ function LessonFsModals({
   lesson,
   lessonFsMaps,
   addVideoToLessonId,
-  deleteLessonId,
   dispatch,
-  submitEvent,
 }: {
   lesson: Lesson;
   lessonFsMaps: LoaderData["lessonFsMaps"];
   addVideoToLessonId: string | null;
-  deleteLessonId: string | null;
   dispatch: (action: courseViewReducer.Action) => void;
-  submitEvent: (event: CourseEditorEvent) => void;
 }) {
   const fsMaps = use(lessonFsMaps);
   return (
@@ -77,24 +72,6 @@ function LessonFsModals({
           });
         }}
       />
-      <DeleteLessonModal
-        lessonId={lesson.id}
-        lessonTitle={lesson.title || lesson.path}
-        filesOnDisk={fsMaps.lessonHasFilesMap[lesson.id] ?? []}
-        open={deleteLessonId === lesson.id}
-        onOpenChange={(open) => {
-          dispatch({
-            type: "set-delete-lesson-id",
-            lessonId: open ? lesson.id : null,
-          });
-        }}
-        onDelete={() => {
-          submitEvent({
-            type: "delete-lesson",
-            lessonId: lesson.id,
-          });
-        }}
-      />
     </>
   );
 }
@@ -107,7 +84,6 @@ export function SortableLessonItem({
   data,
   navigate,
   addVideoToLessonId,
-  deleteLessonId,
   editDescriptionLessonId,
   dispatch,
   submitEvent,
@@ -129,7 +105,6 @@ export function SortableLessonItem({
   data: LoaderData;
   navigate: ReturnType<typeof useNavigate>;
   addVideoToLessonId: string | null;
-  deleteLessonId: string | null;
   editDescriptionLessonId: string | null;
   dispatch: (action: courseViewReducer.Action) => void;
   submitEvent: (event: CourseEditorEvent) => void;
@@ -447,9 +422,7 @@ export function SortableLessonItem({
             lesson={lesson}
             lessonFsMaps={data.lessonFsMaps}
             addVideoToLessonId={addVideoToLessonId}
-            deleteLessonId={deleteLessonId}
             dispatch={dispatch}
-            submitEvent={submitEvent}
           />
         </Suspense>
         {!compact && visibility.videos && (

@@ -6,7 +6,7 @@ import type { RemoteRuntime } from "../runtime.js";
 
 /**
  * The `lesson` verb group: `cvm lesson list | get | tree | create | update |
- * move`.
+ * move | archive | unarchive`.
  *
  * `moveToSection` is the one route here backed by CourseWriteService rather
  * than the operations service: re-sectioning a Lesson renumbers both
@@ -50,6 +50,18 @@ export const lessonRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/deleteLesson",
       forward(runtime, LessonSectionOperationsService, "deleteLesson")
+    )
+    .post(
+      "/getArchivedLessonsBySectionId",
+      forward(
+        runtime,
+        LessonSectionOperationsService,
+        "getArchivedLessonsBySectionId"
+      )
+    )
+    .post(
+      "/unarchiveLesson",
+      forward(runtime, LessonSectionOperationsService, "unarchiveLesson")
     )
     .post(
       "/moveToSection",

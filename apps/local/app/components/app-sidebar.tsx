@@ -82,6 +82,8 @@ export function AppSidebar({ variant }: AppSidebarProps) {
       }
       case "preview-changelog":
         return void navigate(`/courses/${courseId}/changelog`);
+      case "view-archived-lessons":
+        return void navigate(`/courses/${courseId}/archived-lessons`);
       case "publish":
         return void navigate(`/courses/${courseId}/publish`);
       case "archive":

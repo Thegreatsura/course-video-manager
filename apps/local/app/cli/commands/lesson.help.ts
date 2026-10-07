@@ -26,12 +26,14 @@ KEY FIELDS
   sectionId        Parent Section id.
 
 ARCHIVED
-  Archived lessons are deleted lessons: they are ALWAYS filtered out and never
-  shown. There is no --archived flag for lessons — 'archive' is the verb that
-  puts a lesson into that state (see 'cvm lesson archive --help').
+  Archived lessons are hidden: 'get', 'tree', 'update' and 'move' treat them
+  as absent, and 'list' leaves them out unless you pass --archived. 'archive'
+  hides a lesson and 'unarchive' brings it back (see their --help).
 
 VERBS
-  list --section <id>   All active lessons in a Section (NDJSON, identity-rich).
+  list --section <id> [--archived]
+                        All active (or, with --archived, archived) lessons in
+                        a Section (NDJSON, identity-rich).
   get <id...>           One or more lessons with their Section/Version/Repo
                         hierarchy. Variadic: many ids => NDJSON.
   tree <id> [--depth N] Skeleton tree lesson -> videos -> clips.
@@ -42,7 +44,8 @@ VERBS
                         authoring status (WRITE; slug unchanged).
   move <id> [--section <id>] [--before|--after <lessonId>]
                         Reorder within a section, or re-home to another (WRITE).
-  archive <id>          Soft-delete the lesson (WRITE; one-way).
+  archive <id>          Hide the lesson (WRITE; 'unarchive' undoes it).
+  unarchive <id>        Put an archived lesson back in its Section (WRITE).
   search <id> <query>   Substring search down this lesson's subtree
                         (--type lesson|video|beat).
 
@@ -64,10 +67,12 @@ path, sectionId) plus authoringStatus so an agent can map a name to an id
 and judge todo-vs-done in one call. 'name' is the uniform display label every
 noun's 'list' carries (for a lesson it is the title, falling back to path when
 the title is empty), so you never have to guess the label field. Archived lessons
-are never included. Empty section => no output, exit 0.
+are left out; pass --archived to list ONLY the archived ones instead (the ids
+'unarchive' takes). Empty section => no output, exit 0.
 
 Example:
   cvm lesson list --section sec_123
+  cvm lesson list --section sec_123 --archived
   cvm lesson list --section sec_123 | jq -c '{id, title, authoringStatus}'`;
 
 export const GET_HELP = `Fetch one or more Lessons by id, each with its parent hierarchy
@@ -166,23 +171,40 @@ Examples:
 
 export const ARCHIVE_HELP = `WRITE. Archive a lesson — the only way to delete one.
 
-Sets archived = true. The lesson drops out of this CLI entirely: it stops
-appearing in 'list' and 'tree', 'get' returns not-found, and
-'update'/'move'/'archive' can no longer address it. Editing a published
-(frozen) version is refused (exit 3); archiving only ever targets the Draft.
-Echoes the archived lesson (shaped like 'get', with archived: true) one last
-time — the lesson's own Section/Version/Repo hierarchy included, since
-'archive' does not re-fetch after the write.
+Sets archived = true. The lesson drops out of this CLI's normal views: it stops
+appearing in 'list' (see 'list --archived') and 'tree', 'get' returns
+not-found, and 'update'/'move'/'archive' can no longer address it. Editing a
+published (frozen) version is refused (exit 3); archiving only ever targets
+the Draft. Echoes the archived lesson (shaped like 'get', with archived: true)
+one last time — the lesson's own Section/Version/Repo hierarchy included,
+since 'archive' does not re-fetch after the write.
 
-ONE-WAY DOOR. There is no CLI verb, no HTTP route and no UI action that
-un-archives a lesson — the CVM UI's own "delete lesson" dialog is this same
-soft delete with no undo. Archiving is effectively a delete you cannot undo
-without touching the database directly. Reach for it accordingly.
+Undo it with 'cvm lesson unarchive <id>' (the UI's Archived Lessons page does
+the same).
 
 EXAMPLES
   cvm lesson archive les_abc
   cvm lesson list --section sec_123 | jq -r 'select(.title=="Scratch") | .id' \\
     | xargs -n1 cvm lesson archive`;
+
+export const UNARCHIVE_HELP = `WRITE. Unarchive a lesson by id — the undo of 'archive'.
+
+Sets archived back to false. The lesson returns to its Section with its
+Videos, as it was:
+  position   its original slot, when no live lesson has taken that order
+             since; otherwise the END of the Section ('move' repositions it).
+  Version    only the DRAFT's lesson changes, and the Draft is marked as
+             having changes, exactly as 'archive' does. A Pending or
+             Published Version is refused (exit 3).
+
+Refused (exit 3) when the lesson is not archived, when its Section has been
+archived (there is nowhere to go back to), or when a live lesson in the
+Section has taken its title meanwhile (rename one first). An unknown id is a
+not-found (exit 2). Echoes the restored lesson, shaped like 'get'.
+
+EXAMPLES
+  cvm lesson list --section sec_123 --archived | jq -r '.id'
+  cvm lesson unarchive les_abc`;
 
 export const MOVE_HELP = `Reposition a lesson: reorder it within its Section, or re-home it to another.
 

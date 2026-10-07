@@ -353,6 +353,36 @@ describe("lesson archive", () => {
   });
 });
 
+describe("lesson unarchive", () => {
+  it("lists the archived lesson under --archived and puts it back", async () => {
+    await run(["lesson", "archive", s.lessonId]);
+    const archived = ndjson(
+      (
+        await run([
+          "lesson",
+          "list",
+          "--section",
+          s.draftSectionId,
+          "--archived",
+        ])
+      ).stdout
+    ) as { id: string }[];
+    expect(archived.map((l) => l.id)).toContain(s.lessonId);
+
+    const { stdout, exitCode } = await run(["lesson", "unarchive", s.lessonId]);
+    expect(exitCode).toBe(0);
+    expect(one<{ id: string; archived: boolean }>(stdout)).toMatchObject({
+      id: s.lessonId,
+      archived: false,
+    });
+    expect((await run(["lesson", "get", s.lessonId])).exitCode).toBe(0);
+  });
+
+  it("refuses a lesson that is not archived (exit 3)", async () => {
+    expect((await run(["lesson", "unarchive", s.lessonId])).exitCode).toBe(3);
+  });
+});
+
 describe("video create / move / update", () => {
   it("create --name (standalone) has no lesson or pitch parent", async () => {
     const { stdout, stderr, exitCode } = await run([

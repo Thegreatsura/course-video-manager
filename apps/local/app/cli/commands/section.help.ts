@@ -19,7 +19,8 @@ WHAT IS A SECTION
 ARCHIVING
   'cvm section archive <id>' (below) is a WRITE verb: a hard, one-way
   soft-delete. It sets archivedAt and the section then behaves exactly like a
-  deleted row everywhere in this CLI — same as 'cvm lesson archive'. It is the
+  deleted row everywhere in this CLI (unlike 'cvm lesson archive', it has no
+  unarchive). It is the
   ONLY thing that hides a section: a title is just a title, so naming a section
   "... ARCHIVE" hides nothing.
 

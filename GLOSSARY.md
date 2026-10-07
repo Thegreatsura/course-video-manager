@@ -429,7 +429,7 @@ An ordering value that lets an item go between two others without renumbering th
 _Avoid_: Sort order, Position
 
 **Archive**:
-Soft deletion: hiding an entity from active views while keeping it. What can be done after depends on the noun. For most (Beat, Clip Mockup, Chapter, Learning Goal, Section, Lesson) it cannot be undone. Archived Courses and Videos can be listed and restored: an unarchived Video goes back to its Lesson, or comes back Standalone if that Lesson has been archived too. A **Clip** can be reviewed and restored too, so a Clip deleted by mistake can be found and brought back.
+Soft deletion: hiding an entity from active views while keeping it. What can be done after depends on the noun. For most (Beat, Clip Mockup, Chapter, Learning Goal, Section) it cannot be undone. Archived Courses, Videos and Lessons can be listed and restored: an unarchived Video goes back to its Lesson, or comes back Standalone if that Lesson has been archived too. An unarchived Lesson goes back to its Section with its Videos, in its old place if no Lesson has taken it since and at the end of the Section if one has; only a Lesson of the **Draft Version** can be restored, and doing so counts as a write (**Has Changes**). A Lesson whose Section is archived cannot come back. A **Clip** can be reviewed and restored too, so a Clip deleted by mistake can be found and brought back.
 _Avoid_: Delete, Remove
 
 ### Dependencies
