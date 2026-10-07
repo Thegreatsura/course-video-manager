@@ -14,6 +14,8 @@ import type { Database } from "./drizzle-service.server.js";
  * is decided here, and holds each decision to what the path really does.
  * copy-paths.round-trip.test.ts then holds every `copied` table to carrying
  * every column. A NEW PATH THAT COPIES A CLIP OR A VIDEO BELONGS HERE.
+ * scripts/check-clip-inserts.sh (in check:static) fails any Clip insert outside
+ * its allowlist, so a copy path can't skip this file unnoticed.
  */
 
 export type CopyDecision = "copied" | { notCopied: string };
