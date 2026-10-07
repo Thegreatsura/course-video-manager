@@ -1,3 +1,4 @@
+import { OBS_WEBSOCKET_URL } from "@/lib/live-channels";
 import { OBSWebSocket } from "obs-websocket-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEffectReducer, type EffectReducer } from "use-effect-reducer";
@@ -403,7 +404,7 @@ export const useOBSConnector = (props: {
       "attempt-to-connect": (_state, _effect, dispatch) => {
         console.log("Attempting to reconnect");
         websocket
-          .connect("ws://localhost:4455")
+          .connect(OBS_WEBSOCKET_URL)
           .then(async () => {
             const profile = await websocket.call("GetProfileList");
             const scene = await websocket.call("GetSceneList");
