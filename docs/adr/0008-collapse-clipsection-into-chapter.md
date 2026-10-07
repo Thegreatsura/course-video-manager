@@ -1,6 +1,6 @@
 # Collapse ClipSection into Chapter
 
-The codebase originally maintained two names for the same concept: **ClipSection** (the authoring-time marker/divider in a video's timeline) and **Chapter** (the export-time projection that becomes a YouTube chapter). CONTEXT.md codified this split deliberately, with the ClipSection entry carrying `_Avoid_: Chapter (outside the export context)`.
+The codebase originally maintained two names for the same concept: **ClipSection** (the authoring-time marker/divider in a video's timeline) and **Chapter** (the export-time projection that becomes a YouTube chapter). GLOSSARY.md codified this split deliberately, with the ClipSection entry carrying `_Avoid_: Chapter (outside the export context)`.
 
 ## Why collapse
 
@@ -17,5 +17,5 @@ Rename ClipSection → Chapter everywhere: domain glossary, database table and c
 ## Consequences
 
 - **Chapter** is now the single canonical name for the concept across code, database, UI, and documentation.
-- The course **Section** entry in CONTEXT.md no longer needs an `_Avoid_: Chapter` line, since the naming collision that motivated it is gone.
+- The course **Section** entry in GLOSSARY.md no longer needs an `_Avoid_: Chapter` line, since the naming collision that motivated it is gone.
 - Migration files that reference the old `clip_section` table name remain as historical records of the pre-rename schema.

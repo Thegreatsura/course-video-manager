@@ -18,7 +18,7 @@ import {
 } from "@/cli/helpers";
 
 // ---------------------------------------------------------------------------
-// Help text — domain-teaching prose (keep in sync with CONTEXT.md, "Pitches").
+// Help text — domain-teaching prose (keep in sync with GLOSSARY.md, "Pitches").
 // ---------------------------------------------------------------------------
 
 const PITCH_HELP = `Pitch — a reusable packaging artifact.

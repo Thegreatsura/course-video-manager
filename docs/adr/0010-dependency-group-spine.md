@@ -8,7 +8,7 @@ The compact course view marks **Dependency Groups** — contiguous runs of depen
 - **Suppressed under any active filter/search.** A filtered list no longer reflects true adjacency, so drawing adjacency lines would lie. Grouping is computed only when `!hasActiveFilters`.
 - **Renders in read-only / published versions.** The treatment is a derived reading aid, never stored; it shows wherever the compact view shows.
 - **Ghost Lessons participate** as ordinary members of the walk.
-- The grouping rule itself (within-section, contiguous-only, directed-backward, direct-deps-only) is specified under **Dependency Group** in `CONTEXT.md`.
+- The grouping rule itself (within-section, contiguous-only, directed-backward, direct-deps-only) is specified under **Dependency Group** in `GLOSSARY.md`.
 
 ## Why this shape
 

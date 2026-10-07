@@ -39,7 +39,7 @@ function PriorityBadge({ priority }: { priority: number }) {
  * needing a second collapse layer here.
  *
  * Deliberately READ-ONLY: the `cvm learning-goal` CLI is the editing surface
- * (see CONTEXT.md / apps/local/app/cli/commands/learning-goal.ts). Renders
+ * (see GLOSSARY.md / apps/local/app/cli/commands/learning-goal.ts). Renders
  * nothing when the Section has no Learning Goals yet.
  */
 export function SectionLearningGoals({

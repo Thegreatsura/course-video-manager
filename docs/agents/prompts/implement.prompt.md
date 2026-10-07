@@ -17,7 +17,7 @@ PRD, pull that in too.
 # CONTEXT
 
 Read your project's domain/architecture docs before starting _(project-specific: e.g.
-`CONTEXT.md`, ADRs)_. Explore the repo and fill your context with the parts relevant to this
+`GLOSSARY.md`, ADRs)_. Explore the repo and fill your context with the parts relevant to this
 issue — especially test files that touch the area you'll change.
 
 # EXECUTION

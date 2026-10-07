@@ -6,7 +6,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
  * does NOT include "sections" — the Section is the one altitude that's
  * always on screen; every entity below it (Learning Goal, Lesson, Video,
  * Beat) plus the free-text description fields at each altitude are the
- * togglable surface. See CONTEXT.md's "Course structure" and "Video
+ * togglable surface. See GLOSSARY.md's "Course structure" and "Video
  * planning" entries for what each of these names.
  */
 export type VisibilityKey =
@@ -76,7 +76,7 @@ export const VISIBILITY_TREE: VisibilityNode[] = [
  * Defaults reproduce today's course view exactly, so shipping this feature
  * changes nothing until someone opens the settings modal. The one exception
  * is `beatDescriptions: false` — Beat Description is already deliberately
- * hidden on the course view (see CONTEXT.md's "Beat Description" entry;
+ * hidden on the course view (see GLOSSARY.md's "Beat Description" entry;
  * previously enforced by `BeatDescriptionsContext` defaulting to `false`
  * with no provider on this route). Everything else is on today.
  */

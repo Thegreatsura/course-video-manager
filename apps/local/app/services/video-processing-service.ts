@@ -326,7 +326,7 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
       });
 
       /**
-       * Transcribe a whole raw FOOTAGE file (see CONTEXT.md "Footage"): a file on
+       * Transcribe a whole raw FOOTAGE file (see GLOSSARY.md "Footage"): a file on
        * disk that is not — and never becomes — a database row. The ffmpeg +
        * silence-chunking orchestration lives in {@link transcribeFootage} (split
        * out only for the file-size budget); it reuses THIS service's

@@ -15,7 +15,7 @@ import {
  * `cvm version` — read CourseVersions, the immutable/draft SNAPSHOTS of a
  * Course's section/lesson/video structure.
  *
- * Ubiquitous language (see CONTEXT.md, keep in sync by hand):
+ * Ubiquitous language (see GLOSSARY.md, keep in sync by hand):
  *   - A CourseVersion is a snapshot of a Course's structure at a point in time.
  *   - The DRAFT VERSION is the single mutable version currently being edited;
  *     it is always the latest by createdAt and has an empty name/description.

@@ -20,13 +20,13 @@ schema — is documented in the project skill
 
 # CONTEXT
 
-Read `CONTEXT.md` and any relevant ADRs under `docs/adr/` before proposing
+Read `GLOSSARY.md` and any relevant ADRs under `docs/adr/` before proposing
 anything. Treat ADRs as binding — do not propose changes that contradict a
 recorded decision.
 
 # RULES
 
-- Read-only on the repo. No commits. No edits to `CONTEXT.md`, ADRs, or
+- Read-only on the repo. No commits. No edits to `GLOSSARY.md`, ADRs, or
   source files. The only mutations allowed are creating the PRD issue (via
   `/to-prd-project`) and applying the `source:architecture-review` label.
 - One PRD per run. If every reasonable candidate is already covered by a

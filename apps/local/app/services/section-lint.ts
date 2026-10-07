@@ -10,7 +10,7 @@
  * this Course and SHIPPING", course-scoped, over Lesson/Video fields that reach
  * published output. These five are PLANNING-stage questions about one Section's
  * Goal-to-Beat linkage and Beat shape — fields (a Beat, its description, a
- * Learning Goal) that Publish never emits. CONTEXT.md is explicit that a Beat
+ * Learning Goal) that Publish never emits. GLOSSARY.md is explicit that a Beat
  * Warning is "deliberately excluded from Publish Readiness": a planning nag,
  * not a publish blocker. So this is a separate verb with a separate output, and
  * nothing here is bolted onto readiness.

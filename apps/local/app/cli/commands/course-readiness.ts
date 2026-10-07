@@ -30,7 +30,7 @@ import {
  *
  * COMPUTED LOCALLY, NOT VIA THE SERVER. Whether a Video is exported is
  * filesystem-derived (an Export Hash matched against
- * `{courseId}-{exportHash}.mp4` in FINISHED_VIDEOS_DIRECTORY — see CONTEXT.md),
+ * `{courseId}-{exportHash}.mp4` in FINISHED_VIDEOS_DIRECTORY — see GLOSSARY.md),
  * so this needs a filesystem, not an HTTP round-trip, and `cvm` must keep
  * working with the dev server stopped. The computation lives in
  * CoursePublishService's readiness module, so the CLI and the publish gate can

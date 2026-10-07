@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // `cvm deliverable` help text — domain-teaching prose (keep in sync with
-// CONTEXT.md, "Deliverables and scheduling").
+// GLOSSARY.md, "Deliverables and scheduling").
 // ---------------------------------------------------------------------------
 
 export const DELIVERABLE_HELP = `Deliverable — a dated entry on the Deliverables Calendar.
