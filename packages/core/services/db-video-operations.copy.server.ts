@@ -10,6 +10,7 @@ import {
   chapters,
   videos,
   beats,
+  beatLearningGoals,
   clipMockups,
   clipMockupChapters,
   clipMockupComments,
@@ -20,7 +21,16 @@ import { generateNKeysBetween } from "fractional-indexing";
 import { Effect } from "effect";
 import { sortByOrder } from "../lib/sort-by-order.js";
 import type { Database } from "./drizzle-service.server.js";
-import { copyClipMockupCommentValues } from "./clip-mockup-comment-copy.js";
+import {
+  copyClipMockupCommentValues,
+  newIdsFor,
+} from "./clip-mockup-comment-copy.js";
+import {
+  clipChildrenWith,
+  copyBeatLearningGoalValues,
+  copyClipChildren,
+  insertInChunks,
+} from "./copy-child-rows.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) =>
   Effect.tryPromise({
@@ -150,6 +160,7 @@ export const copyVideoImpl = (
               eq(clips.archived, false)
             ),
             orderBy: asc(clips.order),
+            with: clipChildrenWith,
           });
 
           // Load non-archived chapters
@@ -167,8 +178,10 @@ export const copyVideoImpl = (
               null,
               sourceClips.length
             );
+            const clipIds = newIdsFor(sourceClips);
             await tx.insert(clips).values(
               sourceClips.map((clip, i) => ({
+                id: clipIds.get(clip.id)!,
                 videoId: newVideo.id,
                 videoFilename: clip.videoFilename,
                 sourceStartTime: clip.sourceStartTime,
@@ -184,6 +197,9 @@ export const copyVideoImpl = (
                 diagramSnapshotId: clip.diagramSnapshotId,
               }))
             );
+            // Web Links, Transcript Words and Overlays are timed from the
+            // Clip's own start, which a copy keeps, so they travel verbatim.
+            await copyClipChildren(tx, sourceClips, clipIds);
           }
 
           if (sourceChapters.length > 0) {
@@ -210,6 +226,7 @@ export const copyVideoImpl = (
               eq(beats.archived, false)
             ),
             orderBy: asc(beats.order),
+            with: { beatLearningGoals: true },
           });
 
           if (sourceBeats.length > 0) {
@@ -218,14 +235,27 @@ export const copyVideoImpl = (
               null,
               sourceBeats.length
             );
+            const beatIds = newIdsFor(sourceBeats);
             await tx.insert(beats).values(
               sourceBeats.map((beat, i) => ({
+                id: beatIds.get(beat.id)!,
                 videoId: newVideo.id,
                 kind: beat.kind,
                 title: beat.title,
                 description: beat.description,
                 order: beatOrders[i]!,
               }))
+            );
+            // The copy stays in the source's Lesson, so its Beats serve the
+            // very same Learning Goals — the Goal ids carry over unchanged.
+            await insertInChunks(
+              tx,
+              beatLearningGoals,
+              copyBeatLearningGoalValues(
+                sourceBeats.flatMap((beat) => beat.beatLearningGoals),
+                beatIds,
+                (goalId) => goalId
+              )
             );
           }
         }

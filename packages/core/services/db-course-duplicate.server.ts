@@ -12,6 +12,8 @@ import {
   clipMockupComments,
   thumbnails,
   videos,
+  learningGoals,
+  beatLearningGoals,
 } from "../db/schema.js";
 import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import {
@@ -24,6 +26,13 @@ import {
   copyClipMockupCommentValues,
   newIdsFor,
 } from "./clip-mockup-comment-copy.js";
+import {
+  clipChildrenWith,
+  copyBeatLearningGoalValues,
+  copyClipChildren,
+  copyLearningGoalValues,
+  insertInChunks,
+} from "./copy-child-rows.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -34,10 +43,12 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
 
 /**
  * Deep-copies a course's latest draft version into a brand-new course: a single
- * fresh draft version, then every non-archived section → lesson → video and each
- * video's clips, chapters, beats, clip mockups, clip mockup chapters and
- * thumbnails. Split out of `db-course-operations.server.ts` to keep that module
- * under the file-token cap.
+ * fresh draft version, then every non-archived section (and its Learning
+ * Goals) → lesson → video and each video's clips (with their Web Links,
+ * Transcript Words and Overlays), chapters, beats (with their Learning Goal
+ * links), clip mockups, clip mockup chapters and thumbnails. Split out of
+ * `db-course-operations.server.ts` to keep that module under the file-token
+ * cap.
  *
  * Returns the Video lineage pairs alongside the new course. Every duplicated
  * Video gets a FRESH `lineageId` — it is a new Video, not the same one in a
@@ -129,6 +140,10 @@ export const makeDuplicateCourse = (db: Database) =>
         ),
         orderBy: asc(sections.order),
         with: {
+          learningGoals: {
+            orderBy: asc(learningGoals.order),
+            where: eq(learningGoals.archived, false),
+          },
           lessons: {
             orderBy: asc(lessons.order),
             where: eq(lessons.archived, false),
@@ -140,6 +155,7 @@ export const makeDuplicateCourse = (db: Database) =>
                   clips: {
                     orderBy: asc(clips.order),
                     where: eq(clips.archived, false),
+                    with: clipChildrenWith,
                   },
                   chapters: {
                     orderBy: asc(chapters.order),
@@ -148,6 +164,7 @@ export const makeDuplicateCourse = (db: Database) =>
                   beats: {
                     orderBy: asc(beats.order),
                     where: eq(beats.archived, false),
+                    with: { beatLearningGoals: true },
                   },
                   clipMockups: {
                     orderBy: asc(clipMockups.order),
@@ -174,6 +191,12 @@ export const makeDuplicateCourse = (db: Database) =>
       newVideoId: string;
     }> = [];
 
+    // Same shape as Submit's copy: Goal ids made up front, Beat links last.
+    const goalIds = newIdsFor(
+      sourceSections.flatMap((section) => section.learningGoals)
+    );
+    const beatLinkValues: (typeof beatLearningGoals.$inferInsert)[] = [];
+
     for (const sourceSection of sourceSections) {
       const [newSection] = yield* makeDbCall(() =>
         db
@@ -189,6 +212,15 @@ export const makeDuplicateCourse = (db: Database) =>
       );
 
       if (!newSection) continue;
+
+      const goalValues = copyLearningGoalValues(
+        sourceSection.learningGoals,
+        newSection.id,
+        goalIds
+      );
+      if (goalValues.length > 0) {
+        yield* makeDbCall(() => db.insert(learningGoals).values(goalValues));
+      }
 
       for (const sourceLesson of sourceSection.lessons) {
         const [newLesson] = yield* makeDbCall(() =>
@@ -234,10 +266,12 @@ export const makeDuplicateCourse = (db: Database) =>
             newVideoId: newVideo.id,
           });
 
+          const clipIds = newIdsFor(sourceVideo.clips);
           if (sourceVideo.clips.length > 0) {
             yield* makeDbCall(() =>
               db.insert(clips).values(
                 sourceVideo.clips.map((clip) => ({
+                  id: clipIds.get(clip.id)!,
                   videoId: newVideo.id,
                   videoFilename: clip.videoFilename,
                   sourceStartTime: clip.sourceStartTime,
@@ -254,6 +288,9 @@ export const makeDuplicateCourse = (db: Database) =>
                 }))
               )
             );
+            yield* makeDbCall(() =>
+              copyClipChildren(db, sourceVideo.clips, clipIds)
+            );
           }
 
           if (sourceVideo.chapters.length > 0) {
@@ -269,10 +306,19 @@ export const makeDuplicateCourse = (db: Database) =>
             );
           }
 
+          const beatIds = newIdsFor(sourceVideo.beats);
+          beatLinkValues.push(
+            ...copyBeatLearningGoalValues(
+              sourceVideo.beats.flatMap((beat) => beat.beatLearningGoals),
+              beatIds,
+              (goalId) => goalIds.get(goalId)
+            )
+          );
           if (sourceVideo.beats.length > 0) {
             yield* makeDbCall(() =>
               db.insert(beats).values(
                 sourceVideo.beats.map((beat) => ({
+                  id: beatIds.get(beat.id)!,
                   videoId: newVideo.id,
                   kind: beat.kind,
                   title: beat.title,
@@ -358,6 +404,10 @@ export const makeDuplicateCourse = (db: Database) =>
         }
       }
     }
+
+    yield* makeDbCall(() =>
+      insertInChunks(db, beatLearningGoals, beatLinkValues)
+    );
 
     return {
       course: newCourse,
