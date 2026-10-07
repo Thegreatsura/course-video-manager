@@ -20,7 +20,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ScriptCodeBlock } from "./script-code-block";
 import { nestHeadingSections, type HeadingNode } from "./heading-sections";
-import { StickyHeading, stickyH2Height } from "./sticky-heading";
+import {
+  StickyHeading,
+  useStickyHeadingHeights,
+  type StickyRank,
+} from "./sticky-heading";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { ScriptMarkdown } from "./script-markdown";
 import {
@@ -67,6 +71,8 @@ export function TeleprompterCrawl(props: {
     () => nestHeadingSections(props.blocks, headingRank),
     [props.blocks]
   );
+
+  const sectionStyle = useStickyHeadingHeights(proseRef, sections);
 
   // One nudge ≈ three lines, which is about a sentence at these settings.
   const nudge = TYPE.fontSize * TYPE.lineHeight * 3;
@@ -147,7 +153,6 @@ export function TeleprompterCrawl(props: {
             ...textStyle(),
             width: `${TYPE.measure}ch`,
             maxWidth: "92vw",
-            ...stickyH2Height(HEADING_BAR_HEIGHT),
           }}
         >
           {/*
@@ -169,7 +174,7 @@ export function TeleprompterCrawl(props: {
             }}
           />
           <div ref={proseRef}>
-            <SectionsView nodes={sections} />
+            <SectionsView nodes={sections} sectionStyle={sectionStyle} />
           </div>
           {/* Runway so the last line can still reach the read line. */}
           <div style={{ height: "60vh" }} />
@@ -183,50 +188,57 @@ export function TeleprompterCrawl(props: {
 
 /** Headings are read silently, so they sit well under the body size. */
 const HEADING_SIZE = TYPE.fontSize * 0.55;
-/** The pinned H2's bar: one line of heading with room around it. */
-const HEADING_BAR_HEIGHT = HEADING_SIZE * 2;
+/** Pinned headings dim a step per level, so the H1 reads as the outermost. */
+const HEADING_COLOR: Record<StickyRank, string> = {
+  h1: "var(--color-neutral-300)",
+  h2: "var(--color-neutral-400)",
+  h3: "var(--color-neutral-500)",
+};
 
-/** H2 and H3 pin; an H1 sits above them and closes them; H4 and below flow. */
+/** H1, H2 and H3 pin, each under the levels above it; H4 and below flow. */
 function headingRank(block: ScriptBlock) {
   if (block.kind !== "heading") return null;
-  if (block.level === 1) return "break";
+  if (block.level === 1) return "h1";
   if (block.level === 2) return "h2";
   if (block.level === 3) return "h3";
   return null;
 }
 
 /**
- * The script's blocks, each H2 and H3 wrapping the blocks up to the next of
- * its rank so its heading stays pinned exactly that long.
+ * The script's blocks, each H1, H2 and H3 wrapping the blocks up to the next
+ * of its rank or higher so its heading stays pinned exactly that long.
  */
 function SectionsView(props: {
   nodes: readonly HeadingNode<ScriptBlock>[];
-  underH2?: boolean;
+  sectionStyle: ReturnType<typeof useStickyHeadingHeights>;
 }) {
   return props.nodes.map((node) => {
     if (node.kind === "row") {
       return <BlockView key={node.row.id} block={node.row} />;
     }
     return (
-      <section key={node.heading.id} className="mt-12">
+      <section
+        key={node.heading.id}
+        className="mt-12"
+        style={props.sectionStyle(node.heading.id, node.rank)}
+      >
         <StickyHeading
           rank={node.rank}
-          underH2={props.underH2}
+          headingId={node.heading.id}
           style={{
             marginBottom: "1.5rem",
+            paddingBlock: "0.4em",
             fontSize: `${HEADING_SIZE}px`,
+            lineHeight: 1.35,
             fontWeight: 600,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color:
-              node.rank === "h2"
-                ? "var(--color-neutral-400)"
-                : "var(--color-neutral-500)",
+            color: HEADING_COLOR[node.rank],
           }}
         >
           <ScriptMarkdown>{node.heading.text}</ScriptMarkdown>
         </StickyHeading>
-        <SectionsView nodes={node.children} underH2={node.rank === "h2"} />
+        <SectionsView nodes={node.children} sectionStyle={props.sectionStyle} />
       </section>
     );
   });
@@ -274,7 +286,7 @@ function BlockView(props: { block: ScriptBlock; inInstructions?: boolean }) {
   }
 
   // Only reached for a heading inside an instructions region or an H4 and
-  // below; the H2s and H3s are pinned by `SectionsView`.
+  // below; the H1s, H2s and H3s are pinned by `SectionsView`.
   if (block.kind === "heading") {
     return (
       <div

@@ -12,7 +12,7 @@
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { GlassLink, shortenUrl } from "./linked-text";
+import { GlassLink, bareAddress } from "./linked-text";
 import { TYPE } from "./teleprompter-settings";
 
 const COMPONENTS: Components = {
@@ -55,7 +55,7 @@ const COMPONENTS: Components = {
  * What to show for a link whose label is the address itself — the `https://…`
  * a writer dropped into a sentence, which GFM turns into a link on its own.
  * Null for a written label like `[the docs](…)`: those are words the author
- * chose to be read aloud, and shortening them would change the line.
+ * chose to be read aloud, shown exactly as written.
  */
 function urlLabel(
   children: ReactNode,
@@ -73,7 +73,7 @@ function urlLabel(
     href === `https://${label}` ||
     href === `http://${label}` ||
     href === `mailto:${label}`;
-  return isUrlItself ? shortenUrl(label) : null;
+  return isUrlItself ? bareAddress(label) : null;
 }
 
 const PLUGINS = [remarkGfm];

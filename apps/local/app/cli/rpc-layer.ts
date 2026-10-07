@@ -145,6 +145,12 @@ const lessonSectionService = (client: RpcClient) =>
     deleteLesson: rpcMethod((json) =>
       client.rpc.lesson.deleteLesson.$post({ json })
     ),
+    getArchivedLessonsBySectionId: rpcMethod((json) =>
+      client.rpc.lesson.getArchivedLessonsBySectionId.$post({ json })
+    ),
+    unarchiveLesson: rpcMethod((json) =>
+      client.rpc.lesson.unarchiveLesson.$post({ json })
+    ),
   }) satisfies RemoteService<LessonSectionOperationsService>;
 
 /**

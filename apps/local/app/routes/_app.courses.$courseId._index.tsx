@@ -156,7 +156,6 @@ export default function Component(props: Route.ComponentProps) {
     insertPosition,
     addVideoToLessonId,
     editSectionId,
-    deleteLessonId,
     editDescriptionLessonId,
     archiveSectionId,
     lessonSelection,
@@ -330,7 +329,6 @@ export default function Component(props: Route.ComponentProps) {
                               data={loaderData}
                               navigate={navigate}
                               addVideoToLessonId={addVideoToLessonId}
-                              deleteLessonId={deleteLessonId}
                               editDescriptionLessonId={editDescriptionLessonId}
                               dispatch={dispatch}
                               submitEvent={submitEvent}
@@ -383,7 +381,6 @@ export default function Component(props: Route.ComponentProps) {
                           insertPosition={insertPosition}
                           editSectionId={editSectionId}
                           addVideoToLessonId={addVideoToLessonId}
-                          deleteLessonId={deleteLessonId}
                           editDescriptionLessonId={editDescriptionLessonId}
                           archiveSectionId={archiveSectionId}
                           collapsedSections={collapsedSections}

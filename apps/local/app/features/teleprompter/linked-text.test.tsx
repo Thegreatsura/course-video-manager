@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { links } from "./glass-links-test-helpers";
 import { LinkedText } from "./linked-text";
-import { TYPE } from "./teleprompter-settings";
 
 const render = (text: string) =>
   renderToStaticMarkup(<LinkedText>{text}</LinkedText>);
@@ -109,27 +108,20 @@ describe("LinkedText", () => {
     expect(render("")).toBe("");
   });
 
-  it("shortens a long address on the glass", () => {
-    const [link] = links(
-      render("https://example.com/a/really/long/path/that/goes/on?q=1")
-    );
-    expect(link?.text.endsWith("…")).toBe(true);
-    expect(link?.text.length).toBeLessThanOrEqual(TYPE.measure);
+  // You need to see which page a link opens before you click it mid-take.
+  it("shows a long address in full", () => {
+    const url = "https://example.com/a/really/long/path/that/goes/on?q=1";
+    const [link] = links(render(url));
+    expect(link?.text).toBe("example.com/a/really/long/path/that/goes/on?q=1");
+    expect(link?.href).toBe(url);
   });
 
   // The protocol and a bare `www.` are never spoken and never read, and on a
-  // measure this narrow they're a third of the line. Only the label is cut —
+  // measure this narrow they're a third of the line. Only the label drops them —
   // the address it points at stays whole.
   it("drops the protocol and www from the label, not from the link", () => {
     const [link] = links(render("Go to https://www.example.com/ now."));
     expect(link?.text).toBe("example.com");
     expect(link?.href).toBe("https://www.example.com/");
-  });
-
-  it("truncates the label from the end, so the host survives", () => {
-    const [link] = links(
-      render("https://example.com/a/really/long/path/that/goes/on")
-    );
-    expect(link?.text).toMatch(/^example\.com\/.*…$/);
   });
 });

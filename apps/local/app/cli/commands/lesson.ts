@@ -28,6 +28,7 @@ import {
   UPDATE_HELP,
   MOVE_HELP,
   ARCHIVE_HELP,
+  UNARCHIVE_HELP,
 } from "./lesson.help";
 
 /**
@@ -71,12 +72,19 @@ const assertDraftLesson = (lesson: {
 
 const section = entityIdOption("section", "section");
 
-const listCmd = Command.make("list", { section }, ({ section }) =>
-  Effect.gen(function* () {
-    const svc = yield* LessonSectionOperationsService;
-    const rows = yield* svc.getLessonsBySectionId(section);
-    yield* emitNdjson(rows.map(withName));
-  })
+const archived = Options.boolean("archived");
+
+const listCmd = Command.make(
+  "list",
+  { section, archived },
+  ({ section, archived }) =>
+    Effect.gen(function* () {
+      const svc = yield* LessonSectionOperationsService;
+      const rows = archived
+        ? yield* svc.getArchivedLessonsBySectionId(section)
+        : yield* svc.getLessonsBySectionId(section);
+      yield* emitNdjson(rows.map(withName));
+    })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
 // ---------------------------------------------------------------------------
@@ -496,6 +504,43 @@ const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
 ).pipe(Command.withDescription(detail(ARCHIVE_HELP)));
 
 // ---------------------------------------------------------------------------
+// unarchive <id>
+// ---------------------------------------------------------------------------
+
+const unarchiveCmd = Command.make(
+  "unarchive",
+  { id: entityIdArg("lesson") },
+  ({ id }) =>
+    Effect.gen(function* () {
+      const svc = yield* LessonSectionOperationsService;
+
+      // Mirrors archive: unarchiving a live Lesson is invalid input.
+      const lesson = yield* svc
+        .getLessonWithHierarchyById(id)
+        .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
+      if (!lesson.archived) {
+        return yield* parseError(`lesson ${id} is not archived`, "lesson");
+      }
+      if (lesson.section.archivedAt !== null) {
+        return yield* parseError(
+          `lesson ${id} is in an archived section — there is nowhere to restore it to`,
+          "lesson"
+        );
+      }
+      yield* assertDraftLesson(lesson);
+
+      yield* svc
+        .unarchiveLesson(id)
+        .pipe(
+          Effect.catchTag("LessonPathTakenError", (e) =>
+            parseError(e.message, "lesson")
+          )
+        );
+      yield* emitObject(yield* svc.getLessonWithHierarchyById(id));
+    })
+).pipe(Command.withDescription(detail(UNARCHIVE_HELP)));
+
+// ---------------------------------------------------------------------------
 // lesson (parent)
 // ---------------------------------------------------------------------------
 
@@ -509,6 +554,7 @@ export const lessonCommand = Command.make("lesson").pipe(
     updateCmd,
     moveCmd,
     archiveCmd,
+    unarchiveCmd,
     lessonSearchCmd,
   ])
 );

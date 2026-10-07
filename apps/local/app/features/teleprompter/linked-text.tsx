@@ -16,19 +16,7 @@
  * looks and behaves the same once it's on the glass.
  */
 import type { ReactNode } from "react";
-import { TYPE, linkStyle } from "./teleprompter-settings";
-
-/**
- * How much of an address survives on the glass. The measure is the budget: an
- * address that alone runs past a line of it costs more than the words around
- * it, and nobody reads a URL off a teleprompter — they click it. Only the label
- * is cut; the address it points at is whole.
- *
- * The Script's measure, not the wider one Beats use: a label cut to fit the
- * narrower surface fits both, and an address reads the same wherever it's
- * quoted.
- */
-const MAX_URL_CHARS = TYPE.measure;
+import { linkStyle } from "./teleprompter-settings";
 
 /**
  * An address starts a word and runs to whitespace or a bracket. Parentheses are
@@ -48,20 +36,16 @@ const PROTOCOL = /^https?:\/\//i;
  * leading `www.`, a trailing slash. Together they're a third of a very short
  * line. Empty when that's all there was, which is how "type https:// to start"
  * is told apart from an actual address.
+ *
+ * It is how an address reads on the glass, and it is never cut short beyond
+ * that: you need to see which page a link opens before you click it mid-take.
+ * A long one wraps instead (see `linkStyle`).
  */
-function bareAddress(url: string): string {
+export function bareAddress(url: string): string {
   return url
     .replace(PROTOCOL, "")
     .replace(/^www\./i, "")
     .replace(/\/$/, "");
-}
-
-/** The address as it reads on the glass — see `MAX_URL_CHARS`. */
-export function shortenUrl(url: string): string {
-  const bare = bareAddress(url);
-  return bare.length <= MAX_URL_CHARS
-    ? bare
-    : `${bare.slice(0, MAX_URL_CHARS - 1)}…`;
 }
 
 /**
@@ -139,7 +123,7 @@ export function LinkedText(props: { children: string }) {
           piece
         ) : (
           <GlassLink key={i} href={piece.href}>
-            {shortenUrl(piece.url)}
+            {bareAddress(piece.url)}
           </GlassLink>
         )
       )}

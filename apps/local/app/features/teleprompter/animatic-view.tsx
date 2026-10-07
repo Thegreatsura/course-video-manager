@@ -29,7 +29,7 @@ import { MessageSquare } from "lucide-react";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { nestHeadingSections, type HeadingNode } from "./heading-sections";
-import { StickyHeading, stickyH2Height } from "./sticky-heading";
+import { StickyHeading } from "./sticky-heading";
 import { TYPE, cueStyle, textStyle } from "./teleprompter-settings";
 
 type ClipMockupLine = Extract<AnimaticLine, { type: "clip-mockup" }>;
@@ -135,6 +135,7 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
                 ...base,
                 fontSize: `${chapterSize}px`,
                 lineHeight: 1.2,
+                paddingBlock: "0.4em",
                 color: TYPE.cueColor,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -207,7 +208,6 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
             // Set in the glass's own type, so `ch` means what it means in the
             // script's crawl: a line here is exactly a line of the script.
             ...base,
-            ...stickyH2Height(chapterSize * 2),
             width: `calc(${TYPE.measure}ch + ${TYPE.animaticGutter}em)`,
             maxWidth: "92vw",
             paddingTop: `${TYPE.readLine}vh`,
