@@ -78,4 +78,28 @@ describe("drizzle migrations", () => {
     },
     MIGRATION_TIMEOUT_MS
   );
+
+  /**
+   * drizzle's migrator applies only the migrations whose `when` is newer than
+   * the newest one already recorded, so a migration that lands with an older
+   * `when` than one a database has already run is skipped there forever,
+   * silently. That is how 0004_video_format_landscape never reached
+   * production (see 0027_video_format_repair). Regenerate the migration on
+   * top of main rather than keeping a stale `when` through a rebase.
+   */
+  it("every migration's `when` is later than the one before it", () => {
+    const journal: { entries: { tag: string; when: number }[] } = JSON.parse(
+      readFileSync(join(MIGRATIONS_FOLDER, "meta/_journal.json"), "utf-8")
+    );
+    // 0007 and 0008 were applied in the same `migrate` run, which reads the
+    // newest recorded `when` once up front, so the inversion was harmless.
+    const knownInversions = new Set(["0008_add_video_script"]);
+
+    const outOfOrder = journal.entries
+      .filter((entry, i) => i > 0 && entry.when <= journal.entries[i - 1]!.when)
+      .map((entry) => entry.tag)
+      .filter((tag) => !knownInversions.has(tag));
+
+    expect(outOfOrder).toEqual([]);
+  });
 });

@@ -313,6 +313,11 @@ export const videos = createTable(
     // Postgres does not index FK columns automatically, so resolving a Pitch's
     // videos would otherwise scan the whole video table once per Pitch.
     index("video_pitch_id_idx").on(table.pitchId),
+    // Mirrors VIDEO_FORMATS (features/videos/video-format.ts). Without it a
+    // retired value outlives its rename: migration 0004 (standard → landscape)
+    // never ran on production, and every Video stayed 'standard' while
+    // `--format landscape` filters silently missed them. See migration 0027.
+    check("video_format_valid", sql`${table.format} IN ('landscape', 'short')`),
   ]
 );
 

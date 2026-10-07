@@ -101,15 +101,15 @@ describe("copyVersionStructure — schema-drift guard", () => {
         "body",
         "description",
         "script",
+        "format",
         "lineageId",
       ],
-      // `format` is not carried by a version clone today (duplicateCourse
-      // does carry it).
+      // A course Video never has a pitchId (moving a Video into a Lesson
+      // clears it), so there is nothing to carry.
       notCopied: [
         "id",
         "lessonId",
         "pitchId",
-        "format",
         "archived",
         "createdAt",
         "updatedAt",
@@ -127,17 +127,10 @@ describe("copyVersionStructure — schema-drift guard", () => {
         "scene",
         "profile",
         "pauseType",
-      ],
-      // `zoomType` and `diagramSnapshotId` are not carried by a version clone
-      // today (duplicateCourse and the video copy do carry them).
-      notCopied: [
-        "id",
-        "videoId",
         "zoomType",
         "diagramSnapshotId",
-        "archived",
-        "createdAt",
       ],
+      notCopied: ["id", "videoId", "archived", "createdAt"],
     },
     chapter: {
       table: schema.chapters,
@@ -189,6 +182,18 @@ describe("copyVersionStructure — schema-drift guard", () => {
 
   it("carries over every copied column end-to-end", async () => {
     const { course, version } = await createCourseAndVersion();
+    const [diagram] = await testDb
+      .insert(schema.diagrams)
+      .values({ name: "Coverage Diagram" })
+      .returning();
+    const [snapshot] = await testDb
+      .insert(schema.diagramSnapshots)
+      .values({
+        diagramId: diagram!.id,
+        scene: { nodes: [] },
+        contentHash: "coverage-hash",
+      })
+      .returning();
     const [section] = await testDb
       .insert(schema.sections)
       .values({
@@ -220,6 +225,7 @@ describe("copyVersionStructure — schema-drift guard", () => {
         body: "# Lesson body",
         description: "SEO desc",
         script: "video teleprompter script",
+        format: "short",
       })
       .returning();
     await testDb.insert(schema.clips).values({
@@ -233,6 +239,8 @@ describe("copyVersionStructure — schema-drift guard", () => {
       scene: "scene-1",
       profile: "profile-1",
       pauseType: "intro",
+      zoomType: "subtle",
+      diagramSnapshotId: snapshot!.id,
     });
     await testDb
       .insert(schema.chapters)
@@ -558,5 +566,74 @@ describe("getVersionWithSections — the publish read", () => {
     const loadedVideo = loaded.sections[0]!.lessons[0]!.videos[0]!;
     expect(loadedVideo).not.toHaveProperty("clipMockups");
     expect(loadedVideo).not.toHaveProperty("beats");
+  });
+});
+
+describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip looks", () => {
+  it("carries a Clip's zoom and pinned diagram snapshot, and the Video's format", async () => {
+    const { course, version } = await createCourseAndVersion();
+    const [diagram] = await testDb
+      .insert(schema.diagrams)
+      .values({ name: "Pinned Diagram" })
+      .returning();
+    const [snapshot] = await testDb
+      .insert(schema.diagramSnapshots)
+      .values({
+        diagramId: diagram!.id,
+        scene: { nodes: [] },
+        contentHash: "pinned-hash",
+      })
+      .returning();
+    const [section] = await testDb
+      .insert(schema.sections)
+      .values({ repoVersionId: version.id, title: "Section", order: 1 })
+      .returning();
+    const [lesson] = await testDb
+      .insert(schema.lessons)
+      .values({ sectionId: section!.id, order: 1, title: "Lesson" })
+      .returning();
+    const [video] = await testDb
+      .insert(schema.videos)
+      .values({
+        lessonId: lesson!.id,
+        title: "short.mp4",
+        originalFootagePath: "/footage/short",
+        format: "short",
+      })
+      .returning();
+    await testDb.insert(schema.clips).values({
+      videoId: video!.id,
+      videoFilename: "take.mp4",
+      sourceStartTime: 0,
+      sourceEndTime: 5,
+      order: "a0",
+      text: "",
+      zoomType: "subtle",
+      diagramSnapshotId: snapshot!.id,
+    });
+
+    const result = await run(
+      Effect.gen(function* () {
+        const versionOps = yield* VersionOperationsService;
+        return yield* versionOps.freezeAndCloneVersion({
+          sourceVersionId: version.id,
+          repoId: course.id,
+          sourceName: "v1",
+          sourceDescription: "",
+        });
+      })
+    );
+
+    const newVideoId = result.videoIdMappings[0]!.newVideoId;
+    const newVideo = await testDb.query.videos.findFirst({
+      where: (v, { eq }) => eq(v.id, newVideoId),
+      with: { clips: true },
+    });
+    expect(newVideo!.format).toBe("short");
+    expect(newVideo!.clips).toMatchObject([
+      // Diagram Snapshots are content-addressed per Diagram, not per Version,
+      // so the new Draft pins the very same snapshot row.
+      { zoomType: "subtle", diagramSnapshotId: snapshot!.id },
+    ]);
   });
 });
