@@ -110,7 +110,8 @@ ROLE="$(url_user "$TEMPLATE_URL")"
 [ -n "$TEMPLATE_DB" ] || die "VERIFY_DATABASE_URL names no database"
 ADMIN_URL="$(url_with_db "$TEMPLATE_URL" postgres)"
 
-admin() { psql -X -v ON_ERROR_STOP=1 -q "$ADMIN_URL" "$@"; }
+# client_min_messages=warning quiets "does not exist, skipping" NOTICEs.
+admin() { PGOPTIONS="-c client_min_messages=warning" psql -X -v ON_ERROR_STOP=1 -q "$ADMIN_URL" "$@"; }
 admin -c 'select 1' > /dev/null ||
   die "cannot reach the verify Postgres at $(url_host "$TEMPLATE_URL") — start it first"
 
@@ -168,11 +169,15 @@ dump_production() {
   esac
 }
 
+# --exit-on-error + --single-transaction: any restore error is real and fatal,
+# and leaves the database empty rather than half-restored.
+RESTORE_ARGS=(--no-owner --no-acl --exit-on-error --single-transaction)
+
 restore_into() { # restore_into DB < dump
   case "$TOOLS" in
-    local:*)  "${TOOLS#local:}/pg_restore" --no-owner --no-acl -d "$(url_with_db "$TEMPLATE_URL" "$1")" ;;
+    local:*)  "${TOOLS#local:}/pg_restore" "${RESTORE_ARGS[@]}" -d "$(url_with_db "$TEMPLATE_URL" "$1")" ;;
     # Inside the container the server is on its own unix socket, as $ROLE.
-    docker:*) docker exec -i "${TOOLS#docker:}" pg_restore --no-owner --no-acl -U "$ROLE" -d "$1" ;;
+    docker:*) docker exec -i "${TOOLS#docker:}" pg_restore "${RESTORE_ARGS[@]}" -U "$ROLE" -d "$1" ;;
   esac
 }
 
@@ -197,9 +202,13 @@ say "    $(du -h "$DUMP_FILE" | cut -f1)"
 say "2/4 restoring into $NEXT_DB"
 admin -c "drop database if exists \"$NEXT_DB\""
 admin -c "create database \"$NEXT_DB\" template template0"
-# pg_restore keeps going past harmless errors (e.g. "schema public already
-# exists") and exits non-zero for them; step 3 is the real check.
-restore_into "$NEXT_DB" < "$DUMP_FILE" || say "    pg_restore reported errors above — checking the result before using it"
+# A fresh database already has an empty public schema, and the dump (taken
+# with -n public) creates it again. Drop the empty one so the restore is
+# error-free — then any pg_restore error is a real one.
+psql -X -q -v ON_ERROR_STOP=1 "$(url_with_db "$TEMPLATE_URL" "$NEXT_DB")" -c 'drop schema public' ||
+  die "could not clear the empty public schema in $NEXT_DB"
+restore_into "$NEXT_DB" < "$DUMP_FILE" ||
+  die "pg_restore failed (errors above) — $NEXT_DB left in place for a look, template untouched"
 
 say "3/4 checking $NEXT_DB"
 next() { psql -X -At -v ON_ERROR_STOP=1 "$(url_with_db "$TEMPLATE_URL" "$NEXT_DB")" -c "$1"; }
