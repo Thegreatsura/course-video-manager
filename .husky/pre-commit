@@ -1,6 +1,6 @@
 pnpm exec lint-staged
+pnpm run check:effect-tsc
 pnpm run typecheck
-pnpm run lint:effect
 pnpm run lint:boundaries
 pnpm run check:file-tokens
 pnpm run check:no-dirname

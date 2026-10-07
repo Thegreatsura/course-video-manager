@@ -256,13 +256,44 @@ style of the existing guards.
 `effect-tsgo patch` in `prepare`. `tsc` then reports Effect diagnostics during
 `typecheck` and in the editor, and `lint:effect` can be removed.
 
+> **Status (2026-10-07): shipped.** The first half was already done by the
+> Phase 1 move to `typescript@7.0.2`. This PR does the rest:
+>
+> - The root `prepare` script runs `scripts/patch-tsc.sh` after `husky`, which
+>   runs `effect-tsgo patch --typescript`. The patch renames the native binary
+>   to `tsc.original` and copies Effect's build in, so the shared pnpm store
+>   is never written to, and a second run is a no-op. It is skipped when
+>   `VERCEL` is set, so the `apps/remote` deploy compiles with stock `tsc` as
+>   before.
+> - `lint:effect` is gone: the three package scripts, the turbo task, the
+>   `check:static` step and the pre-commit line. `typecheck` now reports the
+>   same errors in one program build instead of two.
+> - Each package's plugin block sets `ignoreEffectWarningsInTscExitCode: true`
+>   and `includeSuggestionsInTsc: false`. The gate is unchanged: only rules at
+>   `error` fail, as `--severity error` did. The 14 warnings
+>   (`multipleEffectProvide` 12, `layerMergeAllWithDependencies` 2, all in
+>   tests) now print in the `typecheck` output, as an invitation.
+> - **Guard:** `scripts/check-effect-tsc.ts` (`check:effect-tsc`, first in
+>   `check:static` and in pre-commit) runs core's `tsc` on
+>   `packages/core/.effect-tsc-canary`, one deliberate `floatingEffect`, and
+>   fails unless `tsc` reports it. It also fails if core, local and remote
+>   resolve different `typescript` installs. Without it, a skipped patch
+>   (`--ignore-scripts`, a restored `node_modules`, a `typescript` bump with
+>   no matching `@effect/tsgo` build) would leave `tsc` exiting 0 while the
+>   Effect rules silently stopped gating.
+>
+> Deferred: editor wiring. The patched `tsc` is what the workspace resolves,
+> but whether an editor's TS 7 language server uses it depends on that
+> editor's settings; the repo has no `.vscode/settings.json` and this PR does
+> not add one. No Phase 5 is planned.
+
 ## CI and pre-commit
 
-- **`pnpm run check`:** typecheck → **lint:effect** → oxlint `--type-aware` →
-  boundaries → guards → tests. The new steps add about 17s, against a CI job
-  dominated by the test suite.
-- **Pre-commit:** add `lint:effect`, which takes about 12s warm, next to
-  `typecheck`. Add the Phase-3 guard in staged mode. Type-aware oxlint stays
+- **`pnpm run check`:** effect-tsc canary → typecheck (with the Effect
+  rules, since Phase 4) → oxlint `--type-aware` → boundaries → guards →
+  tests.
+- **Pre-commit:** the effect-tsc canary and `typecheck`, which carries the
+  Effect rules since Phase 4. The Phase-3 guard runs in staged mode. Type-aware oxlint stays
   CI-only, which matches the split `check:response-body` already uses.
 - **Policy:** only rules backed by a standard (Phase 1 now, Phase 2 as each
   reaches 0) are `error`. Everything else is `warning`, an invitation, as
