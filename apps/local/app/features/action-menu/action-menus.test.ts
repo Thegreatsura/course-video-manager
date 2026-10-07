@@ -7,7 +7,7 @@ import { labelProblems } from "./action-menu-model";
  * The guard behind CODING_STANDARDS.md's "Action menus". Every action menu in
  * `app/` renders through `EntityMenuContent` (or `ActionMenuContent`, for a
  * menu not about an entity), which owns the order, the separators, the
- * destructive styling, the ellipsis and Copy Link / Copy ID. Hand-built menu
+ * destructive styling, the ellipsis and Copy Link. Hand-built menu
  * code — a raw `ContextMenuItem`, `DropdownMenuSeparator`… — fails outright
  * anywhere but a value picker (`PICKERS`). If a menu needs something the
  * model lacks, extend `action-menu-model.ts` (with a test) rather than build
@@ -28,7 +28,7 @@ const PICKERS: Record<string, string> = {
 };
 
 /**
- * Action menus that are not about an entity, so carry no Copy Link / Copy ID.
+ * Action menus that are not about an entity, so carry no Copy Link.
  * Only these files may use `ActionMenuContent`.
  */
 const NOT_ENTITY_MENUS: Record<string, string> = {

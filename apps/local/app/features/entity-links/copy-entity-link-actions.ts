@@ -1,5 +1,5 @@
 import type { ActionLeaf } from "@/features/action-menu/action-menu-model";
-import { Fingerprint, Link2 } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   ENTITY_LABELS,
@@ -17,22 +17,17 @@ async function copy(text: string, what: string) {
 }
 
 /**
- * "Copy Link" and "Copy ID" for one entity, as action-menu leaves.
- * `EntityMenuContent` closes every entity menu's copy group with these
- * (CODING_STANDARDS.md, "Action menus"). `null` is an entity still being
- * saved — a Clip mid-recording, a Chapter just added: it has no id to copy
- * yet, so both show disabled rather than vanish.
+ * "Copy Link" for one entity, as an action-menu leaf. `EntityMenuContent`
+ * closes every entity menu's copy group with it (CODING_STANDARDS.md, "Action
+ * menus"). The link names the entity's whole hierarchy and `cvm` takes it
+ * wherever it takes an id, so there is no separate raw-id item. `null` is an
+ * entity still being saved — a Clip mid-recording, a Chapter just added: it
+ * has no id to link to yet, so the item shows disabled rather than vanish.
  */
 export function copyEntityLinkActions(entity: EntityRef | null): ActionLeaf[] {
   if (entity === null) {
     return [
       { label: "Copy Link", icon: Link2, disabled: true, onSelect: () => {} },
-      {
-        label: "Copy ID",
-        icon: Fingerprint,
-        disabled: true,
-        onSelect: () => {},
-      },
     ];
   }
   const label = ENTITY_LABELS[entity.type];
@@ -45,13 +40,6 @@ export function copyEntityLinkActions(entity: EntityRef | null): ActionLeaf[] {
           entityDeepLink(entity, window.location.origin),
           `${label} link`
         );
-      },
-    },
-    {
-      label: "Copy ID",
-      icon: Fingerprint,
-      onSelect: () => {
-        void copy(entity.id, `${label} ID`);
       },
     },
   ];

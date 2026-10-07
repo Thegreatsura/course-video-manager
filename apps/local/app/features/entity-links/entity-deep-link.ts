@@ -1,20 +1,42 @@
 /**
- * A reference to one entity the app renders, carrying exactly the ids its
- * page needs. `id` is always the entity's own id — the value "Copy ID" puts
- * on the clipboard and the one `cvm` takes as its positional `<id>`.
+ * Where a Video sits in a Course: the Course, Section and Lesson above it. A
+ * standalone Video (a short, a Pitch's Video) has none.
+ */
+export type LessonPlace = {
+  courseId: string;
+  sectionId: string;
+  lessonId: string;
+};
+
+/**
+ * A Video, or an entity shown on one of its pages. `inLesson` is the Video's
+ * place in its Course; a link that carries it names the whole hierarchy.
+ */
+type OnVideo<T extends string> = {
+  type: T;
+  id: string;
+  videoId: string;
+  inLesson?: LessonPlace;
+};
+
+/**
+ * A reference to one entity the app renders, carrying the ids its page needs
+ * and, for a Video and what it holds, the Course, Section and Lesson above it.
+ * `id` is always the entity's own id — the one `cvm` takes as its positional
+ * `<id>`, and the one it reads back out of a link.
  */
 export type EntityRef =
   | { type: "course"; id: string }
   | { type: "section"; id: string; courseId: string }
   | { type: "lesson"; id: string; courseId: string; sectionId: string }
-  | { type: "video"; id: string }
-  | { type: "clip"; id: string; videoId: string }
-  | { type: "chapter"; id: string; videoId: string }
-  | { type: "beat"; id: string; videoId: string }
-  | { type: "clip-mockup"; id: string; videoId: string }
-  | { type: "clip-mockup-chapter"; id: string; videoId: string }
-  | { type: "clip-mockup-comment"; id: string; videoId: string }
-  | { type: "thumbnail"; id: string; videoId: string }
+  | { type: "video"; id: string; inLesson?: LessonPlace }
+  | OnVideo<"clip">
+  | OnVideo<"chapter">
+  | OnVideo<"beat">
+  | OnVideo<"clip-mockup">
+  | OnVideo<"clip-mockup-chapter">
+  | OnVideo<"clip-mockup-comment">
+  | OnVideo<"thumbnail">
   | { type: "pitch"; id: string }
   | { type: "deliverable"; id: string }
   | { type: "diagram"; id: string };
@@ -60,13 +82,39 @@ const CHILD_PARAM = {
 
 type ChildType = keyof typeof CHILD_PARAM;
 
-const childQuery = (type: ChildType, id: string) =>
-  `?${CHILD_PARAM[type]}=${enc(id)}`;
+/**
+ * The query params that name a Video's place in its Course. They come first,
+ * so a link reads top-down: course, section, lesson, then the child.
+ */
+const PLACE_PARAMS = {
+  courseId: "course",
+  sectionId: "section",
+  lessonId: "lesson",
+} as const satisfies Record<keyof LessonPlace, string>;
+
+const query = (pairs: [string, string][]) =>
+  pairs.length === 0
+    ? ""
+    : `?${pairs.map(([k, v]) => `${k}=${enc(v)}`).join("&")}`;
+
+const placePairs = (place: LessonPlace | undefined): [string, string][] =>
+  place
+    ? [
+        [PLACE_PARAMS.courseId, place.courseId],
+        [PLACE_PARAMS.sectionId, place.sectionId],
+        [PLACE_PARAMS.lessonId, place.lessonId],
+      ]
+    : [];
+
+const childQuery = (type: ChildType, id: string, place?: LessonPlace) =>
+  query([...placePairs(place), [CHILD_PARAM[type], id]]);
 
 /**
  * The app path that shows `entity`: its own page where it has one, otherwise
  * the nearest page that renders it, with the entity's id in a query param
- * (see CHILD_PARAM). A Lesson has no page of its own, so it links to its
+ * (see CHILD_PARAM). A Video's page path names only the Video, so a Video in
+ * a Lesson, and anything on its pages, also carries the Course, Section and
+ * Lesson as query params (see PLACE_PARAMS). A Lesson has no page of its own, so it links to its
  * Section's page with the Lesson's anchor in the hash, which that page
  * scrolls into view.
  */
@@ -79,17 +127,17 @@ function entityPath(entity: EntityRef): string {
     case "lesson":
       return `/courses/${enc(entity.courseId)}/sections/${enc(entity.sectionId)}#${enc(entity.id)}`;
     case "video":
-      return `/videos/${enc(entity.id)}/edit`;
+      return `/videos/${enc(entity.id)}/edit${query(placePairs(entity.inLesson))}`;
     case "clip":
     case "chapter":
     case "beat":
-      return `/videos/${enc(entity.videoId)}/edit${childQuery(entity.type, entity.id)}`;
+      return `/videos/${enc(entity.videoId)}/edit${childQuery(entity.type, entity.id, entity.inLesson)}`;
     case "clip-mockup":
     case "clip-mockup-chapter":
     case "clip-mockup-comment":
-      return `/videos/${enc(entity.videoId)}/animatic${childQuery(entity.type, entity.id)}`;
+      return `/videos/${enc(entity.videoId)}/animatic${childQuery(entity.type, entity.id, entity.inLesson)}`;
     case "thumbnail":
-      return `/videos/${enc(entity.videoId)}/thumbnails${childQuery(entity.type, entity.id)}`;
+      return `/videos/${enc(entity.videoId)}/thumbnails${childQuery(entity.type, entity.id, entity.inLesson)}`;
     case "pitch":
       return `/pitches/${enc(entity.id)}`;
     case "deliverable":
@@ -106,6 +154,51 @@ function entityPath(entity: EntityRef): string {
  */
 export function entityDeepLink(entity: EntityRef, origin: string): string {
   return `${origin.replace(/\/+$/, "")}${entityPath(entity)}`;
+}
+
+/** Looks up a Video's place in its Course; `undefined` when standalone or unknown. */
+export type FindLessonPlace = (videoId: string) => LessonPlace | undefined;
+
+/**
+ * A FindLessonPlace over one Course's tree, for a page that lists its Videos.
+ */
+export function lessonPlaceFinder(
+  courseId: string,
+  sections: ReadonlyArray<{
+    id: string;
+    lessons: ReadonlyArray<{
+      id: string;
+      videos: ReadonlyArray<{ id: string }>;
+    }>;
+  }>
+): FindLessonPlace {
+  const places = new Map<string, LessonPlace>();
+  for (const section of sections) {
+    for (const lesson of section.lessons) {
+      for (const video of lesson.videos) {
+        places.set(video.id, {
+          courseId,
+          sectionId: section.id,
+          lessonId: lesson.id,
+        });
+      }
+    }
+  }
+  return (videoId) => places.get(videoId);
+}
+
+/**
+ * `entity` with its Video's place filled in from `findPlace`, when it is a
+ * Video or lives on one and does not already say where it sits.
+ */
+export function withLessonPlace(
+  entity: EntityRef,
+  findPlace: FindLessonPlace
+): EntityRef {
+  if (!("videoId" in entity) && entity.type !== "video") return entity;
+  if ("inLesson" in entity && entity.inLesson) return entity;
+  const place = findPlace(entity.type === "video" ? entity.id : entity.videoId);
+  return place ? { ...entity, inLesson: place } : entity;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +278,14 @@ function parseUrl(raw: string, input: string): EntityRef {
   };
 
   const [head, first, second, third] = segments;
+  const place = (): { inLesson?: LessonPlace } => {
+    const courseId = url.searchParams.get(PLACE_PARAMS.courseId);
+    const sectionId = url.searchParams.get(PLACE_PARAMS.sectionId);
+    const lessonId = url.searchParams.get(PLACE_PARAMS.lessonId);
+    return courseId && sectionId && lessonId
+      ? { inLesson: { courseId, sectionId, lessonId } }
+      : {};
+  };
 
   if (head === "courses" && first) {
     if (second === "sections" && third) {
@@ -205,8 +306,13 @@ function parseUrl(raw: string, input: string): EntityRef {
       "thumbnail",
     ]);
     return child
-      ? ({ type: child.type, id: child.id, videoId: first } as EntityRef)
-      : { type: "video", id: first };
+      ? ({
+          type: child.type,
+          id: child.id,
+          videoId: first,
+          ...place(),
+        } as EntityRef)
+      : { type: "video", id: first, ...place() };
   }
   if (head === "pitches" && first) return { type: "pitch", id: first };
   if (head === "diagram-playground" && first)

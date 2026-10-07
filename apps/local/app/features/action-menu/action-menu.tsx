@@ -25,7 +25,11 @@ import {
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { copyEntityLinkActions } from "@/features/entity-links/copy-entity-link-actions";
-import type { EntityRef } from "@/features/entity-links/entity-deep-link";
+import {
+  withLessonPlace,
+  type EntityRef,
+} from "@/features/entity-links/entity-deep-link";
+import { useFindLessonPlace } from "@/features/entity-links/lesson-place-context";
 import { CheckIcon } from "lucide-react";
 import { Fragment } from "react";
 import {
@@ -82,23 +86,31 @@ interface MenuContentProps {
 /**
  * The menu of one entity — a Course, Lesson, Video, Clip… Renders the
  * entity's actions in canonical group order (CODING_STANDARDS.md, "Action
- * menus") and closes the copy group with Copy Link / Copy ID. Build `groups`
+ * menus") and closes the copy group with Copy Link. Build `groups`
  * once and render it from both doors: `menu="context"` on the right-click and
  * `menu="dropdown"` on the Actions / "…" button. Pass `entity={null}` while
- * the entity is still being saved: Copy Link / Copy ID show, disabled.
+ * the entity is still being saved: Copy Link shows, disabled. A Video, or
+ * anything on one, gets its Course, Section and Lesson from the nearest
+ * `LessonPlaceProvider`, so the copied link names the whole hierarchy.
  */
 export function EntityMenuContent({
   entity,
   ...props
 }: MenuContentProps & { entity: EntityRef | null }) {
+  const findPlace = useFindLessonPlace();
   return (
-    <MenuContent {...props} appendToCopy={copyEntityLinkActions(entity)} />
+    <MenuContent
+      {...props}
+      appendToCopy={copyEntityLinkActions(
+        entity && withLessonPlace(entity, findPlace)
+      )}
+    />
   );
 }
 
 /**
  * An action menu that is not about an entity — a calendar week, the
- * writer's document. Same rules, no Copy Link / Copy ID. A file that uses it
+ * writer's document. Same rules, no Copy Link. A file that uses it
  * is listed in action-menus.test.ts's NOT_ENTITY_MENUS with the reason.
  */
 export function ActionMenuContent(props: MenuContentProps) {
