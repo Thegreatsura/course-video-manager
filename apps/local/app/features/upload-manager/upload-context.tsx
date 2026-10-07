@@ -10,6 +10,7 @@ import { uploadReducer, createInitialUploadState } from "./upload-reducer";
 import { showSuccessToast, showErrorToast } from "./upload-toasts";
 import { startSSEBatchExport } from "./sse-batch-export-client";
 import { uploadTypeRegistry } from "./upload-type-registry";
+import { planUploadReactions } from "./upload-transitions";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import {
   HISTORY_STORAGE_KEY,
@@ -600,48 +601,33 @@ export function UploadProvider({
 
   // Single effect: watch for status transitions to fire toasts and handle auto-retry
   useEffect(() => {
-    const prev = previousUploadsRef.current;
     const current = state.uploads;
+    const reactions = planUploadReactions(
+      previousUploadsRef.current,
+      current,
+      paramsMapRef.current
+    );
 
-    for (const [uploadId, upload] of Object.entries(current)) {
-      const prevUpload = prev[uploadId];
-      if (!prevUpload) continue;
-      if (prevUpload.status === upload.status) continue;
-
-      // A child task's success is reported by its row under its parent; the
-      // parent's own toast speaks for the job as a whole. Failures still toast
-      // per child, because that is how a single stuck Video gets named.
-      if (upload.status === "success" && !upload.parentUploadId) {
-        showSuccessToast(upload);
-      }
-
-      if (upload.status === "error") {
-        showErrorToast(upload);
-      }
-
-      if (upload.status === "retrying") {
-        dispatch({ type: "RETRY", uploadId });
-
-        const storedParams = paramsMapRef.current.get(uploadId);
-        uploadTypeRegistry[upload.uploadType].initiate(
-          uploadId,
-          upload,
-          storedParams?.params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      // Handle waiting → uploading transition (dependency completed)
-      if (prevUpload.status === "waiting" && upload.status === "uploading") {
-        const storedParams = paramsMapRef.current.get(uploadId);
-        uploadTypeRegistry[upload.uploadType].initiate(
-          uploadId,
-          upload,
-          storedParams?.params,
-          dispatch,
-          abortControllersRef.current
-        );
+    for (const reaction of reactions) {
+      switch (reaction.type) {
+        case "success-toast":
+          showSuccessToast(reaction.upload);
+          break;
+        case "error-toast":
+          showErrorToast(reaction.upload);
+          break;
+        case "initiate":
+          if (reaction.retry) {
+            dispatch({ type: "RETRY", uploadId: reaction.uploadId });
+          }
+          uploadTypeRegistry[reaction.upload.uploadType].initiate(
+            reaction.uploadId,
+            reaction.upload,
+            reaction.params,
+            dispatch,
+            abortControllersRef.current
+          );
+          break;
       }
     }
 

@@ -66,10 +66,16 @@ Batch 1 removed tests that exercised a copy of the logic written inside the
 test file, so these never had real coverage. If they matter, extract a pure
 function and test it there:
 
-- The lesson title save guard (`lesson-title-editor`).
-- The upload manager's retry effect (`upload-manager-integration`).
-- The audio boost Strict Mode fix (fcdc392c, `use-audio-boost`). One
-  `renderHook` test that mounts twice would guard it.
+- Done: the lesson title save guard (`lesson-title-editor`). Extracted as
+  `buildLessonRenameEvent`, tested in `lesson-title-editor.test.ts`.
+- Done: the upload manager's retry effect (`upload-manager-integration`). The
+  effect's decisions are extracted as `planUploadReactions`, tested against
+  the real reducer in `upload-transitions.test.ts`.
+- Done: the audio boost Strict Mode fix (fcdc392c, `use-audio-boost`). The app
+  has no DOM test environment, so there is no `renderHook`: the effect body is
+  extracted as `connectAudioBoost`, and `use-audio-boost.test.ts` runs its
+  mount → unmount → mount against a fake Web Audio that throws on a second
+  `createMediaElementSource`, as browsers do.
 
 ## Slowest files
 
