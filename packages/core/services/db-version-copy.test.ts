@@ -73,6 +73,11 @@ describe("copyVersionStructure — schema-drift guard", () => {
         "createdAt",
       ],
     },
+    learningGoal: {
+      table: schema.learningGoals,
+      copied: ["title", "description", "priority", "order"],
+      notCopied: ["id", "sectionId", "archived", "createdAt"],
+    },
     lesson: {
       table: schema.lessons,
       copied: [
@@ -203,6 +208,16 @@ describe("copyVersionStructure — schema-drift guard", () => {
         order: 3,
       })
       .returning();
+    const [learningGoal] = await testDb
+      .insert(schema.learningGoals)
+      .values({
+        sectionId: section!.id,
+        title: "Coverage Goal",
+        description: "Goal Description",
+        priority: 1,
+        order: 4,
+      })
+      .returning();
     const [lesson] = await testDb
       .insert(schema.lessons)
       .values({
@@ -283,6 +298,7 @@ describe("copyVersionStructure — schema-drift guard", () => {
     const [newSection] = await testDb.query.sections.findMany({
       where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
       with: {
+        learningGoals: true,
         lessons: {
           with: {
             videos: {
@@ -305,6 +321,7 @@ describe("copyVersionStructure — schema-drift guard", () => {
     const newVideo = newLesson.videos[0]!;
     const newRows: Record<keyof typeof COPY_SPEC, any> = {
       section: newSection!,
+      learningGoal: newSection!.learningGoals[0]!,
       lesson: newLesson,
       video: newVideo,
       clip: newVideo.clips[0]!,
@@ -317,6 +334,7 @@ describe("copyVersionStructure — schema-drift guard", () => {
     };
     const sourceRows: Record<keyof typeof COPY_SPEC, any> = {
       section: section!,
+      learningGoal: learningGoal!,
       lesson: lesson!,
       video: video!,
       clip: await getOne(schema.clips, "videoId", video!.id),
