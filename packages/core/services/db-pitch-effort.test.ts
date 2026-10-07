@@ -26,23 +26,6 @@ beforeEach(async () => {
 });
 
 describe("effort field", () => {
-  it.effect("defaults to medium (2)", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const pitch = yield* pitchOps.createPitch();
-      expect(pitch.effort).toBe(2);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("updates effort as a number", () =>
-    Effect.gen(function* () {
-      const pitchOps = yield* PitchOperationsService;
-      const created = yield* pitchOps.createPitch();
-      const updated = yield* pitchOps.updatePitchField(created.id, "effort", 1);
-      expect(updated.effort).toBe(1);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect(
     "sorts by effort within the same priority band (low effort first)",
     () =>

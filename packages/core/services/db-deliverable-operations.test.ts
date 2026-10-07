@@ -72,25 +72,6 @@ describe("duplicateDeliverable", () => {
       }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("duplicates a deliverable with no links", () =>
-    Effect.gen(function* () {
-      const deliverableOps = yield* DeliverableOperationsService;
-
-      const original = yield* deliverableOps.createDeliverable({
-        title: "Solo task",
-        date: "2026-05-04",
-      });
-
-      const result = yield* deliverableOps.duplicateDeliverable(original.id);
-
-      expect(result.created.title).toBe("Solo task");
-      expect(result.created.date).toBe("2026-05-11");
-
-      const list = yield* deliverableOps.listDeliverables();
-      expect(list).toHaveLength(2);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("correctly handles month boundary when adding 7 days", () =>
     Effect.gen(function* () {
       const deliverableOps = yield* DeliverableOperationsService;

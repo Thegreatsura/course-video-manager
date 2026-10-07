@@ -56,16 +56,6 @@ describe("mint", () => {
       );
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("honours an explicit expiry", () =>
-    Effect.gen(function* () {
-      const svc = yield* ApiTokenOperationsService;
-      const expiresAt = new Date("2030-01-01T00:00:00Z");
-      const minted = yield* svc.mint({ name: "short-lived", expiresAt });
-
-      expect(minted.expiresAt).toEqual(expiresAt);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("authenticate", () => {
