@@ -31,6 +31,9 @@ CLI, the route and the component.
 [`plans/test-pruning.md`](./plans/test-pruning.md) applies this to
 the existing suite.
 
+For frontend logic the right seam is a pure reducer driven by events, not a
+rendered component: see [`FRONTEND_STATE.md`](./FRONTEND_STATE.md).
+
 ## Good tests
 
 Integration-style tests that exercise real code paths through public APIs. They

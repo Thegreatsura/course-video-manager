@@ -1,0 +1,151 @@
+{
+  "use-state": [
+    {
+      "file": "apps/local/app/components/app-sidebar.tsx",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 2."
+    },
+    {
+      "file": "apps/local/app/features/animatic/animatic-comments.tsx",
+      "count": 6,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/features/article-writer/use-context-model.ts",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/features/diagrams/palette/use-palette.ts",
+      "count": 9,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 8."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/video-editor.tsx",
+      "count": 6,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 2."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/ai-hero-page.tsx",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 9."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/post-page.tsx",
+      "count": 10,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/shorts-posting-modal.tsx",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/social-page.tsx",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 9."
+    },
+    {
+      "file": "apps/local/app/routes/_app.courses.$courseId.publish.tsx",
+      "count": 5,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/routes/_app.pitches.$pitchId.tsx",
+      "count": 7,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.ai-hero.tsx",
+      "count": 13,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.newsletter.tsx",
+      "count": 13,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.post.tsx",
+      "count": 13,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.skills-changelog.tsx",
+      "count": 13,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/_app.videos.$videoId.social.tsx",
+      "count": 13,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/diagram-playground.$diagramId.tsx",
+      "count": 8,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 1."
+    }
+  ],
+  "effect-sets-state": [
+    {
+      "file": "apps/local/app/components/capture-camera-modal.tsx",
+      "count": 3,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/components/video-file-paste-modal.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/features/diagrams/palette/use-palette.ts",
+      "count": 3,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 8."
+    },
+    {
+      "file": "apps/local/app/features/lesson-writer/autofill-description-modal.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/components/recording-session-panel.tsx",
+      "count": 3,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 7."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/preloadable-clip.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 7."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/use-speech-detector.ts",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 7."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/ai-hero-page.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 9."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/post-page.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/shorts-posting-modal.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/features/video-posting/skills-changelog-page.tsx",
+      "count": 2,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 9."
+    },
+    {
+      "file": "apps/local/app/routes/diagram-playground.$diagramId.tsx",
+      "count": 3,
+      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 1."
+    }
+  ]
+}
