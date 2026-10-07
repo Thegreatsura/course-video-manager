@@ -7,8 +7,9 @@
  * recording session, deleted ones included — and this only draws it.
  *
  * Small and dim, for the same reason the controls are: anything bright on the
- * glass is something you read around for the whole take. Clamped so a long
- * clip can't creep down over the script.
+ * glass is something you read around for the whole take. Never truncated: the
+ * whole take wraps onto as many lines as it needs, and only a take taller than
+ * the glass (less the controls strip at the bottom) scrolls inside the panel.
  */
 import { TYPE } from "./teleprompter-settings";
 
@@ -17,11 +18,11 @@ export function LatestTranscript(props: { text: string | null }) {
 
   return (
     <div
-      className="pointer-events-none absolute right-4 top-4 z-40 w-80 select-none rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2"
+      className="absolute right-4 top-4 z-40 max-h-[calc(100vh-6rem)] w-80 select-none overflow-y-auto rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2"
       aria-label="Latest clip transcript"
     >
       <p
-        className="line-clamp-6 text-sm leading-snug text-white/60"
+        className="whitespace-pre-wrap break-words text-sm leading-snug text-white/60"
         style={{ fontFamily: TYPE.fontFamily }}
       >
         {props.text}
