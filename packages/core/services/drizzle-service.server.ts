@@ -4,6 +4,7 @@ import type { ExtractTablesWithRelations } from "drizzle-orm";
 import { Pool } from "pg";
 import * as schema from "../db/schema.js";
 import { resolveDatabaseUrl } from "../db/database-url.js";
+import { sqlStatementLogger } from "../db/sql-statement-log.js";
 import { Effect } from "effect";
 
 export type DrizzleDB = NodePgDatabase<typeof schema>;
@@ -24,8 +25,10 @@ export class DrizzleService extends Effect.Service<DrizzleService>()(
           new Error("DATABASE_URL is not set in environment variables")
         );
       }
+      const logger = sqlStatementLogger();
       return drizzle(new Pool({ connectionString: url }), {
         schema,
+        ...(logger ? { logger } : {}),
       }) as DrizzleDB;
     }),
   }
