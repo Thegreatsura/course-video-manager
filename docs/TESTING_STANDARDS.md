@@ -57,6 +57,9 @@ How to write one:
 - Assert what a user or the parent sees: the text shown, or the callback prop
   a parent receives.
 - No snapshots, no class names, no internal state, no reaching into hooks.
+- Browser tests load the app's real CSS (`app.css`, Tailwind and all), so
+  layout behaviour (sticky, line-clamp, overflow) can be asserted through
+  computed styles. Don't hand-write stand-in CSS.
 
 [`lesson-title-editor.browser.test.tsx`](../apps/local/app/features/course-view/lesson-title-editor.browser.test.tsx)
 is the model. The rename rule is unit tested in `lesson-title-editor.test.ts`.
