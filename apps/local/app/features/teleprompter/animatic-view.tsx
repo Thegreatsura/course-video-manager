@@ -17,6 +17,10 @@
  * white behind a comment icon, marked off by a rule on the left like a note in
  * a margin: the author's notes for this take, never said aloud.
  *
+ * The current Chapter stays pinned at the top of the list, so you always know
+ * which part of the video you are in (see `heading-sections.ts`). Chapters are
+ * the only heading here, so they pin as H2s and nothing pins under them.
+ *
  * Stream Deck: advance/back scroll to the next/previous clip (Chapters are
  * skipped — they are not something you say), reset returns to the top.
  */
@@ -24,6 +28,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
+import { nestHeadingSections, type HeadingNode } from "./heading-sections";
+import { StickyHeading, stickyH2Height } from "./sticky-heading";
 import { TYPE, cueStyle, textStyle } from "./teleprompter-settings";
 
 type ClipMockupLine = Extract<AnimaticLine, { type: "clip-mockup" }>;
@@ -103,8 +109,91 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
     });
   }, [activeIndex, clips]);
 
+  const sections = useMemo(
+    () =>
+      nestHeadingSections(lines, (line) =>
+        line.type === "chapter" ? "h2" : null
+      ),
+    [lines]
+  );
+
   const base = textStyle();
   const chapterSize = TYPE.fontSize * TYPE.animaticChapterScale;
+
+  const renderNodes = (nodes: readonly HeadingNode<AnimaticLine>[]) =>
+    nodes.map((node) => {
+      if (node.kind === "section") {
+        const chapter = node.heading;
+        if (chapter.type !== "chapter") return null;
+        return (
+          // The section is what holds the Chapter pinned: it ends where the
+          // next Chapter begins.
+          <section key={chapter.id} className="mt-10 first:mt-0">
+            <StickyHeading
+              rank="h2"
+              style={{
+                ...base,
+                fontSize: `${chapterSize}px`,
+                lineHeight: 1.2,
+                color: TYPE.cueColor,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                borderBottom: "1px solid rgb(255 255 255 / 0.15)",
+              }}
+            >
+              {chapter.name}
+            </StickyHeading>
+            {/* Under the pinned bar rather than in it: a Chapter's notes are
+                read once, not carried down the whole Chapter. */}
+            <div className="mb-5">
+              <Comments comments={chapter.comments} />
+            </div>
+            {renderNodes(node.children)}
+          </section>
+        );
+      }
+      const line = node.row;
+      if (line.type !== "clip-mockup") return null;
+      return (
+        <div
+          key={line.id}
+          ref={(el) => {
+            if (el) rowRefs.current.set(line.id, el);
+            else rowRefs.current.delete(line.id);
+          }}
+          // Clicking a clip moves the spotlight — the popup rarely has
+          // OS focus for the Stream Deck's keys while you film.
+          onClick={() => {
+            if (hasSelectedText()) return;
+            setActiveIndex(line.position - 1);
+          }}
+          className="mb-8 flex cursor-pointer"
+        >
+          {/* The gutter is sized in body `em`, the number inside it at
+              the cue size, on the first line's own line box. */}
+          <span
+            className="shrink-0"
+            style={{ width: `${TYPE.animaticGutter}em` }}
+            aria-label={`Clip ${line.position}`}
+          >
+            <span
+              className="tabular-nums"
+              style={{
+                ...cueStyle(),
+                fontStyle: "normal",
+                lineHeight: `${TYPE.fontSize * TYPE.lineHeight}px`,
+              }}
+            >
+              {line.position}
+            </span>
+          </span>
+          <div className="min-w-0 flex-1">
+            {line.line}
+            <Comments comments={line.comments} />
+          </div>
+        </div>
+      );
+    });
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -118,72 +207,14 @@ export function AnimaticView(props: { lines: AnimaticLine[] }) {
             // Set in the glass's own type, so `ch` means what it means in the
             // script's crawl: a line here is exactly a line of the script.
             ...base,
+            ...stickyH2Height(chapterSize * 2),
             width: `calc(${TYPE.measure}ch + ${TYPE.animaticGutter}em)`,
             maxWidth: "92vw",
             paddingTop: `${TYPE.readLine}vh`,
             paddingBottom: "70vh",
           }}
         >
-          {lines.map((line) => {
-            if (line.type === "chapter") {
-              return (
-                <div
-                  key={line.id}
-                  className="mt-10 mb-5 border-b border-white/15 pb-1 first:mt-0"
-                  style={{
-                    ...base,
-                    fontSize: `${chapterSize}px`,
-                    color: TYPE.cueColor,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {line.name}
-                  <Comments comments={line.comments} />
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={line.id}
-                ref={(el) => {
-                  if (el) rowRefs.current.set(line.id, el);
-                  else rowRefs.current.delete(line.id);
-                }}
-                // Clicking a clip moves the spotlight — the popup rarely has
-                // OS focus for the Stream Deck's keys while you film.
-                onClick={() => {
-                  if (hasSelectedText()) return;
-                  setActiveIndex(line.position - 1);
-                }}
-                className="mb-8 flex cursor-pointer"
-              >
-                {/* The gutter is sized in body `em`, the number inside it at
-                    the cue size, on the first line's own line box. */}
-                <span
-                  className="shrink-0"
-                  style={{ width: `${TYPE.animaticGutter}em` }}
-                  aria-label={`Clip ${line.position}`}
-                >
-                  <span
-                    className="tabular-nums"
-                    style={{
-                      ...cueStyle(),
-                      fontStyle: "normal",
-                      lineHeight: `${TYPE.fontSize * TYPE.lineHeight}px`,
-                    }}
-                  >
-                    {line.position}
-                  </span>
-                </span>
-                <div className="min-w-0 flex-1">
-                  {line.line}
-                  <Comments comments={line.comments} />
-                </div>
-              </div>
-            );
-          })}
+          {renderNodes(sections)}
         </div>
       </div>
     </div>
