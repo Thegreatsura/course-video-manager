@@ -1,10 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import {
-  Tldraw,
-  loadSnapshot,
-  type Editor,
-  type TLStoreSnapshot,
-} from "tldraw";
+import { useEffect, useCallback } from "react";
+import { Tldraw, type Editor } from "tldraw";
 import "tldraw/tldraw.css";
 import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
@@ -14,17 +9,13 @@ import {
   type ParentToChildMessage,
 } from "@/lib/diagram-protocol";
 import { RestoreSnapshotDialog } from "@/features/diagrams/restore-snapshot-dialog";
-import { renderThumbnailPngBase64 } from "@/features/diagrams/render-thumbnail";
 import { usePreserveSnapshotShortcut } from "@/features/diagrams/preserve-snapshot-shortcut";
 import { useSnapshotStepShortcut } from "@/features/diagrams/use-snapshot-step-shortcut";
 import { useRecentreDiagramShortcut } from "@/features/diagrams/use-recentre-diagram-shortcut";
 import { centreCameraOnContent } from "@/features/diagrams/centre-camera-on-content";
 import { DiagramCenteringDebug } from "@/features/diagrams/diagram-centering-debug";
 import { copyDiagramContents } from "@/features/diagrams/copy-scene-to-clipboard";
-import {
-  TimelinePanel,
-  type Snapshot,
-} from "@/features/diagrams/timeline-panel";
+import { TimelinePanel } from "@/features/diagrams/timeline-panel";
 import { DiagramRail } from "@/features/diagrams/diagram-rail";
 import { useParams, useNavigate, useRevalidator } from "react-router";
 import type { Route } from "./+types/diagram-playground.$diagramId";
@@ -32,25 +23,13 @@ import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playgro
 import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
 import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundary";
 import { CommandPalette } from "@/features/diagrams/palette/command-palette";
-import {
-  createHeadAutosaver,
-  HEAD_AUTOSAVE_DEBOUNCE_MS,
-  type HeadAutosaver,
-  type HeadStatus,
-} from "@/features/diagrams/head-autosaver";
 import { HeadLoadStatus } from "@/features/diagrams/head-load-status";
+import { useDiagramPlaygroundReducer } from "@/features/diagrams/use-diagram-playground-reducer";
 
 export const loader = loadDiagramPlaygroundActive;
 
 const EMPTY_MIME_TYPES: string[] = [];
 
-/**
- * Straight to the store: the canvas is read-only until a head loads, and the
- * editor refuses to delete shapes on a read-only canvas.
- */
-const clearCanvas = (ed: Editor) => {
-  ed.store.remove([...ed.getCurrentPageShapeIds()]);
-};
 const EMPTY_EMBEDS: never[] = [];
 
 export default function DiagramPlaygroundActive({
@@ -59,163 +38,27 @@ export default function DiagramPlaygroundActive({
   const { diagrams } = loaderData;
   const { diagramId } = useParams<{ diagramId: string }>();
   const navigate = useNavigate();
-  const editorRef = useRef<Editor | null>(null);
-  const autosaver = useRef<HeadAutosaver | null>(null);
-  const activeDiagramId = useRef<string | null>(diagramId ?? null);
-  const [preserving, setPreserving] = useState(false);
-  const preservingRef = useRef(false);
-  const [isFocusMode, setIsFocusMode] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [pendingRestore, setPendingRestore] = useState<Snapshot | null>(null);
-  const [editorConnected, setEditorConnected] = useState(false);
-  const [windowFocused, setWindowFocused] = useState(() =>
-    typeof document !== "undefined" ? document.hasFocus() : false
+  const {
+    state,
+    dispatch,
+    editorRef,
+    attachEditor,
+    flushPendingSave,
+    requestRestore,
+  } = useDiagramPlaygroundReducer();
+
+  const reloadScene = useCallback(
+    (id: string) => dispatch({ type: "head-moved-elsewhere", diagramId: id }),
+    [dispatch]
   );
-  const [creating, setCreating] = useState(false);
-  // Mirrors the autosaver's status, which also sets the canvas read-only.
-  const [headStatus, setHeadStatus] = useState<HeadStatus>("loading");
-  const initialLoadDone = useRef(false);
-
-  // Saves only what differs from the head last loaded or saved, so opening a
-  // diagram never writes it back. Every flow that leaves the current diagram
-  // must call this first, or up to 500ms of debounced edits is silently lost.
-  const flushPendingSave = useCallback(async () => {
-    await autosaver.current?.flush();
-  }, []);
-
-  useEffect(() => () => autosaver.current?.dispose(), []);
-
-  const loadDiagramScene = useCallback(async (id: string) => {
-    const ed = editorRef.current;
-    if (!ed) return;
-
-    // Leaving a diagram saves its edits; reloading the same one (a search
-    // restore has already moved its head) discards them.
-    if (activeDiagramId.current && activeDiagramId.current !== id) {
-      await autosaver.current?.flush();
-    }
-    autosaver.current?.markLoading();
-
-    activeDiagramId.current = id;
-    setRefreshKey((k) => k + 1);
-
-    let data: { headScene: TLStoreSnapshot | null } | null = null;
-    try {
-      const res = await fetch(`/api/diagrams/${id}/head`);
-      if (res.ok) data = await res.json();
-    } catch {
-      // Network failure — reported as a failed load below.
-    }
-    // A later load (switching diagrams again) owns the canvas now.
-    if (activeDiagramId.current !== id) return;
-    if (!data) {
-      // Don't leave the previous diagram's shapes standing in for this one.
-      clearCanvas(ed);
-      autosaver.current?.markFailed();
-      return;
-    }
-    if (data.headScene) {
-      loadSnapshot(ed.store, { document: data.headScene });
-      // Covers the palette's search restore, which lands here via
-      // `reloadScene`, as well as opening or switching diagrams.
-      centreCameraOnContent(ed);
-    } else {
-      clearCanvas(ed);
-    }
-    autosaver.current?.markLoaded(id);
-  }, []);
-
-  const retryLoad = useCallback(() => {
-    const id = activeDiagramId.current;
-    if (id) void loadDiagramScene(id);
-  }, [loadDiagramScene]);
-
-  const performRestore = useCallback(async (snapshot: Snapshot) => {
-    const ed = editorRef.current;
-    const id = activeDiagramId.current;
-    if (!ed || !id) return;
-
-    try {
-      const res = await fetch(`/api/diagrams/${id}/restore-to-head`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshotId: snapshot.id }),
-      });
-
-      if (!res.ok) {
-        toast.error("Failed to restore snapshot");
-        return;
-      }
-
-      // The server has already moved the head to this snapshot.
-      loadSnapshot(ed.store, { document: snapshot.scene as never });
-      autosaver.current?.markLoaded(id);
-      centreCameraOnContent(ed);
-      setRefreshKey((k) => k + 1);
-    } catch {
-      toast.error("Failed to restore snapshot");
-    }
-  }, []);
-
-  // Returns a promise that settles when the head has moved, so a caller
-  // stepping through the timeline can wait for one restore before aiming the
-  // next. The dialog branch settles immediately — it hands control to the
-  // dialog, which owns the keyboard until it is answered.
-  const handleRestoreRequest = useCallback(
-    (snapshot: Snapshot, headIsCaptured: boolean): Promise<void> | void => {
-      const ed = editorRef.current;
-      const canvasIsEmpty = ed ? ed.getCurrentPageShapeIds().size === 0 : false;
-      if (headIsCaptured || canvasIsEmpty) {
-        return performRestore(snapshot);
-      }
-      setPendingRestore(snapshot);
-    },
-    [performRestore]
+  const preserveSnapshot = useCallback(
+    () => dispatch({ type: "preserve-clicked" }),
+    [dispatch]
   );
-
-  const preserveSnapshot = useCallback(async () => {
-    if (preservingRef.current) return;
-    const id = activeDiagramId.current;
-    const ed = editorRef.current;
-    if (!id || !ed) return;
-
-    preservingRef.current = true;
-    setPreserving(true);
-    try {
-      await flushPendingSave();
-
-      let thumbnailPngBase64: string | null;
-      try {
-        thumbnailPngBase64 = await renderThumbnailPngBase64(ed, "current-page");
-      } catch {
-        toast.error("Failed to render thumbnail");
-        return;
-      }
-      if (!thumbnailPngBase64) {
-        toast.error("Cannot preserve an empty diagram");
-        return;
-      }
-
-      const res = await fetch(`/api/diagrams/${id}/snapshots`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preserved: true, thumbnailPngBase64 }),
-      });
-      if (!res.ok) {
-        toast.error("Failed to preserve snapshot");
-        return;
-      }
-      const data = await res.json();
-      if (data.snapshot) {
-        setRefreshKey((k) => k + 1);
-      }
-    } catch {
-      toast.error("Failed to preserve snapshot");
-    } finally {
-      preservingRef.current = false;
-      setPreserving(false);
-    }
-  }, [flushPendingSave]);
+  const handleCreateDiagram = useCallback(
+    () => dispatch({ type: "create-clicked" }),
+    [dispatch]
+  );
 
   const recentreDiagram = useCallback(() => {
     const ed = editorRef.current;
@@ -226,7 +69,7 @@ export default function DiagramPlaygroundActive({
   useSnapshotStepShortcut({
     diagramId,
     flushPendingSave,
-    onRestoreRequest: handleRestoreRequest,
+    onRestoreRequest: requestRestore,
   });
   useRecentreDiagramShortcut(diagramId ? recentreDiagram : null);
 
@@ -237,17 +80,10 @@ export default function DiagramPlaygroundActive({
     }
   }, [diagramId]);
 
-  // Reload scene when navigating between diagrams in this same route
+  // Load the diagram when navigating between diagrams in this same route.
   useEffect(() => {
-    if (
-      diagramId &&
-      editorRef.current &&
-      initialLoadDone.current &&
-      activeDiagramId.current !== diagramId
-    ) {
-      loadDiagramScene(diagramId);
-    }
-  }, [diagramId, loadDiagramScene]);
+    if (diagramId) dispatch({ type: "diagram-opened", diagramId });
+  }, [diagramId, dispatch]);
 
   // Ping the parent every 2s; mark disconnected if no pong within 5s.
   // Re-broadcast activeDiagramChanged alongside each ping so a parent that
@@ -257,10 +93,10 @@ export default function DiagramPlaygroundActive({
     const unsub = diagramChannel.subscribeChild((msg: ParentToChildMessage) => {
       if (msg.type === "pong" || msg.type === "editorConnected") {
         lastPong = Date.now();
-        setEditorConnected(true);
+        dispatch({ type: "video-editor-replied" });
       } else if (msg.type === "editorDisconnected") {
         lastPong = 0;
-        setEditorConnected(false);
+        dispatch({ type: "video-editor-disconnected" });
       }
     });
     function beat() {
@@ -269,7 +105,9 @@ export default function DiagramPlaygroundActive({
         type: "activeDiagramChanged",
         diagramId: diagramId ?? null,
       });
-      if (Date.now() - lastPong > 5000) setEditorConnected(false);
+      if (Date.now() - lastPong > 5000) {
+        dispatch({ type: "video-editor-went-quiet" });
+      }
     }
     const interval = setInterval(beat, 2000);
     beat();
@@ -277,7 +115,7 @@ export default function DiagramPlaygroundActive({
       clearInterval(interval);
       unsub();
     };
-  }, [diagramId]);
+  }, [diagramId, dispatch]);
 
   // Listen for parent messages (loadDiagram for switch, flush for save)
   useEffect(() => {
@@ -289,82 +127,39 @@ export default function DiagramPlaygroundActive({
           diagramChannel.sendToParent({ type: "flushAck" });
         });
       } else if (msg.type === "snapshotForClip") {
-        const { clipId, diagramId: targetDiagramId } = msg;
-        void (async () => {
-          let ok = false;
-          let snapshotId: string | null = null;
-          const diagramName =
-            diagrams.find((d) => d.id === targetDiagramId)?.name ?? null;
-          try {
-            const ed = editorRef.current;
-            if (!ed || activeDiagramId.current !== targetDiagramId) return;
-
-            await flushPendingSave();
-
-            // Auto-pin thumbnails are best-effort; proceed without one if rendering fails.
-            const thumbnailPngBase64 = await renderThumbnailPngBase64(
-              ed,
-              "current-page"
-            ).catch(() => null);
-
-            const res = await fetch(
-              `/api/diagrams/${targetDiagramId}/snapshots`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ clipId, thumbnailPngBase64 }),
-              }
-            );
-            ok = res.ok;
-            if (ok) {
-              try {
-                const body = await res.json();
-                snapshotId = body?.snapshot?.id ?? null;
-              } catch {
-                // ignore — snapshotId stays null
-              }
-              setRefreshKey((k) => k + 1);
-            }
-          } finally {
-            diagramChannel.sendToParent({
-              type: "snapshotForClipDone",
-              clipId,
-              ok,
-              snapshotId,
-              diagramName,
-            });
-          }
-        })();
+        dispatch({
+          type: "clip-snapshot-requested",
+          clipId: msg.clipId,
+          diagramId: msg.diagramId,
+          diagramName:
+            diagrams.find((d) => d.id === msg.diagramId)?.name ?? null,
+        });
       }
     });
     return unsub;
-  }, [navigate, flushPendingSave]);
+  }, [navigate, flushPendingSave, dispatch, diagrams]);
 
   useEffect(() => {
     function onFocus() {
-      setWindowFocused(true);
+      dispatch({ type: "window-focused" });
       diagramChannel.sendToParent({ type: "focus" });
     }
     function onBlur() {
-      setWindowFocused(false);
+      dispatch({ type: "window-blurred" });
       diagramChannel.sendToParent({ type: "blur" });
     }
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", onBlur);
-    if (document.hasFocus()) {
-      setWindowFocused(true);
-      diagramChannel.sendToParent({ type: "focus" });
-    }
+    if (document.hasFocus()) onFocus();
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [dispatch]);
 
   const handleMount = useCallback(
     (editor: Editor) => {
-      editorRef.current = editor;
-      setIsFocusMode(editor.getInstanceState().isFocusMode);
+      attachEditor(editor);
 
       editor.sideEffects.registerBeforeCreateHandler("shape", (shape) => {
         if (
@@ -380,45 +175,25 @@ export default function DiagramPlaygroundActive({
         return shape;
       });
 
-      autosaver.current?.dispose();
-      autosaver.current = createHeadAutosaver({
-        store: editor.store,
-        debounceMs: HEAD_AUTOSAVE_DEBOUNCE_MS,
-        // The one place the canvas's editability is set: anything but a
-        // loaded head is read-only, so no edit is made that can't be saved.
-        onStatusChange: (status) => {
-          editor.updateInstanceState({ isReadonly: status !== "ready" });
-          setHeadStatus(status);
-        },
-        save: async (id, document) => {
-          try {
-            const res = await fetch(`/api/diagrams/${id}/head`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(document),
-            });
-            return res.ok;
-          } catch {
-            // Network errors during autosave are non-fatal; the next flush retries.
-            return false;
-          }
-        },
-      });
-
+      // Session changes fire on every pointer move; only a flip is news.
+      let isFocusMode = editor.getInstanceState().isFocusMode;
       editor.store.listen(
         () => {
-          setIsFocusMode(editor.getInstanceState().isFocusMode);
+          const next = editor.getInstanceState().isFocusMode;
+          if (next === isFocusMode) return;
+          isFocusMode = next;
+          dispatch({ type: "focus-mode-changed", isFocusMode });
         },
         { scope: "session" }
       );
 
-      // Load initial diagram from URL param
-      if (diagramId && !initialLoadDone.current) {
-        initialLoadDone.current = true;
-        loadDiagramScene(diagramId);
-      }
+      dispatch({
+        type: "editor-mounted",
+        diagramId: diagramId ?? null,
+        isFocusMode,
+      });
     },
-    [diagramId, loadDiagramScene]
+    [attachEditor, diagramId, dispatch]
   );
 
   const revalidator = useRevalidator();
@@ -455,34 +230,16 @@ export default function DiagramPlaygroundActive({
     [diagramId, diagrams, navigate, revalidator]
   );
 
+  const openDiagramId = state.head?.diagramId;
   const handleCopyDiagramContents = useCallback(
     async (id: string) => {
       // Copying the OPEN diagram reads its stored head like any other, so the
       // debounced save has to land first or the clipboard is up to 500ms stale.
-      if (id === activeDiagramId.current) await flushPendingSave();
+      if (id === openDiagramId) await flushPendingSave();
       await copyDiagramContents(id);
     },
-    [flushPendingSave]
+    [flushPendingSave, openDiagramId]
   );
-
-  const handleCreateDiagram = useCallback(async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      await flushPendingSave();
-      const res = await fetch("/api/diagrams/create", { method: "POST" });
-      if (!res.ok) {
-        toast.error("Failed to create diagram");
-        return;
-      }
-      const { id } = await res.json();
-      navigate(`/diagram-playground/${id}`);
-    } catch {
-      toast.error("Failed to create diagram");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, flushPendingSave, navigate]);
 
   const handleNavigateHome = useCallback(async () => {
     await flushPendingSave();
@@ -493,6 +250,7 @@ export default function DiagramPlaygroundActive({
     navigate("/diagram-playground");
   }, [flushPendingSave, navigate]);
 
+  const { isFocusMode } = state;
   const timelineVisible = diagramId && !isFocusMode;
 
   return (
@@ -508,12 +266,15 @@ export default function DiagramPlaygroundActive({
             shapeUtils={CVM_SHAPE_UTILS}
           />
           {diagramId && (
-            <HeadLoadStatus status={headStatus} onRetry={retryLoad} />
+            <HeadLoadStatus
+              status={state.head?.status ?? "loading"}
+              onRetry={() => dispatch({ type: "retry-load-clicked" })}
+            />
           )}
           {diagramId && (
             <button
               onClick={preserveSnapshot}
-              disabled={preserving}
+              disabled={state.preserving}
               title="Preserve Snapshot"
               aria-label="Preserve Snapshot"
               className="absolute bottom-16 right-2 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 shadow hover:bg-zinc-600 disabled:opacity-50"
@@ -529,16 +290,16 @@ export default function DiagramPlaygroundActive({
             editorRef={editorRef}
             flushPendingSave={flushPendingSave}
             preserveSnapshot={preserveSnapshot}
-            handleRestoreRequest={handleRestoreRequest}
+            handleRestoreRequest={requestRestore}
             handleCopyDiagramContents={handleCopyDiagramContents}
             handleCreateDiagram={handleCreateDiagram}
-            reloadScene={loadDiagramScene}
+            reloadScene={reloadScene}
             recentreDiagram={recentreDiagram}
           />
         )}
         <ConnectionStatusIndicator
-          editorConnected={editorConnected}
-          windowFocused={windowFocused}
+          editorConnected={state.videoEditorConnected}
+          windowFocused={state.windowFocused}
         />
         {diagramId && <DiagramCenteringDebug editorRef={editorRef} />}
       </div>
@@ -552,8 +313,8 @@ export default function DiagramPlaygroundActive({
               <div className="flex-1 overflow-y-auto">
                 <TimelinePanel
                   diagramId={diagramId}
-                  onRestoreRequest={handleRestoreRequest}
-                  refreshKey={refreshKey}
+                  onRestoreRequest={requestRestore}
+                  refreshKey={state.timelineVersion}
                 />
               </div>
             </div>
@@ -566,7 +327,7 @@ export default function DiagramPlaygroundActive({
             <DiagramRail
               diagrams={diagrams}
               activeDiagramId={diagramId}
-              creating={creating}
+              creating={state.creating}
               onNavigateHome={handleNavigateHome}
               onCreateDiagram={handleCreateDiagram}
               onCopyContents={handleCopyDiagramContents}
@@ -576,9 +337,11 @@ export default function DiagramPlaygroundActive({
         </div>
       )}
       <RestoreSnapshotDialog
-        pendingRestore={pendingRestore}
-        onDismiss={() => setPendingRestore(null)}
-        onConfirm={performRestore}
+        pendingRestore={state.pendingRestore}
+        onDismiss={() => dispatch({ type: "restore-dismissed" })}
+        onConfirm={(snapshot) =>
+          dispatch({ type: "restore-confirmed", snapshot })
+        }
       />
     </div>
   );

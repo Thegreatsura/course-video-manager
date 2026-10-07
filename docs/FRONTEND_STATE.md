@@ -42,7 +42,8 @@ The rules:
    `createInitialFooState()`. Existing examples:
    `features/thumbnail-editor/thumbnail-state-reducer.ts`,
    `features/video-editor/video-state-reducer.ts` and `clip-state-reducer.ts`,
-   and `features/course-view/course-view-reducer.ts`.
+   `features/course-view/course-view-reducer.ts` and
+   `features/diagrams/diagram-playground-reducer.ts`.
 2. **Events are facts, not commands.** An event says what happened outside the
    reducer. It never says what state to set. Something the world reports is
    past tense: `photo-captured`, `save-succeeded`,
@@ -77,6 +78,26 @@ The rules:
    subscribes to something and dispatches what it hears (`teleprompter.tsx`,
    `useBrowserLinkCapture` on the edit page). It does not set local state and
    it does not decide anything.
+
+Three situations come up often enough to have a fixed answer
+(`features/diagrams/diagram-playground-reducer.ts` has all three):
+
+- **One I/O must finish before the next starts.** The runner starts every
+  effect from one commit at once and does not wait for any of them. If step 2
+  depends on step 1, either chain them with an outcome event or declare one
+  effect and put the order on it as data (`load-head` with
+  `saveOpenHeadFirst`).
+- **A late outcome.** An outcome event names what it was for (`diagramId`),
+  and the reducer ignores one for something the surface has since left.
+- **A caller that awaits.** If a caller needs a promise back, the hook gives
+  the event a `requestId`, the reducer copies it onto the effect it declares,
+  and the runner resolves that request when the effect is done. The reducer
+  still makes the decision.
+
+`useEffectReducer` re-renders on every dispatch, even when the reducer returns
+the same state. A bridge that listens to a noisy source, such as a tldraw
+session listener that fires on every pointer move, dispatches only when the
+value it reports has changed.
 
 A reducer that never needs effects can use plain `useReducer` (the
 teleprompter's `teleprompterSession.reducer`, the palette's `navReducer`). The
