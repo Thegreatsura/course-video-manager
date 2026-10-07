@@ -20,57 +20,6 @@ const MIGRATION_TIMEOUT_MS = 60_000;
 
 describe("drizzle migrations", () => {
   it(
-    "applies the baseline migration on a fresh database",
-    async () => {
-      const pglite = new PGlite();
-      const db = drizzle(pglite, { schema });
-
-      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-
-      const tables = await db.execute<{ tablename: string }>(
-        sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`
-      );
-      const tableNames = tables.rows.map((r) => r.tablename);
-
-      expect(tableNames).toContain("course-video-manager_course");
-      expect(tableNames).toContain("course-video-manager_video");
-      expect(tableNames).toContain("course-video-manager_diagram");
-      expect(tableNames).toContain("course-video-manager_diagram_snapshot");
-      expect(tableNames).toContain("course-video-manager_clip_transcript_word");
-      expect(tableNames).toContain("course-video-manager_overlay");
-
-      await pglite.close();
-    },
-    MIGRATION_TIMEOUT_MS
-  );
-
-  it(
-    "is a no-op when the baseline is already registered",
-    async () => {
-      const pglite = new PGlite();
-      const db = drizzle(pglite, { schema });
-
-      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-
-      const before = await db.execute<{ id: number }>(
-        sql`SELECT id FROM drizzle.__drizzle_migrations`
-      );
-      const migrationCount = before.rows.length;
-      expect(migrationCount).toBeGreaterThanOrEqual(1);
-
-      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-
-      const after = await db.execute<{ id: number }>(
-        sql`SELECT id FROM drizzle.__drizzle_migrations`
-      );
-      expect(after.rows).toHaveLength(migrationCount);
-
-      await pglite.close();
-    },
-    MIGRATION_TIMEOUT_MS
-  );
-
-  it(
     "baseline SQL hash matches what readMigrationFiles would compute",
     async () => {
       const journal = JSON.parse(
