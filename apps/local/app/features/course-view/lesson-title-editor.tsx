@@ -19,6 +19,29 @@ export function buildLessonNavigateTo({
   return `/courses/${courseId}/sections/${sectionId}#${lessonId}`;
 }
 
+/**
+ * The rename a lesson title edit commits, or null when there is nothing to
+ * save: a blank value, or one that (after trimming) matches the title the
+ * lesson already shows — its path when it has no title.
+ */
+export function buildLessonRenameEvent({
+  value,
+  lesson,
+}: {
+  value: string;
+  lesson: Pick<Lesson, "id" | "title" | "path">;
+}): CourseEditorEvent | null {
+  const newTitle = value.trim();
+  if (newTitle && newTitle !== (lesson.title || lesson.path)) {
+    return {
+      type: "update-lesson-title",
+      lessonId: lesson.id,
+      title: newTitle,
+    };
+  }
+  return null;
+}
+
 export function useLessonTitleEditor({
   lesson,
   submitEvent,
@@ -34,16 +57,10 @@ export function useLessonTitleEditor({
   const saveTitle = useCallback(
     (value: string) => {
       setEditingTitle(false);
-      const newTitle = value.trim();
-      if (newTitle && newTitle !== currentTitle) {
-        submitEvent({
-          type: "update-lesson-title",
-          lessonId: lesson.id,
-          title: newTitle,
-        });
-      }
+      const event = buildLessonRenameEvent({ value, lesson });
+      if (event) submitEvent(event);
     },
-    [lesson, currentTitle, submitEvent]
+    [lesson, submitEvent]
   );
 
   const startEditingTitle = useCallback(() => {
