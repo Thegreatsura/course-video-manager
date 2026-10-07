@@ -12,10 +12,17 @@ import type { Database } from "./drizzle-service.server.js";
  *
  * copy-paths-table-guard.test.ts fails until every table below a path's root
  * is decided here, and holds each decision to what the path really does.
+ * copy-paths.round-trip.test.ts then holds every `copied` table to carrying
+ * every column. A NEW PATH THAT COPIES A CLIP OR A VIDEO BELONGS HERE.
  */
 
 export type CopyDecision = "copied" | { notCopied: string };
-export type CopyPathName = "submit" | "duplicateCourse" | "videoCopy";
+export type CopyPathName =
+  | "submit"
+  | "duplicateCourse"
+  | "videoCopy"
+  | "createVideoFromSelection"
+  | "concatenateVideos";
 
 const NEVER_POSTED =
   "A Video Post records where one Video row was posted. Only standalone " +
@@ -42,6 +49,35 @@ const VERSION_TABLES: Record<string, CopyDecision> = {
   video_post: { notCopied: NEVER_POSTED },
 };
 
+/**
+ * A Clip and everything that hangs off it. Every path that copies a Clip
+ * copies all of these, through `copyClipChildren` in copy-child-rows.ts.
+ */
+const CLIP_TABLES: Record<string, CopyDecision> = {
+  clip: "copied",
+  clip_web_link: "copied",
+  clip_transcript_word: "copied",
+  overlay: "copied",
+};
+
+const NOT_THE_TIMELINE =
+  "This path builds a new Video out of filmed Clips and their Chapters only. " +
+  "The source's plan (Beats, the Animatic) and its Thumbnail describe the " +
+  "whole source Video, not the part of its timeline that was copied.";
+
+/** Every table below a Video, for the paths that copy only its timeline. */
+const TIMELINE_TABLES: Record<string, CopyDecision> = {
+  ...CLIP_TABLES,
+  chapter: "copied",
+  beat: { notCopied: NOT_THE_TIMELINE },
+  beat_learning_goal: { notCopied: NOT_THE_TIMELINE },
+  clip_mockup: { notCopied: NOT_THE_TIMELINE },
+  clip_mockup_chapter: { notCopied: NOT_THE_TIMELINE },
+  clip_mockup_comment: { notCopied: NOT_THE_TIMELINE },
+  thumbnail: { notCopied: NOT_THE_TIMELINE },
+  video_post: { notCopied: NEVER_POSTED },
+};
+
 export const COPY_PATHS: Record<
   CopyPathName,
   { root: PgTable; tables: Record<string, CopyDecision> }
@@ -51,10 +87,7 @@ export const COPY_PATHS: Record<
   videoCopy: {
     root: schema.videos,
     tables: {
-      clip: "copied",
-      clip_web_link: "copied",
-      clip_transcript_word: "copied",
-      overlay: "copied",
+      ...CLIP_TABLES,
       chapter: "copied",
       beat: "copied",
       beat_learning_goal: "copied",
@@ -70,6 +103,10 @@ export const COPY_PATHS: Record<
       video_post: { notCopied: NEVER_POSTED },
     },
   },
+  /** The video editor's "Create video from selection", copy or move. */
+  createVideoFromSelection: { root: schema.videos, tables: TIMELINE_TABLES },
+  /** POST /api/videos/concatenate: many Videos' timelines into a new one. */
+  concatenateVideos: { root: schema.videos, tables: TIMELINE_TABLES },
 };
 
 // ---------------------------------------------------------------------------

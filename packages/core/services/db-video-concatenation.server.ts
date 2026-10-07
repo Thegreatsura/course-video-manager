@@ -1,11 +1,13 @@
-import { clips, chapters } from "@/db/schema";
-import { compareOrderStrings } from "@/lib/sort-by-order";
+import { and, eq, inArray } from "drizzle-orm";
+import { clips, chapters } from "../db/schema.js";
+import { compareOrderStrings } from "../lib/sort-by-order.js";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
-import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { DrizzleService } from "@/services/drizzle-service.server";
-import { UnknownDBServiceError } from "@/services/db-service-errors";
-import type { VideoFormat } from "@/features/videos/video-format";
+import { VideoOperationsService } from "./db-video-operations.server.js";
+import { DrizzleService } from "./drizzle-service.server.js";
+import { UnknownDBServiceError } from "./db-service-errors.js";
+import type { VideoFormat } from "../features/videos/video-format.js";
+import { clipChildrenWith, copyClipsOntoVideo } from "./copy-child-rows.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -20,6 +22,11 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
  * For each source video, all non-archived clips and chapters are copied in order.
  * Boundary chapters are inserted between each source video, named after the source.
  * The resulting video is a normal standalone video (null lessonId).
+ *
+ * A copied Clip carries everything that hangs off it (Transcript Words, Clip
+ * Web Links, Overlays) through `copyClipsOntoVideo`; which tables below a
+ * Video this path copies is COPY_PATHS.concatenateVideos in
+ * version-copy-manifest.ts.
  *
  * `format` is the Video Format the new Video is created with. It is REQUIRED:
  * the format drives the export frame dimensions, so a concatenation that
@@ -65,8 +72,21 @@ export const concatenateVideos = Effect.fn("concatenateVideos")(
         );
       }
 
-      // Get all non-archived clips and chapters, sorted together
-      const sourceClips = sourceVideo.clips; // already sorted by order, non-archived
+      // The Video's non-archived Clips, reloaded with what hangs off each
+      // one so the copy carries it, then sorted together with its Chapters.
+      const sourceClipIds = sourceVideo.clips.map((c) => c.id);
+      const sourceClips =
+        sourceClipIds.length === 0
+          ? []
+          : yield* makeDbCall(() =>
+              db.query.clips.findMany({
+                where: and(
+                  eq(clips.videoId, sourceVideoId),
+                  inArray(clips.id, sourceClipIds)
+                ),
+                with: clipChildrenWith,
+              })
+            );
       const sourceChapters = sourceVideo.chapters; // already sorted by order, non-archived
 
       const allItems = [
@@ -90,39 +110,42 @@ export const concatenateVideos = Effect.fn("concatenateVideos")(
           allItems.length
         );
 
-        for (let j = 0; j < allItems.length; j++) {
-          const entry = allItems[j]!;
-          const newOrder = newOrders[j]!;
+        const placed = allItems.map((entry, j) => ({
+          ...entry,
+          newOrder: newOrders[j]!,
+        }));
 
-          if (entry.type === "clip") {
-            const clip = entry.item;
-            yield* makeDbCall(() =>
-              db.insert(clips).values({
-                videoId: newVideo.id,
-                videoFilename: clip.videoFilename,
-                sourceStartTime: clip.sourceStartTime,
-                sourceEndTime: clip.sourceEndTime,
-                order: newOrder,
-                archived: false,
-                text: clip.text,
-                transcribedAt: clip.transcribedAt,
-                scene: clip.scene,
-                profile: clip.profile,
-                pauseType: clip.pauseType,
-                zoomType: clip.zoomType,
-              })
-            );
-          } else {
-            const section = entry.item;
-            yield* makeDbCall(() =>
-              db.insert(chapters).values({
-                videoId: newVideo.id,
-                name: section.name,
-                order: newOrder,
-                archived: false,
-              })
-            );
-          }
+        yield* makeDbCall(() =>
+          copyClipsOntoVideo(
+            db,
+            placed.flatMap((entry) =>
+              entry.type === "clip"
+                ? [
+                    {
+                      clip: entry.item,
+                      videoId: newVideo.id,
+                      order: entry.newOrder,
+                    },
+                  ]
+                : []
+            )
+          )
+        );
+
+        const chapterValues = placed.flatMap((entry) =>
+          entry.type === "chapter"
+            ? [
+                {
+                  videoId: newVideo.id,
+                  name: entry.item.name,
+                  order: entry.newOrder,
+                  archived: false,
+                },
+              ]
+            : []
+        );
+        if (chapterValues.length > 0) {
+          yield* makeDbCall(() => db.insert(chapters).values(chapterValues));
         }
 
         prevOrder = newOrders[newOrders.length - 1]!;

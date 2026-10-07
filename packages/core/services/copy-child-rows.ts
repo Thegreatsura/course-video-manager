@@ -1,6 +1,7 @@
 import type { PgInsertValue, PgTable } from "drizzle-orm/pg-core";
 import {
   beatLearningGoals,
+  clips,
   clipTranscriptWords,
   clipWebLinks,
   learningGoals,
@@ -44,6 +45,9 @@ const CHUNK = 1000;
 
 /** Anything that can insert: the database itself or an open transaction. */
 type Inserter = Pick<Database, "insert">;
+
+/** A Clip row loaded with `clipChildrenWith`. */
+export type ClipToCopy = typeof clips.$inferSelect & ClipWithChildren;
 
 export const insertInChunks = async <T extends PgTable>(
   tx: Inserter,
@@ -140,4 +144,55 @@ export const copyClipChildren = async (
       clipIds
     )
   );
+};
+
+/**
+ * Copies Clips onto a Video, each at the place given, with every row that
+ * hangs off them. For the Video-level copies — the Video copy, Create video
+ * from selection, Video concatenation — so none of them hand-lists what a
+ * Clip is made of. Every Clip column but its identity and its place comes from
+ * spreading the source row, so a Clip column added later travels with no edit
+ * here; a Clip child table added later fails copy-paths-table-guard.test.ts
+ * until `copyClipChildren` carries it.
+ *
+ * Returns the source -> copy Clip id map.
+ */
+export const copyClipsOntoVideo = async (
+  tx: Inserter,
+  placements: ReadonlyArray<{
+    readonly clip: ClipToCopy;
+    readonly videoId: string;
+    readonly order: string;
+  }>
+): Promise<ReadonlyMap<string, string>> => {
+  const clipIds = new Map(
+    placements.map(({ clip }) => [clip.id, crypto.randomUUID()] as const)
+  );
+  await insertInChunks(
+    tx,
+    clips,
+    placements.map(({ clip, videoId, order }) => {
+      const {
+        id,
+        createdAt: _createdAt,
+        webLinks: _webLinks,
+        transcriptWords: _transcriptWords,
+        overlays: _overlays,
+        ...carried
+      } = clip;
+      return {
+        ...carried,
+        id: clipIds.get(id)!,
+        videoId,
+        order,
+        archived: false,
+      };
+    })
+  );
+  await copyClipChildren(
+    tx,
+    placements.map(({ clip }) => clip),
+    clipIds
+  );
+  return clipIds;
 };

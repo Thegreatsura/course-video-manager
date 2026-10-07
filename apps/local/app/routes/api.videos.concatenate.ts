@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { concatenateVideos } from "@/services/video-concatenation-service";
+import { concatenateVideos } from "@/services/db-video-concatenation.server";
 import { makeAction } from "@/services/route-action.server";
 import { data } from "react-router";
 import { VIDEO_FORMATS } from "@/features/videos/video-format";

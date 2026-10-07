@@ -4,6 +4,9 @@ import { VersionOperationsService } from "./db-version-operations.server.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
 import { copyVideoImpl } from "./db-video-operations.copy.server.js";
+import { createVideoFromSelectionImpl } from "./db-video-from-selection.server.js";
+import { concatenateVideos } from "./db-video-concatenation.server.js";
+import { VideoOperationsService } from "./db-video-operations.server.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -19,7 +22,7 @@ import {
 } from "./version-copy-manifest.js";
 
 /**
- * The TABLE-level copy guard, for all three copy paths. Hand-listed column
+ * The TABLE-level copy guard, for every copy path in COPY_PATHS. Hand-listed column
  * guards (db-duplicate-course-drift.test.ts) only see tables a path already
  * copies, which is how six child tables went uncopied by every path unnoticed.
  * Submit also has a schema-generated round trip
@@ -28,7 +31,7 @@ import {
  *
  * This one derives, from the Drizzle schema's foreign keys, every table that
  * hangs below each copy path's root — a Course Version for Submit and
- * duplicateCourse, a Video for the Video copy — and demands a decision for
+ * duplicateCourse, a Video for the Video-level paths — and demands a decision for
  * each in version-copy-manifest.ts: `copied`, or `notCopied` with the reason. A new child table fails here
  * until someone decides. The end-to-end test then holds each decision to the
  * truth: a `copied` table must have rows under the copy, a `notCopied` one none.
@@ -38,11 +41,17 @@ import {
 
 let testDb: TestDb;
 let versionLayer: Layer.Layer<VersionOperationsService>;
+let videoLayer: Layer.Layer<VideoOperationsService | DrizzleService>;
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
   versionLayer = VersionOperationsService.Default.pipe(
     Layer.provide(Layer.succeed(DrizzleService, testDb as any))
+  );
+  const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
+  videoLayer = Layer.mergeAll(
+    VideoOperationsService.Default.pipe(Layer.provide(drizzleLayer)),
+    drizzleLayer
   );
 });
 
@@ -174,12 +183,43 @@ const RUN_PATH: Record<
         renameOld: true,
       })
     ),
+  createVideoFromSelection: async ({ video }) => {
+    const [clips, chapters] = await Promise.all([
+      testDb.query.clips.findMany({
+        where: (c, { eq }) => eq(c.videoId, video.id),
+      }),
+      testDb.query.chapters.findMany({
+        where: (c, { eq }) => eq(c.videoId, video.id),
+      }),
+    ]);
+    const copy = await Effect.runPromise(
+      createVideoFromSelectionImpl(db(), {
+        sourceVideoId: video.id,
+        clipIds: clips.map((c) => c.id),
+        chapterIds: chapters.map((c) => c.id),
+        title: "Selection",
+        mode: "copy",
+      })
+    );
+    return copy.id;
+  },
+  concatenateVideos: async ({ video }) => {
+    const copy = await Effect.runPromise(
+      concatenateVideos({
+        name: "Joined",
+        sourceVideoIds: [video.id],
+        format: "landscape",
+      }).pipe(Effect.provide(videoLayer))
+    );
+    return copy.id;
+  },
 };
 
 const sourceRootId = (
   path: PathName,
   seed: Awaited<ReturnType<typeof seedEveryTable>>
-) => (path === "videoCopy" ? seed.video.id : seed.version.id);
+) =>
+  COPY_PATHS[path].root === schema.videos ? seed.video.id : seed.version.id;
 
 describe("copy paths — table-level guard", () => {
   for (const [path, spec] of Object.entries(COPY_PATHS) as Array<
