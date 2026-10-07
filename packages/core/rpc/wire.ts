@@ -49,6 +49,7 @@ const ERROR_CONSTRUCTORS: Record<
   VersionNotDraftError: DomainErrors.VersionNotDraftError,
   VersionNotPendingError: DomainErrors.VersionNotPendingError,
   PendingVersionExistsError: DomainErrors.PendingVersionExistsError,
+  VersionCopyIncompleteError: DomainErrors.VersionCopyIncompleteError,
   CourseNameTakenError: DomainErrors.CourseNameTakenError,
   SectionPathTakenError: DomainErrors.SectionPathTakenError,
   LessonPathTakenError: DomainErrors.LessonPathTakenError,

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
-import { getTableName, is, sql } from "drizzle-orm";
-import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { VersionOperationsService } from "./db-version-operations.server.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
@@ -12,169 +10,29 @@ import {
   type TestDb,
 } from "../test-utils/pglite.js";
 import * as schema from "../db/schema.js";
+import {
+  COPY_PATHS,
+  countLiveBelow,
+  shortName,
+  tablesBelow,
+  type CopyPathName as PathName,
+} from "./version-copy-manifest.js";
 
 /**
- * The TABLE-level copy guard. The column guards (db-version-copy.test.ts,
- * db-duplicate-course-drift.test.ts) only see tables a path already copies,
- * which is how six child tables went uncopied by every path unnoticed.
+ * The TABLE-level copy guard, for all three copy paths. Hand-listed column
+ * guards (db-duplicate-course-drift.test.ts) only see tables a path already
+ * copies, which is how six child tables went uncopied by every path unnoticed.
+ * Submit also has a schema-generated round trip
+ * (db-version-copy.round-trip.test.ts) and checks itself at runtime
+ * (version-copy-check.server.ts).
  *
  * This one derives, from the Drizzle schema's foreign keys, every table that
  * hangs below each copy path's root — a Course Version for Submit and
  * duplicateCourse, a Video for the Video copy — and demands a decision for
- * each: `copied`, or `notCopied` with the reason. A new child table fails here
+ * each in version-copy-manifest.ts: `copied`, or `notCopied` with the reason. A new child table fails here
  * until someone decides. The end-to-end test then holds each decision to the
  * truth: a `copied` table must have rows under the copy, a `notCopied` one none.
  */
-
-type Decision = "copied" | { notCopied: string };
-type PathName = "submit" | "duplicateCourse" | "videoCopy";
-
-const NEVER_POSTED =
-  "A Video Post records where one Video row was posted. Only standalone " +
-  "Shorts are posted, and they never sit in a Course; a copied Video has " +
-  "never been posted anywhere.";
-
-const COPY_PATHS: Record<
-  PathName,
-  { root: PgTable; tables: Record<string, Decision> }
-> = {
-  submit: {
-    root: schema.courseVersions,
-    tables: {
-      section: "copied",
-      learning_goal: "copied",
-      lesson: "copied",
-      video: "copied",
-      clip: "copied",
-      clip_web_link: "copied",
-      clip_transcript_word: "copied",
-      overlay: "copied",
-      chapter: "copied",
-      beat: "copied",
-      beat_learning_goal: "copied",
-      clip_mockup: "copied",
-      clip_mockup_chapter: "copied",
-      clip_mockup_comment: "copied",
-      thumbnail: "copied",
-      video_post: { notCopied: NEVER_POSTED },
-    },
-  },
-  duplicateCourse: {
-    root: schema.courseVersions,
-    tables: {
-      section: "copied",
-      learning_goal: "copied",
-      lesson: "copied",
-      video: "copied",
-      clip: "copied",
-      clip_web_link: "copied",
-      clip_transcript_word: "copied",
-      overlay: "copied",
-      chapter: "copied",
-      beat: "copied",
-      beat_learning_goal: "copied",
-      clip_mockup: "copied",
-      clip_mockup_chapter: "copied",
-      clip_mockup_comment: "copied",
-      thumbnail: "copied",
-      video_post: { notCopied: NEVER_POSTED },
-    },
-  },
-  videoCopy: {
-    root: schema.videos,
-    tables: {
-      clip: "copied",
-      clip_web_link: "copied",
-      clip_transcript_word: "copied",
-      overlay: "copied",
-      chapter: "copied",
-      beat: "copied",
-      beat_learning_goal: "copied",
-      clip_mockup: "copied",
-      clip_mockup_chapter: "copied",
-      clip_mockup_comment: "copied",
-      thumbnail: {
-        notCopied:
-          "Thumbnail PNG paths are keyed by the source Video's lineage " +
-          "(#1674) and this path neither rebases nor moves them, so verbatim " +
-          "rows would alias the source's files. A copy starts without one.",
-      },
-      video_post: { notCopied: NEVER_POSTED },
-    },
-  },
-};
-
-// ---------------------------------------------------------------------------
-// The FK graph, read from the schema.
-
-const PREFIX = "course-video-manager_";
-const ALL_TABLES: PgTable[] = (Object.values(schema) as unknown[]).filter(
-  (value): value is PgTable => is(value, PgTable)
-);
-const shortName = (table: PgTable) => getTableName(table).replace(PREFIX, "");
-
-type Edge = { from: PgTable; column: string; to: PgTable; toColumn: string };
-
-const parentEdges = (table: PgTable): Edge[] =>
-  getTableConfig(table).foreignKeys.flatMap((fk) => {
-    const ref = fk.reference();
-    const to = ref.foreignTable;
-    return to === table
-      ? []
-      : [
-          {
-            from: table,
-            column: ref.columns[0]!.name,
-            to,
-            toColumn: ref.foreignColumns[0]!.name,
-          },
-        ];
-  });
-
-/** Shortest chain of foreign keys from `table` up to `root`, if any. */
-const pathToRoot = (table: PgTable, root: PgTable): Edge[] | undefined => {
-  const queue: Array<{ at: PgTable; path: Edge[] }> = [{ at: table, path: [] }];
-  const seen = new Set<PgTable>([table]);
-  while (queue.length > 0) {
-    const { at, path } = queue.shift()!;
-    for (const edge of parentEdges(at)) {
-      if (edge.to === root) return [...path, edge];
-      if (seen.has(edge.to)) continue;
-      seen.add(edge.to);
-      queue.push({ at: edge.to, path: [...path, edge] });
-    }
-  }
-  return undefined;
-};
-
-const tablesBelow = (root: PgTable) =>
-  ALL_TABLES.filter((t) => t !== root && pathToRoot(t, root));
-
-const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
-
-/** How many `table` rows hang below the root row `rootId`. */
-const countBelow = async (
-  db: TestDb,
-  table: PgTable,
-  root: PgTable,
-  rootId: string
-) => {
-  const path = pathToRoot(table, root)!;
-  const joins = path
-    .slice(0, -1)
-    .map(
-      (edge, i) =>
-        `JOIN ${quote(getTableName(edge.to))} t${i + 1} ON t${i}.${quote(edge.column)} = t${i + 1}.${quote(edge.toColumn)}`
-    )
-    .join(" ");
-  const last = path[path.length - 1]!;
-  const { rows } = await db.execute<{ n: number }>(
-    sql`${sql.raw(
-      `SELECT count(*)::int AS n FROM ${quote(getTableName(table))} t0 ${joins} WHERE t${path.length - 1}.${quote(last.column)} = `
-    )}${rootId}`
-  );
-  return rows[0]!.n;
-};
 
 // ---------------------------------------------------------------------------
 
@@ -341,7 +199,12 @@ describe("copy paths — table-level guard", () => {
       // A table with no source row could never fail the check below.
       for (const table of below) {
         expect(
-          await countBelow(testDb, table, spec.root, sourceRootId(path, seed)),
+          await countLiveBelow(
+            db(),
+            table,
+            spec.root,
+            sourceRootId(path, seed)
+          ),
           `seedEveryTable() leaves "${shortName(table)}" empty — give it a row`
         ).toBeGreaterThan(0);
       }
@@ -350,7 +213,7 @@ describe("copy paths — table-level guard", () => {
 
       for (const table of below) {
         const name = shortName(table);
-        const copied = await countBelow(testDb, table, spec.root, copyRootId);
+        const copied = await countLiveBelow(db(), table, spec.root, copyRootId);
         if (spec.tables[name] === "copied") {
           expect(copied, `${path} did not copy "${name}"`).toBeGreaterThan(0);
         } else {
