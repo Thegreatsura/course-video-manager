@@ -10,6 +10,7 @@
  *   togglePlay      →  /api/teleprompter-toggle-play                  ·  P
  *   reset           →  /api/teleprompter-reset                        ·  R
  * */
+import { STREAM_DECK_HUB_URL } from "@/lib/live-channels";
 import { useEffect, useRef } from "react";
 import { streamDeckForwarderMessageSchema } from "stream-deck-forwarder/stream-deck-forwarder-types";
 import { teleprompterChannel } from "@/lib/teleprompter-protocol";
@@ -35,7 +36,7 @@ export function useTeleprompterActions(actions: TeleprompterActions) {
 
     const connect = () => {
       if (closed) return;
-      socket = new WebSocket("ws://localhost:5172");
+      socket = new WebSocket(STREAM_DECK_HUB_URL);
       socket.addEventListener("message", (event) => {
         let json: unknown;
         try {

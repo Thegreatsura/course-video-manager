@@ -10,7 +10,7 @@ set -uo pipefail
 
 # Supplied by the runtime or by the workflow that spawns the process, never
 # by .env: OUTPUT_DIR and TSX_TSCONFIG_PATH belong to the .sandcastle harness.
-RUNTIME_KEYS=(CI NODE_ENV VITEST OUTPUT_DIR TSX_TSCONFIG_PATH)
+RUNTIME_KEYS=(CI NODE_ENV VITEST OUTPUT_DIR TSX_TSCONFIG_PATH PATH)
 
 # Known gaps, from before this check existed. THIS LIST ONLY SHRINKS — document
 # the key in .env.example and delete its line here. Do not add one.

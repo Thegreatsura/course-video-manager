@@ -1,3 +1,4 @@
+import { OBS_WEBSOCKET_URL } from "@/lib/live-channels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OBSWebSocket } from "obs-websocket-js";
 import { CameraIcon, RefreshCwIcon } from "lucide-react";
@@ -35,7 +36,7 @@ function useOBSCameraStream(active: boolean) {
     (async () => {
       // Try to connect to OBS and start virtual camera
       try {
-        await websocket.connect("ws://localhost:4455");
+        await websocket.connect(OBS_WEBSOCKET_URL);
         await websocket.call("StartVirtualCam");
       } catch {
         // OBS might not be running or virtual cam already started — continue anyway

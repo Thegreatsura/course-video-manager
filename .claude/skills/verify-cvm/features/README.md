@@ -27,4 +27,4 @@ Ids that exist in Matt's data today, and so in every clone:
 - Course `AI Coding Crash Course` — `50385098-a712-486f-b777-1f76ef31e9e5`
 
 Confirm they still exist rather than trusting this list; read the hrefs off the
-sidebar with `agent-browser snapshot -i -u -d 2`.
+sidebar with `$AB snapshot -i -u -d 2`.

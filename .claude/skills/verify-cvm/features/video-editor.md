@@ -21,8 +21,8 @@ Course View.
 ## Driving it with agent-browser
 
 ```bash
-# $BASE and $AB come from the skill's launch step — this run's port and session.
-$AB open "$BASE/videos/<videoId>/edit"
+# AB="$V ab <run>" from the skill's launch step — this run's own browser and server.
+$AB open "/videos/<videoId>/edit"
 $AB wait --load networkidle
 $AB find role button click --name "BEATS"
 $AB snapshot -i -c -d 3
@@ -31,7 +31,7 @@ $AB snapshot -i -c -d 3
 Get a `<videoId>` off the Shorts list:
 
 ```bash
-$AB open "$BASE/shorts"
+$AB open "/shorts"
 $AB snapshot -i -u -d 2 | grep -oE 'videos/[0-9a-f-]{36}' | head -1
 ```
 

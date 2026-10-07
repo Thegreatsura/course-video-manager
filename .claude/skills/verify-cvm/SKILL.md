@@ -104,57 +104,65 @@ checkout or any sibling worktree — so you never need to tidy someone else's.
 
 **Verification runs live in 5200-5299, and the CVM never does.** The CVM owns
 5170-5199 — 5172 is the Stream Deck forwarder hub, 5173 Matt's own dev server,
-5174 the forwarder's HTTP side — and its dev server is pinned to 5173 so it can
-never drift upward into your band. `launch` takes the first free port of the
-verification band, asks for exactly it, and refuses a server that comes up
-anywhere else. It prints the port along with the **run directory** that holds
-the pid, the port, the browser session name, the server log and all your
-evidence:
+5174 the forwarder's HTTP side. `launch` takes a free port of the verification
+band, asks for exactly it, and refuses a server that comes up anywhere else.
+
+`launch` prints the **run id** (alone on stdout) and where everything lands:
 
 ```text
-DB: test clone cvm_verify_20260925_160913_1328614 (writes allowed, dropped on cleanup)
-ready:   http://localhost:5203/  (pid 1328618)
-run:     /…/.verify/run-20260925-160913-1328614
-session: verify-cvm-20260925-160913-1328614
-export VERIFY_RUN=/…/.verify/run-20260925-160913-1328614
+DB: test clone cvm_verify_20261007_143020_2714708 (writes allowed, dropped on cleanup)
+ready:    http://localhost:5200/  (pid 2715404)
+session:  verify-cvm-20261007-143020-2714708
+evidence: /…/<your worktree>/.verify/run-20261007-143020-2714708
+run id:   20261007-143020-2714708   <- pass it to every later verb
 ```
 
-**Run that `export` line.** Every later verb needs to know which run you mean.
+## Your run id is the only handle
 
-Then take the two addresses from the harness rather than writing them down:
+**Every verb after `launch` takes the run id as its first argument** —
+`$V <verb> <run> …`. There is no default run, no "latest", no environment
+variable: a verb without an id fails, and so does an id this worktree did not
+launch. Shell variables do not survive between your commands, so write the id
+out in each one:
 
 ```bash
-export VERIFY_RUN=<the directory launch printed>
-BASE=$($V url)                              # http://localhost:<this run's port>
-AB="agent-browser --session $($V session)"  # this run's own browser
+AB="$V ab 20261007-143020-2714708"   # this run's browser, pinned to this run's server
+$AB open /                           # a path opens on this run's server
+$V shot 20261007-143020-2714708 01-home      # → <evidence>/01-home.png
+$V snap 20261007-143020-2714708 01-home -i -c -d 3   # → <evidence>/01-home.snapshot.txt
 ```
 
-### Several runs at once
+A run belongs to the worktree that launched it: its evidence directory is
+`<worktree>/.verify/run-<id>/` and it records that worktree, so a command from
+any other checkout refuses it. `ab` refuses `--session`, `--profile` and
+`close --all`, and any `localhost` URL on a port that is not this run's. Each
+run has its own port, browser session, database and evidence directory, so
+parallel runs never meet. A run is also cut off from Matt's desk: its pages
+point the Stream Deck hub and OBS at a dead port, so his button presses never
+reach a run's editor and nothing a run does reaches his — Stream Deck and OBS
+behaviour cannot be verified here. Keep your own logs in the evidence directory too
+(`$V dir <run>`), never shared `/tmp`.
 
-Runs are independent by construction: each has its own port out of 5200-5299,
-its own browser session, its own database and its own evidence directory. There
-is no shared "current run" pointer, so launching a second one never disturbs
-the first. With more than one run live, every verb **requires `VERIFY_RUN`** and
-refuses to guess; with exactly one, it finds it for you.
+`.verify/` goes when your worktree does: copy the evidence directory out first
+if your report must outlive it.
 
 ## Doctor
 
 Run it after launch, and again the moment anything looks wrong:
 
 ```bash
-$V doctor
+$V doctor <run>
 ```
 
 It reports, read-only: the server process alive, the run's port outside the
-CVM's band, the port owned by _this_ run's pid, `/` answering 200, which database the run is on (`DB: test clone …` or
-`DB: PRODUCTION …`), psql reaching it,
-and which other verification runs are live. Any FAIL means stop and fix — a
-snapshot taken against someone else's server proves nothing.
+CVM's band, the port owned by _this_ run's pid, `/` answering 200, which
+database the run is on (`DB: test clone …` or `DB: PRODUCTION …`), psql
+reaching it, and which other verification runs are live. Any FAIL means stop
+and fix — a snapshot taken against someone else's server proves nothing.
 
-**Drive only the port your own run reports.** 5173 is Matt's CVM: it runs all
-day against the production database, and driving it would type into the
-window he is looking at. `doctor` fails outright on any port in 5170-5199 for
-that reason. Other ports in the verification band belong to sibling runs.
+**Never drive a port by hand.** 5173 is Matt's CVM, running all day against
+production; other ports in 5200-5299 are sibling runs. `$V ab <run>` only goes
+to your own.
 
 ## Drive
 
@@ -165,11 +173,11 @@ driving:
 agent-browser skills get core
 ```
 
-Always go through `$AB` and `$BASE` from the launch step, so your browser and
-your server are both this run's:
+Always go through `$AB` (`$V ab <run>`), never `agent-browser` directly, so
+your browser and your server are both this run's:
 
 ```bash
-$AB open "$BASE/"
+$AB open /
 $AB snapshot -i -c -d 4
 ```
 
@@ -197,10 +205,10 @@ the same behaviour.
 Open the window before you drive, close it after:
 
 ```bash
-$V guard baseline     # before the first browser command
+$V guard <run> baseline     # before the first browser command
 # ... drive ...
-$V guard check        # writes WRITE-LEDGER.md into the run directory
-$V guard forensics course-video-manager_pitch   # name the rows behind a line
+$V guard <run> check        # writes WRITE-LEDGER.md into the evidence directory
+$V guard <run> forensics course-video-manager_pitch   # name the rows behind a line
 ```
 
 **The Ledger never says "clean" on a guess.** It used to read
@@ -294,16 +302,16 @@ DB: PRODUCTION (read-only: the server cannot write)
 
 ## Evidence
 
-Everything lands in the run directory `launch` printed. What makes it a proof:
+Everything lands in the evidence directory `launch` printed (`$V dir <run>`). What makes it a proof:
 
 - **The real user path.** Reach a feature the way Matt reaches it — the route,
   the button. An internal API call you crafted proves the API, not the app.
 - **The action and its result.** Capture the state before your action and the
-  state after, not only the final screen. `$AB screenshot "$VERIFY_RUN/<step>.png"`
-  and `$AB snapshot -i -c > "$VERIFY_RUN/<step>.snapshot.txt"`.
+  state after, not only the final screen: `$V shot <run> <step>` and
+  `$V snap <run> <step> -i -c`.
 - **The side effect too.** A page that looks right over a row that did not
   change is a failure. Check the Ledger, and read the row back where the change
-  was meant to persist: `$V sql 'select … from "course-video-manager_video"
+  was meant to persist: `$V sql <run> 'select … from "course-video-manager_video"
 where …'` (or the query on stdin). It reads this run's clone, read-only, and
   logs the query and result to `sql.log` in the run directory. **Do not use
   `cvm` to read a clone's rows** — it reads production through the deployed
@@ -318,8 +326,8 @@ to follow what you did.
 ## Cleanup
 
 ```bash
-$V cleanup          # this run
-$V cleanup --all    # every live run on the box
+$V cleanup <run>     # this run
+$V cleanup --all     # every live run this worktree launched
 ```
 
 It kills the pid this run recorded — never a process matched by name, which
@@ -327,8 +335,8 @@ would take Matt's server and every sibling run with it — closes this run's
 browser session, **drops the run's clone**, and leaves the rest alone. `--all`
 also sweeps the clones crashed runs left behind (as every `launch` does): any
 whose run is no longer live, in any worktree, and any unclaimed, unconnected
-`cvm_verify_*` database over six hours old. **The evidence survives**: the run
-directory is left whole, and its path is printed. Quote that path in your
+`cvm_verify_*` database over six hours old. A sibling worktree's live run is
+never touched. **The evidence survives**: the run directory is left whole, and its path is printed. Quote that path in your
 report.
 
 Run cleanup after a failed attempt too, so a broken run leaves no server holding

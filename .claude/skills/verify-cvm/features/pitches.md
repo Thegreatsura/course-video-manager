@@ -18,8 +18,8 @@ The `Pitches` entry in the sidebar rail.
 ## Driving it with agent-browser
 
 ```bash
-# $BASE and $AB come from the skill's launch step — this run's port and session.
-$AB open "$BASE/pitches"
+# AB="$V ab <run>" from the skill's launch step — this run's own browser and server.
+$AB open "/pitches"
 $AB wait --load networkidle
 $AB find role button click --name "P1"
 $AB snapshot -i -c -d 3

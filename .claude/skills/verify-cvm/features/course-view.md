@@ -25,9 +25,9 @@ Matt clicks the course name in the sidebar rail.
 Navigate by URL — the sidebar rail does not respond to a click:
 
 ```bash
-# $BASE and $AB come from the skill's launch step — this run's port and session.
+# AB="$V ab <run>" from the skill's launch step — this run's own browser and server.
 $AB snapshot -i -u -d 2 | grep -i "<course name>"   # read the href
-$AB open "$BASE/courses/<courseId>"
+$AB open "/courses/<courseId>"
 $AB wait --load networkidle
 ```
 
