@@ -1,3 +1,4 @@
+import { STREAM_DECK_HUB_URL } from "@/lib/live-channels";
 import { useEffect } from "react";
 import { browserEventMessageSchema } from "stream-deck-forwarder/stream-deck-forwarder-types";
 import type { BrowserLinkEvent } from "@/lib/clip-web-link";
@@ -19,7 +20,7 @@ export function useBrowserLinkCapture(
   onEvent: (event: BrowserLinkEvent) => void
 ) {
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:5172");
+    const socket = new WebSocket(STREAM_DECK_HUB_URL);
     socket.addEventListener("message", (event) => {
       let json: unknown;
       try {

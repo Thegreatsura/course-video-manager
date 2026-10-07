@@ -17,8 +17,8 @@ The `Shorts` and `Videos` entries in the sidebar rail.
 ## Driving it with agent-browser
 
 ```bash
-# $BASE and $AB come from the skill's launch step — this run's port and session.
-$AB open "$BASE/shorts"
+# AB="$V ab <run>" from the skill's launch step — this run's own browser and server.
+$AB open "/shorts"
 $AB wait --load networkidle
 $AB snapshot -i -c -d 3
 ```

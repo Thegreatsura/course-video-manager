@@ -3,16 +3,25 @@
 #
 #   verify.sh mode [--production]    which database `launch` would use (no connection)
 #   verify.sh template          does the template exist, and how old is it (local Postgres only)
-#   verify.sh launch [--production]  start a verification server, print its run directory
-#   verify.sh url               base URL of the run's server
-#   verify.sh session           agent-browser session name for the run
-#   verify.sh doctor            read-only "is this instance worth driving?" check
-#   verify.sh guard baseline    open the Write Ledger window
-#   verify.sh guard check       close it, write WRITE-LEDGER.md (exact: clone triggers + app SQL log)
-#   verify.sh guard forensics <table> [since]
+#   verify.sh launch [--production]  start a verification server, print its RUN ID
+#
+# Every verb below takes that run id as its first argument. There is no default
+# run, no "latest", no environment variable: no id, no command.
+#   verify.sh url <run>         base URL of the run's server
+#   verify.sh dir <run>         the run's evidence directory
+#   verify.sh session <run>     agent-browser session name for the run
+#   verify.sh ab <run> <agent-browser args…>
+#                               drive the run's own browser (relative URLs go to its server)
+#   verify.sh shot <run> <name> [args]   screenshot into <evidence>/<name>.png
+#   verify.sh snap <run> <name> [args]   snapshot into <evidence>/<name>.snapshot.txt
+#   verify.sh doctor <run>      read-only "is this instance worth driving?" check
+#   verify.sh guard <run> baseline   open the Write Ledger window
+#   verify.sh guard <run> check      close it, write WRITE-LEDGER.md (exact: clone triggers + app SQL log)
+#   verify.sh guard <run> forensics <table> [since]
 #                               name the rows that moved in one table
-#   verify.sh sql "<query>"     read back from this run's test clone (test-clone mode only)
-#   verify.sh cleanup [--all]   stop what this run started, drop its clone, keep the evidence
+#   verify.sh sql <run> "<query>"    read back from this run's test clone (test-clone mode only)
+#   verify.sh cleanup <run>     stop what this run started, drop its clone, keep the evidence
+#   verify.sh cleanup --all     the same for every live run THIS worktree launched
 #
 # Two database modes, chosen at launch and recorded in the run directory:
 #   test clone   THE DEFAULT. launch clones the template named by VERIFY_DATABASE_URL
@@ -22,9 +31,9 @@
 #   PRODUCTION   only with `launch --production`. The server uses .env's DATABASE_URL
 #                with default_transaction_read_only on, so it cannot write at all.
 #
-# Runs are independent: several can drive at once. Every verb after `launch`
-# needs to know WHICH run it means. Set VERIFY_RUN to the directory `launch`
-# printed; with exactly one live run the verbs find it themselves.
+# Runs are independent: several can drive at once. A run belongs to the
+# worktree that launched it — its directory is <worktree>/.verify/run-<id> and
+# it records that worktree — and a verb run from any other checkout refuses it.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -54,49 +63,21 @@ die() { log "FAIL: $*"; exit 1; }
 # shellcheck source=SCRIPTDIR/verify-clones.sh
 . "$(dirname "${BASH_SOURCE[0]}")/verify-clones.sh"
 
-# --- finding a run --------------------------------------------------------
-# A run is live when the server it recorded is still alive. That is the only
-# registry: no shared "current" pointer to clobber, so two runs never collide.
-live_runs() {
-  local d pid
-  for d in "$STATE_DIR"/run-*; do
-    [ -f "$d/server.pid" ] || continue
-    pid="$(cat "$d/server.pid")"
-    kill -0 "$pid" 2>/dev/null && printf '%s\n' "$d"
-  done
-  return 0
-}
-
-run_dir() {
-  if [ -n "${VERIFY_RUN:-}" ]; then
-    [ -d "$VERIFY_RUN" ] || die "VERIFY_RUN=$VERIFY_RUN is not a directory"
-    # Absolute, so it compares equal to what live_runs prints.
-    ( cd "$VERIFY_RUN" && pwd )
-    return 0
-  fi
-  local runs count
-  runs="$(live_runs)"
-  count="$(printf '%s' "$runs" | grep -c . || true)"
-  case "$count" in
-    1) printf '%s\n' "$runs" ;;
-    0) die "no live run — call 'verify.sh launch' first" ;;
-    *) log "$runs"
-       die "$count runs are live — set VERIFY_RUN to the one you mean" ;;
-  esac
-}
-
-run_port()    { cat "$(run_dir)/server.port"; }
-run_session() { cat "$(run_dir)/browser-session"; }
-run_base()    { printf 'http://localhost:%s\n' "$(run_port)"; }
+# --- runs and their browser -------------------------------------------------
+# Resolving a run id to its directory (and refusing one this worktree did not
+# launch), the browser verbs, and the channels that keep a run off Matt's desk.
+# shellcheck source=SCRIPTDIR/verify-run.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-run.sh"
 
 # --- picking a port -------------------------------------------------------
 port_listening() { ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1$"; }
 
-# Ports a live sibling run recorded. A run holds its port from the moment it
-# writes it, which is earlier than the moment the server listens on it.
+# Ports a live sibling run recorded, in any worktree. A run holds its port from
+# the moment it writes it, which is earlier than the moment the server listens.
 ports_held_by_runs() {
   local d
-  for d in $(live_runs); do
+  for d in $(all_run_dirs); do
+    run_is_live "$d" || continue
     [ -f "$d/server.port" ] && cat "$d/server.port"
   done
   return 0
@@ -132,7 +113,7 @@ start_server() {
   # `exec` replaces the subshell with the server, so $! is the server's own pid
   # and cleanup can kill exactly what this run started.
   ( cd "$REPO_ROOT/apps/local" &&
-    exec env "${SERVER_ENV[@]}" nohup ./node_modules/.bin/react-router dev --port "$wanted" \
+    exec env "${SERVER_ENV[@]}" "${LIVE_CHANNELS_OFF[@]}" nohup ./node_modules/.bin/react-router dev --port "$wanted" \
       > "$dir/server.log" 2>&1 ) &
   local pid=$!
   echo "$pid" > "$dir/server.pid"
@@ -221,10 +202,16 @@ cmd_launch() {
     sweep_stale_clones || log "warn the sweep of stale clones failed — carrying on"
   fi
 
+  if [ -L "$STATE_DIR" ]; then
+    log "warn $STATE_DIR is a symlink to $(readlink "$STATE_DIR") — other worktrees' runs may sit beside yours there. Each is still refused by id, but a plain directory keeps them apart: rm $STATE_DIR"
+  fi
+
   local id dir
   id="$(date +%Y%m%d-%H%M%S)-$$"
   dir="$STATE_DIR/run-$id"
   mkdir -p "$dir"
+  # Ownership first: every later verb checks it before touching the run.
+  echo "$REPO_ROOT" > "$dir/checkout"
   # While launch runs, its own pid is what marks the run live, so a sibling's
   # sweep never takes a clone whose server has not started yet.
   echo "$$" > "$dir/launch.pid"
@@ -311,14 +298,15 @@ cmd_launch() {
   local i
   for i in $(seq 1 30); do
     if curl -sf -o /dev/null "http://localhost:$port/"; then
+      desk_isolated "$port" || { stop_server "$dir"; die "the server's pages still point at Matt's Stream Deck hub or OBS — refusing to run"; }
       trap - EXIT
       rm -f "$dir/launch.pid"
       log "$db_line"
-      log "ready:   http://localhost:$port/  (pid $pid)"
-      log "run:     $dir"
-      log "session: verify-cvm-$id"
-      log "export VERIFY_RUN=$dir"
-      echo "$dir"
+      log "ready:    http://localhost:$port/  (pid $pid)"
+      log "session:  verify-cvm-$id"
+      log "evidence: $dir"
+      log "run id:   $id   <- pass it to every later verb: $0 <verb> $id …"
+      echo "$id"
       return 0
     fi
     kill -0 "$pid" 2>/dev/null || { tail -20 "$dir/server.log" >&2; stop_server "$dir"; die "server died on startup"; }
@@ -354,6 +342,9 @@ cmd_doctor() {
 
   curl -sf -o /dev/null "http://localhost:$port/" &&
     log "ok   / answers 200" || { log "FAIL / does not answer"; ok=1; }
+  desk_isolated "$port" &&
+    log "ok   off Matt's desk: Stream Deck hub and OBS point at a dead port" ||
+    { log "FAIL this run's pages can reach Matt's Stream Deck hub (5172) or OBS (4455) — cleanup now"; ok=1; }
 
   if [ "$(run_mode "$dir")" = test-clone ]; then
     local t; t="$(verify_template_url)"
@@ -372,7 +363,8 @@ cmd_doctor() {
   psql_ro "$dir" -c 'select 1' > /dev/null 2>&1 &&
     log "ok   read-only psql reaches the database" || { log "FAIL psql cannot reach the database"; ok=1; }
 
-  local others; others="$(live_runs | grep -vx "$dir" || true)"
+  local others; others="$(all_run_dirs | while read -r d; do
+      [ "$d" -ef "$dir" ] && continue; run_is_live "$d" && echo "$d"; done | sort -u || true)"
   if [ -n "$others" ]; then
     if [ "$(run_mode "$dir")" = test-clone ]; then
       log "note other verification runs are live — each has its own database, so they stay out of your Ledger:"
@@ -455,29 +447,40 @@ stop_run() {
 
 cmd_cleanup() {
   if [ "${1:-}" = "--all" ]; then
+    # This worktree's runs only: a sibling's run is its agent's to stop.
     local d
     for d in $(live_runs); do stop_run "$d"; done
     [ -z "$(verify_template_url)" ] || sweep_stale_clones
     return 0
   fi
-  stop_run "$(run_dir)"
+  resolve_run "${1:-}"
+  stop_run "$RUN_DIR"
 }
 
-case "${1:-}" in
+VERB="${1:-}"
+case "$VERB" in
   mode)     shift; cmd_mode "$@" ;;
   template) cmd_template ;;
   launch)   shift; cmd_launch "$@" ;;
-  url)     run_base ;;
-  session) run_session ;;
-  doctor)  cmd_doctor ;;
-  guard)
-    case "${2:-}" in
-      baseline)  cmd_guard_baseline ;;
-      check)     cmd_guard_check ;;
-      forensics) shift 2; cmd_guard_forensics "$@" ;;
-      *) die "usage: verify.sh guard <baseline|check|forensics <table>>" ;;
+  cleanup)  shift; cmd_cleanup "$@" ;;
+  url|dir|session|doctor|guard|sql|ab|shot|snap)
+    shift; resolve_run "${1:-}"; shift
+    case "$VERB" in
+      url)     run_base ;;
+      dir)     run_dir ;;
+      session) run_session ;;
+      doctor)  cmd_doctor ;;
+      sql)     cmd_sql "$@" ;;
+      ab)      run_ab "$@" ;;
+      shot)    cmd_shot "$@" ;;
+      snap)    cmd_snap "$@" ;;
+      guard)
+        case "${1:-}" in
+          baseline)  cmd_guard_baseline ;;
+          check)     cmd_guard_check ;;
+          forensics) shift; cmd_guard_forensics "$@" ;;
+          *) die "usage: verify.sh guard <run> <baseline|check|forensics <table>>" ;;
+        esac ;;
     esac ;;
-  sql)     shift; cmd_sql "$@" ;;
-  cleanup) shift; cmd_cleanup "$@" ;;
-  *) sed -n '2,29p' "$0"; exit 1 ;;
+  *) sed -n '2,36p' "$0"; exit 1 ;;
 esac

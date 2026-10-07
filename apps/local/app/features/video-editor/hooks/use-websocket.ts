@@ -1,3 +1,4 @@
+import { STREAM_DECK_HUB_URL } from "@/lib/live-channels";
 import { useEffect, useRef } from "react";
 import { streamDeckForwarderMessageSchema } from "stream-deck-forwarder/stream-deck-forwarder-types";
 import type { ChapterNamingModal } from "../types";
@@ -31,7 +32,7 @@ export function useWebSocket(params: {
   ref.current = params;
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:5172");
+    const socket = new WebSocket(STREAM_DECK_HUB_URL);
     socket.addEventListener("message", (event) => {
       // The hub rebroadcasts every client's messages (Stream Deck actions AND
       // browser link-capture events) to every client. This hook only handles
