@@ -16,7 +16,7 @@ script creates and attaches the sub-issues deterministically.
 
    If the PRD is ambiguous, make the most reasonable interpretation and proceed; do not stop to ask.
 
-2. Read `CONTEXT.md` and skim `docs/adr/` for any decisions that bear on the area the PRD touches. Sub-issue titles and bodies must use the project's vocabulary.
+2. Read `GLOSSARY.md` and skim `docs/adr/` for any decisions that bear on the area the PRD touches. Sub-issue titles and bodies must use the project's vocabulary.
 
 3. Explore the codebase to ground the breakdown in the real shape of the files you'll be cutting through.
 

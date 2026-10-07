@@ -1,5 +1,5 @@
 /**
- * Pure helpers for whole-file **Footage** transcription (see CONTEXT.md
+ * Pure helpers for whole-file **Footage** transcription (see GLOSSARY.md
  * "Footage"). Extracted from VideoProcessingService so the two decisions that
  * are easy to get wrong — WHERE to split a long recording, and how to STITCH
  * the per-chunk transcripts back onto one timeline — are plain functions with

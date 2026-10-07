@@ -118,7 +118,7 @@ export function SectionCard({
 
   // Dependency Group runs + spine pairs. Only in compact view, and
   // suppressed under any active filter (the rendered list no longer
-  // reflects true adjacency). See CONTEXT.md / docs/adr/0010. Also
+  // reflects true adjacency). See GLOSSARY.md / docs/adr/0010. Also
   // suppressed when Dependencies or Lesson Types are hidden by the
   // course-view display settings — the spine's dashed lines are measured
   // off the lesson-type icon's `data-dep-icon` anchor (see

@@ -265,7 +265,7 @@ describe("deliverable update", () => {
       ).status
     ).toBe("cancelled");
     // Terminal is terminal for Pitch State derivation, not immutable: every
-    // transition is reversible (ADR 0007 / CONTEXT.md "Deliverable Status").
+    // transition is reversible (ADR 0007 / GLOSSARY.md "Deliverable Status").
     expect(
       dobj(
         (await run(["deliverable", "update", "--status", "planned", d.id]))

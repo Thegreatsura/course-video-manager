@@ -30,7 +30,7 @@ names on the server and must not pull tldraw into that bundle.
 ## Why the table is committed
 
 A Diagram shape stores an icon **name**, not its geometry, so the icon set is
-part of the persistence contract — and `CONTEXT.md` defines a DiagramSnapshot as
+part of the persistence contract — and `GLOSSARY.md` defines a DiagramSnapshot as
 the state a Clip _"was filmed against"_. Lucide cannot be tracked: their release
 workflow hard-codes `semver -i minor` for every automated release (76 versions
 in 12 months), and inside 1.x alone 41 icons changed geometry under an unchanged

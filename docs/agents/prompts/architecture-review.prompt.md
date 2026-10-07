@@ -24,7 +24,7 @@ This is an unattended run — there is no user to grill. Your job:
 # CONTEXT
 
 Read your project's domain/architecture docs and ADRs before proposing _(project-specific:
-e.g. `CONTEXT.md`, `docs/adr/`)_. Treat recorded decisions as **binding** — do not propose
+e.g. `GLOSSARY.md`, `docs/adr/`)_. Treat recorded decisions as **binding** — do not propose
 anything that contradicts one.
 
 # RULES

@@ -21,4 +21,4 @@ The dual DB/disk source of truth required constant sync-validation between the d
 
 - Old on-disk course repos are left inert with their git remotes intact — no user data was touched.
 - The `TODO Marker` (`TODO.md` sentinel) is gone, since sidecars are no longer published; lesson-authoring status surfaces only in the app and the changelog.
-- Glossary terms CourseRepo, Ghost Lesson/Section/Course, Materialize, Materialization Cascade, and TODO Marker were removed from `CONTEXT.md`.
+- Glossary terms CourseRepo, Ghost Lesson/Section/Course, Materialize, Materialization Cascade, and TODO Marker were removed from `GLOSSARY.md`.

@@ -203,18 +203,39 @@ $V guard check        # writes WRITE-LEDGER.md into the run directory
 $V guard forensics course-video-manager_pitch   # name the rows behind a line
 ```
 
-`guard` reads `pg_stat_user_tables`, Postgres's own count of the inserts,
-updates and deletes each table has taken. It costs a catalog read, never a table
-scan, so run it around every drive. `forensics` prints every row of one table
-whose `created_at` or `updated_at` falls inside your window, into
-`forensics-<table>.txt`.
+**The Ledger never says "clean" on a guess.** It used to read
+`pg_stat_user_tables`, and those counters lag — each backend flushes them
+only every so often — so it once called a real UI save "clean". It now rests
+on two exact sources:
 
-On a clone the database is this run's alone, so every moved counter is your own
-write, and the Ledger is your record of them:
+- **On a clone, triggers.** `launch` puts statement-level triggers on every
+  table of the clone before the server starts. Each committed insert, update,
+  delete and truncate records itself in `verify_ledger.write` inside the
+  writing transaction, so a save shows up the moment it commits — and a write
+  that rolled back never does.
+- **In both modes, the app's own statement log.** The server runs with
+  `CVM_LOG_SQL=1` and prints every statement it sends as a `[cvm-sql]` line in
+  `server.log`. The Ledger lists the ones that could write.
+
+Three verdicts other than clean, and none of them is clean:
+
+- **PENDING** — a session still held an uncommitted write five seconds after
+  you ran `check`. Run `guard check` again once the page settles.
+- **UNKNOWN** — a table has no ledger trigger (created after launch), or the
+  server is not logging its statements. Say so in your report; never call it
+  clean.
+- On production, **write attempted** — see [Production,
+  read-only](#production-read-only).
+
+`forensics` prints every row of one table whose `created_at` or `updated_at`
+falls inside your window, into `forensics-<table>.txt`.
+
+On a clone the database is this run's alone, so every row in the Ledger is
+your own write:
 
 ```text
 guard: writes landed in this run's test clone (allowed) — see …/WRITE-LEDGER.md
-course-video-manager_pitch|1|1|0
+course-video-manager_pitch|0|1|0|0
 ```
 
 Check each table it names is one you meant to write, and report any you did
@@ -245,12 +266,19 @@ DB: PRODUCTION (read-only: the server cannot write)
   `default_transaction_read_only`, so any write — yours or a stray click — comes
   back a 500 (`PreventCommandIfReadOnly`). A write path you need to verify goes
   on a clone, never here.
-- **The Ledger is your proof you changed nothing**, and its counters are
-  **database-wide**: Matt's own instance, the deployed `apps/remote` and sibling
-  production runs all write to the same tables, so a moved counter is a lead,
-  not a verdict. Run forensics on it, and keep the window tight — `guard
-baseline` immediately before driving, not at launch. `doctor` names the other
-  live runs for this reason.
+- **The Ledger is your proof you changed nothing**, and its verdict is this
+  run's own statements: `[cvm-sql]` lines with no write among them read
+  `clean — this run's server sent no write statement`. A write statement reads
+  `WRITE ATTEMPTED ON PRODUCTION (refused by read-only)`; anything that tries to
+  lift the read-only guard reads `READ-ONLY OVERRIDE ATTEMPTED` — tell Matt at
+  once. No `[cvm-sql]` lines at all reads UNKNOWN.
+- **The database-wide counters are a lead on other writers, never the
+  verdict.** Matt's own instance, the deployed `apps/remote` and sibling
+  production runs write to the same tables, and the counters lag, so a moved
+  counter may be someone else's and an unmoved one proves nothing. Run
+  forensics on a moved one, and keep the window tight — `guard baseline`
+  immediately before driving, not at launch. `doctor` names the other live runs
+  for this reason.
 - **The `api_token` line is background, not a write.** Every `cvm` call
   authenticates against `apps/remote` and bumps that token's `last_used_at`.
   `guard` fingerprints every token row minus `last_used_at`; when only that

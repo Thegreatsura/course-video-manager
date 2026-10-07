@@ -52,7 +52,7 @@ import {
 /**
  * overlay — a visual layer composited on top of a Video's footage.
  *
- * DOMAIN (see CONTEXT.md "Overlays and transitions"):
+ * DOMAIN (see GLOSSARY.md "Overlays and transitions"):
  *   An Overlay is anchored to ONE Clip at `at`, a plain Clip-relative offset in
  *   seconds, and carries its own `durationInSeconds` — independent of that
  *   Clip's length, so an Overlay may run on across the Clips that follow. Its
@@ -204,7 +204,7 @@ const requireSameVideo = (from: AnchorClip, to: AnchorClip) =>
 
 /**
  * At most ONE Overlay is ever visible at a given moment across the whole Video
- * (CONTEXT.md, "Overlays and transitions") — no tracks, no layering.
+ * (GLOSSARY.md, "Overlays and transitions") — no tracks, no layering.
  *
  * The comparison is on the VIDEO's timeline, not within one Clip: an Overlay's
  * duration is free to outrun its anchor Clip, so two Overlays on different

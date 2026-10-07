@@ -488,7 +488,7 @@ attaches** the sub-issues deterministically.
 **Agent-runner contract.**
 
 - _Inputs:_ `PRD_NUMBER`, `PRD_TITLE`, `GH_REPO`. The agent fetches the PRD with
-  `gh issue view`, reads `CONTEXT.md`/ADRs, optionally explores the codebase. Read-only —
+  `gh issue view`, reads `GLOSSARY.md`/ADRs, optionally explores the codebase. Read-only —
   it creates nothing.
 - _Output:_ this task is side-effect-free, so use the **single-pass** strategy
   (`runWithRetry`). Schema:
@@ -981,7 +981,7 @@ issue — ready to be fed to [To Issues](#41-to-issues).
 
 **Agent-runner contract.**
 
-- _Inputs:_ `OUTPUT_DIR`. The agent reads `CONTEXT.md` + ADRs (binding — must not contradict a
+- _Inputs:_ `OUTPUT_DIR`. The agent reads `GLOSSARY.md` + ADRs (binding — must not contradict a
   recorded decision), lists prior `source:architecture-review` proposals (open and closed) to
   avoid duplicates, explores, and picks one candidate. It is **fully read-only on the repo and
   the tracker** — it makes no commits and creates nothing. It only _drafts_ the PRD (title +
@@ -1065,7 +1065,7 @@ wanting a concrete starting point.
 - **Diff-anchor validation** = `parse-diff-lines.ts` builds a `Map<path, Set<line>>` from
   `git diff main...HEAD` so hallucinated inline anchors can be dropped.
 - The genericized prompt skeletons in [`prompts/`](./prompts/) are runner-neutral
-  starting points; fill the project-specific half (your `CONTEXT.md`, coding standards, test
+  starting points; fill the project-specific half (your `GLOSSARY.md`, coding standards, test
   commands) per repo.
 
 # Appendix B — Prompt skeleton index

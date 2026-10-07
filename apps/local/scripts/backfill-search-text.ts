@@ -2,14 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import * as schema from "@/db/schema";
-import { resolveDatabaseUrl } from "@/db/database-url";
 import { extractSceneText } from "@cvm/core/lib/extract-scene-text";
+import { scriptDatabaseUrl } from "./script-database-url";
 
-const url = resolveDatabaseUrl();
-if (!url) {
-  console.error("DATABASE_URL is not set");
-  process.exit(1);
-}
+const { url } = scriptDatabaseUrl();
 
 const db = drizzle(new Pool({ connectionString: url }), { schema });
 

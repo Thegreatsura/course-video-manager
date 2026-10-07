@@ -437,7 +437,7 @@ export const clipTranscriptWords = createTable(
 
 /**
  * An Overlay — a rendered visual layer composited on top of a Video's footage
- * (CONTEXT.md, "Overlays and transitions").
+ * (GLOSSARY.md, "Overlays and transitions").
  *
  * Anchored to ONE Clip at `at`, a plain Clip-relative offset in seconds, so
  * retiming or reordering earlier Clips carries the anchor with them. Its
@@ -1107,7 +1107,7 @@ export const diagramSnapshots = createTable(
 );
 
 /**
- * A Component (see CONTEXT.md) is NOT a Diagram, so it diverges deliberately
+ * A Component (see GLOSSARY.md) is NOT a Diagram, so it diverges deliberately
  * from the `diagram` / `diagram_snapshot` conventions: no `archived` (delete is
  * a hard DELETE — nothing references a component), no `updatedAt` (immutable),
  * no search vector (name-substring only), no indexes and no relations block.

@@ -51,7 +51,7 @@ export function filterLessons(
 // dependency on any member of the current running group (lessons groupStart..i-1).
 // A lesson with no such link closes the current group and starts a fresh one.
 // Directed-backward, contiguous-only, within-section. The caller must suppress
-// grouping when a search/filter is active. See CONTEXT.md / docs/adr/0010.
+// grouping when a search/filter is active. See GLOSSARY.md / docs/adr/0010.
 export function computeDependencyGroupConnections(
   lessons: Lesson[]
 ): Record<string, { connectsToPrev: boolean }> {

@@ -1,5 +1,5 @@
 /**
- * Turns a Video's Script (one flowing markdown document, per CONTEXT.md) into
+ * Turns a Video's Script (one flowing markdown document, per GLOSSARY.md) into
  * blocks a teleprompter can move through: headings, paragraphs, lists, and
  * bracketed cues.
  *

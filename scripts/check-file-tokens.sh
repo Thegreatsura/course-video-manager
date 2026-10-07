@@ -24,9 +24,9 @@ EXCLUDE_PATTERNS=(
   # (see packages/lucide-icons/README.md) and is never hand-edited, so the
   # "split this into smaller modules" advice does not apply.
   "packages/lucide-icons/lib/generated/*"
-  # The ubiquitous-language document, same category as docs/* above. It was
+  # The ubiquitous-language glossary, same category as docs/* above. It was
   # already over the limit before this exclusion existed.
-  "CONTEXT.md"
+  "GLOSSARY.md"
   # The drizzle schema registry. drizzle-kit and `import * as schema` both
   # consume it as ONE module, so it grows by one table at a time and cannot be
   # split the way application code can.
