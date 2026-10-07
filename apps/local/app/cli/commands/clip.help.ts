@@ -10,7 +10,10 @@ export const CLIP_HELP = `clip — a timestamped slice of source footage on a Vi
 A Clip is one captured segment of source footage, defined by a source filename and an in/out
 window into it (sourceStartTime/sourceEndTime, seconds). Clips and Chapters share one fractional
 'order' space; interleaving them in order is what forms the Video's Transcript. A clip's 'text' is
-its spoken transcription. Clips are children of a Video, addressed by id only; there is no version
+its spoken transcription, and 'transcriptionStatus' says where its Transcription stands: "queued"
+(recorded, waiting), "transcribing", "failed" (the last attempt did not finish; any earlier text is
+kept, and re-transcribing in the editor is the fix) or "done" (its text may be empty: nothing was
+said). Clips are children of a Video, addressed by id only; there is no version
 scoping. 'list'/'get' default to ACTIVE clips only, but unlike most other archived nouns a Clip's
 archive is a REVIEW SURFACE, not a one-way trapdoor: pass --archived to either verb to reveal
 soft-deleted clips (so a wrongly-deleted one can be found), and 'clip restore' undoes 'clip delete'.
@@ -46,8 +49,8 @@ has start >= end, or is shorter than the ${MINIMUM_CLIP_LENGTH_SECONDS}s minimum
 
 IMPORTANT: retiming does NOT touch 'text' or 'transcribedAt' — the transcript is not
 re-generated for the new range. A retimed clip's text can be stale until something re-transcribes
-it; there is currently no CLI signal for "this text no longer matches this range" (only the
-pre-existing "never transcribed" signal, transcribedAt == null).
+it; there is currently no CLI signal for "this text no longer matches this range" (only
+transcriptionStatus, which says whether a Transcription landed at all).
 
 Retiming DOES cascade to everything positioned relative to the clip's start, in the same
 transaction as the recut itself, because moving the in-point moves the footage out from under
@@ -171,7 +174,7 @@ Examples:
   cvm clip list --video vid_123
   cvm clip list --video vid_123 --archived | jq 'select(.archived)'
   cvm clip list --video vid_123 | jq -r '.text'
-  cvm clip list --video vid_123 | jq 'select(.transcribedAt==null) | .id'`;
+  cvm clip list --video vid_123 | jq 'select(.transcriptionStatus!="done") | .id'`;
 
 export const GET_HELP = `Fetch one or more Clips by id. Variadic: 'clip get <id> [<id> ...]'.
 

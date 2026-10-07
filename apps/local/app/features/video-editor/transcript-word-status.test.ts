@@ -7,7 +7,7 @@ import {
   type DatabaseId,
   type FrontendId,
 } from "./clip-state-reducer";
-import { createMockExec } from "@/test-utils/reducer-tester";
+import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
 import { WHITE_NOISE_DEFAULTS } from "./clip-state-reducer-effect-clip-helpers";
 import {
   anyClipsMissingTranscriptWords,
@@ -17,7 +17,6 @@ import {
 const createState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },
@@ -37,6 +36,7 @@ const onDatabase = (
     databaseId: id as DatabaseId,
     text: "hello world",
     scene: "Camera",
+    transcriptionStatus: "done",
     ...overrides,
   });
 
@@ -45,18 +45,37 @@ const step = (
   action: clipStateReducer.Action
 ): clipStateReducer.State => clipStateReducer(state, action, createMockExec());
 
-describe("getTranscriptWordStatus", () => {
-  it("a Clip being transcribed is transcribing, even with text and no words yet", () => {
-    const clip = onDatabase("a");
-    const state = createState({
-      clipIdsBeingTranscribed: new Set([clip.frontendId]),
-    });
+const clipIn = (state: clipStateReducer.State, databaseId: string) =>
+  state.items.find(
+    (item): item is ClipOnDatabase =>
+      item.type === "on-database" && item.databaseId === databaseId
+  )!;
 
-    expect(getTranscriptWordStatus(clip, state)).toBe("transcribing");
+describe("getTranscriptWordStatus", () => {
+  it("a queued or running Transcription is transcribing, even with text and no words yet", () => {
+    for (const transcriptionStatus of ["queued", "transcribing"] as const) {
+      const clip = onDatabase("a", { transcriptionStatus });
+      expect(getTranscriptWordStatus(clip, createState())).toBe("transcribing");
+    }
   });
 
   it("a transcribed Clip with words has words", () => {
     const clip = onDatabase("a");
+    const state = createState({
+      clipIdsWithTranscriptWords: new Set([clip.databaseId]),
+    });
+
+    expect(getTranscriptWordStatus(clip, state)).toBe("has-words");
+  });
+
+  it("a failed Transcription with no words is failed, not missing", () => {
+    const clip = onDatabase("a", { transcriptionStatus: "failed" });
+
+    expect(getTranscriptWordStatus(clip, createState())).toBe("failed");
+  });
+
+  it("a failed re-transcribe keeps the words the Clip already had", () => {
+    const clip = onDatabase("a", { transcriptionStatus: "failed" });
     const state = createState({
       clipIdsWithTranscriptWords: new Set([clip.databaseId]),
     });
@@ -88,14 +107,113 @@ describe("getTranscriptWordStatus", () => {
   });
 });
 
+describe("a recorded Clip's Transcription", () => {
+  const recorded = () =>
+    new ReducerTester(clipStateReducer, createState()).send({
+      type: "new-database-clips",
+      clips: [
+        fromPartial({ id: "a", text: "", transcriptionStatus: "queued" }),
+      ],
+    });
+
+  it("is transcribing from the moment the request goes out", () => {
+    const tester = recorded();
+
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe(
+      "transcribing"
+    );
+    expect(
+      getTranscriptWordStatus(clipIn(tester.getState(), "a"), tester.getState())
+    ).toBe("transcribing");
+    expect(tester.getEffects()).toContainEqual({
+      type: "transcribe-clips",
+      clipIds: ["a"],
+    });
+  });
+
+  it("shows failed, not transcribing, when the server reports it failed", () => {
+    const state = recorded()
+      .send({
+        type: "clips-transcribed",
+        clips: [
+          { databaseId: "a" as DatabaseId, transcriptionStatus: "failed" },
+        ],
+      })
+      .getState();
+
+    expect(clipIn(state, "a").transcriptionStatus).toBe("failed");
+    expect(getTranscriptWordStatus(clipIn(state, "a"), state)).toBe("failed");
+    expect(anyClipsMissingTranscriptWords(state)).toBe(false);
+  });
+
+  it("shows failed, not transcribing, when the request itself fails, without taking the editor down", () => {
+    const state = recorded()
+      .send({
+        type: "clips-transcription-failed",
+        clipIds: ["a" as DatabaseId],
+        message: "HTTP 500: Internal Server Error",
+      })
+      .getState();
+
+    expect(clipIn(state, "a").transcriptionStatus).toBe("failed");
+    expect(state.error).toBeNull();
+  });
+
+  it("can be retried after it failed, and lands", () => {
+    const tester = recorded().send({
+      type: "clips-transcription-failed",
+      clipIds: ["a" as DatabaseId],
+      message: "timeout",
+    });
+    const failedClip = clipIn(tester.getState(), "a");
+
+    tester.send({
+      type: "clips-retranscribing",
+      clipIds: [failedClip.frontendId],
+    });
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe(
+      "transcribing"
+    );
+
+    const state = tester
+      .send({
+        type: "clips-transcribed",
+        clips: [
+          {
+            databaseId: "a" as DatabaseId,
+            transcriptionStatus: "done",
+            text: "hello",
+            hasTranscriptWords: true,
+          },
+        ],
+      })
+      .getState();
+
+    expect(clipIn(state, "a")).toMatchObject({
+      text: "hello",
+      transcriptionStatus: "done",
+    });
+    expect(getTranscriptWordStatus(clipIn(state, "a"), state)).toBe(
+      "has-words"
+    );
+    expect(
+      tester.getEffects().filter((effect) => effect.type === "transcribe-clips")
+    ).toEqual([
+      { type: "transcribe-clips", clipIds: ["a"] },
+      { type: "transcribe-clips", clipIds: ["a"] },
+    ]);
+  });
+});
+
 describe("anyClipsMissingTranscriptWords", () => {
   it("is false while a freshly recorded Clip is queued for transcription", () => {
     const state = step(createState(), {
       type: "new-database-clips",
-      clips: [fromPartial({ id: "a", text: "" })],
+      clips: [
+        fromPartial({ id: "a", text: "", transcriptionStatus: "queued" }),
+      ],
     });
 
-    expect(state.clipIdsBeingTranscribed.size).toBe(1);
     expect(anyClipsMissingTranscriptWords(state)).toBe(false);
   });
 
@@ -113,32 +231,33 @@ describe("anyClipsMissingTranscriptWords", () => {
   });
 
   it("stays false when the text and the words land together", () => {
-    const clip = onDatabase("a", { text: "" });
-    const during = createState({
-      items: [clip],
-      clipIdsBeingTranscribed: new Set([clip.frontendId]),
+    const clip = onDatabase("a", {
+      text: "",
+      transcriptionStatus: "transcribing",
     });
 
-    const after = step(during, {
+    const after = step(createState({ items: [clip] }), {
       type: "clips-transcribed",
       clips: [
         {
           databaseId: clip.databaseId,
+          transcriptionStatus: "done",
           text: "hello",
           hasTranscriptWords: true,
         },
       ],
     });
 
-    expect(after.clipIdsBeingTranscribed.size).toBe(0);
     expect(anyClipsMissingTranscriptWords(after)).toBe(false);
   });
 
   it("is true when a Transcription lands with text but no words", () => {
-    const clip = onDatabase("a", { text: "" });
+    const clip = onDatabase("a", {
+      text: "",
+      transcriptionStatus: "transcribing",
+    });
     const during = createState({
       items: [clip],
-      clipIdsBeingTranscribed: new Set([clip.frontendId]),
       clipIdsWithTranscriptWords: new Set([clip.databaseId]),
     });
 
@@ -147,6 +266,7 @@ describe("anyClipsMissingTranscriptWords", () => {
       clips: [
         {
           databaseId: clip.databaseId,
+          transcriptionStatus: "done",
           text: "hello",
           hasTranscriptWords: false,
         },
@@ -158,20 +278,24 @@ describe("anyClipsMissingTranscriptWords", () => {
   });
 
   it("finishes a Transcription that heard nothing, without warning", () => {
-    const clip = onDatabase("a", { text: "" });
-    const during = createState({
-      items: [clip],
-      clipIdsBeingTranscribed: new Set([clip.frontendId]),
+    const clip = onDatabase("a", {
+      text: "",
+      transcriptionStatus: "transcribing",
     });
 
-    const after = step(during, {
+    const after = step(createState({ items: [clip] }), {
       type: "clips-transcribed",
       clips: [
-        { databaseId: clip.databaseId, text: "", hasTranscriptWords: false },
+        {
+          databaseId: clip.databaseId,
+          transcriptionStatus: "done",
+          text: "",
+          hasTranscriptWords: false,
+        },
       ],
     });
 
-    expect(after.clipIdsBeingTranscribed.size).toBe(0);
+    expect(clipIn(after, "a").transcriptionStatus).toBe("done");
     expect(anyClipsMissingTranscriptWords(after)).toBe(false);
   });
 

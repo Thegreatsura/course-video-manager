@@ -533,11 +533,15 @@ const handleNewDatabaseClips = (
 
   return {
     ...state,
-    clipIdsBeingTranscribed: new Set([
-      ...Array.from(state.clipIdsBeingTranscribed),
-      ...Array.from(frontendClipIdsToTranscribe),
-    ]),
-    items: newClipsState,
+    // The transcribe-clips request goes out with this commit, so these Clips
+    // are transcribing from here until `clips-transcribed` or
+    // `clips-transcription-failed` reports back.
+    items: newClipsState.map((item) =>
+      item.type === "on-database" &&
+      frontendClipIdsToTranscribe.has(item.frontendId)
+        ? { ...item, transcriptionStatus: "transcribing" as const }
+        : item
+    ),
     insertionPoint: newInsertionPoint,
   };
 };

@@ -193,6 +193,8 @@ export const appendClipsAtInsertionPoint = Effect.fn(
     order: orders[index]!,
     archived: false,
     text: "",
+    // A fresh recording has no text until its Transcription lands.
+    transcriptionStatus: "queued" as const,
   }));
 
   const clipsResult = yield* dbCall(() =>
@@ -441,6 +443,7 @@ export const createEffectClipAtPositionImpl = Effect.fn(
         order: order!,
         archived: false,
         transcribedAt: new Date(),
+        transcriptionStatus: "done",
       })
       .returning()
   );

@@ -117,6 +117,8 @@ export const seedCourseVersion = async (
           order: clipOrders[clipIndex + 1]!,
           text: clipSpec.text,
           transcribedAt: clipSpec.transcribed === false ? null : new Date(),
+          transcriptionStatus:
+            clipSpec.transcribed === false ? "queued" : "done",
         });
       }
 

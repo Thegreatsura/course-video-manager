@@ -112,7 +112,6 @@ export type VideoEditorContextType = {
   isRecordingActive: boolean;
   /** Is a teleprompter popup attached? Silences the live preview's capture status. */
   isTeleprompterConnected: boolean;
-  clipIdsBeingTranscribed: Set<FrontendId>;
 
   // Callbacks
   onSetInsertionPoint: (mode: "after" | "before", clipId: FrontendId) => void;

@@ -10,7 +10,6 @@ import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
 const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },
@@ -62,22 +61,29 @@ describe("clipStateReducer", () => {
         clipIds: ["123"],
       });
 
-      expect(newState.clipIdsBeingTranscribed.size).toBe(1);
+      expect(newState.items[0]).toMatchObject({
+        transcriptionStatus: "transcribing",
+      });
 
       const stateAfterTranscribe = clipStateReducer(
         newState,
         {
           type: "clips-transcribed",
           clips: [
-            fromPartial({ databaseId: "123" as DatabaseId, text: "Hello" }),
+            {
+              databaseId: "123" as DatabaseId,
+              transcriptionStatus: "done",
+              text: "Hello",
+              hasTranscriptWords: true,
+            },
           ],
         },
         reportEffect
       );
 
-      expect(stateAfterTranscribe.clipIdsBeingTranscribed.size).toBe(0);
       expect(stateAfterTranscribe.items[0]).toMatchObject({
         text: "Hello",
+        transcriptionStatus: "done",
       });
     });
   });

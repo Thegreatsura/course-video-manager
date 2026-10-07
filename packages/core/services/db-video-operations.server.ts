@@ -533,6 +533,7 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
                 order: true,
                 text: true,
                 transcribedAt: true,
+                transcriptionStatus: true,
               },
             },
             chapters: {

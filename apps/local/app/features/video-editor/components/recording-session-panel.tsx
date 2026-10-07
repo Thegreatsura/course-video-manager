@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   Loader2,
   CircleDotIcon,
@@ -125,7 +126,11 @@ const ArchivedClipRow = ({
           ? "No clip found"
           : isResolved
             ? clip.text ||
-              (!clip.transcribedAt ? "Transcribing..." : "No transcript")
+              (clip.transcriptionStatus === "failed"
+                ? "Transcription failed"
+                : isTranscriptionPending(clip.transcriptionStatus)
+                  ? "Transcribing..."
+                  : "No transcript")
             : "Awaiting clip..."}
       </span>
       <span className="text-[10px] text-muted-foreground/70">

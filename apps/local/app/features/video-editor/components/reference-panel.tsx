@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import type { TranscriptionStatus } from "@/features/videos/transcription-status";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   Dialog,
@@ -49,7 +50,7 @@ export type ReferenceCandidate = {
     id: string;
     order: string;
     text: string;
-    transcribedAt: Date | null;
+    transcriptionStatus: TranscriptionStatus;
   }>;
   chapters: Array<{ id: string; order: string; name: string }>;
 };
@@ -198,7 +199,7 @@ export const ReferencePanel = (props: {
           {(() => {
             const allTranscribed =
               selected.clips.length > 0 &&
-              selected.clips.every((c) => c.transcribedAt !== null);
+              selected.clips.every((c) => c.transcriptionStatus === "done");
             const button = (
               <Button
                 variant="ghost"

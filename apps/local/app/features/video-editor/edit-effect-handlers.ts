@@ -80,8 +80,8 @@ export function createEditEffectHandlers(
         })
         .catch((error) => {
           dispatch({
-            type: "effect-failed",
-            effectType: "transcribe-clips",
+            type: "clips-transcription-failed",
+            clipIds: effect.clipIds,
             message:
               error instanceof Error
                 ? error.message

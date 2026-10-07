@@ -8,6 +8,7 @@ import type {
   ClipReducerAction,
   ClipReducerEffect,
   ClipReducerState,
+  DatabaseId,
   FrontendInsertionPoint,
 } from "./clip-state-reducer.types";
 import { archiveClips } from "./clip-state-reducer.helpers";
@@ -70,17 +71,20 @@ export const clipStateReducer: EffectReducer<
       };
     }
     case "clips-retranscribing": {
-      const newSet = new Set([...state.clipIdsBeingTranscribed]);
-      for (const clipId of action.clipIds) {
-        newSet.add(clipId);
-      }
-      return {
-        ...state,
-        clipIdsBeingTranscribed: newSet,
-      };
+      const requested = new Set(action.clipIds);
+      const databaseIds: DatabaseId[] = [];
+      const items = state.items.map((item) => {
+        if (item.type !== "on-database" || !requested.has(item.frontendId)) {
+          return item;
+        }
+        databaseIds.push(item.databaseId);
+        return { ...item, transcriptionStatus: "transcribing" as const };
+      });
+      if (databaseIds.length === 0) return state;
+      exec({ type: "transcribe-clips", clipIds: databaseIds });
+      return { ...state, items };
     }
     case "clips-transcribed": {
-      const beingTranscribed = new Set(state.clipIdsBeingTranscribed);
       const withWords = new Set(state.clipIdsWithTranscriptWords);
       const transcribed = new Map(
         action.clips.map((clip) => [clip.databaseId, clip])
@@ -95,15 +99,35 @@ export const clipStateReducer: EffectReducer<
               : undefined;
           if (item.type !== "on-database" || !clip) return item;
 
-          // An empty text is a finished transcription too (nothing was said),
-          // so it must clear the "being transcribed" mark like any other.
-          beingTranscribed.delete(item.frontendId);
+          // A failed Transcription leaves the Clip's text and words as they
+          // were: only its status changes.
+          if (clip.transcriptionStatus === "failed") {
+            return { ...item, transcriptionStatus: "failed" as const };
+          }
+
+          // An empty text is a finished transcription too (nothing was said).
           if (clip.hasTranscriptWords) withWords.add(item.databaseId);
           else withWords.delete(item.databaseId);
-          return { ...item, text: clip.text };
+          return {
+            ...item,
+            text: clip.text,
+            transcriptionStatus: "done" as const,
+          };
         }),
-        clipIdsBeingTranscribed: beingTranscribed,
         clipIdsWithTranscriptWords: withWords,
+      };
+    }
+    case "clips-transcription-failed": {
+      // The request itself failed, so no Clip in it got a Transcription. Not
+      // fatal to the editor: each Clip shows it failed and can be retried.
+      const failed = new Set(action.clipIds);
+      return {
+        ...state,
+        items: state.items.map((item) =>
+          item.type === "on-database" && failed.has(item.databaseId)
+            ? { ...item, transcriptionStatus: "failed" as const }
+            : item
+        ),
       };
     }
     case "set-insertion-point-after": {
@@ -429,6 +453,7 @@ export const clipStateReducer: EffectReducer<
               sourceEndTime: item.sourceEndTime,
               text: item.text,
               transcribedAt: new Date(),
+              transcriptionStatus: "done",
               scene: item.scene,
               profile: item.profile,
               insertionOrder: item.insertionOrder,

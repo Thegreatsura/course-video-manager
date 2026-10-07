@@ -113,6 +113,9 @@
       "@/features/videos/video-format": [
         "../../packages/core/features/videos/video-format"
       ],
+      "@/features/videos/transcription-status": [
+        "../../packages/core/features/videos/transcription-status"
+      ],
       "@/features/videos/clip-zoom": [
         "../../packages/core/features/videos/clip-zoom"
       ],
