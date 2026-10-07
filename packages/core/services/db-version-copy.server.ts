@@ -202,6 +202,7 @@ export const createVersionCopyOps = (db: Database) => {
                   body: sourceVideo.body,
                   description: sourceVideo.description,
                   script: sourceVideo.script,
+                  format: sourceVideo.format,
                 })
                 .returning()
             );
@@ -228,6 +229,10 @@ export const createVersionCopyOps = (db: Database) => {
                     scene: clip.scene,
                     profile: clip.profile,
                     pauseType: clip.pauseType,
+                    zoomType: clip.zoomType,
+                    // Diagram Snapshots are shared per Diagram, not owned by a
+                    // Version, so the pin carries over verbatim (no remap).
+                    diagramSnapshotId: clip.diagramSnapshotId,
                   }))
                 )
               );
