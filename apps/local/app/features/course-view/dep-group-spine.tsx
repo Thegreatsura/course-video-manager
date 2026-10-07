@@ -1,6 +1,6 @@
 // Dependency Group spine — the dashed icon-to-icon lines drawn in the compact
 // course view to mark contiguous runs of dependency-linked lessons (see the
-// "Dependency Group" entry in CONTEXT.md and docs/adr/0010).
+// "Dependency Group" entry in GLOSSARY.md and docs/adr/0010).
 //
 // The lines are MEASURED from the rendered icon positions rather than drawn at a
 // fixed pixel height: a lesson's row height changes when its title wraps to two

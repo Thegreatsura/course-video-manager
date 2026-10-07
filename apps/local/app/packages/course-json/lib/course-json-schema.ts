@@ -6,7 +6,7 @@
 // Descriptions on every field are load-bearing: `buildCourseJsonSchema` turns
 // this schema into the `course.schema.json` sidecar via `JSONSchema.make`, which
 // reads these annotations verbatim. Keep them in the domain's language (see
-// CONTEXT.md).
+// GLOSSARY.md).
 
 import { JSONSchema, Schema } from "effect";
 

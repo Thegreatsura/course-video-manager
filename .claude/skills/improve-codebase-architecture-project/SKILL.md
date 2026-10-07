@@ -26,7 +26,7 @@ You are looking for **deepening opportunities** — refactors that turn shallow 
 - **The interface is the test surface.**
 - **One adapter = hypothetical seam. Two adapters = real seam.**
 
-Use `CONTEXT.md` vocabulary for **domain** language. Do not re-litigate decisions recorded under `docs/adr/`.
+Use `GLOSSARY.md` vocabulary for **domain** language. Do not re-litigate decisions recorded under `docs/adr/`.
 
 ## Process
 
@@ -43,7 +43,7 @@ If a prior proposal was closed-without-merge with a comment giving a load-bearin
 
 ### 2. Explore the codebase
 
-Read `CONTEXT.md` and any relevant ADRs under `docs/adr/` first.
+Read `GLOSSARY.md` and any relevant ADRs under `docs/adr/` first.
 
 Then use the Agent tool with `subagent_type=Explore` to walk the repo. Note friction organically:
 
@@ -84,7 +84,7 @@ Follow the `/to-prd-project` skill to produce the PRD content: same template (Pr
 In addition to the standard PRD-template sections, the body must include an **Architecture review** section at the top with:
 
 - **Files** — which modules are involved
-- **Problem** — the friction in current architecture, in `CONTEXT.md` + glossary vocabulary above
+- **Problem** — the friction in current architecture, in `GLOSSARY.md` + glossary vocabulary above
 - **Solution** — what changes, in plain English
 - **Benefits** — framed in terms of **locality** and **leverage**; how tests improve
 - **Before / After diagram** — a fenced `mermaid` block showing the shallow → deep transition. GitHub renders Mermaid natively in issue bodies.
@@ -127,6 +127,6 @@ If every reasonable candidate was already proposed:
 
 ## Rules
 
-- **Read-only everywhere.** No commits, no edits to `CONTEXT.md` / ADRs / source files, no `gh issue create`, no `gh issue edit`. The workflow does the publish. If you spot a stale doc, mention it inside the PRD body — don't edit it.
+- **Read-only everywhere.** No commits, no edits to `GLOSSARY.md` / ADRs / source files, no `gh issue create`, no `gh issue edit`. The workflow does the publish. If you spot a stale doc, mention it inside the PRD body — don't edit it.
 - **One proposal per run.** Never publish more than one PRD in a single invocation.
 - **No grilling, no questions.** There is no user. Make the call and emit the `<output>` block.

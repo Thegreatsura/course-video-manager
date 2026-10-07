@@ -13,7 +13,7 @@ import type { BulletPanelBullet } from "../features/videos/bullet-panel.js";
 
 /**
  * Overlays — the visual layers composited on top of a Video's footage, each
- * anchored to one Clip at a plain Clip-relative offset (see CONTEXT.md,
+ * anchored to one Clip at a plain Clip-relative offset (see GLOSSARY.md,
  * "Overlays and transitions", and the `overlays` table's own doc comment).
  *
  * Overlays are addressed by id and listed per Video, never per Course Version:

@@ -24,7 +24,7 @@ export const MINIMUM_CLIP_LENGTH_SECONDS = 1;
 export const AUTO_EDITED_END_PADDING_SECONDS = 0.08;
 
 /**
- * Per-Recording-Session "Silence Length" mode (see CONTEXT.md).
+ * Per-Recording-Session "Silence Length" mode (see GLOSSARY.md).
  * Controls how long a silence must last before it ends a clip.
  * Applied symmetrically to the frontend speech detector and the backend
  * FFmpeg silence detection.

@@ -28,7 +28,7 @@ import {
  * `cvm course publish <courseId> --name vX.Y.Z` — the ONE write verb that
  * leaves the database.
  *
- * Publish (see CONTEXT.md) runs the Version lifecycle: Submit freezes the
+ * Publish (see GLOSSARY.md) runs the Version lifecycle: Submit freezes the
  * Draft as a Pending Version (stamping name + description) and clones a fresh
  * Draft; any Unexported Video is then rendered while the Commit mirrors the
  * Pending Version's shippable output to Dropbox (`.mp4`s + `course.json` +
@@ -128,7 +128,7 @@ const placeholdersOpt = Options.choice("placeholders", [
 const PUBLISH_HELP = `Publish a Course: mirror its Draft Version to Dropbox, then freeze it as a
 named Published Version.
 
-Publish is the release operation (see CONTEXT.md). It (1) validates the
+Publish is the release operation (see GLOSSARY.md). It (1) validates the
 shippable output, (2) SUBMITS the Draft — freezing it as a Pending Version
 stamped with --name and --description, and cloning a fresh Draft to carry on
 editing, (3) EXPORTS any Unexported Video and COMMITS at the same time — each

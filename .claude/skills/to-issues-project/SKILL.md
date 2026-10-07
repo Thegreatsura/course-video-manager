@@ -32,7 +32,7 @@ If non-zero, stop and ask the user whether to (a) abort, (b) add more on top of 
 
 ### 3. Explore the codebase (optional)
 
-If you haven't already, explore the repo to understand the area you're touching. Use the project's domain glossary (`CONTEXT.md`) and respect ADRs under `docs/adr/`. Sub-issue titles and bodies should use the project's vocabulary.
+If you haven't already, explore the repo to understand the area you're touching. Use the project's domain glossary (`GLOSSARY.md`) and respect ADRs under `docs/adr/`. Sub-issue titles and bodies should use the project's vocabulary.
 
 Look for opportunities to prefactor the code to make the implementation easier. "Make the change easy, then make the easy change."
 

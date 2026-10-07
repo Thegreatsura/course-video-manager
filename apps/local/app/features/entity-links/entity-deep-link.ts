@@ -21,7 +21,7 @@ export type EntityRef =
 
 export type EntityType = EntityRef["type"];
 
-/** The entity's name in CONTEXT.md's words, for menu toasts. */
+/** The entity's name in GLOSSARY.md's words, for menu toasts. */
 export const ENTITY_LABELS: Record<EntityType, string> = {
   course: "Course",
   section: "Section",

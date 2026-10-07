@@ -2,7 +2,7 @@
  * Beat <-> Learning Goal dependency warnings.
  *
  * Every Beat is expected to serve at least one Learning Goal of its Section
- * (see CONTEXT.md's Beat / Learning Goal entries) — but ONLY once the Section
+ * (see GLOSSARY.md's Beat / Learning Goal entries) — but ONLY once the Section
  * has any Learning Goals at all. A Section with none yet (or a standalone /
  * pitch-bound Video with no Section) is exempt: there is nothing to serve, so
  * neither warning fires. Mirrors the shape of video-warnings.ts /

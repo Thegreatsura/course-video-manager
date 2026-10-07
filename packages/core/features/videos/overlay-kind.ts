@@ -41,7 +41,7 @@ export const resolveOverlayKind = (
     : DEFAULT_OVERLAY_KIND;
 
 /**
- * What each Kind is CALLED — the words CONTEXT.md uses for it, so a surface
+ * What each Kind is CALLED — the words GLOSSARY.md uses for it, so a surface
  * naming an Overlay's Kind to the author says "Bullet Panel" and never
  * `bulletPanel`.
  *

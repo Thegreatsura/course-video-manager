@@ -37,7 +37,7 @@ import {
 /**
  * clip — a timestamped slice of source footage inside a Video.
  *
- * DOMAIN (see CONTEXT.md "Video and clips"):
+ * DOMAIN (see GLOSSARY.md "Video and clips"):
  *   A Clip is one captured segment of source footage living on a Video's
  *   recorded timeline. It is defined by a source filename
  *   (`videoFilename`) and an in/out window into that file

@@ -6,7 +6,7 @@ You are an expert code reviewer. Your job is **not just to comment** — activel
 
 # CONTEXT
 
-Read `CONTEXT.md`, `CODING_STANDARDS.md`, and any relevant ADRs under `docs/adr/` before starting.
+Read `GLOSSARY.md`, `CODING_STANDARDS.md`, and any relevant ADRs under `docs/adr/` before starting.
 
 <linked-issue>
 

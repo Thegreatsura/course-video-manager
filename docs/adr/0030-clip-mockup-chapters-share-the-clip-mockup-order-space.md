@@ -31,7 +31,7 @@ A Clip Mockup deliberately does not point at a **Beat**: one that serves no Beat
 
 ## Two deliberate asymmetries
 
-Both are stated in `cvm clip-mockup-chapter --help` and in `CONTEXT.md`, because both look like bugs to an agent that assumes the noun inherits from its neighbours.
+Both are stated in `cvm clip-mockup-chapter --help` and in `GLOSSARY.md`, because both look like bugs to an agent that assumes the noun inherits from its neighbours.
 
 - **No Draft Course Version guard.** Every `clip` and `chapter` write needs the owning Course Version to be a Draft. No Clip Mockup Chapter write does. That guard protects the published Course Version write-closure, and Clip Mockups sit outside it — so their grouping follows the thing it groups, not the thing it resembles.
 - **Not a Local-only Command.** Every `cvm clip-mockup` verb is refused off the author's machine, because a frame and a WAV are a directory there (see [ADR 0025](0025-local-remote-split-one-http-transport.md)). A Chapter is a row and touches no disk, so every verb works from any box with a token, including the Remote Box. `cvm clip-mockup-chapter list` therefore works where `cvm clip-mockup list` beside it is refused.

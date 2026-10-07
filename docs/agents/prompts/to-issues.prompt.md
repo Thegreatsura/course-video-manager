@@ -20,7 +20,7 @@ deterministically.
    is ambiguous, make the most reasonable interpretation and proceed; do not stop to ask.
    _(Project-specific: how to fetch a work item, e.g. `gh issue view {{PRD_NUMBER}} --comments`.)_
 2. Read your project's domain/architecture docs so titles and bodies use the project's
-   vocabulary. _(Project-specific: e.g. `CONTEXT.md`, ADRs.)_
+   vocabulary. _(Project-specific: e.g. `GLOSSARY.md`, ADRs.)_
 3. Optionally explore the codebase to ground the breakdown in the real shape of the files.
 
 # DRAFTING SUB-ISSUES

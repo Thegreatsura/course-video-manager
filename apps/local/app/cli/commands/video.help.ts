@@ -2,7 +2,7 @@
  * Long-form --help text for the `cvm video` verbs, split out of video.ts to
  * keep that command module under the repo's per-file token budget (mirrors
  * segment.help.ts). Domain-teaching prose consumed only by
- * Command.withDescription — keep in sync with CONTEXT.md.
+ * Command.withDescription — keep in sync with GLOSSARY.md.
  */
 
 export const VIDEO_HELP = `Video — a container of Clips and Chapters that represents a single producible video output.

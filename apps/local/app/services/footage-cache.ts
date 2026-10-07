@@ -6,7 +6,7 @@ import path from "node:path";
 import type { FootageTranscript } from "./footage-chunking";
 
 /**
- * The on-disk cache for a **Footage** transcript (see CONTEXT.md "Footage").
+ * The on-disk cache for a **Footage** transcript (see GLOSSARY.md "Footage").
  *
  * FOOTAGE HAS NO DATABASE ROW. Its identity is a filesystem path, and its
  * transcript is cached in a SIDECAR file next to the source — the same
