@@ -7,8 +7,8 @@
 #   verify.sh url               base URL of the run's server
 #   verify.sh session           agent-browser session name for the run
 #   verify.sh doctor            read-only "is this instance worth driving?" check
-#   verify.sh guard baseline    record the database write counters
-#   verify.sh guard check       diff them, write the Write Ledger
+#   verify.sh guard baseline    open the Write Ledger window
+#   verify.sh guard check       close it, write WRITE-LEDGER.md (exact: clone triggers + app SQL log)
 #   verify.sh guard forensics <table> [since]
 #                               name the rows that moved in one table
 #   verify.sh sql "<query>"     read back from this run's test clone (test-clone mode only)
@@ -239,6 +239,9 @@ cmd_launch() {
     trap 'drop_run_clone "'"$dir"'" >/dev/null 2>&1 || true' EXIT
     create_clone "$(url_db "$template")" "$clone"
     log "launch: cloned $(url_db "$template") into $clone"
+    # The Write Ledger's triggers go in before the server can write anything.
+    install_write_ledger "$(url_with_db "$template" "$clone")" ||
+      die "could not install the write ledger on $clone — the Ledger would be blind, so the run stops here"
 
     local scratch="$dir/scratch"
     mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
@@ -259,12 +262,16 @@ cmd_launch() {
       "OBS_RECORDING_DIR=$scratch/obs-recordings"
       "DROPBOX_REMOTE_PATH=$scratch/dropbox"
       "${OFFLINE_SERVICES_ENV[@]}"
+      # Every statement the app sends, into server.log, for the Write Ledger.
+      "CVM_LOG_SQL=1"
     )
   else
     # The app's own connections are read-only (node-postgres reads PGOPTIONS):
     # production cannot take a write from this run, whatever gets clicked.
     # PlanetScale wants the system root certificate.
-    SERVER_ENV=("PGSSLROOTCERT=system" "PGOPTIONS=$PSQL_RO_OPTIONS")
+    # CVM_LOG_SQL: every statement the app sends lands in server.log, which is
+    # what the Write Ledger reads to prove this run sent no write.
+    SERVER_ENV=("PGSSLROOTCERT=system" "PGOPTIONS=$PSQL_RO_OPTIONS" "CVM_LOG_SQL=1")
   fi
 
   # Pick a port out of the verification band and ask for exactly it. Vite runs
@@ -381,6 +388,8 @@ cmd_doctor() {
 
 # --- database write guard -------------------------------------------------
 # baseline, check (the Write Ledger) and forensics: all in verify-guard.sh.
+# shellcheck source=SCRIPTDIR/verify-ledger.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-ledger.sh"
 # shellcheck source=SCRIPTDIR/verify-guard.sh
 . "$(dirname "${BASH_SOURCE[0]}")/verify-guard.sh"
 
