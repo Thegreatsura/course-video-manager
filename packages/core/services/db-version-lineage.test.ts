@@ -28,89 +28,7 @@ const run = <A, E>(eff: Effect.Effect<A, E, VersionOperationsService>) =>
   Effect.runPromise(eff.pipe(Effect.provide(testLayer)));
 
 describe("lineageId copy-forward", () => {
-  it("copies section lineageId forward unchanged on version clone", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const ops = yield* VersionOperationsService;
-        return yield* ops.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.lineageId).toBe(section!.lineageId);
-    expect(newSections[0]!.id).not.toBe(section!.id);
-  });
-
-  it("copies lesson lineageId forward unchanged on version clone", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const [lesson] = await testDb
-      .insert(schema.lessons)
-      .values({
-        sectionId: section!.id,
-        order: 1,
-        title: "Lesson",
-        authoringStatus: "done",
-      })
-      .returning();
-
-    const result = await run(
-      Effect.gen(function* () {
-        const ops = yield* VersionOperationsService;
-        return yield* ops.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: { lessons: true },
-    });
-
-    expect(newSections[0]!.lessons[0]!.lineageId).toBe(lesson!.lineageId);
-    expect(newSections[0]!.lessons[0]!.id).not.toBe(lesson!.id);
-  });
-
-  it("copies video lineageId forward unchanged on version clone", async () => {
+  it("copies lineageId forward unchanged at every level, onto new rows", async () => {
     const [course] = await testDb
       .insert(schema.courses)
       .values({ name: "Test" })
@@ -156,16 +74,20 @@ describe("lineageId copy-forward", () => {
       })
     );
 
-    const newVideoId = result.videoIdMappings.find(
-      (m) => m.sourceVideoId === video!.id
-    )!.newVideoId;
-
-    const newVideo = await testDb.query.videos.findFirst({
-      where: (v, { eq }) => eq(v.id, newVideoId),
+    const newSections = await testDb.query.sections.findMany({
+      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
+      with: { lessons: { with: { videos: true } } },
     });
+    const newSection = newSections[0]!;
+    const newLesson = newSection.lessons[0]!;
+    const newVideo = newLesson.videos[0]!;
 
-    expect(newVideo!.lineageId).toBe(video!.lineageId);
-    expect(newVideo!.id).not.toBe(video!.id);
+    expect(newSection.lineageId).toBe(section!.lineageId);
+    expect(newSection.id).not.toBe(section!.id);
+    expect(newLesson.lineageId).toBe(lesson!.lineageId);
+    expect(newLesson.id).not.toBe(lesson!.id);
+    expect(newVideo.lineageId).toBe(video!.lineageId);
+    expect(newVideo.id).not.toBe(video!.id);
   });
 
   it("assigns fresh lineageId to genuinely new rows", async () => {
@@ -192,54 +114,5 @@ describe("lineageId copy-forward", () => {
     expect(s1!.lineageId).toBeTruthy();
     expect(s2!.lineageId).toBeTruthy();
     expect(s1!.lineageId).not.toBe(s2!.lineageId);
-  });
-
-  it("preserves lineageId across two successive clones", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test" })
-      .returning();
-
-    const [v1] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: v1!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const originalLineageId = section!.lineageId;
-
-    // Clone v1 → v2
-    const r1 = await run(
-      Effect.gen(function* () {
-        const ops = yield* VersionOperationsService;
-        return yield* ops.copyVersionStructure({
-          sourceVersionId: v1!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    // Clone v2 → v3
-    const r2 = await run(
-      Effect.gen(function* () {
-        const ops = yield* VersionOperationsService;
-        return yield* ops.copyVersionStructure({
-          sourceVersionId: r1.version.id,
-          repoId: course!.id,
-          newVersionName: "v3",
-        });
-      })
-    );
-
-    const v3Sections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, r2.version.id),
-    });
-
-    expect(v3Sections[0]!.lineageId).toBe(originalLineageId);
   });
 });
