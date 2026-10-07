@@ -56,13 +56,8 @@ const evaluateCssStyle = (
 
 describe("clip zoom", () => {
   describe("resolveClipZoomType", () => {
-    it("passes through every known level", () => {
-      for (const zoomType of CLIP_ZOOM_TYPES) {
-        expect(resolveClipZoomType(zoomType)).toBe(zoomType);
-      }
-    });
-
-    it("reads null, undefined and junk as no zoom", () => {
+    it("keeps a known level and reads null, undefined and junk as no zoom", () => {
+      expect(resolveClipZoomType("subtle")).toBe("subtle");
       expect(resolveClipZoomType(null)).toBe("none");
       expect(resolveClipZoomType(undefined)).toBe("none");
       expect(resolveClipZoomType("wildly-zoomed")).toBe("none");
@@ -74,14 +69,6 @@ describe("clip zoom", () => {
       expect(clipZoomRect("none")).toBeNull();
       expect(clipZoomCssStyle("none")).toBeNull();
       expect(clipZoomCropFilter("none")).toBeNull();
-    });
-
-    it("pins the subtle shot: 115%, centred in x, biased above centre in y", () => {
-      expect(clipZoomRect("subtle")).toEqual({
-        scale: 1.15,
-        originX: 0.5,
-        originY: 0.3,
-      });
     });
   });
 

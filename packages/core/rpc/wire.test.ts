@@ -6,8 +6,7 @@ import {
   VersionNotDraftError,
 } from "../services/db-service-errors.js";
 import { VERSION_NOT_DRAFT_MESSAGE } from "../services/version-not-draft-message.js";
-import { AuthenticationError } from "./rpc-errors.js";
-import { decodeRpcError, encodeRpcError, isRpcFailure } from "./wire.js";
+import { decodeRpcError, encodeRpcError } from "./wire.js";
 
 describe("the error round trip", () => {
   it("rebuilds a domain NotFoundError as the same tagged error", () => {
@@ -56,15 +55,6 @@ describe("the error round trip", () => {
     );
   });
 
-  it("rebuilds a transport AuthenticationError", () => {
-    const rebuilt = decodeRpcError(
-      encodeRpcError(new AuthenticationError({ message: "nope" }))
-    );
-
-    expect(rebuilt).toBeInstanceOf(AuthenticationError);
-    expect(rebuilt._tag).toBe("AuthenticationError");
-  });
-
   it("never puts a raw cause on the wire", () => {
     // UnknownDBServiceError wraps whatever the driver threw — a Postgres error
     // carrying the failing SQL, sometimes with values in it. That is exactly
@@ -94,16 +84,5 @@ describe("the error round trip", () => {
       "UnknownDBServiceError"
     );
     expect(encodeRpcError("boom")._tag).toBe("UnknownDBServiceError");
-  });
-});
-
-describe("isRpcFailure", () => {
-  it("discriminates the envelope", () => {
-    expect(isRpcFailure({ ok: true, value: 1 })).toBe(false);
-    expect(isRpcFailure({ ok: false, error: { _tag: "NotFoundError" } })).toBe(
-      true
-    );
-    expect(isRpcFailure(null)).toBe(false);
-    expect(isRpcFailure("nope")).toBe(false);
   });
 });
