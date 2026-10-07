@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
+import { LessonPlaceProvider } from "@/features/entity-links/lesson-place-context";
+import type { FindLessonPlace } from "@/features/entity-links/entity-deep-link";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
@@ -26,7 +28,7 @@ import {
   HistoryIcon,
   PlayIcon,
 } from "lucide-react";
-import { useContext, useMemo, useState } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import {
   Link,
   Outlet,
@@ -261,6 +263,16 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
     videoTitle,
   });
 
+  // Every link copied on this Video's pages names its Course, Section and
+  // Lesson too.
+  const findLessonPlace = useCallback<FindLessonPlace>(
+    (id) =>
+      id === videoId && repoId && sectionId && lessonId
+        ? { courseId: repoId, sectionId, lessonId }
+        : undefined,
+    [videoId, repoId, sectionId, lessonId]
+  );
+
   const matches = useMatches();
   const hideParentHeader = matches.some(
     (m) =>
@@ -268,167 +280,171 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
   );
 
   return (
-    <div className="h-screen flex flex-col">
-      {!hideParentHeader && (
-        <>
-          {/* Shared header */}
-          <div className="flex items-center gap-2 p-4 border-b justify-between">
-            <div className="flex items-center gap-2">
-              {/* Back button */}
-              <Button variant="ghost" size="icon" asChild>
-                <Link to={backButtonUrl}>
-                  <ChevronLeftIcon className="size-6" />
-                </Link>
-              </Button>
+    <LessonPlaceProvider value={findLessonPlace}>
+      <div className="h-screen flex flex-col">
+        {!hideParentHeader && (
+          <>
+            {/* Shared header */}
+            <div className="flex items-center gap-2 p-4 border-b justify-between">
+              <div className="flex items-center gap-2">
+                {/* Back button */}
+                <Button variant="ghost" size="icon" asChild>
+                  <Link to={backButtonUrl}>
+                    <ChevronLeftIcon className="size-6" />
+                  </Link>
+                </Button>
 
-              {/* Breadcrumb — right-click it for this Video's menu, on every
+                {/* Breadcrumb — right-click it for this Video's menu, on every
                   tab of the Video. */}
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <h1 className="text-lg cursor-context-menu">{breadcrumb}</h1>
-                </ContextMenuTrigger>
-                <EntityMenuContent
-                  menu="context"
-                  entity={{ type: "video", id: videoId }}
-                  groups={videoGroups}
-                />
-              </ContextMenu>
-            </div>
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <h1 className="text-lg cursor-context-menu">
+                      {breadcrumb}
+                    </h1>
+                  </ContextMenuTrigger>
+                  <EntityMenuContent
+                    menu="context"
+                    entity={{ type: "video", id: videoId }}
+                    groups={videoGroups}
+                  />
+                </ContextMenu>
+              </div>
 
-            <div className="flex items-center gap-4">
-              {/* Into the Animatic, which is now a page of this Video like any
+              <div className="flex items-center gap-4">
+                {/* Into the Animatic, which is now a page of this Video like any
                   other: a `Link`, in this tab, beside the tab switcher. Shown
                   for every Landscape Video — a Short has no Animatic, but a
                   Video with no Clip Mockups yet has an empty state that says
                   how they are authored, which is worth reaching. */}
-              {videoFormat !== "short" && (
-                <Link
-                  to={`/videos/${videoId}/animatic`}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
-                    activeTab === "animatic"
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  )}
-                >
-                  <PlayIcon className="size-4" />
-                  Animatic
-                </Link>
-              )}
-
-              {/* Top-level tab switcher (hidden for short-format videos) */}
-              {videoFormat !== "short" && (
-                <div className="flex gap-1">
-                  {topTabs.map((tab) => {
-                    const isActive =
-                      tab.id === "post"
-                        ? isPostTab(activeTab)
-                        : activeTab === tab.id;
-                    return (
-                      <Link
-                        key={tab.id}
-                        to={`/videos/${videoId}/${tab.path}`}
-                        className={cn(
-                          "px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-1.5",
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <tab.icon className="size-4" />
-                        {tab.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Navigation buttons */}
-              <div className="flex items-center gap-2">
-                {previousVideoId ? (
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/videos/${previousVideoId}/${activeTab}`}>
-                      <ChevronLeftIcon className="size-4 mr-1" />
-                      Previous
-                    </Link>
-                  </Button>
-                ) : null}
-                {nextVideoId ? (
-                  <ContextMenu>
-                    <ContextMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link to={`/videos/${nextVideoId}/${activeTab}`}>
-                          Next
-                          <ChevronRightIcon className="size-4 ml-1" />
-                        </Link>
-                      </Button>
-                    </ContextMenuTrigger>
-                    {/* The next Video belongs to this Lesson: its menu is the
-                        Lesson's. */}
-                    {lessonId && repoId && sectionId && (
-                      <EntityMenuContent
-                        menu="context"
-                        entity={{
-                          type: "lesson",
-                          id: lessonId,
-                          courseId: repoId,
-                          sectionId,
-                        }}
-                        groups={{
-                          create: [
-                            {
-                              ...STANDARD_ACTIONS.add,
-                              label: "Add Video",
-                              opensDialog: true,
-                              onSelect: () => setAddVideoModalOpen(true),
-                            },
-                          ],
-                        }}
-                      />
+                {videoFormat !== "short" && (
+                  <Link
+                    to={`/videos/${videoId}/animatic`}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+                      activeTab === "animatic"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     )}
-                  </ContextMenu>
-                ) : null}
+                  >
+                    <PlayIcon className="size-4" />
+                    Animatic
+                  </Link>
+                )}
+
+                {/* Top-level tab switcher (hidden for short-format videos) */}
+                {videoFormat !== "short" && (
+                  <div className="flex gap-1">
+                    {topTabs.map((tab) => {
+                      const isActive =
+                        tab.id === "post"
+                          ? isPostTab(activeTab)
+                          : activeTab === tab.id;
+                      return (
+                        <Link
+                          key={tab.id}
+                          to={`/videos/${videoId}/${tab.path}`}
+                          className={cn(
+                            "px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-1.5",
+                            isActive
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <tab.icon className="size-4" />
+                          {tab.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Navigation buttons */}
+                <div className="flex items-center gap-2">
+                  {previousVideoId ? (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link to={`/videos/${previousVideoId}/${activeTab}`}>
+                        <ChevronLeftIcon className="size-4 mr-1" />
+                        Previous
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {nextVideoId ? (
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to={`/videos/${nextVideoId}/${activeTab}`}>
+                            Next
+                            <ChevronRightIcon className="size-4 ml-1" />
+                          </Link>
+                        </Button>
+                      </ContextMenuTrigger>
+                      {/* The next Video belongs to this Lesson: its menu is the
+                        Lesson's. */}
+                      {lessonId && repoId && sectionId && (
+                        <EntityMenuContent
+                          menu="context"
+                          entity={{
+                            type: "lesson",
+                            id: lessonId,
+                            courseId: repoId,
+                            sectionId,
+                          }}
+                          groups={{
+                            create: [
+                              {
+                                ...STANDARD_ACTIONS.add,
+                                label: "Add Video",
+                                opensDialog: true,
+                                onSelect: () => setAddVideoModalOpen(true),
+                              },
+                            ],
+                          }}
+                        />
+                      )}
+                    </ContextMenu>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Post sub-tabs */}
-          {isPostTab(activeTab) && (
-            <div className="flex gap-1 px-4 py-2 border-b">
-              {postSubTabs.map((tab) => (
-                <Link
-                  key={tab.id}
-                  to={`/videos/${videoId}/${tab.path}`}
-                  className={cn(
-                    "px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-1.5",
-                    activeTab === tab.id
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <tab.icon className="size-4" />
-                  {tab.label}
-                </Link>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+            {/* Post sub-tabs */}
+            {isPostTab(activeTab) && (
+              <div className="flex gap-1 px-4 py-2 border-b">
+                {postSubTabs.map((tab) => (
+                  <Link
+                    key={tab.id}
+                    to={`/videos/${videoId}/${tab.path}`}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-1.5",
+                      activeTab === tab.id
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <tab.icon className="size-4" />
+                    {tab.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
-      {/* Child route content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <Outlet />
+        {/* Child route content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Outlet />
+        </div>
+
+        {dialogs.dialogs}
+
+        <AddVideoModal
+          lessonId={lessonId ?? undefined}
+          videoCount={videoCount}
+          hasExplainerFolder={hasExplainerFolder}
+          open={addVideoModalOpen}
+          onOpenChange={setAddVideoModalOpen}
+        />
       </div>
-
-      {dialogs.dialogs}
-
-      <AddVideoModal
-        lessonId={lessonId ?? undefined}
-        videoCount={videoCount}
-        hasExplainerFolder={hasExplainerFolder}
-        open={addVideoModalOpen}
-        onOpenChange={setAddVideoModalOpen}
-      />
-    </div>
+    </LessonPlaceProvider>
   );
 }

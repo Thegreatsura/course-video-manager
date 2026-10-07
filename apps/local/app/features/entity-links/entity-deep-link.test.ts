@@ -3,7 +3,9 @@ import {
   ENTITY_LABELS,
   EntityRefParseError,
   entityDeepLink,
+  lessonPlaceFinder,
   parseEntityRef,
+  withLessonPlace,
   resolveEntityId,
   type EntityRef,
   type EntityType,
@@ -46,10 +48,53 @@ const cases: [EntityRef, string][] = [
   [{ type: "diagram", id: "g1" }, "/diagram-playground/g1"],
 ];
 
+const inLesson = { courseId: "c1", sectionId: "s1", lessonId: "l1" };
+const PLACE = "course=c1&section=s1&lesson=l1";
+
+/** A Video in a Lesson, and everything on its pages: the link names the whole hierarchy. */
+const placedCases: [EntityRef, string][] = [
+  [{ type: "video", id: "v1", inLesson }, `/videos/v1/edit?${PLACE}`],
+  [
+    { type: "clip", id: "k1", videoId: "v1", inLesson },
+    `/videos/v1/edit?${PLACE}&clip=k1`,
+  ],
+  [
+    { type: "chapter", id: "ch1", videoId: "v1", inLesson },
+    `/videos/v1/edit?${PLACE}&chapter=ch1`,
+  ],
+  [
+    { type: "beat", id: "b1", videoId: "v1", inLesson },
+    `/videos/v1/edit?${PLACE}&beat=b1`,
+  ],
+  [
+    { type: "clip-mockup", id: "m1", videoId: "v1", inLesson },
+    `/videos/v1/animatic?${PLACE}&clip-mockup=m1`,
+  ],
+  [
+    { type: "clip-mockup-chapter", id: "mc1", videoId: "v1", inLesson },
+    `/videos/v1/animatic?${PLACE}&clip-mockup-chapter=mc1`,
+  ],
+  [
+    { type: "clip-mockup-comment", id: "cm1", videoId: "v1", inLesson },
+    `/videos/v1/animatic?${PLACE}&clip-mockup-comment=cm1`,
+  ],
+  [
+    { type: "thumbnail", id: "t1", videoId: "v1", inLesson },
+    `/videos/v1/thumbnails?${PLACE}&thumbnail=t1`,
+  ],
+];
+
 describe("entityDeepLink", () => {
   it.each(cases)("links %o to its page", (entity, path) => {
     expect(entityDeepLink(entity, ORIGIN)).toBe(`${ORIGIN}${path}`);
   });
+
+  it.each(placedCases)(
+    "names the Course, Section and Lesson of %o",
+    (entity, path) => {
+      expect(entityDeepLink(entity, ORIGIN)).toBe(`${ORIGIN}${path}`);
+    }
+  );
 
   it("does not double the slash when the origin ends in one", () => {
     expect(entityDeepLink({ type: "course", id: "c1" }, `${ORIGIN}/`)).toBe(
@@ -71,7 +116,20 @@ describe("parseEntityRef", () => {
     );
   });
 
-  it.each(cases)("reads %o back from its link", (entity) => {
+  it.each([...cases, ...placedCases])(
+    "reads %o back from its link",
+    (entity) => {
+      expect(parseEntityRef(entityDeepLink(entity, ORIGIN))).toEqual(entity);
+    }
+  );
+
+  it("ignores a partial place rather than guessing", () => {
+    expect(
+      parseEntityRef(`${ORIGIN}/videos/v1/edit?course=c1&clip=k1`)
+    ).toEqual({ type: "clip", id: "k1", videoId: "v1" });
+  });
+
+  it.each(cases)("reads %o back from its unplaced link", (entity) => {
     expect(parseEntityRef(entityDeepLink(entity, ORIGIN))).toEqual(entity);
   });
 
@@ -180,5 +238,34 @@ describe("resolveEntityId", () => {
     expect(() =>
       resolveEntityId(link({ type: "video", id: "v1" }), ["clip", "chapter"])
     ).toThrow("that's a Video link, this command wants a Clip or Chapter");
+  });
+});
+
+describe("withLessonPlace", () => {
+  const find = lessonPlaceFinder("c1", [
+    { id: "s1", lessons: [{ id: "l1", videos: [{ id: "v1" }] }] },
+  ]);
+
+  it.each(placedCases)("fills in the place of %o", (placed) => {
+    const { inLesson: _, ...bare } = placed as EntityRef & {
+      inLesson?: unknown;
+    };
+    expect(withLessonPlace(bare as EntityRef, find)).toEqual(placed);
+  });
+
+  it("leaves a standalone Video, and anything not on a Video, alone", () => {
+    const standalone: EntityRef = { type: "clip", id: "k9", videoId: "v9" };
+    expect(withLessonPlace(standalone, find)).toEqual(standalone);
+    const pitch: EntityRef = { type: "pitch", id: "p1" };
+    expect(withLessonPlace(pitch, find)).toEqual(pitch);
+  });
+
+  it("keeps a place the caller already gave", () => {
+    const given: EntityRef = {
+      type: "video",
+      id: "v1",
+      inLesson: { courseId: "c2", sectionId: "s2", lessonId: "l2" },
+    };
+    expect(withLessonPlace(given, find)).toEqual(given);
   });
 });

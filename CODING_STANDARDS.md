@@ -150,15 +150,19 @@ with actions and no right-click handler is an unfinished entity.
 The right-click menu and the entity's **Actions menu** (the `Actions` dropdown,
 or the `…` button) offer **the same set of actions** — see "Action menus".
 
-### Every entity menu can copy its link and ID
+### Every entity menu can copy its link
 
 Every entity's right-click menu and Actions menu ends its copy group with
-"Copy Link", which copies the full app URL that opens the entity, and
-"Copy ID", which copies the id that `cvm` takes. Build entity URLs only in `entityDeepLink`, and
-read them back only with its inverse `parseEntityRef`; `cvm` accepts a link anywhere it takes an id
-because every id argument is declared through `cli/entity-id.ts`. A link names its exact entity:
-one shown on a parent's page carries its own id in a `?<type>=<id>` query param. A new entity type
-gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard item in a menu: `EntityMenuContent` (below) adds both.
+"Copy Link", which copies the full app URL that opens the entity. There is no
+"Copy ID": `cvm` takes a link anywhere it takes an id, because every id argument
+is declared through `cli/entity-id.ts`. Build entity URLs only in `entityDeepLink`, and
+read them back only with its inverse `parseEntityRef`. A link names its exact entity and
+the hierarchy above it: one shown on a parent's page carries its own id in a `?<type>=<id>`
+query param, and anything on a Video in a Lesson also carries `course`, `section` and
+`lesson` params, which `EntityMenuContent` fills in from the nearest `LessonPlaceProvider`.
+A page that shows a Course's Videos provides one. A new entity type
+gets its route in both functions and a test case beside them, which checks they stay inverses. Never hand-roll a URL or a clipboard item in a menu: `EntityMenuContent` (below) adds it,
+and `scripts/check-entity-links.sh` fails a clipboard write of a hand-built app URL or a raw `.id`.
 
 ### Filters stay in sync with the entity
 
@@ -178,14 +182,14 @@ Priority) is exempt. Distilled from Apple's HIG, NN/g and Fluent.
 one not about an entity) from `features/action-menu/`. Declare each action
 under its kind of group, taking common labels and icons from
 `STANDARD_ACTIONS`; the component owns order, separators, destructive styling,
-the ellipsis and Copy Link / Copy ID.
+the ellipsis and Copy Link.
 
 1. **One list, two doors.** An entity's right-click menu and its Actions / `…`
    dropdown render the same `groups`, built once beside the entity. A door
    that can't run an action in place still lists it and navigates to the
    entity's page to run it there (`CourseMenuIntent`).
 2. **Groups come in one order:** `open` → `edit` → `create` → `move` → `run`
-   (export, render, post) → `copy` (clipboard; Copy Link / Copy ID close it) →
+   (export, render, post) → `copy` (clipboard; Copy Link closes it) →
    `danger`. Separators sit between groups only. A new action picks its group;
    it is never appended to the end.
 3. **Labels are verb-first Title Case, without articles** ("Add Lesson

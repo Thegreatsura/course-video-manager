@@ -10,8 +10,8 @@ import type { LucideIcon } from "lucide-react";
  * - `create` — make a new thing beside or inside it: add, insert, duplicate.
  * - `move`   — reorder it or move it somewhere else.
  * - `run`    — produce something from it: export, render, transcribe, post.
- * - `copy`   — put something on the clipboard. An entity menu's Copy Link and
- *              Copy ID always close this group.
+ * - `copy`   — put something on the clipboard. An entity menu's Copy Link always
+ *              closes this group.
  * - `danger` — archive, delete, remove. Always last, always red.
  */
 export const ACTION_GROUPS = [
@@ -151,8 +151,7 @@ function layoutLeaf(
 /**
  * Turns the caller's groups into what the menu renders: groups in canonical
  * order, empty ones dropped, `danger` items marked destructive, ellipses
- * added. `appendToCopy` closes the copy group (an entity menu's Copy Link /
- * Copy ID). A separator goes between each pair of returned groups.
+ * added. `appendToCopy` closes the copy group (an entity menu's Copy Link). A separator goes between each pair of returned groups.
  */
 export function layoutActionMenu(
   groups: ActionMenuGroups,

@@ -1,4 +1,6 @@
 "use client";
+import { lessonPlaceFinder } from "@/features/entity-links/entity-deep-link";
+import { LessonPlaceProvider } from "@/features/entity-links/lesson-place-context";
 
 import { VideoModal } from "@/components/video-player";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
@@ -226,6 +228,11 @@ export default function Component(props: Route.ComponentProps) {
   );
 
   const displaySections = currentCourse?.sections ?? [];
+  // Every link copied here names its Course, Section and Lesson too.
+  const findLessonPlace = useMemo(
+    () => lessonPlaceFinder(currentCourse?.id ?? "", displaySections),
+    [currentCourse?.id, displaySections]
+  );
   const hash = location.hash;
   const scrolledHashRef = useRef<string | null>(null);
   useEffect(() => {
@@ -249,144 +256,147 @@ export default function Component(props: Route.ComponentProps) {
   }, [displaySections, dispatch]);
 
   return (
-    <CourseViewVisibilityProvider>
-      <AutofillChaptersProvider>
-        <div className="flex-1 flex flex-col bg-background text-foreground">
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
-              {currentCourse && section ? (
-                <>
-                  <Link
-                    to={`/courses/${currentCourse.id}`}
-                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    {currentCourse.name}
-                  </Link>
+    <LessonPlaceProvider value={findLessonPlace}>
+      <CourseViewVisibilityProvider>
+        <AutofillChaptersProvider>
+          <div className="flex-1 flex flex-col bg-background text-foreground">
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6">
+                {currentCourse && section ? (
+                  <>
+                    <Link
+                      to={`/courses/${currentCourse.id}`}
+                      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      {currentCourse.name}
+                    </Link>
 
-                  <h1 className="text-2xl font-bold mb-4">{section.title}</h1>
+                    <h1 className="text-2xl font-bold mb-4">{section.title}</h1>
 
-                  {loaderData.selectedVersion &&
-                    !loaderData.isLatestVersion && (
-                      <div className="mb-4">
-                        <ReadOnlyBanner />
-                      </div>
-                    )}
+                    {loaderData.selectedVersion &&
+                      !loaderData.isLatestVersion && (
+                        <div className="mb-4">
+                          <ReadOnlyBanner />
+                        </div>
+                      )}
 
-                  <Tabs
-                    value={activeTab}
-                    onValueChange={(value) =>
-                      setSearchParams(
-                        (prev) => {
-                          if (value === "scripts") prev.set("view", "scripts");
-                          else prev.delete("view");
-                          return prev;
-                        },
-                        { replace: true, preventScrollReset: true }
-                      )
-                    }
-                  >
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="videos">Videos</TabsTrigger>
-                      <TabsTrigger value="scripts">Scripts</TabsTrigger>
-                    </TabsList>
+                    <Tabs
+                      value={activeTab}
+                      onValueChange={(value) =>
+                        setSearchParams(
+                          (prev) => {
+                            if (value === "scripts")
+                              prev.set("view", "scripts");
+                            else prev.delete("view");
+                            return prev;
+                          },
+                          { replace: true, preventScrollReset: true }
+                        )
+                      }
+                    >
+                      <TabsList className="mb-4">
+                        <TabsTrigger value="videos">Videos</TabsTrigger>
+                        <TabsTrigger value="scripts">Scripts</TabsTrigger>
+                      </TabsList>
 
-                    <TabsContent value="videos">
-                      <div className="mb-4">
-                        <FilterBar
+                      <TabsContent value="videos">
+                        <div className="mb-4">
+                          <FilterBar
+                            priorityFilter={priorityFilter}
+                            iconFilter={iconFilter}
+                            todoFilter={todoFilter}
+                            todoCount={todoCount}
+                            searchQuery={searchQuery}
+                            dispatch={dispatch}
+                          />
+                        </div>
+                        <SectionGrid
+                          currentCourse={currentCourse}
+                          data={loaderData}
+                          viewMode="compact"
+                          singleColumn
+                          sensors={sensors}
+                          handleSectionDragEnd={handleSectionDragEnd}
                           priorityFilter={priorityFilter}
                           iconFilter={iconFilter}
                           todoFilter={todoFilter}
-                          todoCount={todoCount}
                           searchQuery={searchQuery}
+                          addLessonSectionId={addLessonSectionId}
+                          insertAdjacentLessonId={insertAdjacentLessonId}
+                          insertPosition={insertPosition}
+                          editSectionId={editSectionId}
+                          addVideoToLessonId={addVideoToLessonId}
+                          deleteLessonId={deleteLessonId}
+                          editDescriptionLessonId={editDescriptionLessonId}
+                          archiveSectionId={archiveSectionId}
+                          collapsedSections={NO_COLLAPSED_SECTIONS}
+                          toggleSection={noopToggleSection}
+                          lessonSelection={lessonSelection}
                           dispatch={dispatch}
+                          submitEvent={submitEvent}
+                          navigate={navigate}
+                          startExportUpload={startExportUpload}
+                          revealVideoFetcher={revealVideoFetcher}
+                          submitDeleteVideo={submitDeleteVideo}
                         />
-                      </div>
-                      <SectionGrid
-                        currentCourse={currentCourse}
-                        data={loaderData}
-                        viewMode="compact"
-                        singleColumn
-                        sensors={sensors}
-                        handleSectionDragEnd={handleSectionDragEnd}
-                        priorityFilter={priorityFilter}
-                        iconFilter={iconFilter}
-                        todoFilter={todoFilter}
-                        searchQuery={searchQuery}
-                        addLessonSectionId={addLessonSectionId}
-                        insertAdjacentLessonId={insertAdjacentLessonId}
-                        insertPosition={insertPosition}
-                        editSectionId={editSectionId}
-                        addVideoToLessonId={addVideoToLessonId}
-                        deleteLessonId={deleteLessonId}
-                        editDescriptionLessonId={editDescriptionLessonId}
-                        archiveSectionId={archiveSectionId}
-                        collapsedSections={NO_COLLAPSED_SECTIONS}
-                        toggleSection={noopToggleSection}
-                        lessonSelection={lessonSelection}
-                        dispatch={dispatch}
-                        submitEvent={submitEvent}
-                        navigate={navigate}
-                        startExportUpload={startExportUpload}
-                        revealVideoFetcher={revealVideoFetcher}
-                        submitDeleteVideo={submitDeleteVideo}
-                      />
-                    </TabsContent>
+                      </TabsContent>
 
-                    <TabsContent value="scripts">
-                      <SectionScriptsView
-                        section={section}
-                        readOnly={Boolean(
-                          loaderData.selectedVersion &&
-                          !loaderData.isLatestVersion
-                        )}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </>
-              ) : (
-                <div className="text-center py-12">
-                  <h1 className="text-xl font-semibold mb-2">
-                    Section not found
-                  </h1>
-                  <p className="text-muted-foreground">
-                    This section may have been archived or deleted.
-                  </p>
-                  {courseId && (
-                    <Link
-                      to={`/courses/${courseId}`}
-                      className="text-primary hover:underline mt-2 inline-block"
-                    >
-                      Back to course
-                    </Link>
-                  )}
-                </div>
-              )}
+                      <TabsContent value="scripts">
+                        <SectionScriptsView
+                          section={section}
+                          readOnly={Boolean(
+                            loaderData.selectedVersion &&
+                            !loaderData.isLatestVersion
+                          )}
+                        />
+                      </TabsContent>
+                    </Tabs>
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <h1 className="text-xl font-semibold mb-2">
+                      Section not found
+                    </h1>
+                    <p className="text-muted-foreground">
+                      This section may have been archived or deleted.
+                    </p>
+                    {courseId && (
+                      <Link
+                        to={`/courses/${courseId}`}
+                        className="text-primary hover:underline mt-2 inline-block"
+                      >
+                        Back to course
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
+            <VideoModal
+              videoId={videoPlayerState.videoId}
+              videoTitle={videoPlayerState.videoTitle}
+              isOpen={videoPlayerState.isOpen}
+              onClose={() => dispatch({ type: "close-video-player" })}
+            />
+
+            <RouteModals
+              currentCourse={currentCourse}
+              data={loaderData}
+              selectedCourseId={courseId}
+              viewState={viewState}
+              dispatch={dispatch}
+              navigate={navigate}
+            />
+
+            <DivergenceReportModal
+              report={divergenceReport}
+              onClose={clearDivergenceReport}
+            />
           </div>
-
-          <VideoModal
-            videoId={videoPlayerState.videoId}
-            videoTitle={videoPlayerState.videoTitle}
-            isOpen={videoPlayerState.isOpen}
-            onClose={() => dispatch({ type: "close-video-player" })}
-          />
-
-          <RouteModals
-            currentCourse={currentCourse}
-            data={loaderData}
-            selectedCourseId={courseId}
-            viewState={viewState}
-            dispatch={dispatch}
-            navigate={navigate}
-          />
-
-          <DivergenceReportModal
-            report={divergenceReport}
-            onClose={clearDivergenceReport}
-          />
-        </div>
-      </AutofillChaptersProvider>
-    </CourseViewVisibilityProvider>
+        </AutofillChaptersProvider>
+      </CourseViewVisibilityProvider>
+    </LessonPlaceProvider>
   );
 }
