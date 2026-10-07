@@ -81,7 +81,12 @@ stops a filming-related commit in `apps/local` triggering an API deploy, and
 unlike `turbo-ignore` it does not consume a concurrent build slot.
 
 The `vercel-build` script takes precedence over the preset's own build command.
-It BUILDS `@cvm/core` — nothing else.
+It BUILDS `@cvm/core`, then runs `scripts/assert-migrations-applied.mjs`: a
+read-only `SELECT` on production's `drizzle.__drizzle_migrations` that fails
+the build when this commit's latest migration is not applied, so a deploy that
+would query schema production does not have is never promoted (PR #1859). It
+never migrates. Deploying a migration-only merge therefore fails until the
+migration is applied by hand — expected; the previous deployment keeps serving.
 
 The build is not optional, and the reason is worth stating because the failure
 it prevents is silent. Vercel does not bundle — it transpiles each file it can
@@ -102,7 +107,8 @@ which is what removes the disagreement instead of picking a side.
 tsconfig `paths` and reads the source directly, so `dist/` is a deployment
 artefact and never part of the local loop.
 
-Environment: `DATABASE_URL` (the pooled PlanetScale string). This deploy does
+Environment: `DATABASE_URL` (the pooled PlanetScale string), at runtime and at
+build time — the migration check reads it during the build. This deploy does
 not need `DIRECT_DATABASE_URL` — that's for `pnpm db:migrate`, run by hand from
 the author's machine, not from Vercel.
 

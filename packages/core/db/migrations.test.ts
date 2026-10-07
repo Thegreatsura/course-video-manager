@@ -57,28 +57,38 @@ describe("drizzle migrations", () => {
     MIGRATION_TIMEOUT_MS
   );
 
+  /**
+   * Every table and column schema.ts declares must be created by a migration.
+   * The reverse need not hold: under expand/contract (docs/agents/merging.md) a
+   * migration lands in a PR of its own and schema.ts catches up in a later one,
+   * after Matt has applied it — so between the two, the migrations are ahead.
+   */
   it(
-    "migrate produces the same public-schema tables as pushSchema",
+    "migrate creates every public-schema column pushSchema does",
     async () => {
-      const getPublicTables = async (db: ReturnType<typeof drizzle>) => {
-        const result = await db.execute<{ tablename: string }>(
-          sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`
+      const getPublicColumns = async (db: ReturnType<typeof drizzle>) => {
+        const result = await db.execute<{
+          table_name: string;
+          column_name: string;
+        }>(
+          sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, column_name`
         );
-        return result.rows.map((r) => r.tablename);
+        return result.rows.map((r) => `${r.table_name}.${r.column_name}`);
       };
 
       const migratePg = new PGlite();
       const migrateDb = drizzle(migratePg, { schema });
       await migrate(migrateDb, { migrationsFolder: MIGRATIONS_FOLDER });
-      const migrateTables = await getPublicTables(migrateDb);
+      const migrateColumns = new Set(await getPublicColumns(migrateDb));
 
       const pushPg = new PGlite();
       const pushDb = drizzle(pushPg, { schema });
       const { apply } = await pushSchema(schema, pushDb as any);
       await apply();
-      const pushTables = await getPublicTables(pushDb);
+      const pushColumns = await getPublicColumns(pushDb);
 
-      expect(migrateTables).toEqual(pushTables);
+      expect(pushColumns.length).toBeGreaterThan(0);
+      expect(pushColumns.filter((c) => !migrateColumns.has(c))).toEqual([]);
 
       await migratePg.close();
       await pushPg.close();
