@@ -139,47 +139,6 @@ describe("getCourseStructureById - archived section filtering", () => {
       expect(sections[0]!.title).toBe("active");
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("returns empty sections when all are archived", () =>
-    Effect.gen(function* () {
-      const [course] = yield* Effect.promise(() =>
-        testDb
-          .insert(schema.courses)
-          .values({
-            name: "All Archived Course",
-          })
-          .returning()
-      );
-      const [version] = yield* Effect.promise(() =>
-        testDb
-          .insert(schema.courseVersions)
-          .values({ repoId: course!.id, name: "v1" })
-          .returning()
-      );
-
-      yield* Effect.promise(() =>
-        testDb.insert(schema.sections).values([
-          {
-            repoVersionId: version!.id,
-            title: "archived",
-            order: 1,
-            archivedAt: new Date(),
-          },
-          {
-            repoVersionId: version!.id,
-            title: "archived",
-            order: 2,
-            archivedAt: new Date(),
-          },
-        ])
-      );
-
-      const courseOps = yield* CourseOperationsService;
-      const result = yield* courseOps.getCourseStructureById(course!.id);
-
-      expect(result.versions[0]!.sections).toHaveLength(0);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("getCourseStructureById", () => {

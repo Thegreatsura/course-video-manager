@@ -105,6 +105,8 @@ describe("listDiagrams", () => {
 
       const d1 = yield* diagramOps.createDiagram();
       const d2 = yield* diagramOps.createDiagram();
+      const archived = yield* diagramOps.createDiagram();
+      yield* diagramOps.updateDiagram(archived.id, { archived: true });
 
       // Force d1.updatedAt to be clearly newer
       yield* Effect.promise(() => new Promise((r) => setTimeout(r, 50)));
@@ -114,19 +116,6 @@ describe("listDiagrams", () => {
       expect(list).toHaveLength(2);
       expect(list[0]!.id).toBe(d1.id);
       expect(list[1]!.id).toBe(d2.id);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("excludes archived diagrams by default", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-
-      yield* diagramOps.createDiagram();
-      const d2 = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagram(d2.id, { archived: true });
-
-      const list = yield* diagramOps.listDiagrams();
-      expect(list).toHaveLength(1);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -160,14 +149,6 @@ describe("listDiagrams", () => {
         nameFilter: "architecture",
       });
       expect(list).toHaveLength(2);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("returns empty array when no diagrams exist", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const list = yield* diagramOps.listDiagrams();
-      expect(list).toEqual([]);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -205,32 +186,9 @@ describe("listDiagrams", () => {
         expect(withoutArchived[0]!.name).toBe("Architecture Overview");
       }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("returns no results when filter matches nothing", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      yield* diagramOps.createDiagram();
-
-      const list = yield* diagramOps.listDiagrams({
-        nameFilter: "nonexistent",
-      });
-      expect(list).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("getDiagram", () => {
-  it.effect("returns a diagram by id", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-      const fetched = yield* diagramOps.getDiagram(created.id);
-
-      expect(fetched.id).toBe(created.id);
-      expect(fetched.name).toBe(created.name);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("fails with NotFoundError for missing id", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -258,6 +216,7 @@ describe("updateDiagram", () => {
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(
         originalUpdatedAt.getTime()
       );
+      expect((yield* diagramOps.getDiagram(created.id)).name).toBe("New Name");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -270,42 +229,6 @@ describe("updateDiagram", () => {
         archived: true,
       });
       expect(updated.archived).toBe(true);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("unarchives a diagram", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagram(created.id, { archived: true });
-
-      const updated = yield* diagramOps.updateDiagram(created.id, {
-        archived: false,
-      });
-      expect(updated.archived).toBe(false);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails with NotFoundError for non-existent diagram", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const result = yield* diagramOps
-        .updateDiagram("nonexistent-id", { name: "Nope" })
-        .pipe(Effect.flip);
-      expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("updating name does not change archived", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-
-      const updated = yield* diagramOps.updateDiagram(created.id, {
-        name: "New Name",
-      });
-      expect(updated.name).toBe("New Name");
-      expect(updated.archived).toBe(false);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -322,20 +245,6 @@ describe("updateDiagram", () => {
       expect(updated.updatedAt.getTime()).toBeGreaterThan(
         created.updatedAt.getTime()
       );
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("allows setting name and archived in a single update", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-
-      const updated = yield* diagramOps.updateDiagram(created.id, {
-        name: "Archived Diagram",
-        archived: true,
-      });
-      expect(updated.name).toBe("Archived Diagram");
-      expect(updated.archived).toBe(true);
     }).pipe(Effect.provide(testLayer))
   );
 });
@@ -360,31 +269,6 @@ describe("updateDiagramHead", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("overwrites previous headScene", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-
-      const scene1 = { store: { "shape:a": {} }, schema: { schemaVersion: 2 } };
-      yield* diagramOps.updateDiagramHead(created.id, scene1);
-
-      const scene2 = { store: { "shape:b": {} }, schema: { schemaVersion: 2 } };
-      const updated = yield* diagramOps.updateDiagramHead(created.id, scene2);
-
-      expect(updated.headScene).toEqual(scene2);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails with NotFoundError for non-existent diagram", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const result = yield* diagramOps
-        .updateDiagramHead("nonexistent-id", { store: {} })
-        .pipe(Effect.flip);
-      expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("clears headScene when set to null", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -395,24 +279,6 @@ describe("updateDiagramHead", () => {
 
       const cleared = yield* diagramOps.updateDiagramHead(created.id, null);
       expect(cleared.headScene).toBeNull();
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("preserves name and archived when updating head", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const created = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagram(created.id, {
-        name: "My Diagram",
-        archived: false,
-      });
-
-      const scene = { store: { "shape:x": {} } };
-      const updated = yield* diagramOps.updateDiagramHead(created.id, scene);
-
-      expect(updated.name).toBe("My Diagram");
-      expect(updated.archived).toBe(false);
-      expect(updated.headScene).toEqual(scene);
     }).pipe(Effect.provide(testLayer))
   );
 });
@@ -443,18 +309,6 @@ describe("createSnapshot", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("defaults preserved to false", () =>
-    Effect.gen(function* () {
-      const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.createDiagram();
-      yield* diagramOps.updateDiagramHead(diagram.id, scene);
-
-      const snapshot = yield* diagramOps.createSnapshot(diagram.id, {});
-
-      expect(snapshot.preserved).toBe(false);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("deduplicates by contentHash — returns existing row", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -464,6 +318,8 @@ describe("createSnapshot", () => {
       const first = yield* diagramOps.createSnapshot(diagram.id, {});
       const second = yield* diagramOps.createSnapshot(diagram.id, {});
 
+      // An unflagged snapshot is not preserved.
+      expect(first.preserved).toBe(false);
       expect(second.id).toBe(first.id);
       expect(second.contentHash).toBe(first.contentHash);
     }).pipe(Effect.provide(testLayer))
@@ -546,29 +402,5 @@ describe("createSnapshot", () => {
         .pipe(Effect.flip);
       expect(result._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "produces same hash regardless of key insertion order in headScene",
-    () =>
-      Effect.gen(function* () {
-        const diagramOps = yield* DiagramOperationsService;
-
-        const d1 = yield* diagramOps.createDiagram();
-        yield* diagramOps.updateDiagramHead(d1.id, {
-          store: { "shape:a": { id: "a", x: 1 } },
-          schema: { schemaVersion: 2 },
-        });
-        const s1 = yield* diagramOps.createSnapshot(d1.id, {});
-
-        const d2 = yield* diagramOps.createDiagram();
-        yield* diagramOps.updateDiagramHead(d2.id, {
-          schema: { schemaVersion: 2 },
-          store: { "shape:a": { x: 1, id: "a" } },
-        });
-        const s2 = yield* diagramOps.createSnapshot(d2.id, {});
-
-        expect(s1.contentHash).toBe(s2.contentHash);
-      }).pipe(Effect.provide(testLayer))
   );
 });

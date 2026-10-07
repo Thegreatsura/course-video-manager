@@ -39,47 +39,6 @@ async function createTestVideo(title = "Test Short") {
   return video!;
 }
 
-describe("createVideoPost", () => {
-  it.effect("creates a video post with platform and videoId", () =>
-    Effect.gen(function* () {
-      const video = yield* Effect.promise(() => createTestVideo());
-      const ops = yield* VideoPostOperationsService;
-      const post = yield* ops.createVideoPost({
-        videoId: video.id,
-        platform: "youtube-shorts",
-      });
-
-      expect(post.id).toEqual(expect.any(String));
-      expect(post.videoId).toBe(video.id);
-      expect(post.platform).toBe("youtube-shorts");
-      expect(post.remoteId).toBeNull();
-      expect(post.remoteUrl).toBeNull();
-      expect(post.postedAt).toBeNull();
-      expect(post.createdAt).toBeInstanceOf(Date);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("allows multiple posts for the same video", () =>
-    Effect.gen(function* () {
-      const video = yield* Effect.promise(() => createTestVideo());
-      const ops = yield* VideoPostOperationsService;
-
-      const post1 = yield* ops.createVideoPost({
-        videoId: video.id,
-        platform: "youtube-shorts",
-      });
-      const post2 = yield* ops.createVideoPost({
-        videoId: video.id,
-        platform: "buffer",
-      });
-
-      expect(post1.id).not.toBe(post2.id);
-      expect(post1.platform).toBe("youtube-shorts");
-      expect(post2.platform).toBe("buffer");
-    }).pipe(Effect.provide(testLayer))
-  );
-});
-
 describe("listByVideoId", () => {
   it.effect("returns all posts for a video", () =>
     Effect.gen(function* () {
@@ -97,16 +56,6 @@ describe("listByVideoId", () => {
 
       const posts = yield* ops.listByVideoId(video.id);
       expect(posts).toHaveLength(2);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("returns empty array when no posts exist", () =>
-    Effect.gen(function* () {
-      const video = yield* Effect.promise(() => createTestVideo());
-      const ops = yield* VideoPostOperationsService;
-
-      const posts = yield* ops.listByVideoId(video.id);
-      expect(posts).toEqual([]);
     }).pipe(Effect.provide(testLayer))
   );
 

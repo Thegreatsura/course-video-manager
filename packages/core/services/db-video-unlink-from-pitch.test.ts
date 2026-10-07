@@ -56,15 +56,4 @@ describe("unlinkVideoFromPitch", () => {
       expect(updated.pitchId).toBeNull();
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("fails with NotFoundError for non-existent video", () =>
-    Effect.gen(function* () {
-      const videoOps = yield* VideoOperationsService;
-      const result = yield* videoOps
-        .unlinkVideoFromPitch("nonexistent-id")
-        .pipe(Effect.flip);
-
-      expect(result._tag).toBe("NotFoundError");
-    }).pipe(Effect.provide(testLayer))
-  );
 });

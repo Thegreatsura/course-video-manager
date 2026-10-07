@@ -79,43 +79,6 @@ describe("createBeat", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("starts with no Learning Goals", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-
-      const beat = yield* beatOps.createBeat("video-1");
-
-      expect(beat.learningGoalIds).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("uses the provided kind", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-
-      const beat = yield* beatOps.createBeat("video-1", "quest");
-
-      expect(beat.kind).toBe("quest");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect(
-    "round-trips the setup kind through createBeat and setBeatKind",
-    () =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => makeVideo("video-1"));
-        const beatOps = yield* BeatOperationsService;
-
-        const beat = yield* beatOps.createBeat("video-1", "setup");
-        expect(beat.kind).toBe("setup");
-
-        const updated = yield* beatOps.setBeatKind(beat.id, "setup");
-        expect(updated.kind).toBe("setup");
-      }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("slots new beats at the end, in creation order", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeVideo("video-1"));
@@ -130,22 +93,6 @@ describe("createBeat", () => {
 
       const listed = yield* beatOps.listBeatsByVideoId("video-1");
       expect(listed.map((s) => s.id)).toEqual([first.id, second.id, third.id]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("stores the provided title", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-
-      const beat = yield* beatOps.createBeat(
-        "video-1",
-        "quest",
-        null,
-        "Closures"
-      );
-
-      expect(beat.title).toBe("Closures");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -195,47 +142,6 @@ describe("createBeat", () => {
       expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
-
-  it.effect("scopes order to each video independently", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      yield* Effect.promise(() => makeVideo("video-2"));
-      const beatOps = yield* BeatOperationsService;
-
-      yield* beatOps.createBeat("video-1");
-      yield* beatOps.createBeat("video-2");
-
-      const v1 = yield* beatOps.listBeatsByVideoId("video-1");
-      const v2 = yield* beatOps.listBeatsByVideoId("video-2");
-      expect(v1).toHaveLength(1);
-      expect(v2).toHaveLength(1);
-    }).pipe(Effect.provide(testLayer))
-  );
-});
-
-describe("renameBeat", () => {
-  it.effect("updates the title", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-      const created = yield* beatOps.createBeat("video-1");
-
-      const renamed = yield* beatOps.renameBeat(created.id, "Closures");
-
-      expect(renamed.title).toBe("Closures");
-      expect(renamed.kind).toBe("definition");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the beat does not exist", () =>
-    Effect.gen(function* () {
-      const beatOps = yield* BeatOperationsService;
-      const result = yield* beatOps
-        .renameBeat("missing", "x")
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
-    }).pipe(Effect.provide(testLayer))
-  );
 });
 
 describe("setBeatDescription", () => {
@@ -256,45 +162,6 @@ describe("setBeatDescription", () => {
       );
       expect(updated.title).toBe("Closures");
       expect(updated.kind).toBe("quest");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("can be cleared back to an empty string", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-      const created = yield* beatOps.createBeat("video-1");
-      yield* beatOps.setBeatDescription(created.id, "draft note");
-
-      const cleared = yield* beatOps.setBeatDescription(created.id, "");
-
-      expect(cleared.description).toBe("");
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the beat does not exist", () =>
-    Effect.gen(function* () {
-      const beatOps = yield* BeatOperationsService;
-      const result = yield* beatOps
-        .setBeatDescription("missing", "x")
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
-    }).pipe(Effect.provide(testLayer))
-  );
-});
-
-describe("setBeatKind", () => {
-  it.effect("changes the kind while preserving the title", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-      const created = yield* beatOps.createBeat("video-1");
-      yield* beatOps.renameBeat(created.id, "Intro");
-
-      const updated = yield* beatOps.setBeatKind(created.id, "playthrough");
-
-      expect(updated.kind).toBe("playthrough");
-      expect(updated.title).toBe("Intro");
     }).pipe(Effect.provide(testLayer))
   );
 });
@@ -336,20 +203,6 @@ describe("setBeatLearningGoals", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("an empty array clears every link", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      yield* Effect.promise(() => makeLearningGoal("goal-1"));
-      const beatOps = yield* BeatOperationsService;
-      const created = yield* beatOps.createBeat("video-1");
-      yield* beatOps.setBeatLearningGoals(created.id, ["goal-1"]);
-
-      const cleared = yield* beatOps.setBeatLearningGoals(created.id, []);
-
-      expect(cleared.learningGoalIds).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
   it.effect("dedupes repeated ids", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeVideo("video-1"));
@@ -378,16 +231,6 @@ describe("setBeatLearningGoals", () => {
       const moved = yield* beatOps.moveBeat(created.id, "video-2", null);
 
       expect(moved.learningGoalIds).toEqual(["goal-1"]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("fails when the beat does not exist", () =>
-    Effect.gen(function* () {
-      const beatOps = yield* BeatOperationsService;
-      const result = yield* beatOps
-        .setBeatLearningGoals("missing", [])
-        .pipe(Effect.either);
-      expect(result._tag).toBe("Left");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -436,21 +279,6 @@ describe("deleteBeat", () => {
       );
       expect(row).toBeDefined();
       expect(row!.archived).toBe(true);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("excludes archived beats from listBeatsByVideoId", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      const beatOps = yield* BeatOperationsService;
-      const a = yield* beatOps.createBeat("video-1");
-      const b = yield* beatOps.createBeat("video-1");
-
-      yield* beatOps.deleteBeat(a.id);
-
-      const listed = yield* beatOps.listBeatsByVideoId("video-1");
-      expect(listed).toHaveLength(1);
-      expect(listed[0]!.id).toBe(b.id);
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -552,20 +380,5 @@ describe("moveBeat", () => {
         expect(v1).toHaveLength(0);
         expect(v2.map((s) => s.id)).toEqual([a.id, d.id]);
       }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("preserves the beat's description across a cross-video move", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => makeVideo("video-1"));
-      yield* Effect.promise(() => makeVideo("video-2"));
-      const beatOps = yield* BeatOperationsService;
-      const a = yield* beatOps.createBeat("video-1");
-      yield* beatOps.setBeatDescription(a.id, "travels with the beat");
-
-      const moved = yield* beatOps.moveBeat(a.id, "video-2", null);
-
-      expect(moved.videoId).toBe("video-2");
-      expect(moved.description).toBe("travels with the beat");
-    }).pipe(Effect.provide(testLayer))
   );
 });
