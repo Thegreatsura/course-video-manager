@@ -58,6 +58,11 @@ export namespace teleprompterSession {
      * the editor. `null` when there is none, or nobody to ask.
      */
     latestTranscript: string | null;
+    /**
+     * How long the Video runs so far, in seconds, as last pushed by the
+     * editor. `null` when there is nobody to ask.
+     */
+    videoLengthSeconds: number | null;
     content: Content;
     lastScriptPushAt: number;
     /** Whether the crawl is rolling. */
@@ -93,6 +98,8 @@ export namespace teleprompterSession {
         marks?: ClipMarks;
         /** Absent from an editor running older code; treated as none. */
         latestTranscript?: string | null;
+        /** Absent from an editor running older code; treated as unknown. */
+        videoLengthSeconds?: number | null;
         at: number;
       }
     /** A bare pong: the editor is still there, and nothing has changed. */
@@ -123,6 +130,7 @@ export namespace teleprompterSession {
     capture: "not-recording",
     marks: NO_MARKS,
     latestTranscript: null,
+    videoLengthSeconds: null,
     content: EMPTY_CONTENT,
     lastScriptPushAt: 0,
     playing: false,
@@ -166,6 +174,9 @@ export namespace teleprompterSession {
           latestTranscript: videoChanged
             ? null
             : (action.latestTranscript ?? null),
+          // Unlike the session's leftovers, the length always describes the
+          // video it arrived with, so a new video's first push is believed.
+          videoLengthSeconds: action.videoLengthSeconds ?? null,
           // Recording never starts the crawl: the first words of a take are
           // rarely the first words of the script, so rolling on record puts the
           // glass ahead of the delivery. Play is a deliberate press. The end of
@@ -208,6 +219,7 @@ export namespace teleprompterSession {
           // on any more.
           marks: NO_MARKS,
           latestTranscript: null,
+          videoLengthSeconds: null,
         };
 
       case "content-fetched": {

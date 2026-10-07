@@ -27,6 +27,8 @@ export type TeleprompterEditorState = {
   marks?: ClipMarks;
   /** The newest transcribed clip in this session, for the glass's corner. */
   latestTranscript?: string | null;
+  /** The Video's length so far in seconds, for beside the mic on the glass. */
+  videoLengthSeconds?: number | null;
 };
 
 /**

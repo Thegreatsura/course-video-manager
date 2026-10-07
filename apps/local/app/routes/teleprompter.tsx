@@ -26,6 +26,7 @@ import { TeleprompterCrawl } from "@/features/teleprompter/teleprompter-crawl";
 import { teleprompterSession } from "@/features/teleprompter/teleprompter-session";
 import { SessionMarks } from "@/features/teleprompter/session-marks";
 import { LatestTranscript } from "@/features/teleprompter/latest-transcript";
+import { VideoLength } from "@/features/teleprompter/video-length";
 import type { Route } from "./+types/teleprompter";
 
 const PING_INTERVAL_MS = 2000;
@@ -60,9 +61,15 @@ export default function Teleprompter() {
           tab: msg.tab,
           marks: msg.marks,
           latestTranscript: msg.latestTranscript,
+          videoLengthSeconds: msg.videoLengthSeconds,
           at: Date.now(),
         });
       } else if (msg.type === "pong") {
+        // A pong that revives a lapsed connection carries nothing, and the
+        // lapse wiped the marks, transcript and length — so ask again, or they
+        // stay blank until something in the editor happens to change.
+        if (!connectedRef.current)
+          teleprompterChannel.sendToParent({ type: "hello" });
         dispatch({ type: "editor-alive", at: Date.now() });
       } else if (msg.type === "editorDisconnected") {
         dispatch({ type: "editor-disconnected" });
@@ -177,6 +184,10 @@ export default function Teleprompter() {
         status={state.capture}
         editorConnected={state.editorConnected}
       />
+
+      {state.editorConnected && (
+        <VideoLength seconds={state.videoLengthSeconds} />
+      )}
 
       {/*
         Always mounted: with no session under way it draws nothing at all, so

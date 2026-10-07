@@ -241,6 +241,32 @@ describe("latest transcript", () => {
   });
 });
 
+describe("video length", () => {
+  it("follows the editor as clips land, and across a move to another video", () => {
+    const push = (videoId: string, videoLengthSeconds: number) => ({
+      type: "editor-state" as const,
+      videoId,
+      capture: "silence" as const,
+      tab: "script" as const,
+      videoLengthSeconds,
+      at: 2000,
+    });
+    const afterFirstClip = reducer(connected(), push("v1", 42));
+    const afterSecondClip = reducer(afterFirstClip, push("v1", 97));
+    const onNextVideo = reducer(afterSecondClip, push("v2", 610));
+    expect(afterSecondClip.videoLengthSeconds).toBe(97);
+    expect(onNextVideo.videoLengthSeconds).toBe(610);
+  });
+
+  it("clears once the editor goes quiet", () => {
+    const next = reducer(connected({ videoLengthSeconds: 97 }), {
+      type: "liveness-checked",
+      at: 1000 + EDITOR_ALIVE_MS + 1,
+    });
+    expect(next.videoLengthSeconds).toBe(null);
+  });
+});
+
 describe("script-pushed", () => {
   it("puts the editor's live text straight on the glass", () => {
     const next = reducer(connected(), {

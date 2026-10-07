@@ -3,7 +3,7 @@
  *
  * The popup has no picker, so this is the only way it learns which video to
  * show, what capture is doing, which of Script or Beats you're looking at, and
- * what this recording session's clips are doing.
+ * what this recording session's clips are doing, and how long the Video runs.
  *
  * Two effects, doing two different jobs:
  *
@@ -17,7 +17,7 @@
  *     `{ videoId, capture, tab }` sends nothing — which matters, because the
  *     speech detector re-renders far more often than it actually transitions.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   enableTeleprompterEditorMode,
   pushTeleprompterState,
@@ -27,6 +27,8 @@ import type { BeatTab } from "../beat-tab";
 import type { RecordingSession, TimelineItem } from "../clip-state-reducer";
 import { useSessionClipMarks } from "../session-clip-marks";
 import { useLatestSessionTranscript } from "../session-latest-transcript";
+import { getTimelineItems, getTotalDuration } from "../video-editor-selectors";
+import { isClip } from "../clip-utils";
 
 export type TeleprompterEditorInput = {
   videoId: string | null;
@@ -47,7 +49,21 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
     input.sessions
   );
 
-  const state = { videoId, capture, tab, marks, latestTranscript };
+  // The same length the editor shows under its player: the same items, the
+  // same filter and the same sum as `clips` / `totalDuration` in video-editor.tsx.
+  const videoLengthSeconds = useMemo(
+    () => getTotalDuration(getTimelineItems(input.items).filter(isClip)),
+    [input.items]
+  );
+
+  const state = {
+    videoId,
+    capture,
+    tab,
+    marks,
+    latestTranscript,
+    videoLengthSeconds,
+  };
   const ref = useRef(state);
   ref.current = state;
 
@@ -63,6 +79,7 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
       tab,
       marks: marksKey === "" ? [] : (marksKey.split(",") as ClipMarks),
       latestTranscript,
+      videoLengthSeconds,
     });
-  }, [videoId, capture, tab, marksKey, latestTranscript]);
+  }, [videoId, capture, tab, marksKey, latestTranscript, videoLengthSeconds]);
 }
