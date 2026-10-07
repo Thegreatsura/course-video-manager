@@ -59,9 +59,9 @@ describe("drizzle migrations", () => {
 
   /**
    * Every table and column schema.ts declares must be created by a migration.
-   * The reverse need not hold: under expand/contract (docs/agents/merging.md) a
-   * migration lands in a PR of its own and schema.ts catches up in a later one,
-   * after Matt has applied it — so between the two, the migrations are ahead.
+   * The reverse need not hold: a contract change (the deploy-migration skill)
+   * first removes a column from schema.ts and only later drops it in a
+   * migration — so between the two, the migrations are ahead.
    */
   it(
     "migrate creates every public-schema column pushSchema does",

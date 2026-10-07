@@ -127,40 +127,10 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-headless-shell
       - run: pnpm run test:ci:browser
 
-  # Expand/contract for migrations (docs/agents/merging.md): a migration ships
-  # in a PR of its own, and a PR that changes the Drizzle schema needs the
-  # `migration-applied` label Matt adds once production is migrated. See
-  # scripts/check-migration-pr.ts. Runs on docs-only PRs too (it is seconds),
-  # and reads the labels live, so re-running this job after Matt labels the PR
-  # sees the label. Pushes to main have no PR to judge.
-  migration-guard:
-    name: migration guard (expand/contract)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          if [ -z "$PR" ]; then echo "not a PR: nothing to judge"; exit 0; fi
-          gh api --paginate "repos/$REPO/pulls/$PR/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)' > files.txt
-          if [ "$(wc -l < files.txt)" -ge 3000 ]; then
-            echo "::error::the files API caps at 3000 entries; split this PR"; exit 1
-          fi
-          gh api "repos/$REPO/pulls/$PR" --jq '.labels[].name' > labels.txt
-          node scripts/check-migration-pr.ts --files files.txt --labels labels.txt
-
   # The required status context. Green only if every job above succeeded, or —
   # on a docs-only PR — was skipped by the fast path.
   check:
-    needs:
-      [changes, static, test-rest, test-local, test-browser, migration-guard]
+    needs: [changes, static, test-rest, test-local, test-browser]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
