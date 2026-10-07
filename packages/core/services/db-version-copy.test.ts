@@ -8,6 +8,8 @@ import {
   type TestDb,
 } from "../test-utils/pglite.js";
 import * as schema from "../db/schema.js";
+import { sortByOrder } from "../lib/sort-by-order.js";
+import { eq, getTableColumns } from "drizzle-orm";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<VersionOperationsService>;
@@ -27,615 +29,471 @@ beforeEach(async () => {
 const run = <A, E>(eff: Effect.Effect<A, E, VersionOperationsService>) =>
   Effect.runPromise(eff.pipe(Effect.provide(testLayer)));
 
-describe("copyVersionStructure", () => {
-  it("preserves lesson icon (type) when copying a version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
+const cloneVersion = (repoId: string, sourceVersionId: string) =>
+  run(
+    Effect.gen(function* () {
+      const versionOps = yield* VersionOperationsService;
+      return yield* versionOps.copyVersionStructure({
+        sourceVersionId,
+        repoId,
+        newVersionName: "v2",
+      });
+    })
+  );
 
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
+async function createCourseAndVersion() {
+  const [course] = await testDb
+    .insert(schema.courses)
+    .values({ name: "Test Course" })
+    .returning();
+  const [version] = await testDb
+    .insert(schema.courseVersions)
+    .values({ repoId: course!.id, name: "v1" })
+    .returning();
+  return { course: course!, version: version! };
+}
 
+/**
+ * What a Course Version snapshot carries forward, column by column. Same
+ * pattern as db-duplicate-course-drift.test.ts: add a column to any table the
+ * clone copies and the first test fails until it is classified here, and the
+ * second proves every `copied` column really arrives on the clone.
+ */
+describe("copyVersionStructure — schema-drift guard", () => {
+  const COPY_SPEC = {
+    section: {
+      table: schema.sections,
+      copied: ["title", "description", "order", "lineageId"],
+      // previousVersionSectionId points at the source row (asserted below).
+      notCopied: [
+        "id",
+        "repoVersionId",
+        "previousVersionSectionId",
+        "archivedAt",
+        "createdAt",
+      ],
+    },
+    lesson: {
+      table: schema.lessons,
+      copied: [
+        "title",
+        "description",
+        "icon",
+        "priority",
+        "dependencies",
+        "authoringStatus",
+        "order",
+        "lineageId",
+      ],
+      notCopied: [
+        "id",
+        "sectionId",
+        "previousVersionLessonId",
+        "archived",
+        "createdAt",
+      ],
+    },
+    video: {
+      table: schema.videos,
+      copied: [
+        "title",
+        "originalFootagePath",
+        "body",
+        "description",
+        "script",
+        "lineageId",
+      ],
+      // `format` is not carried by a version clone today (duplicateCourse
+      // does carry it).
+      notCopied: [
+        "id",
+        "lessonId",
+        "pitchId",
+        "format",
+        "archived",
+        "createdAt",
+        "updatedAt",
+      ],
+    },
+    clip: {
+      table: schema.clips,
+      copied: [
+        "videoFilename",
+        "sourceStartTime",
+        "sourceEndTime",
+        "order",
+        "text",
+        "transcribedAt",
+        "scene",
+        "profile",
+        "pauseType",
+      ],
+      // `zoomType` and `diagramSnapshotId` are not carried by a version clone
+      // today (duplicateCourse and the video copy do carry them).
+      notCopied: [
+        "id",
+        "videoId",
+        "zoomType",
+        "diagramSnapshotId",
+        "archived",
+        "createdAt",
+      ],
+    },
+    chapter: {
+      table: schema.chapters,
+      copied: ["name", "order"],
+      notCopied: ["id", "videoId", "archived", "createdAt"],
+    },
+    beat: {
+      table: schema.beats,
+      copied: ["kind", "title", "description", "order"],
+      notCopied: ["id", "videoId", "archived", "createdAt"],
+    },
+    clipMockup: {
+      table: schema.clipMockups,
+      copied: ["line", "imagePath", "audioPath", "durationSeconds", "order"],
+      notCopied: ["id", "videoId", "archived", "createdAt"],
+    },
+    clipMockupChapter: {
+      table: schema.clipMockupChapters,
+      copied: ["name", "order"],
+      notCopied: ["id", "videoId", "archived", "createdAt"],
+    },
+    clipMockupComment: {
+      table: schema.clipMockupComments,
+      copied: ["body", "createdAt", "updatedAt"],
+      notCopied: ["id", "videoId", "clipMockupId", "clipMockupChapterId"],
+    },
+    thumbnail: {
+      table: schema.thumbnails,
+      copied: ["layers", "filePath", "selectedForUpload"],
+      notCopied: ["id", "videoId", "createdAt"],
+    },
+  } as const;
+
+  async function getOne(table: any, column: string, value: string) {
+    const rows = await testDb
+      .select()
+      .from(table)
+      .where(eq(table[column], value));
+    return rows[0];
+  }
+
+  it("declares every column of every copied table (add a column => this fails)", () => {
+    for (const [name, spec] of Object.entries(COPY_SPEC)) {
+      const actual = Object.keys(getTableColumns(spec.table)).sort();
+      const declared = [...spec.copied, ...spec.notCopied].sort();
+      expect(actual, `uncategorized column(s) on "${name}"`).toEqual(declared);
+    }
+  });
+
+  it("carries over every copied column end-to-end", async () => {
+    const { course, version } = await createCourseAndVersion();
     const [section] = await testDb
       .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    await testDb.insert(schema.lessons).values({
-      sectionId: section!.id,
-      order: 1,
-      icon: "code",
-      title: "Test Lesson",
-      authoringStatus: "done",
-    });
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: { lessons: true },
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.lessons).toHaveLength(1);
-    expect(newSections[0]!.lessons[0]!.icon).toBe("code");
-  });
-
-  it("preserves section description when copying a version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course 2" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    await testDb.insert(schema.sections).values({
-      repoVersionId: version!.id,
-      title: "01-intro",
-      order: 1,
-      description: "This is a section description",
-    });
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.description).toBe("This is a section description");
-  });
-
-  it("skips archived sections when copying a version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Archive Copy Test" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    // One active section, one archived
-    await testDb.insert(schema.sections).values([
-      { repoVersionId: version!.id, title: "01-active", order: 1 },
-      {
-        repoVersionId: version!.id,
-        title: "02-archived",
-        order: 2,
-        archivedAt: new Date(),
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.title).toBe("01-active");
-  });
-
-  it("skips archived lessons when copying a version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
       .values({
-        name: "Archived Lesson Copy Test",
-      })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    await testDb.insert(schema.lessons).values([
-      {
-        sectionId: section!.id,
-        order: 1,
-        title: "Active Lesson",
-        authoringStatus: "done",
-      },
-      {
-        sectionId: section!.id,
-        order: 2,
-        title: "Archived Lesson",
-        authoringStatus: "done",
-        archived: true,
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newSections = await testDb.query.sections.findMany({
-      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: { lessons: true },
-    });
-
-    expect(newSections).toHaveLength(1);
-    expect(newSections[0]!.lessons).toHaveLength(1);
-    expect(newSections[0]!.lessons[0]!.title).toBe("Active Lesson");
-  });
-
-  it("preserves lesson authoringStatus when copying a version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "AuthoringStatus Copy" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    await testDb.insert(schema.lessons).values([
-      {
-        sectionId: section!.id,
-        order: 1,
-        title: "Todo Lesson",
-        authoringStatus: "todo",
-      },
-      {
-        sectionId: section!.id,
-        order: 2,
-        title: "Done Lesson",
-        authoringStatus: "done",
-      },
-      {
-        sectionId: section!.id,
+        repoVersionId: version.id,
+        title: "Coverage Section",
+        description: "Section Description",
         order: 3,
-        title: "Lesson",
-        authoringStatus: "todo",
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
       })
-    );
+      .returning();
+    const [lesson] = await testDb
+      .insert(schema.lessons)
+      .values({
+        sectionId: section!.id,
+        title: "Coverage Lesson",
+        description: "Lesson Description",
+        icon: "code",
+        priority: 5,
+        dependencies: ["dep-a", "dep-b"],
+        authoringStatus: "in-progress",
+        order: 7,
+      })
+      .returning();
+    const [video] = await testDb
+      .insert(schema.videos)
+      .values({
+        lessonId: lesson!.id,
+        title: "coverage.mp4",
+        originalFootagePath: "/footage/coverage.mp4",
+        body: "# Lesson body",
+        description: "SEO desc",
+        script: "video teleprompter script",
+      })
+      .returning();
+    await testDb.insert(schema.clips).values({
+      videoId: video!.id,
+      videoFilename: "coverage-clip.mp4",
+      sourceStartTime: 1.5,
+      sourceEndTime: 9.5,
+      order: "m",
+      text: "clip text",
+      transcribedAt: new Date("2026-01-01T00:00:00.000Z"),
+      scene: "scene-1",
+      profile: "profile-1",
+      pauseType: "intro",
+    });
+    await testDb
+      .insert(schema.chapters)
+      .values({ videoId: video!.id, name: "Coverage Chapter", order: "m" });
+    await testDb.insert(schema.beats).values({
+      videoId: video!.id,
+      kind: "quest",
+      title: "Coverage Beat",
+      description: "Beat Description",
+      order: "m",
+    });
+    await testDb.insert(schema.clipMockups).values({
+      videoId: video!.id,
+      line: "Coverage Clip Mockup line",
+      imagePath: "frame-001.png",
+      audioPath: "speech-001.wav",
+      durationSeconds: 2.75,
+      order: "m",
+    });
+    const [mockupChapter] = await testDb
+      .insert(schema.clipMockupChapters)
+      .values({ videoId: video!.id, name: "Coverage Chapter", order: "mV" })
+      .returning();
+    await testDb.insert(schema.clipMockupComments).values({
+      videoId: video!.id,
+      clipMockupChapterId: mockupChapter!.id,
+      body: "Coverage Clip Mockup Comment",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    });
+    await testDb.insert(schema.thumbnails).values({
+      videoId: video!.id,
+      layers: [{ type: "text", content: "coverage" }],
+      filePath: "/thumbs/coverage.png",
+      selectedForUpload: true,
+    });
 
-    const newSections = await testDb.query.sections.findMany({
+    const result = await cloneVersion(course.id, version.id);
+
+    const [newSection] = await testDb.query.sections.findMany({
       where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
-      with: { lessons: { orderBy: (l, { asc }) => asc(l.order) } },
+      with: {
+        lessons: {
+          with: {
+            videos: {
+              with: {
+                clips: true,
+                chapters: true,
+                beats: true,
+                clipMockups: true,
+                clipMockupChapters: true,
+                clipMockupComments: true,
+                thumbnails: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    expect(newSections[0]!.lessons).toHaveLength(3);
-    expect(newSections[0]!.lessons[0]!.authoringStatus).toBe("todo");
-    expect(newSections[0]!.lessons[1]!.authoringStatus).toBe("done");
-    expect(newSections[0]!.lessons[2]!.authoringStatus).toBe("todo");
+    const newLesson = newSection!.lessons[0]!;
+    const newVideo = newLesson.videos[0]!;
+    const newRows: Record<keyof typeof COPY_SPEC, any> = {
+      section: newSection!,
+      lesson: newLesson,
+      video: newVideo,
+      clip: newVideo.clips[0]!,
+      chapter: newVideo.chapters[0]!,
+      beat: newVideo.beats[0]!,
+      clipMockup: newVideo.clipMockups[0]!,
+      clipMockupChapter: newVideo.clipMockupChapters[0]!,
+      clipMockupComment: newVideo.clipMockupComments[0]!,
+      thumbnail: newVideo.thumbnails[0]!,
+    };
+    const sourceRows: Record<keyof typeof COPY_SPEC, any> = {
+      section: section!,
+      lesson: lesson!,
+      video: video!,
+      clip: await getOne(schema.clips, "videoId", video!.id),
+      chapter: await getOne(schema.chapters, "videoId", video!.id),
+      beat: await getOne(schema.beats, "videoId", video!.id),
+      clipMockup: await getOne(schema.clipMockups, "videoId", video!.id),
+      clipMockupChapter: mockupChapter!,
+      clipMockupComment: await getOne(
+        schema.clipMockupComments,
+        "videoId",
+        video!.id
+      ),
+      thumbnail: await getOne(schema.thumbnails, "videoId", video!.id),
+    };
+
+    for (const [name, spec] of Object.entries(COPY_SPEC)) {
+      const src = sourceRows[name as keyof typeof COPY_SPEC];
+      const copy = newRows[name as keyof typeof COPY_SPEC];
+      for (const col of spec.copied) {
+        expect(copy[col], `"${name}.${col}" was not carried over`).toEqual(
+          src[col]
+        );
+      }
+    }
+
+    // The clone links each structural row back to the one it came from.
+    expect(newSection!.previousVersionSectionId).toBe(section!.id);
+    expect(newLesson.previousVersionLessonId).toBe(lesson!.id);
   });
+});
 
-  it("copies a video's beats, preserving kind/title/order", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
+/** A Video's Animatic as one named list, both tables merged by `order`. */
+async function animaticLabels(videoId: string) {
+  const mockups = await testDb.query.clipMockups.findMany({
+    where: (m, { eq }) => eq(m.videoId, videoId),
+  });
+  const chapters = await testDb.query.clipMockupChapters.findMany({
+    where: (c, { eq }) => eq(c.videoId, videoId),
+  });
+  return sortByOrder([
+    ...mockups.map((m) => ({
+      order: m.order,
+      label: `mockup:${m.line}${m.archived ? " (archived)" : ""}`,
+    })),
+    ...chapters.map((c) => ({
+      order: c.order,
+      label: `chapter:${c.name}${c.archived ? " (archived)" : ""}`,
+    })),
+  ]).map((item) => item.label);
+}
 
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
+describe("copyVersionStructure", () => {
+  it("copies only active rows at every level", async () => {
+    const { course, version } = await createCourseAndVersion();
     const [section] = await testDb
       .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
+      .values([
+        { repoVersionId: version.id, title: "01-active", order: 1 },
+        {
+          repoVersionId: version.id,
+          title: "02-archived",
+          order: 2,
+          archivedAt: new Date(),
+        },
+      ])
       .returning();
-
     const [lesson] = await testDb
       .insert(schema.lessons)
-      .values({
-        sectionId: section!.id,
-        order: 1,
-        title: "Lesson",
-        authoringStatus: "done",
-      })
+      .values([
+        { sectionId: section!.id, order: 1, title: "Active Lesson" },
+        {
+          sectionId: section!.id,
+          order: 2,
+          title: "Archived Lesson",
+          archived: true,
+        },
+      ])
       .returning();
-
     const [video] = await testDb
       .insert(schema.videos)
-      .values({
-        lessonId: lesson!.id,
-        title: "01-intro/01-lesson/video.mp4",
-        originalFootagePath: "/footage/v1",
-      })
+      .values([
+        {
+          lessonId: lesson!.id,
+          title: "active.mp4",
+          originalFootagePath: "/footage/active",
+        },
+        {
+          lessonId: lesson!.id,
+          title: "archived.mp4",
+          originalFootagePath: "/footage/archived",
+          archived: true,
+        },
+      ])
       .returning();
-
-    await testDb.insert(schema.beats).values([
-      {
-        videoId: video!.id,
-        kind: "definition",
-        title: "Closures",
-        description: "Explain JS closures",
-        order: "a0",
-      },
-      {
-        videoId: video!.id,
-        kind: "quest",
-        title: "Build a cache",
-        description: "Build a memoization cache",
-        order: "a1",
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newVideoId = result.videoIdMappings.find(
-      (m) => m.sourceVideoId === video!.id
-    )!.newVideoId;
-
-    const copied = await testDb.query.beats.findMany({
-      where: (s, { eq }) => eq(s.videoId, newVideoId),
-      orderBy: (s, { asc }) => asc(s.order),
-    });
-
-    expect(
-      copied.map((s) => ({
-        kind: s.kind,
-        title: s.title,
-        description: s.description,
+    const videoId = video!.id;
+    await testDb.insert(schema.clips).values(
+      [false, true].map((archived, i) => ({
+        videoId,
+        videoFilename: archived ? "archived.mp4" : "active.mp4",
+        sourceStartTime: i * 10,
+        sourceEndTime: i * 10 + 10,
+        order: `a${i}`,
+        text: "",
+        archived,
       }))
-    ).toEqual([
-      {
-        kind: "definition",
-        title: "Closures",
-        description: "Explain JS closures",
-      },
-      {
-        kind: "quest",
-        title: "Build a cache",
-        description: "Build a memoization cache",
-      },
+    );
+    await testDb.insert(schema.chapters).values([
+      { videoId, name: "Active", order: "a0" },
+      { videoId, name: "Archived", order: "a1", archived: true },
     ]);
-  });
-
-  it("excludes archived beats when copying a video", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const [lesson] = await testDb
-      .insert(schema.lessons)
-      .values({
-        sectionId: section!.id,
-        order: 1,
-        title: "Lesson",
-        authoringStatus: "done",
-      })
-      .returning();
-
-    const [video] = await testDb
-      .insert(schema.videos)
-      .values({
-        lessonId: lesson!.id,
-        title: "01-intro/01-lesson/video.mp4",
-        originalFootagePath: "/footage/v1",
-      })
-      .returning();
-
     await testDb.insert(schema.beats).values([
+      { videoId, kind: "definition", title: "Active", order: "a0" },
       {
-        videoId: video!.id,
-        kind: "definition",
-        title: "Active",
-        order: "a0",
-        archived: false,
-      },
-      {
-        videoId: video!.id,
+        videoId,
         kind: "quest",
         title: "Archived",
         order: "a1",
         archived: true,
       },
     ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newVideoId = result.videoIdMappings.find(
-      (m) => m.sourceVideoId === video!.id
-    )!.newVideoId;
-
-    const copied = await testDb.query.beats.findMany({
-      where: (s, { eq }) => eq(s.videoId, newVideoId),
-      orderBy: (s, { asc }) => asc(s.order),
-    });
-
-    expect(copied.map((s) => ({ kind: s.kind, title: s.title }))).toEqual([
-      { kind: "definition", title: "Active" },
-    ]);
-  });
-
-  it("copies a video's clip mockups, preserving line/imagePath/order", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const [lesson] = await testDb
-      .insert(schema.lessons)
-      .values({
-        sectionId: section!.id,
-        order: 1,
-        title: "Lesson",
-        authoringStatus: "done",
-      })
-      .returning();
-
-    const [video] = await testDb
-      .insert(schema.videos)
-      .values({
-        lessonId: lesson!.id,
-        title: "01-intro/01-lesson/video.mp4",
-        originalFootagePath: "/footage/v1",
-      })
-      .returning();
-
-    // Inserted out of order on purpose: the copy must follow `order`, not
-    // insertion order.
-    await testDb.insert(schema.clipMockups).values([
-      {
-        videoId: video!.id,
-        line: "Second line",
-        imagePath: "frame-002.png",
-        audioPath: "speech-002.wav",
-        durationSeconds: 3.5,
-        order: "a1",
-      },
-      {
-        videoId: video!.id,
-        line: "First line",
-        imagePath: "frame-001.png",
-        audioPath: "speech-001.wav",
-        durationSeconds: 1.25,
-        order: "a0",
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
-    );
-
-    const newVideoId = result.videoIdMappings.find(
-      (m) => m.sourceVideoId === video!.id
-    )!.newVideoId;
-
-    const copied = await testDb.query.clipMockups.findMany({
-      where: (s, { eq }) => eq(s.videoId, newVideoId),
-      orderBy: (s, { asc }) => asc(s.order),
-    });
-
-    expect(
-      copied.map((s) => ({
-        line: s.line,
-        imagePath: s.imagePath,
-        durationSeconds: s.durationSeconds,
-        order: s.order,
-        archived: s.archived,
+    // An Animatic whose Clip Mockups and Chapters share one order space,
+    // inserted out of order: the clone must keep them interleaved as the
+    // source has them, not piled at one end.
+    await testDb.insert(schema.clipMockups).values(
+      [
+        { line: "Three", order: "a3" },
+        { line: "One", order: "a1" },
+        { line: "Two", order: "a2" },
+        { line: "Cut line", order: "a5", archived: true },
+      ].map((m) => ({
+        videoId,
+        imagePath: `${m.line}.png`,
+        audioPath: `${m.line}.wav`,
+        durationSeconds: 1,
+        ...m,
       }))
-    ).toEqual([
-      {
-        line: "First line",
-        imagePath: "frame-001.png",
-        durationSeconds: 1.25,
-        order: "a0",
-        archived: false,
-      },
-      {
-        line: "Second line",
-        imagePath: "frame-002.png",
-        durationSeconds: 3.5,
-        order: "a1",
-        archived: false,
-      },
-    ]);
-  });
-
-  it("excludes archived clip mockups when copying a video", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
-    const [section] = await testDb
-      .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
-      .returning();
-
-    const [lesson] = await testDb
-      .insert(schema.lessons)
-      .values({
-        sectionId: section!.id,
-        order: 1,
-        title: "Lesson",
-        authoringStatus: "done",
-      })
-      .returning();
-
-    const [video] = await testDb
-      .insert(schema.videos)
-      .values({
-        lessonId: lesson!.id,
-        title: "01-intro/01-lesson/video.mp4",
-        originalFootagePath: "/footage/v1",
-      })
-      .returning();
-
-    await testDb.insert(schema.clipMockups).values([
-      {
-        videoId: video!.id,
-        line: "Active",
-        imagePath: "active.png",
-        audioPath: "active.wav",
-        durationSeconds: 1,
-        order: "a0",
-        archived: false,
-      },
-      {
-        videoId: video!.id,
-        line: "Archived",
-        imagePath: "archived.png",
-        audioPath: "archived.wav",
-        durationSeconds: 1,
-        order: "a1",
-        archived: true,
-      },
-    ]);
-
-    const result = await run(
-      Effect.gen(function* () {
-        const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.copyVersionStructure({
-          sourceVersionId: version!.id,
-          repoId: course!.id,
-          newVersionName: "v2",
-        });
-      })
     );
+    await testDb.insert(schema.clipMockupChapters).values([
+      { videoId, name: "Setup", order: "a0" },
+      { videoId, name: "The bug", order: "a1V" },
+      { videoId, name: "The fix", order: "a3V" },
+      { videoId, name: "Cut", order: "a4", archived: true },
+    ]);
 
-    const newVideoId = result.videoIdMappings.find(
-      (m) => m.sourceVideoId === video!.id
-    )!.newVideoId;
+    const result = await cloneVersion(course.id, version.id);
 
-    const copied = await testDb.query.clipMockups.findMany({
-      where: (s, { eq }) => eq(s.videoId, newVideoId),
+    const newSections = await testDb.query.sections.findMany({
+      where: (s, { eq }) => eq(s.repoVersionId, result.version.id),
+      with: {
+        lessons: {
+          with: {
+            videos: { with: { clips: true, chapters: true, beats: true } },
+          },
+        },
+      },
     });
+    expect(newSections.map((s) => s.title)).toEqual(["01-active"]);
+    const newLessons = newSections[0]!.lessons;
+    expect(newLessons.map((l) => l.title)).toEqual(["Active Lesson"]);
+    const newVideos = newLessons[0]!.videos;
+    expect(newVideos.map((v) => v.title)).toEqual(["active.mp4"]);
+    const newVideo = newVideos[0]!;
+    expect(newVideo.clips.map((c) => c.videoFilename)).toEqual(["active.mp4"]);
+    expect(newVideo.chapters.map((c) => c.name)).toEqual(["Active"]);
+    expect(newVideo.beats.map((b) => b.title)).toEqual(["Active"]);
 
-    expect(copied.map((s) => s.line)).toEqual(["Active"]);
+    // Archived Clip Mockups and Chapters are not copied at all, archived or
+    // otherwise; the rest keep their interleaving.
+    expect(await animaticLabels(newVideo.id)).toEqual([
+      "chapter:Setup",
+      "mockup:One",
+      "chapter:The bug",
+      "mockup:Two",
+      "mockup:Three",
+      "chapter:The fix",
+    ]);
   });
 
   it("serializes concurrent clones from the same latest Course Version", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Concurrent Course" })
-      .returning();
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
+    const { course, version } = await createCourseAndVersion();
 
-    const clone = () =>
-      run(
-        Effect.gen(function* () {
-          const versionOps = yield* VersionOperationsService;
-          return yield* versionOps.copyVersionStructure({
-            sourceVersionId: version!.id,
-            repoId: course!.id,
-            newVersionName: "v2",
-          });
-        })
-      );
-    const results = await Promise.allSettled([clone(), clone()]);
+    const results = await Promise.allSettled([
+      cloneVersion(course.id, version.id),
+      cloneVersion(course.id, version.id),
+    ]);
 
     expect(
       results.filter((result) => result.status === "fulfilled")
@@ -645,7 +503,7 @@ describe("copyVersionStructure", () => {
     ).toHaveLength(1);
     expect(
       await testDb.query.courseVersions.findMany({
-        where: (row, { eq }) => eq(row.repoId, course!.id),
+        where: (row, { eq }) => eq(row.repoId, course.id),
       })
     ).toHaveLength(2);
   });
@@ -659,21 +517,11 @@ describe("copyVersionStructure", () => {
 // test fails if anyone does.
 describe("getVersionWithSections — the publish read", () => {
   it("does not load clip mockups", async () => {
-    const [course] = await testDb
-      .insert(schema.courses)
-      .values({ name: "Test Course" })
-      .returning();
-
-    const [version] = await testDb
-      .insert(schema.courseVersions)
-      .values({ repoId: course!.id, name: "v1" })
-      .returning();
-
+    const { version } = await createCourseAndVersion();
     const [section] = await testDb
       .insert(schema.sections)
-      .values({ repoVersionId: version!.id, title: "01-intro", order: 1 })
+      .values({ repoVersionId: version.id, title: "01-intro", order: 1 })
       .returning();
-
     const [lesson] = await testDb
       .insert(schema.lessons)
       .values({
@@ -683,7 +531,6 @@ describe("getVersionWithSections — the publish read", () => {
         authoringStatus: "done",
       })
       .returning();
-
     const [video] = await testDb
       .insert(schema.videos)
       .values({
@@ -692,7 +539,6 @@ describe("getVersionWithSections — the publish read", () => {
         originalFootagePath: "/footage/v1",
       })
       .returning();
-
     await testDb.insert(schema.clipMockups).values({
       videoId: video!.id,
       line: "And here is the bug.",
@@ -705,7 +551,7 @@ describe("getVersionWithSections — the publish read", () => {
     const loaded = await run(
       Effect.gen(function* () {
         const versionOps = yield* VersionOperationsService;
-        return yield* versionOps.getVersionWithSections(version!.id);
+        return yield* versionOps.getVersionWithSections(version.id);
       })
     );
 
