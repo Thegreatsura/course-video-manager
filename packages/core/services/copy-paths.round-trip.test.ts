@@ -57,6 +57,9 @@ const overrides = (ctx: {
   snapshotId: string;
   learningGoalId: string;
 }): Overrides => ({
+  // CHECK clip_transcription_status_valid; one non-default value per row, so
+  // a copy that drops the status (back to "done") fails.
+  "clip.transcriptionStatus": (i) => (i % 2 === 0 ? "failed" : "queued"),
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // A Learning Goal belongs to the Video's Section, which every copy shares.

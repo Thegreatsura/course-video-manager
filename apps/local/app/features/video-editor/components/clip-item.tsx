@@ -32,6 +32,7 @@ import {
 import { resolveForClip } from "@/lib/diagram-action-resolver";
 import { getWebLinkLabel } from "@/lib/clip-web-link";
 import { canZoomClip } from "@/features/videos/clip-zoom";
+import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   overlayKindLabel,
   resolveOverlayKind,
@@ -80,10 +81,6 @@ export const ClipItem = (props: ClipItemProps) => {
     VideoEditorContext,
     (ctx) => ctx.currentTimeInClip
   );
-  const clipIdsBeingTranscribed = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.clipIdsBeingTranscribed
-  );
   const dispatch = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.dispatch
@@ -101,6 +98,10 @@ export const ClipItem = (props: ClipItemProps) => {
       : undefined
   );
   const percentComplete = getClipPercentComplete(clip, currentTimeInClip);
+  const transcriptionStatus =
+    clip.type === "on-database" ? clip.transcriptionStatus : null;
+  const isBeingTranscribed =
+    transcriptionStatus !== null && isTranscriptionPending(transcriptionStatus);
 
   const isPortrait = getIsClipPortrait(clip);
 
@@ -131,12 +132,11 @@ export const ClipItem = (props: ClipItemProps) => {
                 className={cn(
                   "rounded object-cover h-full object-center",
                   isPortrait ? "w-24 aspect-[9/16]" : "w-32 aspect-[16/9]",
-                  clipIdsBeingTranscribed.has(clip.frontendId) &&
-                    "opacity-50 grayscale"
+                  isBeingTranscribed && "opacity-50 grayscale"
                 )}
               />
               {/* Loading spinner overlay */}
-              {clipIdsBeingTranscribed.has(clip.frontendId) && (
+              {isBeingTranscribed && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Loader2 className="w-6 h-6 animate-spin text-white" />
                 </div>
@@ -174,7 +174,30 @@ export const ClipItem = (props: ClipItemProps) => {
 
             {/* Transcript text */}
             <div className="z-10 relative text-card-foreground text-sm leading-6">
-              {clipIdsBeingTranscribed.has(clip.frontendId) ? (
+              {transcriptionStatus === "failed" ? (
+                <>
+                  <span className="text-red-500 mr-2 font-semibold inline-flex items-center">
+                    <AlertTriangleIcon className="w-4 h-4 mr-2" />
+                    Transcription failed
+                  </span>
+                  <button
+                    type="button"
+                    className="mr-2 rounded border border-red-500/50 px-1.5 text-xs text-red-500 hover:bg-red-500/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({
+                        type: "retranscribe-clip",
+                        clipId: clip.frontendId,
+                      });
+                    }}
+                  >
+                    Retry
+                  </button>
+                  {clip.type === "on-database" && clip.text && (
+                    <span className="text-muted-foreground">{clip.text}</span>
+                  )}
+                </>
+              ) : isBeingTranscribed ? (
                 clip.type === "on-database" && clip.text ? (
                   <>
                     <span className="text-muted-foreground mr-2">
@@ -342,9 +365,9 @@ const ClipMenuContent = (props: {
     VideoEditorContext,
     (ctx) => ctx.dispatch
   );
-  const isBeingTranscribed = useContextSelector(VideoEditorContext, (ctx) =>
-    ctx.clipIdsBeingTranscribed.has(clip.frontendId)
-  );
+  const isBeingTranscribed =
+    clip.type === "on-database" &&
+    isTranscriptionPending(clip.transcriptionStatus);
   const hasSelection = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.selectedClipsSet.size > 0

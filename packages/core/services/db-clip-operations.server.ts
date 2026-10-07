@@ -4,8 +4,10 @@ import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
+import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
 import {
   requireDraftVersionForClip,
+  requireDraftVersionForClips,
   requireDraftVersionForClipWebLink,
   requireDraftVersionForVideo,
 } from "./draft-guard.server.js";
@@ -71,6 +73,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
       scene?: string;
       profile?: string;
       transcribedAt?: Date;
+      transcriptionStatus?: TranscriptionStatus;
       pauseType?: string;
       sourceStartTime?: number;
       sourceEndTime?: number;
@@ -82,6 +85,25 @@ const createClipOperationsUnwrapped = (db: Database) => {
     );
 
     return clip!;
+  });
+
+  /**
+   * Move Clips to a Transcription status without touching their text: the
+   * `transcribing` and `failed` transitions. A Transcription that lands goes
+   * through `updateClip` instead, so its text and `done` are one write.
+   */
+  const setTranscriptionStatus = Effect.fn("setTranscriptionStatus")(function* (
+    clipIds: readonly string[],
+    status: TranscriptionStatus
+  ) {
+    if (clipIds.length === 0) return;
+    yield* requireDraftVersionForClips(db, clipIds);
+    yield* makeDbCall(() =>
+      db
+        .update(clips)
+        .set({ transcriptionStatus: status })
+        .where(inArray(clips.id, [...clipIds]))
+    );
   });
 
   /**
@@ -370,6 +392,8 @@ const createClipOperationsUnwrapped = (db: Database) => {
           order,
           archived: false,
           text: opts.text,
+          // Its text comes from the Footage's own transcript.
+          transcriptionStatus: "done",
         })
         .returning()
     );
@@ -491,6 +515,8 @@ const createClipOperationsUnwrapped = (db: Database) => {
             order: orders[index]!,
             archived: false,
             text: "",
+            // A fresh recording has no text until its Transcription lands.
+            transcriptionStatus: "queued" as const,
           }))
         )
         .returning()
@@ -541,6 +567,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
     getClipById,
     getClipsByIds,
     updateClip,
+    setTranscriptionStatus,
     setClipZoom,
     archiveClip,
     restoreClip,
@@ -561,6 +588,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
 export const createClipOperations = (db: Database) =>
   transactionalizeWrites(db, createClipOperationsUnwrapped, [
     "updateClip",
+    "setTranscriptionStatus",
     "setClipZoom",
     "archiveClip",
     "restoreClip",

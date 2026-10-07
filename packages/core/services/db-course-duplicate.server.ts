@@ -280,6 +280,7 @@ export const makeDuplicateCourse = (db: Database) =>
                   archived: false,
                   text: clip.text,
                   transcribedAt: clip.transcribedAt,
+                  transcriptionStatus: clip.transcriptionStatus,
                   scene: clip.scene,
                   profile: clip.profile,
                   pauseType: clip.pauseType,

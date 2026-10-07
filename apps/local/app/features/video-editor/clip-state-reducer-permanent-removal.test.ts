@@ -13,7 +13,6 @@ import { DELETED_CLIPS_SESSION_ID } from "./video-editor-selectors";
 const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },

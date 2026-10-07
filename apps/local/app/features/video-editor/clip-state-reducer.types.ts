@@ -1,6 +1,7 @@
 import type { DB } from "@/db/schema";
 import type { PauseType } from "@/services/video-processing-service";
 import type { ClipZoomType } from "@/features/videos/clip-zoom";
+import type { TranscriptionStatus } from "@/features/videos/transcription-status";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
 
@@ -40,6 +41,12 @@ export type ClipOnDatabase = {
   sourceEndTime: number; // End time in source video (seconds)
   text: string;
   transcribedAt: Date | null;
+  /**
+   * Where this Clip's Transcription stands. Loaded from the Clip, then moved
+   * by the reducer as this window asks for, and hears back about,
+   * Transcriptions. Read through `transcript-word-status.ts`.
+   */
+  transcriptionStatus: TranscriptionStatus;
   scene: string | null;
   profile: string | null;
   insertionOrder: number | null;
@@ -191,7 +198,6 @@ export type RecordingSession = {
 
 export type ClipReducerState = {
   items: TimelineItem[];
-  clipIdsBeingTranscribed: Set<FrontendId>;
   /**
    * The Clips known to have Transcript Words: seeded from the loader, then
    * kept up to date by every transcription that lands in this window. Read by
@@ -275,11 +281,21 @@ export type ClipReducerAction =
     }
   | {
       type: "clips-transcribed";
-      clips: {
-        databaseId: DatabaseId;
-        text: string;
-        hasTranscriptWords: boolean;
-      }[];
+      clips: (
+        | {
+            databaseId: DatabaseId;
+            transcriptionStatus: "done";
+            text: string;
+            hasTranscriptWords: boolean;
+          }
+        | { databaseId: DatabaseId; transcriptionStatus: "failed" }
+      )[];
+    }
+  | {
+      /** The transcribe request as a whole failed: no Clip in it landed. */
+      type: "clips-transcription-failed";
+      clipIds: DatabaseId[];
+      message: string;
     }
   | {
       type: "set-insertion-point-after";

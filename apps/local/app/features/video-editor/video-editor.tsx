@@ -101,7 +101,6 @@ export const VideoEditor = (props: {
   silenceLength: SilenceLength;
   onSilenceLengthChange: (silenceLength: SilenceLength) => void;
   isRecordingActive: boolean;
-  clipIdsBeingTranscribed: Set<FrontendId>;
   onClipsRemoved: (clipIds: FrontendId[]) => void;
   onClipsRetranscribe: (clipIds: FrontendId[]) => void;
   fsData: Promise<{
@@ -453,7 +452,6 @@ export const VideoEditor = (props: {
       setSilenceLength: props.onSilenceLengthChange,
       isRecordingActive: props.isRecordingActive,
       isTeleprompterConnected,
-      clipIdsBeingTranscribed: props.clipIdsBeingTranscribed,
 
       // Callbacks
       onSetInsertionPoint: props.onSetInsertionPoint,
@@ -550,7 +548,6 @@ export const VideoEditor = (props: {
       props.onSilenceLengthChange,
       props.isRecordingActive,
       isTeleprompterConnected,
-      props.clipIdsBeingTranscribed,
       props.onSetInsertionPoint,
       props.onMoveClip,
       props.onTogglePauseForClip,

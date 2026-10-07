@@ -1,4 +1,5 @@
 import { computeShippingSections } from "@/packages/course-json/client";
+import type { TranscriptionStatus } from "@/features/videos/transcription-status";
 import { computeVideoWarnings, type AutofillField } from "./video-warnings";
 
 /**
@@ -54,7 +55,7 @@ export type AutofillSkip = {
 type CandidateClip = {
   readonly order: string;
   readonly archived: boolean;
-  readonly transcribedAt: Date | null;
+  readonly transcriptionStatus: TranscriptionStatus;
 };
 
 type CandidateVideo = {
@@ -141,7 +142,7 @@ export const selectAutofillCandidates = (
         const liveClips = video.clips.filter((clip) => !clip.archived);
         const allTranscribed =
           liveClips.length > 0 &&
-          liveClips.every((clip) => clip.transcribedAt !== null);
+          liveClips.every((clip) => clip.transcriptionStatus === "done");
 
         const fields: AutofillField[] = [];
         if (needsDescription) fields.push("description");

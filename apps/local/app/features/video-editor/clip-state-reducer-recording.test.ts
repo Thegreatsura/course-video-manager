@@ -9,7 +9,6 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
 const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
 ): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   items: [],
   insertionPoint: { type: "end" },

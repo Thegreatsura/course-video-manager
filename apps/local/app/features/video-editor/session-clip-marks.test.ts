@@ -116,7 +116,6 @@ describe("getSessionClipMarks over a real take", () => {
     const tester = new ReducerTester(
       clipStateReducer,
       fromPartial<clipStateReducer.State>({
-        clipIdsBeingTranscribed: new Set(),
         clipIdsWithTranscriptWords: new Set(),
         items: [],
         insertionPoint: { type: "end" },
@@ -159,7 +158,6 @@ describe("getSessionClipMarks over a real take", () => {
     const tester = new ReducerTester(
       clipStateReducer,
       fromPartial<clipStateReducer.State>({
-        clipIdsBeingTranscribed: new Set(),
         clipIdsWithTranscriptWords: new Set(),
         items: [],
         insertionPoint: { type: "end" },
