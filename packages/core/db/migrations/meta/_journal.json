@@ -197,6 +197,13 @@
       "when": 1791365467007,
       "tag": "0027_video_format_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791378440335,
+      "tag": "0028_clip_transcription_status",
+      "breakpoints": true
     }
   ]
 }

@@ -45,7 +45,8 @@ import {
  *   a single fractional `order` space (varchar collate-C keys) — interleaving
  *   them in timeline order is exactly what produces the Video's Transcript.
  *   A Clip's `text` is the spoken transcription, populated from its audio
- *   (Transcription) and timestamped by `transcribedAt`. An "Effect Clip" is a
+ *   (Transcription), timestamped by `transcribedAt`, with `transcriptionStatus`
+ *   saying where the Transcription stands. An "Effect Clip" is a
  *   special clip for non-speech content (white noise, transitions) inserted by
  *   hand. `pauseType` is the held pause after the clip ("none" or "long").
  *
@@ -64,7 +65,9 @@ import {
  *   sourceEndTime    out-point into the source file, seconds (float)
  *   order            fractional-index sort key (shared with Chapters)
  *   text             spoken transcription of the clip (the Transcript unit)
- *   transcribedAt    when `text` was last produced (null = not transcribed)
+ *   transcribedAt    when a Transcription last produced `text` (null for a clip
+ *                    cut from footage, or never transcribed)
+ *   transcriptionStatus  "queued" | "transcribing" | "failed" | "done"
  *   scene / profile  optional capture metadata
  *   pauseType         held pause after clip; "none" or "long"
  *   zoomType          Clip Zoom; "none" or "subtle" (camera scenes only)
@@ -105,7 +108,7 @@ import {
  *   cvm clip list --video vid_123 | jq -r '.text'
  *
  *   # Find untranscribed clips:
- *   cvm clip list --video vid_123 | jq 'select(.transcribedAt == null) | .id'
+ *   cvm clip list --video vid_123 | jq 'select(.transcriptionStatus != "done") | .id'
  *
  *   # tree -> get workflow: pull clip ids off a video skeleton, then fetch them:
  *   cvm video tree --depth all vid_123 \

@@ -27,6 +27,7 @@ const makeClipOnDatabase = (
   sourceEndTime: 5,
   text: "hello world",
   transcribedAt: new Date(),
+  transcriptionStatus: "done",
   scene: null,
   profile: null,
   insertionOrder: null,

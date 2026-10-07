@@ -9,7 +9,6 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
 import { countClipsToClear, getSessionPanels } from "./video-editor-selectors";
 
 const createInitialState = (): clipStateReducer.State => ({
-  clipIdsBeingTranscribed: new Set(),
   clipIdsWithTranscriptWords: new Set(),
   // A clip already on the timeline when the editor opened: deleting it puts
   // it in the "Deleted clips" panel, which has its own "Clear all".

@@ -4,7 +4,6 @@ import type {
   ClipOnDatabase,
   ChapterOnDatabase,
   DatabaseId,
-  FrontendId,
   FrontendInsertionPoint,
   TimelineItem,
 } from "@/features/video-editor/clip-state-reducer";
@@ -42,10 +41,6 @@ export const handle = { fullscreen: true, hideParentHeader: true };
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { getBackButtonUrl } from "@/features/video-editor/video-editor-selectors";
 import { anyClipsMissingTranscriptWords } from "@/features/video-editor/transcript-word-status";
-import {
-  toTranscribedClipEvent,
-  type TranscribedClip,
-} from "@/features/video-editor/transcribe-clips-response";
 import type { loader as parentLoader } from "./_app.videos.$videoId";
 import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
 import { sortByOrder } from "@/lib/sort-by-order";
@@ -284,7 +279,6 @@ export const ComponentInner = (props: Route.ComponentProps) => {
 
   const initialState: clipStateReducer.State = {
     items: initialItems,
-    clipIdsBeingTranscribed: new Set() satisfies Set<FrontendId>,
     clipIdsWithTranscriptWords: new Set(
       props.loaderData.clipIdsWithTranscriptWords as DatabaseId[]
     ),
@@ -394,42 +388,6 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       }}
       onClipsRetranscribe={(clipIds) => {
         dispatch({ type: "clips-retranscribing", clipIds });
-
-        const databaseIds = clipIds
-          .map((frontendId) => {
-            const clip = clipState.items.find(
-              (c) => c.frontendId === frontendId
-            );
-            return clip?.type === "on-database" ? clip.databaseId : null;
-          })
-          .filter((id): id is DatabaseId => id !== null);
-
-        fetch("/clips/transcribe", {
-          method: "POST",
-          body: JSON.stringify({ clipIds: databaseIds }),
-        })
-          .then((res) => {
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            return res.json();
-          })
-          .then((clips: TranscribedClip[]) => {
-            dispatch({
-              type: "clips-transcribed",
-              clips: clips.map(toTranscribedClipEvent),
-            });
-          })
-          .catch((error) => {
-            dispatch({
-              type: "effect-failed",
-              effectType: "transcribe-clips",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to transcribe clips",
-            });
-          });
       }}
       insertionPoint={clipState.insertionPoint}
       onSetInsertionPoint={(mode, clipId) => {
@@ -490,7 +448,6 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       silenceLength={silenceLength}
       onSilenceLengthChange={setSilenceLength}
       isRecordingActive={obsConnector.state.type === "obs-recording"}
-      clipIdsBeingTranscribed={clipState.clipIdsBeingTranscribed}
       fsData={props.loaderData.fsData}
       videoCount={props.loaderData.videoCount}
       referenceCandidates={props.loaderData.referenceCandidates}

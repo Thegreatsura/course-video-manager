@@ -274,6 +274,10 @@ _Avoid_: Cursor, Drop target
 The process of getting a clip's text from its audio.
 _Avoid_: Caption, Subtitle
 
+**Transcription Status**:
+Where a **Clip**'s **Transcription** stands, stored on the Clip: **queued** (recorded, no text yet, a Transcription asked for), **transcribing** (running), **failed** (the last attempt did not finish) or **done** (it finished; the text may be empty, because nothing was said). A failed Transcription changes nothing but the status: the Clip keeps any text and **Transcript Words** it had, and transcribing it again is the fix, so the editor shows it as failed with a retry, never as still transcribing. A Clip that gets its text another way (an **Effect Clip**, a Clip cut from **Footage**) starts done. Every copy of the Clip carries its status.
+_Avoid_: transcribedAt (only says when text last landed, not whether one is coming)
+
 ### Overlays and transitions
 
 **Overlay Template** and **Transition** are **not yet implemented**: they are a design in progress, the planned replacement for today's **Effect Clip** and **Clip Zoom**. Treat those two terms as proposed. **Transform** exists today in one narrow form only (see that entry).

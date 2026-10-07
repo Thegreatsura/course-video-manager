@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
@@ -102,4 +109,58 @@ describe("drizzle migrations", () => {
 
     expect(outOfOrder).toEqual([]);
   });
+
+  it(
+    "0028 backfills each Clip's Transcription status from what it already had",
+    async () => {
+      // Migrate to just before 0028 from a copy of the folder whose journal
+      // stops at 0027, seed the Clips, then run the real folder for 0028.
+      const before = mkdtempSync(join(tmpdir(), "cvm-migrations-"));
+      cpSync(MIGRATIONS_FOLDER, before, { recursive: true });
+      const journalPath = join(before, "meta/_journal.json");
+      const journal: { entries: { tag: string }[] } = JSON.parse(
+        readFileSync(journalPath, "utf-8")
+      );
+      const cut = journal.entries.findIndex(
+        (entry) => entry.tag === "0028_clip_transcription_status"
+      );
+      writeFileSync(
+        journalPath,
+        JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut) })
+      );
+
+      const pglite = new PGlite();
+      const db = drizzle(pglite, { schema });
+      await migrate(db, { migrationsFolder: before });
+      rmSync(before, { recursive: true, force: true });
+
+      // Clip rows only: the Video they point at is beside the point here.
+      await db.execute(sql`SET session_replication_role = replica`);
+      await db.execute(sql`
+        INSERT INTO "course-video-manager_clip"
+          (id, video_id, video_filename, source_start_time, source_end_time, "order", text, transcribed_at)
+        VALUES
+          ('transcribed', 'v', 'f.mp4', 0, 1, 'a', 'hello', now()),
+          ('heard-nothing', 'v', 'f.mp4', 0, 1, 'b', '', now()),
+          ('text-no-timestamp', 'v', 'f.mp4', 0, 1, 'c', 'from footage', NULL),
+          ('never-transcribed', 'v', 'f.mp4', 0, 1, 'd', '', NULL)
+      `);
+      await db.execute(sql`SET session_replication_role = DEFAULT`);
+
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+      const rows = await db.execute<{ id: string; status: string }>(
+        sql`SELECT id, transcription_status AS status FROM "course-video-manager_clip" ORDER BY "order"`
+      );
+      expect(rows.rows).toEqual([
+        { id: "transcribed", status: "done" },
+        { id: "heard-nothing", status: "done" },
+        { id: "text-no-timestamp", status: "done" },
+        { id: "never-transcribed", status: "failed" },
+      ]);
+
+      await pglite.close();
+    },
+    MIGRATION_TIMEOUT_MS
+  );
 });

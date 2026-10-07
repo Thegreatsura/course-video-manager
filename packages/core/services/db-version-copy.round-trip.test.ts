@@ -59,6 +59,9 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   "video.format": () => "short",
   // A course Video never has a Pitch (moving one into a Lesson clears it).
   "video.pitchId": () => null,
+  // CHECK clip_transcription_status_valid; one non-default value per row, so
+  // a copy that drops the status (back to "done") fails.
+  "clip.transcriptionStatus": (i) => (i % 2 === 0 ? "failed" : "queued"),
   // Diagram Snapshots are shared per Diagram, not owned by a Version.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // CHECK clip_mockup_comment_one_parent: row 0 on a Clip Mockup, row 1 on

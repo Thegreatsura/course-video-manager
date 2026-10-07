@@ -18,6 +18,7 @@ import {
 import { createTable } from "./table-creator.js";
 import type { BulletPanelBullet } from "../features/videos/bullet-panel.js";
 import type { BeatKind } from "../features/beats/beat-kinds.js";
+import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
 export { createTable } from "./table-creator.js";
 
 const varcharCollateC = customType<{
@@ -347,6 +348,17 @@ export const clips = createTable(
       mode: "date",
       withTimezone: true,
     }),
+    /**
+     * Where the Clip's Transcription stands — see TRANSCRIPTION_STATUSES
+     * (features/videos/transcription-status.ts). `transcribedAt` alone could
+     * not tell queued, failed and never-transcribed apart (all null). Defaults
+     * to `done` because every insert but a fresh recording already has its
+     * text; the recording paths insert `queued` explicitly. See migration 0028.
+     */
+    transcriptionStatus: text("transcription_status")
+      .$type<TranscriptionStatus>()
+      .notNull()
+      .default("done"),
     scene: varchar("scene", { length: 255 }),
     profile: varchar("profile", { length: 255 }),
     pauseType: varchar("pause_type", { length: 255 }).notNull().default("none"),
@@ -368,6 +380,11 @@ export const clips = createTable(
     // Video's clips (course structure, transcripts, export) otherwise
     // seq-scans the whole clip table once per Video.
     index("clip_video_id_idx").on(table.videoId),
+    // Mirrors TRANSCRIPTION_STATUSES (features/videos/transcription-status.ts).
+    check(
+      "clip_transcription_status_valid",
+      sql`${table.transcriptionStatus} IN ('queued', 'transcribing', 'failed', 'done')`
+    ),
   ]
 );
 
