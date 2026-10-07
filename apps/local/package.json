@@ -15,6 +15,7 @@
     "dev:react-router": "react-router dev",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser": "playwright install --only-shell chromium && vitest run --config vitest.browser.config.ts",
     "start": "pnpm run generate-assets && pnpm run build:if-needed && pnpm run \"/start:/\"",
     "build:if-needed": "tsx scripts/build-if-needed.ts",
     "start:react-router": "PORT=5173 node --env-file=../../.env node_modules/@react-router/serve/bin.js ./build/server/index.js",
@@ -129,6 +130,7 @@
     "@types/pg": "^8.21.0",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
+    "@vitest/browser": "3.2.7",
     "dependency-cruiser": "^18.0.0",
     "drizzle-kit": "^0.31.10",
     "tailwind-scrollbar": "^4.0.2",
@@ -137,6 +139,7 @@
     "typescript": "7.0.2",
     "vite": "^7.3.1",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^3"
+    "vitest": "^3",
+    "vitest-browser-react": "1.0.1"
   }
 }

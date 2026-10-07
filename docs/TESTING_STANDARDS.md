@@ -31,6 +31,42 @@ CLI, the route and the component.
 [`plans/test-pruning.md`](./plans/test-pruning.md) applies this to
 the existing suite.
 
+For frontend logic the right seam is a pure reducer driven by events, not a
+rendered component: see [`FRONTEND_STATE.md`](./FRONTEND_STATE.md).
+
+## Component tests: rare, and only for the wiring
+
+`apps/local` can render a real component in headless Chromium
+(`*.browser.test.tsx`, Vitest browser mode). Most UI changes still need no
+component test. Logic belongs in a reducer or a plain function, and you test
+that directly in a node test. Write a component test only for:
+
+- **The wiring** between DOM events and what they dispatch or call: which
+  key, click or blur does what.
+- **Browser-only behaviour** that a function can't reproduce: focus and blur
+  ordering, keyboard handling, media elements, Web Audio, and effect lifecycle
+  (mount, unmount, Strict Mode remount).
+
+If you can pull the behaviour out into a function, do that and skip the
+component test. One component test per behaviour, not one per component.
+
+How to write one:
+
+- Act like a user: find elements by role, label or text, and act through
+  `userEvent` or the locator's `.click()` / `.fill()`.
+- Assert what a user or the parent sees: the text shown, or the callback prop
+  a parent receives.
+- No snapshots, no class names, no internal state, no reaching into hooks.
+
+[`lesson-title-editor.browser.test.tsx`](../apps/local/app/features/course-view/lesson-title-editor.browser.test.tsx)
+is the model. The rename rule is unit tested in `lesson-title-editor.test.ts`.
+The component test covers only the Enter/Escape-then-blur ordering, because a
+function can't reproduce that.
+
+Run one: `pnpm --filter @cvm/local test:browser -- path/to/x.browser.test.tsx`.
+The script installs Playwright's Chromium first. That takes a second when it's
+already installed, and downloads it once when it isn't.
+
 ## Good tests
 
 Integration-style tests that exercise real code paths through public APIs. They

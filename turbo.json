@@ -21,6 +21,10 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "test:browser": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "lint:boundaries": {},
     "lint:effect": {
       "dependsOn": ["^build"]

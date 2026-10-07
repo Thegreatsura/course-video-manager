@@ -12,6 +12,8 @@ pnpm --filter <package> test -- path/to/thing.test.ts
 
 e.g. `pnpm --filter @cvm/core test -- db/lessons/archive.test.ts`. `pnpm --filter` forwards anything after `--` straight to the package's `vitest run`, so it narrows to that one file (or a handful, space-separated) instead of the whole package. Package names are each `package.json`'s `name` field (`@cvm/core`, `@cvm/local`, `@cvm/remote`, `@cvm/lucide-icons`).
 
+Component tests (`apps/local/**/*.browser.test.tsx`, real headless Chromium) have their own script: `pnpm --filter @cvm/local test:browser -- path/to/x.browser.test.tsx`. `docs/TESTING_STANDARDS.md` says when one is warranted (rarely).
+
 Root-level `.sandcastle` tests are the one exception: run them via `pnpm run test:root path/to/thing.test.ts` — **no `--`**. At the repo root, `pnpm run <script> -- <args>` (unlike `pnpm --filter <pkg> <script> -- <args>`) forwards a literal `"--"` through to vitest along with your path, which silently runs the whole root suite instead of narrowing — confirmed on pnpm 9.12.3. Dropping the `--` narrows correctly.
 
 This is deliberately manual rather than diff-derived — no `turbo --affected`, no vitest `--changed`, no heuristic guessing "what could this diff have broken" from git history. You already know what you touched and what covers it; that's a better signal than a git-diff heuristic, which can still widen out to a whole package (or more) on a broad-looking diff and cost you the time it was meant to save.
