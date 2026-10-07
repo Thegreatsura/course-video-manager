@@ -31,6 +31,9 @@ CLI, the route and the component.
 [`plans/test-pruning.md`](./plans/test-pruning.md) applies this to
 the existing suite.
 
+For frontend logic the right seam is a pure reducer driven by events, not a
+rendered component: see [`FRONTEND_STATE.md`](./FRONTEND_STATE.md).
+
 ## Component tests: rare, and only for the wiring
 
 `apps/local` can render a real component in headless Chromium

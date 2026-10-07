@@ -44,6 +44,17 @@ export class ReducerTester<
     return this.exec;
   }
 
+  /**
+   * Every effect the reducer declared since construction (or the last
+   * `resetExec`), in order. Assert on this list whole, so an extra effect
+   * fails the test too. See docs/FRONTEND_STATE.md.
+   */
+  public getEffects(): TEffect[] {
+    return (
+      this.exec as unknown as { mock: { calls: [TEffect][] } }
+    ).mock.calls.map(([effect]) => effect);
+  }
+
   public resetExec() {
     this.exec = createMockExec();
     return this;

@@ -7,3 +7,4 @@ pnpm run check:no-dirname
 pnpm run check:env-example
 pnpm run check:routes-folder
 pnpm run check:effect-guards
+pnpm run check:frontend-state

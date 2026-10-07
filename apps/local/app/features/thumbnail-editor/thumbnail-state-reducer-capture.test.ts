@@ -30,10 +30,9 @@ describe("Camera", () => {
     expect(state.cutoutImage).toBeNull();
     expect(state.backgroundRemovalError).toBeNull();
     expect(state.removingBackground).toBe(true);
-    expect(tester.getExec()).toHaveBeenCalledWith({
-      type: "remove-background",
-      dataUrl: "photo-data-url",
-    });
+    expect(tester.getEffects()).toEqual([
+      { type: "remove-background", dataUrl: "photo-data-url" },
+    ]);
   });
 
   it("photo-captured: should preserve diagramImage and editingThumbnailId", () => {
@@ -76,30 +75,24 @@ describe("Background Removal", () => {
     expect(state.pendingAutoSave).toBe(true);
   });
 
-  it("background-removal-failed then retry: should recover and emit new effect", () => {
+  it("a failed background removal can be retried", () => {
     const tester = new ReducerTester(
       thumbnailStateReducer,
-      createState({
-        capturedPhoto: "photo",
-        removingBackground: true,
-      })
+      createInitialThumbnailState()
     );
 
-    // Fail first
-    tester.send({ type: "background-removal-failed", error: "timeout" });
-    expect(tester.getState().backgroundRemovalError).toBe("timeout");
-    expect(tester.getState().removingBackground).toBe(false);
-
-    // Retry
-    tester.resetExec();
-    const state = tester.send({ type: "retry-background-removal" }).getState();
+    const state = tester
+      .send({ type: "photo-captured", dataUrl: "photo" })
+      .send({ type: "background-removal-failed", error: "timeout" })
+      .send({ type: "retry-background-removal" })
+      .getState();
 
     expect(state.backgroundRemovalError).toBeNull();
     expect(state.removingBackground).toBe(true);
-    expect(tester.getExec()).toHaveBeenCalledWith({
-      type: "remove-background",
-      dataUrl: "photo",
-    });
+    expect(tester.getEffects()).toEqual([
+      { type: "remove-background", dataUrl: "photo" },
+      { type: "remove-background", dataUrl: "photo" },
+    ]);
   });
 
   it("retry-background-removal: does nothing if no capturedPhoto", () => {
