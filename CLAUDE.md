@@ -51,7 +51,7 @@ Two tiers — don't run a package's full suite by hand. While iterating, run onl
 
 ### Coding standards
 
-[`CODING_STANDARDS.md`](./CODING_STANDARDS.md) — Effect and config, function signatures, types, entity actions, React Router data flow, keyboard shortcuts, front-end state, interface design, testing. Read it while writing code, not only while reviewing it: `every \`any\` is a leak`binds the hand that writes the cast. It sits at the repo root rather than in`.sandcastle/`for that reason. Longer detail is one level down, in`docs/` (`TESTING_STANDARDS.md`, `EFFECT_STANDARDS.md`, `DRAFT_GUARD.md`, `KEYBOARD_SHORTCUTS.md`, `FRONTEND_STATE.md`).
+[`CODING_STANDARDS.md`](./CODING_STANDARDS.md) — Effect and config, function signatures, types, entity actions, React Router data flow, keyboard shortcuts, front-end state, interface design, testing. Read it while writing code, not only while reviewing it: "every `any` is a leak" binds the hand that writes the cast. It sits at the repo root rather than in `.sandcastle/` for that reason. Longer detail is one level down, in `docs/` (`TESTING_STANDARDS.md`, `EFFECT_STANDARDS.md`, `DRAFT_GUARD.md`, `KEYBOARD_SHORTCUTS.md`, `FRONTEND_STATE.md`).
 
 ### Deep-module packages
 
