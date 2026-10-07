@@ -15,6 +15,7 @@ import type { Database } from "@/services/drizzle-service.server";
 import { UnknownDBServiceError } from "@/services/db-service-errors";
 import { requireDraftVersionForVideo } from "@/services/draft-guard.server";
 import { withDbTransaction } from "@/services/with-db-transaction.server";
+import { createVideoFromSelectionImpl } from "@/services/db-video-from-selection.server";
 import type { LogEvent } from "./video-editor-logger-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 
@@ -472,111 +473,12 @@ export const handleCreateVideoFromSelection = Effect.fn(
   input: CreateVideoFromSelectionInput,
   logger: LoggerAdapter
 ) {
-  const { sourceVideoId, clipIds, chapterIds, title, mode } = input;
+  const newVideo = yield* createVideoFromSelectionImpl(db, input);
 
-  // Get the source video to inherit lessonId
-  const sourceVideo = yield* dbCall(() =>
-    db.query.videos.findFirst({
-      where: eq(videos.id, sourceVideoId),
-    })
-  );
-
-  if (!sourceVideo) {
-    throw new Error(`Source video not found: ${sourceVideoId}`);
-  }
-
-  // Create the new video
-  const [newVideo] = yield* dbCall(() =>
-    db
-      .insert(videos)
-      .values({
-        title,
-        originalFootagePath: title,
-        lessonId: sourceVideo.lessonId,
-      })
-      .returning()
-  );
-
-  if (!newVideo) {
-    throw new Error("Failed to create new video");
-  }
-
-  // Get all items from source video to determine their relative order
-  const allItems = yield* getOrderedItems(db, sourceVideoId);
-
-  // Build sets for quick lookup
-  const selectedClipIds = new Set(clipIds);
-  const selectedSectionIds = new Set(chapterIds);
-
-  // Filter to only selected items, preserving original timeline order
-  const selectedItems = allItems.filter((item) => {
-    if (item.type === "clip") {
-      return selectedClipIds.has(item.id);
-    } else {
-      return selectedSectionIds.has(item.id);
-    }
-  });
-
-  // Generate fresh order keys for the new video
-  const orders = generateNKeysBetween(null, null, selectedItems.length);
-
-  // Copy each selected item to the new video
-  for (let i = 0; i < selectedItems.length; i++) {
-    const item = selectedItems[i]!;
-    const order = orders[i]!;
-
-    if (item.type === "clip") {
-      yield* dbCall(() =>
-        db.insert(clips).values({
-          videoId: newVideo.id,
-          videoFilename: item.videoFilename,
-          sourceStartTime: item.sourceStartTime,
-          sourceEndTime: item.sourceEndTime,
-          order,
-          archived: false,
-          text: item.text,
-          transcribedAt: item.transcribedAt,
-          scene: item.scene,
-          profile: item.profile,
-          pauseType: item.pauseType,
-        })
-      );
-    } else {
-      yield* dbCall(() =>
-        db.insert(chapters).values({
-          videoId: newVideo.id,
-          name: item.name,
-          order,
-          archived: false,
-        })
-      );
-    }
-  }
-
-  // In move mode, archive the originals from the source video
-  if (mode === "move") {
-    for (const clipId of clipIds) {
-      yield* dbCall(() =>
-        db.update(clips).set({ archived: true }).where(eq(clips.id, clipId))
-      );
-    }
-
-    for (const chapterId of chapterIds) {
-      yield* dbCall(() =>
-        db
-          .update(chapters)
-          .set({ archived: true })
-          .where(eq(chapters.id, chapterId))
-      );
-    }
-
-    yield* touchVideoUpdatedAt(db, sourceVideoId);
-  }
-
-  logger.log(sourceVideoId, {
+  logger.log(input.sourceVideoId, {
     type: "video-created-from-selection",
-    sourceVideoId,
-    clipIds: [...clipIds],
+    sourceVideoId: input.sourceVideoId,
+    clipIds: [...input.clipIds],
     newVideoId: newVideo.id,
   });
 

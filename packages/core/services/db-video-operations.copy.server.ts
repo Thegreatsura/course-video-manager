@@ -28,7 +28,7 @@ import {
 import {
   clipChildrenWith,
   copyBeatLearningGoalValues,
-  copyClipChildren,
+  copyClipsOntoVideo,
   insertInChunks,
 } from "./copy-child-rows.js";
 
@@ -172,35 +172,21 @@ export const copyVideoImpl = (
             orderBy: asc(chapters.order),
           });
 
-          if (sourceClips.length > 0) {
-            const clipOrders = generateNKeysBetween(
-              null,
-              null,
-              sourceClips.length
-            );
-            const clipIds = newIdsFor(sourceClips);
-            await tx.insert(clips).values(
-              sourceClips.map((clip, i) => ({
-                id: clipIds.get(clip.id)!,
-                videoId: newVideo.id,
-                videoFilename: clip.videoFilename,
-                sourceStartTime: clip.sourceStartTime,
-                sourceEndTime: clip.sourceEndTime,
-                order: clipOrders[i]!,
-                archived: false,
-                text: clip.text,
-                transcribedAt: clip.transcribedAt,
-                scene: clip.scene,
-                profile: clip.profile,
-                pauseType: clip.pauseType,
-                zoomType: clip.zoomType,
-                diagramSnapshotId: clip.diagramSnapshotId,
-              }))
-            );
-            // Web Links, Transcript Words and Overlays are timed from the
-            // Clip's own start, which a copy keeps, so they travel verbatim.
-            await copyClipChildren(tx, sourceClips, clipIds);
-          }
+          // Web Links, Transcript Words and Overlays are timed from the
+          // Clip's own start, which a copy keeps, so they travel verbatim.
+          const clipOrders = generateNKeysBetween(
+            null,
+            null,
+            sourceClips.length
+          );
+          await copyClipsOntoVideo(
+            tx,
+            sourceClips.map((clip, i) => ({
+              clip,
+              videoId: newVideo.id,
+              order: clipOrders[i]!,
+            }))
+          );
 
           if (sourceChapters.length > 0) {
             const chapterOrders = generateNKeysBetween(
