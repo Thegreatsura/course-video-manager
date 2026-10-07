@@ -23,7 +23,8 @@
     "**/*.test.ts",
     "test-utils/**",
     "vitest.config.ts",
-    "drizzle.config.ts"
+    "drizzle.config.ts",
+    "drizzle-guard.ts"
   ],
   "compilerOptions": {
     "noEmit": false,

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "drizzle-kit";
 import { resolveMigrationDatabaseUrl } from "./db/database-url.js";
+import { guardSchemaWrite } from "./drizzle-guard.js";
 
 /**
  * drizzle-kit runs in THIS package, but the author's environment lives in the
@@ -26,13 +27,26 @@ try {
  * unmerged migration on the production schema. See ADR 0026 and
  * apps/remote/README.md.
  */
+const url = resolveMigrationDatabaseUrl();
+
+/**
+ * `migrate` and `push` against a remote database only from a clean `main` at
+ * origin/main — an unmerged branch once migrated production out of order
+ * (PR #1836). Local databases are never checked. See drizzle-guard.ts.
+ */
+guardSchemaWrite({
+  argv: process.argv,
+  url,
+  cwd: fileURLToPath(new URL(".", import.meta.url)),
+});
+
 export default defineConfig({
   dialect: "postgresql",
   schema: "./db/schema.ts",
   out: "./db/migrations",
   dbCredentials: {
     // Migrations run through the direct connection, never the pooler.
-    url: resolveMigrationDatabaseUrl()!,
+    url: url!,
   },
   tablesFilter: ["course-video-manager_*"],
 });
