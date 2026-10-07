@@ -7,25 +7,23 @@
  *
  *   pnpm --filter @cvm/local db:repair-clip-carry            # dry run
  *   pnpm --filter @cvm/local db:repair-clip-carry --apply    # write
+ *
+ * Reads the repo-root .env (see ./script-database-url.ts); set DATABASE_URL
+ * in the environment to point it elsewhere.
  */
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@cvm/core/db/schema";
-import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import {
   applyClipCarryRepair,
   courseNames,
   loadClipCarryRows,
   planClipCarryRepair,
 } from "@cvm/core/services/clip-carry-repair.server";
+import { scriptDatabaseUrl } from "./script-database-url";
 
 const apply = process.argv.includes("--apply");
-const url = resolveDatabaseUrl();
-if (!url) {
-  console.error("DATABASE_URL is not set");
-  process.exit(1);
-}
-const host = new URL(url).host;
+const { url, host } = scriptDatabaseUrl();
 
 const pool = new Pool({ connectionString: url });
 const db = drizzle(pool, { schema });

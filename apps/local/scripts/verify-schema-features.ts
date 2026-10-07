@@ -4,21 +4,17 @@
  * the PlanetScale cutover: point it at the hosted branch once its migrations
  * have run, and paste the output onto the issue.
  *
- *   DATABASE_URL="postgres://…" pnpm run db:verify-features
+ *   pnpm run db:verify-features   # repo-root .env, or DATABASE_URL=… to override
  *
  * Read-only — it queries the catalogue and evaluates literals, and writes
  * nothing. Uses the direct connection string when one is configured, so it
  * sees the primary rather than a pooled session.
  */
 import { Client } from "pg";
-import { resolveMigrationDatabaseUrl } from "@/db/database-url";
 import { SCHEMA_FEATURE_PROBES } from "@/db/schema-feature-probes";
+import { scriptDatabaseUrl } from "./script-database-url";
 
-const url = resolveMigrationDatabaseUrl();
-if (!url) {
-  console.error("DATABASE_URL is not set");
-  process.exit(1);
-}
+const { url } = scriptDatabaseUrl({ direct: true });
 
 const client = new Client({ connectionString: url });
 await client.connect();

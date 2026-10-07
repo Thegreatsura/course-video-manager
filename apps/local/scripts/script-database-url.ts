@@ -1,0 +1,55 @@
+/**
+ * The connection string for a one-off DB script under `apps/local/scripts/`.
+ *
+ * Every such script needs the same three things, so get them here rather than
+ * re-deriving them per script:
+ *
+ * 1. **The env.** Load the repo-root `.env` exactly as
+ *    `packages/core/drizzle.config.ts` does (`process.loadEnvFile`), so a
+ *    script runs from a plain checkout the same way `pnpm db:migrate` does.
+ *    A missing file is fine — a real environment supplies the variables — and
+ *    `loadEnvFile` never overrides a variable already set, so
+ *    `DATABASE_URL=… pnpm --filter @cvm/local db:…` still points a run at a
+ *    local clone.
+ * 2. **The URL.** Pooled by default; `direct: true` for anything touching
+ *    schema or migration bookkeeping (see `@cvm/core/db/database-url`).
+ * 3. **The target, announced.** Prints the host — never the credentials — so
+ *    the operator sees which database is about to be read or written.
+ */
+import { fileURLToPath } from "node:url";
+import {
+  resolveDatabaseUrl,
+  resolveMigrationDatabaseUrl,
+} from "@cvm/core/db/database-url";
+
+export interface ScriptDatabase {
+  readonly url: string;
+  /** `host:port` only — safe to print. */
+  readonly host: string;
+}
+
+export const scriptDatabaseUrl = (
+  opts: { readonly direct?: boolean } = {}
+): ScriptDatabase => {
+  try {
+    process.loadEnvFile(
+      fileURLToPath(new URL("../../../.env", import.meta.url))
+    );
+  } catch {
+    // No .env — the environment supplies the variables directly.
+  }
+
+  const url = opts.direct
+    ? resolveMigrationDatabaseUrl()
+    : resolveDatabaseUrl();
+  if (!url) {
+    console.error(
+      "DATABASE_URL is not set (checked the environment and the repo-root .env)"
+    );
+    process.exit(1);
+  }
+
+  const host = new URL(url).host;
+  console.log(`Target database: ${host}`);
+  return { url, host };
+};
