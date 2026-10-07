@@ -14,6 +14,10 @@ import { VERSION_NOT_DRAFT_MESSAGE } from "@/services/version-not-draft-message"
 import type { EffectsMap } from "use-effect-reducer";
 import type React from "react";
 import { diagramChannel } from "@/lib/diagram-protocol";
+import {
+  toTranscribedClipEvent,
+  type TranscribedClip,
+} from "./transcribe-clips-response";
 
 export interface EditEffectHandlersDeps {
   videoId: string;
@@ -68,13 +72,10 @@ export function createEditEffectHandlers(
           }
           return res.json();
         })
-        .then((clips: DB.Clip[]) => {
+        .then((clips: TranscribedClip[]) => {
           dispatch({
             type: "clips-transcribed",
-            clips: clips.map((clip) => ({
-              databaseId: clip.id,
-              text: clip.text,
-            })),
+            clips: clips.map(toTranscribedClipEvent),
           });
         })
         .catch((error) => {

@@ -8,7 +8,6 @@ import type {
   ClipReducerAction,
   ClipReducerEffect,
   ClipReducerState,
-  DatabaseId,
   FrontendInsertionPoint,
 } from "./clip-state-reducer.types";
 import { archiveClips } from "./clip-state-reducer.helpers";
@@ -81,26 +80,30 @@ export const clipStateReducer: EffectReducer<
       };
     }
     case "clips-transcribed": {
-      const set = new Set([...state.clipIdsBeingTranscribed]);
-
-      const textMap: Record<DatabaseId, string> = action.clips.reduce(
-        (acc, clip) => {
-          acc[clip.databaseId] = clip.text;
-          return acc;
-        },
-        {} as Record<DatabaseId, string>
+      const beingTranscribed = new Set(state.clipIdsBeingTranscribed);
+      const withWords = new Set(state.clipIdsWithTranscriptWords);
+      const transcribed = new Map(
+        action.clips.map((clip) => [clip.databaseId, clip])
       );
 
       return {
         ...state,
         items: state.items.map((item) => {
-          if (item.type === "on-database" && textMap[item.databaseId]) {
-            set.delete(item.frontendId);
-            return { ...item, text: textMap[item.databaseId]! };
-          }
-          return item;
+          const clip =
+            item.type === "on-database"
+              ? transcribed.get(item.databaseId)
+              : undefined;
+          if (item.type !== "on-database" || !clip) return item;
+
+          // An empty text is a finished transcription too (nothing was said),
+          // so it must clear the "being transcribed" mark like any other.
+          beingTranscribed.delete(item.frontendId);
+          if (clip.hasTranscriptWords) withWords.add(item.databaseId);
+          else withWords.delete(item.databaseId);
+          return { ...item, text: clip.text };
         }),
-        clipIdsBeingTranscribed: set,
+        clipIdsBeingTranscribed: beingTranscribed,
+        clipIdsWithTranscriptWords: withWords,
       };
     }
     case "set-insertion-point-after": {

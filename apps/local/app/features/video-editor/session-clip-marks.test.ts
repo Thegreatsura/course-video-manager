@@ -117,6 +117,7 @@ describe("getSessionClipMarks over a real take", () => {
       clipStateReducer,
       fromPartial<clipStateReducer.State>({
         clipIdsBeingTranscribed: new Set(),
+        clipIdsWithTranscriptWords: new Set(),
         items: [],
         insertionPoint: { type: "end" },
         insertionOrder: 0,
@@ -159,6 +160,7 @@ describe("getSessionClipMarks over a real take", () => {
       clipStateReducer,
       fromPartial<clipStateReducer.State>({
         clipIdsBeingTranscribed: new Set(),
+        clipIdsWithTranscriptWords: new Set(),
         items: [],
         insertionPoint: { type: "end" },
         insertionOrder: 0,
