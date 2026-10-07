@@ -37,12 +37,13 @@
     "sandcastle": "tsx ./.sandcastle/main.ts",
     "check:file-tokens": "./scripts/check-file-tokens.sh",
     "check:no-dirname": "./scripts/check-no-dirname.sh",
+    "check:script-db-url": "./scripts/check-script-db-url.sh",
     "check:env-example": "./scripts/check-env-example.sh",
     "check:routes-folder": "./scripts/check-routes-folder.sh",
     "check:response-body": "./scripts/check-response-body.sh",
     "check:effect-guards": "node scripts/check-effect-guards.ts",
     "check:frontend-state": "node scripts/check-frontend-state.ts",
-    "check:static": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all && node scripts/check-frontend-state.ts --all",
+    "check:static": "pnpm run typecheck && pnpm run lint:effect && pnpm run lint && pnpm run lint:boundaries && ./scripts/check-file-tokens.sh --all && ./scripts/check-no-dirname.sh --all && ./scripts/check-script-db-url.sh --all && ./scripts/check-env-example.sh --all && ./scripts/check-routes-folder.sh --all && ./scripts/check-response-body.sh --all && node scripts/check-effect-guards.ts --all && node scripts/check-frontend-state.ts --all",
     "check": "pnpm run check:static && pnpm run test"
   },
   "pnpm": {
