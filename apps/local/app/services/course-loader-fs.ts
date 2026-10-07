@@ -7,40 +7,6 @@ import {
 } from "./export-hash";
 import { authoringVideoWarnings, computeVideoWarnings } from "./video-warnings";
 
-const listFilesRecursive = (
-  dir: string,
-  prefix: string
-): Effect.Effect<
-  { path: string; size: number }[],
-  never,
-  FileSystem.FileSystem
-> =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const entries = yield* fs
-      .readDirectory(dir)
-      .pipe(Effect.catchAll(() => Effect.succeed([] as string[])));
-    const entryResults = yield* Effect.forEach(
-      entries,
-      (entry) =>
-        Effect.gen(function* () {
-          const fullPath = `${dir}/${entry}`;
-          const relativePath = prefix ? `${prefix}/${entry}` : entry;
-          const stat = yield* fs
-            .stat(fullPath)
-            .pipe(Effect.catchAll(() => Effect.succeed(undefined)));
-          if (!stat) return [] as { path: string; size: number }[];
-          if (stat.type === "Directory") {
-            return yield* listFilesRecursive(fullPath, relativePath);
-          } else {
-            return [{ path: relativePath, size: Number(stat.size) }];
-          }
-        }),
-      { concurrency: "unbounded" }
-    );
-    return entryResults.flat();
-  });
-
 export const loadExportStatusMap = (opts: {
   courseId: string;
   videos: { id: string; format: string; clips: ExportClip[] }[];
@@ -80,8 +46,6 @@ export const loadLessonFsMaps = (opts: {
     const fs = yield* FileSystem.FileSystem;
 
     const hasExplainerFolderMap: Record<string, boolean> = {};
-    const lessonHasFilesMap: Record<string, { path: string; size: number }[]> =
-      {};
 
     yield* Effect.forEach(
       opts.lessons,
@@ -90,15 +54,11 @@ export const loadLessonFsMaps = (opts: {
           hasExplainerFolderMap[lesson.id] = yield* fs.exists(
             `${lesson.fullPath}/explainer`
           );
-          lessonHasFilesMap[lesson.id] = yield* listFilesRecursive(
-            lesson.fullPath,
-            ""
-          );
         }),
       { concurrency: "unbounded" }
     );
 
-    return { hasExplainerFolderMap, lessonHasFilesMap };
+    return { hasExplainerFolderMap };
   });
 
 export function toSlimVideo<

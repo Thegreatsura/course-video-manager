@@ -18,7 +18,6 @@ export function NextTodoCard({
   data,
   navigate,
   addVideoToLessonId,
-  deleteLessonId,
   editDescriptionLessonId,
   dispatch,
   submitEvent,
@@ -35,7 +34,6 @@ export function NextTodoCard({
   data: LoaderData;
   navigate: ReturnType<typeof useNavigate>;
   addVideoToLessonId: string | null;
-  deleteLessonId: string | null;
   editDescriptionLessonId: string | null;
   dispatch: (action: courseViewReducer.Action) => void;
   submitEvent: (event: CourseEditorEvent) => void;
@@ -95,7 +93,6 @@ export function NextTodoCard({
                 data={data}
                 navigate={navigate}
                 addVideoToLessonId={addVideoToLessonId}
-                deleteLessonId={deleteLessonId}
                 editDescriptionLessonId={editDescriptionLessonId}
                 dispatch={dispatch}
                 submitEvent={submitEvent}

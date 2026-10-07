@@ -113,11 +113,6 @@
       "reason": "UI status probe: any failure (including an unset FINISHED_VIDEOS_DIRECTORY) shows as 'not exported'."
     },
     {
-      "file": "apps/local/app/services/course-loader-fs.ts",
-      "count": 2,
-      "reason": "Walking a lesson folder: an unreadable directory or entry is skipped, so one bad file never hides the rest of the listing."
-    },
-    {
       "file": "apps/local/app/services/export-sha256-sidecar.ts",
       "count": 3,
       "reason": "The digest sidecar is a cache: a missing, torn or unreadable one reads as 'no digest' and is recomputed (see the file comments)."

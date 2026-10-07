@@ -173,7 +173,6 @@ export default function Component(props: Route.ComponentProps) {
     insertPosition,
     addVideoToLessonId,
     editSectionId,
-    deleteLessonId,
     editDescriptionLessonId,
     archiveSectionId,
     lessonSelection,
@@ -327,7 +326,6 @@ export default function Component(props: Route.ComponentProps) {
                           insertPosition={insertPosition}
                           editSectionId={editSectionId}
                           addVideoToLessonId={addVideoToLessonId}
-                          deleteLessonId={deleteLessonId}
                           editDescriptionLessonId={editDescriptionLessonId}
                           archiveSectionId={archiveSectionId}
                           collapsedSections={NO_COLLAPSED_SECTIONS}

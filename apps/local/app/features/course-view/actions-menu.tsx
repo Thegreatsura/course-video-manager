@@ -43,6 +43,8 @@ export function ActionsDropdown({
     switch (action) {
       case "preview-changelog":
         return void navigate(`/courses/${currentCourse.id}/changelog`);
+      case "view-archived-lessons":
+        return void navigate(`/courses/${currentCourse.id}/archived-lessons`);
       case "publish":
         return void navigate(`/courses/${currentCourse.id}/publish`);
       case "export":

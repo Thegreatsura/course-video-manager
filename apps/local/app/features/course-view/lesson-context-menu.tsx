@@ -146,12 +146,11 @@ export function LessonContextMenuContent({
             },
         ],
         danger: [
+          // Undoable from the course's Archived Lessons page, so it acts at once.
           canEdit && {
-            ...STANDARD_ACTIONS.delete,
-            // A dialog confirms first, listing any files on disk.
-            opensDialog: true,
+            ...STANDARD_ACTIONS.archive,
             onSelect: () =>
-              dispatch({ type: "set-delete-lesson-id", lessonId: lesson.id }),
+              submitEvent({ type: "delete-lesson", lessonId: lesson.id }),
           },
         ],
       }}

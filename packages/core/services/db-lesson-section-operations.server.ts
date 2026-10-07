@@ -275,6 +275,82 @@ const createLessonSectionOperationsUnwrapped = (db: Database) => {
     return lessonResult;
   });
 
+  /**
+   * Archived Lessons of one Section, in Section order — the list the
+   * Unarchive action is offered from. Archived Lessons are hidden everywhere
+   * else.
+   */
+  const getArchivedLessonsBySectionId = Effect.fn(
+    "getArchivedLessonsBySectionId"
+  )(function* (sectionId: string) {
+    return yield* makeDbCall(() =>
+      db.query.lessons.findMany({
+        where: and(
+          eq(lessons.sectionId, sectionId),
+          eq(lessons.archived, true)
+        ),
+        orderBy: asc(lessons.order),
+      })
+    );
+  });
+
+  /**
+   * The undo of deleteLesson: the Lesson goes back into its Section with its
+   * Videos, as it was. Archive leaves `order` untouched, so the Lesson returns
+   * to its original slot when no live sibling has taken that order since,
+   * and to the end of the Section otherwise. Draft-guarded like archive: only
+   * the Draft Version's row changes, and the Draft is marked Has Changes.
+   * Refused when its Section is archived (there is nowhere to go back to) or
+   * a live sibling has taken its title (LessonPathTakenError).
+   */
+  const unarchiveLesson = Effect.fn("unarchiveLesson")(function* (
+    lessonId: string
+  ) {
+    yield* requireDraftVersionForLesson(db, lessonId);
+    const lesson = yield* makeDbCall(() =>
+      db.query.lessons.findFirst({
+        where: eq(lessons.id, lessonId),
+        with: { section: { columns: { archivedAt: true } } },
+      })
+    );
+    if (!lesson || lesson.section.archivedAt) {
+      return yield* new NotFoundError({
+        type: "unarchiveLesson",
+        params: { lessonId },
+      });
+    }
+    const { section: _section, ...row } = lesson;
+    if (!lesson.archived) return row;
+
+    const siblings = yield* makeDbCall(() =>
+      db.query.lessons.findMany({
+        where: and(
+          eq(lessons.sectionId, lesson.sectionId),
+          eq(lessons.archived, false)
+        ),
+        columns: { order: true, title: true },
+      })
+    );
+    if (lesson.title && siblings.some((s) => s.title === lesson.title)) {
+      return yield* new LessonPathTakenError({
+        path: lesson.title,
+        message: `Lesson name "${lesson.title}" is already taken in its section; rename one first`,
+      });
+    }
+    const order = siblings.some((s) => s.order === lesson.order)
+      ? Math.max(...siblings.map((s) => s.order)) + 1
+      : lesson.order;
+
+    const [restored] = yield* makeDbCall(() =>
+      db
+        .update(lessons)
+        .set({ archived: false, order })
+        .where(eq(lessons.id, lessonId))
+        .returning()
+    );
+    return restored!;
+  });
+
   const deleteSection = Effect.fn("deleteSection")(function* (
     sectionId: string
   ) {
@@ -474,6 +550,8 @@ const createLessonSectionOperationsUnwrapped = (db: Database) => {
     createLesson,
     updateLesson,
     deleteLesson,
+    getArchivedLessonsBySectionId,
+    unarchiveLesson,
     deleteSection,
     archiveSection,
     updateSectionOrder,
@@ -496,6 +574,7 @@ const createLessonSectionOperations = (db: Database) =>
     "createLesson",
     "updateLesson",
     "deleteLesson",
+    "unarchiveLesson",
     "deleteSection",
     "archiveSection",
     "updateSectionOrder",
