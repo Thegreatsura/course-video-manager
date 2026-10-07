@@ -345,6 +345,32 @@ export function parseEntityRef(input: string): ParsedEntityRef {
   return parseUrl(raw, input);
 }
 
+/** An entity a page shows inside itself, named by a link's query param. */
+export type DeepLinkTargetType = ChildType;
+
+/** The one entity a link asks its page to focus. */
+export type DeepLinkTarget = { type: DeepLinkTargetType; id: string };
+
+/**
+ * The entity a page's URL asks it to focus: the inverse of the child param
+ * `entityDeepLink` writes (see CHILD_PARAM). `types` are the ones this page,
+ * or this part of it, can show. `null` when the URL names none of them, or
+ * names more than one entity and so points at no single item.
+ */
+export function deepLinkTarget(
+  search: string | URLSearchParams,
+  types: ReadonlyArray<DeepLinkTargetType>
+): DeepLinkTarget | null {
+  const params =
+    typeof search === "string" ? new URLSearchParams(search) : search;
+  const named = (Object.keys(CHILD_PARAM) as ChildType[]).flatMap((type) => {
+    const id = params.get(CHILD_PARAM[type]);
+    return id ? [{ type, id }] : [];
+  });
+  const [only] = named;
+  return named.length === 1 && only && types.includes(only.type) ? only : null;
+}
+
 /** "a Video", "an Animatic"… for error messages. */
 const withArticle = (label: string) =>
   `${/^[AEIOU]/.test(label) ? "an" : "a"} ${label}`;

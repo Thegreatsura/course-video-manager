@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
@@ -342,7 +343,7 @@ function BeatRow({
 
   if (isReadOnly) {
     return (
-      <div>
+      <div {...deepLinkAnchor(beat.id)}>
         <ContextMenu>
           <ContextMenuTrigger asChild>{titleRow}</ContextMenuTrigger>
           <EntityMenuContent menu="context" entity={entity} groups={{}} />
@@ -353,7 +354,7 @@ function BeatRow({
   }
 
   return (
-    <div>
+    <div {...deepLinkAnchor(beat.id)}>
       <ContextMenu>
         <ContextMenuTrigger asChild>{titleRow}</ContextMenuTrigger>
         <EntityMenuContent

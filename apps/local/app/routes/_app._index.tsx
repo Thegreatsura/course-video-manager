@@ -1,3 +1,4 @@
+import { useDeepLinkFocus } from "@/features/entity-links/use-deep-link-focus";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -160,20 +161,23 @@ function HistoryDisclosure({
   overdueCutoffStr,
   allCourses,
   allPitches,
+  open,
+  onToggle,
 }: {
   items: DeliverableWithLinks[];
   todayStr: string;
   overdueCutoffStr: string;
   allCourses: CourseOption[];
   allPitches: PitchOption[];
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
   const monthGroups = groupByMonth(items);
   return (
     <div className="mb-5">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         className="w-full text-left text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-2 border-b border-border"
         aria-expanded={open}
       >
@@ -236,6 +240,7 @@ export default function DeliverablesCalendarPage() {
     | null
   >(null);
   const [bufferWeeks, setBufferWeeks] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     setBufferWeeks(readBufferFromStorage());
@@ -272,6 +277,21 @@ export default function DeliverablesCalendarPage() {
     today,
     { minWeeksAhead: 11, overdueCutoffStr }
   );
+
+  // A copied `?deliverable=` link scrolls to its card, opening the history
+  // first when the card is in it.
+  useDeepLinkFocus({
+    types: ["deliverable"],
+    candidates: deliverablesWithLinks.map((d) => ({
+      type: "deliverable",
+      id: d.id,
+      key: d.id,
+      archived: d.archived,
+    })),
+    onFocus: ({ id }) => {
+      if (pastHistory.some((d) => d.id === id)) setHistoryOpen(true);
+    },
+  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -325,6 +345,8 @@ export default function DeliverablesCalendarPage() {
             overdueCutoffStr={overdueCutoffStr}
             allCourses={courses}
             allPitches={pitches}
+            open={historyOpen}
+            onToggle={() => setHistoryOpen((v) => !v)}
           />
 
           <div className="space-y-8">

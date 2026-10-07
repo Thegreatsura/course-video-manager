@@ -1,3 +1,4 @@
+import { useDeepLinkFocus } from "@/features/entity-links/use-deep-link-focus";
 import { cn } from "@/lib/utils";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
 import { CreateBeatDialogProvider } from "@/features/beats/create-beat-dialog";
@@ -60,6 +61,17 @@ export function EditorSidePanel(props: {
   onDeleteReferenceChapter: (chapterId: string) => void;
   onAutofillReferenceChapters: () => void;
 }) {
+  // A copied `?beat=` link opens the Beats tab on its Beat.
+  useDeepLinkFocus({
+    types: ["beat"],
+    candidates: props.beats.map((beat) => ({
+      type: "beat",
+      id: beat.id,
+      key: beat.id,
+    })),
+    onFocus: () => props.onTabChange("beats"),
+  });
+
   return (
     <div className="border rounded-lg bg-muted/30 flex flex-col min-h-0 h-full">
       <div className="flex items-center gap-1 px-1.5 py-1 border-b bg-muted/50 shrink-0">
