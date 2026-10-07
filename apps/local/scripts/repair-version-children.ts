@@ -9,12 +9,22 @@
  *   pnpm --filter @cvm/local db:repair-version-children            # dry run
  *   pnpm --filter @cvm/local db:repair-version-children --apply    # write
  */
+import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@cvm/core/db/schema";
 import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import { courseNames } from "@cvm/core/services/clip-carry-repair.server";
 import { runVersionChildrenRepair } from "@cvm/core/services/version-children-repair.server";
+
+// The author's environment lives in the repo-root .env, which nothing loads
+// for a bare `tsx` run — same convention as packages/core/drizzle.config.ts.
+// A variable already set in the shell wins over the file.
+try {
+  process.loadEnvFile(fileURLToPath(new URL("../../../.env", import.meta.url)));
+} catch {
+  // No .env — the environment supplies the variables directly.
+}
 
 const apply = process.argv.includes("--apply");
 const url = resolveDatabaseUrl();
