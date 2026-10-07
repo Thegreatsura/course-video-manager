@@ -36,7 +36,7 @@ too, it just drops out of its Lesson with nowhere listing it afterwards.
 
 Verbs:
   list                 every Standalone Video (active by default; --archived for the archive)
-  get <id...>          a Video plus its Clips and Chapters (variadic; NDJSON when >1 id)
+  get <id...>          a Video plus its Chapters and clipCount — no Clips (variadic; NDJSON when >1 id)
   tree <id>            slim skeleton: video -> clip ids + chapters (--full adds clip text)
   transcript <id>      the ordered text projection (Clips + Chapters as prose)
   script <id>          the Video's teleprompter SCRIPT (internal; never published)
@@ -48,7 +48,7 @@ Verbs:
 
 Worked example (find a video, then read it):
   cvm video list | jq -r '.id'                     # map name -> id
-  cvm video get <id> | jq '.clips | length'        # how many clips
+  cvm video get <id> | jq '.clipCount'             # how many clips
   cvm video tree <id>                              # skeleton overview
   cvm video transcript <id> | jq -r '.transcript'  # the prose transcript`;
 
@@ -82,12 +82,18 @@ Examples:
   cvm video list --format short
   cvm video list | jq -r '"\\(.id)\\t\\(.title)"'`;
 
-export const GET_HELP = `Get one or more Videos by id (variadic), each with its immediate children.
+export const GET_HELP = `Get one or more Videos by id (variadic): the video row, its Chapters, and a
+little parent context. NO Clips.
 
-This is a shallow, fixed-depth read: the video row plus its non-archived Clips
-(in timeline order) and Chapters, and a little parent context (its Lesson /
-Section / Course Version when lesson-bound). Accepts ANY video id — standalone
-OR lesson-bound.
+Accepts ANY video id — standalone OR lesson-bound. Returns the video row, its
+non-archived Chapters, a clipCount, and its Lesson / Section / Course Version
+when lesson-bound.
+
+Clips are deliberately left out: on a filmed Video they run to hundreds of KB
+(overlays, words, search vectors) and drown the row. To read them:
+  cvm clip list --video <id>     the Video's Clips in timeline order (NDJSON)
+  cvm video transcript <id>      the spoken text, Clips and Chapters interleaved
+  cvm video tree <id>            the Clip/Chapter skeleton, ids only
 
 Output:
   - exactly one id, found    -> one pretty JSON object, exit 0
@@ -104,14 +110,13 @@ directly with 'cvm course get <courseId>'.
 
 Selected fields:
   id, title, lessonId, pitchId, archived
-  clips[]    { id, order, text, videoFilename, sourceStartTime, sourceEndTime,
-               transcribedAt, pauseType, ... } — order is a fractional index
+  clipCount  number of non-archived Clips (the Clips themselves: 'cvm clip list')
   chapters[] { id, order, name } — named YouTube-style dividers
 
 Examples:
   cvm video get <id>
   cvm video get <id1> <id2> <id3>
-  cvm video get <id> | jq '.clips[] | .text'`;
+  cvm video get <id> | jq '{title, clipCount}'`;
 
 export const TREE_HELP = `Print the SKELETON of a Video: its Clips and Chapters as a shallow tree.
 

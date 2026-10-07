@@ -9,7 +9,8 @@ import {
   type SectionLintLesson,
   type SectionLintVideo,
 } from "@/services/section-lint";
-import { detail, emitObject, notFound } from "@/cli/helpers";
+import { detail, emitObject } from "@/cli/helpers";
+import { notFoundOrStale } from "../stale-id";
 import { LINT_HELP } from "./section.help";
 
 /**
@@ -45,7 +46,7 @@ export const sectionLintCmd = Command.make(
       // An archived Section is deleted-equivalent everywhere in this CLI, so it
       // is a not-found (exit 2) rather than a clean lint of nothing.
       if (section === undefined || section.archivedAt !== null) {
-        return yield* notFound("section", sectionId);
+        return yield* notFoundOrStale("section", sectionId);
       }
 
       const learningGoals =

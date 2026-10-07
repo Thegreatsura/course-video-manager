@@ -111,9 +111,12 @@ Flags:
   --before <id>       place immediately before that beat.
   --after <id>        place immediately after that beat.
                       (omit both --before/--after to append to the end.)
-  --learning-goal <id> attach this Learning Goal to the new Beat (repeatable;
-                      pass the flag once per Goal). Every Beat is expected to
-                      serve at least one Learning Goal, so prefer this to a
+  --learning-goal <id> OPTIONAL. Attach this Learning Goal to the new Beat
+                      (repeatable; pass the flag once per Goal). Omit it to
+                      create a Beat that serves no Goal yet — 'setup' Beats
+                      never need one. Once the Section has Learning Goals,
+                      every other Beat is expected to serve at least one, so
+                      when you already know the Goal prefer this to a
                       follow-up 'beat update --learning-goal' — one call, not
                       two. Same ids, same validation and same errors as
                       'update --learning-goal': an unknown or archived

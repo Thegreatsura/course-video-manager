@@ -1,5 +1,6 @@
 import { Args, Command, Options } from "@effect/cli";
 import { entityIdArg, entityIdOption } from "../entity-id";
+import { explainStaleId, notFoundOrStale } from "../stale-id";
 import { Effect, Option } from "effect";
 import { lessonSearchCmd } from "./search";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
@@ -89,6 +90,7 @@ const getCmd = Command.make("get", { ids, full: fullOption }, ({ ids, full }) =>
     entity: "lesson",
     ids,
     includeMemory: full,
+    explainMissing: explainStaleId("lesson"),
     fetch: (id) =>
       Effect.flatMap(LessonSectionOperationsService, (svc) =>
         svc.getLessonWithHierarchyById(id).pipe(
@@ -136,12 +138,14 @@ const treeCmd = Command.make("tree", { id: treeId, depth }, ({ id, depth }) =>
     // domain NotFoundError when absent — translate to the CLI's exit-2 shape.
     const lesson = yield* lessonSvc
       .getLessonById(id)
-      .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
+      .pipe(
+        Effect.catchTag("NotFoundError", () => notFoundOrStale("lesson", id))
+      );
 
     // Archived lessons are deleted-equivalent: an archived lesson id is treated
     // as not found (no flag, never visible).
     if (lesson.archived) {
-      return yield* notFound("lesson", id);
+      return yield* notFoundOrStale("lesson", id);
     }
 
     // getLessonById loads the lesson's videos relation WITHOUT an archived
@@ -331,8 +335,10 @@ const updateCmd = Command.make(
 
       const lesson = yield* svc
         .getLessonWithHierarchyById(id)
-        .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
-      if (lesson.archived) return yield* notFound("lesson", id);
+        .pipe(
+          Effect.catchTag("NotFoundError", () => notFoundOrStale("lesson", id))
+        );
+      if (lesson.archived) return yield* notFoundOrStale("lesson", id);
 
       yield* assertDraftLesson(lesson);
 
@@ -393,8 +399,10 @@ const moveCmd = Command.make(
 
       const lesson = yield* svc
         .getLessonWithHierarchyById(id)
-        .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
-      if (lesson.archived) return yield* notFound("lesson", id);
+        .pipe(
+          Effect.catchTag("NotFoundError", () => notFoundOrStale("lesson", id))
+        );
+      if (lesson.archived) return yield* notFoundOrStale("lesson", id);
       yield* assertDraftLesson(lesson);
 
       if (anchorId === id) {
@@ -472,8 +480,10 @@ const archiveCmd = Command.make("archive", { id: archiveId }, ({ id }) =>
     // the last chance to fetch it (and the draft guard needs its hierarchy).
     const lesson = yield* svc
       .getLessonWithHierarchyById(id)
-      .pipe(Effect.catchTag("NotFoundError", () => notFound("lesson", id)));
-    if (lesson.archived) return yield* notFound("lesson", id);
+      .pipe(
+        Effect.catchTag("NotFoundError", () => notFoundOrStale("lesson", id))
+      );
+    if (lesson.archived) return yield* notFoundOrStale("lesson", id);
     yield* assertDraftLesson(lesson);
 
     yield* svc.deleteLesson(id);

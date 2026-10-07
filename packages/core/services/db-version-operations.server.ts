@@ -17,6 +17,7 @@ import { overlayExportRelation } from "./db-overlay-operations.server.js";
 import { createVersionLifecycleOps } from "./db-version-lifecycle.server.js";
 import { createVersionPathOps } from "./db-version-paths.server.js";
 import { createVersionCopyOps } from "./db-version-copy.server.js";
+import { createVersionSuccessorOps } from "./db-version-successor.server.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -363,6 +364,8 @@ const createVersionOperations = (db: Database) => {
     getAllVersionsWithStructure,
     // resolveLessonDir / resolveSectionDir (split for the file token budget).
     ...createVersionPathOps(db),
+    // findVersionSuccessor — an older version's id to its Draft equivalent.
+    ...createVersionSuccessorOps(db),
   };
 };
 

@@ -634,6 +634,17 @@ describe("embedded course memory is stripped by default", () => {
     );
   });
 
+  // On a filmed Video the Clips ran to ~350KB (overlays, words, search
+  // vectors) and broke `jq`; `clip list --video` is their read.
+  it("video get carries no Clips, only a clipCount", async () => {
+    const video = JSON.parse(
+      (await run(["video", "get", s.lessonVideoId])).stdout
+    );
+    expect(video).not.toHaveProperty("clips");
+    expect(video.clipCount).toBe(2);
+    expect(video.id).toBe(s.lessonVideoId);
+  });
+
   it("cvm course get is the direct, unaffected way to read memory", async () => {
     const course = JSON.parse(
       (await run(["course", "get", s.courseAId])).stdout
