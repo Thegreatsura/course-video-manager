@@ -63,6 +63,27 @@ url_db()      { sed -E -e 's#^[a-z]*://[^/]*/?##' -e 's#\?.*##' <<< "$1"; }
 url_user()    { sed -E -e 's#^[a-z]*://##' -e 's#[:@].*##' <<< "$1"; }
 url_with_db() { sed -E "s#^([a-z]*://[^/?]*)/?[^?]*#\\1/$2#" <<< "$1"; }
 
+# url_direct URL PORT — the same URL on PORT, with any `|bouncer` suffix taken
+# off the username. pg_dump needs a session, and PlanetScale refuses it on the
+# PgBouncer port (6432): "pg_dump is not allowed to use pooled connections,
+# please use the direct port 5432". Host and password are the same on both
+# ports; only a dedicated bouncer adds `|<bouncer-name>` to the username.
+url_direct() {
+  local scheme="${1%%://*}" rest="${1#*://}" auth tail userinfo="" hostport user pass=""
+  auth="${rest%%[/?]*}"
+  tail="${rest:${#auth}}"
+  hostport="$auth"
+  if [[ $auth == *@* ]]; then userinfo="${auth%@*}"; hostport="${auth##*@}"; fi
+  [[ $hostport == *:* ]] && hostport="${hostport%:*}"
+  if [ -n "$userinfo" ]; then
+    user="${userinfo%%:*}"
+    [[ $userinfo == *:* ]] && pass=":${userinfo#*:}"
+    user="${user%%|*}"; user="${user%%%7[Cc]*}"
+    userinfo="$user$pass@"
+  fi
+  printf '%s://%s%s:%s%s\n' "$scheme" "$userinfo" "$hostport" "$2" "$tail"
+}
+
 # --- the two databases ------------------------------------------------------
 PROD_URL=""
 for f in "$REPO_ROOT/.env" "$MAIN_ROOT/.env"; do
@@ -70,6 +91,8 @@ for f in "$REPO_ROOT/.env" "$MAIN_ROOT/.env"; do
   [ -n "$PROD_URL" ] && break
 done
 [ -n "$PROD_URL" ] || die "no DATABASE_URL in $REPO_ROOT/.env or $MAIN_ROOT/.env"
+# The dump goes to the direct port, never the pooled one (see url_direct).
+DUMP_URL="$(url_direct "$PROD_URL" "${VERIFY_PROD_DUMP_PORT:-5432}")"
 
 TEMPLATE_URL="${VERIFY_DATABASE_URL:-$(read_key "$VERIFY_ENV_FILE" VERIFY_DATABASE_URL)}"
 [ -n "$TEMPLATE_URL" ] || die "VERIFY_DATABASE_URL is not set and $VERIFY_ENV_FILE has none — run scripts/setup-verify-db.sh first"
@@ -133,7 +156,7 @@ host_ca_bundle() {
 dump_production() {
   case "$TOOLS" in
     # PlanetScale wants the system root certificate on this box (see verify.sh).
-    local:*)  PGSSLROOTCERT=system "${TOOLS#local:}/pg_dump" "${DUMP_ARGS[@]}" -d "$PROD_URL" ;;
+    local:*)  PGSSLROOTCERT=system "${TOOLS#local:}/pg_dump" "${DUMP_ARGS[@]}" -d "$DUMP_URL" ;;
     docker:*)
       local ca
       ca="$(host_ca_bundle)" ||
@@ -141,7 +164,7 @@ dump_production() {
       docker cp -L "$ca" "${TOOLS#docker:}:$CONTAINER_CA" > /dev/null ||
         die "could not copy $ca into the $CONTAINER container"
       docker exec -e PGSSLROOTCERT="$CONTAINER_CA" "${TOOLS#docker:}" \
-        pg_dump "${DUMP_ARGS[@]}" -d "$PROD_URL" ;;
+        pg_dump "${DUMP_ARGS[@]}" -d "$DUMP_URL" ;;
   esac
 }
 
@@ -156,6 +179,7 @@ restore_into() { # restore_into DB < dump
 # --- go ---------------------------------------------------------------------
 say ""
 say "  verify-snapshot: production  →  $(url_host "$TEMPLATE_URL")/$TEMPLATE_DB"
+say "  dumping from:    $(url_host "$DUMP_URL") (direct port; override with VERIFY_PROD_DUMP_PORT)"
 say "  pg tools:        $TOOLS"
 say "  credential tables dumped schema-only: ${CREDENTIAL_TABLES[*]}"
 say ""
