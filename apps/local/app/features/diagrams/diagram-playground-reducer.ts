@@ -24,7 +24,10 @@ export namespace diagramPlaygroundReducer {
     creating: boolean;
     videoEditorConnected: boolean;
     windowFocused: boolean;
+    /** tldraw's Focus Mode, which hides the sidebar. The editor owns it. */
     isFocusMode: boolean;
+    /** Whether the video editor last reported a recording in progress. */
+    recording: boolean;
     /** Bumped whenever the snapshot timeline may have changed on the server. */
     timelineVersion: number;
   }
@@ -85,7 +88,12 @@ export namespace diagramPlaygroundReducer {
     | { type: "video-editor-went-quiet" }
     | { type: "window-focused" }
     | { type: "window-blurred" }
-    | { type: "focus-mode-changed"; isFocusMode: boolean };
+    | { type: "focus-mode-changed"; isFocusMode: boolean }
+    /**
+     * The video editor says whether it is recording. It repeats this on every
+     * heartbeat, so only a change is a recording starting or stopping.
+     */
+    | { type: "recording-status-reported"; recording: boolean };
 
   export type Effect =
     /**
@@ -122,7 +130,9 @@ export namespace diagramPlaygroundReducer {
         snapshotId: string | null;
         diagramName: string | null;
       }
-    | { type: "show-error"; message: string };
+    | { type: "show-error"; message: string }
+    /** Turn tldraw's Focus Mode on (sidebar hidden) or off (sidebar shown). */
+    | { type: "set-focus-mode"; isFocusMode: boolean };
 }
 
 type State = diagramPlaygroundReducer.State;
@@ -140,6 +150,7 @@ export const createInitialDiagramPlaygroundState = (opts: {
   videoEditorConnected: false,
   windowFocused: opts.windowFocused,
   isFocusMode: false,
+  recording: false,
   timelineVersion: 0,
 });
 
@@ -333,5 +344,12 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, windowFocused: false };
     case "focus-mode-changed":
       return { ...state, isFocusMode: action.isFocusMode };
+    case "recording-status-reported":
+      if (action.recording === state.recording) return state;
+      // The window is the recording surface: the sidebar gets out of the way
+      // when a recording starts and comes back when it stops. Between the two,
+      // the author can still toggle it by hand.
+      exec({ type: "set-focus-mode", isFocusMode: action.recording });
+      return { ...state, recording: action.recording };
   }
 };

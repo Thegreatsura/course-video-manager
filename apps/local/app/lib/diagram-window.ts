@@ -8,6 +8,7 @@ import { diagramChannel, type ChildToParentMessage } from "./diagram-protocol";
 import { diagramFocus } from "./focus-tracker";
 
 let _activeDiagramId: string | null = null;
+let _recording = false;
 
 // Called once by the VideoEditor component on mount; returns a cleanup.
 // This is the listener that makes the playground's indicator authoritative —
@@ -17,6 +18,11 @@ export function enableVideoEditorMode(): () => void {
   const unsub = diagramChannel.subscribeParent((msg: ChildToParentMessage) => {
     if (msg.type === "ping") {
       diagramChannel.sendToChild({ type: "pong" });
+      // Repeated so a playground opened mid-recording still learns of it.
+      diagramChannel.sendToChild({
+        type: "recordingStatus",
+        recording: _recording,
+      });
     } else if (msg.type === "activeDiagramChanged") {
       _activeDiagramId = msg.diagramId;
     } else if (msg.type === "focus") {
@@ -33,6 +39,15 @@ export function enableVideoEditorMode(): () => void {
     diagramChannel.sendToChild({ type: "editorDisconnected" });
     unsub();
   };
+}
+
+/**
+ * Called by the Video Editor whenever OBS starts or stops recording. The
+ * playground hides its sidebar while a recording is in progress.
+ */
+export function pushDiagramRecordingStatus(recording: boolean): void {
+  _recording = recording;
+  diagramChannel.sendToChild({ type: "recordingStatus", recording });
 }
 
 export function openPlayground(): Window | null {

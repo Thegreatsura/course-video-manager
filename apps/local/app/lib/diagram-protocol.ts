@@ -7,6 +7,8 @@ export const ParentToChild = z.discriminatedUnion("type", [
   z.object({ type: z.literal("pong") }),
   z.object({ type: z.literal("editorConnected") }),
   z.object({ type: z.literal("editorDisconnected") }),
+  /** Sent when recording starts or stops, and repeated with every pong. */
+  z.object({ type: z.literal("recordingStatus"), recording: z.boolean() }),
   z.object({
     type: z.literal("snapshotForClip"),
     diagramId: z.string(),

@@ -97,6 +97,11 @@ export default function DiagramPlaygroundActive({
       } else if (msg.type === "editorDisconnected") {
         lastPong = 0;
         dispatch({ type: "video-editor-disconnected" });
+      } else if (msg.type === "recordingStatus") {
+        dispatch({
+          type: "recording-status-reported",
+          recording: msg.recording,
+        });
       }
     });
     function beat() {
