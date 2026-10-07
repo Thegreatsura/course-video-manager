@@ -68,7 +68,7 @@ Refresh the counts with `node scripts/check-frontend-state.ts --report`.
   `pnpm run check` fails until this is done.
 - No behavior change. The PR is a refactor plus tests, with nothing else in it.
 
-## Batch 1 — Diagram playground lifecycle (score 198)
+## Batch 1 — Diagram playground lifecycle (score 198) — Done
 
 `routes/diagram-playground.$diagramId.tsx`. There are eight `useState`s:
 `headStatus`, `pendingRestore`, `preserving`, `creating`, `editorConnected`,
@@ -83,6 +83,28 @@ for the two fixes first, as event sequences.
 - Delete or trim: in `features/diagrams/head-autosaver.test.ts` (which runs a
   real tldraw store on real timers), keep the debounce and store-boundary cases
   and delete any case that checks a status transition the reducer now owns.
+
+**Done.** `features/diagrams/diagram-playground-reducer.ts` owns the head
+lifecycle (`loading | failed | ready`), the restore dialog, preserving,
+creating, the clip-snapshot handshake and the window/video-editor flags. The
+effect runner is `use-diagram-playground-reducer.ts`; the route keeps only
+bridges that dispatch. The route has no `useState` left, so both of its
+allowlist entries are gone (17 → 16 `use-state`, 12 → 11 `effect-sets-state`).
+
+- Tests: `apps/local` went from 3715 to 3724 (+9 reducer scenarios, written
+  first for `aaac954c` and `ed906519`). `head-autosaver.test.ts` kept its 3
+  cases: the two debounce/store-boundary ones as they were, and the failed-load
+  case cut down to "nothing saves while detached" with its status assertions
+  removed, because `HeadStatus` now lives in the reducer and the autosaver
+  only does `attach`/`detach`. No component test rendered this route, so none
+  could be deleted.
+- Two edge cases changed on purpose: a restore that finishes after the page
+  has moved to another diagram is now ignored (as a late head load already
+  was), and a remounted editor reloads the head rather than staying empty.
+- Verified with `verify-cvm` on a test clone: opening and reloading a diagram
+  never PATCHes the head, an edit autosaves once, a failed head load stays
+  read-only with no PATCH until Retry, and switching diagrams saves the one
+  being left before loading the next.
 
 ## Batch 2 — Modal bags: sidebar and video editor (score 345)
 

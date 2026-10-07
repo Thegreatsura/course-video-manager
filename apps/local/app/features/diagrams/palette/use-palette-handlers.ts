@@ -21,12 +21,12 @@ export type PaletteWiring = {
   diagramId: string;
   /** Cancels the debounced autosave and lands it now. */
   flushPendingSave: () => Promise<void>;
-  preserveSnapshot: () => Promise<void>;
+  preserveSnapshot: () => void;
   handleRestoreRequest: (snapshot: Snapshot, headIsCaptured: boolean) => void;
   handleCopyDiagramContents: (id: string) => Promise<void>;
-  handleCreateDiagram: () => Promise<void>;
+  handleCreateDiagram: () => void;
   /** Re-reads head from the server and loads it into the editor. */
-  reloadScene: (id: string) => Promise<void>;
+  reloadScene: (id: string) => void;
   /** The same camera move the manual Cmd/Ctrl+0 shortcut runs. */
   recentreDiagram: () => void;
 };
@@ -126,7 +126,7 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
         // showing the pre-restore scene — which the next autosave would then
         // write back over the restore. Reload it explicitly.
         if (target.diagramId === diagramId) {
-          await reloadScene(diagramId);
+          reloadScene(diagramId);
           return;
         }
         navigate(`/diagram-playground/${target.diagramId}`);

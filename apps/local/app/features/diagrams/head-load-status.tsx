@@ -1,6 +1,6 @@
 import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { HeadStatus } from "./head-autosaver";
+import type { HeadStatus } from "./diagram-playground-reducer";
 
 /**
  * What the canvas shows while its head is not loaded — the canvas itself is
