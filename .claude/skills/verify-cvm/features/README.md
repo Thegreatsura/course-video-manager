@@ -21,7 +21,7 @@ Not yet mapped, and worth adding the first time you drive one: Diagrams,
 Archived Courses, API Tokens, the changelog page, the AI Hero / newsletter /
 social / thumbnails tabs of a Video.
 
-Ids that exist in production today, for a read-only drive:
+Ids that exist in Matt's data today, and so in every clone:
 
 - Course `Cohort 005` — `4cc62b33-db58-455d-83cb-94f680b119e4`
 - Course `AI Coding Crash Course` — `50385098-a712-486f-b777-1f76ef31e9e5`

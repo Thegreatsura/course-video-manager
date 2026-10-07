@@ -35,4 +35,4 @@ active filters leave on screen, and pressing a filter changes both.
 - Row dropdowns (`button "P1" [expanded=false]`) share their accessible name
   with the filter buttons at the top. Scope with `-s` or use `find nth` so a
   click lands on the filter you meant, not on a Pitch's priority — which would
-  be a write to a real row.
+  be a write you did not mean — harmless on a clone, but it muddies your Ledger.

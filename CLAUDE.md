@@ -18,7 +18,7 @@ Single-context layout: `CONTEXT.md` at the repo root, ADRs under `docs/adr/`. Se
 
 ### Verifying a change in the real app
 
-`.claude/skills/verify-cvm/` drives the app in a browser against the PRODUCTION database and leaves a **Write Ledger** proving what it did or did not modify. Reach for it before opening a PR that changes a page, or to reproduce a UI bug.
+`.claude/skills/verify-cvm/` drives the app in a browser against a per-run clone of Matt's data — writes allowed, never production — and leaves a **Write Ledger** of what it modified. Reach for it before opening a PR that changes a page, or to reproduce a UI bug.
 
 ### What the running server printed
 

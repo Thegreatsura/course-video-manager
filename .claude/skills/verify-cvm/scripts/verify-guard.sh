@@ -128,7 +128,11 @@ cmd_guard_check() {
       fi
       echo "Run 'verify.sh guard forensics <table>' on each one to name the rows."
     } >> "$ledger"
-    log "guard: WRITES DETECTED — see $ledger"
+    if [ "$(run_mode "$dir")" = test-clone ]; then
+      log "guard: writes landed in this run's test clone (allowed) — see $ledger"
+    else
+      log "guard: WRITES DETECTED ON PRODUCTION — see $ledger"
+    fi
     printf '%s\n' "$moved" >&2
   fi
   echo "$ledger"

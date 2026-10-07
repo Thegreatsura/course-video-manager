@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Harness for the verify-cvm skill. One entry point, a handful of verbs.
 #
-#   verify.sh mode              which database `launch` would use, and how (no connection)
-#   verify.sh launch            start a verification server, print its run directory
+#   verify.sh mode [--production]    which database `launch` would use (no connection)
+#   verify.sh template          does the template exist, and how old is it (local Postgres only)
+#   verify.sh launch [--production]  start a verification server, print its run directory
 #   verify.sh url               base URL of the run's server
 #   verify.sh session           agent-browser session name for the run
 #   verify.sh doctor            read-only "is this instance worth driving?" check
@@ -14,11 +15,12 @@
 #   verify.sh cleanup [--all]   stop what this run started, drop its clone, keep the evidence
 #
 # Two database modes, chosen at launch and recorded in the run directory:
-#   test clone   VERIFY_DATABASE_URL is set (exported, or in ~/.config/cvm/verify.env).
-#                launch clones its template database into cvm_verify_<run id>, the
-#                server runs on that clone, cleanup drops it. Writes are harmless.
-#   PRODUCTION   VERIFY_DATABASE_URL is unset. The server uses .env's DATABASE_URL,
-#                which is production: the skill's read-only rules apply.
+#   test clone   THE DEFAULT. launch clones the template named by VERIFY_DATABASE_URL
+#                (exported, or in ~/.config/cvm/verify.env) into cvm_verify_<run id>,
+#                the server runs on that clone, cleanup drops it. Writes are allowed.
+#                No template, no run: launch fails and says to ask Matt.
+#   PRODUCTION   only with `launch --production`. The server uses .env's DATABASE_URL
+#                with default_transaction_read_only on, so it cannot write at all.
 #
 # Runs are independent: several can drive at once. Every verb after `launch`
 # needs to know WHICH run it means. Set VERIFY_RUN to the directory `launch`
@@ -48,6 +50,9 @@ die() { log "FAIL: $*"; exit 1; }
 # Test clone vs production, URL helpers, clone/drop: all in verify-db.sh.
 # shellcheck source=SCRIPTDIR/verify-db.sh
 . "$(dirname "${BASH_SOURCE[0]}")/verify-db.sh"
+# Template checks, clone creation, offline credentials, the stale-clone sweep.
+# shellcheck source=SCRIPTDIR/verify-clones.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-clones.sh"
 
 # --- finding a run --------------------------------------------------------
 # A run is live when the server it recorded is still alive. That is the only
@@ -159,73 +164,89 @@ start_server() {
 }
 
 # --- launch ---------------------------------------------------------------
-# Decide the mode. A set VERIFY_DATABASE_URL means test clone; unset means
-# production, exactly as before the test database existed.
-launch_mode() {
-  if [ -n "$(verify_template_url)" ]; then echo test-clone; else echo production; fi
+# The mode is the test clone unless the caller says --production, out loud, on
+# this one command. Nothing in the environment flips a run onto production.
+mode_from_args() {
+  case "${1:-}" in
+    "")           echo test-clone ;;
+    --production) echo production ;;
+    *)            die "unknown argument '$1' — the only option is --production" ;;
+  esac
 }
 
 cmd_mode() {
-  local t id
+  local mode t id
+  mode="$(mode_from_args "${1:-}")"
   id="$(date +%Y%m%d-%H%M%S)-$$"
-  if [ "$(launch_mode)" = test-clone ]; then
-    t="$(verify_template_url)"
-    refuse_production_url "$t"
+  if [ "$mode" = test-clone ]; then
+    t="$(require_template_url)" || exit 1
     log "DB: test clone (writes allowed, dropped on cleanup)"
     log "  template:  $(url_redact "$t")"
     if [ -n "${VERIFY_DATABASE_URL:-}" ]; then log "  from:      the environment"; else log "  from:      $VERIFY_ENV_FILE"; fi
     log "  launch would run:  create database \"$(clone_name_for "$id")\" template \"$(url_db "$t")\""
     log "  and start the server with DATABASE_URL=$(url_redact "$(url_with_db "$t" "$(clone_name_for "$id")")")"
-    echo test-clone
+    log "  '$0 template' checks the template exists and how old it is."
   else
-    log "DB: PRODUCTION (read-only rules apply)"
-    log "  VERIFY_DATABASE_URL is unset and $VERIFY_ENV_FILE does not exist —"
-    log "  launch would start the server on .env's DATABASE_URL."
-    echo production
+    log "DB: PRODUCTION (read-only: the server cannot write)"
+    log "  launch --production would start the server on .env's DATABASE_URL"
+    log "  with default_transaction_read_only=on."
   fi
+  echo "$mode"
+}
+
+cmd_template() {
+  local t; t="$(require_template)" || exit 1
+  log "template: $(url_db "$t") on $(url_host "$t") — $(psql_admin -At -c "select pg_size_pretty(pg_database_size('$(url_db "$t")'))")"
+  report_template_age "$t"
 }
 
 cmd_launch() {
-  local mode; mode="$(launch_mode)"
+  local mode; mode="$(mode_from_args "${1:-}")"
   local template=""
   if [ "$mode" = test-clone ]; then
-    template="$(verify_template_url)"
-    refuse_production_url "$template"
+    template="$(require_template)" || exit 1
     [ -f "$REPO_ROOT/.env" ] &&
-      log "warn $REPO_ROOT/.env exists — its other keys (Dropbox, Anthropic, …) still load into the server. A test-clone run needs no .env; remove the symlink."
+      log "warn $REPO_ROOT/.env exists — the clone's DATABASE_URL overrides it, but its other keys (Dropbox, Anthropic, …) still load into the server. A test-clone run needs no .env; remove the symlink."
   else
     [ -f "$REPO_ROOT/.env" ] ||
-      die "no .env at $REPO_ROOT/.env — symlink the main checkout's one: ln -s ../../.env $REPO_ROOT/.env (or set up the test database: scripts/setup-verify-db.sh)"
+      die "no .env at $REPO_ROOT/.env — --production needs the main checkout's one: ln -s ../../.env $REPO_ROOT/.env"
   fi
 
   if [ -n "${VERIFY_PORT:-}" ] && in_cvm_band "$VERIFY_PORT"; then
     die "VERIFY_PORT=$VERIFY_PORT is in the CVM's band ($CVM_BAND_MIN-$CVM_BAND_MAX) — that port is Matt's own CVM, not yours. Use $VERIFY_BAND_MIN-$VERIFY_BAND_MAX."
   fi
 
+  # Clones a crashed run left behind, in this checkout or any sibling worktree.
+  if [ "$mode" = test-clone ]; then
+    sweep_stale_clones || log "warn the sweep of stale clones failed — carrying on"
+  fi
+
   local id dir
   id="$(date +%Y%m%d-%H%M%S)-$$"
   dir="$STATE_DIR/run-$id"
   mkdir -p "$dir"
+  # While launch runs, its own pid is what marks the run live, so a sibling's
+  # sweep never takes a clone whose server has not started yet.
+  echo "$$" > "$dir/launch.pid"
   echo "verify-cvm-$id" > "$dir/browser-session"
   echo "$mode" > "$dir/db-mode"
 
   if [ "$mode" = test-clone ]; then
     local clone; clone="$(clone_name_for "$id")"
-    psql_admin -c 'select 1' > /dev/null ||
-      die "cannot reach the local verify Postgres at $(url_host "$template") — is it running? (docker start cvm-local-postgres, or sudo service postgresql start)"
-    clone_exists "$(url_db "$template")" ||
-      die "template database $(url_db "$template") does not exist — Matt runs scripts/verify-snapshot.sh to create it (agents never do)"
     # Recorded before it exists, so a failed launch still knows what to drop.
     echo "$clone" > "$dir/db-name"
     # From here on, any failure drops the clone: no orphaned databases.
-    trap 'drop_clone "$(cat "'"$dir"'/db-name")" >/dev/null 2>&1 || true' EXIT
-    psql_admin -c "create database \"$clone\" template \"$(url_db "$template")\"" ||
-      die "could not clone $(url_db "$template") into $clone — is another session connected to the template?"
+    trap 'drop_run_clone "'"$dir"'" >/dev/null 2>&1 || true' EXIT
+    create_clone "$(url_db "$template")" "$clone"
     log "launch: cloned $(url_db "$template") into $clone"
 
     local scratch="$dir/scratch"
-    mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders"
+    mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
+             "$scratch/finished-videos" "$scratch/obs-recordings" "$scratch/dropbox"
     local clone_url; clone_url="$(url_with_db "$template" "$clone")"
+    # Age read from the clone, not the template: a connection on the template
+    # would block a sibling's clone.
+    report_template_age "$clone_url" 2> >(tee "$dir/template-age.txt" >&2)
     SERVER_ENV=(
       "DATABASE_URL=$clone_url"
       "DIRECT_DATABASE_URL=$clone_url"
@@ -234,9 +255,16 @@ cmd_launch() {
       "CLIP_MOCKUP_DIR=$scratch/clip-mockups"
       "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
       "OVERLAY_RENDER_CACHE_DIRECTORY=$scratch/overlay-renders"
+      "FINISHED_VIDEOS_DIRECTORY=$scratch/finished-videos"
+      "OBS_RECORDING_DIR=$scratch/obs-recordings"
+      "DROPBOX_REMOTE_PATH=$scratch/dropbox"
+      "${OFFLINE_SERVICES_ENV[@]}"
     )
   else
-    SERVER_ENV=("PGSSLROOTCERT=system")
+    # The app's own connections are read-only (node-postgres reads PGOPTIONS):
+    # production cannot take a write from this run, whatever gets clicked.
+    # PlanetScale wants the system root certificate.
+    SERVER_ENV=("PGSSLROOTCERT=system" "PGOPTIONS=$PSQL_RO_OPTIONS")
   fi
 
   # Pick a port out of the verification band and ask for exactly it. Vite runs
@@ -256,7 +284,7 @@ cmd_launch() {
   if [ "$mode" = test-clone ]; then
     db_line="DB: test clone $(cat "$dir/db-name") (writes allowed, dropped on cleanup)"
   else
-    db_line="DB: PRODUCTION (read-only rules apply)"
+    db_line="DB: PRODUCTION (read-only: the server cannot write)"
   fi
 
   {
@@ -268,7 +296,7 @@ cmd_launch() {
     if [ "$mode" = test-clone ]; then
       echo "db:        test clone $(cat "$dir/db-name") of $(url_db "$template") on $(url_host "$template")"
     else
-      echo "db host:   $(db_host)"
+      echo "db host:   $(db_host) (PRODUCTION, server read-only)"
     fi
     echo "session:   verify-cvm-$id"
   } > "$dir/run.txt"
@@ -277,6 +305,7 @@ cmd_launch() {
   for i in $(seq 1 30); do
     if curl -sf -o /dev/null "http://localhost:$port/"; then
       trap - EXIT
+      rm -f "$dir/launch.pid"
       log "$db_line"
       log "ready:   http://localhost:$port/  (pid $pid)"
       log "run:     $dir"
@@ -285,11 +314,11 @@ cmd_launch() {
       echo "$dir"
       return 0
     fi
-    kill -0 "$pid" 2>/dev/null || { tail -20 "$dir/server.log" >&2; die "server died on startup"; }
+    kill -0 "$pid" 2>/dev/null || { tail -20 "$dir/server.log" >&2; stop_server "$dir"; die "server died on startup"; }
     sleep 2
   done
   tail -20 "$dir/server.log" >&2
-  [ "$mode" = test-clone ] && stop_server "$dir"
+  stop_server "$dir"
   die "server announced port $port but never answered on it"
 }
 
@@ -328,7 +357,7 @@ cmd_doctor() {
     esac
   else
     case "$(db_host)" in
-      *psdb.cloud*) log "ok   DB: PRODUCTION ($(db_host)) — read-only rules apply, treat every row as real" ;;
+      *psdb.cloud*) log "ok   DB: PRODUCTION ($(db_host)) — the server is read-only, treat every row as real" ;;
       *)            log "warn database is NOT production ($(db_host))" ;;
     esac
   fi
@@ -415,35 +444,20 @@ stop_run() {
   echo "$dir"
 }
 
-# Clones whose server already died without a cleanup: drop them too, so a
-# crashed run does not leave an 81 MB database behind.
-orphaned_clone_runs() {
-  local d pid
-  for d in "$STATE_DIR"/run-*; do
-    [ -f "$d/db-name" ] && [ ! -f "$d/db-dropped" ] || continue
-    pid="$(cat "$d/server.pid" 2>/dev/null || true)"
-    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && continue
-    printf '%s\n' "$d"
-  done
-  return 0
-}
-
 cmd_cleanup() {
   if [ "${1:-}" = "--all" ]; then
-    local runs orphans d
-    runs="$(live_runs)"
-    orphans="$(orphaned_clone_runs)"
-    [ -n "$runs$orphans" ] || { log "cleanup: no live runs"; return 0; }
-    for d in $runs; do stop_run "$d"; done
-    for d in $orphans; do drop_run_clone "$d"; done
+    local d
+    for d in $(live_runs); do stop_run "$d"; done
+    [ -z "$(verify_template_url)" ] || sweep_stale_clones
     return 0
   fi
   stop_run "$(run_dir)"
 }
 
 case "${1:-}" in
-  mode)    cmd_mode ;;
-  launch)  cmd_launch ;;
+  mode)     shift; cmd_mode "$@" ;;
+  template) cmd_template ;;
+  launch)   shift; cmd_launch "$@" ;;
   url)     run_base ;;
   session) run_session ;;
   doctor)  cmd_doctor ;;
@@ -456,5 +470,5 @@ case "${1:-}" in
     esac ;;
   sql)     shift; cmd_sql "$@" ;;
   cleanup) shift; cmd_cleanup "$@" ;;
-  *) sed -n '2,25p' "$0"; exit 1 ;;
+  *) sed -n '2,29p' "$0"; exit 1 ;;
 esac
