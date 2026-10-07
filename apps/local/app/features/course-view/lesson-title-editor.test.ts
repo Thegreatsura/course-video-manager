@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildLessonNavigateTo } from "./lesson-title-editor";
+import {
+  buildLessonNavigateTo,
+  buildLessonRenameEvent,
+} from "./lesson-title-editor";
 
 // ---------------------------------------------------------------------------
 // buildLessonNavigateTo — Section Workbench click-to-rename (issue #1100)
@@ -40,5 +43,40 @@ describe("buildLessonNavigateTo", () => {
       lessonId,
     });
     expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildLessonRenameEvent — the title save guard
+// ---------------------------------------------------------------------------
+
+describe("buildLessonRenameEvent", () => {
+  const lesson = { id: "lesson-1", title: "Old Title", path: "old-title" };
+
+  it("renames to the trimmed value, keeping the user's casing", () => {
+    expect(
+      buildLessonRenameEvent({ value: "  gRPC in Practice ", lesson })
+    ).toEqual({
+      type: "update-lesson-title",
+      lessonId: "lesson-1",
+      title: "gRPC in Practice",
+    });
+  });
+
+  it("saves nothing when the value only differs by surrounding whitespace", () => {
+    expect(
+      buildLessonRenameEvent({ value: "  Old Title  ", lesson })
+    ).toBeNull();
+  });
+
+  it("saves nothing for a blank value", () => {
+    expect(buildLessonRenameEvent({ value: "   ", lesson })).toBeNull();
+  });
+
+  it("compares against the path when the lesson has no title", () => {
+    const untitled = { ...lesson, title: "" };
+    expect(
+      buildLessonRenameEvent({ value: "old-title", lesson: untitled })
+    ).toBeNull();
   });
 });
