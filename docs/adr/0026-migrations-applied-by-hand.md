@@ -18,4 +18,12 @@ The "exactly one writer" guarantee ADR 0025 wanted was never really about the de
 
 A schema change now needs an explicit, remembered step. Forgetting to run `pnpm db:migrate` before deploying code that reads a new column fails loudly — the column doesn't exist — not silently, which is the same failure shape the version gate already watches for on the read side.
 
+## Addendum: a remote migration runs only from `main` at origin/main
+
+"Only the author runs it" was not enough. An unmerged branch (`fix/lint-exclude-archived-videos`) ran `db:migrate` against production; its `0004` carried a later timestamp than `main`'s real `0004`, and because Drizzle applies only migrations newer than the last one it recorded, it skipped `main`'s `0004` for months (PR #1836).
+
+So the process guarantee is now mechanical again. `packages/core/drizzle.config.ts` — loaded by every drizzle-kit command — calls `drizzle-guard.ts` before `migrate` or `push`. When the target host is **not local** it refuses unless the current branch is `main`, the working tree is clean (untracked files count: an untracked migration is still applied), and `HEAD` equals `origin/main` after a fresh `git fetch`. It prints only the hostname, never the URL. Local targets — `localhost`, `127.x`, `::1`, `0.0.0.0`, `host.docker.internal`, `*.localhost`, a Unix socket — are never checked, so tests (PGlite, which never goes through drizzle-kit), verify clones and dev databases migrate as before. An unparseable URL counts as remote.
+
+There is **no override flag**. Every legitimate remote migration, an emergency one included, can meet the rule: merge it, then `git switch main && git pull --ff-only && pnpm db:migrate` from the main checkout. That is also the only path on which the journal stays in order, and a typed confirmation is no barrier to the headless agents most likely to run the wrong branch.
+
 This supersedes the "there is deliberately no `pnpm db:migrate`" line in [ADR 0025](0025-local-remote-split-one-http-transport.md); the rest of that ADR — one HTTP transport, the version gate, token auth, local-only commands — is unaffected.

@@ -65,6 +65,8 @@ Schema changes are managed with **drizzle-kit generate / migrate** (versioned SQ
 2. `pnpm db:generate` — creates a new numbered `.sql` file under `packages/core/db/migrations/`.
 3. Commit it, then `pnpm db:migrate` — run by hand, against `DIRECT_DATABASE_URL` — before or as part of deploying `apps/remote`. Applying migrations used to be the deploy's job exclusively; it moved to a manual step because that ran on every Vercel build, previews included, and could land an unmerged migration on the production schema. See `apps/remote/README.md` and [ADR 0026](docs/adr/0026-migrations-applied-by-hand.md).
 
+Against any non-local host, `pnpm db:migrate` (and `drizzle-kit push`) refuses unless you are on a clean `main` at exactly `origin/main` — an unmerged branch once migrated production out of order. Merge first, then migrate from the main checkout. Local databases are never checked. See the ADR 0026 addendum.
+
 Migrations are **additive-only**: no dropped or renamed columns without a two-step release. A `cvm` invocation may be in flight while a deploy lands, and it is the additive rule — not the version gate — that keeps that from breaking. The version gate refuses the box's _next_ command, naming both migration counts and telling it to pull (`packages/core/rpc/schema-version.ts`).
 
 ### First-time setup on an existing database

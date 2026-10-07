@@ -4,6 +4,8 @@ import { Effect, Layer } from "effect";
 import { VideoOperationsService } from "./db-video-operations.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
+import { videos } from "../db/schema.js";
+import { VIDEO_FORMATS } from "../features/videos/video-format.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -150,4 +152,30 @@ describe("video format", () => {
         expect(all).toHaveLength(2);
       }).pipe(Effect.provide(testLayer))
   );
+
+  // Production ran for months with every Video on the retired 'standard'
+  // format (migration 0004 was skipped), invisible to `--format landscape`.
+  // The column now defaults to landscape and refuses anything else.
+  it("defaults a Video with no format to landscape", async () => {
+    const [row] = await testDb
+      .insert(videos)
+      .values({ title: "No format", originalFootagePath: "" })
+      .returning();
+    expect(row!.format).toBe("landscape");
+  });
+
+  it("accepts every VIDEO_FORMATS value and refuses anything else", async () => {
+    for (const format of VIDEO_FORMATS) {
+      await testDb
+        .insert(videos)
+        .values({ title: format, originalFootagePath: "", format });
+    }
+    await expect(
+      testDb.insert(videos).values({
+        title: "Retired",
+        originalFootagePath: "",
+        format: "standard",
+      })
+    ).rejects.toThrow();
+  });
 });
