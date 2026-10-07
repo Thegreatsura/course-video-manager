@@ -139,6 +139,11 @@ export namespace videoStateReducer {
         time: number;
       }
     | {
+        /** A copied link named this item, and the timeline has it. */
+        type: "deep-link-target-found";
+        itemId: FrontendId;
+      }
+    | {
         type: "create-video-from-selection-confirmed";
         title: string;
         mode: "copy" | "move";
@@ -372,6 +377,8 @@ export const makeVideoEditorReducer =
           selectedClipsSet: new Set([firstClipAfterSection]),
         });
       }
+      case "deep-link-target-found":
+        return { ...state, selectedClipsSet: new Set([action.itemId]) };
       case "click-clip": {
         // Clear scrub state on any clip interaction
         const s = { ...state, scrubSeekTime: undefined };

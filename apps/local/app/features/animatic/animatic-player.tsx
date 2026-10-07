@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { Player, type PlayerRef } from "@remotion/player";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import {
@@ -60,6 +61,8 @@ import {
 import { AnimaticSubtitlesMenu } from "./animatic-subtitles-menu";
 import { seekKeepingPlayState, startPlayingAt } from "./animatic-transport";
 import { useAnimaticShortcuts } from "./use-animatic-shortcuts";
+import { useAnimaticDeepLink } from "./use-animatic-deep-link";
+import { useSelectionInSight } from "./use-selection-in-sight";
 import {
   ANIMATIC_FPS,
   adjacentSegmentStartFrame,
@@ -314,34 +317,14 @@ export const AnimaticPlayer = (props: {
     onToggleSubtitles: () => chooseSubtitles(!showSubtitles),
   });
 
-  // Keep the selected row in sight. While the author has made no choice of his
-  // own the selection follows the playhead, so this is also what makes the list
-  // walk itself down as the Animatic plays.
-  //
-  // A FOLD IS NOT OPENED TO DO IT. The Animatic plays straight through a folded
-  // Chapter and leaves it folded: the author folded a settled Playthrough away
-  // and having it spring open at the next Clip Mockup undid that with every
-  // boundary. What is brought into sight then is the DIVIDER, which is all
-  // there is on screen for those rows — and which carries the fill bar saying
-  // they are playing.
   const listRef = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const row = list.querySelector(`[data-animatic-index="${selectedIndex}"]`);
-    if (row) {
-      row.scrollIntoView({ block: "nearest" });
-      return;
-    }
-    const section = sectionAtIndex({
-      sections: sectionsRef.current,
-      activeIndex: selectedIndex,
-    });
-    if (!section) return;
-    list
-      .querySelector(`[data-animatic-chapter="${section.chapter.id}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex]);
+  useSelectionInSight({ listRef, sectionsRef, selectedIndex });
+  useAnimaticDeepLink({
+    segments: timeline.segments,
+    sections: layout.sections,
+    setSelection,
+    setCollapsed,
+  });
 
   // Which divider carries the fill. Derived from `activeIndex`, so it is settled
   // once per Clip Mockup — the fill's own movement is CSS, not this.
@@ -426,6 +409,7 @@ export const AnimaticPlayer = (props: {
               <li
                 className="group sticky top-0 z-20"
                 data-animatic-chapter={section.chapter.id}
+                {...deepLinkAnchor(section.chapter.id)}
               >
                 <AnimaticChapterDivider
                   name={section.chapter.name}

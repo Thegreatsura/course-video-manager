@@ -23,6 +23,8 @@ import type { AnimaticChapterSection } from "./animatic-chapters";
  * (`animatic-progress.ts`). Both surfaces used to spring the Chapter open at the
  * boundary, which undid the author's fold every few seconds on exactly the
  * settled Playthrough he folded away to stop looking at.
+ * Opening a copied link to a Clip Mockup or Chapter inside a fold is a hand
+ * opening it too: the author asked for that row.
  *
  * It hides ROWS, never frames. Nothing here can touch the clock: the run time
  * and the `14 / 61` position badge read the same open or closed.

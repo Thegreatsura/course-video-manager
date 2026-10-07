@@ -1,3 +1,4 @@
+import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { timelineItemMenuGroups } from "./timeline-item-menu";
@@ -108,6 +109,7 @@ export const ClipItem = (props: ClipItemProps) => {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <button
+          {...(clip.type === "on-database" && deepLinkAnchor(clip.databaseId))}
           className={cn(
             "bg-card rounded-md text-left relative overflow-hidden allow-keydown flex w-full",
             isSelected && "outline-2 outline-ring bg-muted",

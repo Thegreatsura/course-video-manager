@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   ENTITY_LABELS,
   EntityRefParseError,
+  deepLinkTarget,
   entityDeepLink,
   lessonPlaceFinder,
   parseEntityRef,
   withLessonPlace,
   resolveEntityId,
+  type DeepLinkTargetType,
   type EntityRef,
   type EntityType,
 } from "./entity-deep-link";
@@ -267,5 +269,49 @@ describe("withLessonPlace", () => {
       inLesson: { courseId: "c2", sectionId: "s2", lessonId: "l2" },
     };
     expect(withLessonPlace(given, find)).toEqual(given);
+  });
+});
+
+describe("deepLinkTarget", () => {
+  const search = (entity: EntityRef) =>
+    new URL(entityDeepLink(entity, ORIGIN)).search;
+  const ALL: DeepLinkTargetType[] = [
+    "clip",
+    "chapter",
+    "beat",
+    "clip-mockup",
+    "clip-mockup-chapter",
+    "clip-mockup-comment",
+    "thumbnail",
+    "deliverable",
+  ];
+  const childCases = [...cases, ...placedCases].filter(([entity]) =>
+    (ALL as string[]).includes(entity.type)
+  );
+
+  it.each(childCases)("reads the item %o its page should focus", (entity) => {
+    expect(deepLinkTarget(search(entity), ALL)).toEqual({
+      type: entity.type,
+      id: entity.id,
+    });
+  });
+
+  it("round-trips an id that needs encoding", () => {
+    const entity: EntityRef = { type: "clip", id: "a&b=c", videoId: "v1" };
+    expect(deepLinkTarget(search(entity), ["clip"])).toEqual({
+      type: "clip",
+      id: "a&b=c",
+    });
+  });
+
+  it("is null for a type this part of the page does not show", () => {
+    const beat: EntityRef = { type: "beat", id: "b1", videoId: "v1" };
+    expect(deepLinkTarget(search(beat), ["clip", "chapter"])).toBeNull();
+  });
+
+  it("is null for a plain Video link, or one naming two items", () => {
+    const video: EntityRef = { type: "video", id: "v1", inLesson };
+    expect(deepLinkTarget(search(video), ALL)).toBeNull();
+    expect(deepLinkTarget("?clip=k1&beat=b1", ALL)).toBeNull();
   });
 });
