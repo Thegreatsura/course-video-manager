@@ -102,6 +102,8 @@ export const ClipItem = (props: ClipItemProps) => {
     clip.type === "on-database" ? clip.transcriptionStatus : null;
   const isBeingTranscribed =
     transcriptionStatus !== null && isTranscriptionPending(transcriptionStatus);
+  const retry = () =>
+    dispatch({ type: "retranscribe-clip", clipId: clip.frontendId });
 
   const isPortrait = getIsClipPortrait(clip);
 
@@ -180,19 +182,26 @@ export const ClipItem = (props: ClipItemProps) => {
                     <AlertTriangleIcon className="w-4 h-4 mr-2" />
                     Transcription failed
                   </span>
-                  <button
-                    type="button"
-                    className="mr-2 rounded border border-red-500/50 px-1.5 text-xs text-red-500 hover:bg-red-500/10"
+                  {/* A span, not a <button>: the whole Clip row is already a
+                      button, and a nested <button> is invalid HTML that the
+                      server-rendered markup splits out of the row. */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="mr-2 inline-block rounded border border-red-500/50 px-1.5 text-xs text-red-500 hover:bg-red-500/10"
                     onClick={(e) => {
                       e.stopPropagation();
-                      dispatch({
-                        type: "retranscribe-clip",
-                        clipId: clip.frontendId,
-                      });
+                      retry();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      retry();
                     }}
                   >
                     Retry
-                  </button>
+                  </span>
                   {clip.type === "on-database" && clip.text && (
                     <span className="text-muted-foreground">{clip.text}</span>
                   )}
