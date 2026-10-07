@@ -222,6 +222,8 @@ if [ "$(admin -At -c "select 1 from pg_database where datname = '$TEMPLATE_DB'")
 fi
 admin -c "alter database \"$NEXT_DB\" rename to \"$TEMPLATE_DB\""
 admin -c "drop database if exists \"$OLD_DB\""
+# The stamp verify.sh reads the template's age from (`verify.sh template`).
+admin -c "comment on database \"$TEMPLATE_DB\" is 'cvm verify snapshot taken $(date -u +%Y-%m-%dT%H:%M:%SZ)'"
 
 say ""
 say "  done — $TEMPLATE_DB refreshed $(date --iso-8601=seconds)."

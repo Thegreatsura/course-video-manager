@@ -1,13 +1,14 @@
 # Database half of verify.sh — sourced by it, never run on its own. Which
-# database a run uses (test clone or production), how to reach it, and how
-# clones are made and dropped. Expects log, die and REPO_ROOT from verify.sh.
+# database a run uses (test clone or production), how to reach it, how clones
+# are made, aged and dropped. Expects log, die and REPO_ROOT from verify.sh.
 # shellcheck shell=bash
 
 # --- which database --------------------------------------------------------
-# VERIFY_DATABASE_URL names the TEMPLATE database of a local Postgres the agent
-# owns (see scripts/setup-verify-db.sh). It is never production: a psdb.cloud
-# host is refused outright. Read from the environment first, then from
-# ~/.config/cvm/verify.env, which holds that one key and nothing else.
+# Every run is on a per-run clone of the TEMPLATE database unless `launch
+# --production` asks otherwise. VERIFY_DATABASE_URL names that template, on a
+# local Postgres (see scripts/setup-verify-db.sh). It is never production: a
+# psdb.cloud host is refused outright. Read from the environment first, then
+# from ~/.config/cvm/verify.env, which holds that one key and nothing else.
 VERIFY_ENV_FILE="${VERIFY_ENV_FILE:-$HOME/.config/cvm/verify.env}"
 
 verify_template_url() {
@@ -57,7 +58,7 @@ psql_admin() {
   psql -X -v ON_ERROR_STOP=1 -q "$(url_with_db "$t" postgres)" "$@"
 }
 
-clone_exists() {
+db_exists() {
   [ "$(psql_admin -At -c "select 1 from pg_database where datname = '$1'")" = 1 ]
 }
 
@@ -69,6 +70,65 @@ drop_clone() {
   psql_admin -c "drop database if exists \"$name\" with (force)"
 }
 
+# --- the template's age -------------------------------------------------------
+# verify-snapshot.sh stamps the template with a comment when it swaps a fresh
+# copy in: "cvm verify snapshot taken <ISO time>". A template made before it did
+# has no stamp, so the age falls back to its newest created_at/updated_at — the
+# data's "as of", which is the snapshot time give or take Matt's last edit.
+TEMPLATE_STALE_DAYS="${VERIFY_TEMPLATE_STALE_DAYS:-14}"
+SNAPSHOT_STAMP_PREFIX='cvm verify snapshot taken '
+
+template_snapshot_stamp() {
+  local name; name="$(url_db "$(verify_template_url)")"
+  psql_admin -At -c "select shobj_description(oid, 'pg_database') from pg_database where datname = '$name'" |
+    sed -n "s/^$SNAPSHOT_STAMP_PREFIX//p"
+}
+
+# newest_row_time <url> — newest created_at/updated_at across the CVM's tables.
+newest_row_time() {
+  local q
+  q="$(PGOPTIONS="$PSQL_RO_OPTIONS" psql -X -At "$1" -c "
+        select string_agg(format('select max(%I)::timestamptz from %I', column_name, table_name), ' union all ')
+          from information_schema.columns
+         where table_schema = 'public' and table_name like 'course-video-manager_%'
+           and column_name in ('created_at', 'updated_at')")"
+  [ -n "$q" ] || return 0
+  PGOPTIONS="$PSQL_RO_OPTIONS" psql -X -At "$1" -c \
+    "select to_char(max(m) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') from ($q) s(m)"
+}
+
+# template_age <url to read rows from> — "when|days|how we know", or nothing.
+# Pass a clone's URL when there is one: reading the template itself holds a
+# connection on it, and Postgres will not clone a template anyone is on.
+template_age() {
+  local when how="snapshot stamp"
+  when="$(template_snapshot_stamp)"
+  if [ -z "$when" ]; then
+    when="$(newest_row_time "$1")"
+    how="newest row — the template has no snapshot stamp yet"
+  fi
+  [ -n "$when" ] || return 0
+  printf '%s|%s|%s\n' "$when" "$(( ($(date +%s) - $(date -d "$when" +%s)) / 86400 ))" "$how"
+}
+
+# report_template_age <url> — one line on stderr; a stale template warns, never fails.
+report_template_age() {
+  local age when days how
+  age="$(template_age "$1" 2>/dev/null || true)"
+  if [ -z "$age" ]; then
+    log "warn could not tell how old the template is — carry on, and mention it in your report"
+    return 0
+  fi
+  IFS='|' read -r when days how <<< "$age"
+  if [ "$days" -ge "$TEMPLATE_STALE_DAYS" ]; then
+    log "warn template is $days days old (as of $when, from the $how) — $TEMPLATE_STALE_DAYS days or more."
+    log "     Data newer than that is not in your clone. Carrying on. Tell Matt in your report"
+    log "     that it wants a refresh: pnpm db:verify-snapshot — he runs it; you never do."
+  else
+    log "template: $days day(s) old (as of $when, from the $how)"
+  fi
+}
+
 # --- production database access ------------------------------------------
 # PlanetScale rejects the connection without a root certificate; `system` uses
 # the OS trust store, which is the only root available on this box. Set only
@@ -76,13 +136,12 @@ drop_clone() {
 # which a local Postgres without TLS would refuse.
 prod_ssl() { PGSSLROOTCERT=system "$@"; }
 
-# default_transaction_read_only makes every psql statement THIS script runs
-# against production incapable of writing, whatever it says. It is deliberately
-# NOT exported: `launch` execs the dev server from here, so an exported copy was
-# inherited by the app, and every write it tried came back a 500
-# (`PreventCommandIfReadOnly`) — the skill's own "Writing to production"
-# protocol could not be carried out. What proves a run changed nothing is the
-# Write Ledger, not this variable.
+# default_transaction_read_only makes every statement on the connection
+# incapable of writing, whatever it says. Every psql this script runs uses it,
+# in both modes. In production mode `launch` also hands it to the dev server
+# (PGOPTIONS, which node-postgres reads), so the app ITSELF cannot write to
+# production: a write comes back a 500 (`PreventCommandIfReadOnly`) instead of
+# landing. Writes are what the test clone is for.
 PSQL_RO_OPTIONS='-c default_transaction_read_only=on'
 
 db_url() {
