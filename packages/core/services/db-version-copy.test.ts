@@ -225,7 +225,7 @@ describe("copyVersionStructure — schema-drift guard", () => {
         body: "# Lesson body",
         description: "SEO desc",
         script: "video teleprompter script",
-        format: "portrait",
+        format: "short",
       })
       .returning();
     await testDb.insert(schema.clips).values({
@@ -598,7 +598,7 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
         lessonId: lesson!.id,
         title: "short.mp4",
         originalFootagePath: "/footage/short",
-        format: "portrait",
+        format: "short",
       })
       .returning();
     await testDb.insert(schema.clips).values({
@@ -629,7 +629,7 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
       where: (v, { eq }) => eq(v.id, newVideoId),
       with: { clips: true },
     });
-    expect(newVideo!.format).toBe("portrait");
+    expect(newVideo!.format).toBe("short");
     expect(newVideo!.clips).toMatchObject([
       // Diagram Snapshots are content-addressed per Diagram, not per Version,
       // so the new Draft pins the very same snapshot row.
