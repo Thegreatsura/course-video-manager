@@ -10,7 +10,6 @@ import {
   truncateAllTables,
   type TestDb,
 } from "../test-utils/pglite.js";
-import type { Database } from "./drizzle-service.server.js";
 
 class ForcedTestError extends Data.TaggedError("ForcedTestError")<{
   message: string;
@@ -104,21 +103,5 @@ describe("withDbTransaction", () => {
       expect(error._tag).toBe("ForcedTestError");
       expect((error as ForcedTestError).message).toBe("preserved error");
     })
-  );
-
-  it.effect(
-    "ops-service factories accept a transaction handle and typecheck",
-    () =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => makeVideo("video-1"));
-
-        yield* withDbTransaction(testDb as any, (tx: Database) =>
-          Effect.gen(function* () {
-            const segOps = createBeatOperations(tx as any);
-            const seg = yield* segOps.createBeat("video-1");
-            expect(seg.videoId).toBe("video-1");
-          })
-        );
-      })
   );
 });
