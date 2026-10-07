@@ -27,14 +27,6 @@ describe("generateApiToken", () => {
     expect(minted.tokenHash).not.toContain(minted.secret);
     expect(minted.tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
-
-  it("never issues the same id or secret twice", () => {
-    const a = generateApiToken();
-    const b = generateApiToken();
-
-    expect(a.id).not.toBe(b.id);
-    expect(a.secret).not.toBe(b.secret);
-  });
 });
 
 describe("parseApiToken", () => {

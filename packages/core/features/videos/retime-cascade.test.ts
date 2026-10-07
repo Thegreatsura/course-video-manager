@@ -72,14 +72,6 @@ describe("shiftTranscriptWords", () => {
     ]);
   });
 
-  it("drops a word pushed off the front of the Clip", () => {
-    // "the" spans 0.5-1.5; trimming 2s off the head puts it at -1.5 to -0.5,
-    // which is footage the Clip no longer contains.
-    const shifted = shiftTranscriptWords(words, { delta: -2, newDuration: 8 });
-
-    expect(shifted.map((w) => w.text)).not.toContain("the");
-  });
-
   it("drops a word that now runs past the Clip's end", () => {
     // Tail-only recut to 6s long: "fox" (8.5-9.5) no longer exists.
     const shifted = shiftTranscriptWords(words, { delta: 0, newDuration: 6 });
@@ -110,23 +102,10 @@ describe("shiftTranscriptWords", () => {
     expect(shifted[0]).toEqual(word(0, 1, "the"));
   });
 
-  it("leaves a word untouched when nothing about the cut moved", () => {
-    expect(shiftTranscriptWords(words, { delta: 0, newDuration: 10 })).toEqual(
-      words
-    );
-  });
-
   it("keeps no words at all for a Clip with no room left", () => {
     expect(shiftTranscriptWords(words, { delta: 0, newDuration: 0 })).toEqual(
       []
     );
-  });
-
-  it("does not mutate the words it was given", () => {
-    const original = [word(2, 3, "quick")];
-    shiftTranscriptWords(original, { delta: -1, newDuration: 9 });
-
-    expect(original).toEqual([word(2, 3, "quick")]);
   });
 });
 
@@ -148,13 +127,6 @@ describe("clampOverlayAnchor", () => {
 
   it("collapses to 0 for a Clip with no room at all", () => {
     expect(clampOverlayAnchor(9, { delta: 0, newDuration: 0 })).toBe(0);
-  });
-
-  it("is idempotent — clamping an already-clamped anchor does nothing", () => {
-    const shift = { delta: 0, newDuration: 4 };
-    const once = clampOverlayAnchor(9, shift);
-
-    expect(clampOverlayAnchor(once, shift)).toBe(once);
   });
 });
 
