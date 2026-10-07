@@ -23,6 +23,7 @@ import { asc, and, desc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { requireDraftVersion } from "./draft-guard.server.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
+import { assertCopyComplete } from "./version-copy-check.server.js";
 import {
   freezeAndCloneVersion as freezeAndCloneVersionTransaction,
   lockCourseForVersionMutation,
@@ -56,7 +57,9 @@ const makeDbCall = <T>(fn: () => Promise<T>) =>
  *
  * A new child table of a Section, Lesson, Video, Clip or Beat must be decided
  * for this copy (and duplicateCourse, and the Video copy) in
- * copy-paths-table-guard.test.ts, or CI fails.
+ * version-copy-manifest.ts, or CI fails (copy-paths-table-guard.test.ts). The
+ * copy then checks itself: `assertCopyComplete` refuses a Submit whose new
+ * Draft is missing live rows of any `copied` table.
  *
  * Both exits from `copyVersionStructureInDb` are here: `copyVersionStructure`
  * (which freezes its source itself; no app path calls it any more, only tests
@@ -384,6 +387,12 @@ export const createVersionCopyOps = (db: Database) => {
 
       yield* makeDbCall(() =>
         insertInChunks(transaction, beatLearningGoals, beatLinkValues)
+      );
+
+      yield* assertCopyComplete(
+        transaction,
+        input.sourceVersionId,
+        newVersion.id
       );
 
       return { version: newVersion, videoIdMappings };

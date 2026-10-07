@@ -62,6 +62,25 @@ export class PendingVersionExistsError extends Data.TaggedError(
   pendingVersionId: string;
 }> {}
 
+/**
+ * Submit's copy left a table short: the new Draft has fewer (or more) live rows
+ * of `table` than the Version it was cloned from. Raised inside the Submit
+ * transaction, so nothing is written — the Draft stays a Draft and no new
+ * Version exists. A copy-path bug, never a user error.
+ */
+export class VersionCopyIncompleteError extends Data.TaggedError(
+  "VersionCopyIncompleteError"
+)<{
+  table: string;
+  sourceCount: number;
+  copyCount: number;
+  sourceVersionId: string;
+}> {
+  override get message() {
+    return `Submit refused: copying Version ${this.sourceVersionId} would carry ${this.copyCount} of its ${this.sourceCount} live "${this.table}" row(s) into the new Draft. Nothing was changed. This is a bug in the version copy (packages/core/services/db-version-copy.server.ts).`;
+  }
+}
+
 export class CourseNameTakenError extends Data.TaggedError(
   "CourseNameTakenError"
 )<{

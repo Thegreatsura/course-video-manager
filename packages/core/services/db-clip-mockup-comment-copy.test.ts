@@ -15,7 +15,8 @@ import * as schema from "../db/schema.js";
  * Clip Mockup Comments and RE-POINTS each one at the copy of its parent. A
  * comment left pointing at the source row would show on the old Version and
  * vanish from the Draft the author opens. The Course duplicate shares the
- * Version copy's shape and is covered by the schema-drift guard.
+ * Version copy's shape and is covered by its schema-drift guard
+ * (db-duplicate-course-drift.test.ts).
  */
 
 let testDb: TestDb;
