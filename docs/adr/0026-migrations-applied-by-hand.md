@@ -28,12 +28,14 @@ There is **no override flag**. Every legitimate remote migration, an emergency o
 
 This supersedes the "there is deliberately no `pnpm db:migrate`" line in [ADR 0025](0025-local-remote-split-one-http-transport.md); the rest of that ADR — one HTTP transport, the version gate, token auth, local-only commands — is unaffected.
 
-## Addendum: migrations ship alone (expand/contract)
+## Addendum: the deploy refuses code that is ahead of production
 
 "Applying one ahead of the code that uses it is always safe" held only if someone applied it ahead. PR #1859 merged migration 0028 in the same PR as code selecting the new column; `apps/remote` deployed on merge and read a column production did not have until Matt migrated.
 
-So the order is now mechanical too (`docs/agents/merging.md`, "A PR with a migration"):
+So the deploy now checks. The `apps/remote` `vercel-build` runs a read-only `SELECT` on `drizzle.__drizzle_migrations` through the app's own `DATABASE_URL` and fails the build when the commit's latest journal entry is not applied. The deployment that would query missing schema is never promoted; the previous one keeps serving. Once Matt has migrated, the failed deployment is redeployed. The whole flow is the `deploy-migration` skill (`.claude/skills/deploy-migration/SKILL.md`).
 
-- **CI** (`migration guard` job, `scripts/check-migration-pr.ts`, part of the required `check`): a PR that touches `packages/core/db/migrations/` may change nothing else except `migrations.test.ts` and `docs/` — `schema.ts` included, because a column in the schema is a column every `select()` reads. A PR that changes the Drizzle schema needs the `migration-applied` label, which Matt adds after `pnpm db:migrate`. CI has no production credential and gets none; the label is the proof. Agents act through Matt's GitHub account, so GitHub cannot tell who added it — a Claude Code hook (`.claude/hooks/block-migration-applied-label.sh`) blocks agents from adding it.
-- **Deploy** (`apps/remote` `vercel-build`): a read-only `SELECT` on `drizzle.__drizzle_migrations` through the app's own `DATABASE_URL` fails the build when the latest journal entry is not applied. The deployment that would query missing schema is never promoted.
-- `migrations.test.ts` now checks that every column `schema.ts` declares is created by a migration, rather than that the two produce identical tables, because between the migration PR and its follow-up the migrations are deliberately ahead.
+PR #1861 also added a merge-side gate: migration-only PRs enforced in CI, plus a `migration-applied` label only Matt could add. It was removed: the deploy check alone prevents the breakage, and the gate doubled the PRs and hand-offs for every schema change. Destructive changes (drop, rename, `NOT NULL` without a default) still go contract-first, because the deploy check cannot protect code already running against a column that disappears.
+
+`migrations.test.ts` checks that every column `schema.ts` declares is created by a migration, rather than that the two produce identical tables, because during a contract change the migrations are briefly ahead of the schema.
+
+`apps/local` runs against production too, so `pnpm dev` and `pnpm start` first run `apps/local/scripts/warn-pending-migrations.ts`, which warns (never blocks) when the database is behind the checkout's migrations.
