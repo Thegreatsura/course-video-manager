@@ -3,9 +3,27 @@ import {
   createSSEResponse,
   type SendEvent,
 } from "./create-sse-response.server";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Layer, Logger, ManagedRuntime } from "effect";
 
 const testRuntime = ManagedRuntime.make(Layer.empty);
+
+/**
+ * A runtime whose logger keeps what it is handed, so a test can read back what
+ * the server would have printed — the log output is the boundary here.
+ */
+const makeLoggedRuntime = () => {
+  const lines: { level: string; text: string }[] = [];
+  const logger = Logger.make(({ logLevel, message, cause }) => {
+    lines.push({
+      level: logLevel.label,
+      text: [String(message), Cause.pretty(cause)].join("\n"),
+    });
+  });
+  return {
+    lines,
+    runtime: ManagedRuntime.make(Logger.replace(Logger.defaultLogger, logger)),
+  };
+};
 
 async function readAllEvents(response: Response): Promise<string[]> {
   const reader = response.body!.getReader();
@@ -193,5 +211,57 @@ describe("createSSEResponse", () => {
     const events = await readAllEvents(response);
 
     expect(events).toEqual(['event: error\ndata: {"message":"second"}\n\n']);
+  });
+
+  describe("when the program fails or dies", () => {
+    it("logs a defect with its cause and still tells the client", async () => {
+      const { lines, runtime } = makeLoggedRuntime();
+
+      const response = createSSEResponse({
+        runtime,
+        program: (sendEvent) =>
+          Effect.sync(() => {
+            sendEvent("stage", { stage: "rendering" });
+            throw new Error(
+              "Cannot read properties of undefined (reading 'fps')"
+            );
+          }),
+      });
+
+      const events = await readAllEvents(response);
+
+      expect(events).toEqual([
+        'event: stage\ndata: {"stage":"rendering"}\n\n',
+        `event: error\ndata: {"message":"Cannot read properties of undefined (reading 'fps')"}\n\n`,
+      ]);
+      expect(lines).toEqual([
+        {
+          level: "ERROR",
+          text: expect.stringContaining("reading 'fps'"),
+        },
+      ]);
+    });
+
+    it("sends the first line of a failure and logs the whole of it", async () => {
+      const { lines, runtime } = makeLoggedRuntime();
+
+      const response = createSSEResponse({
+        runtime,
+        program: () =>
+          Effect.fail({
+            message:
+              "Overlay renderer exited with code 1: Error: Chromium could not start\n    at launch (browser.js:12)",
+          }),
+      });
+
+      const events = await readAllEvents(response);
+
+      expect(events).toEqual([
+        'event: error\ndata: {"message":"Overlay renderer exited with code 1: Error: Chromium could not start"}\n\n',
+      ]);
+      expect(lines.map((line) => line.text).join("\n")).toContain(
+        "at launch (browser.js:12)"
+      );
+    });
   });
 });

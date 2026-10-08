@@ -231,6 +231,7 @@ export function createShipVideo(deps: {
     ) {
       return yield* new ExportError({
         message: `Immutable asset bundle conflict for video ${entry.videoId}`,
+        cause: null,
       });
     }
     // A resumed Publish counts it as done rather than reporting itself back
@@ -280,6 +281,7 @@ export function createShipVideo(deps: {
     if (metadata.content_hash !== contentHash) {
       return yield* new ExportError({
         message: `Upload verification failed for video ${entry.videoId}: content_hash mismatch`,
+        cause: null,
       });
     }
 

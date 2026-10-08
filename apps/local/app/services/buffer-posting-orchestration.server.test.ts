@@ -3,7 +3,10 @@ import { beforeAll, beforeEach, vi } from "vitest";
 import { Effect, Layer, ConfigProvider } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
-import { BufferApiService } from "@/services/buffer-api-service.server";
+import {
+  BufferApiService,
+  BufferAuthError,
+} from "@/services/buffer-api-service.server";
 import { ObjectStoreService } from "@/services/object-store-service.server";
 import { bufferPostProgram } from "@/services/buffer-posting-orchestration.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
@@ -62,6 +65,7 @@ function makeFakeObjectStore() {
 
 function makeFakeBufferApi() {
   return {
+    verifyAuth: vi.fn((): Effect.Effect<void, BufferAuthError> => Effect.void),
     createPost: vi.fn(
       (_opts: { channelId: string; text: string; videoUrl: string }) =>
         Effect.succeed({ id: "buffer-post-123" })
@@ -207,6 +211,39 @@ describe("bufferPostProgram", () => {
         );
         expect(posts).toHaveLength(1);
         expect(posts[0]!.postedAt).toBeNull();
+      })
+    );
+  });
+
+  describe("the Buffer key is invalid or expired", () => {
+    it.effect("fails before uploading the video or recording a post", () =>
+      Effect.gen(function* () {
+        const video = yield* Effect.promise(() => createTestVideo());
+        const objectStore = makeFakeObjectStore();
+        const bufferApi = makeFakeBufferApi();
+        bufferApi.verifyAuth.mockImplementation(() =>
+          Effect.fail(new BufferAuthError({ message: "key expired" }))
+        );
+        const { sendEvent } = makeSendEvent();
+
+        const layer = makeTestLayer({ objectStore, bufferApi });
+
+        const exit = yield* bufferPostProgram({
+          videoId: video.id,
+          caption: "Expired key",
+          sendEvent,
+        }).pipe(Effect.provide(layer), Effect.exit);
+
+        expect(exit._tag).toBe("Failure");
+        expect(objectStore.upload).not.toHaveBeenCalled();
+        expect(bufferApi.createPost).not.toHaveBeenCalled();
+
+        const posts = yield* Effect.promise(() =>
+          testDb.query.videoPosts.findMany({
+            where: eq(schema.videoPosts.videoId, video.id),
+          })
+        );
+        expect(posts).toHaveLength(0);
       })
     );
   });

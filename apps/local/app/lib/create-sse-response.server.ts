@@ -1,4 +1,5 @@
-import { Effect, type ManagedRuntime } from "effect";
+import { Cause, Effect, type ManagedRuntime } from "effect";
+import { failureHeadline } from "@/services/format-failure-cause";
 
 export type SendEvent = (event: string, data: unknown) => void;
 
@@ -40,7 +41,23 @@ export function createSSEResponse<R, RE>(
         closed = true;
       });
 
-      let effect: Effect.Effect<void, any, any> = config.program(sendEvent);
+      const fallbackMessage =
+        config.fallbackMessage ?? "An unexpected error occurred";
+
+      let effect: Effect.Effect<void, any, any> = config
+        .program(sendEvent)
+        .pipe(
+          // Every failure and every defect is logged here, with its full cause,
+          // before anything turns it into a one-line event for the browser.
+          // Without this, a failed job's only trace was a toast.
+          Effect.tapErrorCause((cause) =>
+            // A client that disconnects interrupts the program; that is not a
+            // failure worth a log line.
+            Cause.isInterruptedOnly(cause)
+              ? Effect.void
+              : Effect.logError("SSE stream failed", cause)
+          )
+        );
 
       if (config.errorHandlers) {
         for (const { tag, handler } of config.errorHandlers) {
@@ -54,14 +71,22 @@ export function createSSEResponse<R, RE>(
 
       effect
         .pipe(
+          // The client shows the first line of the real cause; the rest is in
+          // the log line above.
           Effect.catchAll((e) =>
             Effect.sync(() => {
               sendEvent("error", {
-                message:
-                  "message" in e && typeof e.message === "string"
-                    ? e.message
-                    : (config.fallbackMessage ??
-                      "An unexpected error occurred"),
+                message: failureHeadline(e) ?? fallbackMessage,
+              });
+            })
+          ),
+          // A defect (a throw, an `Effect.die`) used to reject the run and
+          // close the stream with no event, so the browser saw a dropped
+          // connection and no reason. It gets an error event like a failure.
+          Effect.catchAllDefect((defect) =>
+            Effect.sync(() => {
+              sendEvent("error", {
+                message: failureHeadline(defect) ?? fallbackMessage,
               });
             })
           ),
@@ -70,8 +95,9 @@ export function createSSEResponse<R, RE>(
               signal: abortController.signal,
             })
         )
-        // The program may reject when interrupted by the abort signal; that
-        // is expected on client disconnect and must not go unhandled.
+        // The program rejects only when interrupted by the abort signal (every
+        // failure and defect is caught above); that is expected on client
+        // disconnect and must not go unhandled.
         .catch(() => {})
         .finally(() => {
           if (closed) return;
