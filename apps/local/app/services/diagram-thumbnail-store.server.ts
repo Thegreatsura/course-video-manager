@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { assertUnder } from "@/services/assert-under";
 import path from "node:path";
 import { Layer } from "effect";
 import { DiagramThumbnailStore } from "@/services/diagram-thumbnail-store";
@@ -68,7 +69,10 @@ export function writeThumbnail(
   contentHash: string,
   png: Buffer
 ): void {
-  const filePath = getThumbnailPath(diagramId, contentHash);
+  const filePath = assertUnder(
+    getDiagramThumbnailsBaseDir(),
+    getThumbnailPath(diagramId, contentHash)
+  );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, png);
 }
@@ -109,7 +113,10 @@ export function writeComponentThumbnail(
   componentId: string,
   png: Buffer
 ): void {
-  const filePath = getComponentThumbnailPath(componentId);
+  const filePath = assertUnder(
+    getDiagramThumbnailsBaseDir(),
+    getComponentThumbnailPath(componentId)
+  );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, png);
 }
@@ -129,7 +136,11 @@ export function readComponentThumbnail(componentId: string): Buffer | null {
  */
 export function deleteComponentThumbnail(componentId: string): void {
   try {
-    fs.unlinkSync(getComponentThumbnailPath(componentId));
+    const filePath = assertUnder(
+      getDiagramThumbnailsBaseDir(),
+      getComponentThumbnailPath(componentId)
+    );
+    fs.unlinkSync(filePath);
   } catch {
     // Already gone, or never written. Nothing to do.
   }

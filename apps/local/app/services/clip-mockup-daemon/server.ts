@@ -12,7 +12,9 @@ import {
 } from "effect";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import { ClipMockupSpeechService } from "../clip-mockup-speech-service";
+import { assertUnder } from "../assert-under";
 import { FrameCaptureService } from "../frame-capture-service";
 import {
   CaptureRequest,
@@ -127,7 +129,11 @@ const daemon = (version: string) =>
         const durations: number[] = [];
         for (const item of job.items) {
           const spoken = yield* voice.synthesizeLine(item.line);
-          yield* fileSystem.writeFile(item.outputPath, spoken.wav);
+          // The client voices lines into a scratch directory in the OS temp
+          // dir (resolve-clip-mockup-speech.ts) and reads them back; a path
+          // off the socket that points anywhere else is refused.
+          const outputPath = assertUnder(os.tmpdir(), item.outputPath);
+          yield* fileSystem.writeFile(outputPath, spoken.wav);
           durations.push(spoken.durationSeconds);
         }
         return durations;

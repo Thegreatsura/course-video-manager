@@ -1,4 +1,5 @@
 import path from "node:path";
+import { assertUnder } from "@/services/assert-under";
 import { Config, Effect } from "effect";
 import type { FileSystem } from "@effect/platform";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
@@ -91,9 +92,9 @@ export const makeVideoExportPasses = (deps: {
     );
 
     // Move to final location
-    const outputPath = path.join(
+    const outputPath = assertUnder(
       FINISHED_VIDEOS_DIRECTORY,
-      `${opts.videoId}.mp4`
+      path.join(FINISHED_VIDEOS_DIRECTORY, `${opts.videoId}.mp4`)
     );
 
     yield* effectFs.makeDirectory(path.dirname(outputPath), {
@@ -143,34 +144,36 @@ export const makeVideoExportPasses = (deps: {
     }) {
       // ffmpeg cannot read and write one file at once, so the pass writes
       // beside the export and the finished file is moved over it.
-      const compositedPath = path.join(
-        path.dirname(opts.videoPath),
-        `.${path.basename(opts.videoPath)}.overlays.mp4`
+      const finishedVideosDir = yield* Config.string(
+        "FINISHED_VIDEOS_DIRECTORY"
+      );
+      const videoPath = assertUnder(finishedVideosDir, opts.videoPath);
+      const compositedPath = assertUnder(
+        finishedVideosDir,
+        path.join(
+          path.dirname(videoPath),
+          `.${path.basename(videoPath)}.overlays.mp4`
+        )
       );
 
       yield* ffmpegCommands
-        .compositeOverlaysAtOffsets(
-          opts.videoPath,
-          opts.overlays,
-          compositedPath,
-          {
-            totalDurationSeconds: opts.totalDurationSeconds,
-            onProgress: opts.onProgress,
-            onLog: makeFfmpegLogger(
-              videoEditorLogger,
-              opts.videoId,
-              "export:composite-overlays"
-            ),
-          }
-        )
+        .compositeOverlaysAtOffsets(videoPath, opts.overlays, compositedPath, {
+          totalDurationSeconds: opts.totalDurationSeconds,
+          onProgress: opts.onProgress,
+          onLog: makeFfmpegLogger(
+            videoEditorLogger,
+            opts.videoId,
+            "export:composite-overlays"
+          ),
+        })
         .pipe(
           Effect.tapError(() => removeBestEffort(effectFs, compositedPath))
         );
 
-      yield* effectFs.copyFile(compositedPath, opts.videoPath);
+      yield* effectFs.copyFile(compositedPath, videoPath);
       yield* removeBestEffort(effectFs, compositedPath);
 
-      return opts.videoPath;
+      return videoPath;
     }
   );
 
