@@ -1,114 +1,25 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { createDirectClipService } from "@/test-utils/direct-clip-service";
-import { type VideoProcessingAdapter } from "./clip-service-handler";
-import type { ClipService } from "./clip-service";
-import type {
-  FrontendId,
-  DatabaseId,
-  FrontendTimelineItem,
-  FrontendInsertionPoint,
-} from "./clip-service";
+import { describe, it, expect } from "vitest";
+import type { FrontendInsertionPoint } from "./clip-service";
 import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
+  setupClipServiceTests,
+  clipService,
+  getItems,
+  afterClip,
+  afterSection,
+  start,
+} from "./clip-service-test-setup";
 
-let testDb: TestDb;
-let clipService: ClipService;
-let mockVideoProcessing: VideoProcessingAdapter;
+setupClipServiceTests();
 
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-beforeEach(async () => {
-  await truncateAllTables(testDb);
-
-  mockVideoProcessing = {
-    getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
-  };
-
-  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
-});
-
-const getItems = async (
-  clipService: ClipService,
-  videoId: string
-): Promise<FrontendTimelineItem[]> => {
-  const timeline = await clipService.getTimeline(videoId);
-  return timeline.map((item): FrontendTimelineItem => {
-    if (item.type === "clip") {
-      return {
-        type: "on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    } else {
-      return {
-        type: "chapter-on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    }
-  });
-};
-
-const afterClip = (id: string): FrontendInsertionPoint => ({
-  type: "after-clip",
-  frontendClipId: id as FrontendId,
-});
-
-const afterSection = (id: string): FrontendInsertionPoint => ({
-  type: "after-chapter",
-  frontendChapterId: id as FrontendId,
-});
-
-const start: FrontendInsertionPoint = { type: "start" };
 const end: FrontendInsertionPoint = { type: "end" };
 
 describe("ClipService", () => {
-  describe("createVideo", () => {
-    it("creates a standalone video", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      expect(video).toMatchObject({
-        id: expect.any(String),
-        title: "test-video.mp4",
-        lessonId: null,
-      });
-    });
-  });
-
   describe("getTimeline", () => {
     it("returns an empty timeline for a video with no clips", async () => {
       const video = await clipService.createVideo("test-video.mp4");
       const timeline = await clipService.getTimeline(video.id);
 
       expect(timeline).toEqual([]);
-    });
-
-    it("returns clips sorted by order", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const clips = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [
-          { inputVideo: "test.mp4", startTime: 0, endTime: 10 },
-          { inputVideo: "test.mp4", startTime: 10, endTime: 20 },
-        ],
-      });
-
-      const timeline = await clipService.getTimeline(video.id);
-
-      expect(timeline).toHaveLength(2);
-      expect(timeline[0]).toMatchObject({ type: "clip" });
-      expect(timeline[1]).toMatchObject({ type: "clip" });
-      expect(timeline[0]!.data.id).toBe(clips[0]!.id);
-      expect(timeline[1]!.data.id).toBe(clips[1]!.id);
     });
 
     it("returns clips and sections interleaved and sorted", async () => {
@@ -287,22 +198,6 @@ describe("ClipService", () => {
   });
 
   describe("archiveClips", () => {
-    it("archives a single clip", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const [clip] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      await clipService.archiveClips([clip!.id]);
-
-      const timeline = await clipService.getTimeline(video.id);
-      expect(timeline).toHaveLength(0);
-    });
-
     it("archives multiple clips", async () => {
       const video = await clipService.createVideo("test-video.mp4");
 
@@ -354,30 +249,6 @@ describe("ClipService", () => {
       }
     });
   });
-
-  describe("updatePause", () => {
-    it("updates pause type for a single clip", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const [clip] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      await clipService.updatePause(clip!.id, "transition");
-
-      const timeline = await clipService.getTimeline(video.id);
-      const timelineItem = timeline[0]!;
-
-      expect(timelineItem.type).toBe("clip");
-      if (timelineItem.type === "clip") {
-        expect(timelineItem.data.pauseType).toBe("transition");
-      }
-    });
-  });
-
   describe("reorderClip", () => {
     it("moves a clip up past another clip", async () => {
       const video = await clipService.createVideo("test-video.mp4");

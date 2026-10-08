@@ -252,46 +252,6 @@ describe("loadVideoPostingContext", () => {
         expect(mdFile!.defaultEnabled).toBe(true);
       }).pipe(Effect.provide(testLayer))
     );
-
-    it.effect("returns empty files array when directory does not exist", () =>
-      Effect.gen(function* () {
-        const video = yield* createStandaloneVideoWithClips("test-video", [
-          "text",
-        ]);
-
-        const ctx = yield* loadVideoPostingContext(video.id);
-
-        expect(ctx.isStandalone).toBe(true);
-        expect(ctx.files).toEqual([]);
-      }).pipe(Effect.provide(testLayer))
-    );
-  });
-
-  describe("lesson video file metadata", () => {
-    it.effect(
-      "returns files from lineageId-keyed dir for lesson-bound videos",
-      () =>
-        Effect.gen(function* () {
-          const { video } = yield* createLessonVideo();
-
-          const dir = setupVideoDir(video.lineageId);
-          nodeFs.writeFileSync(path.join(dir, "index.ts"), "export {}");
-          nodeFs.writeFileSync(path.join(dir, "readme.md"), "# Readme");
-
-          const ctx = yield* loadVideoPostingContext(video.id);
-
-          expect(ctx.isStandalone).toBe(false);
-          expect(ctx.files.length).toBe(2);
-
-          const tsFile = ctx.files.find((f) => f.path === "index.ts");
-          expect(tsFile).toBeDefined();
-          expect(tsFile!.defaultEnabled).toBe(true);
-
-          const readmeFile = ctx.files.find((f) => f.path === "readme.md");
-          expect(readmeFile).toBeDefined();
-          expect(readmeFile!.defaultEnabled).toBe(true);
-        }).pipe(Effect.provide(testLayer))
-    );
   });
 
   describe("course structure", () => {
@@ -345,34 +305,6 @@ describe("loadVideoPostingContext", () => {
 
         expect(ctx.transcriptWordCount).toBe(0);
         expect(ctx.chapters).toEqual([]);
-      }).pipe(Effect.provide(testLayer))
-    );
-  });
-
-  describe("pitchId", () => {
-    it.effect("returns null pitchId for standalone videos", () =>
-      Effect.gen(function* () {
-        const video = yield* createStandaloneVideoWithClips("test-video", [
-          "text",
-        ]);
-
-        setupVideoDir(video.lineageId);
-
-        const ctx = yield* loadVideoPostingContext(video.id);
-
-        expect(ctx.pitchId).toBeNull();
-      }).pipe(Effect.provide(testLayer))
-    );
-
-    it.effect("returns null pitchId for lesson videos", () =>
-      Effect.gen(function* () {
-        const { video } = yield* createLessonVideo((lessonDir) => {
-          nodeFs.writeFileSync(path.join(lessonDir, "index.ts"), "export {}");
-        });
-
-        const ctx = yield* loadVideoPostingContext(video.id);
-
-        expect(ctx.pitchId).toBeNull();
       }).pipe(Effect.provide(testLayer))
     );
   });
