@@ -17,6 +17,12 @@ export const action = async (args: Route.ActionArgs) => {
     program: (sendEvent) => bufferPostProgram({ videoId, caption, sendEvent }),
     errorHandlers: [
       {
+        tag: "BufferAuthError",
+        handler: (e, sendEvent) => {
+          sendEvent("error", { message: e.message });
+        },
+      },
+      {
         tag: "BufferApiError",
         handler: (e, sendEvent) => {
           sendEvent("error", { message: e.message });
