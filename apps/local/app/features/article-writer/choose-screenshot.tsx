@@ -12,13 +12,13 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
 import {
   CHOOSE_SCREENSHOT_ATTR,
+  SCREENSHOT_CAPTURE_EVENT,
   SCREENSHOT_STEP_EVENT,
+  type ScreenshotCaptureRequest,
+  type ScreenshotStep,
 } from "./screenshot-navigation";
-import {
-  stepScreenshotFrame,
-  type FrameStepDirection,
-} from "./screenshot-frame-step";
-import { useScreenshotIoStep } from "./screenshot-io-step-dial";
+import { stepScreenshotFrame } from "./screenshot-frame-step";
+import { useScreenshotSteps } from "./screenshot-io-step-dial";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
@@ -32,7 +32,7 @@ export interface ChooseScreenshotProps {
     alt: string,
     timestamp: number,
     videoFilename: string
-  ) => void;
+  ) => Promise<boolean>;
   onRemove: (clipIndex: number, alt: string) => void;
   isCapturing?: boolean;
   isStreaming?: boolean;
@@ -54,7 +54,7 @@ export function ChooseScreenshot({
   const rootRef = useRef<HTMLDivElement>(null);
   /** Where the next clip shown opens: its end after I crossed back into it. */
   const landAtRef = useRef<"start" | "end">("start");
-  const { step, dial } = useScreenshotIoStep();
+  const { steps, dials } = useScreenshotSteps();
 
   const isFirstClip = clipIndex <= 1;
   const isLastClip = clipIndex >= clips.length;
@@ -75,7 +75,7 @@ export function ChooseScreenshot({
     onClipIndexChange(clipIndex, newIndex);
   };
 
-  const handleStep = (direction: FrameStepDirection) => {
+  const handleStep = ({ direction, size }: ScreenshotStep) => {
     if (!clip) return;
     const next = stepScreenshotFrame({
       time: currentTime,
@@ -83,7 +83,7 @@ export function ChooseScreenshot({
       clipEnd: clip.sourceEndTime,
       clipIndex,
       clipCount: clips.length,
-      step,
+      step: steps[size],
       direction,
     });
     if (next?.type === "seek") {
@@ -93,18 +93,36 @@ export function ChooseScreenshot({
       changeClip(next.newIndex, next.landAt);
     }
   };
-  const handleStepRef = useRef(handleStep);
-  handleStepRef.current = handleStep;
+  const capture = () =>
+    clip
+      ? onCapture(clipIndex, alt, currentTime, clip.videoFilename)
+      : Promise.resolve(false);
 
-  // Bridge: I / O arrive from useScreenshotNavigation as a DOM event.
+  const handleCaptureRequest = async (request: ScreenshotCaptureRequest) => {
+    if (isCapturing) return;
+    if (await capture()) request.onCaptured();
+  };
+
+  const handlersRef = useRef({ handleStep, handleCaptureRequest });
+  handlersRef.current = { handleStep, handleCaptureRequest };
+
+  // Bridge: the keys arrive from useScreenshotNavigation as DOM events.
   const isLive = Boolean(clip) && !isStreaming;
   useEffect(() => {
     const el = rootRef.current;
     if (!isLive || !el) return;
     const onStep = (e: Event) =>
-      handleStepRef.current((e as CustomEvent<FrameStepDirection>).detail);
+      handlersRef.current.handleStep((e as CustomEvent<ScreenshotStep>).detail);
+    const onCaptureRequest = (e: Event) =>
+      void handlersRef.current.handleCaptureRequest(
+        (e as CustomEvent<ScreenshotCaptureRequest>).detail
+      );
     el.addEventListener(SCREENSHOT_STEP_EVENT, onStep);
-    return () => el.removeEventListener(SCREENSHOT_STEP_EVENT, onStep);
+    el.addEventListener(SCREENSHOT_CAPTURE_EVENT, onCaptureRequest);
+    return () => {
+      el.removeEventListener(SCREENSHOT_STEP_EVENT, onStep);
+      el.removeEventListener(SCREENSHOT_CAPTURE_EVENT, onCaptureRequest);
+    };
   }, [isLive]);
 
   const handleTimeUpdate = useCallback(() => {
@@ -199,8 +217,13 @@ export function ChooseScreenshot({
         className="w-full rounded-md aspect-video"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => {
+          // Re-apply the frame already chosen: a key pressed while the
+          // video was loading must not be thrown away.
           if (videoRef.current) {
-            videoRef.current.currentTime = landingTime(clip);
+            videoRef.current.currentTime = Math.min(
+              Math.max(currentTime, clip.sourceStartTime),
+              clip.sourceEndTime
+            );
           }
         }}
       />
@@ -241,14 +264,8 @@ export function ChooseScreenshot({
           <ChevronRightIcon className="h-3 w-3 ml-1" />
         </Button>
         <div className="flex-1" />
-        {dial}
-        <Button
-          size="sm"
-          disabled={isCapturing}
-          onClick={() =>
-            onCapture(clipIndex, alt, currentTime, clip.videoFilename)
-          }
-        >
+        {dials}
+        <Button size="sm" disabled={isCapturing} onClick={() => void capture()}>
           {isCapturing ? (
             <LoaderIcon className="h-3 w-3 mr-1 animate-spin" />
           ) : (

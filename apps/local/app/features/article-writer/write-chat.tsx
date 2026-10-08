@@ -1,4 +1,5 @@
 import type { DocumentAgentMessage } from "./types";
+import { toastError } from "@/components/ui/toast";
 import {
   AIConversation,
   AIConversationContent,
@@ -134,8 +135,11 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
         mutateMessageText(messageId, (text) =>
           replaceChooseScreenshotWithImage(text, clipIndex, alt, imagePath)
         );
+        return true;
       } catch (err) {
         console.error("Screenshot capture failed:", err);
+        toastError(err, "Screenshot capture failed");
+        return false;
       } finally {
         setCapturingKey(null);
       }

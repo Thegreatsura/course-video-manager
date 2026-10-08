@@ -1,37 +1,52 @@
-// TODO(remove dial): a temporary dial for feeling out the I / O step. Once the
-// step is settled, delete this file and use a constant in choose-screenshot.tsx.
+// TODO(remove dial): temporary dials for feeling out the frame steps. Once the
+// steps are settled, delete this file and use constants in choose-screenshot.tsx.
 import { useEffect } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import type { ScreenshotStepSize } from "./screenshot-navigation";
 
-const STORAGE_KEY = "choose-screenshot-io-step-seconds";
-/** Tells every other mounted placeholder's dial that the value moved. */
-const CHANGED_EVENT = "choose-screenshot-io-step-changed";
-const DEFAULT_STEP = 2.5;
+/** Tells every other mounted placeholder's dial that a value moved. */
+const CHANGED_EVENT = "choose-screenshot-step-changed";
 
-/** The I / O step in seconds, and the dial that edits it. */
-export function useScreenshotIoStep() {
-  const [raw, setRaw] = useLocalStorage(STORAGE_KEY, String(DEFAULT_STEP));
+const DIALS = {
+  // "-v2": the old key holds the 2.5s default this replaces.
+  large: { key: "choose-screenshot-io-step-seconds-v2", fallback: 1 },
+  small: { key: "choose-screenshot-arrow-step-seconds", fallback: 0.2 },
+} as const;
+
+function useStepDial(
+  size: ScreenshotStepSize,
+  label: string,
+  inputStep: number
+) {
+  const { key, fallback } = DIALS[size];
+  const [raw, setRaw] = useLocalStorage(key, String(fallback));
+
   // Bridge: keep every placeholder's dial on the one shared value.
   useEffect(() => {
-    const onChanged = (e: Event) => setRaw((e as CustomEvent<string>).detail);
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ key: string; value: string }>).detail;
+      if (detail.key === key) setRaw(detail.value);
+    };
     window.addEventListener(CHANGED_EVENT, onChanged);
     return () => window.removeEventListener(CHANGED_EVENT, onChanged);
-  }, [setRaw]);
+  }, [key, setRaw]);
 
   const parsed = Number(raw);
-  const step = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_STEP;
+  const step = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 
   const dial = (
     <label className="flex items-center gap-1 text-xs text-muted-foreground">
-      I/O step (s)
+      {label}
       <input
         type="number"
-        step={0.1}
-        min={0.1}
+        step={inputStep}
+        min={inputStep}
         value={raw}
         onChange={(e) =>
           window.dispatchEvent(
-            new CustomEvent(CHANGED_EVENT, { detail: e.target.value })
+            new CustomEvent(CHANGED_EVENT, {
+              detail: { key, value: e.target.value },
+            })
           )
         }
         className="w-16 rounded border border-border bg-background px-1 py-0.5 tabular-nums text-foreground"
@@ -40,4 +55,23 @@ export function useScreenshotIoStep() {
   );
 
   return { step, dial };
+}
+
+/** The frame steps in seconds, and the dials that edit them. */
+export function useScreenshotSteps() {
+  const large = useStepDial("large", "I/O step (s)", 0.1);
+  const small = useStepDial("small", "←/→ step (s)", 0.05);
+
+  const steps: Record<ScreenshotStepSize, number> = {
+    large: large.step,
+    small: small.step,
+  };
+  const dials = (
+    <>
+      {large.dial}
+      {small.dial}
+    </>
+  );
+
+  return { steps, dials };
 }
