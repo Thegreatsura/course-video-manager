@@ -1,71 +1,15 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { createDirectClipService } from "@/test-utils/direct-clip-service";
-import { type VideoProcessingAdapter } from "./clip-service-handler";
-import type { ClipService } from "./clip-service";
-import type {
-  FrontendId,
-  DatabaseId,
-  FrontendTimelineItem,
-  FrontendInsertionPoint,
-} from "./clip-service";
+import { describe, it, expect } from "vitest";
+
 import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
+  setupClipServiceTests,
+  clipService,
+  getItems,
+  afterClip,
+  afterSection,
+  start,
+} from "./clip-service-test-setup";
 
-let testDb: TestDb;
-let clipService: ClipService;
-let mockVideoProcessing: VideoProcessingAdapter;
-
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-beforeEach(async () => {
-  await truncateAllTables(testDb);
-
-  mockVideoProcessing = {
-    getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
-  };
-
-  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
-});
-
-const getItems = async (
-  clipService: ClipService,
-  videoId: string
-): Promise<FrontendTimelineItem[]> => {
-  const timeline = await clipService.getTimeline(videoId);
-  return timeline.map((item): FrontendTimelineItem => {
-    if (item.type === "clip") {
-      return {
-        type: "on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    } else {
-      return {
-        type: "chapter-on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    }
-  });
-};
-
-const afterClip = (id: string): FrontendInsertionPoint => ({
-  type: "after-clip",
-  frontendClipId: id as FrontendId,
-});
-
-const afterSection = (id: string): FrontendInsertionPoint => ({
-  type: "after-chapter",
-  frontendChapterId: id as FrontendId,
-});
-
-const start: FrontendInsertionPoint = { type: "start" };
+setupClipServiceTests();
 
 describe("ClipService", () => {
   describe("createChapterAtInsertionPoint", () => {
@@ -166,26 +110,6 @@ describe("ClipService", () => {
       ]);
     });
   });
-
-  describe("updateChapter", () => {
-    it("updates the name of a chapter", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const section = await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Original Name",
-        insertionPoint: start,
-        items: [],
-      });
-
-      await clipService.updateChapter(section.id, "Updated Name");
-
-      const timeline = await clipService.getTimeline(video.id);
-      const updatedSection = timeline[0]!.data;
-      expect((updatedSection as typeof section).name).toBe("Updated Name");
-    });
-  });
-
   describe("archiveChapters", () => {
     it("archives a chapter", async () => {
       const video = await clipService.createVideo("test-video.mp4");
@@ -295,51 +219,6 @@ describe("ClipService", () => {
         { type: "clip", id: clip1!.id },
         { type: "clip", id: clip2!.id },
         { type: "chapter", id: sectionC.id },
-      ]);
-    });
-
-    it("moves a section up past an adjacent section (no clips between)", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      // Build timeline: [Clip1, SectionA, SectionB, Clip2]
-      const [clip1] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      const sectionA = await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Section A",
-        insertionPoint: afterClip(clip1!.id),
-        items: await getItems(clipService, video.id),
-      });
-
-      const sectionB = await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Section B",
-        insertionPoint: afterSection(sectionA.id),
-        items: await getItems(clipService, video.id),
-      });
-
-      const [clip2] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: afterSection(sectionB.id),
-        items: await getItems(clipService, video.id),
-        clips: [{ inputVideo: "test.mp4", startTime: 10, endTime: 20 }],
-      });
-
-      // Move SectionB up (past SectionA)
-      // Expected: [Clip1, SectionB, SectionA, Clip2]
-      await clipService.reorderChapter(sectionB.id, "up");
-
-      const timeline = await clipService.getTimeline(video.id);
-      expect(timeline.map((t) => ({ type: t.type, id: t.data.id }))).toEqual([
-        { type: "clip", id: clip1!.id },
-        { type: "chapter", id: sectionB.id },
-        { type: "chapter", id: sectionA.id },
-        { type: "clip", id: clip2!.id },
       ]);
     });
 

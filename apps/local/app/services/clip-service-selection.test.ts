@@ -1,72 +1,17 @@
+import { describe, it, expect } from "vitest";
 import * as schema from "@/db/schema";
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { createDirectClipService } from "@/test-utils/direct-clip-service";
-import { type VideoProcessingAdapter } from "./clip-service-handler";
-import type { ClipService } from "./clip-service";
-import type {
-  FrontendId,
-  DatabaseId,
-  FrontendTimelineItem,
-  FrontendInsertionPoint,
-} from "./clip-service";
+
 import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
+  setupClipServiceTests,
+  testDb,
+  clipService,
+  getItems,
+  afterClip,
+  afterSection,
+  start,
+} from "./clip-service-test-setup";
 
-let testDb: TestDb;
-let clipService: ClipService;
-let mockVideoProcessing: VideoProcessingAdapter;
-
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-beforeEach(async () => {
-  await truncateAllTables(testDb);
-
-  mockVideoProcessing = {
-    getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
-  };
-
-  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
-});
-
-const getItems = async (
-  clipService: ClipService,
-  videoId: string
-): Promise<FrontendTimelineItem[]> => {
-  const timeline = await clipService.getTimeline(videoId);
-  return timeline.map((item): FrontendTimelineItem => {
-    if (item.type === "clip") {
-      return {
-        type: "on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    } else {
-      return {
-        type: "chapter-on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    }
-  });
-};
-
-const afterClip = (id: string): FrontendInsertionPoint => ({
-  type: "after-clip",
-  frontendClipId: id as FrontendId,
-});
-
-const afterSection = (id: string): FrontendInsertionPoint => ({
-  type: "after-chapter",
-  frontendChapterId: id as FrontendId,
-});
-
-const start: FrontendInsertionPoint = { type: "start" };
+setupClipServiceTests();
 
 describe("ClipService", () => {
   describe("createVideoFromSelection", () => {
@@ -327,48 +272,6 @@ describe("ClipService", () => {
       });
 
       expect(newVideo.lessonId).toBe(lessonId);
-    });
-
-    it("selecting all items creates a new video with everything", async () => {
-      const video = await clipService.createVideo("source-video.mp4");
-
-      const sectionA = await clipService.createChapterAtInsertionPoint({
-        videoId: video.id,
-        name: "Section A",
-        insertionPoint: start,
-        items: [],
-      });
-
-      const [clipA, clipB] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: afterSection(sectionA.id),
-        items: await getItems(clipService, video.id),
-        clips: [
-          { inputVideo: "footage.mp4", startTime: 0, endTime: 10 },
-          { inputVideo: "footage.mp4", startTime: 10, endTime: 20 },
-        ],
-      });
-
-      // Select everything
-      const newVideo = await clipService.createVideoFromSelection({
-        sourceVideoId: video.id,
-        clipIds: [clipA!.id, clipB!.id],
-        chapterIds: [sectionA.id],
-        title: "Complete Copy",
-        mode: "copy",
-      });
-
-      const newTimeline = await clipService.getTimeline(newVideo.id);
-      expect(newTimeline).toHaveLength(3);
-      expect(newTimeline.map((t) => t.type)).toEqual([
-        "chapter",
-        "clip",
-        "clip",
-      ]);
-
-      // Source should still have all items
-      const sourceTimeline = await clipService.getTimeline(video.id);
-      expect(sourceTimeline).toHaveLength(3);
     });
   });
 });

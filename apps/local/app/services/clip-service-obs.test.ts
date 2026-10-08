@@ -1,66 +1,15 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { createDirectClipService } from "@/test-utils/direct-clip-service";
-import { type VideoProcessingAdapter } from "./clip-service-handler";
-import type { ClipService } from "./clip-service";
-import type {
-  FrontendId,
-  DatabaseId,
-  FrontendTimelineItem,
-  FrontendInsertionPoint,
-} from "./clip-service";
+import { describe, it, expect, vi } from "vitest";
+
 import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
+  setupClipServiceTests,
+  clipService,
+  mockVideoProcessing,
+  getItems,
+  afterClip,
+  start,
+} from "./clip-service-test-setup";
 
-let testDb: TestDb;
-let clipService: ClipService;
-let mockVideoProcessing: VideoProcessingAdapter;
-
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-beforeEach(async () => {
-  await truncateAllTables(testDb);
-
-  mockVideoProcessing = {
-    getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
-  };
-
-  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
-});
-
-const getItems = async (
-  clipService: ClipService,
-  videoId: string
-): Promise<FrontendTimelineItem[]> => {
-  const timeline = await clipService.getTimeline(videoId);
-  return timeline.map((item): FrontendTimelineItem => {
-    if (item.type === "clip") {
-      return {
-        type: "on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    } else {
-      return {
-        type: "chapter-on-database",
-        frontendId: item.data.id as FrontendId,
-        databaseId: item.data.id as DatabaseId,
-      };
-    }
-  });
-};
-
-const afterClip = (id: string): FrontendInsertionPoint => ({
-  type: "after-clip",
-  frontendClipId: id as FrontendId,
-});
-
-const start: FrontendInsertionPoint = { type: "start" };
+setupClipServiceTests();
 
 describe("ClipService", () => {
   describe("appendFromObs", () => {
