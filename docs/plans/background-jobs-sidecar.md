@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batch 1 (the skeleton) is done. Matt's decisions are in section 6;
+**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -175,7 +175,7 @@ Each batch is one PR. Each can be merged on its own, and each leaves the app wor
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | 0     | **Logging fix, no sidecar.** `createSSEResponse` logs every failure and defect with `Effect.logError(cause)` and sends defects to the client too. `RenderVerticalError` goes into the Video's log through `recordStageFailure`. The export toast shows the cause's first line, not the generic `ExportError`.                         | Today's overlay failure would have been in `.data/logs`. Ships this week, whatever else is decided.      |
 | 1 ✅  | **Done.** **The skeleton.** `job`, `job_event` and `sidecar_lease` migration; `db-job` service; `apps/local/sidecar/` with lease, claim, heartbeat, recovery, JSON logger and socket; `dev:sidecar` / `start:sidecar`; verify-cvm launch, doctor and cleanup; one `noop` kind; `check-background-jobs.ts` landed with today's counts. | `pnpm dev` starts the sidecar; a test job runs and is logged; a verify run has its own. No UI change.    |
-| 2     | **Upload Manager front end on job events.** `/api/jobs/events` proxy; `jobs-reducer.ts` and its bridge; the Global Upload Progress renders server jobs next to the old ones. First kind: **Video export (#6)**, whose SSE route is deleted.                                                                                           | Close the tab mid-export, reopen it: the export is still running and finishes. The allowlist drops by 1. |
+| 2 ✅  | **Done.** **Upload Manager front end on job events.** `/api/jobs/events` proxy; `jobs-reducer.ts` and its bridge; the Global Upload Progress renders server jobs next to the old ones. First kind: **Video export (#6)**, whose SSE route is deleted.                                                                                 | Close the tab mid-export, reopen it: the export is still running and finishes. The allowlist drops by 1. |
 | 3     | Batch export (#7) as N `export` jobs with a parent, plus the vertical Shorts render (#8).                                                                                                                                                                                                                                             | Kill the sidecar mid-render; it re-queues on restart.                                                    |
 | 4     | Posting: YouTube upload, Shorts, Buffer, AI Hero, Skills Changelog (#1-#5). `depends_on` moves to the server. Non-idempotent: an interrupted post asks before running again.                                                                                                                                                          | Chain "upload → AI Hero post" survives a reload.                                                         |
 | 5     | Course Autofill (#10), in the `ai` lane.                                                                                                                                                                                                                                                                                              | —                                                                                                        |
@@ -301,3 +301,77 @@ Left for later batches, on purpose:
 - verify-cvm puts a run's socket in `$XDG_RUNTIME_DIR` (else `/tmp`), named by
   the run id: a run directory's path is longer than a Unix socket allows
   (107 bytes).
+
+### 7.5 What batch 2 built, and what it decided
+
+Built: **Video export (#6) is the first real kind** (`apps/local/sidecar/kinds/export.ts`,
+`CoursePublishService.exportVideo` unchanged, 3 attempts, default lane). Its SSE
+route (`api.videos.$videoId.export-sse.ts`) and browser client
+(`sse-export-client.ts`) are deleted, and both allowlist entries with them. The
+sidecar builds the app's own `layerLive`, so handlers reach every service.
+
+- **Job Events to the browser.** The sidecar's socket serves `GET /events`: a
+  snapshot (unfinished Jobs and those finished in the last 10 minutes, each
+  with its events), or a replay after `Last-Event-ID`, then every new event.
+  One poller reads `job_event` for all subscribers (no LISTEN/NOTIFY on the
+  pooler), woken by the sidecar's own writes and by `/nudge`, re-reading a
+  window of ids for late commits (`sidecar/job-event-feed.ts`). The app's
+  `GET /api/jobs/events` passes it through untouched, and answers
+  `sidecar-unavailable` when nothing listens on the socket. The wire format is
+  `features/jobs/job-wire.ts`, imported by both ends. `scripts/check-background-jobs.ts`
+  exempts that one route by name.
+- **Enqueue.** `POST /api/jobs` writes the row and nudges the sidecar; it
+  succeeds with the sidecar down. The browser picks the Job's id, so
+  "export, then post" still works: an upload's `dependsOn` is the export
+  Job's id, and the Upload Manager hears it settle (`server-job-succeeded` /
+  `server-job-failed`, the same `Dependency "<title>" failed` message).
+- **The reducer.** `features/jobs/jobs-reducer.ts` (facts: `job-requested`,
+  `job-queued`, `job-started`, `job-stage-entered`, `job-progressed`,
+  `job-retrying`, `job-requeued`, `job-succeeded`, `job-failed`,
+  `job-interrupted`, `job-snapshot-received`, `sidecar-unavailable`,
+  `press-dismiss`, `idle-timeout-elapsed`; effects: `enqueue-job`, the toasts,
+  `report-job-settled`), its bridge and runner in `use-jobs.ts`. It lives
+  inside `UploadProvider`, and the Global Upload Progress draws each export
+  Job as an Upload Manager row (`jobs-selectors.ts`: same stages, bands and
+  labels), next to the browser's own rows. A failed Job's toast and row link
+  to its log (`/api/jobs/<id>/log`, read from the sidecar's socket).
+- **A Batch export child's retry** (section 7.1's open row): the browser used
+  to retry a failed child as a standalone export through the deleted route.
+  It now hands it to the sidecar as an `export` Job with the attempts the row
+  had left (`attemptsSpent`), so the run count stays 3 + 2 = 5, as before.
+  Batch 3 still decides the policy when Batch export moves.
+
+**`tsx watch` restarts.** A stop on purpose — a signal: `tsx watch` restarting
+after an edit, Ctrl-C, verify-cvm's cleanup — no longer spends an attempt:
+each running Job goes back to `queued` at the SAME attempt (`returnJobToQueue`,
+a `requeued` event) and the next sidecar runs it. A sidecar that dies (SIGKILL,
+a crash, a lost database) still has its Jobs settled by recovery as failed
+attempts, as section 7.2 copies. This does not change the copied rule: the
+browser never saw a dev edit cut off an export (Vite reloads modules without
+dropping the request), so there is no old behaviour for a deliberate restart
+to copy, and "the server died mid-stream" still costs an attempt. The ffmpeg
+child registry's own SIGTERM handler, which SIGKILLs every child and re-raises
+the signal, is switched off in the sidecar (`leaveSignalsToTheProcess`): it
+killed the process before any Job was put back. The stop takes well under
+tsx's 5 s grace (about 0.4 s in the verify run), and ffmpeg dies with its
+fiber's scope; the exit backstop stays.
+
+**The spawn guard (section 3.7, items 1's third bullet and 2) is not added.**
+Every other spawning job — Batch export, Publish, the vertical render — still
+runs in the app server until batches 3 and 6, through the same
+`CoursePublishService` and `FfmpegRun`. A `SidecarContext` requirement on
+those services would stop the app building, and a dependency-cruiser rule on
+`routes/` would fail on those routes today. It belongs to the batch that moves
+the last of them (6), or to batch 8.
+
+Left out, on purpose:
+
+- **ETA for a server Job.** Its row shows stage and percent, not time left;
+  the ETA still reads the browser's own stage history. Stage durations from
+  `job_event` timestamps (section 3.3) come with batch 8's clean-up.
+- **Cancel.** Dismissing a Job's row hides it; the export carries on. There is
+  still no cancel verb.
+- **A stale row while the sidecar is down.** A stopping sidecar writes its
+  `requeued` events as it closes the stream, so an open tab may still show the
+  last stage until the sidecar is back and replays them. The row's dialog says
+  the sidecar is not running.

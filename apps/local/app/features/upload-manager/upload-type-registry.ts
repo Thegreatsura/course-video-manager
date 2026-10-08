@@ -1,7 +1,6 @@
 import type { uploadReducer } from "./upload-reducer";
 import { autofillConfig } from "./upload-type-autofill";
 import { startSSEAiHeroPost } from "./sse-ai-hero-client";
-import { startSSEExport } from "./sse-export-client";
 import { startSSEPublish } from "./sse-publish-client";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import { startSSERenderVertical } from "./sse-render-vertical-client";
@@ -35,13 +34,19 @@ export interface UploadTypeConfig<
 
   applySuccess: (entry: TEntry, action: UploadSuccessAction) => TEntry;
 
-  initiate: (
-    uploadId: string,
-    entry: TEntry,
-    params: TParams,
-    dispatch: (action: uploadReducer.Action) => void,
-    abortControllers: Map<string, AbortController>
-  ) => void;
+  /**
+   * Starts the job in the browser. `null` for a job that runs in the Sidecar
+   * instead (a Video export): the provider hands it there (`upload-context.tsx`).
+   */
+  initiate:
+    | ((
+        uploadId: string,
+        entry: TEntry,
+        params: TParams,
+        dispatch: (action: uploadReducer.Action) => void,
+        abortControllers: Map<string, AbortController>
+      ) => void)
+    | null;
 
   supportsDependsOn?: boolean;
 }
@@ -92,39 +97,10 @@ const exportConfig: UploadTypeConfig<
     videoUploadStage: null,
   }),
 
-  initiate: (uploadId, entry, _params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSEExport(
-        { videoId: entry.videoId },
-        {
-          onStageChange: (stage) => {
-            dispatch({ type: "UPDATE_EXPORT_STAGE", uploadId, stage });
-          },
-          onProgress: (stage, percent) => {
-            if (stage === "queued") return;
-            dispatch({
-              type: "UPDATE_EXPORT_PROGRESS",
-              uploadId,
-              stage,
-              percent,
-            });
-          },
-          onComplete: () => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A Video export is a background Job: it runs in the Sidecar. Only a Batch
+  // export's per-Video row is still an entry here, and its retry is handed to
+  // the sidecar by the provider.
+  initiate: null,
 
   supportsDependsOn: false,
 };

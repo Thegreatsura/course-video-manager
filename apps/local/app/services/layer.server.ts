@@ -37,6 +37,7 @@ import { ObjectStoreService } from "./object-store-service.server";
 import { TextGenerationService } from "./text-generation-service";
 import { AutofillService } from "./autofill-service";
 import { DiagramThumbnailStoreLive } from "./diagram-thumbnail-store.server";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 
 const CloudinaryMarkdownLayer = CloudinaryMarkdownService.Default.pipe(
   Layer.provide(CloudinaryService.Default)
@@ -60,6 +61,8 @@ const coreLayer = Layer.mergeAll(
   ThumbnailOperationsService.Default,
   LinkAuthOperationsService.Default,
   ApiTokenOperationsService.Default,
+  // Background Jobs: the app enqueues them; the Sidecar runs them.
+  JobOperationsService.Default,
   VideoPostOperationsService.Default,
   BufferApiService.Default,
   ObjectStoreService.Default,

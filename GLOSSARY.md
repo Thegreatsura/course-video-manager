@@ -471,11 +471,11 @@ _Avoid_: API version, Migration number, Protocol version
 ### Background work
 
 **Job**:
-A piece of background work, kept as a row in the database: something the author starts and walks away from, such as an export, a render, a post or a **Publish**. It has a kind, a title, the parameters it was started with, and a status (queued, running, succeeded, failed, interrupted, cancelled). A Job may wait on another Job and starts only once that one has succeeded; when the one it waits on fails, it fails too. A failed attempt is run again at once while the Job has attempts left, and the number of attempts is copied from what the Upload Manager allowed for that kind. Closing the browser never stops a Job. Today only a test kind (`noop`) runs as one; the Upload Manager's jobs move over one kind at a time (docs/plans/background-jobs-sidecar.md).
+A piece of background work, kept as a row in the database: something the author starts and walks away from, such as an export, a render, a post or a **Publish**. It has a kind, a title, the parameters it was started with, and a status (queued, running, succeeded, failed, interrupted, cancelled). A Job may wait on another Job and starts only once that one has succeeded; when the one it waits on fails, it fails too. A failed attempt is run again at once while the Job has attempts left, and the number of attempts is copied from what the Upload Manager allowed for that kind. Closing the browser never stops a Job. A Video export runs as one, beside a test kind (`noop`); the Upload Manager's other jobs move over one kind at a time (docs/plans/background-jobs-sidecar.md).
 _Avoid_: Task, Upload (the Upload Manager's word for all of them), Background request
 
 **Sidecar**:
-The process beside the app that runs **Jobs**: one per database, which it proves by holding that database's lease. `pnpm dev` and `pnpm start` start it, and a verify-cvm run starts one of its own on its clone. A worktree's Sidecar never touches production. While it is down, Jobs wait in the queue; one it was running when it stopped is run again if it has attempts left, and is marked interrupted if it does not.
+The process beside the app that runs **Jobs**: one per database, which it proves by holding that database's lease. `pnpm dev` and `pnpm start` start it, and a verify-cvm run starts one of its own on its clone. A worktree's Sidecar never touches production. While it is down, Jobs wait in the queue. A Job it was running when it was stopped on purpose (a restart after an edit, Ctrl-C) goes back to the queue without spending an attempt; one it was running when it died is run again if it has attempts left, and is marked interrupted if it does not.
 _Avoid_: Worker, Daemon (the Clip Mockup daemon is something else), Queue
 
 **Lane**:
@@ -483,5 +483,5 @@ A queue inside the **Sidecar** with its own limit on how many **Jobs** run at on
 _Avoid_: Pool, Channel, Concurrency group
 
 **Job Event**:
-One thing that happened to a **Job**, in order: queued, started, progress, retrying, succeeded, failed, interrupted. The record a screen replays to show a Job's progress, and the answer to "what ran, and why did it fail?" after the fact. Each Job also has its own log file.
+One thing that happened to a **Job**, in order: queued, started, stage, progress, retrying, requeued, succeeded, failed, interrupted. Every open tab follows them as they happen, and the Upload Manager draws a Job from them. The record a screen replays to show a Job's progress, and the answer to "what ran, and why did it fail?" after the fact. Each Job also has its own log file.
 _Avoid_: Job log (that is the file), Progress update, Status change

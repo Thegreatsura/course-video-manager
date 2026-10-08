@@ -46,6 +46,18 @@ const installHandlers = () => {
   }
 };
 
+/**
+ * For a process that handles SIGINT/SIGTERM itself and stops its work by
+ * interrupting fibers (the Sidecar): keep only the exit backstop. The signal
+ * handlers above would kill every child and re-raise the signal, ending the
+ * process before it could put its Jobs back. Call it before any spawn.
+ */
+export const leaveSignalsToTheProcess = () => {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
+  process.once("exit", killAll);
+};
+
 /** Track a spawned ffmpeg child; returns the untrack function. */
 export const registerFfmpegChild = (pid: number): (() => void) => {
   installHandlers();

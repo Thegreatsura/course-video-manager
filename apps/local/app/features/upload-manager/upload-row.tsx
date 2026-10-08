@@ -21,9 +21,12 @@ export function UploadRow({
   onDismiss,
   nested = false,
   eta,
+  logHref,
 }: {
   upload: uploadReducer.UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
+  /** Where a background Job's log is read, for a failed row; `null` otherwise. */
+  logHref: string | null;
   /** A child task, indented under the parent job that spawned it. */
   nested?: boolean;
   /** Its time to finish, from `estimateUploads`. */
@@ -38,7 +41,7 @@ export function UploadRow({
       <StatusIcon upload={upload} />
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate">{upload.title}</p>
-        <UploadStatusDetail upload={upload} eta={eta} />
+        <UploadStatusDetail upload={upload} eta={eta} logHref={logHref} />
       </div>
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
         <button
@@ -144,9 +147,11 @@ function InlineProgress({
 function UploadStatusDetail({
   upload,
   eta,
+  logHref,
 }: {
   upload: uploadReducer.UploadEntry;
   eta?: UploadEta;
+  logHref: string | null;
 }) {
   switch (upload.status) {
     case "waiting":
@@ -175,9 +180,23 @@ function UploadStatusDetail({
     case "error":
       return (
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-destructive truncate">
+          <span
+            className="text-xs text-destructive truncate"
+            title={upload.errorMessage ?? undefined}
+          >
             {upload.errorMessage}
           </span>
+          {logHref && (
+            <a
+              href={logHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View log
+            </a>
+          )}
           {/* A child task's Video belongs to the job above it, not to a
               social post — the same reason a Publish offers no link here. */}
           {upload.uploadType !== "publish" && !upload.parentUploadId && (

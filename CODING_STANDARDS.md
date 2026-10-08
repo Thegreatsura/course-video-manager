@@ -151,7 +151,9 @@ Build a client through `DrizzleService`, `scriptPgClient()`/`scriptDrizzle()` (o
 
 Work the author starts and walks away from — an export, a render, a post, a
 Publish — is a **Job**: enqueue it with `enqueueJob` (`apps/local/sidecar/job-kinds.ts`)
-and let the **Sidecar** run it. Do not stream it from a request that a browser
+and let the **Sidecar** run it. The browser starts one through the Upload
+Manager's `startJob` (`features/jobs/use-jobs.ts`, `POST /api/jobs`) and
+follows it through `jobs-reducer.ts`. Do not stream it from a request that a browser
 tab keeps alive: closing the tab cancels the work, and its failure dies as a
 toast. A new kind is a handler under `apps/local/sidecar/kinds/` and one line
 in `JOB_KINDS`; its lane and attempt count are copied from the job it replaces

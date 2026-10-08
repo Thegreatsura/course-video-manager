@@ -36,6 +36,7 @@ const enqueue = (
 ) =>
   Effect.flatMap(JobOperationsService, (ops) =>
     ops.enqueueJob({
+      id: null,
       kind: "noop",
       title: overrides.title ?? "A job",
       lane: overrides.lane ?? "default",
@@ -229,6 +230,36 @@ describe("recoverExpiredJobs", () => {
         expect((yield* ops.getJob(alive.id))?.status).toBe("running");
         const events = (yield* ops.listJobEvents(once.id)).map((e) => e.type);
         expect(events).toEqual(["queued", "started", "interrupted"]);
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("listRecentJobs", () => {
+  it.effect(
+    "gives a new subscriber every unfinished Job and the recently finished ones, each with its events",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const waiting = yield* enqueue({ title: "waiting" });
+        const done = yield* enqueue({ title: "done", lane: "publish" });
+        yield* ops.claimNextJob({
+          lane: "publish",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        yield* ops.completeJob({ jobId: done.id, holder: "h" });
+
+        const recent = yield* ops.listRecentJobs({ finishedWithinMs: 60_000 });
+        expect(
+          recent.map((r) => [r.job.title, r.events.map((e) => e.type)])
+        ).toEqual([
+          ["waiting", ["queued"]],
+          ["done", ["queued", "started", "succeeded"]],
+        ]);
+
+        yield* lapse;
+        const later = yield* ops.listRecentJobs({ finishedWithinMs: 1 });
+        expect(later.map((r) => r.job.id)).toEqual([waiting.id]);
       }).pipe(Effect.provide(testLayer))
   );
 });

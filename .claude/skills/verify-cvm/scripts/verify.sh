@@ -268,9 +268,9 @@ cmd_launch() {
   fi
 
   # Pick a port out of the verification band and ask for exactly it. Vite runs
-  # with strictPort, so a taken port is a startup failure rather than a silent
-  # drift onto the neighbour — which is what used to walk a run up into the
-  # CVM's band. VERIFY_PORT overrides the pick when you need a known address.
+  # with strictPort, so a taken port fails startup rather than drifting into the
+  # CVM's band. VERIFY_PORT overrides the pick. The app gets the run's socket.
+  SERVER_ENV+=("CVM_SIDECAR_SOCKET=$(sidecar_socket_for "$id")")
   local wanted port="" pid=""
   for wanted in $(candidate_ports); do
     if start_server "$dir" "$wanted"; then port="$wanted"; break; fi
