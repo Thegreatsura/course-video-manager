@@ -1,6 +1,5 @@
-import { sortByOrder } from "@/lib/sort-by-order";
 import { loadOtherVideosQuizIds } from "@/services/course-quiz-ids.server";
-import { formatOnScreenLinks } from "@/lib/transcript-builder";
+import { buildWriterTranscript } from "@/lib/transcript-builder";
 import { generateArticlePrompt } from "@/prompts/generate-article";
 import { generateArticlePlanPrompt } from "@/prompts/generate-article-plan";
 import { generateStepsToCompleteForProjectPrompt } from "@/prompts/generate-steps-to-complete-for-project";
@@ -274,6 +273,8 @@ export const acquireTextWritingContext = Effect.fn("acquireVideoContext")(
     enabledFiles: string[] | undefined;
     includeTranscript?: boolean;
     enabledSections?: string[];
+    /** Annotate each clip with the text of the diagram it pins. Off unless asked. */
+    includeDiagramText?: boolean;
   }) {
     const videoOps = yield* VideoOperationsService;
     const fs = yield* FileSystem.FileSystem;
@@ -356,70 +357,14 @@ export const acquireTextWritingContext = Effect.fn("acquireVideoContext")(
 
     const includeTranscript = props.includeTranscript ?? true;
 
-    // Build transcript with section filtering
-    let transcript = "";
-    if (includeTranscript) {
-      const enabledSectionIds = new Set(props.enabledSections ?? []);
-      const allSectionsEnabled =
-        enabledSectionIds.size === 0 ||
-        (props.enabledSections?.length === 0 && video.chapters.length === 0);
-
-      // Combine clips and chapters, sort by order (ASCII ordering to match PostgreSQL COLLATE "C")
-      const allItems = [
-        ...video.clips.map((clip) => ({
-          type: "clip" as const,
-          order: clip.order,
-          clip,
-        })),
-        ...video.chapters.map((section) => ({
-          type: "chapter" as const,
-          order: section.order,
-          section,
-        })),
-      ];
-
-      const sortedAllItems = sortByOrder(allItems);
-
-      // Build formatted transcript with sections as H2 headers
-      // Annotate clips with sequential 1-based indices for AI screenshot placement
-      const transcriptParts: string[] = [];
-      let currentParagraph: string[] = [];
-      let currentSectionEnabled = allSectionsEnabled; // If no sections exist, include clips before first section
-      let clipIndex = 0;
-      // On-screen web links are annotated inline once, on their first appearance.
-      const seenUrls = new Set<string>();
-
-      for (const item of sortedAllItems) {
-        if (item.type === "chapter") {
-          // Flush current paragraph before starting a new section
-          if (currentParagraph.length > 0 && currentSectionEnabled) {
-            transcriptParts.push(currentParagraph.join(" "));
-            currentParagraph = [];
-          } else {
-            currentParagraph = [];
-          }
-
-          // Check if this section is enabled
-          currentSectionEnabled =
-            allSectionsEnabled || enabledSectionIds.has(item.section.id);
-        } else {
-          clipIndex++;
-          if (item.clip.text && currentSectionEnabled) {
-            const onScreen = formatOnScreenLinks(item.clip.webLinks, seenUrls);
-            currentParagraph.push(
-              `[${clipIndex}] ${onScreen}${item.clip.text}`
-            );
-          }
-        }
-      }
-
-      // Flush remaining paragraph
-      if (currentParagraph.length > 0 && currentSectionEnabled) {
-        transcriptParts.push(currentParagraph.join(" "));
-      }
-
-      transcript = transcriptParts.join("\n\n").trim();
-    }
+    const transcript = includeTranscript
+      ? buildWriterTranscript({
+          clips: video.clips,
+          chapters: video.chapters,
+          enabledSections: props.enabledSections,
+          includeDiagramText: props.includeDiagramText,
+        })
+      : "";
 
     // The same chapter list the published course.json carries.
     const youtubeChapters = toYouTubeChapters(

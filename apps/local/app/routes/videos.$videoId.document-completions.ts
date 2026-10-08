@@ -56,6 +56,9 @@ const chatSchema = Schema.Struct({
   enabledSections: Schema.optionalWith(Schema.Array(Schema.String), {
     default: () => [],
   }),
+  includeDiagramText: Schema.optionalWith(Schema.Boolean, {
+    default: () => false,
+  }),
   courseStructure: Schema.optional(courseStructureSchema),
   memory: Schema.optional(Schema.String),
   pageFields: Schema.optionalWith(
@@ -89,6 +92,7 @@ export const action = makeAction({
         enabledFiles,
         includeTranscript,
         enabledSections,
+        includeDiagramText: parsed.includeDiagramText,
       });
 
       const linkAuthOps = yield* LinkAuthOperationsService;

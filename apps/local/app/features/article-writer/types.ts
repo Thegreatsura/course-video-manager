@@ -11,6 +11,7 @@ import type {
 import type { BeatKind } from "@/features/beats/beat-kinds";
 import type { VideoRole } from "@/services/lesson-warnings";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
+import type { ClipDiagramTextEntry } from "@/lib/transcript-builder";
 
 export type DocumentAgentTools = {
   writeDocument: typeof writeDocumentTool;
@@ -85,6 +86,8 @@ export interface WriterContext {
   script: string;
   /** The video's Animatic as lines, comments attached. Empty when it has none. */
   animaticLines: readonly AnimaticLine[];
+  /** The text of the diagram each clip pins, where it changes. Empty when none. */
+  diagramTexts: readonly ClipDiagramTextEntry[];
   /** Quiz ids owned by other videos in this course — none of them are free. */
   quizIds?: string[];
   /** The video's role in its lesson — picks the mode the writer opens on. */
