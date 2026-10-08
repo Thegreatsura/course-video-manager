@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  isScreenshotCapturePress,
   pickCurrentScreenshot,
   pickScreenshotTarget,
   screenshotNavDirection,
+  screenshotStep,
   type PlaceholderSpan,
 } from "./screenshot-navigation";
 
@@ -230,5 +232,59 @@ describe("pickCurrentScreenshot", () => {
         lastVisited: null,
       }),
     ]).toEqual([1, 2, null]);
+  });
+});
+
+describe("screenshotStep and isScreenshotCapturePress", () => {
+  const origInput = globalThis.HTMLInputElement;
+  const origTextarea = globalThis.HTMLTextAreaElement;
+  beforeAll(() => {
+    (globalThis as any).HTMLInputElement = FakeHTMLInputElement;
+    (globalThis as any).HTMLTextAreaElement = FakeHTMLTextAreaElement;
+  });
+  afterAll(() => {
+    (globalThis as any).HTMLInputElement = origInput;
+    (globalThis as any).HTMLTextAreaElement = origTextarea;
+  });
+
+  const event = (key: string, target: unknown = plain, repeat = false) =>
+    ({
+      key,
+      repeat,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+      target,
+    }) as unknown as KeyboardEvent;
+
+  it("I / O take the large step, the arrows the small one, never while typing", () => {
+    expect([
+      screenshotStep(event("o")),
+      screenshotStep(event("ArrowLeft")),
+      screenshotStep(event("ArrowRight", new FakeHTMLInputElement())),
+    ]).toEqual([
+      { direction: 1, size: "large" },
+      { direction: -1, size: "small" },
+      null,
+    ]);
+  });
+
+  it("captures on Return, but not while typing, on a repeat, or on a control outside the preview", () => {
+    const inPreview = { closest: () => null };
+    const applyButton = {
+      closest: (s: string) => (s.includes("button") ? {} : null),
+    };
+    const preview = { contains: (n: unknown) => n === inPreview };
+    expect([
+      isScreenshotCapturePress(event("Enter"), preview),
+      isScreenshotCapturePress(event("Enter", inPreview), preview),
+      isScreenshotCapturePress(
+        event("Enter", new FakeHTMLTextAreaElement()),
+        preview
+      ),
+      isScreenshotCapturePress(event("Enter", plain, true), preview),
+      isScreenshotCapturePress(event("Enter", applyButton), preview),
+    ]).toEqual([true, true, false, false, false]);
   });
 });

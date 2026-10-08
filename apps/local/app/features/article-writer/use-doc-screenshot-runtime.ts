@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toastError } from "@/components/ui/toast";
 import {
   removeChooseScreenshot,
   replaceChooseScreenshotWithImage,
@@ -55,8 +56,11 @@ export function useDocScreenshotRuntime(opts: {
             )
           );
         }
+        return true;
       } catch (err) {
         console.error("Screenshot capture failed:", err);
+        toastError(err, "Screenshot capture failed");
+        return false;
       } finally {
         setDocCapturingKey(null);
       }
@@ -100,9 +104,9 @@ export function useDocScreenshotRuntime(opts: {
       keyFor: (clipIndex, alt) => `doc-${clipIndex}-${alt}`,
       onClipIndexChange: (_messageId, current, next, alt) =>
         handleDocClipIndexChange(current, next, alt),
-      // The capture reports its own failure; nothing waits on it.
+      // The capture toasts its own failure; Return waits on the result.
       onCapture: (_messageId, clipIndex, alt, timestamp, videoFilename) =>
-        void handleDocCapture(clipIndex, alt, timestamp, videoFilename),
+        handleDocCapture(clipIndex, alt, timestamp, videoFilename),
       onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
     }),
     [

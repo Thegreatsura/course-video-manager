@@ -5,8 +5,9 @@
  * press past the last placeholder doing nothing tells the author he is done,
  * where a jump back to the top would lose his place.
  *
- * I / O nudge the frame of the current placeholder (see
- * `screenshot-frame-step.ts`).
+ * I / O nudge the frame of the current placeholder by the large step, and
+ * Left / Right by the small one (see `screenshot-frame-step.ts`). Return
+ * captures it, then walks on as L would.
  *
  * The decisions live here as pure functions; `useScreenshotNavigation` is the
  * DOM wiring around them.
@@ -21,7 +22,8 @@ export const CHOOSE_SCREENSHOT_ATTR = "data-choose-screenshot";
 type NavKeyEvent = Pick<
   KeyboardEvent,
   "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "target"
->;
+> &
+  Partial<Pick<KeyboardEvent, "repeat">>;
 
 /**
  * Which way a keypress walks, or `null` when it is not ours to take: any
@@ -38,16 +40,46 @@ export function screenshotNavDirection(
   return keyDirection(e, "l", "k");
 }
 
-/**
- * I / O nudge the current placeholder's frame: O forward, I back. Same guard
- * as {@link screenshotNavDirection}. The placeholder hears it as
- * {@link SCREENSHOT_STEP_EVENT}.
- */
-export function screenshotStepDirection(
-  e: NavKeyEvent
-): ScreenshotNavDirection | null {
-  return keyDirection(e, "o", "i");
+export type ScreenshotStepSize = "large" | "small";
+
+export interface ScreenshotStep {
+  direction: ScreenshotNavDirection;
+  size: ScreenshotStepSize;
 }
+
+/**
+ * I / O nudge the current placeholder's frame by the large step, Left / Right
+ * by the small one. Same guard as {@link screenshotNavDirection}. The
+ * placeholder hears it as {@link SCREENSHOT_STEP_EVENT}.
+ */
+export function screenshotStep(e: NavKeyEvent): ScreenshotStep | null {
+  const large = keyDirection(e, "o", "i");
+  if (large !== null) return { direction: large, size: "large" };
+  const small = keyDirection(e, "ArrowRight", "ArrowLeft");
+  if (small !== null) return { direction: small, size: "small" };
+  return null;
+}
+
+/**
+ * Whether Return captures the current placeholder. Same guard as the other
+ * keys, plus: not a held-down repeat (one press, one capture), and not a
+ * control outside the preview — Return must still press the writer's own
+ * Apply, Cancel or model picker when focus is on one.
+ */
+export function isScreenshotCapturePress(
+  e: NavKeyEvent,
+  preview: Pick<Node, "contains">
+): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key !== "Enter" || e.repeat) return false;
+  if (isTypingTarget(e.target)) return false;
+  const target = e.target as Element | null;
+  if (preview.contains(target as Node | null)) return true;
+  return !target?.closest?.(OTHER_CONTROLS);
+}
+
+const OTHER_CONTROLS =
+  'button, a[href], select, [role="button"], [role="combobox"], [role="menuitem"], [role="option"], [role="tab"]';
 
 function keyDirection(
   e: NavKeyEvent,
@@ -60,8 +92,19 @@ function keyDirection(
   return e.key === forward ? 1 : -1;
 }
 
-/** Dispatched on a placeholder's root; `detail` is the step direction. */
+/** Dispatched on a placeholder's root; `detail` is a {@link ScreenshotStep}. */
 export const SCREENSHOT_STEP_EVENT = "choose-screenshot-step";
+
+/**
+ * Dispatched on a placeholder's root to capture its frame; `detail` is a
+ * {@link ScreenshotCaptureRequest}.
+ */
+export const SCREENSHOT_CAPTURE_EVENT = "choose-screenshot-capture";
+
+export interface ScreenshotCaptureRequest {
+  /** Called only once the capture has succeeded. */
+  onCaptured: () => void;
+}
 
 /** A placeholder's vertical extent, in px relative to the scroll box's top. */
 export interface PlaceholderSpan {

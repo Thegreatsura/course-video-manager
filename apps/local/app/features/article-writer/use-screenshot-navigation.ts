@@ -1,19 +1,24 @@
 import { useEffect, useRef, type RefObject } from "react";
 import {
   CHOOSE_SCREENSHOT_ATTR,
+  SCREENSHOT_CAPTURE_EVENT,
   SCREENSHOT_STEP_EVENT,
+  isScreenshotCapturePress,
   pickCurrentScreenshot,
   pickScreenshotTarget,
   screenshotNavDirection,
-  screenshotStepDirection,
+  screenshotStep,
+  type ScreenshotCaptureRequest,
 } from "./screenshot-navigation";
 
 const HIGHLIGHT_CLASSES = ["ring-2", "ring-primary", "ring-offset-2"];
 const HIGHLIGHT_MS = 1200;
 
 /**
- * L / K step through the preview's `<ChooseScreenshot>` placeholders, and I / O
- * nudge the current one's frame. Mount it only while the preview is showing.
+ * L / K step through the preview's `<ChooseScreenshot>` placeholders; I / O and
+ * Left / Right nudge the current one's frame; Return captures it and, once the
+ * capture has succeeded, walks on as L would. Mount it only while the preview
+ * is showing.
  *
  * Scoped to keys pressed inside the dialog that holds the preview. The Video
  * page's own L / K (2x / 1x) and the Animatic page's both refuse any key from
@@ -29,19 +34,33 @@ export function useScreenshotNavigation(
     if (!enabled) return;
     lastVisited.current = null;
 
+    const placeholdersIn = (preview: HTMLElement) =>
+      Array.from(
+        preview.querySelectorAll<HTMLElement>(`[${CHOOSE_SCREENSHOT_ATTR}]`)
+      );
+
+    const goTo = (el: HTMLElement, index: number) => {
+      lastVisited.current = index;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add(...HIGHLIGHT_CLASSES);
+      window.setTimeout(
+        () => el.classList.remove(...HIGHLIGHT_CLASSES),
+        HIGHLIGHT_MS
+      );
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       const preview = previewRef.current;
       if (!preview) return;
       const direction = screenshotNavDirection(e);
-      const stepDirection = screenshotStepDirection(e);
-      if (direction === null && stepDirection === null) return;
+      const step = screenshotStep(e);
+      const capture = isScreenshotCapturePress(e, preview);
+      if (direction === null && step === null && !capture) return;
 
       const scope = preview.closest('[role="dialog"]') ?? document.body;
       if (!(e.target instanceof Node) || !scope.contains(e.target)) return;
 
-      const placeholders = Array.from(
-        preview.querySelectorAll<HTMLElement>(`[${CHOOSE_SCREENSHOT_ATTR}]`)
-      );
+      const placeholders = placeholdersIn(preview);
       if (placeholders.length === 0) return;
       e.preventDefault();
 
@@ -52,15 +71,47 @@ export function useScreenshotNavigation(
       });
       const viewportHeight = preview.clientHeight;
 
-      if (stepDirection !== null) {
+      if (step !== null || capture) {
         const current = pickCurrentScreenshot({
           spans,
           viewportHeight,
           lastVisited: lastVisited.current,
         });
         if (current === null) return;
-        placeholders[current]!.dispatchEvent(
-          new CustomEvent(SCREENSHOT_STEP_EVENT, { detail: stepDirection })
+        const el = placeholders[current]!;
+        if (step !== null) {
+          el.dispatchEvent(
+            new CustomEvent(SCREENSHOT_STEP_EVENT, { detail: step })
+          );
+          return;
+        }
+
+        // Where L would go from here, decided now: the capture replaces this
+        // placeholder with an image, shifting every later one up an index.
+        const next = pickScreenshotTarget({
+          spans,
+          viewportHeight,
+          lastVisited: current,
+          direction: 1,
+        });
+        const nextEl = next === null ? null : placeholders[next]!;
+        const request: ScreenshotCaptureRequest = {
+          onCaptured: () => {
+            if (!nextEl) return; // The last one: capture and stay.
+            // Two frames: let React commit the captured document first.
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                const now = placeholdersIn(preview);
+                const found = now.indexOf(nextEl);
+                const index = found === -1 ? current : found;
+                const target = now[index];
+                if (target) goTo(target, index);
+              })
+            );
+          },
+        };
+        el.dispatchEvent(
+          new CustomEvent(SCREENSHOT_CAPTURE_EVENT, { detail: request })
         );
         return;
       }
@@ -73,15 +124,7 @@ export function useScreenshotNavigation(
         direction,
       });
       if (target === null) return;
-
-      lastVisited.current = target;
-      const el = placeholders[target]!;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add(...HIGHLIGHT_CLASSES);
-      window.setTimeout(
-        () => el.classList.remove(...HIGHLIGHT_CLASSES),
-        HIGHLIGHT_MS
-      );
+      goTo(placeholders[target]!, target);
     };
 
     window.addEventListener("keydown", onKeyDown);
