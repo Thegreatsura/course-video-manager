@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LayerLive } from "@/services/layer.server";
 import type { JobKind } from "./job-kind";
+import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
@@ -15,6 +16,7 @@ export const JOB_KINDS = {
   noop: noopJobKind,
   export: exportJobKind,
   "render-vertical": renderVerticalJobKind,
+  "batch-export": batchExportJobKind,
 } as const satisfies Record<string, JobKind<JobServices>>;
 
 export type JobKindName = keyof typeof JOB_KINDS;

@@ -47,6 +47,24 @@ export namespace jobsReducer {
     errorMessage: string | null;
     /** The newest Job Event applied: an older or repeated one is ignored. */
     lastEventId: number;
+    /**
+     * A Batch export's Videos, in the order it announced them; `null` for
+     * every other kind, and for a batch that has not announced them yet.
+     */
+    videos: BatchVideoView[] | null;
+  }
+
+  /**
+   * One Video of a Batch export. `handed-off`: it failed its tries in the
+   * batch and runs on as its own export Job, whose row replaces this one.
+   */
+  export interface BatchVideoView {
+    id: string;
+    title: string;
+    status: "queued" | "running" | "succeeded" | "failed" | "handed-off";
+    stage: string | null;
+    percent: number | null;
+    errorMessage: string | null;
   }
 
   /** What this tab knows of the sidecar, from the stream. */
@@ -78,7 +96,23 @@ export namespace jobsReducer {
     | StreamFact<"job-requeued", { attempt: number }>
     | StreamFact<"job-succeeded">
     | StreamFact<"job-failed", { message: string }>
-    | StreamFact<"job-interrupted", { message: string }>;
+    | StreamFact<"job-interrupted", { message: string }>
+    // A Batch export's Videos
+    | StreamFact<
+        "batch-videos-announced",
+        { videos: { id: string; title: string }[] }
+      >
+    | StreamFact<
+        "batch-video-stage-entered",
+        { videoId: string; stage: string }
+      >
+    | StreamFact<
+        "batch-video-progressed",
+        { videoId: string; stage: string; percent: number }
+      >
+    | StreamFact<"batch-video-succeeded", { videoId: string }>
+    | StreamFact<"batch-video-failed", { videoId: string; message: string }>
+    | StreamFact<"batch-video-handed-off", { videoId: string }>;
 
   export type Action =
     // Gestures and requests from this tab
@@ -145,6 +179,13 @@ export const createInitialJobsState = (): jobsReducer.State => ({
   sidecar: "unknown",
   sidecarMessage: null,
 });
+
+/** The row id of one Video of a Batch export: `<job id>/<video id>`. */
+export const batchVideoRowId = (jobId: string, videoId: string) =>
+  `${jobId}/${videoId}`;
+
+/** The Job a row belongs to: the row's own id, or a batch row's Job. */
+export const jobIdOfRow = (rowId: string) => rowId.split("/")[0] ?? rowId;
 
 const FINISHED: readonly jobsReducer.JobStatus[] = [
   "succeeded",
@@ -228,6 +269,64 @@ export const toJobsAction = (
         type: "job-interrupted",
         message: errorMessageOf(data),
       };
+    case "videos":
+      return Array.isArray(data.videos)
+        ? {
+            ...base,
+            type: "batch-videos-announced",
+            videos: data.videos.flatMap((v: unknown) =>
+              typeof v === "object" &&
+              v !== null &&
+              "id" in v &&
+              "title" in v &&
+              typeof v.id === "string" &&
+              typeof v.title === "string"
+                ? [{ id: v.id, title: v.title }]
+                : []
+            ),
+          }
+        : null;
+    case "video-stage":
+      return typeof data.videoId === "string" && typeof data.stage === "string"
+        ? {
+            ...base,
+            type: "batch-video-stage-entered",
+            videoId: data.videoId,
+            stage: data.stage,
+          }
+        : null;
+    case "video-progress":
+      return typeof data.videoId === "string" &&
+        typeof data.stage === "string" &&
+        typeof data.percent === "number"
+        ? {
+            ...base,
+            type: "batch-video-progressed",
+            videoId: data.videoId,
+            stage: data.stage,
+            percent: data.percent,
+          }
+        : null;
+    case "video-succeeded":
+      return typeof data.videoId === "string"
+        ? { ...base, type: "batch-video-succeeded", videoId: data.videoId }
+        : null;
+    case "video-failed":
+      return typeof data.videoId === "string"
+        ? {
+            ...base,
+            type: "batch-video-failed",
+            videoId: data.videoId,
+            message:
+              typeof data.message === "string"
+                ? data.message
+                : "The export failed",
+          }
+        : null;
+    case "video-handed-off":
+      return typeof data.videoId === "string"
+        ? { ...base, type: "batch-video-handed-off", videoId: data.videoId }
+        : null;
     default:
       return null;
   }
@@ -248,7 +347,48 @@ const viewOf = (
   percent: null,
   errorMessage: null,
   lastEventId: 0,
+  videos: null,
 });
+
+/** Apply `change` to one of a batch's Videos; unknown Videos are ignored. */
+const updateVideo = (
+  job: jobsReducer.JobView,
+  videoId: string,
+  change: Partial<jobsReducer.BatchVideoView>
+): jobsReducer.JobView => ({
+  ...job,
+  videos:
+    job.videos?.map((video) =>
+      video.id === videoId ? { ...video, ...change } : video
+    ) ?? null,
+});
+
+/**
+ * A batch announces the Videos it will export. A batch put back by a
+ * stopping sidecar announces again, without the ones it already finished:
+ * those keep their rows.
+ */
+const announceVideos = (
+  job: jobsReducer.JobView,
+  announced: readonly { id: string; title: string }[]
+): jobsReducer.JobView => {
+  const known = new Map((job.videos ?? []).map((v) => [v.id, v]));
+  for (const { id, title } of announced) {
+    const before = known.get(id);
+    if (before?.status === "succeeded" || before?.status === "handed-off") {
+      continue;
+    }
+    known.set(id, {
+      id,
+      title,
+      status: "queued",
+      stage: null,
+      percent: null,
+      errorMessage: null,
+    });
+  }
+  return { ...job, videos: [...known.values()] };
+};
 
 /**
  * Apply one Job Event to what is known of its Job: the whole state machine,
@@ -304,6 +444,34 @@ const applyStreamAction = (
       return { ...job, status: "failed", errorMessage: action.message };
     case "job-interrupted":
       return { ...job, status: "interrupted", errorMessage: action.message };
+    case "batch-videos-announced":
+      return announceVideos(job, action.videos);
+    case "batch-video-stage-entered":
+      return updateVideo(job, action.videoId, {
+        status: "running",
+        stage: action.stage,
+        percent: 0,
+      });
+    case "batch-video-progressed":
+      return updateVideo(job, action.videoId, {
+        status: "running",
+        stage: action.stage,
+        percent: action.percent,
+      });
+    case "batch-video-succeeded":
+      return updateVideo(job, action.videoId, {
+        status: "succeeded",
+        stage: null,
+        percent: null,
+        errorMessage: null,
+      });
+    case "batch-video-failed":
+      return updateVideo(job, action.videoId, {
+        status: "failed",
+        errorMessage: action.message,
+      });
+    case "batch-video-handed-off":
+      return updateVideo(job, action.videoId, { status: "handed-off" });
   }
 };
 
@@ -313,6 +481,9 @@ type Exec = Parameters<
 
 /** The toast and the Upload Manager's report for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
+  // A Batch export toasts each Video as it finishes (as the browser did), and
+  // nothing for the batch itself; only its failure is news.
+  if (job.kind === "batch-export" && job.status === "succeeded") return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",
@@ -394,6 +565,7 @@ export const jobsReducer: EffectReducer<
             percent: null,
             errorMessage: null,
             lastEventId: 0,
+            videos: null,
           },
         },
       };
@@ -456,7 +628,8 @@ export const jobsReducer: EffectReducer<
       };
 
     case "press-dismiss": {
-      if (!state.jobs[action.id]) return state;
+      // A Job's id, or one of a Batch export's rows (`batchVideoRowId`).
+      if (!state.jobs[jobIdOfRow(action.id)]) return state;
       return { ...state, dismissed: { ...state.dismissed, [action.id]: true } };
     }
 
@@ -480,12 +653,31 @@ export const jobsReducer: EffectReducer<
     case "job-requeued":
     case "job-succeeded":
     case "job-failed":
-    case "job-interrupted": {
+    case "job-interrupted":
+    case "batch-videos-announced":
+    case "batch-video-stage-entered":
+    case "batch-video-progressed":
+    case "batch-video-succeeded":
+    case "batch-video-failed":
+    case "batch-video-handed-off": {
       const before = state.jobs[action.job.id];
       const after = applyStreamAction(before, action);
       if (!after) return state;
       if (!(before && isFinishedJob(before)) && isFinishedJob(after)) {
         announceSettled(exec, after);
+      }
+      if (action.type === "batch-video-succeeded") {
+        // Each Video of a batch toasts as it lands, as the browser's rows did.
+        const video = after.videos?.find((v) => v.id === action.videoId);
+        if (video) {
+          exec({
+            type: "show-job-succeeded-toast",
+            jobId: after.id,
+            kind: "export",
+            title: video.title,
+            subjectId: video.id,
+          });
+        }
       }
       return {
         ...state,

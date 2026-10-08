@@ -1,4 +1,5 @@
 import { Cause, Config, Deferred, Effect, Exit, Schedule } from "effect";
+import { SidecarContext } from "./sidecar-context";
 import { dropboxAppCredentials } from "./dropbox-auth-service";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -180,11 +181,23 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
       const batchExport = Effect.fn("batchExport")(function* (
         versionId: string,
         includeTodoLessons: boolean,
-        onDetailEvent?: EmitPublishDetailEvent
+        onDetailEvent?: EmitPublishDetailEvent,
+        /**
+         * Videos this batch must leave alone: a re-run of a Batch export Job
+         * skips the ones it already handed on as their own export Jobs.
+         */
+        skipVideoIds: ReadonlySet<string> = new Set()
       ) {
-        const { courseId, unexportedVideos } = yield* findShippingVideos(
+        // A Batch export is a Job: only the Sidecar runs it, never a request
+        // a browser tab keeps alive (sidecar-context.ts).
+        yield* SidecarContext;
+        const shipping = yield* findShippingVideos(
           versionId,
           includeTodoLessons
+        );
+        const courseId = shipping.courseId;
+        const unexportedVideos = shipping.unexportedVideos.filter(
+          (video) => !skipVideoIds.has(video.id)
         );
 
         yield* runObservedExportLoop({

@@ -5,7 +5,8 @@ import { UploadRow } from "./upload-row";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import { formatRemaining } from "./upload-eta";
 import type { uploadReducer } from "./upload-reducer";
-import { jobUploadEntry, visibleJobs } from "@/features/jobs/jobs-selectors";
+import { visibleJobRows } from "@/features/jobs/jobs-selectors";
+import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
 import { jobLogHref } from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -34,11 +35,8 @@ export function GlobalUploadProgress() {
 
   const uploadEntries = Object.values(uploads);
   // Background Jobs the Sidecar runs, drawn as rows beside the browser's own.
-  const jobEntries = visibleJobs(jobs).flatMap((job) => {
-    const entry = jobUploadEntry(job);
-    return entry ? [entry] : [];
-  });
-  const isJob = (uploadId: string) => uploadId in jobs.jobs;
+  const jobEntries = visibleJobRows(jobs);
+  const isJob = (uploadId: string) => jobIdOfRow(uploadId) in jobs.jobs;
   const hasUploads = uploadEntries.length + jobEntries.length > 0;
 
   // A child task is already counted inside its parent's bar, so only the
@@ -107,7 +105,7 @@ export function GlobalUploadProgress() {
   const handleDismiss = useCallback(
     (e: React.MouseEvent, uploadId: string) => {
       e.stopPropagation();
-      if (uploadId in jobs.jobs) dismissJob(uploadId);
+      if (jobIdOfRow(uploadId) in jobs.jobs) dismissJob(uploadId);
       else dismissUpload(uploadId);
     },
     [dismissUpload, dismissJob, jobs.jobs]
@@ -203,8 +201,8 @@ export function GlobalUploadProgress() {
               className="text-xs text-yellow-600 dark:text-yellow-500"
               title={jobs.sidecarMessage ?? undefined}
             >
-              The sidecar is not running: exports wait in the queue until it
-              starts (`pnpm dev` and `pnpm start` run it).
+              The sidecar is not running: exports and renders wait in the queue
+              until it starts (`pnpm dev` and `pnpm start` run it).
             </p>
           )}
           <div className="max-h-80 overflow-y-auto -mx-6 px-6">
@@ -222,7 +220,7 @@ export function GlobalUploadProgress() {
                       eta={etas[upload.uploadId]}
                       logHref={
                         isJob(upload.uploadId)
-                          ? jobLogHref(upload.uploadId)
+                          ? jobLogHref(jobIdOfRow(upload.uploadId))
                           : null
                       }
                     />

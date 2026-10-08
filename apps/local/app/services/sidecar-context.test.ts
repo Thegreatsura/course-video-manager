@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { Effect } from "effect";
 import type { LayerLive } from "./layer.server";
+import { CoursePublishService } from "./course-publish-service";
 import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import type { SidecarContext } from "./sidecar-context";
 
@@ -16,6 +17,14 @@ describe("SidecarContext", () => {
       service.renderVerticalVideo({ videoId: "a-video" })
     );
     type Missing = Exclude<Effect.Effect.Context<typeof render>, LayerLive>;
+    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a Batch export needs the Sidecar: layerLive cannot run it", () => {
+    const batch = Effect.flatMap(CoursePublishService, (service) =>
+      service.batchExport("a-version", true)
+    );
+    type Missing = Exclude<Effect.Effect.Context<typeof batch>, LayerLive>;
     expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
   });
 });

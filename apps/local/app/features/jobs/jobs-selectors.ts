@@ -4,11 +4,26 @@ import {
   fillBand,
   RENDER_VERTICAL_STAGE_BANDS,
 } from "@/features/upload-manager/upload-progress";
-import type { jobsReducer } from "./jobs-reducer";
+import {
+  batchVideoRowId,
+  isFinishedJob,
+  type jobsReducer,
+} from "./jobs-reducer";
 
 /** The Jobs the author has not dismissed, oldest first by when this tab met them. */
 export const visibleJobs = (state: jobsReducer.State): jobsReducer.JobView[] =>
   Object.values(state.jobs).filter((job) => !state.dismissed[job.id]);
+
+/**
+ * Every Upload Manager row the visible Jobs draw, minus the ones dismissed:
+ * one per Job, or one per Video for a Batch export.
+ */
+export const visibleJobRows = (
+  state: jobsReducer.State
+): uploadReducer.UploadEntry[] =>
+  visibleJobs(state)
+    .flatMap(jobUploadEntries)
+    .filter((row) => !state.dismissed[row.uploadId]);
 
 const EXPORT_STAGES: readonly string[] = Object.keys(EXPORT_STAGE_BANDS);
 
@@ -117,4 +132,74 @@ export const jobUploadEntry = (
     default:
       return null;
   }
+};
+
+/** A batch Video's row status, read with its batch's. */
+const batchVideoStatusOf = (
+  job: jobsReducer.JobView,
+  video: jobsReducer.BatchVideoView
+): uploadReducer.UploadStatus => {
+  switch (video.status) {
+    case "succeeded":
+      return "success";
+    case "failed":
+      return "error";
+    case "queued":
+    case "running":
+    case "handed-off":
+      // A batch that ended without finishing a Video leaves it failed.
+      return isFinishedJob(job) && job.status !== "succeeded"
+        ? "error"
+        : "uploading";
+  }
+};
+
+/**
+ * The rows a Job draws. A Batch export draws one export row per Video, as
+ * the browser-driven batch did (`isBatchEntry`); a Video it handed on is
+ * drawn by its own export Job instead. Every other kind draws one row.
+ */
+export const jobUploadEntries = (
+  job: jobsReducer.JobView
+): uploadReducer.UploadEntry[] => {
+  if (job.kind !== "batch-export") {
+    const entry = jobUploadEntry(job);
+    return entry ? [entry] : [];
+  }
+  return (job.videos ?? []).flatMap(
+    (video): uploadReducer.ExportUploadEntry[] => {
+      if (video.status === "handed-off") return [];
+      const status = batchVideoStatusOf(job, video);
+      const stage =
+        video.stage !== null && isExportStage(video.stage) ? video.stage : null;
+      const progress =
+        status === "success"
+          ? 100
+          : stage === null
+            ? 0
+            : fillBand(EXPORT_STAGE_BANDS[stage], video.percent ?? 0);
+      return [
+        {
+          uploadId: batchVideoRowId(job.id, video.id),
+          videoId: video.id,
+          title: video.title,
+          progress,
+          status,
+          errorMessage:
+            video.errorMessage ??
+            (status === "error" ? job.errorMessage : null),
+          retryCount: 0,
+          terminal: false,
+          dependsOn: null,
+          parentUploadId: null,
+          uploadType: "export",
+          exportStage: status === "uploading" ? (stage ?? "queued") : stage,
+          isBatchEntry: true,
+          videoUploadStage: null,
+          uploadedBytes: 0,
+          totalBytes: null,
+        },
+      ];
+    }
+  );
 };

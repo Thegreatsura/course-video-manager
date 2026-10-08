@@ -35,7 +35,7 @@ export interface UploadTypeConfig<
 
   /**
    * Starts the job in the browser. `null` for a job that runs in the Sidecar
-   * instead (a Video export): the provider hands it there (`upload-context.tsx`).
+   * instead (a Video export, a vertical render): the provider enqueues it.
    */
   initiate:
     | ((
@@ -96,9 +96,9 @@ const exportConfig: UploadTypeConfig<
     videoUploadStage: null,
   }),
 
-  // A Video export is a background Job: it runs in the Sidecar. Only a Batch
-  // export's per-Video row is still an entry here, and its retry is handed to
-  // the sidecar by the provider.
+  // A Video export, alone or in a Batch export, is a background Job: it runs
+  // in the Sidecar. Only a Publish's per-Video rows are still entries here,
+  // and the Publish drives them.
   initiate: null,
 
   supportsDependsOn: false,

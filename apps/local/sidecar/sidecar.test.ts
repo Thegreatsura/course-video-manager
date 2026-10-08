@@ -550,6 +550,52 @@ describe("the sidecar", () => {
   );
 
   it.live(
+    "after recovering a lost run, lets its kind clean up — and not after a deliberate stop",
+    () =>
+      Effect.gen(function* () {
+        const lost: string[] = [];
+        const kinds = {
+          tidy: defineJobKind({
+            lane: "default",
+            maxAttempts: 1,
+            params: Schema.Struct({ wait: Schema.Boolean }),
+            run: (params) => (params.wait ? Effect.never : Effect.void),
+            afterLostRun: (job) =>
+              Effect.sync(() => {
+                lost.push(job.id);
+              }),
+          }),
+        } as const;
+        const ops = yield* JobOperationsService;
+
+        // A run a dead sidecar left behind: recovery settles it, then the
+        // kind hears of it, once.
+        const dead = yield* enqueue(kinds, "tidy", { wait: false });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "dead",
+          leaseMs: 1,
+        });
+        yield* Effect.sleep(5);
+        const first = yield* startSidecar(kinds);
+        expect(yield* waitForJob(dead.id, finished)).toMatchObject({
+          status: "interrupted",
+        });
+        expect(lost).toEqual([dead.id]);
+
+        // A run stopped on purpose goes back to the queue: nothing was lost.
+        const stopped = yield* enqueue(kinds, "tidy", { wait: true });
+        yield* waitForJob(stopped.id, (job) => job.status === "running");
+        yield* Deferred.succeed(first.stop, "test over");
+        yield* Fiber.join(first.fiber);
+        expect(yield* ops.getJob(stopped.id)).toMatchObject({
+          status: "queued",
+        });
+        expect(lost).toEqual([dead.id]);
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
     "does not start beside a live sidecar on the same database, and names it",
     () =>
       Effect.gen(function* () {
