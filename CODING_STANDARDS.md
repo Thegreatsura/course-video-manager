@@ -145,6 +145,22 @@ stranded writes that taught this: [`docs/DRAFT_GUARD.md`](./docs/DRAFT_GUARD.md)
 
 Build a client through `DrizzleService`, `scriptPgClient()`/`scriptDrizzle()` (one-off scripts) or `test-utils/pglite.ts` (tests) — never `new Pool`/`new Client`/`drizzle(`/`postgres(` or a read of `process.env.DATABASE_URL` yourself, which skips the connection guard that stops a worktree writing to production; `scripts/check-db-clients.sh` fails anything else, and its allowlist does not grow.
 
+## Background work
+
+### Background work runs in the sidecar
+
+Work the author starts and walks away from — an export, a render, a post, a
+Publish — is a **Job**: enqueue it with `enqueueJob` (`apps/local/sidecar/job-kinds.ts`)
+and let the **Sidecar** run it. Do not stream it from a request that a browser
+tab keeps alive: closing the tab cancels the work, and its failure dies as a
+toast. A new kind is a handler under `apps/local/sidecar/kinds/` and one line
+in `JOB_KINDS`; its lane and attempt count are copied from the job it replaces
+(`retry-policy.ts`), never invented. `scripts/check-background-jobs.ts` holds
+the streaming routes and the browser loops that drive them to a shrink-only
+allowlist. Interactive streams (the Article Writer, a modal the author watches)
+stay, by name. The plan and the order the jobs move in:
+[`docs/plans/background-jobs-sidecar.md`](./docs/plans/background-jobs-sidecar.md).
+
 ## Entities and their actions
 
 ### Every entity is right-clickable

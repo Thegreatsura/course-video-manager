@@ -1030,6 +1030,14 @@ export const coursesRelations = relations(courses, ({ many }) => ({
 
 export { youtubeAuth, aiHeroAuth, dropboxAuth } from "./schema-auth.js";
 export { apiTokens } from "./schema-api-token.js";
+export {
+  jobs,
+  jobEvents,
+  sidecarLease,
+  JOB_STATUSES,
+  FINISHED_JOB_STATUSES,
+  type JobStatus,
+} from "./schema-jobs.js";
 
 // Global links table for article writing
 export const links = createTable("link", {

@@ -25,6 +25,11 @@ counters() {
 # changes the set or a fingerprint and is reported as a normal write.
 API_TOKEN_TABLE='course-video-manager_api_token'
 
+# --- the sidecar background --------------------------------------------------
+# The tables only the run's sidecar writes on its own (apps/local/sidecar/):
+# its lease, renewed every few seconds, and the Jobs it claims and settles.
+SIDECAR_TABLES_RE='^course-video-manager_(job|job_event|sidecar_lease)\|'
+
 # token_rows <run dir> — "id|fingerprint|last_used_at" per token, sorted by id;
 # empty when the table does not exist (test clones carry no credential tables).
 token_rows() {
@@ -144,11 +149,25 @@ guard_check_clone() {
   uncovered="$(ledger_uncovered "$dir")"
   moved="$(ledger_writes "$dir" "$(cat "$dir/guard-snapshot.txt")")"
   printf '%s\n' "$moved" > "$dir/guard-writes.txt"
+  # The run's sidecar renews its lease every few seconds and writes every Job
+  # it runs: real writes, and this run's, but background to the click being
+  # verified. They get their own section rather than drown the table.
+  local background
+  background="$(printf '%s\n' "$moved" | grep -E "$SIDECAR_TABLES_RE" || true)"
+  moved="$(printf '%s\n' "$moved" | grep -vE "$SIDECAR_TABLES_RE" | grep . || true)"
   {
     echo "Source: the clone's write-ledger triggers — every committed insert, update,"
     echo "delete and truncate, recorded in the writing transaction itself. Nothing"
     echo "else writes to this clone, so every row below is this run's."
     echo
+    if [ -n "$background" ]; then
+      echo "Background (this run's sidecar — its lease and its Jobs):"
+      echo
+      echo "| Table | Inserted | Updated | Deleted | Truncated |"
+      echo "| --- | --- | --- | --- | --- |"
+      printf '%s\n' "$background" | awk -F'|' '{ printf "| %s | %d | %d | %d | %d |\n", $1, $2, $3, $4, $5 }'
+      echo
+    fi
     if [ -n "$moved" ]; then
       echo "**Writes landed during this run.**"
       echo
@@ -171,7 +190,7 @@ guard_check_clone() {
       echo
     fi
     if [ -z "$moved" ] && [ "$in_flight" = 0 ] && [ -z "$uncovered" ]; then
-      echo "No table took an insert, update, delete or truncate during the window."
+      echo "No table took an insert, update, delete or truncate during the window${background:+, beyond the sidecar background above}."
       echo "Nothing was modified."
       echo
     fi

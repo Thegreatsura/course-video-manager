@@ -1,0 +1,126 @@
+{
+  "sse-route": [
+    {
+      "file": "apps/local/app/routes/api.courseVersions.$versionId.batch-export-sse.ts",
+      "count": 1,
+      "reason": "Batch export (#7). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/api.courses.$courseId.autofill-sse.ts",
+      "count": 1,
+      "reason": "Course Autofill (#10). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/routes/api.courses.$courseId.publish-sse.ts",
+      "count": 1,
+      "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.autofill-chapters.ts",
+      "count": 1,
+      "reason": "Interactive, not background work: the chapter Autofill modal streams to the person watching it (the plan's question 5). Stays."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.export-sse.ts",
+      "count": 1,
+      "reason": "Video export (#6). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 2."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.post-ai-hero.ts",
+      "count": 1,
+      "reason": "AI Hero post (#4). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.post-skills-changelog.ts",
+      "count": 1,
+      "reason": "Skills Changelog post (#5). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.post-social.ts",
+      "count": 1,
+      "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.post-youtube-shorts.ts",
+      "count": 1,
+      "reason": "YouTube Shorts post (#3). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.render-vertical-sse.ts",
+      "count": 1,
+      "reason": "Vertical Shorts render (#8). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.upload.ts",
+      "count": 1,
+      "reason": "YouTube upload (#1). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    }
+  ],
+  "browser-driver": [
+    {
+      "file": "apps/local/app/features/upload-manager/sse-ai-hero-client.ts",
+      "count": 1,
+      "reason": "AI Hero post (#4). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-autofill-client.ts",
+      "count": 1,
+      "reason": "Course Autofill (#10). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 5."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-batch-export-client.ts",
+      "count": 1,
+      "reason": "Batch export (#7). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-export-client.ts",
+      "count": 1,
+      "reason": "Video export (#6). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 2."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-publish-client.ts",
+      "count": 1,
+      "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-render-vertical-client.ts",
+      "count": 1,
+      "reason": "Vertical Shorts render (#8). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 3."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-skills-changelog-client.ts",
+      "count": 1,
+      "reason": "Skills Changelog post (#5). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-social-client.ts",
+      "count": 1,
+      "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-upload-client.ts",
+      "count": 1,
+      "reason": "YouTube upload (#1). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/features/upload-manager/sse-youtube-shorts-client.ts",
+      "count": 1,
+      "reason": "YouTube Shorts post (#3). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/components/autofill-chapters-modal.tsx",
+      "count": 1,
+      "reason": "Interactive, not background work: the chapter Autofill modal (the plan's question 5). Stays."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/edit-effect-handlers.ts",
+      "count": 1,
+      "reason": "OBS clip ingestion (#13), tied to a live Recording Session: not in this migration (the plan's question 6)."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/obs-connector.tsx",
+      "count": 2,
+      "reason": "Waits for OBS's virtual camera while the editor is open: part of a live Recording Session, not background work. Stays."
+    }
+  ]
+}

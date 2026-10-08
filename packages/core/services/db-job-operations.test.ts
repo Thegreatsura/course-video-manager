@@ -1,0 +1,272 @@
+import { describe, expect, it } from "@effect/vitest";
+import { beforeAll, beforeEach } from "vitest";
+import { Effect, Layer } from "effect";
+import { JobOperationsService } from "./db-job-operations.server.js";
+import { DrizzleService } from "./drizzle-service.server.js";
+import {
+  createTestDb,
+  truncateAllTables,
+  type TestDb,
+} from "../test-utils/pglite.js";
+
+let testDb: TestDb;
+let testLayer: Layer.Layer<JobOperationsService>;
+
+beforeAll(async () => {
+  const result = await createTestDb();
+  testDb = result.testDb;
+  testLayer = JobOperationsService.Default.pipe(
+    Layer.provide(Layer.succeed(DrizzleService, testDb as any))
+  );
+});
+
+beforeEach(async () => {
+  await truncateAllTables(testDb);
+});
+
+const LEASE = 30_000;
+
+const enqueue = (
+  overrides: Partial<{
+    title: string;
+    lane: string;
+    maxAttempts: number;
+    dependsOn: string | null;
+  }> = {}
+) =>
+  Effect.flatMap(JobOperationsService, (ops) =>
+    ops.enqueueJob({
+      kind: "noop",
+      title: overrides.title ?? "A job",
+      lane: overrides.lane ?? "default",
+      params: {},
+      maxAttempts: overrides.maxAttempts ?? 3,
+      dependsOn: overrides.dependsOn ?? null,
+      subject: null,
+    })
+  );
+
+const failure = { tag: "Boom", message: "boom", cause: "Boom: boom" };
+
+const lapse = Effect.promise(() => new Promise((r) => setTimeout(r, 5)));
+
+describe("claimNextJob", () => {
+  it.effect(
+    "hands each queued Job in a lane to exactly one claimer, oldest first",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const first = yield* enqueue({ title: "first" });
+        const second = yield* enqueue({ title: "second" });
+        yield* enqueue({ title: "elsewhere", lane: "publish" });
+
+        const a = yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        const b = yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        const c = yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+
+        expect([a?.id, b?.id, c]).toEqual([first.id, second.id, undefined]);
+        expect(a?.status).toBe("running");
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("holds a Job back until the Job it depends on has succeeded", () =>
+    Effect.gen(function* () {
+      const ops = yield* JobOperationsService;
+      const parent = yield* enqueue({ title: "upload" });
+      const child = yield* enqueue({ title: "post", dependsOn: parent.id });
+
+      const claimed = yield* ops.claimNextJob({
+        lane: "default",
+        holder: "h",
+        leaseMs: LEASE,
+      });
+      expect(claimed?.id).toBe(parent.id);
+      expect(
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        })
+      ).toBeUndefined();
+
+      yield* ops.completeJob({ jobId: parent.id, holder: "h" });
+      const next = yield* ops.claimNextJob({
+        lane: "default",
+        holder: "h",
+        leaseMs: LEASE,
+      });
+      expect(next?.id).toBe(child.id);
+    }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("failJobAttempt", () => {
+  it.effect(
+    "re-queues a failed attempt until max_attempts, then fails the Job and everything queued behind it",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const parent = yield* enqueue({ title: "upload", maxAttempts: 3 });
+        const child = yield* enqueue({ title: "post", dependsOn: parent.id });
+        const grandchild = yield* enqueue({
+          title: "share",
+          dependsOn: child.id,
+        });
+
+        const outcomes: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          yield* ops.claimNextJob({
+            lane: "default",
+            holder: "h",
+            leaseMs: LEASE,
+          });
+          outcomes.push(
+            yield* ops.failJobAttempt({
+              jobId: parent.id,
+              holder: "h",
+              failure,
+              interrupted: false,
+            })
+          );
+        }
+
+        expect(outcomes).toEqual(["retrying", "retrying", "failed"]);
+        const after = yield* ops.getJob(parent.id);
+        expect(after).toMatchObject({
+          status: "failed",
+          attempt: 3,
+          error: failure,
+        });
+        expect((yield* ops.getJob(child.id))?.error).toMatchObject({
+          message: 'Dependency "upload" failed',
+        });
+        expect((yield* ops.getJob(grandchild.id))?.error).toMatchObject({
+          message: 'Dependency "post" failed',
+        });
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("refuses to settle a Job its holder no longer holds", () =>
+    Effect.gen(function* () {
+      const ops = yield* JobOperationsService;
+      const job = yield* enqueue();
+      yield* ops.claimNextJob({
+        lane: "default",
+        holder: "old",
+        leaseMs: LEASE,
+      });
+
+      expect(
+        yield* ops.failJobAttempt({
+          jobId: job.id,
+          holder: "new",
+          failure,
+          interrupted: false,
+        })
+      ).toBe("not-held");
+      expect(yield* ops.completeJob({ jobId: job.id, holder: "new" })).toBe(
+        false
+      );
+      expect((yield* ops.getJob(job.id))?.status).toBe("running");
+    }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("recoverExpiredJobs", () => {
+  it.effect(
+    "re-queues a Job whose sidecar died while it has attempts left, and leaves it interrupted on its last",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const retryable = yield* enqueue({ title: "export", maxAttempts: 3 });
+        const once = yield* enqueue({
+          title: "publish",
+          maxAttempts: 1,
+          lane: "publish",
+        });
+        const alive = yield* enqueue({ title: "still running" });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "dead",
+          leaseMs: 1,
+        });
+        yield* ops.claimNextJob({
+          lane: "publish",
+          holder: "dead",
+          leaseMs: 1,
+        });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "live",
+          leaseMs: LEASE,
+        });
+        yield* lapse;
+
+        const recovered = yield* ops.recoverExpiredJobs();
+
+        expect(
+          Object.fromEntries(recovered.map((r) => [r.jobId, r.outcome]))
+        ).toEqual({
+          [retryable.id]: "retrying",
+          [once.id]: "interrupted",
+        });
+        expect(yield* ops.getJob(retryable.id)).toMatchObject({
+          status: "queued",
+          attempt: 2,
+        });
+        expect((yield* ops.getJob(alive.id))?.status).toBe("running");
+        const events = (yield* ops.listJobEvents(once.id)).map((e) => e.type);
+        expect(events).toEqual(["queued", "started", "interrupted"]);
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("the sidecar lease", () => {
+  const take = (holder: string, leaseMs: number) =>
+    Effect.flatMap(JobOperationsService, (ops) =>
+      ops.acquireSidecarLease({
+        holder,
+        pid: 1,
+        hostname: "box",
+        checkout: `/repo/${holder}`,
+        gitSha: "abc",
+        socket: "/tmp/s.sock",
+        leaseMs,
+      })
+    );
+
+  it.effect(
+    "goes to one sidecar at a time, and to the next once it lapses",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        expect((yield* take("first", 1)).acquired).toBe(true);
+        expect((yield* take("first", LEASE)).acquired).toBe(true);
+
+        const refused = yield* take("second", LEASE);
+        expect(refused).toMatchObject({
+          acquired: false,
+          lease: { holder: "first", checkout: "/repo/first" },
+        });
+
+        yield* ops.releaseSidecarLease("first");
+        yield* lapse;
+        expect((yield* take("second", LEASE)).acquired).toBe(true);
+        expect(
+          yield* ops.renewSidecarLease({ holder: "first", leaseMs: LEASE })
+        ).toBe(false);
+      }).pipe(Effect.provide(testLayer))
+  );
+});

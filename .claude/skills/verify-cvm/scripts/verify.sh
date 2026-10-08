@@ -305,6 +305,7 @@ cmd_launch() {
   for i in $(seq 1 30); do
     if curl -sf -o /dev/null "http://localhost:$port/"; then
       desk_isolated "$port" || { stop_server "$dir"; die "the server's pages still point at Matt's Stream Deck hub or OBS — refusing to run"; }
+      launch_sidecar "$dir" "$id" "$mode"
       trap - EXIT
       rm -f "$dir/launch.pid"
       log "$db_line"
@@ -369,6 +370,8 @@ cmd_doctor() {
 
   psql_ro "$dir" -c 'select 1' > /dev/null 2>&1 &&
     log "ok   read-only psql reaches the database" || { log "FAIL psql cannot reach the database"; ok=1; }
+
+  doctor_sidecar "$dir" || ok=1
 
   local others; others="$(all_run_dirs | while read -r d; do
       [ "$d" -ef "$dir" ] && continue; run_is_live "$d" && echo "$d"; done | sort -u || true)"
@@ -442,6 +445,7 @@ drop_run_clone() {
 
 stop_run() {
   local dir="$1"
+  stop_sidecar "$dir"
   stop_server "$dir"
   if [ -f "$dir/browser-session" ]; then
     agent-browser --session "$(cat "$dir/browser-session")" close 2>/dev/null &&
