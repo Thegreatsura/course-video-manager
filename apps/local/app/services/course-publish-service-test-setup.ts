@@ -14,6 +14,7 @@
  */
 
 import { afterEach, beforeAll } from "vitest";
+import { SidecarContextTest } from "./sidecar-context";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import fs from "node:fs";
@@ -394,8 +395,10 @@ export const setupPublishableCourse = async (opts?: {
     NodeContext.layer
   ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
 
-  const testLayer = Layer.merge(
+  const testLayer = Layer.mergeAll(
     coreTestLayer,
+    // A Batch export runs only in the Sidecar; the suite stands in for it.
+    SidecarContextTest,
     CoursePublishService.Default.pipe(Layer.provide(coreTestLayer))
   );
 

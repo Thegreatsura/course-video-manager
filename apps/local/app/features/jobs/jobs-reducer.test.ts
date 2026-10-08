@@ -5,7 +5,7 @@ import {
   jobsReducer,
   toJobsAction,
 } from "./jobs-reducer";
-import { jobUploadEntry, visibleJobs } from "./jobs-selectors";
+import { jobUploadEntry, visibleJobRows, visibleJobs } from "./jobs-selectors";
 import type { WireJob, WireJobEvent } from "./job-wire";
 
 const JOB_ID = "6b0c1f5e-0000-4000-8000-000000000001";
@@ -394,6 +394,156 @@ describe("jobsReducer", () => {
           title: "My Short",
           outcome: "failed",
         },
+      ]);
+    });
+  });
+
+  describe("a Batch export", () => {
+    const batchJob = wireJob({
+      kind: "batch-export",
+      title: "Export all: Generics",
+      maxAttempts: 1,
+      subjectType: "course-version",
+      subjectId: "version-1",
+    });
+    const batch = (type: string, data: Record<string, unknown> = {}) =>
+      streamed(wireEvent(type, data), batchJob);
+    const announced = () =>
+      batch("videos", {
+        videos: [
+          { id: "video-a", title: "S1/L1/Intro" },
+          { id: "video-b", title: "S1/L2/Generics" },
+        ],
+      });
+    const rows = (state: jobsReducer.State) =>
+      visibleJobRows(state).map((r) => ({
+        uploadId: r.uploadId,
+        title: r.title,
+        status: r.status,
+        ...(r.uploadType === "export"
+          ? { exportStage: r.exportStage, isBatchEntry: r.isBatchEntry }
+          : {}),
+      }));
+
+    it("draws one export row per Video, toasts each as it lands, and hands a failed one's row to its own Job", () => {
+      const tester = newTester()
+        .send(batch("started", { attempt: 1 }))
+        .send(announced())
+        .send(
+          batch("video-stage", {
+            videoId: "video-a",
+            stage: "concatenating-clips",
+          })
+        );
+      expect(rows(tester.getState())).toEqual([
+        {
+          uploadId: `${JOB_ID}/video-a`,
+          title: "S1/L1/Intro",
+          status: "uploading",
+          exportStage: "concatenating-clips",
+          isBatchEntry: true,
+        },
+        {
+          uploadId: `${JOB_ID}/video-b`,
+          title: "S1/L2/Generics",
+          status: "uploading",
+          exportStage: "queued",
+          isBatchEntry: true,
+        },
+      ]);
+
+      tester
+        .send(batch("video-succeeded", { videoId: "video-a" }))
+        .send(
+          batch("video-failed", { videoId: "video-b", message: "ffmpeg 1" })
+        )
+        .send(batch("video-handed-off", { videoId: "video-b", jobId: "other" }))
+        .send(batch("succeeded"));
+      expect(rows(tester.getState()).map((r) => r.uploadId)).toEqual([
+        `${JOB_ID}/video-a`,
+      ]);
+      // Each Video toasts as the browser's rows did; the batch itself says
+      // nothing when it succeeds.
+      expect(tester.getEffects()).toEqual([
+        {
+          type: "show-job-succeeded-toast",
+          jobId: JOB_ID,
+          kind: "export",
+          title: "S1/L1/Intro",
+          subjectId: "video-a",
+        },
+      ]);
+    });
+
+    it("a batch that fails leaves its unfinished Videos failed, and toasts once with its log", () => {
+      const tester = newTester()
+        .send(announced())
+        .send(batch("video-succeeded", { videoId: "video-a" }))
+        .send(
+          batch("failed", {
+            error: { tag: "NotFoundError", message: "Version not found" },
+          })
+        );
+      expect(
+        visibleJobRows(tester.getState()).map((r) => [r.title, r.status])
+      ).toEqual([
+        ["S1/L1/Intro", "success"],
+        ["S1/L2/Generics", "error"],
+      ]);
+      expect(tester.getEffects()).toContainEqual({
+        type: "show-job-failed-toast",
+        jobId: JOB_ID,
+        kind: "batch-export",
+        title: "Export all: Generics",
+        message: "Version not found",
+        hasLog: true,
+      });
+    });
+
+    it("a reopened tab redraws the batch from the snapshot without toasting what already landed", () => {
+      const event = (type: string, data: Record<string, unknown> = {}) =>
+        wireEvent(type, data);
+      const tester = newTester().send({
+        type: "job-snapshot-received",
+        snapshot: {
+          cursor: 999,
+          jobs: [
+            {
+              job: batchJob,
+              events: [
+                event("started", { attempt: 1 }),
+                event("videos", {
+                  videos: [
+                    { id: "video-a", title: "S1/L1/Intro" },
+                    { id: "video-b", title: "S1/L2/Generics" },
+                  ],
+                }),
+                event("video-succeeded", { videoId: "video-a" }),
+                event("video-progress", {
+                  videoId: "video-b",
+                  stage: "normalizing-audio",
+                  percent: 50,
+                }),
+              ],
+            },
+          ],
+        },
+      });
+      expect(
+        visibleJobRows(tester.getState()).map((r) => [r.title, r.status])
+      ).toEqual([
+        ["S1/L1/Intro", "success"],
+        ["S1/L2/Generics", "uploading"],
+      ]);
+      expect(tester.getEffects()).toEqual([]);
+    });
+
+    it("dismissing one Video's row hides only that row", () => {
+      const tester = newTester()
+        .send(announced())
+        .send({ type: "press-dismiss", id: `${JOB_ID}/video-a` });
+      expect(visibleJobRows(tester.getState()).map((r) => r.title)).toEqual([
+        "S1/L2/Generics",
       ]);
     });
   });

@@ -48,6 +48,15 @@ export const UPLOAD_MANAGER_POLICIES = {
   "ai-hero": { lane: "default", maxAttempts: 3 },
   "skills-changelog": { lane: "default", maxAttempts: 3 },
   "render-vertical": { lane: "default", maxAttempts: 3 },
+  /**
+   * A Batch export has no row and no retry of its own in the browser: it is
+   * one stream, and its retries are per Video — `recurs(2)` inside the
+   * service (`course-publish-export-events.ts:160`), then the browser's
+   * standalone export with the attempts the row had left
+   * (`upload-context.tsx`, the `initiate: null` hand-off). So: 1 attempt for
+   * the batch; its Videos carry the retries (`kinds/batch-export.ts`).
+   */
+  "batch-export": { lane: "default", maxAttempts: 1 },
   publish: { lane: "publish", maxAttempts: 1 },
   autofill: { lane: "default", maxAttempts: 1 },
 } as const satisfies Record<string, JobPolicy>;

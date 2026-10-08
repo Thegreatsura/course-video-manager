@@ -221,6 +221,27 @@ export const runSidecar = <R>(opts: {
       const runningIn = (lane: LaneName) =>
         [...running.values()].filter((r) => r.lane === lane).length;
 
+      /**
+       * A run of `job` was lost — not stopped on purpose — and has been
+       * settled as a failed attempt: let its kind clean up after it.
+       */
+      const afterLostRun = (job: {
+        id: string;
+        kind: string;
+        title: string;
+      }) => {
+        const kind = Object.hasOwn(registry, job.kind)
+          ? registry[job.kind]
+          : undefined;
+        if (!kind?.afterLostRun) return Effect.void;
+        return kind
+          .afterLostRun({ id: job.id, title: job.title })
+          .pipe(
+            Effect.annotateLogs({ jobId: job.id, kind: job.kind }),
+            logCause("job: its kind could not clean up after a lost run")
+          );
+      };
+
       const settle = (job: Job, exit: Exit.Exit<void, unknown>) =>
         Exit.match(exit, {
           onSuccess: () =>
@@ -275,7 +296,10 @@ export const runSidecar = <R>(opts: {
               ),
               Effect.flatMap((outcome) =>
                 Effect.logInfo(`job settled: ${outcome}`)
-              )
+              ),
+              // Interrupted while not stopping: this sidecar lost the Job's
+              // lease mid-run. A handler that failed cleaned up itself.
+              Effect.zipRight(interrupted ? afterLostRun(job) : Effect.void)
             );
           },
         }).pipe(
@@ -379,7 +403,15 @@ export const runSidecar = <R>(opts: {
             recovered,
             (r) =>
               Effect.logWarning(`job recovered: ${r.outcome}`).pipe(
-                Effect.annotateLogs({ jobId: r.jobId })
+                Effect.annotateLogs({ jobId: r.jobId }),
+                Effect.zipRight(
+                  ops.getJob(r.jobId).pipe(
+                    Effect.flatMap((job) =>
+                      job ? afterLostRun(job) : Effect.void
+                    ),
+                    logCause("sidecar: could not read a recovered job")
+                  )
+                )
               ),
             { discard: true }
           )

@@ -8,7 +8,6 @@ import {
 } from "react";
 import { uploadReducer, createInitialUploadState } from "./upload-reducer";
 import { showSuccessToast, showErrorToast } from "./upload-toasts";
-import { startSSEBatchExport } from "./sse-batch-export-client";
 import { uploadTypeRegistry } from "./upload-type-registry";
 import { planUploadReactions } from "./upload-transitions";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
@@ -84,9 +83,14 @@ export interface UploadContextType {
    * Returns the Job's id, which a Shorts post may wait on.
    */
   startRenderVerticalUpload: (videoId: string, title: string) => string;
+  /**
+   * Export every Video of a Course Version that is not yet exported: a
+   * background Job the Sidecar runs, drawn as one row per Video.
+   */
   startBatchExportUpload: (
     versionId: string,
-    includeTodoLessons: boolean
+    includeTodoLessons: boolean,
+    title: string
   ) => void;
   startPublish: (
     courseId: string,
@@ -207,9 +211,6 @@ export function UploadProvider({
   const paramsMapRef = useRef<
     Map<string, { type: uploadReducer.UploadType; params: unknown }>
   >(new Map());
-
-  // Maps videoId → uploadId for batch exports
-  const batchVideoIdToUploadIdRef = useRef<Map<string, string>>(new Map());
 
   const startUpload = useCallback(
     (
@@ -437,86 +438,16 @@ export function UploadProvider({
   );
 
   const startBatchExportUpload = useCallback(
-    (versionId: string, includeTodoLessons: boolean) => {
-      const abortController = startSSEBatchExport(
-        { versionId, includeTodoLessons },
-        {
-          onVideos: (videos) => {
-            for (const video of videos) {
-              const uploadId = generateUploadId();
-              batchVideoIdToUploadIdRef.current.set(video.id, uploadId);
-              dispatch({
-                type: "START_UPLOAD",
-                uploadId,
-                videoId: video.id,
-                title: video.title,
-                uploadType: "export",
-                isBatchEntry: true,
-              });
-            }
-          },
-          onStageChange: (videoId, stage) => {
-            const uploadId = batchVideoIdToUploadIdRef.current.get(videoId);
-            if (uploadId) {
-              dispatch({
-                type: "UPDATE_EXPORT_STAGE",
-                uploadId,
-                stage,
-              });
-            }
-          },
-          onProgress: (videoId, stage, percent) => {
-            if (stage === "queued") return;
-            const uploadId = batchVideoIdToUploadIdRef.current.get(videoId);
-            if (uploadId) {
-              dispatch({
-                type: "UPDATE_EXPORT_PROGRESS",
-                uploadId,
-                stage,
-                percent,
-              });
-            }
-          },
-          onComplete: (videoId) => {
-            const uploadId = batchVideoIdToUploadIdRef.current.get(videoId);
-            if (uploadId) {
-              dispatch({
-                type: "UPLOAD_SUCCESS",
-                uploadId,
-              });
-              batchVideoIdToUploadIdRef.current.delete(videoId);
-            }
-          },
-          onError: (videoId, message) => {
-            if (videoId === null) {
-              // Connection-level error — mark all remaining batch entries as errored
-              for (const [, uid] of batchVideoIdToUploadIdRef.current) {
-                dispatch({
-                  type: "UPLOAD_ERROR",
-                  uploadId: uid,
-                  errorMessage: message,
-                });
-              }
-              batchVideoIdToUploadIdRef.current.clear();
-            } else {
-              const uploadId = batchVideoIdToUploadIdRef.current.get(videoId);
-              if (uploadId) {
-                dispatch({
-                  type: "UPLOAD_ERROR",
-                  uploadId,
-                  errorMessage: message,
-                });
-                batchVideoIdToUploadIdRef.current.delete(videoId);
-              }
-            }
-          },
-        }
-      );
-
-      // Store with a synthetic key so it can be cleaned up on unmount
-      abortControllersRef.current.set(`batch-${versionId}`, abortController);
+    (versionId: string, includeTodoLessons: boolean, title: string) => {
+      startJob({
+        kind: "batch-export",
+        title,
+        params: { versionId, includeTodoLessons },
+        subject: { type: "course-version", id: versionId },
+        attemptsSpent: 0,
+      });
     },
-    []
+    [startJob]
   );
 
   const startPublish = useCallback(
@@ -627,24 +558,8 @@ export function UploadProvider({
         case "initiate": {
           const initiate =
             uploadTypeRegistry[reaction.upload.uploadType].initiate;
-          if (!initiate) {
-            // Only a Batch export's per-Video row is still a browser entry
-            // with no browser driver; every other such kind is a Job.
-            if (reaction.upload.uploadType !== "export") break;
-            // A Batch export's per-Video row failed, and the browser used to
-            // retry it as a standalone export. That export is a Job now: hand
-            // it to the Sidecar with the attempts the row has left, and let
-            // the Job's row take this one's place.
-            startJob({
-              kind: "export",
-              title: reaction.upload.title,
-              params: { videoId: reaction.upload.videoId },
-              subject: { type: "video", id: reaction.upload.videoId },
-              attemptsSpent: reaction.upload.retryCount,
-            });
-            dispatch({ type: "DISMISS", uploadId: reaction.uploadId });
-            break;
-          }
+          // A kind that runs as a Job has no browser driver to re-run.
+          if (!initiate) break;
           if (reaction.retry) {
             dispatch({ type: "RETRY", uploadId: reaction.uploadId });
           }

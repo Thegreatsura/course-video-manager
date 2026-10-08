@@ -252,7 +252,11 @@ export default function Component(props: Route.ComponentProps) {
   const handleBatchExport = () => {
     if (!loaderData.selectedVersion) return;
     // Course-view Export All ships the whole version — include every lesson.
-    startBatchExportUpload(loaderData.selectedVersion.id, true);
+    startBatchExportUpload(
+      loaderData.selectedVersion.id,
+      true,
+      `Export all: ${currentCourse?.name ?? "this Course"}`
+    );
   };
 
   const lessonSelectionRef = useRef(lessonSelection);

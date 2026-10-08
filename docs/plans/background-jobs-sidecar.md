@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Batch 3 has moved the vertical Shorts render (section 7.6); Batch export is next. Matt's decisions are in section 6;
+**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Batch 3 (the vertical Shorts render; Batch export) is done too: section 7.6. Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -230,7 +230,7 @@ handlers: lanes in `apps/local/sidecar/lanes.ts`, attempts per kind in
 | The retry runs **at once**, with the params it started with: no delay, no backoff, and every error counts as retryable                                                                            | `UM/upload-transitions.ts:51`, `UM/upload-context.tsx:620`                                                | A retried Job goes straight back to `queued` and the settle nudges the lanes, so it is claimed at once. No backoff column                                                            |
 | A **Publish** and an **Autofill** report every failure as `UPLOAD_FATAL_ERROR`, which sets `terminal`: **1 attempt**. So do the per-Video rows each fans out into                                 | `UM/upload-type-registry.ts:577-634`, `UM/upload-type-autofill.ts:88-108`, `UM/upload-reducer.ts:533`     | `max_attempts = 1` for `publish` and `autofill`                                                                                                                                      |
 | Export, YouTube upload, Shorts, Buffer, AI Hero, Skills Changelog and vertical render report `UPLOAD_ERROR`: **3 attempts**                                                                       | `UM/upload-type-registry.ts:118, 186, 250, 313, 381, 459, 690`                                            | `max_attempts = 3` (`UPLOAD_MANAGER_POLICIES`)                                                                                                                                       |
-| A Batch export child that fails is retried by the client as a **standalone** export (its `initiate` ignores params), after the batch already retried it twice on the server: up to 3 + 2 = 5 runs | `UM/upload-context.tsx:431-500`, `UM/upload-type-registry.ts:95`, `S/course-publish-export-events.ts:160` | Not encoded yet: batch 3 decides it when it moves Batch export                                                                                                                       |
+| A Batch export child that fails is retried by the client as a **standalone** export (its `initiate` ignores params), after the batch already retried it twice on the server: up to 3 + 2 = 5 runs | `UM/upload-context.tsx:431-500`, `UM/upload-type-registry.ts:95`, `S/course-publish-export-events.ts:160` | Batch 3: the batch Job hands a failed Video on as an `export` Job with 2 attempts, at once (section 7.6). Still 3 + 2 = 5                                                            |
 | When a job fails for good, every job **waiting on it** fails with `Dependency "<title>" failed`                                                                                                   | `UM/upload-reducer.ts:554` and `:597`                                                                     | Same message, same transaction (`failDependents`). One difference: the client failed only direct dependents, leaving a grandchild waiting forever; the sidecar fails the whole chain |
 | A job waiting on another starts when that one succeeds                                                                                                                                            | `UM/upload-context.tsx:204`, `UM/upload-transitions.ts:61-69`, `UM/upload-reducer.ts:521-523`             | `claimNextJob` takes a Job only once the Job it depends on has `succeeded`                                                                                                           |
 
@@ -348,7 +348,7 @@ sidecar builds the app's own `layerLive`, so handlers reach every service.
   to retry a failed child as a standalone export through the deleted route.
   It now hands it to the sidecar as an `export` Job with the attempts the row
   had left (`attemptsSpent`), so the run count stays 3 + 2 = 5, as before.
-  Batch 3 still decides the policy when Batch export moves.
+  Batch 3 moved this hand-off into the sidecar (section 7.6).
 
 **`tsx watch` restarts.** A stop on purpose — a signal: `tsx watch` restarting
 after an edit, Ctrl-C, verify-cvm's cleanup — no longer spends an attempt:
@@ -405,11 +405,11 @@ log, behind the toast's **View log**. The stage reports go through
 
 **The spawn guard, part of it (section 3.7, guard 2).** `SidecarContext`
 (`app/services/sidecar-context.ts`) is a tag only the sidecar's layer provides.
-`renderVerticalVideo` asks for it, so a route that reaches a vertical render
-does not compile (`makeAction` / `makeLoader` accept only `LayerLive`);
+`renderVerticalVideo` and `batchExport` ask for it, so a route that reaches a
+vertical render or a Batch export does not compile (`makeAction` / `makeLoader` accept only `LayerLive`);
 `sidecar-context.test.ts` pins that at the type level. Still outside it, because
 the app server still runs them: `CoursePublishService.exportVideo` (a Publish
-exports in-process until batch 6), `batchExport` (until batch 3's second half),
+exports in-process until batch 6),
 `FfmpegRun` and `OverlayContentRenderer` (Publish, and the editor's own
 interactive ffmpeg calls: thumbnails, frames, transcription), and the posting
 services (batch 4). Guard 1's third bullet (a dependency-cruiser rule on
@@ -423,3 +423,47 @@ Left out, on purpose:
 - No success toast existed for a browser-driven render; the Job's generic one
   ("rendered as a vertical Short") is new, and the Shorts page now revalidates
   on it, as it did on the browser row's success.
+
+**Batch export (#7) is a kind** (`apps/local/sidecar/kinds/batch-export.ts`):
+`CoursePublishService.batchExport` unchanged — 6 Videos at a time
+(`MAX_CONCURRENT_EXPORTS`), each tried 3 times inside the service
+(`recurs(2)`). It is ONE Job, not N: the batch's concurrency and in-service
+retries are the copied behaviour, and N `export` Jobs in the unbounded default
+lane would have run every Video at once with 3 sidecar attempts each. The
+Upload Manager still draws one export row per Video (`isBatchEntry`), from the
+batch's own Job Events: `videos`, `video-stage`, `video-progress`,
+`video-succeeded`, `video-failed`, `video-handed-off`. Each Video toasts as it
+lands; the batch itself toasts only if it fails. Its SSE route
+(`api.courseVersions.$versionId.batch-export-sse.ts`) and browser client
+(`sse-batch-export-client.ts`) are deleted, and both allowlist entries with
+them; the browser hand-off batch 2 added (`initiate: null` → `startJob`) is
+gone with them.
+
+What the browser did around the stream is copied in the handler:
+
+| Today, in the browser                                                                                                       | In the sidecar                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A Video's `error` event: its row went to `retrying` (`retryCount` 1) and was re-run at once as a standalone export          | The handler hands the Video on at once as its own `export` Job with `maxAttempts` 2 (`video-handed-off`), and the batch carries on. 3 + 2 = 5, as before      |
+| The stream failed (`error` with no Video, or the reader rejected): every unfinished row errored and was re-run the same way | The batch failing (not a stop) hands every announced, unfinished Video on the same way, then fails with its cause                                             |
+| The batch as a whole had no row, no attempt count and no retry                                                              | `batch-export`: 1 attempt, default lane (`retry-policy.ts`)                                                                                                   |
+| The server dying mid-stream counted as the stream failing                                                                   | A lost run (recovery found the lease expired, or the sidecar lost it) is `interrupted`, and the kind's new `afterLostRun` hook hands its unfinished Videos on |
+
+`afterLostRun` (`job-kind.ts`) is the one new piece of sidecar machinery: an
+optional per-kind hook the sidecar calls after recovery settles a lost run, and
+after it loses a Job's lease mid-run — never after a deliberate stop. The
+hand-off reads the batch's own Job Events, so it never hands a Video on twice.
+
+A deliberate stop (a signal) puts the batch back at the same attempt, as for
+every kind (section 7.5). Its re-run skips every Video already exported
+(`findShippingVideos`, content-addressed) and, through a new optional
+`skipVideoIds` argument to `batchExport`, every Video an earlier run already
+handed on — without it, the re-run exported a handed-on Video a second time
+beside its own Job (found in the verify run).
+
+Left out, on purpose:
+
+- No parent row for the batch: the browser never drew one. A batch that fails
+  before it announces its Videos (a missing Version) shows only its failure
+  toast, with its log — where today it showed nothing at all.
+- A Batch export's `title` ("Export all: <Course>") is new: a Job needs one for
+  its log and its failure toast.
