@@ -1,10 +1,9 @@
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as schema from "./schema.js";
+import { createBlankDb, type TestDb } from "../test-utils/pglite.js";
 import { SCHEMA_FEATURE_PROBES } from "./schema-feature-probes.js";
 
 const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
@@ -18,11 +17,10 @@ const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
  */
 describe("schema feature probes", () => {
   let pglite: PGlite;
-  let db: ReturnType<typeof drizzle<typeof schema>>;
+  let db: TestDb;
 
   beforeAll(async () => {
-    pglite = new PGlite();
-    db = drizzle(pglite, { schema });
+    ({ pglite, db } = createBlankDb());
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
   });
 

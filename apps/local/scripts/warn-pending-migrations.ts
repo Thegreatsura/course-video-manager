@@ -14,9 +14,8 @@
  * errors.
  */
 import { readFileSync } from "node:fs";
-import { Client } from "pg";
 import { pendingMigrations, type JournalEntry } from "./pending-migrations";
-import { scriptDatabaseUrl } from "./script-database-url";
+import { scriptPgClient } from "./script-database-url";
 
 const journal: JournalEntry[] = JSON.parse(
   readFileSync(
@@ -28,10 +27,8 @@ const journal: JournalEntry[] = JSON.parse(
   )
 ).entries;
 
-const { url, host } = scriptDatabaseUrl();
-const client = new Client({
-  connectionString: url,
-  connectionTimeoutMillis: 5000,
+const { client, host } = scriptPgClient({
+  config: { connectionTimeoutMillis: 5000 },
 });
 
 try {

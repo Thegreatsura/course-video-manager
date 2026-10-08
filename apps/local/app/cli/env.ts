@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { join } from "node:path";
 import {
@@ -116,8 +117,8 @@ export const ensureApiConfig = (): EnsureApiConfigResult => {
 };
 
 export const ensureDatabaseUrl = (): EnsureDatabaseUrlResult => {
-  const existing = process.env.DATABASE_URL;
-  if (existing != null && existing !== "") {
+  const existing = resolveDatabaseUrl();
+  if (existing !== undefined) {
     return { ok: true, databaseUrl: existing };
   }
 
