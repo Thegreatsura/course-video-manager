@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  pickCurrentScreenshot,
   pickScreenshotTarget,
   screenshotNavDirection,
   type PlaceholderSpan,
@@ -209,5 +210,25 @@ describe("pickScreenshotTarget", () => {
         direction: 1,
       })
     ).toBeNull();
+  });
+});
+
+describe("pickCurrentScreenshot", () => {
+  const spans: PlaceholderSpan[] = [
+    { top: -300, bottom: -100 },
+    { top: 100, bottom: 300 },
+    { top: 400, bottom: 600 },
+  ];
+
+  it("prefers the last visited placeholder, else the on-screen one nearest centre", () => {
+    expect([
+      pickCurrentScreenshot({ spans, viewportHeight: 1000, lastVisited: 1 }),
+      pickCurrentScreenshot({ spans, viewportHeight: 1000, lastVisited: 0 }),
+      pickCurrentScreenshot({
+        spans: [],
+        viewportHeight: 1000,
+        lastVisited: null,
+      }),
+    ]).toEqual([1, 2, null]);
   });
 });
