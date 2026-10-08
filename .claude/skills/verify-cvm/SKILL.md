@@ -17,10 +17,24 @@ port 5433) into a database only this run uses, starts the server on it, and
 `cleanup` drops it:
 
 ```text
-launch: cloned cvm_verify_template into cvm_verify_20261007_094829_712617
-template: 0 day(s) old (as of 2026-10-06T18:56:11Z, from the snapshot stamp)
-DB: test clone cvm_verify_20261007_094829_712617 (writes allowed, dropped on cleanup)
+launch: cloned cvm_verify_template into cvm_verify_20261008_094914_14982
+migrate: applied 2 migration(s) the template lacks, to cvm_verify_20261008_094914_14982 only:
+  0027_video_format_repair
+  0028_clip_transcription_status
+template: 1 day(s) old (as of 2026-10-06T18:56:11Z, from the snapshot stamp)
+DB: test clone cvm_verify_20261008_094914_14982 (writes allowed, dropped on cleanup)
 ```
+
+**Your clone has your checkout's schema.** Right after cloning, `launch`
+applies every migration in your worktree's `packages/core/db/migrations` that
+the clone lacks — your branch's new one included — to the clone only, before
+the server starts and before the Ledger's triggers go in (so a migration's own
+writes never show in your Ledger). It prints what it applied, and keeps the
+list in `migrations.txt` in the run directory. It refuses any target but
+localhost:5433 and this run's own `cvm_verify_<id>` clone: the template is
+never migrated. The template still moves only when Matt runs
+`pnpm db:verify-snapshot` — that is how its _data_ gets newer, and agents still
+never run it. A failed migration stops the launch.
 
 So **writes are allowed — verify the write path for real.** Create, edit,
 reorder, archive, delete: press the button that mutates and then read the row
