@@ -248,7 +248,29 @@ describe("ClipService", () => {
         expect(timelineItem.data.pauseType).toBe("start");
       }
     });
+
+    it("updates pause type for a single clip", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+
+      const [clip] = await clipService.appendClips({
+        videoId: video.id,
+        insertionPoint: start,
+        items: [],
+        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
+      });
+
+      await clipService.updatePause(clip!.id, "transition");
+
+      const timeline = await clipService.getTimeline(video.id);
+      const timelineItem = timeline[0]!;
+
+      expect(timelineItem.type).toBe("clip");
+      if (timelineItem.type === "clip") {
+        expect(timelineItem.data.pauseType).toBe("transition");
+      }
+    });
   });
+
   describe("reorderClip", () => {
     it("moves a clip up past another clip", async () => {
       const video = await clipService.createVideo("test-video.mp4");

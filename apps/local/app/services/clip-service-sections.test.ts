@@ -110,6 +110,25 @@ describe("ClipService", () => {
       ]);
     });
   });
+  describe("updateChapter", () => {
+    it("updates the name of a chapter", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+
+      const section = await clipService.createChapterAtInsertionPoint({
+        videoId: video.id,
+        name: "Original Name",
+        insertionPoint: start,
+        items: [],
+      });
+
+      await clipService.updateChapter(section.id, "Updated Name");
+
+      const timeline = await clipService.getTimeline(video.id);
+      const updatedSection = timeline[0]!.data;
+      expect((updatedSection as typeof section).name).toBe("Updated Name");
+    });
+  });
+
   describe("archiveChapters", () => {
     it("archives a chapter", async () => {
       const video = await clipService.createVideo("test-video.mp4");
