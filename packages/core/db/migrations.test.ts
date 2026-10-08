@@ -8,13 +8,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { pushSchema } from "drizzle-kit/api";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema.js";
+import { createBlankDb, type TestDb } from "../test-utils/pglite.js";
 
 const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
 
@@ -41,8 +40,7 @@ describe("drizzle migrations", () => {
         .update(sqlContent)
         .digest("hex");
 
-      const pglite = new PGlite();
-      const db = drizzle(pglite, { schema });
+      const { pglite, db } = createBlankDb();
       await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
       const rows = await db.execute<{ hash: string; created_at: string }>(
@@ -66,7 +64,7 @@ describe("drizzle migrations", () => {
   it(
     "migrate creates every public-schema column pushSchema does",
     async () => {
-      const getPublicColumns = async (db: ReturnType<typeof drizzle>) => {
+      const getPublicColumns = async (db: TestDb) => {
         const result = await db.execute<{
           table_name: string;
           column_name: string;
@@ -76,13 +74,11 @@ describe("drizzle migrations", () => {
         return result.rows.map((r) => `${r.table_name}.${r.column_name}`);
       };
 
-      const migratePg = new PGlite();
-      const migrateDb = drizzle(migratePg, { schema });
+      const { pglite: migratePg, db: migrateDb } = createBlankDb();
       await migrate(migrateDb, { migrationsFolder: MIGRATIONS_FOLDER });
       const migrateColumns = new Set(await getPublicColumns(migrateDb));
 
-      const pushPg = new PGlite();
-      const pushDb = drizzle(pushPg, { schema });
+      const { pglite: pushPg, db: pushDb } = createBlankDb();
       const { apply } = await pushSchema(schema, pushDb as any);
       await apply();
       const pushColumns = await getPublicColumns(pushDb);
@@ -139,8 +135,7 @@ describe("drizzle migrations", () => {
         JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut) })
       );
 
-      const pglite = new PGlite();
-      const db = drizzle(pglite, { schema });
+      const { pglite, db } = createBlankDb();
       await migrate(db, { migrationsFolder: before });
       rmSync(before, { recursive: true, force: true });
 

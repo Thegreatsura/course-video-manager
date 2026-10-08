@@ -17,6 +17,24 @@ async function getSnapshotPath(): Promise<string | undefined> {
 }
 
 /**
+ * A fresh in-memory PGlite with NO schema, and a drizzle handle over it — for
+ * tests that apply the migrations (or push the schema) themselves.
+ *
+ * This file is where every test database is built: scripts/check-db-clients.sh
+ * flags `new PGlite(` / `drizzle(` anywhere else.
+ */
+export const createBlankDb = () => {
+  const pglite = new PGlite();
+  return { pglite, db: drizzle(pglite, { schema }) };
+};
+
+/** A second drizzle handle over an existing PGlite that reports every query it sends. */
+export const withQueryLog = (
+  pglite: PGlite,
+  logQuery: (query: string) => void
+): TestDb => drizzle(pglite, { schema, logger: { logQuery } });
+
+/**
  * Creates a single PGlite instance and migrates the schema once.
  *
  * Designed for use in `beforeAll` — spinning up one PGlite per file
@@ -36,8 +54,7 @@ export const createTestDb = async () => {
   }
 
   const { pushSchema } = await import("drizzle-kit/api");
-  const pglite = new PGlite();
-  const testDb = drizzle(pglite, { schema });
+  const { pglite, db: testDb } = createBlankDb();
   const { apply } = await pushSchema(schema, testDb as any);
   await apply();
   return { pglite, testDb };

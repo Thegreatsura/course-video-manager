@@ -11,12 +11,11 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { Effect, Exit, Layer } from "effect";
-import { drizzle } from "drizzle-orm/pglite";
 import type { PGlite } from "@electric-sql/pglite";
-import * as schema from "@/db/schema";
 import {
   createTestDb,
   truncateAllTables,
+  withQueryLog,
   type TestDb,
 } from "@/test-utils/pglite";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
@@ -196,10 +195,7 @@ describe("clips-during-publish race (#1403)", () => {
     // A second drizzle handle over the same PGlite, with a query logger:
     // the mechanism assertion is on the emitted SQL, not on timing.
     const queries: string[] = [];
-    const loggedDb = drizzle(pglite, {
-      schema,
-      logger: { logQuery: (q) => queries.push(q.toLowerCase()) },
-    });
+    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
 
     await Effect.runPromise(
       createClipOperations(loggedDb as any).appendClips({
@@ -223,10 +219,7 @@ describe("clips-during-publish race (#1403)", () => {
     const { course, version } = await setup();
 
     const queries: string[] = [];
-    const loggedDb = drizzle(pglite, {
-      schema,
-      logger: { logQuery: (q) => queries.push(q.toLowerCase()) },
-    });
+    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
     const runLogged = makeRunner(loggedDb as any);
 
     await runLogged(

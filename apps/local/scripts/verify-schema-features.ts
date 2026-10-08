@@ -10,13 +10,10 @@
  * nothing. Uses the direct connection string when one is configured, so it
  * sees the primary rather than a pooled session.
  */
-import { Client } from "pg";
 import { SCHEMA_FEATURE_PROBES } from "@/db/schema-feature-probes";
-import { scriptDatabaseUrl } from "./script-database-url";
+import { scriptPgClient } from "./script-database-url";
 
-const { url } = scriptDatabaseUrl({ direct: true });
-
-const client = new Client({ connectionString: url });
+const { client } = scriptPgClient({ direct: true });
 await client.connect();
 
 let failures = 0;

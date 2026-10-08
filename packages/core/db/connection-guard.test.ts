@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
 import {
   effectiveHost,
@@ -117,8 +117,7 @@ describe("isReadOnlyConnection", () => {
 
 describe("DrizzleService", () => {
   const build = (insideGitWorktree: boolean) => {
-    const previous = process.env.DATABASE_URL;
-    process.env.DATABASE_URL = REMOTE;
+    vi.stubEnv("DATABASE_URL", REMOTE);
     try {
       return Effect.runSyncExit(
         Effect.scoped(
@@ -134,8 +133,7 @@ describe("DrizzleService", () => {
         )
       );
     } finally {
-      if (previous === undefined) delete process.env.DATABASE_URL;
-      else process.env.DATABASE_URL = previous;
+      vi.unstubAllEnvs();
     }
   };
 

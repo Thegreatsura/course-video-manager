@@ -139,6 +139,12 @@ writes** onto a superseded Version's rows. "Not part of the published artifact"
 is not an exemption; "no row above it reaches a CourseVersion" is. The ~250
 stranded writes that taught this: [`docs/DRAFT_GUARD.md`](./docs/DRAFT_GUARD.md).
 
+## Database connections
+
+### Every database client comes from a guarded factory
+
+Build a client through `DrizzleService`, `scriptPgClient()`/`scriptDrizzle()` (one-off scripts) or `test-utils/pglite.ts` (tests) — never `new Pool`/`new Client`/`drizzle(`/`postgres(` or a read of `process.env.DATABASE_URL` yourself, which skips the connection guard that stops a worktree writing to production; `scripts/check-db-clients.sh` fails anything else, and its allowlist does not grow.
+
 ## Entities and their actions
 
 ### Every entity is right-clickable

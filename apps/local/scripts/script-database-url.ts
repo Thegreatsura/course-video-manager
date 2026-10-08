@@ -18,8 +18,15 @@
  * 4. **The target, guarded.** From a git worktree, a writable connection to a
  *    remote database is refused before it is opened — see
  *    `@cvm/core/db/connection-guard`.
+ *
+ * Build the client here too — `scriptPgClient()` or `scriptDrizzle()` — never
+ * with `new Client`/`new Pool` in the script: scripts/check-db-clients.sh
+ * allows client construction only in the guarded factories.
  */
 import { fileURLToPath } from "node:url";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { Client, Pool, type ClientConfig } from "pg";
+import * as schema from "@cvm/core/db/schema";
 import {
   resolveDatabaseUrl,
   resolveMigrationDatabaseUrl,
@@ -70,4 +77,33 @@ export const scriptDatabaseUrl = (
     process.exit(1);
   }
   return { url, host };
+};
+
+/**
+ * A `pg` Client on the guarded connection string. Not yet connected — call
+ * `client.connect()` and `client.end()` as before. `config` takes any other
+ * client option (a timeout, say); the connection string is not one of them.
+ */
+export const scriptPgClient = (
+  opts: {
+    readonly direct?: boolean;
+    readonly config?: Omit<ClientConfig, "connectionString">;
+  } = {}
+): ScriptDatabase & { readonly client: Client } => {
+  const target = scriptDatabaseUrl({ direct: opts.direct });
+  return {
+    ...target,
+    client: new Client({ ...opts.config, connectionString: target.url }),
+  };
+};
+
+/** A Drizzle database over a pooled connection on the guarded connection string. */
+export const scriptDrizzle = (
+  opts: { readonly direct?: boolean } = {}
+): ScriptDatabase & { readonly db: NodePgDatabase<typeof schema> } => {
+  const target = scriptDatabaseUrl(opts);
+  return {
+    ...target,
+    db: drizzle(new Pool({ connectionString: target.url }), { schema }),
+  };
 };
