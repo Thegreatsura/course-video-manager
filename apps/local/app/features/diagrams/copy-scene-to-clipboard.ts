@@ -7,7 +7,7 @@
 // paste handler expects a `TLContent` ({ shapes, bindings, assets, rootShapeIds,
 // schema }) wrapped in a tagged HTML envelope. We rebuild that from the scene.
 
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 interface SerializedRecord {
   typeName: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast, toastError } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -67,9 +67,7 @@ export function ImageUploadDropdown({
         toast("No local images found to upload");
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to upload images"
-      );
+      toastError(error, "Failed to upload images");
     } finally {
       setIsUploading(false);
     }

@@ -1,6 +1,6 @@
 import type { ActionLeaf } from "@/features/action-menu/action-menu-model";
 import { Link2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import {
   ENTITY_LABELS,
   entityDeepLink,

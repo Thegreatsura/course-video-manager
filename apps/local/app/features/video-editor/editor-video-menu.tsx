@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useFetcher } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { useContextSelector } from "use-context-selector";
 import { useRetranscribeAllClips } from "./components/transcript-word-actions";
 import { VideoEditorContext } from "./video-editor-context";

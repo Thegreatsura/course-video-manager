@@ -1,7 +1,7 @@
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 const imageUrl = (thumbnailId: string) =>
   `/api/thumbnails/${thumbnailId}/image`;

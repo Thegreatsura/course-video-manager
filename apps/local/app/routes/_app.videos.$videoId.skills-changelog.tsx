@@ -19,7 +19,7 @@ import { AddLinkModal } from "@/components/add-link-modal";
 import { VideoFileManagementModal } from "@/components/video-file-management-modal";
 import { VideoFilePasteModal } from "@/components/video-file-paste-modal";
 import { DeleteVideoFileModal } from "@/components/delete-video-file-modal";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import type { Route } from "./+types/_app.videos.$videoId.skills-changelog";
 import { SkillsChangelogPage } from "@/features/video-posting/skills-changelog-page";
 import { useWriterContext } from "@/features/article-writer/use-writer-context";

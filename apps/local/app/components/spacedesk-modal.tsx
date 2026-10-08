@@ -11,7 +11,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { buildFullIp, isValidSuffix, STORAGE_KEY } from "@/lib/spacedesk-ip";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 interface SpacedeskModalProps {
   open: boolean;

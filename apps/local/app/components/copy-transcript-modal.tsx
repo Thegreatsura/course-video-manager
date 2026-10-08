@@ -27,7 +27,7 @@ import {
   Play,
 } from "lucide-react";
 import { use, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 type FilterProps = {
   priorityFilter: number[];

@@ -6,7 +6,7 @@ import { loadVideoPostingContext } from "@/services/video-posting-context.server
 import { makeLoader } from "@/services/route-action.server";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { VideoContextPanel } from "@/components/video-context-panel";
 import { FilePreviewModal } from "@/components/file-preview-modal";
 import { AddLinkModal } from "@/components/add-link-modal";

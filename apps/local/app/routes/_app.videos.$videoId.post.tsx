@@ -10,7 +10,7 @@ import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import type { Route } from "./+types/_app.videos.$videoId.post";
 import { VideoContextPanel } from "@/components/video-context-panel";
 import { CoursePublishService } from "@/services/course-publish-service";

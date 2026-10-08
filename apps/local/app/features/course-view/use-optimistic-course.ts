@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchers } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
 import type { LoaderData } from "./course-view-types";
 import {

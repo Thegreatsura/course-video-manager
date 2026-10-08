@@ -3,7 +3,7 @@ import { Tldraw, type Editor } from "tldraw";
 import "tldraw/tldraw.css";
 import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import {
   diagramChannel,
   type ParentToChildMessage,
