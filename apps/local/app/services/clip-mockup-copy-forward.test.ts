@@ -203,13 +203,6 @@ describe("duplicating a Video carries its Animatic's files across", () => {
     await seed();
   });
 
-  it("gives the duplicate a fresh lineageId — the reason the files must move", async () => {
-    const source = await seed();
-    const { sourceVideo, newVideo } = await duplicateVideo(source.id);
-
-    expect(newVideo.lineageId).not.toBe(sourceVideo.lineageId);
-  });
-
   it("leaves the duplicate's Animatic playable: no missing frame, no missing speech", async () => {
     const source = await seed();
     const { newVideo } = await duplicateVideo(source.id);

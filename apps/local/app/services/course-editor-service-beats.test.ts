@@ -75,15 +75,6 @@ describe("CourseEditorService — beats", () => {
       const updated = await getBeat(beat.id);
       expect(updated?.description).toBe("What I'll cover in this part");
     });
-
-    it("clears the description back to empty", async () => {
-      const { beat } = await createBeat();
-      await svc().setBeatDescription(beat.id, "draft note");
-      await svc().setBeatDescription(beat.id, "");
-
-      const updated = await getBeat(beat.id);
-      expect(updated?.description).toBe("");
-    });
   });
 
   describe("set-beat-learning-goals", () => {

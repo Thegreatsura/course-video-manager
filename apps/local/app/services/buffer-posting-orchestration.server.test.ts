@@ -60,11 +60,11 @@ function makeFakeObjectStore() {
   };
 }
 
-function makeFakeBufferApi(opts?: { createPostId?: string }) {
+function makeFakeBufferApi() {
   return {
     createPost: vi.fn(
       (_opts: { channelId: string; text: string; videoUrl: string }) =>
-        Effect.succeed({ id: opts?.createPostId ?? "buffer-post-123" })
+        Effect.succeed({ id: "buffer-post-123" })
     ),
   };
 }
@@ -161,6 +161,7 @@ describe("bufferPostProgram", () => {
         expect(posts).toHaveLength(1);
         expect(posts[0]!.platform).toBe("buffer");
         expect(posts[0]!.remoteId).toBe("buffer-post-123");
+        expect(posts[0]!.remoteUrl).toBeNull();
         expect(posts[0]!.postedAt).toBeInstanceOf(Date);
 
         const eventTypes = events.map((e) => e.event);
@@ -237,36 +238,6 @@ describe("bufferPostProgram", () => {
         expect(errorEvents).toHaveLength(1);
         expect((errorEvents[0]!.data as any).message).toContain("not found");
       })
-    );
-  });
-
-  describe("videoPosts row lifecycle", () => {
-    it.effect(
-      "creates row before upload and sets remoteId after createPost",
-      () =>
-        Effect.gen(function* () {
-          const video = yield* Effect.promise(() => createTestVideo());
-          const objectStore = makeFakeObjectStore();
-          const bufferApi = makeFakeBufferApi({ createPostId: "bp-custom-id" });
-          const { sendEvent } = makeSendEvent();
-
-          const layer = makeTestLayer({ objectStore, bufferApi });
-
-          yield* bufferPostProgram({
-            videoId: video.id,
-            caption: "Lifecycle test",
-            sendEvent,
-          }).pipe(Effect.provide(layer));
-
-          const posts = yield* Effect.promise(() =>
-            testDb.query.videoPosts.findMany({
-              where: eq(schema.videoPosts.videoId, video.id),
-            })
-          );
-          expect(posts[0]!.remoteId).toBe("bp-custom-id");
-          expect(posts[0]!.remoteUrl).toBeNull();
-          expect(posts[0]!.postedAt).toBeInstanceOf(Date);
-        })
     );
   });
 });

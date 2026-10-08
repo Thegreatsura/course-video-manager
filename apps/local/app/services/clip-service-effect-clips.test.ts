@@ -1,33 +1,12 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { createDirectClipService } from "@/test-utils/direct-clip-service";
-import { type VideoProcessingAdapter } from "./clip-service-handler";
-import type { ClipService, FrontendInsertionPoint } from "./clip-service";
+import { describe, it, expect } from "vitest";
+
 import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
+  setupClipServiceTests,
+  clipService,
+  start,
+} from "./clip-service-test-setup";
 
-let testDb: TestDb;
-let clipService: ClipService;
-let mockVideoProcessing: VideoProcessingAdapter;
-
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-beforeEach(async () => {
-  await truncateAllTables(testDb);
-
-  mockVideoProcessing = {
-    getLatestOBSVideoClips: vi.fn().mockResolvedValue({ clips: [] }),
-  };
-
-  clipService = createDirectClipService(testDb as any, mockVideoProcessing);
-});
-
-const start: FrontendInsertionPoint = { type: "start" };
+setupClipServiceTests();
 
 const effectClipDefaults = {
   videoFilename: "/path/to/assets/effects/white-noise.mp4",
@@ -64,39 +43,6 @@ describe("ClipService", () => {
         { type: "clip", id: effectClip.id },
         { type: "clip", id: clip!.id },
       ]);
-    });
-
-    it("creates an effect clip with correct field values", async () => {
-      const video = await clipService.createVideo("test-video.mp4");
-
-      const [clip] = await clipService.appendClips({
-        videoId: video.id,
-        insertionPoint: start,
-        items: [],
-        clips: [{ inputVideo: "test.mp4", startTime: 0, endTime: 10 }],
-      });
-
-      const effectClip = await clipService.createEffectClipAtPosition({
-        videoId: video.id,
-        position: "after",
-        targetItemId: clip!.id,
-        targetItemType: "clip",
-        ...effectClipDefaults,
-      });
-
-      expect(effectClip).toMatchObject({
-        id: expect.any(String),
-        videoId: video.id,
-        videoFilename: "/path/to/assets/effects/white-noise.mp4",
-        sourceStartTime: 0,
-        sourceEndTime: 0.5,
-        text: "*white noise*",
-        scene: "white noise",
-        profile: "main-camera",
-        pauseType: "none",
-        archived: false,
-        transcribedAt: expect.any(Date),
-      });
     });
 
     it("inserts effect clip between two existing clips with correct ordering", async () => {

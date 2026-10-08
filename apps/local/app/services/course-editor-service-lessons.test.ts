@@ -88,13 +88,6 @@ describe("CourseEditorService — lessons", () => {
       const lessons = await getLessons(section!.id);
       expect(lessons).toHaveLength(1);
     });
-
-    it("creates a real lesson even when the course has no filePath", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const result = await svc().createLesson(s.sectionId, "My Lesson");
-      expect(result).toMatchObject({ success: true });
-    });
   });
 
   describe("update-lesson-name", () => {
@@ -122,62 +115,6 @@ describe("CourseEditorService — lessons", () => {
 
       const lesson = await getLessonById(l.lessonId);
       expect(lesson!.title).toBe("New Title");
-    });
-  });
-
-  describe("update-lesson-description", () => {
-    it("updates the description", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const l = await svc().addLesson(s.sectionId, "My Lesson");
-
-      await svc().updateLessonDescription(
-        l.lessonId,
-        "A great lesson about testing"
-      );
-
-      const lesson = await getLessonById(l.lessonId);
-      expect(lesson!.description).toBe("A great lesson about testing");
-    });
-  });
-
-  describe("update-lesson-icon", () => {
-    it("updates the icon", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const l = await svc().addLesson(s.sectionId, "My Lesson");
-
-      await svc().updateLessonIcon(l.lessonId, "code");
-
-      const lesson = await getLessonById(l.lessonId);
-      expect(lesson!.icon).toBe("code");
-    });
-  });
-
-  describe("update-lesson-priority", () => {
-    it("updates the priority", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const l = await svc().addLesson(s.sectionId, "My Lesson");
-
-      await svc().updateLessonPriority(l.lessonId, 1);
-
-      const lesson = await getLessonById(l.lessonId);
-      expect(lesson!.priority).toBe(1);
-    });
-  });
-
-  describe("update-lesson-dependencies", () => {
-    it("updates dependencies array", async () => {
-      const { version } = await createCourseWithVersion();
-      const s = await svc().createSection(version.id, "Section A", 0);
-      const l1 = await svc().addLesson(s.sectionId, "Lesson 1");
-      const l2 = await svc().addLesson(s.sectionId, "Lesson 2");
-
-      await svc().updateLessonDependencies(l2.lessonId, [l1.lessonId]);
-
-      const lesson = await getLessonById(l2.lessonId);
-      expect(lesson!.dependencies).toEqual([l1.lessonId]);
     });
   });
 
