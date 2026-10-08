@@ -1,8 +1,22 @@
 import fs from "node:fs";
 import http from "node:http";
-import { Data, Effect, Runtime, Schema } from "effect";
-import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import { Data, Effect, Option, Queue, Runtime, Schema } from "effect";
+import {
+  JobOperationsService,
+  type JobEvent,
+  type JobEventWithJob,
+  type JobSummary,
+} from "@cvm/core/services/db-job-operations.server";
+import { assertUnderEffect } from "@/services/assert-under";
+import {
+  JOB_STREAM_EVENTS,
+  type JobEventMessage,
+  type JobSnapshotMessage,
+  type WireJob,
+  type WireJobEvent,
+} from "@/features/jobs/job-wire";
 import { enqueueJob, type JobKindRegistry } from "./job-kinds";
+import { jobLogPath } from "./json-logger";
 import type { SidecarHandle } from "./sidecar";
 
 /**
@@ -15,7 +29,104 @@ import type { SidecarHandle } from "./sidecar";
  *   POST /nudge      look for work now (an enqueue elsewhere calls this)
  *   POST /jobs       {kind, title, params, dependsOn?} → enqueue, then nudge
  *   GET  /jobs/<id>  the Job and its events
+ *   GET  /jobs/<id>/log  the Job's log, one JSON object per line
+ *   GET  /events     Job Events as Server-Sent Events (see features/jobs/job-wire.ts):
+ *                    a snapshot, or a replay after `Last-Event-ID`, then live
  */
+
+/** How long a finished Job stays in a new subscriber's snapshot. */
+export const SNAPSHOT_FINISHED_WITHIN_MS = 10 * 60_000;
+/** A reconnect further behind than this gets a snapshot instead of a replay. */
+const MAX_REPLAY = 5_000;
+const KEEPALIVE_MS = 15_000;
+
+const toWireJob = (job: JobSummary): WireJob => ({
+  id: job.id,
+  kind: job.kind,
+  title: job.title,
+  attempt: job.attempt,
+  maxAttempts: job.maxAttempts,
+  subjectType: job.subjectType,
+  subjectId: job.subjectId,
+});
+
+const toWireEvent = (event: JobEvent): WireJobEvent => ({
+  id: event.id,
+  jobId: event.jobId,
+  type: event.type,
+  data: (event.data ?? {}) as Record<string, unknown>,
+  at: event.at.toISOString(),
+});
+
+const sseMessage = (event: string, data: unknown, id?: number) =>
+  `${id === undefined ? "" : `id: ${id}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+const jobEventMessage = (row: JobEventWithJob) =>
+  sseMessage(
+    JOB_STREAM_EVENTS.jobEvent,
+    {
+      job: toWireJob(row.job),
+      event: toWireEvent(row.event),
+    } satisfies JobEventMessage,
+    row.event.id
+  );
+
+/**
+ * One subscriber's stream, until the scope closes (its connection does).
+ * Subscribes BEFORE reading the snapshot or the replay, so nothing written in
+ * between is lost; an event that arrives both ways is ignored the second time
+ * by the jobs reducer.
+ */
+const streamJobEvents = (opts: {
+  readonly handle: SidecarHandle;
+  readonly lastEventId: number | null;
+  readonly write: (text: string) => void;
+}) =>
+  Effect.gen(function* () {
+    const ops = yield* JobOperationsService;
+    const live = yield* opts.handle.feed.subscribe;
+
+    const replay =
+      opts.lastEventId === null
+        ? null
+        : yield* ops.listJobEventsAfter({
+            after: opts.lastEventId,
+            limit: MAX_REPLAY + 1,
+          });
+    if (replay !== null && replay.length <= MAX_REPLAY) {
+      for (const row of replay) opts.write(jobEventMessage(row));
+    } else {
+      const cursor = yield* ops.latestJobEventId();
+      const recent = yield* ops.listRecentJobs({
+        finishedWithinMs: SNAPSHOT_FINISHED_WITHIN_MS,
+      });
+      opts.write(
+        sseMessage(
+          JOB_STREAM_EVENTS.snapshot,
+          {
+            cursor,
+            jobs: recent.map((r) => ({
+              job: toWireJob(r.job),
+              events: r.events.map(toWireEvent),
+            })),
+          } satisfies JobSnapshotMessage,
+          cursor
+        )
+      );
+    }
+
+    while (true) {
+      const batch = yield* Queue.take(live).pipe(
+        Effect.timeoutOption(KEEPALIVE_MS)
+      );
+      if (Option.isNone(batch)) {
+        // A comment line: keeps proxies and the browser from timing it out.
+        opts.write(": keepalive\n\n");
+        continue;
+      }
+      for (const row of batch.value) opts.write(jobEventMessage(row));
+    }
+  }).pipe(Effect.scoped);
 
 export class SidecarSocketError extends Data.TaggedError("SidecarSocketError")<{
   readonly socket: string;
@@ -84,10 +195,12 @@ const socketAnswers = (socket: string) =>
 export const serveSidecarSocket = (opts: {
   readonly socket: string;
   readonly handle: SidecarHandle;
-  readonly registry: JobKindRegistry;
+  readonly registry: JobKindRegistry<unknown>;
+  /** Where the Jobs' log files are (`json-logger.ts`). */
+  readonly logDir: string;
 }) =>
   Effect.gen(function* () {
-    const { socket, handle, registry } = opts;
+    const { socket, handle, registry, logDir } = opts;
     if (Buffer.byteLength(socket) > MAX_SOCKET_PATH_BYTES) {
       return yield* new SidecarSocketError({
         socket,
@@ -129,15 +242,32 @@ export const serveSidecarSocket = (opts: {
             Effect.flatMap(Schema.decodeUnknown(EnqueueRequest))
           );
           const job = yield* enqueueJob({
+            id: null,
             kind: request.kind,
             title: request.title,
             params: request.params,
             dependsOn: request.dependsOn,
             subject: null,
+            attemptsSpent: 0,
             registry,
           });
           yield* handle.nudge;
           return { status: 201, body: { ok: true, job } };
+        }
+        const logMatch = /^\/jobs\/([^/?]+)\/log$/.exec(url);
+        if (req.method === "GET" && logMatch?.[1]) {
+          const id = decodeURIComponent(logMatch[1]);
+          const file = yield* assertUnderEffect(logDir, jobLogPath(logDir, id));
+          if (!fs.existsSync(file)) {
+            return {
+              status: 404,
+              body: { ok: false, message: `no log for job ${id}` },
+            };
+          }
+          return {
+            status: 200,
+            body: { ok: true, log: fs.readFileSync(file, "utf8") },
+          };
         }
         const jobMatch = /^\/jobs\/([^/?]+)$/.exec(url);
         if (req.method === "GET" && jobMatch?.[1]) {
@@ -175,6 +305,16 @@ export const serveSidecarSocket = (opts: {
               status: 400,
               body: { ok: false, message: e.message },
             }),
+          PathOutsideBaseDirError: (e) =>
+            Effect.succeed({
+              status: 400,
+              body: { ok: false, message: e.message },
+            }),
+          NoAttemptsLeftError: (e) =>
+            Effect.succeed({
+              status: 400,
+              body: { ok: false, message: e.message },
+            }),
         }),
         Effect.tapErrorCause((cause) =>
           Effect.logError(`socket: ${req.method} ${req.url} failed`, cause)
@@ -182,6 +322,36 @@ export const serveSidecarSocket = (opts: {
       );
 
     const server = http.createServer((req, res) => {
+      if (req.method === "GET" && req.url === "/events") {
+        res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        });
+        const header = req.headers["last-event-id"];
+        const lastEventId =
+          typeof header === "string" && /^\d+$/.test(header)
+            ? Number(header)
+            : null;
+        // The stream runs until the subscriber goes away.
+        const gone = new AbortController();
+        res.on("close", () => gone.abort());
+        void run(
+          streamJobEvents({
+            handle,
+            lastEventId,
+            write: (text) => {
+              res.write(text);
+            },
+          }).pipe(
+            Effect.tapErrorCause((cause) =>
+              Effect.logError("socket: a Job Event stream failed", cause)
+            )
+          ),
+          { signal: gone.signal }
+        ).then(() => res.end());
+        return;
+      }
       // runPromiseExit never rejects, and node's request callback cannot wait.
       void run(route(req)).then((exit) => {
         const answer =

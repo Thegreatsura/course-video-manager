@@ -197,6 +197,13 @@ export namespace uploadReducer {
     | { type: "UPLOAD_ERROR"; uploadId: string; errorMessage: string }
     | { type: "UPLOAD_FATAL_ERROR"; uploadId: string; errorMessage: string }
     | { type: "RETRY"; uploadId: string }
+    /**
+     * A background Job this tab follows (`features/jobs/`) settled. An upload
+     * waiting on it (`dependsOn` is the Job's id: "export, then post")
+     * starts, or fails as it would have behind a failed upload.
+     */
+    | { type: "server-job-succeeded"; jobId: string }
+    | { type: "server-job-failed"; jobId: string; title: string }
     | { type: "DISMISS"; uploadId: string }
     | {
         type: "UPDATE_PUBLISH_STAGE";
@@ -603,6 +610,34 @@ const reduceUploads = (
         ...state,
         uploads: updatedUploads,
       };
+    }
+
+    case "server-job-succeeded": {
+      let changed = false;
+      const uploads = { ...state.uploads };
+      for (const [id, u] of Object.entries(uploads)) {
+        if (u.dependsOn === action.jobId && u.status === "waiting") {
+          uploads[id] = { ...u, status: "uploading" };
+          changed = true;
+        }
+      }
+      return changed ? { ...state, uploads } : state;
+    }
+
+    case "server-job-failed": {
+      let changed = false;
+      const uploads = { ...state.uploads };
+      for (const [id, u] of Object.entries(uploads)) {
+        if (u.dependsOn === action.jobId && u.status === "waiting") {
+          uploads[id] = {
+            ...u,
+            status: "error" as const,
+            errorMessage: `Dependency "${action.title}" failed`,
+          };
+          changed = true;
+        }
+      }
+      return changed ? { ...state, uploads } : state;
     }
 
     case "RETRY": {

@@ -304,7 +304,7 @@ describe("youtube registry entry", () => {
         thumbnailId: "thumb-1",
       };
 
-      youtubeConfig.initiate(
+      youtubeConfig.initiate!(
         "upload-1",
         entry,
         params,
@@ -337,7 +337,7 @@ describe("youtube registry entry", () => {
         parentUploadId: null,
       };
 
-      youtubeConfig.initiate(
+      youtubeConfig.initiate!(
         "upload-1",
         entry,
         {

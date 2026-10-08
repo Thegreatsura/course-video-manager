@@ -1,6 +1,8 @@
 import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import type { LayerLive } from "@/services/layer.server";
 import type { JobKind } from "./job-kind";
+import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
 
 /**
@@ -9,14 +11,27 @@ import { noopJobKind } from "./kinds/noop";
  */
 export const JOB_KINDS = {
   noop: noopJobKind,
-} as const satisfies Record<string, JobKind>;
+  export: exportJobKind,
+} as const satisfies Record<string, JobKind<JobServices>>;
 
 export type JobKindName = keyof typeof JOB_KINDS;
 
-export type JobKindRegistry = Readonly<Record<string, JobKind>>;
+/**
+ * Every service a handler in `JOB_KINDS` may ask for: the app server's own
+ * (`layerLive`), which the sidecar builds once for itself.
+ */
+export type JobServices = LayerLive;
+
+export type JobKindRegistry<R = JobServices> = Readonly<
+  Record<string, JobKind<R>>
+>;
 
 export class UnknownJobKindError extends Data.TaggedError(
   "UnknownJobKindError"
+)<{ readonly kind: string; readonly message: string }> {}
+
+export class NoAttemptsLeftError extends Data.TaggedError(
+  "NoAttemptsLeftError"
 )<{ readonly kind: string; readonly message: string }> {}
 
 /**
@@ -26,13 +41,26 @@ export class UnknownJobKindError extends Data.TaggedError(
  * sidecar later.
  */
 export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
+  /** The id the caller chose for it (the browser does), or `null` for a fresh one. */
+  id: string | null;
   kind: string;
   title: string;
   params: unknown;
   dependsOn: string | null;
   subject: { type: string; id: string } | null;
-  /** `JOB_KINDS`, except in a test that brings kinds of its own. */
-  registry: JobKindRegistry;
+  /**
+   * Attempts this work already spent before it became a Job: a Batch export
+   * child the browser retries hands its export to the sidecar with the
+   * attempts it had left, so it runs as many times in all as it did when the
+   * browser retried it (docs/plans/background-jobs-sidecar.md, section 7.1).
+   * 0 for new work.
+   */
+  attemptsSpent: number;
+  /**
+   * `JOB_KINDS`, except in a test that brings kinds of its own. Enqueueing
+   * never runs a kind, so any kind's requirements will do.
+   */
+  registry: JobKindRegistry<unknown>;
 }) {
   const registry = input.registry;
   const kind = Object.hasOwn(registry, input.kind)
@@ -45,13 +73,21 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     });
   }
   yield* kind.decodeParams(input.params);
+  const maxAttempts = kind.maxAttempts - input.attemptsSpent;
+  if (input.attemptsSpent < 0 || maxAttempts < 1) {
+    return yield* new NoAttemptsLeftError({
+      kind: input.kind,
+      message: `a ${input.kind} Job runs at most ${kind.maxAttempts} times; ${input.attemptsSpent} were already spent`,
+    });
+  }
   const ops = yield* JobOperationsService;
   return yield* ops.enqueueJob({
+    id: input.id,
     kind: input.kind,
     title: input.title,
     lane: kind.lane,
     params: input.params ?? {},
-    maxAttempts: kind.maxAttempts,
+    maxAttempts,
     dependsOn: input.dependsOn,
     subject: input.subject,
   });

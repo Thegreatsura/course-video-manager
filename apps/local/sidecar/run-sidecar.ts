@@ -10,12 +10,9 @@ import {
   isReadOnlyConnection,
   judgeConnection,
 } from "@cvm/core/db/connection-guard";
-import {
-  GitWorktreeProbeLive,
-  isInsideGitWorktree,
-} from "@cvm/core/git-worktree";
-import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
-import { DrizzleService } from "@cvm/core/services/drizzle-service.server";
+import { isInsideGitWorktree } from "@cvm/core/git-worktree";
+import { leaveSignalsToTheProcess } from "@/services/ffmpeg-child-registry";
+import { layerLive } from "@/services/layer.server";
 import { JOB_KINDS } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
@@ -100,11 +97,17 @@ const main = async (): Promise<void> => {
     socket,
   };
 
+  // The sidecar owns its signals: a stop interrupts each running Job, whose
+  // scope kills its ffmpeg, and the Job goes back to the queue. The registry's
+  // own signal handler would SIGKILL ffmpeg first and re-raise the signal,
+  // killing the process before any Job is put back.
+  leaveSignalsToTheProcess();
+
+  // The app server's own services, built once in this process as they are in
+  // the app's (so ffmpeg's GPU/CPU permits are process-wide here too), on the
+  // same guarded database client (`layerLive` includes the Job operations).
   const layer = Layer.mergeAll(
-    JobOperationsService.Default.pipe(
-      Layer.provide(DrizzleService.Default),
-      Layer.provide(GitWorktreeProbeLive)
-    ),
+    layerLive,
     Logger.replace(
       Logger.defaultLogger,
       makeJsonLogger({ logDir, write: (text) => process.stdout.write(text) })
@@ -126,7 +129,7 @@ const main = async (): Promise<void> => {
         timing: SIDECAR_TIMING,
         stop,
         serve: (handle) =>
-          serveSidecarSocket({ socket, handle, registry: JOB_KINDS }),
+          serveSidecarSocket({ socket, handle, registry: JOB_KINDS, logDir }),
       });
     }).pipe(Effect.provide(layer))
   );

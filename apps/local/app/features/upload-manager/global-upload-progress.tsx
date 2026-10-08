@@ -4,6 +4,9 @@ import { UploadContext } from "./upload-context";
 import { UploadRow } from "./upload-row";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import { formatRemaining } from "./upload-eta";
+import type { uploadReducer } from "./upload-reducer";
+import { jobUploadEntry, visibleJobs } from "@/features/jobs/jobs-selectors";
+import { jobLogHref } from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -17,16 +20,33 @@ const CIRCLE_RADIUS = 16;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
 export function GlobalUploadProgress() {
-  const { uploads, dismissUpload, timings, etaHistory, clock } =
-    useContext(UploadContext);
+  const {
+    uploads,
+    dismissUpload,
+    timings,
+    etaHistory,
+    clock,
+    jobs,
+    dismissJob,
+    dismissFinishedJobs,
+  } = useContext(UploadContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const uploadEntries = Object.values(uploads);
-  const hasUploads = uploadEntries.length > 0;
+  // Background Jobs the Sidecar runs, drawn as rows beside the browser's own.
+  const jobEntries = visibleJobs(jobs).flatMap((job) => {
+    const entry = jobUploadEntry(job);
+    return entry ? [entry] : [];
+  });
+  const isJob = (uploadId: string) => uploadId in jobs.jobs;
+  const hasUploads = uploadEntries.length + jobEntries.length > 0;
 
   // A child task is already counted inside its parent's bar, so only the
   // top-level jobs speak for the badge counts and the floating indicator.
-  const rootEntries = uploadEntries.filter((u) => !u.parentUploadId);
+  const rootEntries: uploadReducer.UploadEntry[] = [
+    ...jobEntries,
+    ...uploadEntries.filter((u) => !u.parentUploadId),
+  ];
   const childrenOf = (parentUploadId: string) =>
     uploadEntries.filter((u) => u.parentUploadId === parentUploadId);
 
@@ -78,17 +98,19 @@ export function GlobalUploadProgress() {
       for (const upload of uploadEntries) {
         dismissUpload(upload.uploadId);
       }
+      dismissFinishedJobs();
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, [hasUploads, isActive, uploadEntries, dismissUpload]);
+  }, [hasUploads, isActive, uploadEntries, dismissUpload, dismissFinishedJobs]);
 
   const handleDismiss = useCallback(
     (e: React.MouseEvent, uploadId: string) => {
       e.stopPropagation();
-      dismissUpload(uploadId);
+      if (uploadId in jobs.jobs) dismissJob(uploadId);
+      else dismissUpload(uploadId);
     },
-    [dismissUpload]
+    [dismissUpload, dismissJob, jobs.jobs]
   );
 
   if (!hasUploads) return null;
@@ -175,8 +197,18 @@ export function GlobalUploadProgress() {
               )}
             </DialogTitle>
           </DialogHeader>
+          {jobs.sidecar === "not-running" && (
+            <p
+              role="status"
+              className="text-xs text-yellow-600 dark:text-yellow-500"
+              title={jobs.sidecarMessage ?? undefined}
+            >
+              The sidecar is not running: exports wait in the queue until it
+              starts (`pnpm dev` and `pnpm start` run it).
+            </p>
+          )}
           <div className="max-h-80 overflow-y-auto -mx-6 px-6">
-            {uploadEntries.length === 0 ? (
+            {rootEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No uploads
               </p>
@@ -188,6 +220,11 @@ export function GlobalUploadProgress() {
                       upload={upload}
                       onDismiss={handleDismiss}
                       eta={etas[upload.uploadId]}
+                      logHref={
+                        isJob(upload.uploadId)
+                          ? jobLogHref(upload.uploadId)
+                          : null
+                      }
                     />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow
@@ -196,6 +233,7 @@ export function GlobalUploadProgress() {
                         onDismiss={handleDismiss}
                         nested
                         eta={etas[child.uploadId]}
+                        logHref={null}
                       />
                     ))}
                   </div>

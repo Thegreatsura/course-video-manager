@@ -8,7 +8,8 @@
 // tab, so none is added while the old ones are moved out:
 //
 // 1. `sse-route` — a route that streams a long job back: `createSSEResponse(`
-//    or a hand-written `text/event-stream` response, in apps/local/app/routes.
+//    or a hand-written `text/event-stream` response, in apps/local/app/routes
+//    (except `api.jobs.events.ts`, the Job Event subscription).
 // 2. `browser-driver` — the browser end that keeps one alive:
 //    `consumeSSEStream(`, `new EventSource(` or a `while (!unmounted)` loop,
 //    anywhere in apps/local/app outside `features/jobs/` (the Job Event
@@ -53,7 +54,11 @@ const isTestFile = (file: string): boolean =>
   /(^|\/)(tests?|__tests__|test-utils|e2e)\//.test(file) ||
   /-test-(setup|harness)\.tsx?$/.test(file);
 
-const inRoutes = (file: string) => file.startsWith("apps/local/app/routes/");
+// The Job Event subscription itself: it streams what the Sidecar reports, and
+// closing it cancels nothing. It is the one stream that stays, by design.
+const JOB_EVENTS_ROUTE = "apps/local/app/routes/api.jobs.events.ts";
+const inRoutes = (file: string) =>
+  file.startsWith("apps/local/app/routes/") && file !== JOB_EVENTS_ROUTE;
 const inBrowserScope = (file: string) =>
   file.startsWith("apps/local/app/") &&
   !file.startsWith("apps/local/app/features/jobs/");

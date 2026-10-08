@@ -21,9 +21,16 @@ import {
 } from "./upload-history";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { CompletedStage } from "./upload-timing";
+import { useJobs, type JobSettledReport } from "@/features/jobs/use-jobs";
+import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 
 export interface UploadContextType {
   uploads: uploadReducer.State["uploads"];
+  /** Background Jobs the Sidecar runs (a Video export), as this tab sees them. */
+  jobs: jobsReducer.State;
+  dismissJob: (jobId: string) => void;
+  /** Hide every finished Job: the Global Upload Progress's idle timer. */
+  dismissFinishedJobs: () => void;
   /** Inputs to the ETA: see `estimateUploads`. */
   timings: uploadReducer.State["timings"];
   etaHistory: HistoryLookup;
@@ -67,6 +74,10 @@ export interface UploadContextType {
     description: string,
     dependsOn?: string
   ) => string;
+  /**
+   * Export a Video: a background Job the Sidecar runs, so it carries on when
+   * the tab closes. Returns the Job's id, which an upload may wait on.
+   */
   startExportUpload: (videoId: string, title: string) => string;
   startRenderVerticalUpload: (videoId: string, title: string) => string;
   startBatchExportUpload: (
@@ -104,6 +115,7 @@ function initiateFromRegistry(
   abortControllers: Map<string, AbortController>
 ) {
   const config = uploadTypeRegistry[uploadType];
+  if (!config.initiate) return;
   const base: uploadReducer.BaseUploadEntry = {
     uploadId: action.uploadId,
     videoId: action.videoId,
@@ -167,6 +179,23 @@ export function UploadProvider({
       }
     }
   }, [state.timings, historyStore]);
+
+  // The background Jobs. One that settles may release uploads waiting on it.
+  const onJobSettled = useCallback(
+    (report: JobSettledReport) =>
+      dispatch(
+        report.outcome === "succeeded"
+          ? { type: "server-job-succeeded", jobId: report.jobId }
+          : {
+              type: "server-job-failed",
+              jobId: report.jobId,
+              title: report.title,
+            }
+      ),
+    [dispatch]
+  );
+  const jobs = useJobs(onJobSettled);
+  const { startJob } = jobs;
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const previousUploadsRef = useRef<uploadReducer.State["uploads"]>({});
@@ -379,28 +408,17 @@ export function UploadProvider({
     []
   );
 
-  const startExportUpload = useCallback((videoId: string, title: string) => {
-    const uploadId = generateUploadId();
-
-    const action = {
-      type: "START_UPLOAD" as const,
-      uploadId,
-      videoId,
-      title,
-      uploadType: "export" as const,
-    };
-    dispatch(action);
-
-    initiateFromRegistry(
-      "export",
-      action,
-      undefined,
-      dispatch,
-      abortControllersRef.current
-    );
-
-    return uploadId;
-  }, []);
+  const startExportUpload = useCallback(
+    (videoId: string, title: string) =>
+      startJob({
+        kind: "export",
+        title,
+        params: { videoId },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+      }),
+    [startJob]
+  );
 
   const startRenderVerticalUpload = useCallback(
     (videoId: string, title: string) => {
@@ -616,11 +634,28 @@ export function UploadProvider({
         case "error-toast":
           showErrorToast(reaction.upload);
           break;
-        case "initiate":
+        case "initiate": {
+          const initiate =
+            uploadTypeRegistry[reaction.upload.uploadType].initiate;
+          if (!initiate) {
+            // A Batch export's per-Video row failed, and the browser used to
+            // retry it as a standalone export. That export is a Job now: hand
+            // it to the Sidecar with the attempts the row has left, and let
+            // the Job's row take this one's place.
+            startJob({
+              kind: "export",
+              title: reaction.upload.title,
+              params: { videoId: reaction.upload.videoId },
+              subject: { type: "video", id: reaction.upload.videoId },
+              attemptsSpent: reaction.upload.retryCount,
+            });
+            dispatch({ type: "DISMISS", uploadId: reaction.uploadId });
+            break;
+          }
           if (reaction.retry) {
             dispatch({ type: "RETRY", uploadId: reaction.uploadId });
           }
-          uploadTypeRegistry[reaction.upload.uploadType].initiate(
+          initiate(
             reaction.uploadId,
             reaction.upload,
             reaction.params,
@@ -628,6 +663,7 @@ export function UploadProvider({
             abortControllersRef.current
           );
           break;
+        }
       }
     }
 
@@ -647,6 +683,9 @@ export function UploadProvider({
     <UploadContext.Provider
       value={{
         uploads: state.uploads,
+        jobs: jobs.state,
+        dismissJob: jobs.dismissJob,
+        dismissFinishedJobs: jobs.dismissFinishedJobs,
         timings: state.timings,
         etaHistory: historyStore.lookup,
         clock,

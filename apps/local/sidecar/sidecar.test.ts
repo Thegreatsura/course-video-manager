@@ -16,10 +16,14 @@ import {
   type TestDb,
 } from "@/test-utils/pglite";
 import { defineJobKind } from "./job-kind";
-import { enqueueJob, JOB_KINDS, type JobKindRegistry } from "./job-kinds";
+import { enqueueJob, type JobKindRegistry } from "./job-kinds";
+import { noopJobKind } from "./kinds/noop";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, type SidecarTiming } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
+
+/** The kinds that need no service: what these tests run. */
+const JOB_KINDS = { noop: noopJobKind } as const;
 
 let testDb: TestDb;
 let dir: string;
@@ -65,7 +69,7 @@ const TIMING: SidecarTiming = {
 
 /** Start a sidecar in the background; resolves once its socket answers. */
 const startSidecar = (
-  registry: JobKindRegistry,
+  registry: JobKindRegistry<never>,
   name = "first",
   timing: SidecarTiming = TIMING
 ) =>
@@ -87,7 +91,7 @@ const startSidecar = (
         timing,
         stop,
         serve: (handle) =>
-          serveSidecarSocket({ socket, handle, registry }).pipe(
+          serveSidecarSocket({ socket, handle, registry, logDir }).pipe(
             Effect.zipRight(Deferred.succeed(serving, undefined))
           ),
       })
@@ -139,12 +143,21 @@ const waitForJob = (id: string, done: (job: Job) => boolean) =>
 const finished = (job: Job) => !["queued", "running"].includes(job.status);
 
 const enqueue = (
-  registry: JobKindRegistry,
+  registry: JobKindRegistry<never>,
   kind: string,
   params: unknown,
   title = kind
 ) =>
-  enqueueJob({ kind, title, params, dependsOn: null, subject: null, registry });
+  enqueueJob({
+    id: null,
+    kind,
+    title,
+    params,
+    dependsOn: null,
+    subject: null,
+    attemptsSpent: 0,
+    registry,
+  });
 
 const logLines = (jobId: string) =>
   fs
@@ -152,6 +165,69 @@ const logLines = (jobId: string) =>
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+interface SseMessage {
+  id: string | null;
+  event: string;
+  data: any;
+}
+
+/** Subscribe to the socket's `/events`; collects every message until closed. */
+const subscribe = (socket: string, lastEventId: string | null = null) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const messages: SseMessage[] = [];
+      let buffer = "";
+      const req = http.get({
+        socketPath: socket,
+        path: "/events",
+        headers: lastEventId ? { "last-event-id": lastEventId } : {},
+      });
+      req.on("response", (res) => {
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          buffer += chunk;
+          let end: number;
+          while ((end = buffer.indexOf("\n\n")) !== -1) {
+            const block = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
+            const field = (name: string) =>
+              block
+                .split("\n")
+                .find((l) => l.startsWith(`${name}: `))
+                ?.slice(name.length + 2) ?? null;
+            const event = field("event");
+            const data = field("data");
+            if (event && data) {
+              messages.push({ id: field("id"), event, data: JSON.parse(data) });
+            }
+          }
+        });
+      });
+      req.on("error", () => {});
+      return { messages, req };
+    }),
+    ({ req }) => Effect.sync(() => req.destroy())
+  ).pipe(
+    Effect.map(({ messages }) => ({
+      messages,
+      waitFor: (done: (all: SseMessage[]) => boolean) =>
+        Effect.gen(function* () {
+          for (let i = 0; i < 200; i++) {
+            if (done(messages)) return messages;
+            yield* Effect.sleep(25);
+          }
+          return yield* Effect.dieMessage(
+            `the stream never got there: ${JSON.stringify(messages.map((m) => m.event))}`
+          );
+        }),
+    }))
+  );
+
+const eventTypes = (messages: SseMessage[], jobId: string) =>
+  messages
+    .filter((m) => m.event === "job-event" && m.data.job.id === jobId)
+    .map((m) => m.data.event.type as string);
 
 /** Kinds that record how many of themselves run at once. */
 const concurrencyProbe = () => {
@@ -343,7 +419,7 @@ describe("the sidecar", () => {
   );
 
   it.live(
-    "puts a Job it was running back in the queue as its next attempt when it is stopped",
+    "puts a Job it was running back in the queue at the same attempt when it is stopped on purpose",
     () =>
       Effect.gen(function* () {
         const { stop, fiber } = yield* startSidecar(JOB_KINDS);
@@ -354,14 +430,101 @@ describe("the sidecar", () => {
         yield* Fiber.join(fiber);
 
         const ops = yield* JobOperationsService;
+        // A restart (tsx watch after an edit, Ctrl-C) is not the Job failing.
         expect(yield* ops.getJob(job.id)).toMatchObject({
           status: "queued",
-          attempt: 2,
+          attempt: 1,
         });
-        expect(logLines(job.id).map((l) => l.message)).toContain(
-          "job interrupted"
-        );
+        const events = yield* ops.listJobEvents(job.id);
+        expect(events.at(-1)).toMatchObject({
+          type: "requeued",
+          data: { attempt: 1 },
+        });
+
+        // The next sidecar runs it from where the queue left it.
+        const next = yield* startSidecar(JOB_KINDS, "second");
+        yield* waitForJob(job.id, (j) => j.status === "running");
+        yield* Deferred.succeed(next.stop, "test over");
+        yield* Fiber.join(next.fiber);
+        expect(yield* ops.getJob(job.id)).toMatchObject({ attempt: 1 });
       }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
+    "streams Job Events to a subscriber: a snapshot of what is running, then each event as it happens",
+    () =>
+      Effect.gen(function* () {
+        const { stop, fiber, socket } = yield* startSidecar(JOB_KINDS);
+        const running = yield* enqueue(JOB_KINDS, "noop", {
+          durationMs: 60_000,
+        });
+        yield* waitForJob(running.id, (j) => j.status === "running");
+
+        const stream = yield* subscribe(socket);
+        const [snapshot] = yield* stream.waitFor((all) => all.length > 0);
+        expect(snapshot?.event).toBe("snapshot");
+        expect(
+          snapshot?.data.jobs.map((j: any) => [
+            j.job.title,
+            j.events.map((e: any) => e.type),
+          ])
+        ).toEqual([["noop", expect.arrayContaining(["queued", "started"])]]);
+
+        const later = yield* enqueue(JOB_KINDS, "noop", {}, "later");
+        yield* stream.waitFor((all) =>
+          eventTypes(all, later.id).includes("succeeded")
+        );
+        expect(eventTypes(stream.messages, later.id)).toEqual([
+          "queued",
+          "started",
+          "progress",
+          "succeeded",
+        ]);
+        // Every live message carries its event's id, for a reconnect.
+        const last = stream.messages.at(-1);
+        expect(last?.id).toBe(String(last?.data.event.id));
+
+        yield* Deferred.succeed(stop, "test over");
+        yield* Fiber.join(fiber);
+      }).pipe(Effect.scoped, Effect.provide(layer()))
+  );
+
+  it.live(
+    "replays what a subscriber missed after its Last-Event-ID instead of a snapshot",
+    () =>
+      Effect.gen(function* () {
+        const { stop, fiber, socket } = yield* startSidecar(JOB_KINDS);
+        const ops = yield* JobOperationsService;
+        const before = yield* ops.latestJobEventId();
+        const missed = yield* enqueue(JOB_KINDS, "noop", {}, "missed");
+        yield* waitForJob(missed.id, finished);
+
+        const stream = yield* subscribe(socket, String(before));
+        yield* stream.waitFor((all) =>
+          eventTypes(all, missed.id).includes("succeeded")
+        );
+        expect(stream.messages.some((m) => m.event === "snapshot")).toBe(false);
+
+        yield* Deferred.succeed(stop, "test over");
+        yield* Fiber.join(fiber);
+      }).pipe(Effect.scoped, Effect.provide(layer()))
+  );
+
+  it.live("serves a Job's log over the socket", () =>
+    Effect.gen(function* () {
+      const { stop, fiber, socket } = yield* startSidecar(JOB_KINDS);
+      const job = yield* enqueue(JOB_KINDS, "noop", { failAttempts: 99 });
+      yield* waitForJob(job.id, finished);
+
+      const read = yield* request(socket, "GET", `/jobs/${job.id}/log`);
+      expect(read.status).toBe(200);
+      expect(read.body.log).toContain("NoopJobFailedError");
+      const missing = yield* request(socket, "GET", "/jobs/nope/log");
+      expect(missing.status).toBe(404);
+
+      yield* Deferred.succeed(stop, "test over");
+      yield* Fiber.join(fiber);
+    }).pipe(Effect.provide(layer()))
   );
 
   it.live(

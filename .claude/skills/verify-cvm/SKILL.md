@@ -141,7 +141,9 @@ dud credentials, once the server answers. `launch` prints its pid and socket:
 sidecar:  pid 1643294, socket /run/user/1000/cvm-sidecar-<run id>.sock, job logs in <evidence>/logs/jobs
 ```
 
-Its socket is a Unix socket named by the run id, never a port. Its output is
+Its socket is a Unix socket named by the run id, never a port, and the run's
+server is pointed at it (`CVM_SIDECAR_SOCKET`): an Export pressed in the
+browser runs in this sidecar, and its row and toasts come from its Job Events. Its output is
 `<evidence>/sidecar.log`, and each Job's log is `<evidence>/logs/jobs/<job id>.jsonl`.
 To run a Job by hand, post it to the socket and read it back:
 
