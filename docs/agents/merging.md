@@ -2,12 +2,13 @@
 
 `main` is protected by a ruleset: a PR merges only once the `check` status is green on a branch that is up to date with `main` (strict). Every change lands through this sequence.
 
-1. **Worktree.** `git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin/main`, then `pnpm install --frozen-lockfile --prefer-offline` inside it. If you touch UI, verify with the `verify-cvm` skill — it runs on a clone of its own and needs no `.env`. A worktree never opens a writable connection to a remote database: `DrizzleService`, the `db:*` scripts and drizzle-kit refuse (`packages/core/db/connection-guard.ts`), and `cvm`'s local-only commands refuse too.
+1. **Worktree.** `git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin/main`, then `pnpm install --frozen-lockfile --prefer-offline` inside it. A worktree never opens a writable connection to a remote database: `DrizzleService`, the `db:*` scripts and drizzle-kit refuse (`packages/core/db/connection-guard.ts`), and `cvm`'s local-only commands refuse too.
 2. **Commit.** `pnpm run check` is green before you push. Every commit ends with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-3. **PR.** `gh pr create`; the body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-4. **Merge.** Done when the PR shows `MERGED` and your worktree is gone:
+3. **Browser check.** Any change with a visible effect in the UI is driven in the browser with `verify-cvm` (`.claude/skills/verify-cvm/SKILL.md` — read it directly if the skill isn't loaded) before you open the PR. It runs on a clone of its own and needs no `.env`. Copy the evidence directory out of `.verify/` before the worktree goes.
+4. **PR.** `gh pr create`; the body states what you clicked and saw in the browser, with screenshots or the evidence path, or says `No UI change`; the body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+5. **Merge.** Done when the PR shows `MERGED` and your worktree is gone:
    1. Wait for `check` to pass (`gh pr checks <pr> --watch`).
-   2. If `gh pr view <pr> --json mergeStateStatus` says `BEHIND`, run `gh pr update-branch <pr>` and go back to 4.1.
+   2. If `gh pr view <pr> --json mergeStateStatus` says `BEHIND`, run `gh pr update-branch <pr>` and go back to 5.1.
    3. `gh pr merge <pr> --merge`. Leave off `--delete-branch`: `main` is checked out in another worktree, so the local cleanup fails.
    4. `git push origin --delete <branch>`, then `git worktree remove .claude/worktrees/<name>`.
 
