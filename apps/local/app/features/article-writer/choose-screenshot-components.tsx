@@ -34,7 +34,7 @@ export interface ChooseScreenshotRuntime {
     alt: string,
     timestamp: number,
     videoFilename: string
-  ) => void;
+  ) => Promise<boolean>;
   onRemove: (messageId: string, clipIndex: number, alt: string) => void;
 }
 
