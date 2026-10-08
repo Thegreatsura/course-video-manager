@@ -3,8 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import {
+  HUB_URL_ENV_KEY,
+  isMainCheckout,
+  liveDeskAddresses,
+  OBS_URL_ENV_KEY,
+} from "./live-desk/live-desk";
 
 // On CI (GitHub Actions sets CI=true) match the fork count to the runner's
 // core count — the suite is CPU-bound, so spawning more forks than cores just
@@ -59,6 +65,19 @@ function serveRoots(): string[] {
 // .claude/skills/verify-cvm/scripts/verify.sh.
 const DEV_PORT = 5173;
 
+// The live-desk addresses app/lib/live-channels.ts is built with, decided here
+// in Node because the browser cannot ask git which checkout it came from.
+function liveDeskDefine(mode: string): Record<string, string> {
+  const { hub, obs } = liveDeskAddresses({
+    mainCheckout: isMainCheckout(path.resolve(".")),
+    explicit: loadEnv(mode, WORKSPACE_ROOT, "VITE_"),
+  });
+  return {
+    [`import.meta.env.${HUB_URL_ENV_KEY}`]: JSON.stringify(hub),
+    [`import.meta.env.${OBS_URL_ENV_KEY}`]: JSON.stringify(obs),
+  };
+}
+
 // A `pnpm start` prints ~700 lines, and ~600 of them are this build reporting
 // on itself: one line per emitted asset, one warning per empty route chunk, one
 // warning per sourcemap it could not resolve. THE POINT IS THE AGENT (see
@@ -67,8 +86,13 @@ const DEV_PORT = 5173;
 // context spent on nothing. What follows removes the volume and keeps the
 // signal: every warning Vite would show you by default still shows, and errors
 // are untouched.
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   envDir: WORKSPACE_ROOT,
+
+  // Matt's live desk (OBS + the Stream Deck hub) is wired in only when this is
+  // the main checkout; every worktree's editor gets the dead address unless an
+  // env value says otherwise. See live-desk/live-desk.ts.
+  define: liveDeskDefine(mode),
 
   // `warn` on a build only. It drops the per-asset size table (419 lines of the
   // 697), `transforming...`, `computing gzip size...` and `built in Ns` — all

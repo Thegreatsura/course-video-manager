@@ -284,21 +284,64 @@ describe("verify-cvm: concurrent runs are addressed by id and owned by their wor
     }
   });
 
-  it("leaves no browser client addressing the hub or OBS except through live-channels", () => {
-    const hits = execFileSync(
+  it("leaves nothing addressing the live desk except the files gated to the main checkout", () => {
+    // Every spelling of Matt's hub (WS 5172), its unauthenticated HTTP side
+    // (5174) and OBS (4455), across the app, the forwarder, the Chrome
+    // extension's folder and the agent skills. A skill line telling an agent to
+    // `curl localhost:5174/api/…` is as live as code, so skill Markdown counts
+    // in full; in code, comments do not.
+    const desk = String.raw`(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(5172|5174|4455)\b`;
+    const allowed: Record<string, string> = {
+      // The one place the live addresses are named; handed out only to the
+      // main checkout.
+      "apps/local/live-desk/live-desk.ts": "isMainCheckout",
+      // Runs inside Matt's Chrome, not a checkout: it can only ever reach the
+      // hub his own main checkout serves.
+      "apps/local/chrome-extension/background.js": "",
+      // A dev script that sends to the hub — refuses outside the main checkout.
+      "apps/local/chrome-extension/dev-send-events.ts":
+        "isMainCheckout(process.cwd())",
+    };
+    const repo = join(import.meta.dirname, "..");
+    const files = execFileSync(
       "git",
-      ["grep", "-lE", "localhost:(5172|4455)", "--", "apps/local/app"],
-      { cwd: join(import.meta.dirname, ".."), encoding: "utf8" }
+      [
+        "grep",
+        "-lE",
+        desk,
+        "--",
+        "apps/local/app",
+        "apps/local/live-desk",
+        "apps/local/stream-deck-forwarder/*.ts",
+        "apps/local/chrome-extension",
+        ".claude/skills",
+        "apps/local/vite.config.ts",
+        ":!*.test.ts",
+      ],
+      { cwd: repo, encoding: "utf8" }
     )
       .trim()
-      .split("\n");
-    const literal = hits.filter((f) => {
-      if (f.endsWith("lib/live-channels.ts")) return false;
-      const code = readFileSync(join(import.meta.dirname, "..", f), "utf8")
-        .split("\n")
-        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l));
-      return code.some((l) => /localhost:(5172|4455)/.test(l));
+      .split("\n")
+      .filter(Boolean);
+    expect(files).toContain("apps/local/chrome-extension/background.js");
+
+    const re = new RegExp(desk);
+    const live = files.filter((f) => {
+      const lines = readFileSync(join(repo, f), "utf8").split("\n");
+      const skillProse = f.startsWith(".claude/skills/") && f.endsWith(".md");
+      // A human-facing README outside the skills describes the desk; it does
+      // not drive it.
+      if (f.endsWith(".md") && !skillProse) return false;
+      const code = skillProse
+        ? lines
+        : lines.filter((l) => !/^\s*(\/\/|\*|\/\*|#)/.test(l));
+      return code.some((l) => re.test(l));
     });
-    expect(literal).toEqual([]);
+    const unguarded = live.filter(
+      (f) =>
+        !(f in allowed) ||
+        !readFileSync(join(repo, f), "utf8").includes(allowed[f]!)
+    );
+    expect(unguarded).toEqual([]);
   });
 });

@@ -4,13 +4,16 @@
  * link-capture) and OBS. Every client reads its address from here, never from
  * a literal.
  *
- * A verify-cvm run overrides both (`VITE_STREAM_DECK_HUB_URL`,
- * `VITE_OBS_WEBSOCKET_URL`) with an address nothing listens on, so its editor
- * never hears Matt's real button presses — a press on a clone's editor acts
- * on the clone — and Matt's editor never hears it.
+ * The addresses are decided at build time by vite.config.ts (see
+ * live-desk/live-desk.ts): the live desk in Matt's main checkout, the discard
+ * port everywhere else, and an explicit `VITE_STREAM_DECK_HUB_URL` /
+ * `VITE_OBS_WEBSOCKET_URL` over both — verify-cvm pins its runs that way. A
+ * worktree's editor therefore never hears Matt's real button presses, and his
+ * editor never hears it. The fallback here is the dead address too, so a build
+ * that skipped the config still fails closed.
  */
 export const STREAM_DECK_HUB_URL: string =
-  import.meta.env.VITE_STREAM_DECK_HUB_URL || "ws://localhost:5172";
+  import.meta.env.VITE_STREAM_DECK_HUB_URL || "ws://127.0.0.1:9";
 
 export const OBS_WEBSOCKET_URL: string =
-  import.meta.env.VITE_OBS_WEBSOCKET_URL || "ws://localhost:4455";
+  import.meta.env.VITE_OBS_WEBSOCKET_URL || "ws://127.0.0.1:9";
