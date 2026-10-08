@@ -72,22 +72,12 @@ describe("CloudinaryMarkdownService", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("skips http URLs", () =>
-    Effect.gen(function* () {
-      const body =
-        "![hosted](https://example.com/image.png)\n![also](http://example.com/other.jpg)";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toBe(body);
-      expect(result.uploadedFilePaths).toEqual([]);
-      expect(uploadCounter).toBe(0);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("handles mixed local and http images", () =>
+  it.effect("handles mixed local, https and http images", () =>
     Effect.gen(function* () {
       const body = [
         "![local](screenshot.png)",
         "![remote](https://cdn.example.com/photo.jpg)",
+        "![plain-http](http://example.com/other.jpg)",
         "![another-local](images/chart.png)",
       ].join("\n");
       const result = yield* uploadImagesInMarkdown(body, "/base");
@@ -95,6 +85,7 @@ describe("CloudinaryMarkdownService", () => {
         [
           "![local](https://res.cloudinary.com/test/ai-hero-images/screenshot_1)",
           "![remote](https://cdn.example.com/photo.jpg)",
+          "![plain-http](http://example.com/other.jpg)",
           "![another-local](https://res.cloudinary.com/test/ai-hero-images/chart_2)",
         ].join("\n")
       );

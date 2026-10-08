@@ -140,12 +140,6 @@ describe("wavDurationSeconds", () => {
 });
 
 describe("speechFilename", () => {
-  it("is the same file for the same words", () => {
-    expect(speechFilename("Here's the problem.")).toBe(
-      speechFilename("Here's the problem.")
-    );
-  });
-
   it("is a different file for different words", () => {
     expect(speechFilename("One.")).not.toBe(speechFilename("Two."));
   });

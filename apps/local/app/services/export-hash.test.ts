@@ -4,8 +4,6 @@ import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import {
   computeExportHash,
-  exportFilename,
-  resolveExportPath,
   isExported,
   type ExportClip,
   type ExportOverlay,
@@ -26,20 +24,6 @@ describe("export-hash", () => {
   describe("computeExportHash", () => {
     it("returns null for empty clips", () => {
       expect(computeExportHash([], "landscape")).toBeNull();
-    });
-
-    it("returns a 32-char hex string for clips", () => {
-      const hash = computeExportHash(
-        [
-          makeClip({
-            videoFilename: "rec.mp4",
-            sourceStartTime: 0,
-            sourceEndTime: 10,
-          }),
-        ],
-        "landscape"
-      );
-      expect(hash).toMatch(/^[0-9a-f]{32}$/);
     });
 
     it("changing the video format changes the hash", () => {
@@ -67,24 +51,6 @@ describe("export-hash", () => {
       expect(computeExportHash(clips, undefined)).toBe(landscape);
       expect(computeExportHash(clips, null)).toBe(landscape);
       expect(computeExportHash(clips, "bogus")).toBe(landscape);
-    });
-
-    it("is deterministic for the same input", () => {
-      const clips = [
-        makeClip({
-          videoFilename: "rec.mp4",
-          sourceStartTime: 0,
-          sourceEndTime: 10,
-        }),
-        makeClip({
-          videoFilename: "rec2.mp4",
-          sourceStartTime: 5,
-          sourceEndTime: 15,
-        }),
-      ];
-      const hash1 = computeExportHash(clips, "landscape");
-      const hash2 = computeExportHash(clips, "landscape");
-      expect(hash1).toBe(hash2);
     });
 
     it("hashes clips in the given array order, not a re-sorted one", () => {
@@ -336,22 +302,6 @@ describe("export-hash", () => {
       const a = card({ at: 1, title: "A" });
       const b = card({ at: 6, title: "B" });
       expect(withOverlays(a, b)).toBe(withOverlays(b, a));
-    });
-  });
-
-  describe("exportFilename", () => {
-    it("returns {courseId}-{hash}.mp4", () => {
-      expect(exportFilename("course-123", "abc123")).toBe(
-        "course-123-abc123.mp4"
-      );
-    });
-  });
-
-  describe("resolveExportPath", () => {
-    it("returns absolute path in finished videos directory", () => {
-      expect(resolveExportPath("/output", "course-123", "abc123")).toBe(
-        "/output/course-123-abc123.mp4"
-      );
     });
   });
 

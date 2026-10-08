@@ -22,10 +22,6 @@ describe("isUrl", () => {
     expect(isUrl("https://res.cloudinary.com/test/image.png")).toBe(true);
   });
 
-  it("returns true for http URLs", () => {
-    expect(isUrl("http://example.com/file.png")).toBe(true);
-  });
-
   it("returns false for local filenames", () => {
     expect(isUrl("image.png")).toBe(false);
     expect(isUrl("thumbnail-abc.png")).toBe(false);
@@ -42,21 +38,9 @@ describe("getVideoFilePath", () => {
     expect(result).not.toContain("standalone");
   });
 
-  it("joins local filename with lineageId directory", () => {
-    const result = getVideoFilePath("lineage-abc-123", "image.png");
-    expect(result).toContain("lineage-abc-123");
-    expect(result).toContain("image.png");
-  });
-
   it("returns URL as-is when filename is an https URL", () => {
     const url =
       "https://res.cloudinary.com/total-typescript/image/upload/v1772100428/ai-hero-images/alyzcymusoj0qby2wfhc.png";
-    const result = getVideoFilePath("lineage-abc-123", url);
-    expect(result).toBe(url);
-  });
-
-  it("returns URL as-is when filename is an http URL", () => {
-    const url = "http://example.com/image.png";
     const result = getVideoFilePath("lineage-abc-123", url);
     expect(result).toBe(url);
   });

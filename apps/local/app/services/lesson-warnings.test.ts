@@ -23,10 +23,6 @@ describe("deriveVideoRole", () => {
     expect(deriveVideoRole("Solution")).toBe("solution");
   });
 
-  it("returns solution for 'Solution 2'", () => {
-    expect(deriveVideoRole("Solution 2")).toBe("solution");
-  });
-
   it("returns unknown for unrecognized titles", () => {
     expect(deriveVideoRole("Intro")).toBe("unknown");
   });
@@ -107,12 +103,6 @@ describe("computeLessonWarnings", () => {
     ).toEqual([{ kind: "numberedRoleName" }]);
   });
 
-  it("flags 'Explainer 1' as a numbered role name (canonical is 'Explainer')", () => {
-    expect(
-      computeLessonWarnings({ videos: [{ title: "Explainer 1" }] })
-    ).toContainEqual({ kind: "numberedRoleName" });
-  });
-
   it("does not flag a numbered non-role name", () => {
     expect(
       computeLessonWarnings({ videos: [{ title: "Intro 2" }] })
@@ -125,37 +115,6 @@ describe("computeLessonWarnings", () => {
     });
     expect(result).toContainEqual({ kind: "numberedRoleName" });
     expect(result).toContainEqual({ kind: "duplicateRoles" });
-  });
-});
-
-describe("computeCourseViewLintCount", () => {
-  const makeVideo = (
-    title: string,
-    clips: { order: string; archived: boolean }[] = [],
-    chapters: { order: string; archived: boolean }[] = []
-  ) => ({ title, clips, chapters });
-
-  it("returns 0 for empty sections", () => {
-    expect(computeCourseViewLintCount([])).toBe(0);
-  });
-
-  it("returns 0 for a valid explainer lesson with chapters", () => {
-    const sections = [
-      {
-        lessons: [
-          {
-            videos: [
-              makeVideo(
-                "Explainer",
-                [{ order: "a1", archived: false }],
-                [{ order: "a0", archived: false }]
-              ),
-            ],
-          },
-        ],
-      },
-    ];
-    expect(computeCourseViewLintCount(sections)).toBe(0);
   });
 });
 

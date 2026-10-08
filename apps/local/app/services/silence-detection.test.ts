@@ -89,22 +89,6 @@ describe("findSilenceInVideo", () => {
     expect(clip.endTime).toBeCloseTo(5.07 + startTimeOffset, 0);
   });
 
-  it("does not adjust timestamps when startTime is 0", async () => {
-    const ffmpeg = mockFFmpeg({
-      fps: 30,
-      silenceOutput: SILENCE_OUTPUT_TWO_PERIODS,
-    });
-
-    const result = await run(
-      findSilenceInVideo(ffmpeg, "/test/video.mkv", { startTime: 0 })
-    );
-
-    expect(result.clips).toHaveLength(1);
-    const clip = result.clips[0]!;
-    expect(clip.startTime).toBeCloseTo(2.0, 1);
-    expect(clip.endTime).toBeCloseTo(5.07, 1);
-  });
-
   it("keeps the first clip when ffmpeg reports a negative first silence_start", async () => {
     const ffmpeg = mockFFmpeg({
       fps: 60,

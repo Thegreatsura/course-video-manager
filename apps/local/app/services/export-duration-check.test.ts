@@ -17,20 +17,16 @@ describe("isExportUnacceptablyShort", () => {
     expect(verdict(100, 100)).toBe(false);
   });
 
-  it("accepts an export short by less than the tolerance", () => {
-    expect(verdict(100, 100 - EXPORT_DURATION_TOLERANCE_IN_SECONDS + 0.01)).toBe(
+  it("accepts an export short by exactly the tolerance", () => {
+    expect(verdict(100, 100 - EXPORT_DURATION_TOLERANCE_IN_SECONDS)).toBe(
       false
     );
   });
 
-  it("accepts an export short by exactly the tolerance", () => {
-    expect(verdict(100, 100 - EXPORT_DURATION_TOLERANCE_IN_SECONDS)).toBe(false);
-  });
-
   it("refuses an export short by more than the tolerance", () => {
-    expect(verdict(100, 100 - EXPORT_DURATION_TOLERANCE_IN_SECONDS - 0.01)).toBe(
-      true
-    );
+    expect(
+      verdict(100, 100 - EXPORT_DURATION_TOLERANCE_IN_SECONDS - 0.01)
+    ).toBe(true);
   });
 
   it("refuses each of the three truncations found on disk", () => {

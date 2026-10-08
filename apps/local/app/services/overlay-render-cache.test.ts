@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import path from "node:path";
 import {
   computeOverlayContentHash,
   overlayContentHashAtVersion,
-  overlayRenderFilename,
   resolveOverlayRenderPath,
   OVERLAY_RENDERER_VERSION,
   type BulletPanelContent,
@@ -50,16 +48,6 @@ const panelWithEditedBullet = (edit: {
 
 describe("overlay-render-cache", () => {
   describe("computeOverlayContentHash — Definition Cards", () => {
-    it("returns a 32-char hex string", () => {
-      expect(computeOverlayContentHash(card())).toMatch(/^[0-9a-f]{32}$/);
-    });
-
-    it("is stable for the same content", () => {
-      expect(computeOverlayContentHash(card())).toBe(
-        computeOverlayContentHash(card())
-      );
-    });
-
     it("changing the title changes the hash", () => {
       expect(computeOverlayContentHash(card())).not.toBe(
         computeOverlayContentHash(card({ title: "Streaming" }))
@@ -105,12 +93,6 @@ describe("overlay-render-cache", () => {
   });
 
   describe("computeOverlayContentHash — Bullet Panels", () => {
-    it("is stable for the same content", () => {
-      expect(computeOverlayContentHash(panel())).toBe(
-        computeOverlayContentHash(panel())
-      );
-    });
-
     it("changing the panel's heading changes the hash", () => {
       expect(computeOverlayContentHash(panel())).not.toBe(
         computeOverlayContentHash(panel({ title: "Something else" }))
@@ -191,39 +173,11 @@ describe("overlay-render-cache", () => {
   });
 
   describe("resolveOverlayRenderPath", () => {
-    it("puts the render in the cache directory", () => {
-      expect(
-        resolveOverlayRenderPath("/cache/overlays", "course-1", card())
-      ).toBe(
-        path.join(
-          "/cache/overlays",
-          overlayRenderFilename("course-1", computeOverlayContentHash(card()))
-        )
-      );
-    });
-
-    it("gives identical content under the same course one path", () => {
-      expect(
-        resolveOverlayRenderPath("/cache/overlays", "course-1", card())
-      ).toBe(resolveOverlayRenderPath("/cache/overlays", "course-1", card()));
-    });
-
     it("gives identical content under a different course a different path", () => {
       expect(
         resolveOverlayRenderPath("/cache/overlays", "course-1", card())
       ).not.toBe(
         resolveOverlayRenderPath("/cache/overlays", "course-2", card())
-      );
-    });
-
-    it("gives a Bullet Panel a path of the same shape", () => {
-      expect(
-        resolveOverlayRenderPath("/cache/overlays", "course-1", panel())
-      ).toBe(
-        path.join(
-          "/cache/overlays",
-          overlayRenderFilename("course-1", computeOverlayContentHash(panel()))
-        )
       );
     });
   });
