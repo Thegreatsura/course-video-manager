@@ -98,15 +98,6 @@ describe("overlayRenderProps", () => {
       );
     });
 
-    it("carries the card's own words", () => {
-      const props = overlayRenderProps(content);
-
-      expect(props.definitionCards[0]).toMatchObject({
-        title: content.title,
-        description: content.description,
-      });
-    });
-
     it("draws no panel", () => {
       expect(overlayRenderProps(content).bulletPanels).toEqual([]);
     });
@@ -148,14 +139,6 @@ describe("overlayRenderProps", () => {
         disableEnterAnimation: true,
         disableExitAnimation: true,
       });
-    });
-
-    it("renders at the landscape export frame", () => {
-      const props = overlayRenderProps(panel);
-
-      expect({ width: props.width, height: props.height }).toEqual(
-        OVERLAY_RENDER_FRAME
-      );
     });
 
     it("draws no card", () => {

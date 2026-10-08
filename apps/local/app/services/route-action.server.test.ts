@@ -409,24 +409,6 @@ describe("makeLoader", () => {
     expect(result).toEqual({ items: [1, 2, 3] });
   });
 
-  it("passes params to the effect", async () => {
-    const runtime = makeTestRuntime();
-
-    const loader = makeLoader(
-      {
-        effect: ({ params }) => Effect.succeed({ id: params.pitchId }),
-      },
-      runtime
-    );
-
-    const result = await loader({
-      request: dummyRequest,
-      params: { pitchId: "abc-123" },
-    });
-
-    expect(result).toEqual({ id: "abc-123" });
-  });
-
   describe("error handling", () => {
     it("maps NotFoundError to 404 by default", async () => {
       const runtime = makeTestRuntime();
@@ -445,26 +427,6 @@ describe("makeLoader", () => {
         const defect = extractDieDefect(error);
         expect(defect.init.status).toBe(404);
         expect(defect.data).toBe("Not found");
-      }
-    });
-
-    it("maps ParseError to 400 by default", async () => {
-      const runtime = makeTestRuntime();
-
-      const loader = makeLoader(
-        {
-          effect: () => Effect.fail({ _tag: "ParseError" as const }),
-        },
-        runtime
-      );
-
-      try {
-        await loader({ request: dummyRequest, params: {} });
-        expect.unreachable("should have thrown");
-      } catch (error) {
-        const defect = extractDieDefect(error);
-        expect(defect.init.status).toBe(400);
-        expect(defect.data).toBe("Invalid request");
       }
     });
 

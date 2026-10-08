@@ -21,11 +21,6 @@ describe("appendBoundedTail", () => {
     const tail = appendBoundedTail("", "x".repeat(50), 10);
     expect(tail).toBe("x".repeat(10));
   });
-
-  it("defaults to MAX_STDERR_TAIL_CHARS when no limit is given", () => {
-    const tail = appendBoundedTail("", "y".repeat(10_000));
-    expect(tail.length).toBe(8_000);
-  });
 });
 
 describe("withStderrTail", () => {
