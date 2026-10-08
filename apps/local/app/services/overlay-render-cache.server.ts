@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertUnder } from "@/services/assert-under";
 import path from "node:path";
 import { FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
@@ -56,10 +57,9 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
         courseId: string;
         content: OverlayContent;
       }) {
-        const cachedPath = resolveOverlayRenderPath(
+        const cachedPath = assertUnder(
           cacheDir,
-          opts.courseId,
-          opts.content
+          resolveOverlayRenderPath(cacheDir, opts.courseId, opts.content)
         );
 
         const alreadyRendered = yield* fs
@@ -84,9 +84,12 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
         // a scratch name ending in `.partial` fails every render before a
         // single frame is drawn.
         const cachedExtension = path.extname(cachedPath);
-        const scratchPath = path.join(
+        const scratchPath = assertUnder(
           cacheDir,
-          `.${path.basename(cachedPath, cachedExtension)}.${crypto.randomUUID()}.partial${cachedExtension}`
+          path.join(
+            cacheDir,
+            `.${path.basename(cachedPath, cachedExtension)}.${crypto.randomUUID()}.partial${cachedExtension}`
+          )
         );
 
         yield* renderer

@@ -4,6 +4,7 @@ import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { computeExportHash } from "@/services/export-hash";
 import { SIDECAR_SUFFIX } from "@/services/export-sha256-sidecar";
+import { assertUnderEffect } from "@/services/assert-under";
 
 /**
  * Garbage-collect stale exported files for a course.
@@ -54,7 +55,10 @@ export const garbageCollect = (courseId: string) =>
     for (const { file, suffix } of courseFiles) {
       const hash = file.slice(prefix.length, -suffix.length);
       if (!allValidHashes.has(hash)) {
-        const filePath = path.join(finishedVideosDir, file);
+        const filePath = yield* assertUnderEffect(
+          finishedVideosDir,
+          path.join(finishedVideosDir, file)
+        );
         yield* fs.remove(filePath);
         deleted.push(filePath);
       }

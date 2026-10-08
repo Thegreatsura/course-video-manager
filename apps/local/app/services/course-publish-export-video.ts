@@ -1,4 +1,5 @@
 import path from "node:path";
+import { assertUnder } from "@/services/assert-under";
 import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -65,7 +66,10 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
     /** Deleting a file we are replacing is never a reason to fail. */
     const removeQuietly = (filePath: string) =>
-      effectFs.remove(filePath).pipe(Effect.catchAllDefect(() => Effect.void));
+      Effect.suspend(() => {
+        const guarded = assertUnder(FINISHED_VIDEOS_DIRECTORY, filePath);
+        return effectFs.remove(guarded);
+      }).pipe(Effect.catchAllDefect(() => Effect.void));
 
     /**
      * Write why a stage failed into the Video's own log, beside the
@@ -167,7 +171,10 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       onProgress,
     });
 
-    const videoIdPath = path.join(FINISHED_VIDEOS_DIRECTORY, `${videoId}.mp4`);
+    const videoIdPath = assertUnder(
+      FINISHED_VIDEOS_DIRECTORY,
+      path.join(FINISHED_VIDEOS_DIRECTORY, `${videoId}.mp4`)
+    );
 
     // Check the export against its own Clips BEFORE the rename. A file
     // that never reaches its content-addressed path never becomes an
@@ -251,7 +258,11 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
     }
 
     // Move from {videoId}.mp4 to content-addressed path
-    yield* effectFs.rename(videoIdPath, targetPath);
+    const guardedTargetPath = assertUnder(
+      FINISHED_VIDEOS_DIRECTORY,
+      targetPath
+    );
+    yield* effectFs.rename(videoIdPath, guardedTargetPath);
 
     // Digest it now, while it is the newest thing on the disk. A later
     // Publish that copies this Video inside Dropbox rather than uploading

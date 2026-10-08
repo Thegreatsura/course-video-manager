@@ -3,9 +3,10 @@ import { FileSystem } from "@effect/platform";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { makeAction } from "@/services/route-action.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { getVideoFilePath } from "@/services/video-files";
+import { getVideoFilePath, getVideoFilesBaseDir } from "@/services/video-files";
+import { assertUnderEffect, isUnder } from "@/services/assert-under";
 import { data } from "react-router";
-import { removeBestEffort } from "@/services/remove-best-effort";
+import { removeUnderBestEffort } from "@/services/remove-best-effort";
 
 function decodeDataUrl(dataUrl: string): Uint8Array {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -52,23 +53,49 @@ export const action = makeAction({
       const existing = yield* thumbnailOps.getThumbnailById(thumbnailId);
       const video = yield* videoOps.getVideoDeepById(existing.videoId);
       const existingLayers = existing.layers as {
-        backgroundPhoto?: { filePath?: string };
+        backgroundPhoto?: { filePath?: string; horizontalPosition?: number };
         diagram?: { filePath?: string } | null;
         cutout?: { filePath?: string } | null;
       };
 
-      const compositeBytes = decodeDataUrl(imageDataUrl as string);
-      if (existing.filePath) {
-        yield* fs.writeFile(existing.filePath, compositeBytes);
-      }
+      // Every path written here must lie under VIDEO_FILES_DIR. A stored path
+      // that does not (on a verify-cvm clone the row still names Matt's real
+      // file) is never written: the layer moves to its canonical address in
+      // this store instead, and the row is updated to point there.
+      const videoFilesDir = getVideoFilesBaseDir();
+      const layerPath = (stored: string | null | undefined, suffix: string) =>
+        stored && isUnder(videoFilesDir, stored)
+          ? stored
+          : getVideoFilePath(
+              video.lineageId,
+              `thumbnail-${thumbnailId}${suffix}.png`
+            );
+      yield* fs.makeDirectory(getVideoFilePath(video.lineageId), {
+        recursive: true,
+      });
 
+      const compositeBytes = decodeDataUrl(imageDataUrl as string);
+      const compositePath = yield* assertUnderEffect(
+        videoFilesDir,
+        layerPath(existing.filePath, "")
+      );
+      yield* fs.writeFile(compositePath, compositeBytes);
+
+      // A thumbnail made before layers existed has no background file of its
+      // own: its composite stands in for it, as it always has.
+      let bgPath = compositePath;
       if (existingLayers.backgroundPhoto?.filePath) {
+        const ownBgPath = yield* assertUnderEffect(
+          videoFilesDir,
+          layerPath(existingLayers.backgroundPhoto.filePath, "-bg")
+        );
         const bgBytes =
           typeof backgroundPhotoDataUrl === "string" &&
           backgroundPhotoDataUrl.startsWith("data:")
             ? decodeDataUrl(backgroundPhotoDataUrl)
             : compositeBytes;
-        yield* fs.writeFile(existingLayers.backgroundPhoto.filePath, bgBytes);
+        yield* fs.writeFile(ownBgPath, bgBytes);
+        bgPath = ownBgPath;
       }
 
       let diagramLayer = null;
@@ -76,27 +103,22 @@ export const action = makeAction({
         typeof diagramDataUrl === "string" &&
         diagramDataUrl.startsWith("data:")
       ) {
-        const diagBytes = decodeDataUrl(diagramDataUrl);
-
-        if (existingLayers.diagram?.filePath) {
-          yield* fs.writeFile(existingLayers.diagram.filePath, diagBytes);
-          diagramLayer = {
-            filePath: existingLayers.diagram.filePath,
-            horizontalPosition:
-              typeof diagramPosition === "number" ? diagramPosition : 50,
-          };
-        } else {
-          const diagFilename = `thumbnail-${thumbnailId}-diagram.png`;
-          const diagFilePath = getVideoFilePath(video.lineageId, diagFilename);
-          yield* fs.writeFile(diagFilePath, diagBytes);
-          diagramLayer = {
-            filePath: diagFilePath,
-            horizontalPosition:
-              typeof diagramPosition === "number" ? diagramPosition : 50,
-          };
-        }
+        const diagPath = yield* assertUnderEffect(
+          videoFilesDir,
+          layerPath(existingLayers.diagram?.filePath, "-diagram")
+        );
+        yield* fs.writeFile(diagPath, decodeDataUrl(diagramDataUrl));
+        diagramLayer = {
+          filePath: diagPath,
+          horizontalPosition:
+            typeof diagramPosition === "number" ? diagramPosition : 50,
+        };
       } else if (existingLayers.diagram?.filePath) {
-        yield* removeBestEffort(fs, existingLayers.diagram.filePath);
+        yield* removeUnderBestEffort(
+          fs,
+          videoFilesDir,
+          existingLayers.diagram.filePath
+        );
       }
 
       let cutoutLayer = null;
@@ -104,36 +126,29 @@ export const action = makeAction({
         typeof cutoutDataUrl === "string" &&
         cutoutDataUrl.startsWith("data:")
       ) {
-        const cutoutBytes = decodeDataUrl(cutoutDataUrl);
-
-        if (existingLayers.cutout?.filePath) {
-          yield* fs.writeFile(existingLayers.cutout.filePath, cutoutBytes);
-          cutoutLayer = {
-            filePath: existingLayers.cutout.filePath,
-            horizontalPosition:
-              typeof cutoutPosition === "number" ? cutoutPosition : 50,
-          };
-        } else {
-          const cutoutFilename = `thumbnail-${thumbnailId}-cutout.png`;
-          const cutoutFilePath = getVideoFilePath(
-            video.lineageId,
-            cutoutFilename
-          );
-          yield* fs.writeFile(cutoutFilePath, cutoutBytes);
-          cutoutLayer = {
-            filePath: cutoutFilePath,
-            horizontalPosition:
-              typeof cutoutPosition === "number" ? cutoutPosition : 50,
-          };
-        }
+        const cutoutPath = yield* assertUnderEffect(
+          videoFilesDir,
+          layerPath(existingLayers.cutout?.filePath, "-cutout")
+        );
+        yield* fs.writeFile(cutoutPath, decodeDataUrl(cutoutDataUrl));
+        cutoutLayer = {
+          filePath: cutoutPath,
+          horizontalPosition:
+            typeof cutoutPosition === "number" ? cutoutPosition : 50,
+        };
       } else if (existingLayers.cutout?.filePath) {
-        yield* removeBestEffort(fs, existingLayers.cutout.filePath);
+        yield* removeUnderBestEffort(
+          fs,
+          videoFilesDir,
+          existingLayers.cutout.filePath
+        );
       }
 
       const layers = {
-        backgroundPhoto: existingLayers.backgroundPhoto ?? {
-          filePath: existing.filePath,
+        backgroundPhoto: {
           horizontalPosition: 0,
+          ...existingLayers.backgroundPhoto,
+          filePath: bgPath,
         },
         diagram: diagramLayer,
         cutout: cutoutLayer,
@@ -141,7 +156,7 @@ export const action = makeAction({
 
       const updated = yield* thumbnailOps.updateThumbnail(thumbnailId, {
         layers,
-        filePath: existing.filePath,
+        filePath: compositePath,
       });
 
       return { success: true, thumbnailId: updated.id };
