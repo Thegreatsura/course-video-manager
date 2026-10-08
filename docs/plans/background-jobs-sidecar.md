@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Matt's decisions are in section 6;
+**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Batch 3 has moved the vertical Shorts render (section 7.6); Batch export is next. Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -205,6 +205,13 @@ sidecar copies today's limits and today's retries instead. See section 7.
 2. **Rerun after a crash / retries:** copy the existing logic exactly. Find what the upload manager / export clients do today (retry counts, which kinds retry, what happens to an interrupted job) and reproduce that behaviour in the sidecar. Don't invent a new policy.
 3. **Concurrency:** copy the existing concurrency limits already in the codebase (upload manager queue, Publish semaphore, etc.). Don't invent new lane numbers.
 4. Questions 3, 5 and 6 use the recommendations above (enqueue with `--wait`; interactive AI streams stay in the browser; OBS ingest later).
+5. **Posting never runs twice on its own** (decided before batch 4). Matt: "I definitely don't want reruns to happen on their own. Posting twice would be disastrous." So every posting Job kind — YouTube upload, YouTube Shorts post, Buffer post, AI Hero post and Skills Changelog post (#1-#5) — gets **exactly 1 attempt**:
+   - No automatic retry when an attempt fails.
+   - No re-queue after a deliberate stop (a signal: `tsx watch` restarting, Ctrl-C, verify-cvm's cleanup) or a sidecar crash. Section 7.5's "a stop on purpose puts the Job back at the same attempt" does not apply to a posting kind.
+   - A post that is cut off goes to a terminal state, **"interrupted — check before retrying"**, with a manual **Retry**. Where the service allows it (YouTube, Buffer, AI Hero), the sidecar checks whether the post went out and says so on the row.
+   - Batch 4 adds a guard test asserting all of this for every posting kind, so a new one cannot slip back to 3 attempts.
+
+   **This overrides decision 2 ("copy the existing logic exactly") for posting only.** Today the browser retries a failed post up to 3 times (section 7.1) and re-runs one cut off by a server death (section 7.2); the sidecar does neither. Every other kind still copies today's behaviour.
 
 ## 7. What the sidecar copies (findings, 2026-10-08)
 
@@ -251,7 +258,9 @@ policy, and Matt's call.
 Buffer post or AI Hero post that is cut off mid-run is run again automatically
 (it is today too, when the server dies mid-stream), so a post that had in fact
 landed can be posted twice. Section 3.2's "posting waits for a click" would stop
-that, but it is a change of policy, so it is not built.
+that, but it is a change of policy, so it is not built. **Decided:** Matt chose
+the change of policy for posting — section 6, decision 5: 1 attempt, no
+re-queue, "interrupted — check before retrying".
 
 ### 7.3 Concurrency
 
@@ -375,3 +384,42 @@ Left out, on purpose:
   `requeued` events as it closes the stream, so an open tab may still show the
   last stage until the sidecar is back and replays them. The row's dialog says
   the sidecar is not running.
+
+### 7.6 What batch 3 built, and what it decided
+
+**The vertical Shorts render (#8) is a kind** (`apps/local/sidecar/kinds/render-vertical.ts`):
+`RenderVerticalVideoService.renderVerticalVideo` unchanged, 3 attempts, the
+default lane (`UPLOAD_MANAGER_POLICIES["render-vertical"]`, copied). Each stage
+(concatenating, transcribing, rendering the overlay, compositing) is a `stage`
+Job Event, and the Global Upload Progress draws the Job as the
+`render-vertical` row it drew before: same stages, same floors of the bar. Its
+SSE route (`api.videos.$videoId.render-vertical-sse.ts`) and browser client
+(`sse-render-vertical-client.ts`) are deleted, and both allowlist entries with
+them. `startRenderVerticalUpload` enqueues the Job and returns its id, so the
+Shorts posting dialog's "render, then post" still works: the YouTube Shorts and
+Buffer posts wait on the Job's id, are released when it succeeds and fail with
+`Dependency "<title>" failed` when it fails. Problem 1's case — a render's
+failure that only ever reached a toast — is gone: the cause is in the Job's
+log, behind the toast's **View log**. The stage reports go through
+`sidecar/ordered-events.ts`, the export's ordered writer, now shared.
+
+**The spawn guard, part of it (section 3.7, guard 2).** `SidecarContext`
+(`app/services/sidecar-context.ts`) is a tag only the sidecar's layer provides.
+`renderVerticalVideo` asks for it, so a route that reaches a vertical render
+does not compile (`makeAction` / `makeLoader` accept only `LayerLive`);
+`sidecar-context.test.ts` pins that at the type level. Still outside it, because
+the app server still runs them: `CoursePublishService.exportVideo` (a Publish
+exports in-process until batch 6), `batchExport` (until batch 3's second half),
+`FfmpegRun` and `OverlayContentRenderer` (Publish, and the editor's own
+interactive ffmpeg calls: thumbnails, frames, transcription), and the posting
+services (batch 4). Guard 1's third bullet (a dependency-cruiser rule on
+`routes/`) waits for those too.
+
+Left out, on purpose:
+
+- The Upload Manager's `UPDATE_RENDER_VERTICAL_STAGE` action and the
+  `render-vertical` entry type stay: the type is how a Job draws as a row, and
+  the action has no caller left. Batch 8 deletes `upload-reducer.ts` whole.
+- No success toast existed for a browser-driven render; the Job's generic one
+  ("rendered as a vertical Short") is new, and the Shorts page now revalidates
+  on it, as it did on the browser row's success.

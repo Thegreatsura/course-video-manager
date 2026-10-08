@@ -157,7 +157,9 @@ follows it through `jobs-reducer.ts`. Do not stream it from a request that a bro
 tab keeps alive: closing the tab cancels the work, and its failure dies as a
 toast. A new kind is a handler under `apps/local/sidecar/kinds/` and one line
 in `JOB_KINDS`; its lane and attempt count are copied from the job it replaces
-(`retry-policy.ts`), never invented. `scripts/check-background-jobs.ts` holds
+(`retry-policy.ts`), never invented. Work that has moved into a Job asks for
+`SidecarContext` (`app/services/sidecar-context.ts`), which only the sidecar
+provides, so a route that reaches it does not compile. `scripts/check-background-jobs.ts` holds
 the streaming routes and the browser loops that drive them to a shrink-only
 allowlist. Interactive streams (the Article Writer, a modal the author watches)
 stay, by name. The plan and the order the jobs move in:

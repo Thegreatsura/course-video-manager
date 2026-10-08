@@ -17,6 +17,7 @@ import {
 } from "@/lib/subtitle-chunks";
 import { removeBestEffort } from "@/services/remove-best-effort";
 import { formatFailureCause } from "./format-failure-cause";
+import { SidecarContext } from "./sidecar-context";
 
 export type RenderVerticalStage =
   "concatenating-clips" | "transcribing" | "rendering-overlay" | "compositing";
@@ -43,6 +44,9 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           videoId: string;
           onStageChange?: (stage: RenderVerticalStage) => void;
         }) {
+          // A vertical render is a Job: only the Sidecar runs it, never a
+          // request a browser tab keeps alive (sidecar-context.ts).
+          yield* SidecarContext;
           // The stage the render is in, so a failure can say where it broke.
           let stage: RenderVerticalStage | "loading-video" = "loading-video";
           const enterStage = (next: RenderVerticalStage) => {

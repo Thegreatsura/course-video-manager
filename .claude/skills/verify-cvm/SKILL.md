@@ -145,6 +145,11 @@ Its socket is a Unix socket named by the run id, never a port, and the run's
 server is pointed at it (`CVM_SIDECAR_SOCKET`): an Export pressed in the
 browser runs in this sidecar, and its row and toasts come from its Job Events. Its output is
 `<evidence>/sidecar.log`, and each Job's log is `<evidence>/logs/jobs/<job id>.jsonl`.
+A vertical Shorts render transcribes through OpenAI's Whisper, and the clone's
+OpenAI key is a dud, so on a clone it fails at "transcribing" — a ready-made
+failure path. To see one finish, launch with `OPENAI_BASE_URL` pointed at a
+local stub that answers `POST /v1/audio/transcriptions` (the server and the
+sidecar both inherit it); everything else in the render runs for real.
 To run a Job by hand, post it to the socket and read it back:
 
 ```bash

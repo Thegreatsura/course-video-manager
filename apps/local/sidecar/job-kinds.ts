@@ -4,6 +4,8 @@ import type { LayerLive } from "@/services/layer.server";
 import type { JobKind } from "./job-kind";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
+import { renderVerticalJobKind } from "./kinds/render-vertical";
+import type { SidecarContext } from "@/services/sidecar-context";
 
 /**
  * Every kind of background job the sidecar can run. A new kind is a handler
@@ -12,15 +14,18 @@ import { noopJobKind } from "./kinds/noop";
 export const JOB_KINDS = {
   noop: noopJobKind,
   export: exportJobKind,
+  "render-vertical": renderVerticalJobKind,
 } as const satisfies Record<string, JobKind<JobServices>>;
 
 export type JobKindName = keyof typeof JOB_KINDS;
 
 /**
  * Every service a handler in `JOB_KINDS` may ask for: the app server's own
- * (`layerLive`), which the sidecar builds once for itself.
+ * (`layerLive`), which the sidecar builds once for itself, and the
+ * `SidecarContext` only the sidecar provides — the proof work that has moved
+ * into a Job asks for, so no route can run it in-process.
  */
-export type JobServices = LayerLive;
+export type JobServices = LayerLive | SidecarContext;
 
 export type JobKindRegistry<R = JobServices> = Readonly<
   Record<string, JobKind<R>>

@@ -1,69 +1,35 @@
-import { Effect, Fiber, Queue, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { CoursePublishService } from "@/services/course-publish-service";
 import type { ExportStage } from "@/services/course-publish-export-events";
 import { defineJobKind, type JobContext } from "../job-kind";
+import { makeOrderedEvents } from "../ordered-events";
 import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 
 /** The stages an export reports; `queued` is the browser's, before it starts. */
 type ExportWorkStage = Exclude<ExportStage, "queued">;
 
-type ExportReport =
-  | { readonly type: "stage"; readonly stage: ExportWorkStage }
-  | {
-      readonly type: "progress";
-      readonly stage: ExportWorkStage;
-      readonly percent: number;
-    }
-  | { readonly type: "done" };
-
 /**
- * The export service reports through plain callbacks, but a Job Event is a
- * database write. The callbacks drop each report into a queue, and one fiber
- * writes them in order — so a `progress` event never lands before the
- * `stage` it belongs to, and none is lost when the export finishes.
+ * Report an export's stages and ffmpeg percentages as `stage` / `progress`
+ * Job Events, in order.
  */
 const reportInOrder = (ctx: JobContext) =>
   Effect.gen(function* () {
-    const queue = yield* Queue.unbounded<ExportReport>();
-    const writer = yield* Effect.fork(
-      Effect.gen(function* () {
-        while (true) {
-          const report = yield* Queue.take(queue);
-          switch (report.type) {
-            case "done":
-              return;
-            case "stage":
-              yield* ctx.emit("stage", { stage: report.stage });
-              break;
-            case "progress":
-              yield* ctx.emit("progress", {
-                stage: report.stage,
-                percent: report.percent,
-              });
-              break;
-          }
-        }
-      })
-    );
+    const events = yield* makeOrderedEvents(ctx);
     // ffmpeg repeats a percentage many times over; only a change is news.
     let last: { stage: ExportWorkStage; percent: number } | null = null;
     return {
       onStage: (stage: ExportWorkStage) => {
         last = null;
-        Queue.unsafeOffer(queue, { type: "stage", stage });
+        events.emit("stage", { stage });
       },
       onProgress: (info: { stage: ExportWorkStage; percent: number }) => {
         if (last?.stage === info.stage && last.percent === info.percent) {
           return;
         }
         last = info;
-        Queue.unsafeOffer(queue, { type: "progress", ...info });
+        events.emit("progress", { stage: info.stage, percent: info.percent });
       },
-      /** Write what is still queued, then stop the writer. */
-      flush: Effect.suspend(() => {
-        Queue.unsafeOffer(queue, { type: "done" });
-        return Fiber.join(writer);
-      }),
+      flush: events.flush,
     };
   });
 

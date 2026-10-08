@@ -308,4 +308,93 @@ describe("jobsReducer", () => {
     tester.send({ type: "press-dismiss", id: "other" });
     expect(visibleJobs(tester.getState())).toEqual([]);
   });
+
+  describe("a vertical Shorts render", () => {
+    const renderJob = wireJob({ kind: "render-vertical", title: "My Short" });
+    const render = (type: string, data: Record<string, unknown> = {}) =>
+      streamed(wireEvent(type, data), renderJob);
+
+    it("draws as the render-vertical row it was in the browser, stage by stage, and releases the posts waiting on it", () => {
+      const tester = newTester().send({
+        type: "job-requested",
+        id: JOB_ID,
+        kind: "render-vertical",
+        title: "My Short",
+        params: { videoId: "video-1" },
+        subject: { type: "video", id: "video-1" },
+        attemptsSpent: 0,
+      });
+      expect(row(tester.getState())).toMatchObject({
+        uploadType: "render-vertical",
+        status: "uploading",
+        renderVerticalStage: null,
+        progress: 0,
+      });
+
+      tester
+        .send(render("queued"))
+        .send(render("started", { attempt: 1 }))
+        .send(render("stage", { stage: "transcribing" }));
+      // Each stage is a floor of the bar, as the browser render drew it.
+      expect(row(tester.getState())).toMatchObject({
+        status: "uploading",
+        renderVerticalStage: "transcribing",
+        progress: 30,
+      });
+
+      tester.send(render("stage", { stage: "compositing" }));
+      expect(row(tester.getState())).toMatchObject({ progress: 85 });
+
+      tester.send(render("succeeded"));
+      expect(row(tester.getState())).toMatchObject({
+        status: "success",
+        progress: 100,
+        renderVerticalStage: null,
+      });
+      expect(tester.getEffects()).toContainEqual({
+        type: "report-job-settled",
+        jobId: JOB_ID,
+        title: "My Short",
+        outcome: "succeeded",
+      });
+    });
+
+    it("a render that fails every attempt toasts once, with its log, and fails the posts waiting on it", () => {
+      const error = {
+        error: {
+          tag: "CouldNotTranscribeError",
+          message: "Whisper API call failed: 401",
+          cause: "Whisper API call failed: 401",
+        },
+      };
+      const tester = newTester()
+        .send(render("started", { attempt: 1 }))
+        .send(render("retrying", { nextAttempt: 2, ...error }));
+      expect(row(tester.getState())).toMatchObject({
+        status: "retrying",
+        retryCount: 1,
+      });
+      tester.send(render("failed", error));
+      expect(row(tester.getState())).toMatchObject({
+        status: "error",
+        errorMessage: "Whisper API call failed: 401",
+      });
+      expect(tester.getEffects()).toEqual([
+        {
+          type: "show-job-failed-toast",
+          jobId: JOB_ID,
+          kind: "render-vertical",
+          title: "My Short",
+          message: "Whisper API call failed: 401",
+          hasLog: true,
+        },
+        {
+          type: "report-job-settled",
+          jobId: JOB_ID,
+          title: "My Short",
+          outcome: "failed",
+        },
+      ]);
+    });
+  });
 });
