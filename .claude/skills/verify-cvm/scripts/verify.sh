@@ -226,6 +226,12 @@ cmd_launch() {
     trap 'drop_run_clone "'"$dir"'" >/dev/null 2>&1 || true' EXIT
     create_clone "$(url_db "$template")" "$clone"
     log "launch: cloned $(url_db "$template") into $clone"
+    # The template only moves when Matt runs `pnpm db:verify-snapshot`, so it
+    # lags every merged migration. Bring the CLONE (never the template) up to
+    # this checkout's migrations — before the Ledger's triggers, so the
+    # migration's own writes are not counted as the run's.
+    migrate_run_clone "$(url_with_db "$template" "$clone")" "$clone" 2> >(tee "$dir/migrations.txt" >&2) ||
+      die "could not apply this checkout's migrations to $clone — the server would run on a stale schema, so the run stops here"
     # The Write Ledger's triggers go in before the server can write anything.
     install_write_ledger "$(url_with_db "$template" "$clone")" ||
       die "could not install the write ledger on $clone — the Ledger would be blind, so the run stops here"
