@@ -142,6 +142,9 @@ export default defineConfig(({ command }) => ({
       ? [tsconfigPaths()]
       : [tailwindcss(), reactRouter(), tsconfigPaths()],
   test: {
+    // The suite runs from agents' worktrees, where `isLocalMachine()` is
+    // always false; the tests decide local-or-not with CVM_LOCAL_MACHINE alone.
+    setupFiles: ["./app/test-utils/not-a-worktree.setup.ts"],
     pool: "forks",
     poolOptions: {
       forks: {

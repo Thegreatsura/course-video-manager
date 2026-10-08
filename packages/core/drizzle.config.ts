@@ -1,7 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "drizzle-kit";
 import { resolveMigrationDatabaseUrl } from "./db/database-url.js";
+import {
+  formatConnectionRefusal,
+  judgeConnection,
+} from "./db/connection-guard.js";
 import { guardSchemaWrite } from "./drizzle-guard.js";
+import { isInsideGitWorktree } from "./git-worktree.js";
 
 /**
  * drizzle-kit runs in THIS package, but the author's environment lives in the
@@ -39,6 +44,30 @@ guardSchemaWrite({
   url,
   cwd: fileURLToPath(new URL(".", import.meta.url)),
 });
+
+/**
+ * Every drizzle-kit command that opens a connection (`studio` writes rows too)
+ * goes through the same rule as every other client: no writable connection to
+ * a remote database from a git worktree. See db/connection-guard.ts.
+ */
+const CONNECTING_COMMANDS = new Set([
+  "migrate",
+  "push",
+  "studio",
+  "pull",
+  "introspect",
+]);
+if (url && process.argv.slice(2).some((arg) => CONNECTING_COMMANDS.has(arg))) {
+  const verdict = judgeConnection({
+    url,
+    env: process.env,
+    insideGitWorktree: () => isInsideGitWorktree(),
+  });
+  if (!verdict.allowed) {
+    console.error(`\n${formatConnectionRefusal(verdict)}\n`);
+    process.exit(1);
+  }
+}
 
 export default defineConfig({
   dialect: "postgresql",

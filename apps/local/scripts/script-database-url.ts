@@ -15,12 +15,20 @@
  *    schema or migration bookkeeping (see `@cvm/core/db/database-url`).
  * 3. **The target, announced.** Prints the host — never the credentials — so
  *    the operator sees which database is about to be read or written.
+ * 4. **The target, guarded.** From a git worktree, a writable connection to a
+ *    remote database is refused before it is opened — see
+ *    `@cvm/core/db/connection-guard`.
  */
 import { fileURLToPath } from "node:url";
 import {
   resolveDatabaseUrl,
   resolveMigrationDatabaseUrl,
 } from "@cvm/core/db/database-url";
+import {
+  formatConnectionRefusal,
+  judgeConnection,
+} from "@cvm/core/db/connection-guard";
+import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 
 export interface ScriptDatabase {
   readonly url: string;
@@ -51,5 +59,15 @@ export const scriptDatabaseUrl = (
 
   const host = new URL(url).host;
   console.log(`Target database: ${host}`);
+
+  const verdict = judgeConnection({
+    url,
+    env: process.env,
+    insideGitWorktree: () => isInsideGitWorktree(),
+  });
+  if (!verdict.allowed) {
+    console.error(`\n${formatConnectionRefusal(verdict)}\n`);
+    process.exit(1);
+  }
   return { url, host };
 };

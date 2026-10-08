@@ -1,5 +1,8 @@
 import { domainServicesLayer, type DomainServices } from "@cvm/core/layer";
-import { DrizzleService } from "@cvm/core/services/drizzle-service.server";
+import {
+  DrizzleService,
+  GitWorktreeProbe,
+} from "@cvm/core/services/drizzle-service.server";
 import { Layer, ManagedRuntime } from "effect";
 
 /**
@@ -20,8 +23,16 @@ export type RemoteRuntime = ManagedRuntime.ManagedRuntime<
   never
 >;
 
-/** The production layer: the domain services over a real Postgres pool. */
+/**
+ * The production layer: the domain services over a real Postgres pool. The
+ * deployed box has no git checkout, so the worktree connection guard is a
+ * no-op here (`GitWorktreeProbe.NoCheckout`).
+ */
 export const remoteLayer: Layer.Layer<DomainServices | DrizzleService> =
-  domainServicesLayer.pipe(Layer.provideMerge(DrizzleService.Default));
+  domainServicesLayer.pipe(
+    Layer.provideMerge(
+      DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbe.NoCheckout))
+    )
+  );
 
 export const remoteRuntime: RemoteRuntime = ManagedRuntime.make(remoteLayer);

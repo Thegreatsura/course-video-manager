@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { isLocalHost, parseHost } from "./db/connection-guard.js";
 
 /**
  * The guard in front of every drizzle-kit command that writes a schema
@@ -31,27 +32,8 @@ const SCHEMA_WRITING_COMMANDS = new Set(["migrate", "push"]);
 export const isSchemaWritingCommand = (argv: readonly string[]): boolean =>
   argv.slice(2).some((arg) => SCHEMA_WRITING_COMMANDS.has(arg));
 
-/**
- * The host a connection string points at — never the credentials. `""` for a
- * Unix-socket URL (`postgresql:///db?host=/var/run/postgresql`); `undefined`
- * when the string is not a URL at all, which the guard treats as remote.
- */
-export const parseHost = (url: string): string | undefined => {
-  try {
-    return new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  } catch {
-    return undefined;
-  }
-};
-
-export const isLocalHost = (host: string): boolean =>
-  host === "" ||
-  host === "localhost" ||
-  host.endsWith(".localhost") ||
-  host === "::1" ||
-  host === "0.0.0.0" ||
-  host === "host.docker.internal" ||
-  /^127(\.\d{1,3}){3}$/.test(host);
+// Shared with the connection guard every database client goes through.
+export { isLocalHost, parseHost } from "./db/connection-guard.js";
 
 export interface GitState {
   /** `HEAD` when detached. */

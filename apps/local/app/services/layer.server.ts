@@ -1,5 +1,6 @@
 import { Layer, ManagedRuntime } from "effect";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
 import { NodeContext } from "@effect/platform-node";
 import { VideoProcessingService } from "./video-processing-service";
 import { BackgroundRemovalService } from "./background-removal-service";
@@ -75,7 +76,9 @@ const coreLayer = Layer.mergeAll(
   OverlayRenderCacheService.Default,
   NodeContext.layer
 ).pipe(
-  Layer.provideMerge(DrizzleService.Default),
+  Layer.provideMerge(
+    DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbeLive))
+  ),
   // The Diagram operations store thumbnails through a port `@cvm/core` declares
   // but cannot implement — it has no filesystem. On this machine it is the
   // on-disk store.

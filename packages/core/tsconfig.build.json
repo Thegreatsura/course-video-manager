@@ -24,7 +24,8 @@
     "test-utils/**",
     "vitest.config.ts",
     "drizzle.config.ts",
-    "drizzle-guard.ts"
+    "drizzle-guard.ts",
+    "git-worktree.ts"
   ],
   "compilerOptions": {
     "noEmit": false,
