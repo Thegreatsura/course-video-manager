@@ -2,7 +2,8 @@ import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { makeAction } from "@/services/route-action.server";
-import { removeBestEffort } from "@/services/remove-best-effort";
+import { removeUnderBestEffort } from "@/services/remove-best-effort";
+import { getVideoFilesBaseDir } from "@/services/video-files";
 
 export const action = makeAction({
   errors: { NotFoundError: 404 },
@@ -37,8 +38,11 @@ export const action = makeAction({
         filesToDelete.push(layers.cutout.filePath);
       }
 
+      // Rows store absolute paths; only those under VIDEO_FILES_DIR are ever
+      // deleted (on a verify-cvm clone they name Matt's real files).
+      const videoFilesDir = getVideoFilesBaseDir();
       for (const filePath of filesToDelete) {
-        yield* removeBestEffort(fs, filePath);
+        yield* removeUnderBestEffort(fs, videoFilesDir, filePath);
       }
 
       yield* thumbnailOps.deleteThumbnail(params.thumbnailId!);

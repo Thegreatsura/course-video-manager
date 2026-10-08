@@ -2,10 +2,10 @@ import { Data, Effect } from "effect";
 import { data } from "react-router";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { makeAction } from "@/services/route-action.server";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 class WslPathConversionError extends Data.TaggedError(
   "WslPathConversionError"
@@ -21,7 +21,7 @@ const wslPathToWindows = (
 ): Effect.Effect<string, WslPathConversionError> => {
   return Effect.tryPromise({
     try: async () => {
-      const { stdout } = await execAsync(`wslpath -w "${wslPath}"`);
+      const { stdout } = await execFileAsync("wslpath", ["-w", wslPath]);
       return stdout.trim();
     },
     catch: (e) =>
@@ -32,25 +32,46 @@ const wslPathToWindows = (
   });
 };
 
+const REVEAL_PATH_ENV = "CVM_REVEAL_PATH";
+
 const revealInExplorer = (
   windowsPath: string
 ): Effect.Effect<void, RevealInExplorerError> => {
   return Effect.async<void, RevealInExplorerError>((resume) => {
-    const command = `powershell.exe -c "explorer.exe '/select,\\"${windowsPath}\\"'"`;
-    exec(command, (error) => {
-      if (error && typeof error.code === "string") {
-        resume(
-          Effect.fail(
-            new RevealInExplorerError({
-              cause: error,
-              message: `Failed to reveal file: ${error.message}`,
-            })
-          )
-        );
-      } else {
-        resume(Effect.succeed(undefined));
+    // The path reaches PowerShell as an environment variable (forwarded
+    // into the Windows process by WSLENV), never spliced into the command
+    // text, so nothing in a file name can be run as code.
+    execFile(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `explorer.exe ('/select,"' + $env:${REVEAL_PATH_ENV} + '"')`,
+      ],
+      {
+        env: {
+          ...process.env,
+          [REVEAL_PATH_ENV]: windowsPath,
+          // Only this variable crosses into the Windows process.
+          WSLENV: REVEAL_PATH_ENV,
+        },
+      },
+      (error) => {
+        if (error && typeof error.code === "string") {
+          resume(
+            Effect.fail(
+              new RevealInExplorerError({
+                cause: error,
+                message: `Failed to reveal file: ${error.message}`,
+              })
+            )
+          );
+        } else {
+          resume(Effect.succeed(undefined));
+        }
       }
-    });
+    );
   });
 };
 

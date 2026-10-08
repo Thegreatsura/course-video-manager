@@ -1,4 +1,5 @@
 import { FileSystem } from "@effect/platform";
+import { isUnder } from "./assert-under";
 import type { PlatformError } from "@effect/platform/Error";
 import { Data, Effect } from "effect";
 import { existsSync } from "node:fs";
@@ -148,6 +149,17 @@ export function resolveVideoFilePath(
       new InvalidVideoFilePathError({
         path: relativePath,
         message: "path escapes the video's file directory",
+      })
+    );
+  }
+
+  // The lexical check above names the error a caller sees for `..`; this
+  // one also follows symlinks, so a link inside the store cannot lead out.
+  if (!isUnder(root, resolved)) {
+    return Effect.fail(
+      new InvalidVideoFilePathError({
+        path: relativePath,
+        message: "path escapes the video's file directory through a symlink",
       })
     );
   }

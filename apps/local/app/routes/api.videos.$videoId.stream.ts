@@ -4,7 +4,8 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { runtimeLive } from "@/services/layer.server";
 import { makeAction } from "@/services/route-action.server";
 import { FileSystem } from "@effect/platform";
-import { Effect } from "effect";
+import { Config, Effect } from "effect";
+import { assertUnderEffect } from "@/services/assert-under";
 import { statSync } from "fs";
 import type { Route } from "./+types/api.videos.$videoId.stream";
 
@@ -70,13 +71,18 @@ const innerAction = makeAction({
 
       yield* videoOps.getVideoDeepById(params.videoId!);
 
-      const videoPath = yield* publishService.resolveExportPath(
+      const exportPath = yield* publishService.resolveExportPath(
         params.videoId!
       );
 
-      if (!videoPath) {
+      if (!exportPath) {
         return { success: true, deletedPath: null };
       }
+
+      const videoPath = yield* assertUnderEffect(
+        yield* Config.string("FINISHED_VIDEOS_DIRECTORY"),
+        exportPath
+      );
 
       const exists = yield* fs.exists(videoPath);
       if (!exists) {
