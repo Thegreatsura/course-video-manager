@@ -22,6 +22,7 @@ import { getBeatsSection } from "@/prompts/beats-instructions";
 import { getAnimaticSection } from "@/prompts/animatic-instructions";
 import { getScriptSection } from "@/prompts/script-instructions";
 import { CACHE_BREAKPOINT_1H } from "./prompt-cache";
+import { repairToolPartsForModel } from "./writer-message-repair";
 import {
   ToolLoopAgent as Agent,
   convertToModelMessages,
@@ -241,7 +242,9 @@ export const createModelMessagesForTextWritingAgent = async (props: {
    */
   cacheImages?: boolean;
 }): Promise<ModelMessage[]> => {
-  const modelMessages = await convertToModelMessages(props.messages);
+  const modelMessages = await convertToModelMessages(
+    repairToolPartsForModel(props.messages)
+  );
 
   if (props.imageFiles.length > 0) {
     modelMessages.unshift({

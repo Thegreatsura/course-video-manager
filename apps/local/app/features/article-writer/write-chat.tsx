@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/card";
 import type { DocumentAgentMessage } from "./types";
 import {
   AIConversation,
@@ -34,11 +33,16 @@ import { WriteDocumentDisplay, EditDocumentDisplay } from "./tool-call-display";
 import { CacheStatsBadge } from "./cache-stats-badge";
 import { AssistantMessage } from "./assistant-message";
 import { useMessageTextMutation } from "./message-text-mutation";
+import { RegenerateReply, RejectedToolCall, TurnFailure } from "./turn-failure";
+import type { WriterFailure } from "./writer-errors";
 
 export interface WriteChatProps {
   messages: DocumentAgentMessage[];
   setMessages: (messages: DocumentAgentMessage[]) => void;
-  error: Error | undefined;
+  /** The last turn's failure, shown after the last message with a Retry. */
+  failure: WriterFailure | null;
+  onRetry: () => void;
+  onRegenerate: () => void;
   fullPath: string;
   onSubmit: (text: string) => void;
   onStop: () => void;
@@ -57,7 +61,9 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
   const {
     messages,
     setMessages,
-    error,
+    failure,
+    onRetry,
+    onRegenerate,
     fullPath,
     onSubmit,
     onStop,
@@ -184,16 +190,6 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
       >
         <AIConversation className="flex-1 overflow-y-auto scrollbar scrollbar-track-transparent scrollbar-thumb-muted hover:scrollbar-thumb-muted-foreground">
           <AIConversationContent className="max-w-[75ch] mx-auto">
-            {error && (
-              <Card className="p-4 mb-4 border-red-500 bg-red-50 dark:bg-red-950">
-                <div className="flex items-start gap-2">
-                  <div className="text-red-500 font-semibold">Error:</div>
-                  <div className="text-red-700 dark:text-red-300 flex-1">
-                    {error.message}
-                  </div>
-                </div>
-              </Card>
-            )}
             {messages.map((message) => {
               if (message.role === "system") {
                 return null;
@@ -214,6 +210,26 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
               return (
                 <AssistantMessage key={message.id}>
                   {message.parts.map((part, partIndex) => {
+                    if (
+                      (part.type.startsWith("tool-") ||
+                        part.type === "dynamic-tool") &&
+                      "state" in part &&
+                      part.state === "output-error"
+                    ) {
+                      return (
+                        <RejectedToolCall
+                          key={partIndex}
+                          toolName={
+                            "toolName" in part
+                              ? String(part.toolName)
+                              : part.type.slice("tool-".length)
+                          }
+                          errorText={
+                            "errorText" in part ? part.errorText : undefined
+                          }
+                        />
+                      );
+                    }
                     if (part.type === "tool-writeDocument") {
                       return (
                         <WriteDocumentDisplay key={partIndex} part={part} />
@@ -250,6 +266,14 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
                 </AssistantMessage>
               );
             })}
+            {failure ? (
+              <TurnFailure failure={failure} onRetry={onRetry} />
+            ) : (
+              status === "ready" &&
+              messages.at(-1)?.role === "assistant" && (
+                <RegenerateReply onRegenerate={onRegenerate} />
+              )
+            )}
             {queuedMessages?.map((text, i) => (
               <AIMessage from="user" key={`queued-${i}`}>
                 <AIMessageContent>
