@@ -2,6 +2,7 @@ import http from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { type StreamDeckForwarderMessage } from "./stream-deck-forwarder-types";
 import { createConnectionLog } from "./connection-log";
+import { forwarderRefusal } from "../live-desk/live-desk";
 
 export const DEFAULT_WS_PORT = 5172;
 export const DEFAULT_HTTP_PORT = 5174;
@@ -127,7 +128,13 @@ export function startStreamDeckForwarder(opts?: {
 }
 
 // Auto-start when run as the process entry point (e.g. `tsx run-…`), but not
-// when imported by tests.
+// when imported by tests — and only from the main checkout. Exits 0 when
+// refused so `pnpm dev` in a worktree carries on without it.
 if (!process.env.VITEST) {
-  startStreamDeckForwarder();
+  const refusal = forwarderRefusal(process.cwd());
+  if (refusal) {
+    console.log(refusal);
+  } else {
+    startStreamDeckForwarder();
+  }
 }
