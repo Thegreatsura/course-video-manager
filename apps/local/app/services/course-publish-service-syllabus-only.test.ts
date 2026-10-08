@@ -21,11 +21,12 @@ import { VersionOperationsService } from "@/services/db-version-operations.serve
 import { CoursePublishService } from "@/services/course-publish-service";
 import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 import {
-  DROPBOX_REMOTE_PATH,
   fakeDropbox,
   finishedVideosDir,
   setupPublishServiceTests,
   setupPublishableCourse as setup,
+  isVideoUploadRequest,
+  receiptManifest,
 } from "./course-publish-service-test-setup";
 
 setupPublishServiceTests();
@@ -38,22 +39,6 @@ const syllabusOnlyCourse = async () => {
   const world = await setup({ videoCount: 2 });
   for (const video of world.videos) await world.unfilm(video.id);
   return world;
-};
-
-const receiptManifest = () => {
-  const stored = fakeDropbox.get(
-    `${DROPBOX_REMOTE_PATH}/test-course/course.json`
-  );
-  if (!stored) throw new Error("No course.json in fake Dropbox");
-  return JSON.parse(stored.content.toString("utf-8"));
-};
-
-const isVideoUpload = (url: string, init: RequestInit) => {
-  if (!url.includes("/2/files/upload") || url.includes("session")) return false;
-  const arg = (init.headers as Record<string, string> | undefined)?.[
-    "Dropbox-API-Arg"
-  ];
-  return Boolean(arg && JSON.parse(arg).path.endsWith(".mp4"));
 };
 
 describe("CoursePublishService — a syllabus-only release", () => {
@@ -107,7 +92,7 @@ describe("CoursePublishService — a syllabus-only release", () => {
     ]);
     expect(
       fakeDropbox.fetchCalls.filter((call) =>
-        isVideoUpload(call.url, call.init)
+        isVideoUploadRequest(call.url, call.init)
       )
     ).toHaveLength(0);
   }, 30_000);

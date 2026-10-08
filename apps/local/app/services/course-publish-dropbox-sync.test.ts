@@ -1,324 +1,89 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
-import { NodeContext } from "@effect/platform-node";
+/**
+ * What a committed Bundle holds: course.json's shape, the files beside it,
+ * archived Videos and withheld to-do Lessons. How the Videos get there —
+ * addressing, concurrency, resuming — is course-publish-dropbox-upload's.
+ */
+
+import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { tmpdir } from "node:os";
-import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
-import {
-  createFakeDropbox,
-  FAKE_ACCESS_TOKEN,
-} from "@/test-utils/fake-dropbox";
-import { CourseOperationsService } from "@/services/db-course-operations.server";
-import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
-import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
-import { DrizzleService } from "@/services/drizzle-service.server";
-import { syncFrozenCourseVersionToDropbox } from "@/services/course-publish-dropbox";
-import { ANNOUNCE_NOTHING } from "@/packages/course-json";
-import {
-  computeExportHash,
-  resolveExportPath,
-  type ExportClip,
-} from "@/services/export-hash";
 import {
   clips as clipsTable,
+  lessons as lessonsTable,
   videos as videosTable,
-  dropboxAuth,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import {
+  DROPBOX_REMOTE_PATH,
+  fakeDropbox,
+  manifestVideos,
+  receiptManifest,
+  setupDropboxUploadTests,
+  setupUploads,
+  testDb,
+  type PublishedManifest,
+} from "./course-publish-dropbox-upload-test-setup";
 
-let testDb: TestDb;
-let finishedVideosDir: string;
-let fakeDropbox: ReturnType<typeof createFakeDropbox>;
+setupDropboxUploadTests();
 
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-const DROPBOX_REMOTE_PATH = "/Courses";
-
+/** Two complete Lessons, the second of them still to-do. */
 const setupSync = async () => {
-  await truncateAllTables(testDb);
-
-  fakeDropbox = createFakeDropbox();
-  fakeDropbox.install();
-
-  finishedVideosDir = fs.mkdtempSync(path.join(tmpdir(), "sync-test-videos-"));
-
-  // Seed Dropbox auth so the transport can get an access token.
-  await testDb.insert(dropboxAuth).values({
-    accessToken: FAKE_ACCESS_TOKEN,
-    refreshToken: "fake-refresh-token",
-    expiresAt: new Date(Date.now() + 3600 * 1000),
-  });
-
-  const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
-  const dbLayer = Layer.mergeAll(
-    CourseOperationsService.Default,
-    VideoOperationsService.Default,
-    VersionOperationsService.Default,
-    LessonSectionOperationsService.Default,
-    LinkAuthOperationsService.Default
-  ).pipe(Layer.provide(drizzleLayer));
-
-  const course = await Effect.gen(function* () {
-    const courseOps = yield* CourseOperationsService;
-    return yield* courseOps.createCourse({
-      name: "test-course",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const version = await Effect.gen(function* () {
-    const versionOps = yield* VersionOperationsService;
-    return yield* versionOps.createCourseVersion({
-      repoId: course.id,
-      name: "",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const section = await Effect.gen(function* () {
-    const lsOps = yield* LessonSectionOperationsService;
-    const sections = yield* lsOps.createSections({
-      repoVersionId: version.id,
-      sections: [{ sectionPathWithNumber: "01-intro", sectionNumber: 1 }],
-    });
-    return sections[0]!;
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const lesson1 = await Effect.gen(function* () {
-    const lsOps = yield* LessonSectionOperationsService;
-    const lessons = yield* lsOps.createLessons(section.id, [
-      { lessonPathWithNumber: "01.01-welcome", lessonNumber: 1 },
-    ]);
-    yield* lsOps.updateLesson(lessons[0]!.id, { authoringStatus: "done" });
-    return lessons[0]!;
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const lesson2 = await Effect.gen(function* () {
-    const lsOps = yield* LessonSectionOperationsService;
-    const lessons = yield* lsOps.createLessons(section.id, [
-      { lessonPathWithNumber: "01.02-setup", lessonNumber: 2 },
-    ]);
-    return lessons[0]!;
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const video1 = await Effect.gen(function* () {
-    const videoOps = yield* VideoOperationsService;
-    return yield* videoOps.createVideo(lesson1.id, {
-      title: "Problem",
-      originalFootagePath: "/tmp/footage1.mp4",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const video2 = await Effect.gen(function* () {
-    const videoOps = yield* VideoOperationsService;
-    return yield* videoOps.createVideo(lesson2.id, {
-      title: "Explainer",
-      originalFootagePath: "/tmp/footage2.mp4",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
+  const world = await setupUploads({ videoCount: 2 });
+  const todoVideo = world.videos[1]!;
+  const [row] = await testDb
+    .select({ lessonId: videosTable.lessonId })
+    .from(videosTable)
+    .where(eq(videosTable.id, todoVideo.id));
   await testDb
-    .update(videosTable)
-    .set({ body: "Video body", description: "Video description" })
-    .where(eq(videosTable.id, video1.id));
-  await testDb
-    .update(videosTable)
-    .set({ body: "Video body", description: "Video description" })
-    .where(eq(videosTable.id, video2.id));
-
-  const clipData = [
-    {
-      videoFilename: "recording.mp4",
-      sourceStartTime: 0,
-      sourceEndTime: 10,
-      order: "a0",
-      text: "Hello world",
-      pauseType: "none" as const,
-    },
-    {
-      videoFilename: "recording.mp4",
-      sourceStartTime: 15,
-      sourceEndTime: 25,
-      order: "a1",
-      text: "Welcome to the course",
-      pauseType: "none" as const,
-    },
-  ];
-
-  await testDb
-    .insert(clipsTable)
-    .values(clipData.map((c) => ({ ...c, videoId: video1.id })));
-  await testDb
-    .insert(clipsTable)
-    .values(clipData.map((c) => ({ ...c, videoId: video2.id })));
-
-  const clips: ExportClip[] = clipData.map((c) => ({
-    videoFilename: c.videoFilename,
-    sourceStartTime: c.sourceStartTime,
-    sourceEndTime: c.sourceEndTime,
-    pauseType: "none",
-    zoomType: "none",
-    overlays: [],
-    order: c.order,
-  }));
-  const exportHash = computeExportHash(clips, "landscape")!;
-
-  fs.writeFileSync(
-    resolveExportPath(finishedVideosDir, course.id, exportHash),
-    "video-content"
-  );
-
-  await Effect.gen(function* () {
-    const versionOps = yield* VersionOperationsService;
-    yield* versionOps.copyVersionStructure({
-      sourceVersionId: version.id,
-      repoId: course.id,
-      newVersionName: "",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const configLayer = Layer.setConfigProvider(
-    ConfigProvider.fromMap(
-      new Map([
-        ["FINISHED_VIDEOS_DIRECTORY", finishedVideosDir],
-        ["DROPBOX_REMOTE_PATH", DROPBOX_REMOTE_PATH],
-        ["DROPBOX_APP_KEY", "test-dropbox-app-key"],
-        ["DROPBOX_APP_SECRET", "test-dropbox-app-secret"],
-      ])
-    )
-  );
-
-  const coreTestLayer = Layer.mergeAll(
-    CourseOperationsService.Default,
-    VideoOperationsService.Default,
-    VersionOperationsService.Default,
-    LinkAuthOperationsService.Default,
-    NodeContext.layer
-  ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
-
-  const testLayer = coreTestLayer;
-
-  const run = <A, E>(effect: Effect.Effect<A, E, any>) =>
-    Effect.runPromise(
-      effect.pipe(Effect.provide(testLayer) as any)
-    ) as Promise<A>;
-
-  return { course, version, video1, video2, run };
+    .update(lessonsTable)
+    .set({ authoringStatus: "todo" })
+    .where(eq(lessonsTable.id, row!.lessonId!));
+  return { ...world, todoVideo };
 };
 
-afterEach(() => {
-  fakeDropbox?.cleanup();
-});
-
-/**
- * Commit a Published Version to Dropbox: the same Bundle commit a Publish
- * ends with, with no export phase in front of it.
- */
-const commitPublished = (
-  courseId: string,
-  courseVersionId: string,
-  includeTodoLessons: boolean,
-  onProgress?: (event: "progress", data: { percentage: number }) => void
-) =>
-  syncFrozenCourseVersionToDropbox({
-    courseId,
-    courseVersionId,
-    includeTodoLessons,
-    placeholderFloor: ANNOUNCE_NOTHING,
-    onDetailEvent: (e) => {
-      if (e.event === "progress") onProgress?.("progress", e.data);
-    },
-    awaitVideoReady: () => Effect.void,
-  });
-
-function getRemoteManifest(): any {
-  const stored = fakeDropbox.get(
-    `${DROPBOX_REMOTE_PATH}/test-course/course.json`
-  );
-  if (!stored) throw new Error("No course.json in fake Dropbox");
-  return JSON.parse(stored.content.toString("utf-8"));
-}
-
-function getManifestVideos(doc: any): Array<{ relativePath: string }> {
-  return doc.sections.flatMap((section: any) =>
-    section.lessons.flatMap((lesson: any) =>
-      lesson.type === "problem"
-        ? [lesson.problem, lesson.solution].filter(Boolean)
-        : [lesson.explainer]
-    )
-  );
-}
+const remotePath = (relativePath: string) =>
+  `${DROPBOX_REMOTE_PATH}/test-course/${relativePath}`;
 
 describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
   it("uploads videos for all lessons", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    await sync();
 
-    const doc = getRemoteManifest();
-    const videos = getManifestVideos(doc);
+    const videos = manifestVideos(receiptManifest());
     expect(videos).toHaveLength(2);
     for (const video of videos) {
-      const fullPath = `${DROPBOX_REMOTE_PATH}/test-course/${video.relativePath}`;
-      expect(fakeDropbox.get(fullPath)).toBeDefined();
+      expect(fakeDropbox.get(remotePath(video.relativePath))).toBeDefined();
     }
   });
 
   it("rejects bundle corruption without moving the commit marker", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    await sync();
 
-    const manifestBefore = getRemoteManifest();
+    const manifestBefore = receiptManifest();
     // Corrupt a video in the fake Dropbox.
-    const firstVideo = getManifestVideos(manifestBefore)[0]!;
-    const fullPath = `${DROPBOX_REMOTE_PATH}/test-course/${firstVideo.relativePath}`;
-    const stored = fakeDropbox.get(fullPath)!;
+    const firstVideo = manifestVideos(manifestBefore)[0]!;
+    const stored = fakeDropbox.get(remotePath(firstVideo.relativePath))!;
     // Replace with same-sized but different content.
     fakeDropbox.store(
       stored.pathDisplay,
       Buffer.from("x".repeat(stored.content.length))
     );
 
-    await expect(
-      run(
-        Effect.gen(function* () {
-          return yield* commitPublished(course.id, version.id, true);
-        })
-      )
-    ).rejects.toBeDefined();
+    await expect(sync()).rejects.toBeDefined();
 
     // Manifest should be unchanged.
-    const manifestAfter = getRemoteManifest();
-    expect(manifestAfter).toEqual(manifestBefore);
+    expect(receiptManifest()).toEqual(manifestBefore);
   });
 
   it("writes only .mp4, course.json, manifest.json, and course.schema.json — no authoring sidecars", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    await sync();
 
-    const doc = getRemoteManifest();
+    const doc = receiptManifest();
     const coursePrefix = `${DROPBOX_REMOTE_PATH}/test-course/`;
     const prefix = coursePrefix.toLowerCase();
     const remoteFiles = Array.from(fakeDropbox.files.keys())
@@ -332,25 +97,17 @@ describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
       "course.json",
       `${doc.$schema}`,
       `${path.posix.dirname(doc.$schema)}/manifest.json`,
-      ...getManifestVideos(doc).map((video) => video.relativePath),
+      ...manifestVideos(doc).map((video) => video.relativePath),
     ].sort();
 
     expect(remoteFiles).toEqual(expectedFiles);
   });
 
   it("returns missingVideos without writing an incomplete manifest", async () => {
-    const { course, version, run } = await setupSync();
+    const { videos, sync } = await setupSync();
+    for (const video of videos) fs.unlinkSync(video.exportPath);
 
-    const files = fs.readdirSync(finishedVideosDir);
-    for (const file of files) {
-      fs.unlinkSync(path.join(finishedVideosDir, file));
-    }
-
-    const result = await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    const result = await sync();
 
     expect(result.missingVideos.length).toBeGreaterThan(0);
     expect(
@@ -359,147 +116,93 @@ describe("syncFrozenCourseVersionToDropbox (Dropbox HTTP API)", () => {
   });
 
   it("emits course.json at the course root", async () => {
-    const { course, version, run } = await setupSync();
+    const { course, version, sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    await sync();
 
-    const doc = getRemoteManifest();
+    const doc = receiptManifest() as PublishedManifest & {
+      courseId: string;
+      courseVersionId: string;
+      archiveTTL: string;
+      courseName: string;
+    };
     expect(doc.schemaVersion).toBe(4);
     expect(doc.courseId).toBe(course.id);
     expect(doc.courseVersionId).toBe(version.id);
     expect(doc.archiveTTL).toBe("90d");
     expect(doc.courseName).toBe("test-course");
     expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0].lessons).toHaveLength(2);
+    expect(doc.sections[0]!.lessons).toHaveLength(2);
   });
 
   it("course.json contains no path field", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    await sync();
 
-    const doc = getRemoteManifest();
+    const doc = receiptManifest();
     expect(doc.sections[0]).not.toHaveProperty("path");
-    const lesson = doc.sections[0].lessons[0];
+    const lesson = doc.sections[0]!.lessons[0]!;
     expect(lesson).not.toHaveProperty("path");
     const video = lesson.problem ?? lesson.explainer;
     expect(video).not.toHaveProperty("path");
   });
 
-  it("course.json uses lineageId as correlation id", async () => {
-    const { course, version, run } = await setupSync();
-
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-
-    const doc = getRemoteManifest();
-    const lesson = doc.sections[0].lessons[0];
-    expect(lesson.id).toBeDefined();
-    expect(lesson.id).not.toBe("");
-    expect(lesson.explainer?.id ?? lesson.problem?.id).toBeDefined();
-  });
-
-  it("course.json includes the render-input hash and exported byte receipt", async () => {
-    const { course, version, run } = await setupSync();
-
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-
-    const doc = getRemoteManifest();
-    const lesson = doc.sections[0].lessons[0];
-    const video = lesson.problem ?? lesson.explainer;
-    expect(video.hash).not.toBeNull();
-    expect(typeof video.hash).toBe("string");
-    expect(video.sha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(video.bytes).toBe(Buffer.byteLength("video-content"));
-  });
-
   it("does not resolve or publish archived videos", async () => {
-    const { course, version, video2, run } = await setupSync();
+    const { todoVideo, sync } = await setupSync();
+    // Move its Export Hash off the file on disk, so resolving it would
+    // report a missing Video.
     await testDb
       .update(clipsTable)
       .set({ sourceEndTime: 99 })
-      .where(eq(clipsTable.videoId, video2.id));
+      .where(eq(clipsTable.videoId, todoVideo.id));
     await testDb
       .update(videosTable)
       .set({ archived: true })
-      .where(eq(videosTable.id, video2.id));
+      .where(eq(videosTable.id, todoVideo.id));
 
-    const result = await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
+    const result = await sync();
 
     expect(result.missingVideos).toEqual([]);
-    const videos = getManifestVideos(getRemoteManifest());
+    const videos = manifestVideos(receiptManifest());
     expect(videos).toHaveLength(1);
-    expect(videos[0]!.relativePath).not.toContain("setup");
+    expect(videos[0]!.relativePath).not.toContain("lesson-2");
   });
 
   // ── Withholding to-do lessons (includeTodoLessons = false) ──────────
 
   it("withholds a to-do lesson's folder and omits it from course.json", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, false);
-      })
-    );
+    await sync(undefined, false);
 
-    const doc = getRemoteManifest();
-    const videos = getManifestVideos(doc);
+    const doc = receiptManifest();
+    const videos = manifestVideos(doc);
     expect(videos).toHaveLength(1);
-    expect(videos[0]!.relativePath).toContain("welcome/Problem.mp4");
-    const fullPath = `${DROPBOX_REMOTE_PATH}/test-course/${videos[0]!.relativePath}`;
-    expect(fakeDropbox.get(fullPath)).toBeDefined();
-    expect(videos[0]!.relativePath).not.toContain("setup");
+    expect(videos[0]!.relativePath).toContain("lesson-1/Explainer1.mp4");
+    expect(fakeDropbox.get(remotePath(videos[0]!.relativePath))).toBeDefined();
+    expect(videos[0]!.relativePath).not.toContain("lesson-2");
 
     expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0].lessons).toHaveLength(1);
+    expect(doc.sections[0]!.lessons).toHaveLength(1);
   });
 
   it("keeps the prior immutable bundle when a later manifest withholds a to-do lesson", async () => {
-    const { course, version, run } = await setupSync();
+    const { sync } = await setupSync();
 
     // First publish includes the to-do lesson.
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, true);
-      })
-    );
-    const firstDoc = getRemoteManifest();
-    const previousTodoVideo = getManifestVideos(firstDoc).find((video) =>
-      video.relativePath.includes("setup")
+    await sync(undefined, true);
+    const previousTodoVideo = manifestVideos(receiptManifest()).find((video) =>
+      video.relativePath.includes("lesson-2")
     )!;
-    const previousTodoPath = `${DROPBOX_REMOTE_PATH}/test-course/${previousTodoVideo.relativePath}`;
+    const previousTodoPath = remotePath(previousTodoVideo.relativePath);
     expect(fakeDropbox.get(previousTodoPath)).toBeDefined();
 
     // A later publish withholds it.
-    await run(
-      Effect.gen(function* () {
-        return yield* commitPublished(course.id, version.id, false);
-      })
-    );
-    const secondDoc = getRemoteManifest();
+    await sync(undefined, false);
     expect(
-      getManifestVideos(secondDoc).some((video) =>
-        video.relativePath.includes("setup")
+      manifestVideos(receiptManifest()).some((video) =>
+        video.relativePath.includes("lesson-2")
       )
     ).toBe(false);
     // The prior bundle's files are still in Dropbox.

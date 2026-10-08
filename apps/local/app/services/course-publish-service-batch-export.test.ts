@@ -1,213 +1,24 @@
 // batchExport's slice of CoursePublishService — split out of
-// course-publish-service.test.ts, which covers the rest of the service. The
-// seeded fixture below is the same one, kept local per this repo's per-file
-// test-harness convention (see course-publish-service-publish.test.ts).
-import { describe, it, expect, beforeAll } from "vitest";
+// course-publish-service.test.ts, which covers the rest of the service. Both
+// seed the shared fixture in course-publish-service-test-setup.ts.
+import { describe, it, expect } from "vitest";
 import { writeAlreadyExportedVideo } from "@/test-utils/exported-video-fixture";
-import { ConfigProvider, Effect, Layer } from "effect";
-import { NodeContext } from "@effect/platform-node";
-import { createFakeOverlayRenderCache } from "@/test-utils/fake-overlay-render-cache";
-import { createFakeVideoEditorLogger } from "@/test-utils/fake-video-editor-logger";
+import { Effect } from "effect";
 import fs from "node:fs";
 import path from "node:path";
-import { tmpdir } from "node:os";
-import {
-  createTestDb,
-  truncateAllTables,
-  type TestDb,
-} from "@/test-utils/pglite";
-import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
-import { DrizzleService } from "@/services/drizzle-service.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
 import { CoursePublishService } from "@/services/course-publish-service";
-import { computeExportHash, type ExportClip } from "@/services/export-hash";
 import { clips as clipsTable, videos as videosTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import {
-  honestRenderedDurationInSeconds,
-  soundExportDurationProbe,
-} from "@/test-utils/fake-video-processing";
+  finishedVideosDir,
+  setupPublishServiceTests,
+  setupPublishableCourse as setup,
+  testDb,
+} from "./course-publish-service-test-setup";
 
-let testDb: TestDb;
-let finishedVideosDir: string;
-
-beforeAll(async () => {
-  const result = await createTestDb();
-  testDb = result.testDb;
-});
-
-/** Create temp directories and seed a course with one version, one section,
- *  one lesson, one video with clips in the PGLite database. Returns IDs. */
-const setup = async () => {
-  await truncateAllTables(testDb);
-
-  finishedVideosDir = fs.mkdtempSync(
-    path.join(tmpdir(), "publish-test-videos-")
-  );
-
-  const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
-  const dbLayer = Layer.mergeAll(
-    CourseOperationsService.Default,
-    VideoOperationsService.Default,
-    VersionOperationsService.Default,
-    LessonSectionOperationsService.Default
-  ).pipe(Layer.provide(drizzleLayer));
-
-  // Mock VideoProcessingService: creates a dummy file at {videoId}.mp4
-  const mockVideoProcessing = Layer.succeed(VideoProcessingService, {
-    exportVideoClips: (opts: any) =>
-      Effect.sync(() => {
-        const outputPath = path.join(finishedVideosDir, `${opts.videoId}.mp4`);
-        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-        fs.writeFileSync(outputPath, "dummy-video-content");
-        opts.onStageChange?.("concatenating-clips");
-        opts.onProgress?.({ stage: "concatenating-clips", percent: 50 });
-        opts.onStageChange?.("normalizing-audio");
-        opts.onProgress?.({ stage: "normalizing-audio", percent: 50 });
-        return {
-          outputPath,
-          durationInSeconds: honestRenderedDurationInSeconds(opts),
-        };
-      }),
-    getVideoDurationInSeconds: soundExportDurationProbe,
-  } as any);
-
-  const configLayer = Layer.setConfigProvider(
-    ConfigProvider.fromMap(
-      new Map([["FINISHED_VIDEOS_DIRECTORY", finishedVideosDir]])
-    )
-  );
-
-  // Build a core layer with all deps, then provide to CoursePublishService
-  const coreTestLayer = Layer.mergeAll(
-    CourseOperationsService.Default,
-    VideoOperationsService.Default,
-    VersionOperationsService.Default,
-    mockVideoProcessing,
-    createFakeOverlayRenderCache().layer,
-    createFakeVideoEditorLogger().layer,
-    NodeContext.layer
-  ).pipe(Layer.provide(drizzleLayer), Layer.provide(configLayer));
-
-  const testLayer = Layer.merge(
-    coreTestLayer,
-    CoursePublishService.Default.pipe(Layer.provide(coreTestLayer))
-  );
-
-  // Seed data
-  const course = await Effect.gen(function* () {
-    const courseOps = yield* CourseOperationsService;
-    return yield* courseOps.createCourse({
-      name: "test-course",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const version = await Effect.gen(function* () {
-    const versionOps = yield* VersionOperationsService;
-    return yield* versionOps.createCourseVersion({
-      repoId: course.id,
-      name: "v1",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const section = await Effect.gen(function* () {
-    const lsOps = yield* LessonSectionOperationsService;
-    const sections = yield* lsOps.createSections({
-      repoVersionId: version.id,
-      sections: [{ sectionPathWithNumber: "01-intro", sectionNumber: 1 }],
-    });
-    return sections[0]!;
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const lesson = await Effect.gen(function* () {
-    const lsOps = yield* LessonSectionOperationsService;
-    const lessons = yield* lsOps.createLessons(section.id, [
-      { lessonPathWithNumber: "01.01-welcome", lessonNumber: 1 },
-    ]);
-    return lessons[0]!;
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  const video = await Effect.gen(function* () {
-    const videoOps = yield* VideoOperationsService;
-    return yield* videoOps.createVideo(lesson.id, {
-      title: "Problem",
-      originalFootagePath: "/tmp/footage.mp4",
-    });
-  }).pipe(Effect.provide(dbLayer), Effect.runPromise);
-
-  // Add clips to the video (direct insert)
-  await testDb.insert(clipsTable).values([
-    {
-      videoId: video.id,
-      videoFilename: "recording.mp4",
-      sourceStartTime: 0,
-      sourceEndTime: 10,
-      order: "a0",
-      text: "Hello world",
-      pauseType: "none",
-      zoomType: "none",
-    },
-    {
-      videoId: video.id,
-      videoFilename: "recording.mp4",
-      sourceStartTime: 15,
-      sourceEndTime: 25,
-      order: "a1",
-      text: "Welcome to the course",
-      pauseType: "none",
-      zoomType: "none",
-    },
-  ]);
-
-  // A COMPLETE, shippable Video: ADR 0029 makes a missing `body` or missing
-  // Clips a hard gap, which withholds the whole Lesson from every roster. A
-  // fixture that means to be published has to say so.
-  await testDb
-    .update(videosTable)
-    .set({ body: "Lesson body content", description: "SEO description" })
-    .where(eq(videosTable.id, video.id));
-
-  const clips: ExportClip[] = [
-    {
-      videoFilename: "recording.mp4",
-      sourceStartTime: 0,
-      sourceEndTime: 10,
-      pauseType: "none",
-      zoomType: "none",
-      overlays: [],
-    },
-    {
-      videoFilename: "recording.mp4",
-      sourceStartTime: 15,
-      sourceEndTime: 25,
-      pauseType: "none",
-      zoomType: "none",
-      overlays: [],
-    },
-  ];
-  const exportHash = computeExportHash(clips, "landscape")!;
-
-  const run = <A, E>(effect: Effect.Effect<A, E, any>) =>
-    Effect.runPromise(
-      effect.pipe(Effect.provide(testLayer) as any)
-    ) as Promise<A>;
-
-  return {
-    course,
-    version,
-    section,
-    lesson,
-    video,
-    exportHash,
-    clips,
-    run,
-    testLayer,
-    dbLayer,
-  };
-};
+setupPublishServiceTests();
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
@@ -300,6 +111,7 @@ describe("CoursePublishService", () => {
         .map((e) => e.data as any);
       expect(progressEvents).toEqual([
         expect.objectContaining({ stage: "concatenating-clips", percent: 50 }),
+        expect.objectContaining({ stage: "concatenating-clips", percent: 99 }),
         expect.objectContaining({ stage: "normalizing-audio", percent: 50 }),
       ]);
       expect(progressEvents[0].videoId).toBeTruthy();

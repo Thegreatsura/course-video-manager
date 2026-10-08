@@ -8,6 +8,10 @@ import {
   finishedVideosDir,
   setupPublishServiceTests,
   setupPublishableCourse as setup,
+  copyBatchCount,
+  remoteBundleDirs,
+  remoteBundleVideoPaths,
+  videoUploadCount,
 } from "./course-publish-service-test-setup";
 import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
@@ -26,25 +30,6 @@ setupPublishServiceTests();
  * `publish` has an export phase, which is the half that produces the bytes.
  */
 
-/** Only the `.mp4` uploads inside a bundle. */
-const isVideoUploadRequest = (url: string, init: RequestInit) => {
-  if (!url.includes("/2/files/upload") || url.includes("session")) return false;
-  const arg = (init.headers as Record<string, string> | undefined)?.[
-    "Dropbox-API-Arg"
-  ];
-  return Boolean(arg && JSON.parse(arg).path.endsWith(".mp4"));
-};
-
-const videoUploadCount = () =>
-  fakeDropbox.fetchCalls.filter((call) =>
-    isVideoUploadRequest(call.url, call.init)
-  ).length;
-
-const copyBatchCount = () =>
-  fakeDropbox.fetchCalls.filter((call) =>
-    call.url.includes("/2/files/copy_batch_v2")
-  ).length;
-
 /** Every `.mp4` the export pool has left in the finished videos directory. */
 const exportsOnDisk = () => {
   const found: string[] = [];
@@ -58,22 +43,6 @@ const exportsOnDisk = () => {
   walk(finishedVideosDir);
   return found;
 };
-
-const remoteBundleVideoPaths = () =>
-  Array.from(fakeDropbox.files.values())
-    .map((stored) => stored.pathDisplay)
-    .filter((remotePath) => remotePath.endsWith(".mp4"))
-    .sort();
-
-/** The `{versionFingerprint}-{assetFingerprint}` directories in Dropbox. */
-const remoteBundleDirs = () =>
-  Array.from(
-    new Set(
-      remoteBundleVideoPaths().map(
-        (remotePath) => remotePath.split("/versions/")[1]!.split("/")[0]!
-      )
-    )
-  );
 
 /** The export garbage collector, run to completion. */
 const collectAllExports = () => {

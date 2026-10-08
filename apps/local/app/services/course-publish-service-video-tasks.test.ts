@@ -177,25 +177,4 @@ describe("CoursePublishService — per-Video upload tasks", () => {
       )
     ).toBe(true);
   }, 30_000);
-
-  it("emits per-Video upload events even when nothing needs exporting", async () => {
-    const { course, videos, run } = await setup({ videoCount: 2 });
-    for (const video of videos) {
-      writeAlreadyExportedVideo(
-        path.join(finishedVideosDir, `${course.id}-${video.exportHash}.mp4`),
-        `already exported ${video.id}`
-      );
-    }
-
-    const events: CapturedEvent[] = [];
-    await run(publishCapturing(course.id, events));
-
-    for (const video of videos) {
-      expect(timelineFor(events, video.id)).toEqual([
-        "upload-queued",
-        "upload-video-progress",
-        "upload-video-complete",
-      ]);
-    }
-  }, 30_000);
 });

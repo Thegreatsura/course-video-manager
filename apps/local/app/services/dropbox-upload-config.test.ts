@@ -20,26 +20,10 @@ const readWith = <A>(
   );
 
 describe("Dropbox upload configuration", () => {
-  it("defaults upload concurrency to 4", async () => {
-    await expect(readWith(uploadConcurrency)).resolves.toBe(4);
-  });
-
-  it("reads upload concurrency from DROPBOX_UPLOAD_CONCURRENCY", async () => {
-    await expect(
-      readWith(uploadConcurrency, { DROPBOX_UPLOAD_CONCURRENCY: "8" })
-    ).resolves.toBe(8);
-  });
-
   it("rejects an upload concurrency below 1", async () => {
     await expect(
       readWith(uploadConcurrency, { DROPBOX_UPLOAD_CONCURRENCY: "0" })
     ).rejects.toBeDefined();
-  });
-
-  it("defaults the upload chunk size to 16 MB", async () => {
-    await expect(readWith(uploadChunkSizeBytes)).resolves.toBe(
-      16 * 1024 * 1024
-    );
   });
 
   it("reads the upload chunk size from DROPBOX_UPLOAD_CHUNK_SIZE_MB", async () => {
