@@ -53,7 +53,7 @@ export const requireLocalMachine = (
           new LocalOnlyCommandError({
             command,
             reason,
-            message: `${command} needs the author's machine: ${reason}. This box is not it, so the command can never succeed here — stop rather than retry, and use a verb that reads the data instead. (If this IS the author's machine, set ${LOCAL_MACHINE_ENV_KEY}=true in the repo-root .env.)`,
+            message: `${command} needs the author's machine: ${reason}. This box is not it, so the command can never succeed here — stop rather than retry, and use a verb that reads the data instead. (If this IS the author's machine, run it from the main checkout — never a git worktree — with ${LOCAL_MACHINE_ENV_KEY}=true in the repo-root .env.)`,
           })
         )
   );

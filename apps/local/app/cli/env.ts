@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { join } from "node:path";
 import {
   installLocationRepoRoot,
@@ -78,10 +79,16 @@ export const LOCAL_MACHINE_ENV_KEY = "CVM_LOCAL_MACHINE";
  * `cvm` setting is: the environment first, then the repo-root `.env` found by
  * walking up from the install location — so it holds from any working
  * directory, and a Remote Box that sets nothing simply is not local.
+ *
+ * A git worktree is never the author's machine, whatever its `.env` declares:
+ * worktrees have been made with the main checkout's `.env` copied in, and the
+ * local-only commands would then run unmerged code against production. They
+ * run from the main checkout only.
  */
 export const isLocalMachine = (): boolean => {
   const value = resolveEnvKey(LOCAL_MACHINE_ENV_KEY)?.trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes";
+  const declared = value === "1" || value === "true" || value === "yes";
+  return declared && !isInsideGitWorktree();
 };
 
 export const ensureApiConfig = (): EnsureApiConfigResult => {

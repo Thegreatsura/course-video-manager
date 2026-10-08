@@ -3,6 +3,7 @@ import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
@@ -80,7 +81,11 @@ const publishDeps = Layer.mergeAll(
   // CLI's publish needs the same logger the app's export does.
   VideoEditorLoggerService.Default,
   NodeContext.layer
-).pipe(Layer.provideMerge(DrizzleService.Default));
+).pipe(
+  Layer.provideMerge(
+    DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbeLive))
+  )
+);
 
 const publishLayer = CoursePublishService.Default.pipe(
   Layer.provideMerge(publishDeps)
