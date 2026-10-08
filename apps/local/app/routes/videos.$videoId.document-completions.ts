@@ -13,7 +13,8 @@ import { resolveArticleWriterModel } from "@/services/article-writer-model";
 import type { DocumentWritingAgentMode } from "@/services/document-writing-agent";
 import { type LanguageModelUsage, type ModelMessage, type UIMessage } from "ai";
 import { Data, Effect, Schema } from "effect";
-import { anthropic } from "@ai-sdk/anthropic";
+import { writerLanguageModel } from "@/services/fake-writer-model";
+import { describeWriterStreamError } from "@/services/writer-stream-errors";
 import type { WriterCacheStats } from "@/features/article-writer/types";
 
 const courseStructureSchema = Schema.Struct({
@@ -167,7 +168,7 @@ export const action = makeAction({
       }
 
       const agent = createDocumentWritingAgent({
-        model: anthropic(resolveArticleWriterModel(parsed.model)),
+        model: writerLanguageModel(resolveArticleWriterModel(parsed.model)),
         mode: parsed.mode as DocumentWritingAgentMode,
         transcript: videoContext.transcript,
         code: videoContext.textFiles,
@@ -188,6 +189,7 @@ export const action = makeAction({
             messages: modelMessages,
           }) as Promise<{
             toUIMessageStreamResponse: (opts: {
+              onError: (error: unknown) => string;
               messageMetadata: (options: {
                 part: { type: string; totalUsage?: LanguageModelUsage };
               }) => WriterCacheStats | undefined;
@@ -200,6 +202,7 @@ export const action = makeAction({
       // not apply, it simply bills the full prefix. Sending the counts to the
       // client is the only way the miss ever becomes visible.
       return result.toUIMessageStreamResponse({
+        onError: describeWriterStreamError,
         messageMetadata: ({ part }) => {
           if (part.type !== "finish" || !part.totalUsage) return undefined;
           const details = part.totalUsage.inputTokenDetails;

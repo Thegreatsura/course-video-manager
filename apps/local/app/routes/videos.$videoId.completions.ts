@@ -8,7 +8,8 @@ import {
 import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
 import { type UIMessage } from "ai";
 import { Effect, Schema } from "effect";
-import { anthropic } from "@ai-sdk/anthropic";
+import { writerLanguageModel } from "@/services/fake-writer-model";
+import { describeWriterStreamError } from "@/services/writer-stream-errors";
 
 const modeSchema = Schema.Union(
   Schema.Literal("article"),
@@ -128,7 +129,7 @@ export const action = makeAction({
       );
 
       const agent = createTextWritingAgent({
-        model: anthropic(model),
+        model: writerLanguageModel(model),
         mode: mode,
         transcript: videoContext.transcript,
         code: videoContext.textFiles,
@@ -149,7 +150,9 @@ export const action = makeAction({
         agent.stream({ messages: modelMessages })
       );
 
-      return result.toUIMessageStreamResponse();
+      return result.toUIMessageStreamResponse({
+        onError: describeWriterStreamError,
+      });
     });
   },
 });

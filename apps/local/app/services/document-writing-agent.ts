@@ -10,6 +10,7 @@ import {
   ToolLoopAgent as Agent,
   tool,
   type LanguageModel,
+  type StopCondition,
   type SystemModelMessage,
   stepCountIs,
 } from "ai";
@@ -229,6 +230,28 @@ After calling a tool, you may add a brief conversational message explaining what
   };
 };
 
+/**
+ * How many tool calls with malformed input one reply may make. The SDK hands
+ * each rejected call's validation error back to the model as an error tool
+ * result and runs another step, so the model can correct itself; this bounds
+ * that to two corrections. The turn then ends on the rejected call, and the
+ * client surfaces it as a failure with Retry (`findUnrecoveredToolError`).
+ */
+export const MAX_INVALID_TOOL_CALLS = 3;
+
+export const tooManyInvalidToolCalls: StopCondition<DocumentAgentToolSet> = ({
+  steps,
+}) =>
+  steps
+    .flatMap((step) => step.toolCalls)
+    .filter((call) => "invalid" in call && call.invalid === true).length >=
+  MAX_INVALID_TOOL_CALLS;
+
+type DocumentAgentToolSet = {
+  writeDocument: typeof writeDocumentTool;
+  editDocument: typeof editDocumentTool;
+};
+
 export const createDocumentWritingAgent = (
   props: DocumentWritingContext & { model: LanguageModel }
 ) => {
@@ -253,7 +276,7 @@ export const createDocumentWritingAgent = (
       writeDocument: writeDocumentTool,
       editDocument: editDocumentTool,
     },
-    stopWhen: stepCountIs(5),
+    stopWhen: [stepCountIs(5), tooManyInvalidToolCalls],
     experimental_repairToolCall: repairToolCall,
   });
 };

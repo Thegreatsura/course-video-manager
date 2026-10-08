@@ -20,20 +20,14 @@ import { useLint, useLintContext, useLintFix } from "@/hooks/use-lint";
 import { useBannedPhrases } from "@/hooks/use-banned-phrases";
 import { useMessageQueue } from "./use-message-queue";
 import { partsToText } from "./write-utils";
-import {
-  replaceChooseScreenshotWithImage,
-  updateChooseScreenshotClipIndex,
-  removeChooseScreenshot,
-  hasUnresolvedScreenshots,
-} from "./choose-screenshot-mutations";
+import { hasUnresolvedScreenshots } from "./choose-screenshot-mutations";
 import {
   preprocessDocumentPreview,
   type DocumentPreviewOptions,
 } from "./document-preview-markdown";
-import {
-  ChooseScreenshotProvider,
-  type ChooseScreenshotRuntime,
-} from "./choose-screenshot-components";
+import { ChooseScreenshotProvider } from "./choose-screenshot-components";
+import { useDocScreenshotRuntime } from "./use-doc-screenshot-runtime";
+import { useWriterTurn } from "./use-writer-turn";
 import {
   PREVIEW_COMPONENTS,
   PREVIEW_COMPONENTS_WITH_SCREENSHOTS,
@@ -118,7 +112,6 @@ export function WriterEngine({
   const ctxModel = useContextModel(context, pageFields);
   useMemoryAutosave(ctxModel.memoryText, context.repoId);
 
-  const [docCapturingKey, setDocCapturingKey] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
   const isDocumentMode =
@@ -173,102 +166,19 @@ export function WriterEngine({
       onDocumentChange,
     });
 
-  // Screenshot support
-  const handleDocCapture = useCallback(
-    async (
-      clipIndex: number,
-      alt: string,
-      timestamp: number,
-      videoFilename: string
-    ) => {
-      const key = `doc-${clipIndex}-${alt}`;
-      setDocCapturingKey(key);
-      try {
-        const res = await fetch(`/api/videos/${videoId}/capture-screenshot`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ timestamp, videoFilename }),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || "Failed to capture screenshot");
-        }
-        const { imagePath } = await res.json();
-        const currentDoc = documentRef.current;
-        if (currentDoc) {
-          updateDocument(
-            replaceChooseScreenshotWithImage(
-              currentDoc,
-              clipIndex,
-              alt,
-              imagePath
-            )
-          );
-        }
-      } catch (err) {
-        console.error("Screenshot capture failed:", err);
-      } finally {
-        setDocCapturingKey(null);
-      }
-    },
-    [videoId, documentRef, updateDocument]
-  );
-
-  const handleDocClipIndexChange = useCallback(
-    (currentIndex: number, newIndex: number, alt: string) => {
-      const currentDoc = documentRef.current;
-      if (currentDoc) {
-        updateDocument(
-          updateChooseScreenshotClipIndex(
-            currentDoc,
-            currentIndex,
-            newIndex,
-            alt
-          )
-        );
-      }
-    },
-    [documentRef, updateDocument]
-  );
-
-  const handleDocRemove = useCallback(
-    (clipIndex: number, alt: string) => {
-      const currentDoc = documentRef.current;
-      if (currentDoc) {
-        updateDocument(removeChooseScreenshot(currentDoc, clipIndex, alt));
-      }
-    },
-    [documentRef, updateDocument]
-  );
+  const { docScreenshotRuntime, isCapturing } = useDocScreenshotRuntime({
+    videoId,
+    indexedClips,
+    isGenerating,
+    documentRef,
+    updateDocument,
+  });
 
   const hasScreenshots = indexedClips.length > 0 && isDocumentMode;
 
   const docExtraComponents = hasScreenshots
     ? PREVIEW_COMPONENTS_WITH_SCREENSHOTS
     : PREVIEW_COMPONENTS;
-
-  // The document is a single scope, so the message id plays no part in its keys.
-  const docScreenshotRuntime = useMemo(
-    (): ChooseScreenshotRuntime => ({
-      clips: indexedClips,
-      isStreaming: isGenerating,
-      capturingKey: docCapturingKey,
-      keyFor: (clipIndex, alt) => `doc-${clipIndex}-${alt}`,
-      onClipIndexChange: (_messageId, current, next, alt) =>
-        handleDocClipIndexChange(current, next, alt),
-      onCapture: (_messageId, clipIndex, alt, timestamp, videoFilename) =>
-        handleDocCapture(clipIndex, alt, timestamp, videoFilename),
-      onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
-    }),
-    [
-      indexedClips,
-      isGenerating,
-      docCapturingKey,
-      handleDocClipIndexChange,
-      handleDocCapture,
-      handleDocRemove,
-    ]
-  );
 
   const previewOptions = useMemo(
     (): DocumentPreviewOptions => ({ screenshots: hasScreenshots }),
@@ -395,7 +305,8 @@ export function WriterEngine({
 
   const handleSend = useCallback(
     (text: string) => {
-      sendMessage({ text }, { body: getBodyPayload() });
+      // useChat reports a failed send through its status, not this promise.
+      void sendMessage({ text }, { body: getBodyPayload() });
     },
     [sendMessage, getBodyPayload]
   );
@@ -404,11 +315,12 @@ export function WriterEngine({
     submit: handleSubmit,
     queuedMessages,
     clearQueue,
-  } = useMessageQueue(status, handleSend, docCapturingKey !== null);
+  } = useMessageQueue(status, handleSend, isCapturing);
 
   const handleClearChat = () => {
     setMessages([]);
     clearQueue();
+    turnDispatch({ type: "chat-cleared" });
     saveFieldMessages(videoId, fieldId, mode, []);
     // Clearing the chat throws away the session's AI work; the document goes
     // back to the persisted value rather than blank.
@@ -424,9 +336,18 @@ export function WriterEngine({
     context: lintContext,
   });
 
-  const handleRegenerate = useCallback(() => {
-    regenerate({ body: getBodyPayload() });
-  }, [regenerate, getBodyPayload]);
+  const turn = useWriterTurn({
+    messages,
+    status,
+    error,
+    regenerate: () => void regenerate({ body: getBodyPayload() }),
+    stop: () => void stop(),
+  });
+  const turnDispatch = turn.dispatch;
+  const handleRegenerate = useCallback(
+    () => turnDispatch({ type: "regenerate-requested" }),
+    [turnDispatch]
+  );
 
   // Links: add/remove hit the global link API; React Router auto-revalidates
   // the route loader afterward, which refreshes context.links.
@@ -515,10 +436,12 @@ export function WriterEngine({
     () => ({
       messages,
       setMessages,
-      error,
+      failure: turn.failure,
+      onRetry: () => turnDispatch({ type: "retry-requested" }),
+      onRegenerate: handleRegenerate,
       fullPath,
       onSubmit: handleSubmit,
-      onStop: stop,
+      onStop: () => turnDispatch({ type: "stop-requested" }),
       status,
       indexedClips,
       mode,
@@ -531,10 +454,11 @@ export function WriterEngine({
     [
       messages,
       setMessages,
-      error,
+      turn.failure,
+      turnDispatch,
+      handleRegenerate,
       fullPath,
       handleSubmit,
-      stop,
       status,
       indexedClips,
       mode,
