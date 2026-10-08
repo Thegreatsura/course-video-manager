@@ -5,6 +5,9 @@
  * press past the last placeholder doing nothing tells the author he is done,
  * where a jump back to the top would lose his place.
  *
+ * I / O nudge the frame of the current placeholder (see
+ * `screenshot-frame-step.ts`).
+ *
  * The decisions live here as pure functions; `useScreenshotNavigation` is the
  * DOM wiring around them.
  */
@@ -32,11 +35,33 @@ type NavKeyEvent = Pick<
 export function screenshotNavDirection(
   e: NavKeyEvent
 ): ScreenshotNavDirection | null {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null;
-  if (e.key !== "l" && e.key !== "k") return null;
-  if (isTypingTarget(e.target)) return null;
-  return e.key === "l" ? 1 : -1;
+  return keyDirection(e, "l", "k");
 }
+
+/**
+ * I / O nudge the current placeholder's frame: O forward, I back. Same guard
+ * as {@link screenshotNavDirection}. The placeholder hears it as
+ * {@link SCREENSHOT_STEP_EVENT}.
+ */
+export function screenshotStepDirection(
+  e: NavKeyEvent
+): ScreenshotNavDirection | null {
+  return keyDirection(e, "o", "i");
+}
+
+function keyDirection(
+  e: NavKeyEvent,
+  forward: string,
+  back: string
+): ScreenshotNavDirection | null {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null;
+  if (e.key !== forward && e.key !== back) return null;
+  if (isTypingTarget(e.target)) return null;
+  return e.key === forward ? 1 : -1;
+}
+
+/** Dispatched on a placeholder's root; `detail` is the step direction. */
+export const SCREENSHOT_STEP_EVENT = "choose-screenshot-step";
 
 /** A placeholder's vertical extent, in px relative to the scroll box's top. */
 export interface PlaceholderSpan {
@@ -86,4 +111,37 @@ export function pickScreenshotTarget({
     if (centres[i]! < centre - EPSILON) return i;
   }
   return null;
+}
+
+/**
+ * The placeholder I / O act on: the one L / K last went to while it is still on
+ * screen, otherwise the on-screen one nearest the viewport's centre, otherwise
+ * none.
+ */
+export function pickCurrentScreenshot({
+  spans,
+  viewportHeight,
+  lastVisited,
+}: {
+  spans: PlaceholderSpan[];
+  viewportHeight: number;
+  lastVisited: number | null;
+}): number | null {
+  const onScreen = (s: PlaceholderSpan) =>
+    s.bottom > 0 && s.top < viewportHeight;
+  const last = lastVisited === null ? undefined : spans[lastVisited];
+  if (lastVisited !== null && last && onScreen(last)) return lastVisited;
+
+  const centre = viewportHeight / 2;
+  let best: number | null = null;
+  let bestDistance = Infinity;
+  spans.forEach((s, i) => {
+    if (!onScreen(s)) return;
+    const distance = Math.abs((s.top + s.bottom) / 2 - centre);
+    if (distance < bestDistance) {
+      best = i;
+      bestDistance = distance;
+    }
+  });
+  return best;
 }

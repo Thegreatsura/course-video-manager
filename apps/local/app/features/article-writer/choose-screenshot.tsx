@@ -10,7 +10,15 @@ import {
 import { formatDuration } from "@/lib/format-duration";
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
-import { CHOOSE_SCREENSHOT_ATTR } from "./screenshot-navigation";
+import {
+  CHOOSE_SCREENSHOT_ATTR,
+  SCREENSHOT_STEP_EVENT,
+} from "./screenshot-navigation";
+import {
+  stepScreenshotFrame,
+  type FrameStepDirection,
+} from "./screenshot-frame-step";
+import { useScreenshotIoStep } from "./screenshot-io-step-dial";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
@@ -43,16 +51,61 @@ export function ChooseScreenshot({
   const clip = clips.find((c) => c.index === clipIndex);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  /** Where the next clip shown opens: its end after I crossed back into it. */
+  const landAtRef = useRef<"start" | "end">("start");
+  const { step, dial } = useScreenshotIoStep();
 
   const isFirstClip = clipIndex <= 1;
   const isLastClip = clipIndex >= clips.length;
 
+  const landingTime = (c: IndexedClip) =>
+    landAtRef.current === "end" ? c.sourceEndTime : c.sourceStartTime;
+
   useEffect(() => {
     if (clip && videoRef.current) {
-      videoRef.current.currentTime = clip.sourceStartTime;
-      setCurrentTime(clip.sourceStartTime);
+      const time = landingTime(clip);
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
     }
   }, [clip?.sourceStartTime]);
+
+  const changeClip = (newIndex: number, landAt: "start" | "end") => {
+    landAtRef.current = landAt;
+    onClipIndexChange(clipIndex, newIndex);
+  };
+
+  const handleStep = (direction: FrameStepDirection) => {
+    if (!clip) return;
+    const next = stepScreenshotFrame({
+      time: currentTime,
+      clipStart: clip.sourceStartTime,
+      clipEnd: clip.sourceEndTime,
+      clipIndex,
+      clipCount: clips.length,
+      step,
+      direction,
+    });
+    if (next?.type === "seek") {
+      if (videoRef.current) videoRef.current.currentTime = next.time;
+      setCurrentTime(next.time);
+    } else if (next?.type === "change-clip") {
+      changeClip(next.newIndex, next.landAt);
+    }
+  };
+  const handleStepRef = useRef(handleStep);
+  handleStepRef.current = handleStep;
+
+  // Bridge: I / O arrive from useScreenshotNavigation as a DOM event.
+  const isLive = Boolean(clip) && !isStreaming;
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!isLive || !el) return;
+    const onStep = (e: Event) =>
+      handleStepRef.current((e as CustomEvent<FrameStepDirection>).detail);
+    el.addEventListener(SCREENSHOT_STEP_EVENT, onStep);
+    return () => el.removeEventListener(SCREENSHOT_STEP_EVENT, onStep);
+  }, [isLive]);
 
   const handleTimeUpdate = useCallback(() => {
     if (!videoRef.current || !clip) return;
@@ -121,6 +174,7 @@ export function ChooseScreenshot({
   return (
     <div
       {...navAnchor}
+      ref={rootRef}
       className="transition-shadow my-4 rounded-lg border border-border bg-muted/50 p-4 relative"
     >
       <Button
@@ -146,7 +200,7 @@ export function ChooseScreenshot({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => {
           if (videoRef.current) {
-            videoRef.current.currentTime = clip.sourceStartTime;
+            videoRef.current.currentTime = landingTime(clip);
           }
         }}
       />
@@ -172,7 +226,7 @@ export function ChooseScreenshot({
           variant="outline"
           size="sm"
           disabled={isFirstClip}
-          onClick={() => onClipIndexChange(clipIndex, clipIndex - 1)}
+          onClick={() => changeClip(clipIndex - 1, "start")}
         >
           <ChevronLeftIcon className="h-3 w-3 mr-1" />
           Prev
@@ -181,12 +235,13 @@ export function ChooseScreenshot({
           variant="outline"
           size="sm"
           disabled={isLastClip}
-          onClick={() => onClipIndexChange(clipIndex, clipIndex + 1)}
+          onClick={() => changeClip(clipIndex + 1, "start")}
         >
           Next
           <ChevronRightIcon className="h-3 w-3 ml-1" />
         </Button>
         <div className="flex-1" />
+        {dial}
         <Button
           size="sm"
           disabled={isCapturing}
