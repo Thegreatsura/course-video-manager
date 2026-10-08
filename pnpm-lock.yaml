@@ -12,7 +12,7 @@ overrides:
   ai: 6.0.301
   '@types/hast': 3.0.4
 
-packageExtensionsChecksum: 6f03a8220ba0cadc7ce82233429fb16c
+packageExtensionsChecksum: 6305f9e83418449af86a3d8d449edf5b
 
 importers:
 
@@ -9487,6 +9487,7 @@ snapshots:
       remotion: 4.0.347(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       source-map: 0.7.3
       style-loader: 4.0.0(webpack@5.96.1(esbuild@0.25.0)(lightningcss@1.32.0)(postcss@8.5.1))
+      typescript: 5.8.2
       webpack: 5.96.1(esbuild@0.25.0)(lightningcss@1.32.0)(postcss@8.5.1)
     transitivePeerDependencies:
       - '@minify-html/node'

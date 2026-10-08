@@ -69,6 +69,11 @@
       ]
     },
     "packageExtensions": {
+      "@remotion/bundler": {
+        "dependencies": {
+          "typescript": "5.8.2"
+        }
+      },
       "dependency-cruiser": {
         "dependencies": {
           "typescript": "5.9.3"
