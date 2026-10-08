@@ -1,8 +1,8 @@
 import { Data, Effect } from "effect";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class OpenFolderError extends Data.TaggedError("OpenFolderError")<{
   cause: unknown;
@@ -14,7 +14,7 @@ const wslPathToWindows = (
 ): Effect.Effect<string, OpenFolderError> =>
   Effect.tryPromise({
     try: async () => {
-      const { stdout } = await execAsync(`wslpath -w "${wslPath}"`);
+      const { stdout } = await execFileAsync("wslpath", ["-w", wslPath]);
       return stdout.trim();
     },
     catch: (e) =>
@@ -34,7 +34,7 @@ export class OpenFolderService extends Effect.Service<OpenFolderService>()(
         const windowsPath = yield* wslPathToWindows(path);
         yield* Effect.tryPromise({
           try: async () => {
-            await execAsync(`explorer.exe "${windowsPath}"`);
+            await execFileAsync("explorer.exe", [windowsPath]);
           },
           catch: (e) =>
             new OpenFolderError({
@@ -47,7 +47,7 @@ export class OpenFolderService extends Effect.Service<OpenFolderService>()(
       const openInVSCode = Effect.fn("openInVSCode")(function* (path: string) {
         yield* Effect.tryPromise({
           try: async () => {
-            await execAsync(`code "${path}"`);
+            await execFileAsync("code", [path]);
           },
           catch: (e) =>
             new OpenFolderError({

@@ -1,5 +1,6 @@
 import type { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
+import { assertUnderEffect } from "./assert-under";
 
 /**
  * Remove a scratch file or a file being replaced, without failing the work
@@ -25,3 +26,24 @@ export const removeBestEffort = (
             )
       )
     );
+
+/**
+ * `removeBestEffort` for a path the app did not build itself (a `filePath`
+ * read from a row, a path out of a request). The path must lie under
+ * `baseDir` — see `assertUnder`. One that does not is left alone with a
+ * warning: on a verify-cvm clone a row still names Matt's real file, and
+ * cleanup must never reach it.
+ */
+export const removeUnderBestEffort = (
+  fs: FileSystem.FileSystem,
+  baseDir: string,
+  path: string
+): Effect.Effect<void> =>
+  assertUnderEffect(baseDir, path).pipe(
+    Effect.flatMap((guarded) => removeBestEffort(fs, guarded)),
+    Effect.catchTag("PathOutsideBaseDirError", (error) =>
+      Effect.logWarning(`Not removing ${path}`).pipe(
+        Effect.annotateLogs("error", error.message)
+      )
+    )
+  );
