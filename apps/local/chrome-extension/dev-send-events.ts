@@ -22,6 +22,7 @@ import {
   createBrowserEventMessage,
   type BrowserEventMessage,
 } from "../stream-deck-forwarder/stream-deck-forwarder-types";
+import { isMainCheckout } from "../live-desk/live-desk";
 
 const HUB_URL = "ws://localhost:5172";
 
@@ -31,6 +32,14 @@ const urls =
     : ["https://example.com/one", "https://example.com/two"];
 
 async function main() {
+  // The hub is Matt's live desk: these events would land in his editor. Only
+  // his main checkout may send to it (see live-desk/live-desk.ts).
+  if (!isMainCheckout(process.cwd())) {
+    console.error(
+      `Refusing to send to ${HUB_URL}: this is not the main checkout, and that hub is Matt's live desk.`
+    );
+    process.exit(1);
+  }
   const ws = new WebSocket(HUB_URL);
   ws.addEventListener("error", () => {
     console.error(
