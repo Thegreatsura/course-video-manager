@@ -45,6 +45,9 @@ ALLOWLIST=(
   .claude/skills/verify-cvm/scripts/verify-db.sh
   .claude/skills/verify-cvm/scripts/verify-ledger.sh
   .claude/skills/verify-cvm/scripts/verify.sh
+  # verify-cvm: migrates the run's clone; refuses anything but
+  # localhost:5433/cvm_verify_<id> before it connects (stricter than the guard).
+  .claude/skills/verify-cvm/scripts/migrate-clone.mjs
   # verify-cvm's template: creates the local template database, and refreshes
   # it from a read-only pg_dump of production.
   scripts/setup-verify-db.sh
