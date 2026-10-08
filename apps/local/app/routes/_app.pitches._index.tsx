@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { makeLoader } from "@/services/route-action.server";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { Effect } from "effect";
 import { FileVideo, Lightbulb, Plus } from "lucide-react";
 import { useEffect } from "react";
@@ -468,7 +468,7 @@ function PitchRow({
                           {video.title || "Untitled"}
                         </span>
                         <span className="text-xs font-mono mt-0.5">
-                          {formatSecondsToTimeCode(video.totalDuration)}
+                          {formatDuration(video.totalDuration)}
                         </span>
                       </div>
                     </Link>

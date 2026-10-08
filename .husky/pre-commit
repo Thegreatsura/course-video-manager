@@ -9,5 +9,6 @@ pnpm run check:clip-inserts
 pnpm run check:env-example
 pnpm run check:routes-folder
 pnpm run check:entity-links
+pnpm run check:duration-format
 pnpm run check:effect-guards
 pnpm run check:frontend-state

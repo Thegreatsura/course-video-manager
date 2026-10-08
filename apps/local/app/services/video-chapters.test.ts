@@ -103,7 +103,7 @@ describe("buildVideoChaptersFromRows", () => {
 });
 
 describe("toYouTubeChapters", () => {
-  it("writes each start time as M:SS", () => {
+  it("writes each start time as m:ss, growing an hours field past the hour", () => {
     expect(
       toYouTubeChapters([
         { title: "Intro", startTime: 0 },
@@ -113,7 +113,7 @@ describe("toYouTubeChapters", () => {
     ).toEqual([
       { timestamp: "0:00", name: "Intro" },
       { timestamp: "1:05", name: "Setup" },
-      { timestamp: "62:05", name: "Long one" },
+      { timestamp: "1:02:05", name: "Long one" },
     ]);
   });
 });

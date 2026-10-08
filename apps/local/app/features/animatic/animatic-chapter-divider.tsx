@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CHAPTER_PROGRESS_VAR, progressFillStyle } from "./animatic-progress";
-import { formatRunTime } from "./animatic-timeline";
+import { formatDuration } from "@/lib/format-duration";
 
 /**
  * A Clip Mockup Chapter in the Animatic's sidebar.
@@ -97,7 +97,7 @@ export const AnimaticChapterDivider = (props: {
         {props.name}
       </span>
       <span className="relative z-10 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {formatRunTime(props.runTimeSeconds)}
+        {formatDuration(props.runTimeSeconds)}
       </span>
       <div className="relative z-10 h-0 flex-1 border-t-2 border-border" />
     </button>

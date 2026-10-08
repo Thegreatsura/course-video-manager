@@ -1,4 +1,4 @@
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { courseViewReducer } from "@/features/course-view/course-view-reducer";
 import { AlertTriangle, FileVideo } from "lucide-react";
 import { Suspense } from "react";
@@ -95,7 +95,7 @@ function VideoThumbnailItem({
             )}
           </div>
           <span className="text-xs font-mono mt-0.5">
-            {formatSecondsToTimeCode(totalDuration)}
+            {formatDuration(totalDuration)}
           </span>
         </div>
       </Link>

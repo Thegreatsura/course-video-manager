@@ -19,7 +19,7 @@ import {
 } from "./section-grid-utils";
 import { CompactLessonList, runSpacingClass } from "./dep-group-spine";
 import { type LoaderData } from "./course-view-types";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -174,7 +174,7 @@ export function SectionCard({
                       <div className="flex items-center gap-1.5">
                         {viewMode === "expanded" && (
                           <Badge variant="secondary" className="text-[10px]">
-                            {formatSecondsToTimeCode(sectionDuration)}
+                            {formatDuration(sectionDuration)}
                           </Badge>
                         )}
                         <button

@@ -1,5 +1,5 @@
 import { sortByOrder } from "@/lib/sort-by-order";
-import { formatSecondsToTimeCode } from "./utils";
+import { formatDuration } from "@/lib/format-duration";
 
 /**
  * The chapter list of a Video: where each Chapter starts, in whole seconds
@@ -91,6 +91,6 @@ export type YouTubeChapter = { timestamp: string; name: string };
 
 export const toYouTubeChapters = (chapters: VideoChapter[]): YouTubeChapter[] =>
   chapters.map((chapter) => ({
-    timestamp: formatSecondsToTimeCode(chapter.startTime),
+    timestamp: formatDuration(chapter.startTime),
     name: chapter.title,
   }));

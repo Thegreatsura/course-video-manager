@@ -8,7 +8,8 @@ import {
   type AnimaticCommentTarget,
 } from "./animatic-comments";
 import { MOCKUP_PROGRESS_VAR, progressFillStyle } from "./animatic-progress";
-import { ANIMATIC_FPS, formatRunTime } from "./animatic-timeline";
+import { formatDuration } from "@/lib/format-duration";
+import { ANIMATIC_FPS } from "./animatic-timeline";
 
 /**
  * One Clip Mockup's row in the Animatic's sidebar. The same row whether it
@@ -76,7 +77,7 @@ export const AnimaticMockupRow = (props: {
               {segment.mockup.line}
             </span>
             <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
-              {formatRunTime(segment.startFrame / ANIMATIC_FPS)}
+              {formatDuration(segment.startFrame / ANIMATIC_FPS)}
               {(segment.mockup.imageMissing || segment.mockup.audioMissing) && (
                 <span className="text-amber-600 dark:text-amber-300">
                   {" "}

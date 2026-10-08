@@ -177,15 +177,3 @@ export function adjacentSegmentStartFrame(
   if (index < 0) return null;
   return segments[index + delta]?.startFrame ?? null;
 }
-
-/** `4:07`, or `1:04:07` once an Animatic passes the hour. */
-export function formatRunTime(seconds: number): string {
-  const whole = Math.max(0, Math.round(seconds));
-  const hours = Math.floor(whole / 3600);
-  const minutes = Math.floor((whole % 3600) / 60);
-  const secs = whole % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(secs)}`
-    : `${minutes}:${pad(secs)}`;
-}

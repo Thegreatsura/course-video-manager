@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeLoader } from "@/services/route-action.server";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import {
   DndContext,
   KeyboardSensor,
@@ -193,7 +193,7 @@ function SortableQueueItem({
                   {line.label}
                 </span>
                 <span className="text-xs text-muted-foreground flex-shrink-0">
-                  {formatSecondsToTimeCode(item.duration)}
+                  {formatDuration(item.duration)}
                 </span>
               </div>
             ) : (
@@ -229,7 +229,7 @@ function VideoRow({
         <VideoIcon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
         <span className="text-sm break-all">{video.title}</span>
         <span className="text-xs text-muted-foreground flex-shrink-0">
-          {formatSecondsToTimeCode(video.duration)}
+          {formatDuration(video.duration)}
         </span>
       </div>
       {!isInQueue && (

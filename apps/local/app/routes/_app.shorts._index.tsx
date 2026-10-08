@@ -16,7 +16,7 @@ import {
   type PostedPlatforms,
 } from "@/lib/short-status";
 import { SiYoutube, SiTiktok } from "@icons-pack/react-simple-icons";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { makeLoader } from "@/services/route-action.server";
@@ -172,7 +172,7 @@ export default function ShortsIndex(props: Route.ComponentProps) {
                         )}
                         {totalDuration > 0 && (
                           <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
-                            {formatSecondsToTimeCode(totalDuration)}
+                            {formatDuration(totalDuration)}
                           </div>
                         )}
                         {(posted?.youtube || posted?.tiktok) && (

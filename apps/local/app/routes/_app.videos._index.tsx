@@ -6,7 +6,7 @@ import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeLoader } from "@/services/route-action.server";
@@ -86,7 +86,7 @@ export default function Component(props: Route.ComponentProps) {
               <span className="font-medium">{video.title}</span>
             </div>
             <span className="text-sm text-muted-foreground">
-              {formatSecondsToTimeCode(totalDuration)}
+              {formatDuration(totalDuration)}
             </span>
           </Link>
         </ContextMenuTrigger>

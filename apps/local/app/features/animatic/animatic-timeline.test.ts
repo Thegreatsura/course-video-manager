@@ -4,7 +4,6 @@ import {
   CLIP_MOCKUP_GAP_SECONDS,
   UNVOICED_HOLD_SECONDS,
   buildAnimaticTimeline,
-  formatRunTime,
   adjacentSegmentStartFrame,
   segmentIndexAtFrame,
   type AnimaticClipMockup,
@@ -132,18 +131,6 @@ describe("segmentIndexAtFrame", () => {
 
   it("is -1 only for an empty timeline", () => {
     expect(segmentIndexAtFrame([], 0)).toBe(-1);
-  });
-});
-
-describe("formatRunTime", () => {
-  it("reads as minutes and seconds", () => {
-    expect(formatRunTime(0)).toBe("0:00");
-    expect(formatRunTime(7)).toBe("0:07");
-    expect(formatRunTime(247)).toBe("4:07");
-  });
-
-  it("grows an hours field once an Animatic passes the hour", () => {
-    expect(formatRunTime(3847)).toBe("1:04:07");
   });
 });
 

@@ -1,8 +1,5 @@
-import {
-  ANIMATIC_FPS,
-  formatRunTime,
-  segmentFrames,
-} from "./animatic-timeline";
+import { formatDuration } from "@/lib/format-duration";
+import { ANIMATIC_FPS, segmentFrames } from "./animatic-timeline";
 
 /**
  * The Section clock: how far through the whole Section's Animatics the author
@@ -126,5 +123,5 @@ export function sectionClockAt(params: {
  * elapsed and the total answered no question the author asks mid-sitting.
  */
 export function formatSectionClock(clock: AnimaticSectionClock): string {
-  return `${formatRunTime(clock.remainingSeconds)} left`;
+  return `${formatDuration(clock.remainingSeconds)} left`;
 }
