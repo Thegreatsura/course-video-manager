@@ -53,7 +53,7 @@ const chatSchema = Schema.Struct({
   messages: Schema.Any,
   enabledFiles: Schema.Array(Schema.String),
   mode: modeSchema,
-  // The Article Writer sends no model; it always runs on ARTICLE_WRITER_MODEL.
+  // The Article Writer sends its selected model; with none, ARTICLE_WRITER_MODEL.
   model: Schema.optional(Schema.String),
   includeTranscript: Schema.optionalWith(Schema.Boolean, {
     default: () => true,

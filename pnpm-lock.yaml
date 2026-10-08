@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@ai-sdk/anthropic': 3.0.127
+  '@ai-sdk/anthropic': 3.0.128
   '@ai-sdk/provider': 3.0.18
   '@ai-sdk/provider-utils': 4.0.57
   '@ai-sdk/react': 3.0.304
@@ -64,8 +64,8 @@ importers:
   apps/local:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: 3.0.127
-        version: 3.0.127(zod@4.4.3)
+        specifier: 3.0.128
+        version: 3.0.128(zod@4.4.3)
       '@ai-sdk/react':
         specifier: 3.0.304
         version: 3.0.304(react@19.2.7)(zod@4.4.3)
@@ -550,8 +550,8 @@ packages:
       '@vercel/sandbox':
         optional: true
 
-  '@ai-sdk/anthropic@3.0.127':
-    resolution: {integrity: sha512-Inff1DmPRVWi6QGr9YL2wiA4maILZuve9I8id/O4keQEoq6fJv6EfvkrSFw/nNvm2jiTcIUfDrpczeHTuhl9mg==}
+  '@ai-sdk/anthropic@3.0.128':
+    resolution: {integrity: sha512-xCEEoZrEi6hnTbZgIO8A3rqXvSUkdx9oOfKLrHQrmaGhekxb+DauyekkDExyMFRm9Qr8Azaq43wLie1FTnQc5A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -7276,7 +7276,7 @@ snapshots:
     dependencies:
       '@clack/prompts': 1.7.0
 
-  '@ai-sdk/anthropic@3.0.127(zod@4.4.3)':
+  '@ai-sdk/anthropic@3.0.128(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.18
       '@ai-sdk/provider-utils': 4.0.57(zod@4.4.3)

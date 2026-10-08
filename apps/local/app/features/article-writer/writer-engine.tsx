@@ -55,6 +55,10 @@ import { InlineContextStrip } from "./inline-context-strip";
 import { ContextView } from "./context-view";
 import { SettingsView } from "./settings-view";
 import { WriteModeDropdown } from "./write-mode-dropdown";
+import {
+  useArticleWriterModel,
+  WriteModelSelector,
+} from "./write-model-selector";
 import { Button } from "@/components/ui/button";
 import {
   RefreshCwIcon,
@@ -110,6 +114,7 @@ export function WriterEngine({
     defaultModeForRole(context.videoRole)
   );
   const [mode, setMode] = useState<Mode>(constrainedMode);
+  const [model, setModel] = useArticleWriterModel();
   const ctxModel = useContextModel(context, pageFields);
   useMemoryAutosave(ctxModel.memoryText, context.repoId);
 
@@ -345,8 +350,8 @@ export function WriterEngine({
     };
     // Ref, not state: a lint fix sends in the same tick as it rewrites.
     return isDocumentMode
-      ? { ...base, document: documentRef.current, mode }
-      : { ...base, mode };
+      ? { ...base, document: documentRef.current, mode, model }
+      : { ...base, mode, model };
   }, [
     chapters.length,
     ctxModel.enabledSections,
@@ -360,6 +365,7 @@ export function WriterEngine({
     isDocumentMode,
     documentRef,
     mode,
+    model,
   ]);
 
   const {
@@ -612,6 +618,11 @@ export function WriterEngine({
               mode={mode}
               onModeChange={handleModeChange}
               allowedModes={modes}
+            />
+            <WriteModelSelector
+              model={model}
+              onModelChange={setModel}
+              disabled={isGenerating}
             />
             <Button
               variant="ghost"

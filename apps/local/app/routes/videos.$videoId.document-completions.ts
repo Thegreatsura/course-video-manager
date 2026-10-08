@@ -9,7 +9,7 @@ import {
   formatRelatedFields,
 } from "@/services/document-writing-agent";
 import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
-import { ARTICLE_WRITER_MODEL } from "@/services/article-writer-model";
+import { resolveArticleWriterModel } from "@/services/article-writer-model";
 import type { DocumentWritingAgentMode } from "@/services/document-writing-agent";
 import { type LanguageModelUsage, type ModelMessage, type UIMessage } from "ai";
 import { Data, Effect, Schema } from "effect";
@@ -47,6 +47,8 @@ const chatSchema = Schema.Struct({
     default: () => "article" as const,
   }),
   document: Schema.optional(Schema.String),
+  // The writer's model selector; anything not on offer runs the default.
+  model: Schema.optional(Schema.String),
   includeTranscript: Schema.optionalWith(Schema.Boolean, {
     default: () => true,
   }),
@@ -165,7 +167,7 @@ export const action = makeAction({
       }
 
       const agent = createDocumentWritingAgent({
-        model: anthropic(ARTICLE_WRITER_MODEL),
+        model: anthropic(resolveArticleWriterModel(parsed.model)),
         mode: parsed.mode as DocumentWritingAgentMode,
         transcript: videoContext.transcript,
         code: videoContext.textFiles,
