@@ -39,6 +39,21 @@ create_clone() {
     die "could not clone $template_db into $clone — is a session holding the template open? (select * from pg_stat_activity where datname = '$template_db')"
 }
 
+# migrate_run_clone <clone url> <clone name> — apply the checkout's migrations
+# the clone lacks, to the clone alone. Checked twice: here, and again in
+# migrate-clone.mjs, which refuses anything but localhost:5433/<this clone>.
+migrate_run_clone() {
+  local url="$1" name="$2"
+  case "$name" in cvm_verify_[0-9]*) ;; *) die "refusing to migrate '$name' — not a per-run clone" ;; esac
+  [ "$name" != "$(url_db "$(verify_template_url)")" ] || die "refusing to migrate the template itself"
+  [ "$(url_db "$url")" = "$name" ] || die "refusing to migrate $(url_db "$url") — this run's clone is $name"
+  case "$(url_host "$url")" in
+    localhost:5433|127.0.0.1:5433) ;;
+    *) die "refusing to migrate a clone on $(url_host "$url") — only localhost:5433 is migrated" ;;
+  esac
+  node "$(dirname "${BASH_SOURCE[0]}")/migrate-clone.mjs" "$url" "$name"
+}
+
 # A clone run is writable, so nothing it does may leave the box. Every external
 # service's credential is replaced with a dud — they win over a linked .env,
 # because the process environment beats .env — so Buffer, S3, Dropbox, YouTube,
