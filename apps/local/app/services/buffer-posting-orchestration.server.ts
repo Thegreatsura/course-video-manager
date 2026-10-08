@@ -27,6 +27,10 @@ export const bufferPostProgram = (opts: {
       return;
     }
 
+    // A dead key used to surface only after the whole video had uploaded.
+    // Check it first, before any upload or row, so it fails in seconds.
+    yield* bufferApi.verifyAuth();
+
     const post = yield* videoPostOps.createVideoPost({
       videoId: opts.videoId,
       platform: "buffer",
