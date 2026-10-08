@@ -22,6 +22,7 @@ import {
   RenderVerticalError,
   RenderVerticalVideoService,
 } from "./render-vertical-video-service";
+import { SidecarContextTest } from "./sidecar-context";
 
 describe("buildSubtitles", () => {
   it("keeps a short segment as a single subtitle and converts to frames", () => {
@@ -128,8 +129,10 @@ describe("RenderVerticalVideoService", () => {
       NodeContext.layer
     );
 
-    return Layer.merge(
+    return Layer.mergeAll(
       depsLayer,
+      // A render runs only in the Sidecar; a test stands in for it.
+      SidecarContextTest,
       RenderVerticalVideoService.Default.pipe(Layer.provide(depsLayer))
     );
   }
@@ -246,7 +249,8 @@ describe("RenderVerticalVideoService", () => {
         ),
         // The overlay step spawns a subprocess, so the render itself (not just
         // the service's construction) needs a CommandExecutor in context.
-        Effect.provide(NodeContext.layer)
+        // A render runs only in the Sidecar; a test stands in for it.
+        Effect.provide(Layer.merge(NodeContext.layer, SidecarContextTest))
       );
     }
   );

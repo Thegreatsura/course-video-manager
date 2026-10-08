@@ -10,9 +10,11 @@ type Toast<T extends jobsReducer.Effect["type"]> = Extract<
 /** What a kind of Job did, for the toast's headline. */
 const DID: Record<string, string> = {
   export: "exported successfully",
+  "render-vertical": "rendered as a vertical Short",
 };
 const FAILED: Record<string, string> = {
   export: "export failed",
+  "render-vertical": "vertical Short render failed",
 };
 
 export function showJobSucceededToast(

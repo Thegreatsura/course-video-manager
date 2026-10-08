@@ -79,6 +79,10 @@ export interface UploadContextType {
    * the tab closes. Returns the Job's id, which an upload may wait on.
    */
   startExportUpload: (videoId: string, title: string) => string;
+  /**
+   * Render a Video as a vertical Short: a background Job the Sidecar runs.
+   * Returns the Job's id, which a Shorts post may wait on.
+   */
   startRenderVerticalUpload: (videoId: string, title: string) => string;
   startBatchExportUpload: (
     versionId: string,
@@ -421,29 +425,15 @@ export function UploadProvider({
   );
 
   const startRenderVerticalUpload = useCallback(
-    (videoId: string, title: string) => {
-      const uploadId = generateUploadId();
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    (videoId: string, title: string) =>
+      startJob({
+        kind: "render-vertical",
         title,
-        uploadType: "render-vertical" as const,
-      };
-      dispatch(action);
-
-      initiateFromRegistry(
-        "render-vertical",
-        action,
-        undefined,
-        dispatch,
-        abortControllersRef.current
-      );
-
-      return uploadId;
-    },
-    []
+        params: { videoId },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+      }),
+    [startJob]
   );
 
   const startBatchExportUpload = useCallback(
@@ -638,6 +628,9 @@ export function UploadProvider({
           const initiate =
             uploadTypeRegistry[reaction.upload.uploadType].initiate;
           if (!initiate) {
+            // Only a Batch export's per-Video row is still a browser entry
+            // with no browser driver; every other such kind is a Job.
+            if (reaction.upload.uploadType !== "export") break;
             // A Batch export's per-Video row failed, and the browser used to
             // retry it as a standalone export. That export is a Job now: hand
             // it to the Sidecar with the attempts the row has left, and let

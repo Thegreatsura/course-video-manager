@@ -3,7 +3,6 @@ import { autofillConfig } from "./upload-type-autofill";
 import { startSSEAiHeroPost } from "./sse-ai-hero-client";
 import { startSSEPublish } from "./sse-publish-client";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
-import { startSSERenderVertical } from "./sse-render-vertical-client";
 import { startSSESkillsChangelogPost } from "./sse-skills-changelog-client";
 import { startSSESocialPost } from "./sse-social-client";
 import { startSSEUpload } from "./sse-upload-client";
@@ -645,34 +644,9 @@ const renderVerticalConfig: UploadTypeConfig<
     renderVerticalStage: null,
   }),
 
-  initiate: (uploadId, entry, _params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSERenderVertical(
-        { videoId: entry.videoId },
-        {
-          onStageChange: (stage) => {
-            dispatch({
-              type: "UPDATE_RENDER_VERTICAL_STAGE",
-              uploadId,
-              stage,
-            });
-          },
-          onComplete: () => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A vertical render is a background Job: it runs in the Sidecar
+  // (`startRenderVerticalUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: false,
 };

@@ -2,6 +2,7 @@ import type { uploadReducer } from "@/features/upload-manager/upload-reducer";
 import {
   EXPORT_STAGE_BANDS,
   fillBand,
+  RENDER_VERTICAL_STAGE_BANDS,
 } from "@/features/upload-manager/upload-progress";
 import type { jobsReducer } from "./jobs-reducer";
 
@@ -13,6 +14,15 @@ const EXPORT_STAGES: readonly string[] = Object.keys(EXPORT_STAGE_BANDS);
 
 const isExportStage = (stage: string): stage is uploadReducer.ExportStage =>
   EXPORT_STAGES.includes(stage);
+
+const RENDER_VERTICAL_STAGES: readonly string[] = Object.keys(
+  RENDER_VERTICAL_STAGE_BANDS
+);
+
+const isRenderVerticalStage = (
+  stage: string
+): stage is uploadReducer.RenderVerticalStage =>
+  RENDER_VERTICAL_STAGES.includes(stage);
 
 const uploadStatusOf = (
   job: jobsReducer.JobView
@@ -35,15 +45,55 @@ const uploadStatusOf = (
   }
 };
 
+/** The fields every Job's row shares, whatever its kind. */
+const baseEntryOf = (
+  job: jobsReducer.JobView,
+  status: uploadReducer.UploadStatus,
+  progress: number
+): uploadReducer.BaseUploadEntry => ({
+  uploadId: job.id,
+  videoId: job.subjectId ?? "",
+  title: job.title,
+  progress,
+  status,
+  errorMessage: job.errorMessage,
+  retryCount: job.attempt - 1,
+  terminal: false,
+  dependsOn: null,
+  parentUploadId: null,
+});
+
 /**
  * A server Job as a row of the Global Upload Progress, which draws Upload
- * Manager entries. An export Job draws exactly as the browser-driven export
- * did: the same stages, bands and labels. `null` for a kind with no row.
+ * Manager entries. Each kind draws exactly as its browser-driven job did: the
+ * same stages, bands and labels. `null` for a kind with no row.
  */
 export const jobUploadEntry = (
   job: jobsReducer.JobView
-): uploadReducer.ExportUploadEntry | null => {
+):
+  | uploadReducer.ExportUploadEntry
+  | uploadReducer.RenderVerticalUploadEntry
+  | null => {
   switch (job.kind) {
+    case "render-vertical": {
+      const stage =
+        job.stage !== null && isRenderVerticalStage(job.stage)
+          ? job.stage
+          : null;
+      const status = uploadStatusOf(job);
+      // A render reports stages, not percentages: each stage is a floor.
+      const progress =
+        status === "success"
+          ? 100
+          : stage === null
+            ? 0
+            : RENDER_VERTICAL_STAGE_BANDS[stage].start;
+      return {
+        ...baseEntryOf(job, status, progress),
+        uploadType: "render-vertical",
+        renderVerticalStage: status === "success" ? null : stage,
+      };
+    }
     case "export": {
       const stage =
         job.stage !== null && isExportStage(job.stage) ? job.stage : null;
@@ -55,16 +105,7 @@ export const jobUploadEntry = (
             ? 0
             : fillBand(EXPORT_STAGE_BANDS[stage], job.percent ?? 0);
       return {
-        uploadId: job.id,
-        videoId: job.subjectId ?? "",
-        title: job.title,
-        progress,
-        status,
-        errorMessage: job.errorMessage,
-        retryCount: job.attempt - 1,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
+        ...baseEntryOf(job, status, progress),
         uploadType: "export",
         exportStage: status === "uploading" ? (stage ?? "queued") : stage,
         isBatchEntry: false,
