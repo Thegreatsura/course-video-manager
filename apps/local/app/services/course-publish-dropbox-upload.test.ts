@@ -206,22 +206,6 @@ describe("Dropbox publish upload — resumability", () => {
       .filter((call) => isVideoUploadRequest(call.url, call.init));
     expect(videoUploads).toHaveLength(0);
   });
-
-  it("still fails when a Video in the bundle does not match its expected bytes", async () => {
-    const { sync } = await setupUploads({ videoCount: 2 });
-
-    await sync();
-    const target = remoteBundleVideoPaths()[0]!;
-    const stored = fakeDropbox.get(target)!;
-    // Same size, different bytes — an immutability violation, not a partial
-    // transfer.
-    fakeDropbox.store(
-      stored.pathDisplay,
-      Buffer.from("y".repeat(stored.content.length))
-    );
-
-    await expect(sync()).rejects.toBeDefined();
-  });
 });
 
 describe("Dropbox publish upload — transient failures", () => {

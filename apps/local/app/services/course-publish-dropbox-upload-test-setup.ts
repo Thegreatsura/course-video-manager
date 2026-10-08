@@ -47,7 +47,7 @@ import {
 } from "@/packages/course-json";
 import { eq } from "drizzle-orm";
 
-let testDb: TestDb;
+export let testDb: TestDb;
 let finishedVideosDir: string;
 export let fakeDropbox: ReturnType<typeof createFakeDropbox>;
 
@@ -307,22 +307,6 @@ export const setupUploads = async (opts?: {
   return { course, version, videos, run, commit, sync, unfilm, refilm };
 };
 
-export const remoteBundleVideoPaths = () =>
-  Array.from(fakeDropbox.files.values())
-    .map((stored) => stored.pathDisplay)
-    .filter((remotePath) => remotePath.endsWith(".mp4"))
-    .sort();
-
-/** The `{versionFingerprint}-{assetFingerprint}` directory the bundle landed in. */
-export const remoteBundleDirs = () =>
-  Array.from(
-    new Set(
-      remoteBundleVideoPaths().map(
-        (remotePath) => remotePath.split("/versions/")[1]!.split("/")[0]!
-      )
-    )
-  );
-
 /** A Lesson as the published `course.json` carries it. */
 interface ManifestLesson {
   type?: string;
@@ -337,13 +321,6 @@ export interface PublishedManifest {
   schemaVersion: number;
   sections: Array<{ lessons: ManifestLesson[] }>;
 }
-
-export const receiptManifest = (): PublishedManifest =>
-  JSON.parse(
-    fakeDropbox
-      .get(`${DROPBOX_REMOTE_PATH}/test-course/course.json`)!
-      .content.toString("utf-8")
-  );
 
 export const manifestVideos = (manifest: PublishedManifest): ManifestVideo[] =>
   manifest.sections.flatMap((section) =>
@@ -374,12 +351,51 @@ export const freezeLatestVersion = (
     })
   );
 
-export const videoUploadCount = () =>
-  fakeDropbox.fetchCalls.filter((call) =>
-    isVideoUploadRequest(call.url, call.init)
-  ).length;
+/**
+ * Readers over what a fake Dropbox holds and was asked for. Both publish test
+ * harnesses install their own fake, so each binds these to its own.
+ */
+export const bundleReaders = (
+  dropbox: () => ReturnType<typeof createFakeDropbox>
+) => {
+  const remoteBundleVideoPaths = () =>
+    Array.from(dropbox().files.values())
+      .map((stored) => stored.pathDisplay)
+      .filter((remotePath) => remotePath.endsWith(".mp4"))
+      .sort();
 
-export const copyBatchCount = () =>
-  fakeDropbox.fetchCalls.filter((call) =>
-    call.url.includes("/2/files/copy_batch_v2")
-  ).length;
+  return {
+    remoteBundleVideoPaths,
+    /** The `{versionFingerprint}-{assetFingerprint}` directories the bundle landed in. */
+    remoteBundleDirs: () =>
+      Array.from(
+        new Set(
+          remoteBundleVideoPaths().map(
+            (remotePath) => remotePath.split("/versions/")[1]!.split("/")[0]!
+          )
+        )
+      ),
+    receiptManifest: (): PublishedManifest =>
+      JSON.parse(
+        dropbox()
+          .get(`${DROPBOX_REMOTE_PATH}/test-course/course.json`)!
+          .content.toString("utf-8")
+      ),
+    videoUploadCount: () =>
+      dropbox().fetchCalls.filter((call) =>
+        isVideoUploadRequest(call.url, call.init)
+      ).length,
+    copyBatchCount: () =>
+      dropbox().fetchCalls.filter((call) =>
+        call.url.includes("/2/files/copy_batch_v2")
+      ).length,
+  };
+};
+
+export const {
+  remoteBundleVideoPaths,
+  remoteBundleDirs,
+  receiptManifest,
+  videoUploadCount,
+  copyBatchCount,
+} = bundleReaders(() => fakeDropbox);

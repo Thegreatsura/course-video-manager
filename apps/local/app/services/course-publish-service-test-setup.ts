@@ -47,12 +47,22 @@ import {
   dropboxAuth,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { bundleReaders } from "./course-publish-dropbox-upload-test-setup";
 
 export let testDb: TestDb;
 export let finishedVideosDir: string;
 export let fakeDropbox: ReturnType<typeof createFakeDropbox>;
 
 export const DROPBOX_REMOTE_PATH = "/Courses";
+
+export { isVideoUploadRequest } from "./course-publish-dropbox-upload-test-setup";
+export const {
+  remoteBundleVideoPaths,
+  remoteBundleDirs,
+  receiptManifest,
+  videoUploadCount,
+  copyBatchCount,
+} = bundleReaders(() => fakeDropbox);
 
 /** What the fake renderer writes when a test does not say otherwise. */
 export const DEFAULT_RENDERED_BYTES = "dummy-video-content";
@@ -232,6 +242,7 @@ export const setupPublishableCourse = async (opts?: {
     relativeAssetPath: string;
   }> = [];
 
+  let firstLesson: { id: string } | undefined;
   for (let index = 0; index < videoCount; index++) {
     const lessonPath = `01.${String(index + 1).padStart(2, "0")}-welcome`;
     // Every lesson's fixture path parses to the same title ("welcome") once
@@ -247,6 +258,7 @@ export const setupPublishableCourse = async (opts?: {
       ]);
       return lessons[0]!;
     }).pipe(Effect.provide(dbLayer), Effect.runPromise);
+    firstLesson ??= lesson;
 
     const video = await Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
@@ -408,6 +420,11 @@ export const setupPublishableCourse = async (opts?: {
   return {
     course,
     version,
+    section,
+    /** The Lesson the first seeded Video sits on. */
+    lesson: firstLesson!,
+    /** The database-only layers, for seeding more rows in a test. */
+    dbLayer,
     video,
     videos,
     exportHash,

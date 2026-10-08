@@ -166,28 +166,17 @@ describe("CoursePublishService — when a Video is re-exported", () => {
     expect(shipped[0]!.content.toString()).toBe(
       "re-export-that-is-not-truncated"
     );
-  }, 60_000);
-
-  it("records the re-exported file's SHA256 in the manifest", async () => {
-    renderedBytes = "first-export";
-    const { course, video, run } = await setup({
-      videoCount: 1,
-      renderBytes: () => renderedBytes,
-    });
-
-    await run(publish(course.id, "v1.0"));
-    await run(reExport(video.id, "re-export-that-is-not-truncated"));
-    await run(publish(course.id, "v2.0"));
 
     // The manifest's SHA256 is the downstream consumer's only proof of which
     // bytes a release carries. Copying forward the previous Bundle's digest
     // makes it describe a file nobody can produce any more.
-    const expected = createHash("sha256")
-      .update("re-export-that-is-not-truncated")
-      .digest("hex");
-    const shipped = manifestVideos(readCommitReceipt("test-course"));
-    expect(shipped).toHaveLength(1);
-    expect(shipped[0]!.sha256).toBe(expected);
+    const receipt = manifestVideos(readCommitReceipt("test-course"));
+    expect(receipt).toHaveLength(1);
+    expect(receipt[0]!.sha256).toBe(
+      createHash("sha256")
+        .update("re-export-that-is-not-truncated")
+        .digest("hex")
+    );
   }, 60_000);
 });
 

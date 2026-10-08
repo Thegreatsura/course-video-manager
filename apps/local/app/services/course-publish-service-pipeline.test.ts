@@ -14,6 +14,8 @@ import {
   finishedVideosDir,
   setupPublishServiceTests,
   setupPublishableCourse as setup,
+  isVideoUploadRequest,
+  remoteBundleVideoPaths,
 } from "./course-publish-service-test-setup";
 import {
   honestRenderedDurationInSeconds,
@@ -23,27 +25,12 @@ import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
 setupPublishServiceTests();
 
-/** Only the `.mp4` uploads inside a bundle. */
-const isVideoUploadRequest = (url: string, init: RequestInit) => {
-  if (!url.includes("/2/files/upload") || url.includes("session")) return false;
-  const arg = (init.headers as Record<string, string> | undefined)?.[
-    "Dropbox-API-Arg"
-  ];
-  return Boolean(arg && JSON.parse(arg).path.endsWith(".mp4"));
-};
-
 const uploadOf =
   (relativeAssetPath: string) => (url: string, init: RequestInit) =>
     isVideoUploadRequest(url, init) &&
     JSON.parse(
       (init.headers as Record<string, string>)["Dropbox-API-Arg"]!
     ).path.endsWith(`/${relativeAssetPath}`);
-
-const remoteBundleVideoPaths = () =>
-  Array.from(fakeDropbox.files.values())
-    .map((stored) => stored.pathDisplay)
-    .filter((remotePath) => remotePath.endsWith(".mp4"))
-    .sort();
 
 const publish = (courseId: string) =>
   Effect.gen(function* () {
