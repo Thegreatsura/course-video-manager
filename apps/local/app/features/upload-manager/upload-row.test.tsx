@@ -17,7 +17,9 @@ const base: uploadReducer.BaseUploadEntry = {
 };
 
 const render = (upload: uploadReducer.UploadEntry) =>
-  renderToStaticMarkup(<UploadRow upload={upload} onDismiss={() => {}} />);
+  renderToStaticMarkup(
+    <UploadRow upload={upload} onDismiss={() => {}} logHref={null} />
+  );
 
 /** The `aria-valuenow` of every progress bar in the row, in document order. */
 const bars = (html: string) =>
@@ -205,10 +207,15 @@ const videoTask = (
 describe("UploadRow for a per-Video task under a Publish", () => {
   it("indents a child task so it reads as belonging to its parent", () => {
     const flat = renderToStaticMarkup(
-      <UploadRow upload={videoTask()} onDismiss={() => {}} />
+      <UploadRow upload={videoTask()} onDismiss={() => {}} logHref={null} />
     );
     const nested = renderToStaticMarkup(
-      <UploadRow upload={videoTask()} onDismiss={() => {}} nested />
+      <UploadRow
+        upload={videoTask()}
+        onDismiss={() => {}}
+        logHref={null}
+        nested
+      />
     );
 
     expect(flat).not.toContain("pl-5");
@@ -258,7 +265,12 @@ describe("UploadRow ETA", () => {
     eta: Parameters<typeof UploadRow>[0]["eta"]
   ) =>
     renderToStaticMarkup(
-      <UploadRow upload={upload} onDismiss={() => {}} eta={eta} />
+      <UploadRow
+        upload={upload}
+        onDismiss={() => {}}
+        logHref={null}
+        eta={eta}
+      />
     );
 
   it("shows the time left beside the percent", () => {

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { jobEvents, jobs, sidecarLease } from "../db/schema.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
@@ -23,6 +23,37 @@ import { withDbTransaction } from "./with-db-transaction.server.js";
 export type Job = typeof jobs.$inferSelect;
 export type JobEvent = typeof jobEvents.$inferSelect;
 export type SidecarLease = typeof sidecarLease.$inferSelect;
+
+/** What a subscriber needs to know about a Job to show it: never its params. */
+export interface JobSummary {
+  readonly id: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly status: Job["status"];
+  readonly attempt: number;
+  readonly maxAttempts: number;
+  readonly subjectType: string | null;
+  readonly subjectId: string | null;
+  readonly createdAt: Date;
+}
+
+/** A Job Event as a subscriber receives it: with the Job it belongs to. */
+export interface JobEventWithJob {
+  readonly event: JobEvent;
+  readonly job: JobSummary;
+}
+
+const jobSummaryColumns = {
+  id: jobs.id,
+  kind: jobs.kind,
+  title: jobs.title,
+  status: jobs.status,
+  attempt: jobs.attempt,
+  maxAttempts: jobs.maxAttempts,
+  subjectType: jobs.subjectType,
+  subjectId: jobs.subjectId,
+  createdAt: jobs.createdAt,
+};
 
 /** What `job.error` holds: enough to diagnose without the log. */
 export interface JobFailure {
@@ -166,6 +197,12 @@ export const createJobOperations = (db: Database) => {
   // -- Jobs ------------------------------------------------------------------
 
   const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
+    /**
+     * The Job's id, when the caller chose it — the browser does, so it can
+     * name the Job (and wait on it) before the request returns. `null` takes
+     * a fresh one.
+     */
+    id: string | null;
     kind: string;
     title: string;
     lane: string;
@@ -180,6 +217,7 @@ export const createJobOperations = (db: Database) => {
           tx
             .insert(jobs)
             .values({
+              ...(input.id === null ? {} : { id: input.id }),
               kind: input.kind,
               title: input.title,
               lane: input.lane,
@@ -328,6 +366,43 @@ export const createJobOperations = (db: Database) => {
   });
 
   /**
+   * Put a held Job back in the queue at the SAME attempt, because its sidecar
+   * is stopping on purpose (a signal: `tsx watch` restarting it after an
+   * edit, Ctrl-C, verify-cvm's cleanup). A deliberate stop is not a failure
+   * of the Job, so it spends no attempt; a sidecar that DIES is different, and
+   * its Jobs are settled by `recoverExpiredJobs` as failed attempts. `false`
+   * when the Job was no longer `holder`'s.
+   */
+  const returnJobToQueue = Effect.fn("returnJobToQueue")(function* (input: {
+    jobId: string;
+    holder: string;
+    reason: string;
+  }) {
+    return yield* withDbTransaction(db, (tx) =>
+      Effect.gen(function* () {
+        const job = yield* lockHeld(tx, input.jobId, input.holder);
+        if (!job) return false;
+        yield* makeDbCall(() =>
+          tx
+            .update(jobs)
+            .set({
+              status: "queued",
+              holder: null,
+              leaseUntil: null,
+              updatedAt: sql`now()`,
+            })
+            .where(eq(jobs.id, job.id))
+        );
+        yield* insertEvent(tx, job.id, "requeued", {
+          attempt: job.attempt,
+          reason: input.reason,
+        });
+        return true;
+      })
+    );
+  });
+
+  /**
    * Every running Job whose lease has run out — its sidecar died, or was
    * stopped without settling it — is settled as an interrupted attempt by the
    * retry rule. Safe to call at any time and from any process.
@@ -377,6 +452,79 @@ export const createJobOperations = (db: Database) => {
         .where(eq(jobEvents.jobId, jobId))
         .orderBy(asc(jobEvents.id))
     );
+  });
+
+  // -- Subscribers -----------------------------------------------------------
+
+  /** The newest Job Event's id, or 0 when there is none: where a feed starts. */
+  const latestJobEventId = Effect.fn("latestJobEventId")(function* () {
+    const [row] = yield* makeDbCall(() =>
+      db
+        .select({ id: jobEvents.id })
+        .from(jobEvents)
+        .orderBy(desc(jobEvents.id))
+        .limit(1)
+    );
+    return row?.id ?? 0;
+  });
+
+  /** Up to `limit` Job Events with an id above `after`, oldest first. */
+  const listJobEventsAfter = Effect.fn("listJobEventsAfter")(function* (input: {
+    after: number;
+    limit: number;
+  }) {
+    const rows = yield* makeDbCall(() =>
+      db
+        .select({ event: jobEvents, job: jobSummaryColumns })
+        .from(jobEvents)
+        .innerJoin(jobs, eq(jobs.id, jobEvents.jobId))
+        .where(gt(jobEvents.id, input.after))
+        .orderBy(asc(jobEvents.id))
+        .limit(input.limit)
+    );
+    return rows as JobEventWithJob[];
+  });
+
+  /**
+   * What a new subscriber starts from: every Job not yet finished, and every
+   * Job that finished in the last `finishedWithinMs`, each with all of its
+   * events, oldest Job first.
+   */
+  const listRecentJobs = Effect.fn("listRecentJobs")(function* (input: {
+    finishedWithinMs: number;
+  }) {
+    const recent = yield* makeDbCall(() =>
+      db
+        .select(jobSummaryColumns)
+        .from(jobs)
+        .where(
+          or(
+            inArray(jobs.status, ["queued", "running"]),
+            gt(
+              jobs.finishedAt,
+              sql`now() - (${input.finishedWithinMs} * interval '1 millisecond')`
+            )
+          )
+        )
+        .orderBy(asc(jobs.createdAt), asc(jobs.id))
+    );
+    if (recent.length === 0) return [];
+    const events = yield* makeDbCall(() =>
+      db
+        .select()
+        .from(jobEvents)
+        .where(
+          inArray(
+            jobEvents.jobId,
+            recent.map((j) => j.id)
+          )
+        )
+        .orderBy(asc(jobEvents.id))
+    );
+    return recent.map((job) => ({
+      job: job as JobSummary,
+      events: events.filter((e) => e.jobId === job.id),
+    }));
   });
 
   // -- The sidecar lease -----------------------------------------------------
@@ -463,7 +611,11 @@ export const createJobOperations = (db: Database) => {
     appendJobEvent,
     completeJob,
     failJobAttempt,
+    returnJobToQueue,
     recoverExpiredJobs,
+    latestJobEventId,
+    listJobEventsAfter,
+    listRecentJobs,
     getJob,
     listJobEvents,
     acquireSidecarLease,

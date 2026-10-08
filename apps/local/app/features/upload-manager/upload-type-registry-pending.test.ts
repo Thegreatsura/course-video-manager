@@ -48,7 +48,7 @@ describe("publish failure handling", () => {
     const dispatch = vi.fn();
     const abortControllers = new Map<string, AbortController>();
 
-    publishConfig.initiate(
+    publishConfig.initiate!(
       "upload-1",
       entry,
       {
@@ -77,7 +77,7 @@ describe("publish failure handling", () => {
     const dispatch = vi.fn();
     const abortControllers = new Map<string, AbortController>();
 
-    publishConfig.initiate(
+    publishConfig.initiate!(
       "upload-1",
       entry,
       {
@@ -104,7 +104,7 @@ describe("publish failure handling", () => {
     const dispatch = vi.fn();
     const abortControllers = new Map<string, AbortController>();
 
-    publishConfig.initiate(
+    publishConfig.initiate!(
       "upload-1",
       entry,
       {

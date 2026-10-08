@@ -267,3 +267,34 @@ describe("full retry lifecycle", () => {
     expect(state.uploads["upload-1"]!.retryCount).toBe(1);
   });
 });
+
+describe("an upload waiting on a background export Job", () => {
+  const waitingOnJob = () =>
+    reduce(createState(), {
+      type: "START_UPLOAD",
+      uploadId: "yt-1",
+      videoId: "video-1",
+      title: "Upload to YouTube",
+      dependsOn: "job-1",
+    });
+
+  it("starts once the Job succeeds", () => {
+    const state = reduce(waitingOnJob(), {
+      type: "server-job-succeeded",
+      jobId: "job-1",
+    });
+    expect(state.uploads["yt-1"]!.status).toBe("uploading");
+  });
+
+  it("fails, naming the Job, once the Job fails", () => {
+    const state = reduce(waitingOnJob(), {
+      type: "server-job-failed",
+      jobId: "job-1",
+      title: "Intro to Generics",
+    });
+    expect(state.uploads["yt-1"]).toMatchObject({
+      status: "error",
+      errorMessage: 'Dependency "Intro to Generics" failed',
+    });
+  });
+});

@@ -16,6 +16,7 @@ import {
 } from "@cvm/core/services/db-job-operations.server";
 import { formatFailureCause } from "@/services/format-failure-cause";
 import type { JobContext } from "./job-kind";
+import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import { UnknownJobKindError, type JobKindRegistry } from "./job-kinds";
 import { LANE_NAMES, LANES, laneHasRoom, type LaneName } from "./lanes";
 
@@ -86,8 +87,10 @@ export interface SidecarHealth {
 /** What the socket can ask of a running sidecar. */
 export interface SidecarHandle {
   readonly health: Effect.Effect<SidecarHealth>;
-  /** Look for work now rather than at the next poll. */
+  /** Look for work (and new Job Events) now rather than at the next poll. */
   readonly nudge: Effect.Effect<void>;
+  /** Every new Job Event, for the `/events` stream. */
+  readonly feed: JobEventFeed;
 }
 
 export type SidecarOutcome =
@@ -127,9 +130,10 @@ const logCause = (what: string) =>
     Effect.logError(what, cause)
   );
 
-export const runSidecar = (opts: {
+export const runSidecar = <R>(opts: {
   readonly identity: SidecarIdentity;
-  readonly registry: JobKindRegistry;
+  /** `R`: the services the kinds' handlers need, provided with the call. */
+  readonly registry: JobKindRegistry<R>;
   readonly timing: SidecarTiming;
   /** Completed by whoever wants the sidecar to stop (a signal); the reason is logged. */
   readonly stop: Deferred.Deferred<string>;
@@ -137,7 +141,7 @@ export const runSidecar = (opts: {
   readonly serve: (
     handle: SidecarHandle
   ) => Effect.Effect<void, unknown, Scope.Scope | JobOperationsService>;
-}): Effect.Effect<SidecarOutcome, unknown, JobOperationsService> =>
+}): Effect.Effect<SidecarOutcome, unknown, JobOperationsService | R> =>
   Effect.scoped(
     Effect.gen(function* () {
       const { identity, registry, timing, stop } = opts;
@@ -196,13 +200,20 @@ export const runSidecar = (opts: {
         wake.set(lane, yield* Queue.sliding<void>(1));
       }
       const queues = [...wake.values()];
+      const feed = yield* makeJobEventFeed({
+        pollMs: timing.pollMs,
+        lookback: 50,
+        pageSize: 500,
+      });
       const nudge = Effect.forEach(
         queues,
         (queue) => Queue.offer(queue, undefined),
         { discard: true }
-      );
+      ).pipe(Effect.zipRight(feed.wake));
 
       // -- Running one Job ---------------------------------------------------
+      /** Set once the sidecar has been told to stop, before it interrupts its Jobs. */
+      let stopping = false;
       const running = new Map<
         string,
         { readonly lane: LaneName; readonly fiber: Fiber.RuntimeFiber<void> }
@@ -226,6 +237,29 @@ export const runSidecar = (opts: {
               ),
           onFailure: (cause) => {
             const interrupted = Cause.isInterruptedOnly(cause);
+            // A stop on purpose (a signal: `tsx watch` restarting after an
+            // edit, Ctrl-C, verify-cvm's cleanup) is not the Job failing, so
+            // it costs no attempt: the Job goes back to the queue as it was.
+            // A sidecar that dies instead is settled by recovery, which does
+            // spend one — as a dropped stream did in the browser.
+            if (interrupted && stopping) {
+              return Effect.logWarning(
+                "job interrupted: the sidecar is stopping; it goes back to the queue at the same attempt"
+              ).pipe(
+                Effect.zipRight(
+                  ops.returnJobToQueue({
+                    jobId: job.id,
+                    holder: identity.holder,
+                    reason: "the sidecar stopped",
+                  })
+                ),
+                Effect.flatMap((held) =>
+                  Effect.logInfo(
+                    `job settled: ${held ? "requeued" : "not-held"}`
+                  )
+                )
+              );
+            }
             return (
               interrupted
                 ? Effect.logWarning("job interrupted")
@@ -268,7 +302,10 @@ export const runSidecar = (opts: {
               emit: (type, data) =>
                 ops
                   .appendJobEvent({ jobId: job.id, type, data })
-                  .pipe(logCause("job: could not record an event")),
+                  .pipe(
+                    Effect.zipRight(feed.wake),
+                    logCause("job: could not record an event")
+                  ),
             };
             yield* Effect.logInfo("job started", {
               title: job.title,
@@ -429,6 +466,7 @@ export const runSidecar = (opts: {
           ) as SidecarHealth["lanes"],
         })),
         nudge,
+        feed,
       });
 
       yield* Effect.forkScoped(
@@ -458,6 +496,7 @@ export const runSidecar = (opts: {
 
       const reason = yield* Deferred.await(stop);
       yield* Effect.logInfo(`sidecar: stopping (${reason})`);
+      stopping = true;
       // Stop claiming first, then stop every running Job: each settles as an
       // interrupted attempt — back to `queued` while it has attempts left.
       yield* Fiber.interrupt(lanes);

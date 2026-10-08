@@ -167,7 +167,7 @@ describe("ai-hero registry entry", () => {
         aiHeroSlug: null,
       };
 
-      aiHeroConfig.initiate(
+      aiHeroConfig.initiate!(
         "upload-1",
         entry,
         { body: "content", description: "desc", slug: "my-slug" },
@@ -191,7 +191,7 @@ describe("ai-hero registry entry", () => {
         aiHeroSlug: null,
       };
 
-      aiHeroConfig.initiate(
+      aiHeroConfig.initiate!(
         "upload-1",
         entry,
         { body: "content", description: "desc", slug: "my-slug" },
@@ -359,7 +359,7 @@ describe("skills-changelog registry entry", () => {
         skillsChangelogSlug: null,
       };
 
-      skillsChangelogConfig.initiate(
+      skillsChangelogConfig.initiate!(
         "upload-1",
         entry,
         skillsChangelogParams,
@@ -383,7 +383,7 @@ describe("skills-changelog registry entry", () => {
         skillsChangelogSlug: null,
       };
 
-      skillsChangelogConfig.initiate(
+      skillsChangelogConfig.initiate!(
         "upload-1",
         entry,
         skillsChangelogParams,
