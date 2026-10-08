@@ -52,7 +52,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@ai-sdk/anthropic": "3.0.127",
+      "@ai-sdk/anthropic": "3.0.128",
       "@ai-sdk/provider": "3.0.18",
       "@ai-sdk/provider-utils": "4.0.57",
       "@ai-sdk/react": "3.0.304",
