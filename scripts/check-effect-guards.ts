@@ -74,6 +74,10 @@ const RUN_BOUNDARIES: ReadonlyArray<readonly [RegExp, string]> = [
     "the Clip Mockup daemon's entry point",
   ],
   [
+    /^apps\/local\/sidecar\/(run-sidecar|socket)\.ts$/,
+    "the Sidecar's entry point and its socket's request handler",
+  ],
+  [
     /^packages\/core\/services\/with-db-transaction\.server\.ts$/,
     "bridges Drizzle's async transaction callback",
   ],

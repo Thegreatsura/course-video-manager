@@ -131,6 +131,29 @@ evidence: /…/<your worktree>/.verify/run-20261007-143020-2714708
 run id:   20261007-143020-2714708   <- pass it to every later verb
 ```
 
+### The run's sidecar
+
+A clone run also starts a background-jobs **Sidecar** of its own
+(`apps/local/sidecar/`) on the same clone, with the same scratch folders and
+dud credentials, once the server answers. `launch` prints its pid and socket:
+
+```text
+sidecar:  pid 1643294, socket /run/user/1000/cvm-sidecar-<run id>.sock, job logs in <evidence>/logs/jobs
+```
+
+Its socket is a Unix socket named by the run id, never a port. Its output is
+`<evidence>/sidecar.log`, and each Job's log is `<evidence>/logs/jobs/<job id>.jsonl`.
+To run a Job by hand, post it to the socket and read it back:
+
+```bash
+S=$(cat "$($V dir <run>)/sidecar.socket")
+curl -s --unix-socket "$S" -X POST http://sidecar/jobs -d '{"kind":"noop","title":"check","params":{"durationMs":1000}}'
+curl -s --unix-socket "$S" http://sidecar/jobs/<job id>     # the Job and its Job Events
+```
+
+A `--production` run has no sidecar: its connections are read-only, so a
+sidecar could not hold its lease.
+
 ## Your run id is the only handle
 
 **Every verb after `launch` takes the run id as its first argument** —
@@ -171,7 +194,8 @@ $V doctor <run>
 It reports, read-only: the server process alive, the run's port outside the
 CVM's band, the port owned by _this_ run's pid, `/` answering 200, which
 database the run is on (`DB: test clone …` or `DB: PRODUCTION …`), psql
-reaching it, and which other verification runs are live. Any FAIL means stop
+reaching it, the run's sidecar alive, answering on its socket and holding the
+lease in this run's clone, and which other verification runs are live. Any FAIL means stop
 and fix — a snapshot taken against someone else's server proves nothing.
 
 **Who may own the port.** The listener passes only if it is the pid `launch`
@@ -270,6 +294,10 @@ guard: writes landed in this run's test clone (allowed) — see …/WRITE-LEDGER
 course-video-manager_pitch|0|1|0|0
 ```
 
+The sidecar's own writes (its lease, renewed every few seconds, and the Jobs
+it runs) are listed apart, under "Background (this run's sidecar …)", and never
+count against a clean verdict.
+
 Check each table it names is one you meant to write, and report any you did
 not expect — a button that writes three tables when it should write one is a bug
 the run found.
@@ -354,7 +382,8 @@ $V cleanup <run>     # this run
 $V cleanup --all     # every live run this worktree launched
 ```
 
-It kills the pid this run recorded — never a process matched by name, which
+It stops the run's sidecar first (SIGTERM, so it puts back any Job it was
+running and lets go of its lease) and removes its socket, then kills the pid this run recorded — never a process matched by name, which
 would take Matt's server and every sibling run with it — closes this run's
 browser session, **drops the run's clone**, and leaves the rest alone. `--all`
 also sweeps the clones crashed runs left behind (as every `launch` does): any

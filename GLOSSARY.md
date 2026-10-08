@@ -467,3 +467,21 @@ _Avoid_: Offline command, Machine command, Disabled command
 **Schema Version**:
 The version of the data structure a copy of the tool was built for, compared on every request with the version the shared service runs. Any difference is refused, with both numbers and a request to update, so an out-of-date machine can never write data it does not understand. Changes to the data structure only add, so a machine already working when one arrives keeps working.
 _Avoid_: API version, Migration number, Protocol version
+
+### Background work
+
+**Job**:
+A piece of background work, kept as a row in the database: something the author starts and walks away from, such as an export, a render, a post or a **Publish**. It has a kind, a title, the parameters it was started with, and a status (queued, running, succeeded, failed, interrupted, cancelled). A Job may wait on another Job and starts only once that one has succeeded; when the one it waits on fails, it fails too. A failed attempt is run again at once while the Job has attempts left, and the number of attempts is copied from what the Upload Manager allowed for that kind. Closing the browser never stops a Job. Today only a test kind (`noop`) runs as one; the Upload Manager's jobs move over one kind at a time (docs/plans/background-jobs-sidecar.md).
+_Avoid_: Task, Upload (the Upload Manager's word for all of them), Background request
+
+**Sidecar**:
+The process beside the app that runs **Jobs**: one per database, which it proves by holding that database's lease. `pnpm dev` and `pnpm start` start it, and a verify-cvm run starts one of its own on its clone. A worktree's Sidecar never touches production. While it is down, Jobs wait in the queue; one it was running when it stopped is run again if it has attempts left, and is marked interrupted if it does not.
+_Avoid_: Worker, Daemon (the Clip Mockup daemon is something else), Queue
+
+**Lane**:
+A queue inside the **Sidecar** with its own limit on how many **Jobs** run at once. There are two, both copied from limits the app already had: the default lane, unlimited as the Upload Manager was, and the Publish lane, one at a time as Publishes always were.
+_Avoid_: Pool, Channel, Concurrency group
+
+**Job Event**:
+One thing that happened to a **Job**, in order: queued, started, progress, retrying, succeeded, failed, interrupted. The record a screen replays to show a Job's progress, and the answer to "what ran, and why did it fail?" after the fact. Each Job also has its own log file.
+_Avoid_: Job log (that is the file), Progress update, Status change

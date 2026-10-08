@@ -31,7 +31,10 @@ and `ls -t .data/logs/dev-*.log` when several dev servers are up and you need a
 different one. Runs are kept for a day. Read them when a page throws at
 runtime, when the server dies, or to confirm a fix loads: the stack that killed
 the process is there and in no test, build artifact or table.
-`scripts/run-with-log.sh` is the wrapper.
+`scripts/run-with-log.sh` is the wrapper. The background-jobs **Sidecar**
+(`apps/local/sidecar/`, started by the same `pnpm dev`) prints one JSON object
+per line into that log, and also keeps every Job's lines in
+`.data/logs/jobs/<job id>.jsonl` — read that file for why a Job failed.
 
 ### Repository layout
 

@@ -145,3 +145,113 @@ cmd_snap() {
   log "snap: saved $f"
 }
 
+
+# --- the run's sidecar --------------------------------------------------------
+# A test-clone run gets a background-jobs sidecar of its own
+# (apps/local/sidecar/), on the run's clone and nothing else: same DATABASE_URL,
+# same scratch directories and dud credentials as its server. Its socket is a
+# Unix socket, never a port, so it can never land in either band. The socket
+# lives in $XDG_RUNTIME_DIR (else /tmp) because a run directory's path is too
+# long for one (a Unix socket path is capped at 107 bytes); it is named by the
+# run id, so no two runs share it, and cleanup removes it. The sidecar's own
+# output goes to <run>/sidecar.log and each Job's log to <run>/logs/jobs/.
+SIDECAR_ENV=()
+
+sidecar_socket_for() { printf '%s/cvm-sidecar-%s.sock\n' "${XDG_RUNTIME_DIR:-/tmp}" "$1"; }
+run_sidecar_socket() { cat "$1/sidecar.socket" 2>/dev/null || true; }
+run_sidecar_pid()    { cat "$1/sidecar.pid" 2>/dev/null || true; }
+
+# sidecar_health <socket> — the sidecar's /health answer, or nothing.
+sidecar_health() {
+  [ -S "$1" ] || return 1
+  curl -sf --max-time 3 --unix-socket "$1" http://sidecar/health
+}
+
+# start_sidecar <run dir> <run id> — start it and wait for its socket to answer.
+start_sidecar() {
+  local dir="$1" socket pid _
+  socket="$(sidecar_socket_for "$2")"
+  echo "$socket" > "$dir/sidecar.socket"
+  mkdir -p "$dir/logs/jobs"
+  # `node --import tsx`, not the tsx CLI: the CLI runs the script in a child
+  # process, and the pid recorded here must be the sidecar itself.
+  ( cd "$REPO_ROOT/apps/local" &&
+    exec env "${SIDECAR_ENV[@]}" "CVM_SIDECAR_SOCKET=$socket" "CVM_SIDECAR_LOG_DIR=$dir/logs/jobs" \
+      nohup node --import tsx sidecar/run-sidecar.ts > "$dir/sidecar.log" 2>&1 ) &
+  pid=$!
+  echo "$pid" > "$dir/sidecar.pid"
+  for _ in $(seq 1 60); do
+    sidecar_health "$socket" > /dev/null && return 0
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 1
+  done
+  return 1
+}
+
+# launch_sidecar <run dir> <run id> <mode> — launch's step, once the server
+# answers. A sidecar that does not come up stops the server and fails the launch.
+# The sidecar shares the server's environment (SERVER_ENV) but not its
+# statement log: its polling would bury the app's in no time, and the clone's
+# triggers already count its writes, on a line of their own in the Ledger.
+launch_sidecar() {
+  local dir="$1" e
+  if [ "$3" != test-clone ]; then
+    log "sidecar:  none — production is read-only, so a sidecar could not hold its lease"
+    return 0
+  fi
+  for e in "${SERVER_ENV[@]}"; do [ "$e" = "CVM_LOG_SQL=1" ] || SIDECAR_ENV+=("$e"); done
+  start_sidecar "$dir" "$2" || {
+    tail -20 "$dir/sidecar.log" >&2
+    stop_sidecar "$dir"; stop_server "$dir"
+    die "the run's sidecar did not come up — see $dir/sidecar.log"
+  }
+  log "sidecar:  pid $(run_sidecar_pid "$dir"), socket $(run_sidecar_socket "$dir"), job logs in $dir/logs/jobs"
+  echo "sidecar:   pid $(run_sidecar_pid "$dir") socket $(run_sidecar_socket "$dir")" >> "$dir/run.txt"
+}
+
+# stop_sidecar <run dir> — SIGTERM, so it puts its running Jobs back and lets
+# go of its lease, then make sure nothing is left on its socket. Cleanup calls
+# it before it stops the server and drops the clone, while the clone is there.
+stop_sidecar() {
+  local dir="$1" pid socket _
+  pid="$(run_sidecar_pid "$dir")"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || true
+    for _ in $(seq 1 40); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -KILL "$pid" 2>/dev/null || true
+      log "cleanup: sidecar pid $pid ignored SIGTERM for 10s — killed it"
+    else
+      log "cleanup: stopped sidecar pid $pid"
+    fi
+  fi
+  socket="$(run_sidecar_socket "$dir")"
+  if [ -n "$socket" ] && [ -e "$socket" ]; then
+    rm -f "$socket"
+    log "cleanup: removed the sidecar's leftover socket $socket"
+  fi
+}
+
+# The run's sidecar: alive, answering on its own socket, and holding the lease
+# in THIS run's clone (its lease row names the clone and the sidecar's pid).
+doctor_sidecar() {
+  local dir="$1" pid socket health lease clone fail=0
+  if [ "$(run_mode "$dir")" != test-clone ]; then log "ok   no sidecar: production is read-only"; return 0; fi
+  pid="$(run_sidecar_pid "$dir")"; socket="$(run_sidecar_socket "$dir")"
+  clone="$(run_clone_name "$dir")"
+  if [ -z "$pid" ]; then log "FAIL no sidecar was started for this run"; return 1; fi
+  kill -0 "$pid" 2>/dev/null &&
+    log "ok   sidecar process $pid alive" || { log "FAIL sidecar process $pid gone — see $dir/sidecar.log"; fail=1; }
+  if health="$(sidecar_health "$socket")" && grep -q "\"pid\":$pid[,}]" <<< "$health"; then
+    log "ok   sidecar answers on its socket $socket"
+  else
+    log "FAIL nothing of this run's answers on $socket"; fail=1
+  fi
+  lease="$(psql_ro "$dir" -c 'select pid, database, lease_until > now() from "course-video-manager_sidecar_lease"' 2>/dev/null || true)"
+  if [ "$lease" = "$pid|$clone|t" ]; then
+    log "ok   sidecar holds the lease in $clone"
+  else
+    log "FAIL the sidecar lease in $clone is not this run's sidecar's (pid|database|live: ${lease:-no row})"; fail=1
+  fi
+  return "$fail"
+}
