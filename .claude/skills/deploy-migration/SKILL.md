@@ -45,6 +45,8 @@ Then wait. Do not redeploy, retry or poll until Matt confirms he has run it.
 
    If the build fails again with `production has not applied`, Matt's migrate did not take. Tell him, quoting the tag. Do not redeploy in a loop.
 
+   `redeploy` of the merge commit's deployment is the **only** way you put anything on production. Never run `vercel deploy --prod` (or `vercel --prod`): it uploads your working tree, not `main`. The build refuses it anyway (`apps/remote/scripts/assert-production-source.mjs` fails any production build that is not a GitHub clone of `main`), but don't rely on that. If `redeploy` fails with `assert-production-source`, you redeployed the wrong deployment: stop and tell Matt.
+
 3. Confirm on GitHub. Read the commit's status contexts and check that `Vercel` is `SUCCESS` with a `createdAt` after your redeploy:
 
    ```
