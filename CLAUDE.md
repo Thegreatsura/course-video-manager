@@ -18,7 +18,9 @@ Single-context layout: `GLOSSARY.md` at the repo root, ADRs under `docs/adr/`. S
 
 ### Verifying a change in the real app
 
-`.claude/skills/verify-cvm/` drives the app in a browser against a per-run clone of Matt's data — writes allowed, never production — and leaves a **Write Ledger** of what it modified. Reach for it before opening a PR that changes a page, or to reproduce a UI bug.
+`.claude/skills/verify-cvm/` drives the app in a browser against a per-run clone of Matt's data — writes allowed, never production — and leaves a **Write Ledger** of what it modified. Use it to reproduce a UI bug, too.
+
+**Any change with a visible effect in the UI is checked in the browser with verify-cvm before you open the PR.** Passing tests and a green `check` do not replace it. If the skill isn't loaded (say you were launched from another repo), read `.claude/skills/verify-cvm/SKILL.md` directly and follow it. The PR body states what you clicked and what you saw, with screenshots or the evidence path. A change with no UI effect says so in one line — `No UI change` — instead.
 
 ### What the running server printed
 
