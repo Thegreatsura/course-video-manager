@@ -1,6 +1,6 @@
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Config, Data, Effect, Stream } from "effect";
+import { Cause, Config, Data, Effect, Stream } from "effect";
 import path from "node:path";
 import { tmpdir } from "os";
 import crypto from "node:crypto";
@@ -16,6 +16,7 @@ import {
   type SubtitleSegment,
 } from "@/lib/subtitle-chunks";
 import { removeBestEffort } from "@/services/remove-best-effort";
+import { formatFailureCause } from "./format-failure-cause";
 
 export type RenderVerticalStage =
   "concatenating-clips" | "transcribing" | "rendering-overlay" | "compositing";
@@ -42,131 +43,176 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           videoId: string;
           onStageChange?: (stage: RenderVerticalStage) => void;
         }) {
-          const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-            "FINISHED_VIDEOS_DIRECTORY"
-          );
+          // The stage the render is in, so a failure can say where it broke.
+          let stage: RenderVerticalStage | "loading-video" = "loading-video";
+          const enterStage = (next: RenderVerticalStage) => {
+            stage = next;
+            opts.onStageChange?.(next);
+          };
 
-          const video = yield* videoOps.getVideoWithClipsById(opts.videoId);
-
-          if (video.clips.length === 0) {
-            return yield* new RenderVerticalError({
-              cause: null,
-              message: "Video has no clips to export",
-            });
-          }
-
-          // Every ffmpeg invocation for this render is teed into
-          // `.data/logs/{videoId}.log` (the "cli-output" event, on both
-          // success and failure) — see the matching comment in
-          // video-processing-service.ts's exportVideoClips.
-          const logCliOutput = (
-            stage: "concat" | "normalize-audio" | "composite-overlay"
-          ) =>
-            makeFfmpegLogger(videoEditorLogger, opts.videoId, `short:${stage}`);
-
-          // Step 1: Concatenate clips → temp file (not the final output path,
-          // since the composite step will write the final .mp4)
-          opts.onStageChange?.("concatenating-clips");
-          const rawConcatenatedPath =
-            yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
-              video.clips.map((clip) => ({
-                inputVideo: clip.videoFilename,
-                startTime: clip.sourceStartTime,
-                duration: clip.sourceEndTime - clip.sourceStartTime,
-                pauseType: clip.pauseType as "none" | "long",
-                zoomType: clip.zoomType,
-              })),
-              // The vertical renderer always produces a 9:16 short — the Remotion
-              // subtitle/CTA overlay below is rendered at 1080x1920 to match.
-              VIDEO_FORMAT_DIMENSIONS.short,
-              { onLog: logCliOutput("concat") }
+          // A failed render's message used to reach only the browser (the SSE
+          // `error` event, shown as a toast): the server log and
+          // `.data/logs/{videoId}.log` showed the last ffmpeg pass and then
+          // nothing, which is how a broken overlay renderer went unseen. Both
+          // now get the failure. `tapErrorCause`, not `tapError`, so a defect
+          // (a throw inside a generator) is recorded too.
+          const recordFailure = (cause: Cause.Cause<unknown>) => {
+            // A client that disconnects interrupts the render; that is not a
+            // failure worth a log line.
+            if (Cause.isInterruptedOnly(cause)) return Effect.void;
+            const failure = Cause.squash(cause);
+            return Effect.logError(
+              `Vertical short render failed at stage "${stage}" for video ${opts.videoId}`,
+              cause
+            ).pipe(
+              Effect.zipRight(
+                videoEditorLogger.log(opts.videoId, {
+                  type: "export-stage-failed",
+                  videoId: opts.videoId,
+                  stage: `short:${stage}`,
+                  message:
+                    failure instanceof Error
+                      ? failure.message
+                      : String(failure),
+                  cause: formatFailureCause(failure),
+                })
+              ),
+              // Best-effort: logging must never replace the failure it explains.
+              Effect.catchAllDefect(() => Effect.void)
             );
-          const concatenatedPath = yield* ffmpegCommands.normalizeAudio(
-            rawConcatenatedPath,
-            { onLog: logCliOutput("normalize-audio") }
-          );
+          };
 
-          // Clean up raw concatenated file
-          yield* removeBestEffort(effectFs, rawConcatenatedPath);
+          return yield* Effect.gen(function* () {
+            const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
+              "FINISHED_VIDEOS_DIRECTORY"
+            );
 
-          // Step 2: Transcribe the concatenated video in a single pass. Because
-          // Whisper runs on the already concatenated + normalized audio, its
-          // segment timestamps are on the final timeline — no per-clip offset,
-          // and the long-pause padding / audio normalization are accounted for.
-          opts.onStageChange?.("transcribing");
-          const transcription =
-            yield* videoProcessing.transcribeVideoFile(concatenatedPath);
+            const video = yield* videoOps.getVideoWithClipsById(opts.videoId);
 
-          // Step 3: Get FPS from the concatenated video
-          const fps = yield* ffmpegCommands.getFPS(concatenatedPath);
+            if (video.clips.length === 0) {
+              return yield* new RenderVerticalError({
+                cause: null,
+                message: "Video has no clips to export",
+              });
+            }
 
-          // Step 4: Split long segments into short phrases and convert to frames
-          const subtitles = buildSubtitles(transcription.segments, fps);
+            // Every ffmpeg invocation for this render is teed into
+            // `.data/logs/{videoId}.log` (the "cli-output" event, on both
+            // success and failure) — see the matching comment in
+            // video-processing-service.ts's exportVideoClips.
+            const logCliOutput = (
+              stage: "concat" | "normalize-audio" | "composite-overlay"
+            ) =>
+              makeFfmpegLogger(
+                videoEditorLogger,
+                opts.videoId,
+                `short:${stage}`
+              );
 
-          // Compute total duration in frames
-          const totalDuration = video.clips.reduce(
-            (acc, clip) => acc + (clip.sourceEndTime - clip.sourceStartTime),
-            0
-          );
-          const durationInFrames = Math.ceil(totalDuration * fps);
+            // Step 1: Concatenate clips → temp file (not the final output path,
+            // since the composite step will write the final .mp4)
+            enterStage("concatenating-clips");
+            const rawConcatenatedPath =
+              yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
+                video.clips.map((clip) => ({
+                  inputVideo: clip.videoFilename,
+                  startTime: clip.sourceStartTime,
+                  duration: clip.sourceEndTime - clip.sourceStartTime,
+                  pauseType: clip.pauseType as "none" | "long",
+                  zoomType: clip.zoomType,
+                })),
+                // The vertical renderer always produces a 9:16 short — the Remotion
+                // subtitle/CTA overlay below is rendered at 1080x1920 to match.
+                VIDEO_FORMAT_DIMENSIONS.short,
+                { onLog: logCliOutput("concat") }
+              );
+            const concatenatedPath = yield* ffmpegCommands.normalizeAudio(
+              rawConcatenatedPath,
+              { onLog: logCliOutput("normalize-audio") }
+            );
 
-          // The call-to-action pill pops up at the very start and fades out over
-          // the length of the first clip, capped at 5 seconds so a long opening
-          // clip doesn't leave it on screen too long. This mirrors the original
-          // Total TypeScript renderer, which timed `ctaDurationInFrames` to the
-          // first clip. It is always the "ai" branded CTA.
-          const CTA_MAX_SECONDS = 5;
-          const firstClip = video.clips[0]!;
-          const firstClipDuration =
-            firstClip.sourceEndTime - firstClip.sourceStartTime;
-          const ctaDurationInFrames = Math.ceil(
-            Math.min(firstClipDuration, CTA_MAX_SECONDS) * fps
-          );
+            // Clean up raw concatenated file
+            yield* removeBestEffort(effectFs, rawConcatenatedPath);
 
-          // Step 5: Render Remotion overlay
-          opts.onStageChange?.("rendering-overlay");
-          const overlayDir = path.join(tmpdir(), "cvm-overlay-render");
-          yield* effectFs.makeDirectory(overlayDir, { recursive: true });
-          const overlayHash = crypto
-            .createHash("sha256")
-            .update(opts.videoId + Date.now())
-            .digest("hex")
-            .slice(0, 12);
-          const overlayPath = path.join(overlayDir, `${overlayHash}.mov`);
+            // Step 2: Transcribe the concatenated video in a single pass. Because
+            // Whisper runs on the already concatenated + normalized audio, its
+            // segment timestamps are on the final timeline — no per-clip offset,
+            // and the long-pause padding / audio normalization are accounted for.
+            enterStage("transcribing");
+            const transcription =
+              yield* videoProcessing.transcribeVideoFile(concatenatedPath);
 
-          const propsJson = JSON.stringify({
-            width: 1080,
-            height: 1920,
-            fps,
-            durationInFrames,
-            subtitles,
-            cta: { variant: "ai", durationInFrames: ctaDurationInFrames },
-          });
+            // Step 3: Get FPS from the concatenated video
+            const fps = yield* ffmpegCommands.getFPS(concatenatedPath);
 
-          yield* renderOverlay(effectFs, propsJson, overlayPath);
+            // Step 4: Split long segments into short phrases and convert to frames
+            const subtitles = buildSubtitles(transcription.segments, fps);
 
-          // Step 6: Composite overlay onto concatenated video
-          opts.onStageChange?.("compositing");
-          const outputPath = path.join(
-            FINISHED_VIDEOS_DIRECTORY,
-            `${opts.videoId}.mp4`
-          );
-          yield* effectFs.makeDirectory(path.dirname(outputPath), {
-            recursive: true,
-          });
+            // Compute total duration in frames
+            const totalDuration = video.clips.reduce(
+              (acc, clip) => acc + (clip.sourceEndTime - clip.sourceStartTime),
+              0
+            );
+            const durationInFrames = Math.ceil(totalDuration * fps);
 
-          yield* ffmpegCommands.compositeOverlay(
-            concatenatedPath,
-            overlayPath,
-            outputPath,
-            logCliOutput("composite-overlay")
-          );
+            // The call-to-action pill pops up at the very start and fades out over
+            // the length of the first clip, capped at 5 seconds so a long opening
+            // clip doesn't leave it on screen too long. This mirrors the original
+            // Total TypeScript renderer, which timed `ctaDurationInFrames` to the
+            // first clip. It is always the "ai" branded CTA.
+            const CTA_MAX_SECONDS = 5;
+            const firstClip = video.clips[0]!;
+            const firstClipDuration =
+              firstClip.sourceEndTime - firstClip.sourceStartTime;
+            const ctaDurationInFrames = Math.ceil(
+              Math.min(firstClipDuration, CTA_MAX_SECONDS) * fps
+            );
 
-          // Clean up intermediate files
-          yield* removeBestEffort(effectFs, overlayPath);
-          yield* removeBestEffort(effectFs, concatenatedPath);
+            // Step 5: Render Remotion overlay
+            enterStage("rendering-overlay");
+            const overlayDir = path.join(tmpdir(), "cvm-overlay-render");
+            yield* effectFs.makeDirectory(overlayDir, { recursive: true });
+            const overlayHash = crypto
+              .createHash("sha256")
+              .update(opts.videoId + Date.now())
+              .digest("hex")
+              .slice(0, 12);
+            const overlayPath = path.join(overlayDir, `${overlayHash}.mov`);
 
-          return outputPath;
+            const propsJson = JSON.stringify({
+              width: 1080,
+              height: 1920,
+              fps,
+              durationInFrames,
+              subtitles,
+              cta: { variant: "ai", durationInFrames: ctaDurationInFrames },
+            });
+
+            yield* renderOverlay(effectFs, propsJson, overlayPath);
+
+            // Step 6: Composite overlay onto concatenated video
+            enterStage("compositing");
+            const outputPath = path.join(
+              FINISHED_VIDEOS_DIRECTORY,
+              `${opts.videoId}.mp4`
+            );
+            yield* effectFs.makeDirectory(path.dirname(outputPath), {
+              recursive: true,
+            });
+
+            yield* ffmpegCommands.compositeOverlay(
+              concatenatedPath,
+              overlayPath,
+              outputPath,
+              logCliOutput("composite-overlay")
+            );
+
+            // Clean up intermediate files
+            yield* removeBestEffort(effectFs, overlayPath);
+            yield* removeBestEffort(effectFs, concatenatedPath);
+
+            return outputPath;
+          }).pipe(Effect.tapErrorCause(recordFailure));
         }
       );
 
@@ -217,7 +263,14 @@ function renderOverlay(
     const propsFile = path.join(propsDir, `${propsHash}.json`);
     yield* effectFs.writeFileString(propsFile, propsJson);
 
-    const binPath = overlayRendererBinPath();
+    const binPath = yield* Effect.try({
+      try: () => overlayRendererBinPath(),
+      catch: (e) =>
+        new RenderVerticalError({
+          cause: e,
+          message: `Could not locate the overlay renderer: ${e instanceof Error ? e.message : String(e)}`,
+        }),
+    });
 
     const result = yield* Effect.scoped(
       Effect.gen(function* () {

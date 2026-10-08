@@ -7,6 +7,10 @@ import { VideoProcessingService } from "@/services/video-processing-service";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
+import {
+  VideoEditorLoggerService,
+  type LogEvent,
+} from "@/services/video-editor-logger-service";
 import * as schema from "@/db/schema";
 import {
   createTestDb,
@@ -15,6 +19,7 @@ import {
 } from "@/test-utils/pglite";
 import {
   buildSubtitles,
+  RenderVerticalError,
   RenderVerticalVideoService,
 } from "./render-vertical-video-service";
 
@@ -160,5 +165,89 @@ describe("RenderVerticalVideoService", () => {
 
       expect(result._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(buildTestLayer()))
+  );
+
+  it.effect(
+    "records a failed stage in the video's own log, not only the SSE error",
+    () => {
+      const logged: { videoId: string; event: LogEvent }[] = [];
+
+      const dbLayer = Layer.succeed(DrizzleService, testDb as any);
+      const depsLayer = Layer.mergeAll(
+        VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
+        Layer.succeed(VideoProcessingService, {} as any),
+        Layer.succeed(FFmpegCommandsService, {
+          createAndConcatenateVideoClipsSinglePass: () =>
+            Effect.fail(
+              new RenderVerticalError({
+                cause: null,
+                message: "ffmpeg concat blew up",
+              })
+            ),
+        } as any),
+        Layer.succeed(VideoEditorLoggerService, {
+          log: (videoId: string, event: LogEvent) =>
+            Effect.sync(() => {
+              logged.push({ videoId, event });
+            }),
+          getLogPath: () => "/dev/null",
+        } as any),
+        Layer.setConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([["FINISHED_VIDEOS_DIRECTORY", "/tmp/test-finished"]])
+          )
+        ),
+        NodeContext.layer
+      );
+
+      return Effect.gen(function* () {
+        const [video] = yield* Effect.promise(() =>
+          testDb
+            .insert(schema.videos)
+            .values({
+              title: "Broken Short",
+              originalFootagePath: "/footage/short.mp4",
+              format: "short",
+            })
+            .returning()
+        );
+        yield* Effect.promise(() =>
+          testDb.insert(schema.clips).values({
+            videoId: video!.id,
+            videoFilename: "a.mp4",
+            sourceStartTime: 0,
+            sourceEndTime: 10,
+            order: "0001",
+            text: "hello",
+          })
+        );
+
+        const service = yield* RenderVerticalVideoService;
+        const error = yield* service
+          .renderVerticalVideo({ videoId: video!.id })
+          .pipe(Effect.flip);
+
+        expect(error.message).toBe("ffmpeg concat blew up");
+        expect(logged).toEqual([
+          {
+            videoId: video!.id,
+            event: expect.objectContaining({
+              type: "export-stage-failed",
+              stage: "short:concatenating-clips",
+              message: "ffmpeg concat blew up",
+            }),
+          },
+        ]);
+      }).pipe(
+        Effect.provide(
+          RenderVerticalVideoService.DefaultWithoutDependencies.pipe(
+            Layer.provide(depsLayer)
+          )
+        ),
+        // The overlay step spawns a subprocess, so the render itself (not just
+        // the service's construction) needs a CommandExecutor in context.
+        Effect.provide(NodeContext.layer)
+      );
+    }
   );
 });
