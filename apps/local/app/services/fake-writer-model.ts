@@ -130,6 +130,8 @@ type Turn = {
 };
 
 function readTurn(options: CallOptions): Turn {
+  // The latest user message carries the directive; the <current-document>
+  // message the route appends after it does not count.
   let scenario: string | undefined;
   let text = "";
   let directiveIndex = -1;
@@ -138,15 +140,13 @@ function readTurn(options: CallOptions): Turn {
     if (message.role !== "user") return;
     for (const part of message.content) {
       if (part.type !== "text") continue;
-      if (part.text.includes("<current-document>")) hasDocument = true;
-      const match = /\[fake:([a-z-]+)\]/.exec(part.text);
-      if (match) {
-        scenario = match[1];
-        directiveIndex = index;
+      if (part.text.includes("<current-document>")) {
+        hasDocument = true;
+        continue;
       }
-      if (!part.text.includes("<current-document>")) {
-        text = part.text.replace(/\[fake:[a-z-]+\]/, "").trim();
-      }
+      scenario = /\[fake:([a-z-]+)\]/.exec(part.text)?.[1];
+      text = part.text.replace(/\[fake:[a-z-]+\]/, "").trim();
+      directiveIndex = index;
     }
   });
   let rejectedAttempts = 0;
