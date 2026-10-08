@@ -10,7 +10,7 @@
  * without React.
  */
 
-import { applyEdits, type DocumentEdit } from "./document-editing-engine";
+import { applyEdits } from "./document-editing-engine";
 import type { DocumentAgentMessage } from "./types";
 
 export type DocumentToolOutput = {
@@ -33,12 +33,17 @@ type DocumentToolPart = Extract<
   { type: "tool-writeDocument" | "tool-editDocument" }
 >;
 
-/** The same union, with `input` known to have arrived. */
-type SettledDocumentToolPart = DocumentToolPart extends infer Part
-  ? Part extends DocumentToolPart
+/**
+ * The same union minus its `input-streaming` states (whose input is still a
+ * partial object), with `input` known to have arrived — i.e. it passed the
+ * tool's input schema.
+ */
+type Settled<Part> = Part extends { state: "input-streaming" }
+  ? never
+  : Part extends { input?: unknown }
     ? Part & { input: NonNullable<Part["input"]> }
-    : never
-  : never;
+    : never;
+type SettledDocumentToolPart = Settled<DocumentToolPart>;
 
 /**
  * A tool call whose input has stopped streaming, and so can be executed.
@@ -103,10 +108,7 @@ export function applyDocumentToolCalls(opts: {
       continue;
     }
 
-    const result = applyEdits(
-      current ?? "",
-      part.input.edits as DocumentEdit[]
-    );
+    const result = applyEdits(current ?? "", part.input.edits);
     if ("error" in result) {
       outputs.push({
         tool: "editDocument",

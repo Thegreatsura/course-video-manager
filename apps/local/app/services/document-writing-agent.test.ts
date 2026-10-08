@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { asSchema } from "ai";
 import {
   buildDocumentWritingSystemMessage,
+  editDocumentTool,
   formatRelatedFields,
   type DocumentWritingContext,
 } from "./document-writing-agent";
@@ -102,5 +104,35 @@ describe("formatRelatedFields", () => {
     expect(result).toContain("SEO Description");
     expect(result).toContain("A lesson about caching.");
     expect(result).not.toContain("Empty Field");
+  });
+});
+
+describe("editDocumentTool input", () => {
+  // The SDK validates a tool call against this schema before the client ever
+  // sees it; a failure goes back to the model as a tool error to retry. The
+  // client folds whatever passes into the document, so anything that passes
+  // must be an edit `applyEdits` can run. A `replace` with no `old_text` once
+  // passed, and crashed the writer: "Cannot read properties of undefined
+  // (reading 'split')".
+  const validate = (input: unknown) =>
+    asSchema(editDocumentTool.inputSchema).validate!(input);
+
+  it.each([
+    ["replace without old_text", { type: "replace", new_text: "Replaced" }],
+    ["insert_after without anchor", { type: "insert_after", new_text: "More" }],
+  ])("rejects %s", async (_, edit) => {
+    const result = await validate({ edits: [{ ...edit, message: "fake" }] });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts each edit type with the field it needs", async () => {
+    const result = await validate({
+      edits: [
+        { type: "replace", old_text: "a", new_text: "b", message: "m" },
+        { type: "insert_after", anchor: "b", new_text: "c", message: "m" },
+        { type: "rewrite", new_text: "# Whole", message: "m" },
+      ],
+    });
+    expect(result.success).toBe(true);
   });
 });

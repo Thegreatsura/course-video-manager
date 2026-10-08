@@ -34,35 +34,50 @@ export const writeDocumentTool = tool({
   outputSchema: z.string(),
 });
 
+const editMessage = z
+  .string()
+  .describe(
+    "A very short (max 20 chars) commit-style reason for this edit, e.g. 'fix typo', 'add intro', 'reword heading'"
+  );
+
+/**
+ * One object per edit type, each requiring the field it acts on. The SDK
+ * rejects a call that fails this schema and hands the error back to the model,
+ * so a `replace` with no `old_text` never reaches the client's `applyEdits`.
+ * A union, not a discriminatedUnion: zod emits `anyOf` for it rather than
+ * `oneOf`, which tool input schemas handle more widely.
+ */
+const documentEditSchema = z.union([
+  z.object({
+    type: z.literal("replace"),
+    old_text: z
+      .string()
+      .describe(
+        "The exact text to find and replace. Include enough context for a unique match."
+      ),
+    new_text: z.string().describe("The text to replace it with"),
+    message: editMessage,
+  }),
+  z.object({
+    type: z.literal("insert_after"),
+    anchor: z
+      .string()
+      .describe("The exact text after which to insert new content."),
+    new_text: z.string().describe("The text to insert"),
+    message: editMessage,
+  }),
+  z.object({
+    type: z.literal("rewrite"),
+    new_text: z.string().describe("The full new document"),
+    message: editMessage,
+  }),
+]);
+
 export const editDocumentTool = tool({
   description:
     "Edit the existing document with surgical changes. Use replace for targeted text changes, insert_after to add content after an anchor, or rewrite to replace the entire document.",
   inputSchema: z.object({
-    edits: z.array(
-      z.object({
-        type: z
-          .enum(["replace", "insert_after", "rewrite"])
-          .describe("The type of edit to apply"),
-        old_text: z
-          .string()
-          .optional()
-          .describe(
-            "For replace: the exact text to find and replace. Include enough context for a unique match."
-          ),
-        anchor: z
-          .string()
-          .optional()
-          .describe(
-            "For insert_after: the exact text after which to insert new content."
-          ),
-        new_text: z.string().describe("The new text to insert or replace with"),
-        message: z
-          .string()
-          .describe(
-            "A very short (max 20 chars) commit-style reason for this edit, e.g. 'fix typo', 'add intro', 'reword heading'"
-          ),
-      })
-    ),
+    edits: z.array(documentEditSchema),
   }),
   outputSchema: z.string(),
 });
