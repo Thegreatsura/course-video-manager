@@ -21,7 +21,7 @@ import type {
 } from "../clip-state-reducer";
 import { cn } from "@/lib/utils";
 import { RECORDING_SESSION_PANELS_ID } from "../constants";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 
 /**
  * Renders a single pending clip row within a session panel.
@@ -266,7 +266,7 @@ export const SessionPanel = ({ panel }: { panel: SessionPanelData }) => {
             />
             Recording
             <span className="font-mono tabular-nums">
-              {formatSecondsToTimeCode(elapsedSeconds)}
+              {formatDuration(elapsedSeconds)}
             </span>
           </span>
         )}

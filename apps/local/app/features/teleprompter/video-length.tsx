@@ -8,7 +8,7 @@
  * (`left-4`, `size-14`) so it sits beside the mic without moving it, and above
  * the session marks, which start at `top-20`.
  */
-import { formatVideoLength } from "./format-video-length";
+import { formatDuration } from "@/lib/format-duration";
 
 export function VideoLength(props: { seconds: number | null }) {
   if (props.seconds === null) return null;
@@ -18,7 +18,7 @@ export function VideoLength(props: { seconds: number | null }) {
       className="pointer-events-none absolute left-20 top-4 z-40 flex h-14 select-none items-center font-mono text-xs tabular-nums text-white/30"
       aria-label="Video length"
     >
-      {formatVideoLength(props.seconds)}
+      {formatDuration(props.seconds)}
     </div>
   );
 }

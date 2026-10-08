@@ -1,4 +1,4 @@
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { AlertTriangleIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
@@ -28,7 +28,7 @@ export const VideoPlayerStatusStrip = () => {
     <div className="flex items-center gap-2 mb-2">
       <span className="text-xs text-muted-foreground">
         {videoTitle}
-        {" · " + formatSecondsToTimeCode(totalDuration)}
+        {" · " + formatDuration(totalDuration)}
       </span>
       {areAnyClipsDangerous && (
         <span className="text-orange-500 text-xs font-medium inline-flex items-center">

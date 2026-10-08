@@ -15,7 +15,7 @@ import {
   getShowRecordingSignal as getShowRecordingSignalSelector,
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { SendIcon, VideoOffIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
@@ -227,7 +227,7 @@ export const PortraitStudioPanel = () => {
       <div className="flex items-center justify-between mt-1 shrink-0">
         <span className="text-xs text-muted-foreground truncate">
           {videoTitle}
-          {" · " + formatSecondsToTimeCode(totalDuration)}
+          {" · " + formatDuration(totalDuration)}
         </span>
         <MissingWordTimingBadge />
         <div className="flex gap-1 shrink-0">

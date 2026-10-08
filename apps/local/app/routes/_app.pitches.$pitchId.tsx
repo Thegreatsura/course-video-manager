@@ -19,7 +19,7 @@ import { PitchStateBadge } from "@/components/status-icon-badge";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { makeLoader } from "@/services/route-action.server";
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import { Effect } from "effect";
 import {
   ArrowLeft,
@@ -273,7 +273,7 @@ function PitchVideoItem({
                 {video.title || "Untitled"}
               </span>
               <span className="text-xs font-mono mt-0.5">
-                {formatSecondsToTimeCode(video.totalDuration)}
+                {formatDuration(video.totalDuration)}
               </span>
             </div>
           </Link>

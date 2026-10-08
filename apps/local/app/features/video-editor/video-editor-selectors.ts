@@ -1,4 +1,4 @@
-import { formatSecondsToTimeCode } from "@/services/utils";
+import { formatDuration } from "@/lib/format-duration";
 import type {
   Clip,
   ClipOnDatabase,
@@ -290,7 +290,7 @@ export const getClipComputedProps = (clips: Clip[]): ClipComputedProps => {
         ? calculateTextSimilarity(clip.text, nextClip.text)
         : 0;
 
-    const timecodeString = formatSecondsToTimeCode(timecode);
+    const timecodeString = formatDuration(timecode);
 
     const duration = clip.sourceEndTime - clip.sourceStartTime;
     timecode += duration;

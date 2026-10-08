@@ -1,3 +1,4 @@
+import { formatDuration } from "@/lib/format-duration";
 import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { Player, type PlayerRef } from "@remotion/player";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
@@ -67,7 +68,6 @@ import {
   ANIMATIC_FPS,
   adjacentSegmentStartFrame,
   buildAnimaticTimeline,
-  formatRunTime,
   segmentIndexAtFrame,
   type AnimaticClipMockup,
 } from "./animatic-timeline";
@@ -506,7 +506,7 @@ export const AnimaticPlayer = (props: {
             onStyle={chooseSubtitleStyle}
           />
           <div className="pointer-events-none rounded-md bg-black/70 px-3 py-1.5 font-mono text-sm tabular-nums">
-            {formatRunTime(timeline.totalSeconds)}
+            {formatDuration(timeline.totalSeconds)}
           </div>
         </div>
       </div>

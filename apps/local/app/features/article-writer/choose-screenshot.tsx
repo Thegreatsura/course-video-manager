@@ -7,6 +7,7 @@ import {
   LoaderIcon,
   XIcon,
 } from "lucide-react";
+import { formatDuration } from "@/lib/format-duration";
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { IndexedClip } from "./types";
 import { CHOOSE_SCREENSHOT_ATTR } from "./screenshot-navigation";
@@ -151,7 +152,7 @@ export function ChooseScreenshot({
       />
       <div className="mt-2 flex items-center gap-2">
         <span className="text-xs text-muted-foreground tabular-nums w-12 text-right">
-          {formatTime(currentTime - clip.sourceStartTime)}
+          {formatDuration(currentTime - clip.sourceStartTime)}
         </span>
         <input
           type="range"
@@ -163,7 +164,7 @@ export function ChooseScreenshot({
           className="flex-1 h-1.5 accent-primary"
         />
         <span className="text-xs text-muted-foreground tabular-nums w-12">
-          {formatTime(duration)}
+          {formatDuration(duration)}
         </span>
       </div>
       <div className="mt-2 flex items-center gap-2">
@@ -203,11 +204,4 @@ export function ChooseScreenshot({
       </div>
     </div>
   );
-}
-
-function formatTime(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
