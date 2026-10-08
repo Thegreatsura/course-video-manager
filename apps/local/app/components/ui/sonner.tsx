@@ -14,6 +14,19 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       position="bottom-left"
       closeButton
+      // The floor every toast stands on, however it was made: long unbroken
+      // strings (URLs, paths, JSON) wrap instead of widening the toast, and no
+      // title or description outgrows half the screen; past that it scrolls.
+      // The four-line clamp, "Show more" and "Copy" live in ./toast.tsx.
+      toastOptions={{
+        classNames: {
+          content: "min-w-0",
+          title:
+            "max-h-[50vh] min-w-0 overflow-y-auto [overflow-wrap:anywhere]",
+          description:
+            "max-h-[50vh] min-w-0 overflow-y-auto [overflow-wrap:anywhere]",
+        },
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

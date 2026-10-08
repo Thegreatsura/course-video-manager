@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import { useNavigate } from "react-router";
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { diagramChannel } from "@/lib/diagram-protocol";
 import {
   createInitialDiagramPlaygroundState,

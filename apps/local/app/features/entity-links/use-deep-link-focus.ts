@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { useEffectReducer } from "use-effect-reducer";
 import {
   createInitialDeepLinkFocusState,

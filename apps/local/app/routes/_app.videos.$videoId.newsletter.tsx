@@ -15,7 +15,7 @@ import { VideoFilePasteModal } from "@/components/video-file-paste-modal";
 import { DeleteVideoFileModal } from "@/components/delete-video-file-modal";
 import { NewsletterPagePanel } from "@/features/video-posting/newsletter-page";
 import type { Route } from "./+types/_app.videos.$videoId.newsletter";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 export const loader = makeLoader({
   effect: ({ params }) =>

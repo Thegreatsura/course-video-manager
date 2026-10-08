@@ -275,6 +275,15 @@ Animatic's run time, a YouTube chapter — goes through `formatDuration` in
 `% 60` plus a two-digit `padStart`). Rounded estimates like an upload ETA
 (`~1h 5m`) are a different thing and keep their own wording.
 
+### One toast
+
+Every toast comes from `@/components/ui/toast`, never straight from
+`sonner`. That module clamps a toast's text to four lines with a "Show more"
+toggle and gives every error toast a "Copy" action, so an enormous server
+error stays readable and pasteable instead of filling the screen. Show a
+caught error with `toastError(error, fallback)`. `scripts/check-toast-import.sh`
+fails any other file that imports `sonner`.
+
 ## Interface design
 
 ### Deep modules

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorageBoolean } from "@/hooks/use-local-storage";
 import { useFetcher, useLocation } from "react-router";
 import { useCallback, useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 
 const ADD_MORE_STORAGE_KEY = "feedback-modal-add-more";
 

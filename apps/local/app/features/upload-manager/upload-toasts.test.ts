@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { showSuccessToast } from "./upload-toasts";
 import type { uploadReducer } from "./upload-reducer";
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: {
     success: vi.fn(),
   },

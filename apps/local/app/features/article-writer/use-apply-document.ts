@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type RefObject } from "react";
-import { toast } from "sonner";
+import { toast, toastError } from "@/components/ui/toast";
 import { hasUnresolvedScreenshots } from "./choose-screenshot-mutations";
 
 export function useApplyDocument(
@@ -36,9 +36,7 @@ export function useApplyDocument(
           if (uploaded !== doc) updateDocument(uploaded);
         }
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Failed to upload images"
-        );
+        toastError(err, "Failed to upload images");
       } finally {
         setIsApplying(false);
       }

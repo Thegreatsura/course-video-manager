@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";

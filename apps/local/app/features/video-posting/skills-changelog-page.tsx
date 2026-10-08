@@ -2,7 +2,7 @@
 
 import { useContext, useEffect, useState } from "react";
 import { hasLocalStorage } from "@/hooks/use-local-storage";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import type { Editor } from "tldraw";
 import { searchIconNames } from "@/packages/lucide-icons";
 import { renderThumbnailPngBase64 } from "@/features/diagrams/render-thumbnail";
