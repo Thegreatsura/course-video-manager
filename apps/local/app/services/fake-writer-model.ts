@@ -14,6 +14,7 @@ import { APICallError, type LanguageModel } from "ai";
  * | (none)                  | writes (or, with a document present, rewrites) the document    |
  * | `bad-tool-shape`        | sends malformed tool input once, then corrects itself          |
  * | `bad-tool-shape-always` | sends malformed tool input on every step                       |
+ * | `edit-missing-old-text` | once, a `replace` edit with no `old_text`; then corrects itself |
  * | `overloaded-once`       | 529 on this message's first request, fine on its retry         |
  * | `rate-limit-once`       | 429 on this message's first request, fine on its retry         |
  * | `stream-drop-once`      | the stream dies mid-reply on the first request                 |
@@ -22,6 +23,7 @@ import { APICallError, type LanguageModel } from "ai";
 export const FAKE_WRITER_SCENARIOS = [
   "bad-tool-shape",
   "bad-tool-shape-always",
+  "edit-missing-old-text",
   "overloaded-once",
   "rate-limit-once",
   "stream-drop-once",
@@ -90,6 +92,11 @@ export function createFakeWriterModel(
       const malformed =
         turn.scenario === "bad-tool-shape-always" ||
         (turn.scenario === "bad-tool-shape" && turn.rejectedAttempts === 0);
+      const editMissingOldText =
+        turn.scenario === "edit-missing-old-text" &&
+        turn.hasDocument &&
+        turn.rejectedAttempts === 0 &&
+        turn.step === 0;
       const toolNames = (options.tools ?? []).map((t) => t.name);
 
       if (!toolNames.includes("writeDocument")) {
@@ -99,6 +106,14 @@ export function createFakeWriterModel(
         // `contents`, not `content`: the shape a model gets wrong.
         parts.push(
           ...toolCallParts(turn, "writeDocument", { contents: "# Oops" })
+        );
+        parts.push(finish("tool-calls"));
+      } else if (editMissingOldText) {
+        // A `replace` that forgot the passage it replaces.
+        parts.push(
+          ...toolCallParts(turn, "editDocument", {
+            edits: [{ type: "replace", new_text: "Replaced", message: "fake" }],
+          })
         );
         parts.push(finish("tool-calls"));
       } else {
