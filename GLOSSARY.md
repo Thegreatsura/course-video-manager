@@ -356,6 +356,10 @@ _Avoid_: Drawing, Sketch, Canvas, Scene (reserved for the drawing tool's own ter
 An immutable copy of a Diagram's drawing at the moment a specific **Clip** was filmed. It is pinned to that Clip, so going back to the Clip later shows the diagram as it was filmed, even after the Diagram has changed.
 _Avoid_: Frame, Revision, Checkpoint, Version (overloaded with **CourseVersion**)
 
+**Diagram Text**:
+All the words written on a **DiagramSnapshot**'s shapes, flattened into one line. It is derived from the drawing and stored beside it, so the same text powers search and the Article Writer. The Article Writer reads it inside the **Transcript**, right after the marker of the **Clip** the snapshot is pinned to, so the model knows which diagram was on screen for which words. It is given again only when it changes, because most snapshots of one Diagram differ only in layout. It is on by default and can be switched off like the writer's other context. It is supporting material, like a **Video File**: it shows what was on screen and is never quoted as words said on camera.
+_Avoid_: Diagram labels, Diagram transcript, search text (the column's name, not the concept)
+
 **Active Diagram**:
 The Diagram the author is drawing on now. There may be none, in which case the author is on **Playground Home**. It stays the same across **Clips** until the author changes it.
 _Avoid_: Current diagram, Open diagram

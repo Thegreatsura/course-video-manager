@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildTranscript,
+  buildWriterTranscript,
   formatOnScreenLinks,
   formatProseTranscript,
   toDiffArray,
@@ -280,6 +281,53 @@ describe("buildTranscript on-screen web links", () => {
     );
     expect(transcript).toBe(
       "[1] «on screen: Docs — https://docs.com» First mention. [2] Second mention."
+    );
+  });
+});
+
+describe("buildWriterTranscript", () => {
+  const snapshot = (diagramId: string, name: string, searchText: string) => ({
+    diagramId,
+    searchText,
+    scene: {},
+    diagram: { name },
+  });
+
+  it("puts each diagram's text next to its clip, only when it changes", () => {
+    const loop = snapshot("d1", "Agent loop", "model tools loop");
+    const clips = [
+      { order: "a0", text: "Here is the loop.", diagramSnapshot: loop },
+      // Same text, different snapshot (a shape moved): not repeated.
+      { order: "a1", text: "It calls tools.", diagramSnapshot: { ...loop } },
+      {
+        order: "a2",
+        text: "Now with memory.",
+        diagramSnapshot: snapshot(
+          "d1",
+          "Agent loop",
+          "model tools loop memory"
+        ),
+      },
+      { order: "a3", text: "No diagram here.", diagramSnapshot: null },
+      {
+        order: "a4",
+        text: "Blank diagram.",
+        diagramSnapshot: snapshot("d2", "Empty", ""),
+      },
+    ];
+
+    expect(
+      buildWriterTranscript({ clips, chapters: [], includeDiagramText: true })
+    ).toBe(
+      '[1] «diagram "Agent loop": model tools loop» Here is the loop. ' +
+        "[2] It calls tools. " +
+        '[3] «diagram "Agent loop": model tools loop memory» Now with memory. ' +
+        "[4] No diagram here. [5] Blank diagram."
+    );
+    expect(
+      buildWriterTranscript({ clips, chapters: [], includeDiagramText: false })
+    ).toBe(
+      "[1] Here is the loop. [2] It calls tools. [3] Now with memory. [4] No diagram here. [5] Blank diagram."
     );
   });
 });

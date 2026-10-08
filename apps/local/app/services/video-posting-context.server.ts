@@ -10,6 +10,8 @@ import {
   toTranscriptItems,
   formatProseTranscript,
   buildTranscript,
+  listClipDiagramTexts,
+  type ClipDiagramTextEntry,
 } from "@/lib/transcript-builder";
 import { sortByOrder } from "@/lib/sort-by-order";
 import type { BeatKind } from "@/features/beats/beat-kinds";
@@ -220,6 +222,11 @@ export interface WriterContextData {
    * Empty when the video has no Clip Mockups.
    */
   animaticLines: AnimaticLine[];
+  /**
+   * The text of the diagram each clip pins, annotated where it changes — what
+   * the writer's transcript carries when diagram text is switched on.
+   */
+  diagramTexts: ClipDiagramTextEntry[];
   /** Quiz ids owned by other videos in this course. */
   quizIds: string[];
   /** The video's role in its lesson, read off its title — picks the writer's default mode. */
@@ -260,6 +267,8 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     video.chapters
   );
 
+  const diagramTexts = listClipDiagramTexts(video.clips);
+
   const videoRole = deriveVideoRole(video.title);
   const lesson = video.lesson;
   const files = yield* listVideoFiles(video.lineageId);
@@ -282,6 +291,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
       beats,
       script: video.script ?? "",
       animaticLines,
+      diagramTexts,
       quizIds: [],
       videoRole,
     } satisfies WriterContextData;
@@ -327,6 +337,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
     beats,
     script: video.script ?? "",
     animaticLines,
+    diagramTexts,
     quizIds,
     videoRole,
   } satisfies WriterContextData;
