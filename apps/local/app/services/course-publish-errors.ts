@@ -36,4 +36,10 @@ export class PublishCommitFailedError extends Data.TaggedError(
 
 export class ExportError extends Data.TaggedError("ExportError")<{
   message: string;
+  /**
+   * The failure underneath, kept so the Video's log can show it
+   * (`formatFailureCause` walks `cause`). `null` when the export itself is
+   * the first thing that went wrong.
+   */
+  cause: unknown;
 }> {}

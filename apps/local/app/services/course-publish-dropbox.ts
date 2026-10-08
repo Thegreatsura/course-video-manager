@@ -355,6 +355,7 @@ export const syncFrozenCourseVersionToDropbox = Effect.fn(
       if (result.metadata.content_hash !== shipment.source.contentHash) {
         return yield* new ExportError({
           message: `Copy verification failed for video ${shipment.entry.videoId}: content_hash mismatch`,
+          cause: null,
         });
       }
       copyReceipts.set(shipment.entry.videoId, shipment.receipt);

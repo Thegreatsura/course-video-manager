@@ -375,6 +375,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
                     latch,
                     new ExportError({
                       message: `Export failed for video ${videoId}`,
+                      cause: null,
                     })
                   );
             },
@@ -389,7 +390,10 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
               (latch) =>
                 Deferred.fail(
                   latch,
-                  new ExportError({ message: "Export did not complete" })
+                  new ExportError({
+                    message: "Export did not complete",
+                    cause: null,
+                  })
                 ),
               { discard: true }
             )
