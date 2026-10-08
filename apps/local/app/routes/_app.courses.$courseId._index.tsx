@@ -66,8 +66,8 @@ import { DivergenceReportModal } from "@/features/course-view/divergence-report-
 /** Which sections of the course grid are folded away, remembered per browser. */
 const COLLAPSED_SECTIONS_KEY = "collapsed-sections";
 
-export const meta: Route.MetaFunction = ({ data }) => {
-  const selectedCourse = data?.selectedCourse;
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  const selectedCourse = loaderData?.selectedCourse;
 
   if (selectedCourse) {
     return [

@@ -48,7 +48,7 @@ import type {
 import { LessonPlaceProvider } from "@/features/entity-links/lesson-place-context";
 import type { Route } from "./+types/_app.pitches.$pitchId";
 
-export const meta: Route.MetaFunction = ({ data: loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = loaderData?.pitch?.title || "Untitled Pitch";
   return [{ title: `CVM - ${title}` }];
 };
