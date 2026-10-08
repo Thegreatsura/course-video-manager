@@ -174,6 +174,16 @@ database the run is on (`DB: test clone …` or `DB: PRODUCTION …`), psql
 reaching it, and which other verification runs are live. Any FAIL means stop
 and fix — a snapshot taken against someone else's server proves nothing.
 
+**Who may own the port.** The listener passes only if it is the pid `launch`
+recorded, or a **direct** child of it (its parent pid is the recorded pid).
+`react-router dev` relaunches itself as a child node process
+(`[restart] Relaunching with --conditions=development`), and the child is what
+binds the port; doctor then says
+`ok   port 5200 owned by this run (pid <child>, a direct child of <pid>)`.
+A grandchild, or any process whose parent is not the recorded pid, still
+FAILs. `cleanup` stops that child too: it signals the recorded pid's direct
+children before the pid itself.
+
 **Never drive a port by hand.** 5173 is Matt's CVM, running all day against
 production; other ports in 5200-5299 are sibling runs. `$V ab <run>` only goes
 to your own.

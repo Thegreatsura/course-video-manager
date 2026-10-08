@@ -339,11 +339,12 @@ cmd_doctor() {
     log "ok   port $port is outside the CVM's band ($CVM_BAND_MIN-$CVM_BAND_MAX)"
   fi
 
-  local owner; owner="$(ss -ltnp 2>/dev/null | grep ":$port " || true)"
+  local owner; owner="$(port_owner "$port" "$pid")"
   case "$owner" in
-    *"pid=$pid"*) log "ok   port $port owned by this run" ;;
-    "")           log "FAIL nothing listening on $port"; ok=1 ;;
-    *)            log "FAIL port $port owned by another process — do not drive it"; ok=1 ;;
+    "$pid") log "ok   port $port owned by this run" ;;
+    none)   log "FAIL nothing listening on $port"; ok=1 ;;
+    other)  log "FAIL port $port owned by another process — do not drive it"; ok=1 ;;
+    *)      log "ok   port $port owned by this run (pid $owner, a direct child of $pid)" ;;
   esac
 
   curl -sf -o /dev/null "http://localhost:$port/" &&

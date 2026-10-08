@@ -24,6 +24,22 @@ desk_isolated() {
   [ "$(grep -o 'ws://127\.0\.0\.1:9"' <<< "$src" | wc -l)" -ge 2 ]
 }
 
+# --- who holds the port ---------------------------------------------------
+# Prints the listener on port $1 that belongs to run pid $2 — $2 itself, or a
+# DIRECT child of it (`react-router dev` relaunches itself as a child node
+# process, and the child binds the port) — else `other`, or `none` when nothing
+# listens. A grandchild, or any other process, is `other`.
+port_owner() {
+  local owner p child=""
+  owner="$(ss -ltnp 2>/dev/null | grep ":$1 " || true)"
+  [ -n "$owner" ] || { echo none; return 0; }
+  for p in $(grep -oE 'pid=[0-9]+' <<< "$owner" | cut -d= -f2 | sort -u || true); do
+    [ "$p" = "$2" ] && { echo "$p"; return 0; }
+    if [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = "$2" ]; then child="$p"; fi
+  done
+  echo "${child:-other}"
+}
+
 # --- finding a run --------------------------------------------------------
 # A run is live when the server it recorded is still alive. That is the only
 # registry: no shared "current" pointer to clobber, so two runs never collide.
