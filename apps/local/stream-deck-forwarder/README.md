@@ -7,6 +7,10 @@ Bridges Stream Deck button presses to the video editor via WebSocket.
 - **HTTP server** on port `5174` — receives button presses from Stream Deck
 - **WebSocket server** on port `5172` — broadcasts messages to connected video editor clients
 
+It starts only from the main checkout of the repo. In a git worktree `pnpm dev`
+prints why and carries on without it, and that worktree's editor is pointed at
+a dead address instead of the hub and OBS — see `../live-desk/live-desk.ts`.
+
 ## Available Actions
 
 | Action             | HTTP Endpoint                         | Description                                                        |
