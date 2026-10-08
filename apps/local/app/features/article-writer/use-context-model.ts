@@ -14,6 +14,7 @@ import {
   BEATS_ENABLED_STORAGE_KEY,
   SCRIPT_ENABLED_STORAGE_KEY,
   ANIMATIC_ENABLED_STORAGE_KEY,
+  DIAGRAM_TEXT_ENABLED_STORAGE_KEY,
   LINKS_DISABLED_STORAGE_KEY,
 } from "./write-utils";
 import { formatBeatsContext } from "./format-beats-context";
@@ -44,6 +45,8 @@ export interface ContextModel {
   beatsEnabled: boolean;
   scriptEnabled: boolean;
   animaticEnabled: boolean;
+  /** Annotate the transcript's clips with their diagrams' text. */
+  diagramTextEnabled: boolean;
 
   // Mutation callbacks
   toggleItem: (itemId: string) => void;
@@ -138,6 +141,19 @@ export function useContextModel(
     () => formatAnimaticContext(context.animaticLines),
     [context.animaticLines]
   );
+  // Diagram-heavy videos say little that the diagram doesn't show, so on
+  // wherever a clip pins a diagram with text.
+  const [diagramTextEnabled, setDiagramTextEnabled] = useLocalStorageBoolean(
+    DIAGRAM_TEXT_ENABLED_STORAGE_KEY,
+    true
+  );
+  const diagramText = useMemo(
+    () =>
+      context.diagramTexts
+        .map((d) => `[${d.clipIndex}] ${d.diagramName}: ${d.text}`)
+        .join("\n"),
+    [context.diagramTexts]
+  );
 
   // ── Build sources ─────────────────────────────────────────────────────────
 
@@ -184,6 +200,31 @@ export function useContextModel(
         note: "clips.text, split by chapter — deselect chapters to trim it",
         items: [
           { id: "transcript", label: "Full transcript", text, on, tokens },
+        ],
+        onCount: on ? 1 : 0,
+        check: on,
+        atomic: true,
+        tokens: on ? tokens : 0,
+      });
+    }
+
+    // 1b. Diagram text (only if a clip pins a diagram with text). It rides
+    // inside the transcript, next to the clip each diagram was on screen for.
+    if (diagramText.length > 0) {
+      const tokens = estimateTokens(diagramText);
+      const on = diagramTextEnabled;
+      result.push({
+        key: "diagramText",
+        label: "Diagram text",
+        note: "the text on each clip's diagram, inlined next to that clip in the transcript",
+        items: [
+          {
+            id: "diagramText",
+            label: "Diagram text",
+            text: diagramText,
+            on,
+            tokens,
+          },
         ],
         onCount: on ? 1 : 0,
         check: on,
@@ -396,6 +437,7 @@ export function useContextModel(
     beatsText,
     scriptText,
     animaticText,
+    diagramText,
     enabledSections,
     enabledFiles,
     enabledFields,
@@ -407,6 +449,7 @@ export function useContextModel(
     beatsEnabled,
     scriptEnabled,
     animaticEnabled,
+    diagramTextEnabled,
   ]);
 
   const totalTokens = useMemo(
@@ -484,6 +527,10 @@ export function useContextModel(
         setAnimaticEnabled((prev) => !prev);
         return;
       }
+      if (itemId === "diagramText") {
+        setDiagramTextEnabled((prev) => !prev);
+        return;
+      }
       if (itemId === "courseStructure") {
         setIncludeCourseStructure((prev) => !prev);
         return;
@@ -549,6 +596,9 @@ export function useContextModel(
           break;
         case "animatic":
           setAnimaticEnabled((prev) => !prev);
+          break;
+        case "diagramText":
+          setDiagramTextEnabled((prev) => !prev);
           break;
         case "courseStructure":
           setIncludeCourseStructure((prev) => !prev);
@@ -625,6 +675,7 @@ export function useContextModel(
     beatsEnabled,
     scriptEnabled,
     animaticEnabled,
+    diagramTextEnabled,
 
     toggleItem,
     toggleSource,

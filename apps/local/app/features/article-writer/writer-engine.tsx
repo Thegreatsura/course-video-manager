@@ -251,6 +251,7 @@ export function WriterEngine({
       enabledFiles: Array.from(ctxModel.enabledFiles),
       includeTranscript: transcriptEnabled,
       enabledSections: Array.from(ctxModel.enabledSections),
+      includeDiagramText: ctxModel.diagramTextEnabled,
       courseStructure:
         ctxModel.includeCourseStructure && courseStructure
           ? courseStructure
@@ -266,6 +267,7 @@ export function WriterEngine({
     chapters.length,
     ctxModel.enabledSections,
     ctxModel.includeTranscript,
+    ctxModel.diagramTextEnabled,
     ctxModel.enabledFiles,
     ctxModel.enabledFields,
     pageFields,
