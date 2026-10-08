@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Client } from "pg";
-import { scriptDatabaseUrl } from "./script-database-url";
+import { scriptPgClient } from "./script-database-url";
 
 const MIGRATIONS_DIR = join(
   import.meta.dirname,
@@ -26,9 +25,7 @@ const hash = createHash("sha256").update(sqlContent).digest("hex");
 
 // This writes to drizzle's migration bookkeeping, so it runs through the
 // direct connection like every other migration step.
-const { url } = scriptDatabaseUrl({ direct: true });
-
-const client = new Client({ connectionString: url });
+const { client } = scriptPgClient({ direct: true });
 await client.connect();
 
 try {

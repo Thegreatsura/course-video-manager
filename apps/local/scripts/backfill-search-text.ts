@@ -1,13 +1,9 @@
-import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
-import { Pool } from "pg";
 import * as schema from "@/db/schema";
 import { extractSceneText } from "@cvm/core/lib/extract-scene-text";
-import { scriptDatabaseUrl } from "./script-database-url";
+import { scriptDrizzle } from "./script-database-url";
 
-const { url } = scriptDatabaseUrl();
-
-const db = drizzle(new Pool({ connectionString: url }), { schema });
+const { db } = scriptDrizzle();
 
 let snapshotCount = 0;
 const snapshots = await db
