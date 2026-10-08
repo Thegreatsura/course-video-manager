@@ -58,9 +58,9 @@ import { DivergenceReportModal } from "@/features/course-view/divergence-report-
 import { SectionScriptsView } from "@/features/course-view/section-scripts-view";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-export const meta: Route.MetaFunction = ({ data }) => {
-  const section = data?.selectedCourse?.sections[0];
-  const courseName = data?.selectedCourse?.name;
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  const section = loaderData?.selectedCourse?.sections[0];
+  const courseName = loaderData?.selectedCourse?.name;
   if (section && courseName) {
     return [{ title: `CVM - ${courseName} - ${section.title}` }];
   }
