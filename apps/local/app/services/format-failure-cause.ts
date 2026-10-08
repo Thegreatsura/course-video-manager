@@ -1,3 +1,5 @@
+import { Cause } from "effect";
+
 /**
  * Render an unknown failure as one string a human can read in a log file.
  *
@@ -39,4 +41,34 @@ export const formatFailureCause = (
     // A getter that throws, a BigInt, a circular plain object.
     return "[unformattable cause]";
   }
+};
+
+/**
+ * The one line a toast shows for a failure: the first non-empty line of its
+ * message, or `undefined` when it has none worth showing.
+ *
+ * A toast is where the author first learns something broke, so it should
+ * name the actual cause ("Whisper API call failed: 401 …"), not the wrapper
+ * that carried it. The rest — the stack, the renderer's whole stderr — goes
+ * to the logs (`formatFailureCause`), not the screen.
+ *
+ * Takes an Effect `Cause` too, so a defect gets the same treatment as a
+ * failure.
+ */
+export const failureHeadline = (failure: unknown): string | undefined => {
+  const value = Cause.isCause(failure) ? Cause.squash(failure) : failure;
+  const message =
+    typeof value === "string"
+      ? value
+      : typeof value === "object" &&
+          value !== null &&
+          "message" in value &&
+          typeof value.message === "string"
+        ? value.message
+        : undefined;
+  const line = message
+    ?.split("\n")
+    .map((part) => part.trim())
+    .find((part) => part !== "");
+  return line === undefined || line === "" ? undefined : line;
 };

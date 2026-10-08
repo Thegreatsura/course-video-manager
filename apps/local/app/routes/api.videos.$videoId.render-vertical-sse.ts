@@ -29,12 +29,6 @@ export const action = async (args: Route.ActionArgs) => {
           sendEvent("error", { message: "Video not found" });
         },
       },
-      {
-        tag: "RenderVerticalError",
-        handler: (e, sendEvent) => {
-          sendEvent("error", { message: e.message });
-        },
-      },
     ],
     fallbackMessage: "Vertical short render failed unexpectedly",
   });

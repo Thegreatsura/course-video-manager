@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import { asc, eq } from "drizzle-orm";
 import { CoursePublishService } from "@/services/course-publish-service";
+import { VideoProcessingService } from "@/services/video-processing-service";
+import { FFmpegError } from "@/services/ffmpeg-run";
 import { clips as clipsTable, overlays as overlaysTable } from "@/db/schema";
 import {
   COMPOSITED_BYTES_MARKER,
@@ -217,10 +219,9 @@ describe("Definition Cards in a course export", () => {
 
   describe("when a stage fails, the Video's log says why", () => {
     /**
-     * The export's own error names the Video and nothing else, on purpose —
-     * one failed card and one failed ffmpeg pass are both just "this Video did
-     * not export". That makes the Video's log the only place the actual cause
-     * can survive, so these tests hold it to writing one.
+     * The export's own error carries one line — enough for a toast — so the
+     * Video's log is the only place the whole cause survives, with the stage
+     * it broke in. These tests hold it to writing one.
      */
     const cardRenderFailure = new Error(
       "The overlay renderer exited with code 1: Chromium could not start"
@@ -247,6 +248,45 @@ describe("Definition Cards in a course export", () => {
       expect(failures[0]!.stage).toBe("export:render-overlays");
       // The detail the export's own ExportError throws away.
       expect(failures[0]!.cause).toContain("Chromium could not start");
+    });
+
+    it("names the real cause in the first line of the export's error", async () => {
+      const { video, run } = await setup({
+        failCardRenderWith: cardRenderFailure,
+      });
+
+      await addOverlay(video.id, 0, {
+        at: 2,
+        durationInSeconds: 4,
+        title: "Monomorphism",
+        description: "Never collapses two inputs into one output.",
+      });
+
+      // The author's toast shows this message's first line.
+      await expect(run(exportVideo(video.id))).rejects.toThrow(
+        /^Failed to composite Overlays onto video .*: The overlay renderer exited with code 1: Chromium could not start$/
+      );
+    });
+
+    it("records a failed ffmpeg pass under the stage it was in", async () => {
+      const { video, run, videoLog } = await setup({
+        mockVideoProcessing: Layer.succeed(VideoProcessingService, {
+          exportVideoClips: () =>
+            Effect.fail(
+              new FFmpegError({
+                cause: null,
+                message: "ffmpeg exited with code 254: clip.mp4: No such file",
+              })
+            ),
+        } as unknown as VideoProcessingService),
+      });
+
+      await expect(run(exportVideo(video.id))).rejects.toThrow();
+
+      const failures = videoLog.ofType("export-stage-failed");
+      expect(failures).toHaveLength(1);
+      expect(failures[0]!.stage).toBe("export:concatenating-clips");
+      expect(failures[0]!.cause).toContain("clip.mp4: No such file");
     });
 
     it("writes the failure to the log of the Video that failed", async () => {
