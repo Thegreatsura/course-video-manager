@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "tsc",
     "lint:boundaries": "depcruise app.ts auth.ts index.ts runtime.ts version.ts routes",
-    "vercel-build": "pnpm --filter @cvm/core run build && node scripts/assert-migrations-applied.mjs"
+    "vercel-build": "node scripts/assert-production-source.mjs && pnpm --filter @cvm/core run build && node scripts/assert-migrations-applied.mjs"
   },
   "dependencies": {
     "@cvm/core": "workspace:*",

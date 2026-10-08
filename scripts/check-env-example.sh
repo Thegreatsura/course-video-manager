@@ -9,8 +9,10 @@
 set -uo pipefail
 
 # Supplied by the runtime or by the workflow that spawns the process, never
-# by .env: OUTPUT_DIR and TSX_TSCONFIG_PATH belong to the .sandcastle harness.
-RUNTIME_KEYS=(CI NODE_ENV VITEST OUTPUT_DIR TSX_TSCONFIG_PATH PATH)
+# by .env: OUTPUT_DIR and TSX_TSCONFIG_PATH belong to the .sandcastle harness;
+# the VERCEL_* keys are Vercel system variables, set in its build.
+RUNTIME_KEYS=(CI NODE_ENV VITEST OUTPUT_DIR TSX_TSCONFIG_PATH PATH
+  VERCEL_ENV VERCEL_GIT_PROVIDER VERCEL_GIT_COMMIT_REF VERCEL_GIT_COMMIT_SHA)
 
 # Known gaps, from before this check existed. THIS LIST ONLY SHRINKS — document
 # the key in .env.example and delete its line here. Do not add one.
