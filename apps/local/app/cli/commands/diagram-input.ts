@@ -104,3 +104,23 @@ export const parseCreateInput = (
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, name: json.name as string | undefined, scenes };
 };
+
+/**
+ * What `cvm diagram snapshot add --file` reads: ONE drawing, `{ "shapes": [...] }`.
+ * A snapshot has no name of its own (the Diagram has one), and one drawing is
+ * added at a time.
+ */
+export const parseSnapshotInput = (
+  json: unknown,
+  icons: ReadonlySet<string>
+): { ok: true; scene: unknown } | { ok: false; errors: string[] } => {
+  if (isObject(json) && ("name" in json || "snapshots" in json)) {
+    return {
+      ok: false,
+      errors: [
+        'snapshot: expected { "shapes": [...] } — a snapshot has no "name", and \'snapshot add\' adds ONE drawing (no "snapshots")',
+      ],
+    };
+  }
+  return toScene(json, icons, "");
+};
