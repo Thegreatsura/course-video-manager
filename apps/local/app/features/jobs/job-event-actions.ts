@@ -177,6 +177,28 @@ export const toJobsAction = (
                 : "The export failed",
           }
         : null;
+    case "video-upload-queued":
+      return typeof data.videoId === "string"
+        ? {
+            ...base,
+            type: "batch-video-upload-queued",
+            videoId: data.videoId,
+          }
+        : null;
+    case "video-upload-progress":
+      return typeof data.videoId === "string" &&
+        typeof data.uploadedBytes === "number" &&
+        typeof data.totalBytes === "number"
+        ? {
+            ...base,
+            type: "batch-video-upload-progressed",
+            videoId: data.videoId,
+            uploadedBytes: data.uploadedBytes,
+            totalBytes: data.totalBytes,
+          }
+        : null;
+    case "published":
+      return { ...base, type: "job-published", result: { ...data } };
     case "video-handed-off":
       return typeof data.videoId === "string"
         ? { ...base, type: "batch-video-handed-off", videoId: data.videoId }

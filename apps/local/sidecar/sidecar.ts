@@ -16,7 +16,7 @@ import {
   type SidecarLease,
 } from "@cvm/core/services/db-job-operations.server";
 import { formatFailureCause } from "@/services/format-failure-cause";
-import { isPostingKind, type JobContext } from "./job-kind";
+import { isPostingKind, isRequeuedOnStop, type JobContext } from "./job-kind";
 import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import { UnknownJobKindError, type JobKindRegistry } from "./job-kinds";
@@ -277,6 +277,7 @@ export const runSidecar = <R>(opts: {
           onFailure: (cause) => {
             const interrupted = Cause.isInterruptedOnly(cause);
             const posting = isPostingKind(kindOf(job.kind));
+            const requeuedOnStop = isRequeuedOnStop(kindOf(job.kind));
             // A stop on purpose (a signal: `tsx watch` restarting after an
             // edit, Ctrl-C, verify-cvm's cleanup) is not the Job failing, so
             // it costs no attempt: the Job goes back to the queue as it was.
@@ -284,7 +285,9 @@ export const runSidecar = <R>(opts: {
             // spend one — as a dropped stream did in the browser.
             // A POST is never put back (decision 5): it may already have gone
             // out, so it ends `interrupted` and waits for the author's Retry.
-            if (interrupted && stopping && !posting) {
+            // Nor is a Publish (section 7.2): cut off after Submit, it leaves a
+            // Pending Version only the author may Promote or Discard.
+            if (interrupted && stopping && requeuedOnStop) {
               return Effect.logWarning(
                 "job interrupted: the sidecar is stopping; it goes back to the queue at the same attempt"
               ).pipe(
@@ -307,7 +310,9 @@ export const runSidecar = <R>(opts: {
                 ? Effect.logWarning(
                     posting
                       ? "job interrupted: a post is never run again on its own; it waits for the author's Retry"
-                      : "job interrupted"
+                      : requeuedOnStop
+                        ? "job interrupted"
+                        : "job interrupted: this kind is never run again on its own"
                   )
                 : Effect.logError("job failed", cause)
             ).pipe(
@@ -321,7 +326,9 @@ export const runSidecar = <R>(opts: {
                       : INTERRUPTED
                     : toJobFailure(cause),
                   interrupted,
-                  mayRetry: !posting,
+                  // A kind that is never put back is never re-run by a stop
+                  // or a lost lease either, whatever its attempts say.
+                  mayRetry: !posting && (requeuedOnStop || !interrupted),
                 })
               ),
               Effect.flatMap((outcome) =>

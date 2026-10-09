@@ -41,11 +41,17 @@ export function UploadRow({
   eta,
   logHref,
   post = null,
+  publishRecoveryHref = null,
 }: {
   upload: uploadReducer.UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
   /** A failed or interrupted post's check and Retry; `null` otherwise. */
   post?: PostRowControls | null;
+  /**
+   * An interrupted Publish: the publish page, where its Pending Version is
+   * Promoted or Discarded by hand. `null` otherwise.
+   */
+  publishRecoveryHref?: string | null;
   /** Where a background Job's log is read, for a failed row; `null` otherwise. */
   logHref: string | null;
   /** A child task, indented under the parent job that spawned it. */
@@ -67,6 +73,7 @@ export function UploadRow({
           eta={eta}
           logHref={logHref}
           post={post}
+          publishRecoveryHref={publishRecoveryHref}
         />
       </div>
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
@@ -175,11 +182,13 @@ function UploadStatusDetail({
   eta,
   logHref,
   post,
+  publishRecoveryHref,
 }: {
   upload: uploadReducer.UploadEntry;
   eta?: UploadEta;
   logHref: string | null;
   post: PostRowControls | null;
+  publishRecoveryHref: string | null;
 }) {
   switch (upload.status) {
     case "waiting":
@@ -206,6 +215,15 @@ function UploadStatusDetail({
     case "success":
       return <SuccessDetail upload={upload} />;
     case "error":
+      if (publishRecoveryHref) {
+        return (
+          <InterruptedPublishDetail
+            message={upload.errorMessage}
+            logHref={logHref}
+            recoveryHref={publishRecoveryHref}
+          />
+        );
+      }
       if (post) {
         return (
           <PostFailedDetail upload={upload} logHref={logHref} post={post} />
@@ -247,6 +265,46 @@ function UploadStatusDetail({
         </div>
       );
   }
+}
+
+/**
+ * A Publish that was cut off (plan §7.2): it never runs again on its own, and
+ * a Pending Version it may have left is reconciled on the publish page.
+ */
+function InterruptedPublishDetail({
+  message,
+  logHref,
+  recoveryHref,
+}: {
+  message: string | null;
+  logHref: string | null;
+  recoveryHref: string;
+}) {
+  return (
+    <div className="mt-0.5 space-y-1">
+      <p className="text-xs text-yellow-600 dark:text-yellow-500">{message}</p>
+      <div className="flex items-center gap-3">
+        <Link
+          to={recoveryHref}
+          className="text-xs font-medium text-foreground underline underline-offset-2 whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Promote or Discard on the publish page
+        </Link>
+        {logHref && (
+          <a
+            href={logHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View log
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const CHECK_TONE = {

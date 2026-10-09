@@ -68,7 +68,10 @@ OFFLINE='verify-cvm-offline'
 # so a run can post to a local stub and never anywhere else.
 # ANTHROPIC_BASE_URL rides along: a Course Autofill calls the model, and its
 # stub is a loopback Messages API (the AI SDK reads the variable itself).
-POSTING_URL_VARS=(YOUTUBE_API_URL GOOGLE_OAUTH_TOKEN_URL BUFFER_API_URL S3_ENDPOINT AI_HERO_BASE_URL ANTHROPIC_BASE_URL)
+# So do Dropbox's two hosts: a Publish ships its Bundle there (DROPBOX_API_URL
+# carries the RPC calls and the OAuth token refresh, DROPBOX_CONTENT_URL the
+# bytes).
+POSTING_URL_VARS=(YOUTUBE_API_URL GOOGLE_OAUTH_TOKEN_URL BUFFER_API_URL S3_ENDPOINT AI_HERO_BASE_URL ANTHROPIC_BASE_URL DROPBOX_API_URL DROPBOX_CONTENT_URL)
 DISCARD_URL='http://127.0.0.1:9'
 loopback_or_discard() {
   if [[ "${1:-}" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}(/[A-Za-z0-9._~/-]*)?$ ]]; then
@@ -92,8 +95,9 @@ OFFLINE_SERVICES_ENV=(
   "DROPBOX_APP_KEY=$OFFLINE" "DROPBOX_APP_SECRET=$OFFLINE"
   "GOOGLE_CLIENT_ID=$OFFLINE" "GOOGLE_CLIENT_SECRET=$OFFLINE"
   "OPENAI_API_KEY=$OFFLINE" "ANTHROPIC_API_KEY=$OFFLINE" "REMOVE_BG_API_KEY=$OFFLINE"
-  # YouTube, Google's token endpoint, Buffer, S3, AI Hero and Anthropic: the discard
-  # port, or a loopback stub the caller started (POSTING_URL_VARS above).
+  # YouTube, Google's token endpoint, Buffer, S3, AI Hero, Anthropic and
+  # Dropbox: the discard port, or a loopback stub the caller started
+  # (POSTING_URL_VARS above).
   "${POSTING_URLS_ENV[@]}"
 )
 

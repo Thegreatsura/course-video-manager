@@ -7,7 +7,11 @@ import { formatRemaining } from "./upload-eta";
 import type { uploadReducer } from "./upload-reducer";
 import { visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
-import { isPostingJobKind, jobLogHref } from "@/features/jobs/job-wire";
+import {
+  isPostingJobKind,
+  jobLogHref,
+  publishPageHref,
+} from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +68,14 @@ export function GlobalUploadProgress() {
         ? null
         : () => retryJob(job.id),
     };
+  };
+  /** An interrupted Publish: where its Pending Version is reconciled. */
+  const publishRecoveryHref = (uploadId: string): string | null => {
+    const job = jobs.jobs[jobIdOfRow(uploadId)];
+    if (!job || job.kind !== "publish" || job.status !== "interrupted") {
+      return null;
+    }
+    return job.subjectId ? publishPageHref(job.subjectId) : null;
   };
   const hasUploads = uploadEntries.length + jobEntries.length > 0;
 
@@ -266,6 +278,7 @@ export function GlobalUploadProgress() {
                           : null
                       }
                       post={postControls(upload.uploadId)}
+                      publishRecoveryHref={publishRecoveryHref(upload.uploadId)}
                     />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow

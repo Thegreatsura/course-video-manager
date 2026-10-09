@@ -122,34 +122,6 @@ export interface UploadContextType {
 
 export const UploadContext = createContext<UploadContextType>(null!);
 
-let nextUploadId = 0;
-const generateUploadId = () => `upload-${++nextUploadId}`;
-
-function initiateFromRegistry(
-  uploadType: uploadReducer.UploadType,
-  action: Extract<uploadReducer.Action, { type: "START_UPLOAD" }>,
-  params: unknown,
-  dispatch: (action: uploadReducer.Action) => void,
-  abortControllers: Map<string, AbortController>
-) {
-  const config = uploadTypeRegistry[uploadType];
-  if (!config.initiate) return;
-  const base: uploadReducer.BaseUploadEntry = {
-    uploadId: action.uploadId,
-    videoId: action.videoId,
-    title: action.title,
-    progress: 0,
-    status: "uploading",
-    errorMessage: null,
-    retryCount: 0,
-    terminal: false,
-    dependsOn: null,
-    parentUploadId: null,
-  };
-  const entry = config.createEntry(base, action);
-  config.initiate(action.uploadId, entry, params, dispatch, abortControllers);
-}
-
 export function UploadProvider({
   children,
   clock = Date.now,
@@ -366,6 +338,10 @@ export function UploadProvider({
     [startJob]
   );
 
+  // A Publish is a background Job: the Sidecar runs it in the `publish`
+  // lane, one at a time, so closing the tab no longer stops it. It runs once
+  // and is never re-run on its own: a Publish cut off after Submit leaves a
+  // Pending Version for the publish page's Promote / Discard.
   const startPublish = useCallback(
     (
       courseId: string,
@@ -374,39 +350,22 @@ export function UploadProvider({
       description: string,
       includeTodoLessons: boolean,
       placeholders: PlaceholderFloorBand
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = {
-        courseId,
-        name,
-        description,
-        includeTodoLessons,
-        placeholders,
-      };
-      paramsMapRef.current.set(uploadId, { type: "publish", params });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId: "",
+    ) =>
+      startJob({
+        kind: "publish",
         title: courseName,
-        uploadType: "publish" as const,
-        courseId,
-      };
-      dispatch(action);
-
-      initiateFromRegistry(
-        "publish",
-        action,
-        params,
-        dispatch,
-        abortControllersRef.current
-      );
-
-      return uploadId;
-    },
-    []
+        params: {
+          courseId,
+          name,
+          description,
+          includeTodoLessons,
+          placeholders,
+        },
+        subject: { type: "course", id: courseId },
+        attemptsSpent: 0,
+        dependsOn: null,
+      }),
+    [startJob]
   );
 
   // A Course Autofill is a background Job: the Sidecar runs it, so closing

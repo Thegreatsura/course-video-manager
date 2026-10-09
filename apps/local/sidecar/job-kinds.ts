@@ -6,6 +6,7 @@ import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
+import { publishJobKind } from "./kinds/publish";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
 import { aiHeroJobKind } from "./kinds/ai-hero";
 import { bufferJobKind } from "./kinds/buffer";
@@ -24,6 +25,8 @@ export const JOB_KINDS = {
   "render-vertical": renderVerticalJobKind,
   "batch-export": batchExportJobKind,
   autofill: autofillJobKind,
+  // The `publish` lane, one at a time; never run again on its own.
+  publish: publishJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.
   youtube: youtubeJobKind,
   "youtube-shorts": youtubeShortsJobKind,

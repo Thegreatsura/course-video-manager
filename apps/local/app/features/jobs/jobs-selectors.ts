@@ -3,8 +3,12 @@ import {
   AUTOFILL_STAGE_BANDS,
   AUTOFILL_WORK_BAND,
   EXPORT_STAGE_BANDS,
+  exportStageBands,
   fillBand,
+  PUBLISH_STAGE_BANDS,
+  PUBLISH_VIDEO_UPLOAD_BANDS,
   RENDER_VERTICAL_STAGE_BANDS,
+  withDerivedParentProgress,
 } from "@/features/upload-manager/upload-progress";
 import {
   batchVideoRowId,
@@ -296,16 +300,116 @@ const autofillUploadEntries = (
   return [parent, ...children];
 };
 
+const PUBLISH_STAGES: readonly string[] = Object.keys(PUBLISH_STAGE_BANDS);
+
+const isPublishStage = (stage: string): stage is uploadReducer.PublishStage =>
+  PUBLISH_STAGES.includes(stage);
+
+/** One shipping Video of a Publish: its encode, then its upload. */
+const publishVideoEntry = (
+  job: jobsReducer.JobView,
+  video: jobsReducer.BatchVideoView
+): uploadReducer.ExportUploadEntry => {
+  const status = batchVideoStatusOf(job, video);
+  const stage =
+    video.stage !== null && isExportStage(video.stage) ? video.stage : null;
+  const entry: uploadReducer.ExportUploadEntry = {
+    uploadId: batchVideoRowId(job.id, video.id),
+    videoId: video.id,
+    title: video.title,
+    progress: 0,
+    status,
+    errorMessage:
+      video.errorMessage ?? (status === "error" ? job.errorMessage : null),
+    retryCount: 0,
+    // The Publish already retried the export inside the service, and the
+    // Publish itself fails with it: a Video's row is never retried alone.
+    terminal: status === "error",
+    dependsOn: null,
+    parentUploadId: job.id,
+    uploadType: "export",
+    exportStage:
+      status === "uploading" && video.uploadStage === null
+        ? (stage ?? "queued")
+        : video.uploadStage === null
+          ? stage
+          : null,
+    isBatchEntry: true,
+    videoUploadStage: status === "success" ? null : video.uploadStage,
+    uploadedBytes: video.uploadedBytes,
+    totalBytes: video.totalBytes,
+  };
+  const progress =
+    status === "success"
+      ? 100
+      : video.uploadStage === "uploading"
+        ? fillBand(
+            PUBLISH_VIDEO_UPLOAD_BANDS.uploading,
+            video.totalBytes && video.totalBytes > 0
+              ? (100 * video.uploadedBytes) / video.totalBytes
+              : 0
+          )
+        : video.uploadStage === "queued-for-upload"
+          ? PUBLISH_VIDEO_UPLOAD_BANDS["queued-for-upload"].start
+          : stage === null
+            ? 0
+            : fillBand(exportStageBands(entry)[stage], video.percent ?? 0);
+  return { ...entry, progress };
+};
+
+/**
+ * A **Publish** as the browser-driven run drew it: a parent row for the
+ * Course, banded by the publish stages until its Videos are announced and
+ * then the byte-weighted mean of them (`withDerivedParentProgress`), and one
+ * child row per shipping Video, which encodes and then uploads.
+ */
+const publishUploadEntries = (
+  job: jobsReducer.JobView
+): uploadReducer.UploadEntry[] => {
+  const status = uploadStatusOf(job);
+  const stage =
+    job.stage !== null && isPublishStage(job.stage) ? job.stage : null;
+  const newDraftVersionId = stringOf(job.result?.newDraftVersionId);
+  const parent: uploadReducer.PublishUploadEntry = {
+    ...baseEntryOf(
+      job,
+      status,
+      status === "success"
+        ? 100
+        : stage === null
+          ? 0
+          : PUBLISH_STAGE_BANDS[stage].start
+    ),
+    // The parent names a Course, not a Video.
+    videoId: "",
+    terminal: status === "error",
+    uploadType: "publish",
+    publishStage: status === "success" ? null : (stage ?? "validating"),
+    newDraftVersionId,
+    courseId: job.subjectId ?? "",
+  };
+  const children = (job.videos ?? []).map((video) =>
+    publishVideoEntry(job, video)
+  );
+  const derived = withDerivedParentProgress(
+    Object.fromEntries(
+      [parent, ...children].map((entry) => [entry.uploadId, entry])
+    )
+  );
+  return [derived[parent.uploadId] ?? parent, ...children];
+};
+
 /**
  * The rows a Job draws. A Batch export draws one export row per Video, as
  * the browser-driven batch did (`isBatchEntry`); a Video it handed on is
- * drawn by its own export Job instead. An Autofill draws a parent row and a
- * child row per Video. Every other kind draws one row.
+ * drawn by its own export Job instead. An Autofill and a Publish draw a
+ * parent row and a child row per Video. Every other kind draws one row.
  */
 export const jobUploadEntries = (
   job: jobsReducer.JobView
 ): uploadReducer.UploadEntry[] => {
   if (job.kind === "autofill") return autofillUploadEntries(job);
+  if (job.kind === "publish") return publishUploadEntries(job);
   if (job.kind !== "batch-export") {
     const entry = jobUploadEntry(job);
     return entry ? [entry] : [];

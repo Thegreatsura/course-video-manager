@@ -45,6 +45,14 @@ export interface RetryingJobPolicy {
   readonly lane: LaneName;
   readonly maxAttempts: number;
   readonly posting?: false;
+  /**
+   * `true` for a kind that must never run again on its own, not even after a
+   * deliberate stop (section 7.5 puts every other kind back at the same
+   * attempt). A Publish cut off halfway leaves a Pending Version that only
+   * the author may Promote or Discard (section 7.2), so a stop ends it
+   * `interrupted`, as a crash does.
+   */
+  readonly neverRequeued?: true;
 }
 
 /**
@@ -100,7 +108,13 @@ export const UPLOAD_MANAGER_POLICIES = {
    * the batch; its Videos carry the retries (`kinds/batch-export.ts`).
    */
   "batch-export": { lane: "default", maxAttempts: 1 },
-  publish: { lane: "publish", maxAttempts: 1 },
+  /**
+   * A Publish: every failure was `UPLOAD_FATAL_ERROR` (1 attempt), and it
+   * held `courseVersionMutationSemaphore`, one permit — the `publish` lane.
+   * It is never put back after a stop either (`neverRequeued`): a run cut off
+   * after Submit leaves a Pending Version for the author (section 7.2).
+   */
+  publish: { lane: "publish", maxAttempts: 1, neverRequeued: true },
   autofill: { lane: "default", maxAttempts: 1 },
 } as const satisfies Record<string, JobPolicy>;
 
