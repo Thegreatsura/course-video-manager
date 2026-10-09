@@ -6,6 +6,10 @@ import { readFileSync } from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
 import { ICON_NAMES } from "@cvm/lucide-icons";
+import {
+  readSimpleDiagram,
+  type Scene,
+} from "@cvm/core/lib/simple-diagram/index";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import {
   DiagramRenderError,
@@ -23,6 +27,7 @@ import {
 } from "@/cli/local-only";
 import {
   CREATE_HELP,
+  GET_HELP,
   HELP,
   RENDER_HELP,
   SNAPSHOT_ADD_HELP,
@@ -40,7 +45,8 @@ import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
  * preserved first); neither writes the head itself. Both check the file, DRAW
  * every snapshot, and only then write — so the one failure an agent cannot fix
  * in its JSON (the app is not running) leaves nothing behind. `render` draws a
- * snapshot that is already stored, never the head.
+ * snapshot that is already stored, never the head. `get` only reads: the head
+ * and the snapshots, in the simple format.
  */
 
 const ENTITY = "diagram";
@@ -235,7 +241,69 @@ const renderCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(RENDER_HELP)));
 
+/** A stored scene's shapes in the simple format; no scene (a new head) has none. */
+const shapesOf = (scene: unknown) => {
+  const store = (scene as Partial<Scene> | null)?.store;
+  return store && typeof store === "object"
+    ? readSimpleDiagram(store).shapes
+    : [];
+};
+
+const getCmd = Command.make(
+  "get",
+  {
+    diagramId: entityIdArg("diagram", "diagramId"),
+    snapshot: Options.text("snapshot").pipe(
+      Options.withDescription(
+        "Print this one DiagramSnapshot's drawing instead of the head and the list."
+      ),
+      Options.optional
+    ),
+  },
+  ({ diagramId, snapshot }) =>
+    Effect.gen(function* () {
+      const diagrams = yield* DiagramOperationsService;
+      const diagram = yield* diagrams
+        .getDiagram(diagramId)
+        .pipe(
+          Effect.catchTag("NotFoundError", () => notFound(ENTITY, diagramId))
+        );
+
+      if (Option.isSome(snapshot)) {
+        const missing = () => notFound("diagram snapshot", snapshot.value);
+        const one = yield* diagrams
+          .getDiagramSnapshot(snapshot.value)
+          .pipe(Effect.catchTag("NotFoundError", missing));
+        if (one.diagramId !== diagram.id) return yield* missing();
+        yield* emitNdjson([
+          { snapshotId: one.id, shapes: shapesOf(one.scene) },
+        ]);
+        return;
+      }
+
+      const snapshots = yield* diagrams.listSnapshotsWithClips(diagram.id);
+      yield* emitNdjson([
+        {
+          id: diagram.id,
+          name: diagram.name,
+          url: entityDeepLink(
+            { type: "diagram", id: diagram.id },
+            resolveAppUrl()
+          ),
+          head: { shapes: shapesOf(diagram.headScene) },
+          snapshots: snapshots.map((s) => ({
+            id: s.id,
+            preserved: s.preserved,
+            clipIds: s.clips.filter((c) => !c.archived).map((c) => c.id),
+            diagramText: s.searchText ?? "",
+            createdAt: s.createdAt,
+          })),
+        },
+      ]);
+    })
+).pipe(Command.withDescription(detail(GET_HELP)));
+
 export const diagramCommand = Command.make("diagram").pipe(
   Command.withDescription(detail(HELP)),
-  Command.withSubcommands([createCmd, snapshotCmd, renderCmd])
+  Command.withSubcommands([createCmd, snapshotCmd, renderCmd, getCmd])
 );
