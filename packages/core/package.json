@@ -21,11 +21,15 @@
     "drizzle-orm": "^0.44.3",
     "effect": "^3.17.1",
     "fractional-indexing": "^3.2.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "zod": "^4.1.1"
   },
   "devDependencies": {
     "@effect/vitest": "^0.27.0",
     "@electric-sql/pglite": "^0.3.15",
+    "@tldraw/store": "5.2.4",
+    "@tldraw/tlschema": "5.2.4",
+    "@tldraw/validate": "5.2.4",
     "@types/node": "^20",
     "@types/pg": "^8.21.0",
     "dependency-cruiser": "^18.0.0",
