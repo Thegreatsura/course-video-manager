@@ -176,15 +176,15 @@ export const VideoPlayerPanel = () => {
   );
   const isAddVideoModalOpen = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.isAddVideoModalOpen
+    (ctx) => ctx.openModal === "add-video"
   );
-  const setIsAddVideoModalOpen = useContextSelector(
+  const onAddVideoModalOpenChange = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.setIsAddVideoModalOpen
+    (ctx) => ctx.onModalOpenChange["add-video"]
   );
-  const onAddNoteFromClipboard = useContextSelector(
+  const modalDispatch = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.onAddNoteFromClipboard
+    (ctx) => ctx.modalDispatch
   );
   const items = useContextSelector(VideoEditorContext, (ctx) => ctx.items);
   const fsData = useContextSelector(VideoEditorContext, (ctx) => ctx.fsData);
@@ -204,17 +204,12 @@ export const VideoPlayerPanel = () => {
     "suggestions" | "toc" | "links" | "more"
   >("suggestions");
 
-  // Suggestion state from context (shared with ClipTimeline)
-  const setSuggestionState = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setSuggestionState
-  );
-
+  // The Suggestions panel reports its state up; the timeline shows it inline.
   const handleSuggestionStateChange = useCallback(
-    (state: SuggestionState) => {
-      setSuggestionState(state);
+    (suggestion: SuggestionState) => {
+      modalDispatch({ type: "suggestion-changed", suggestion });
     },
-    [setSuggestionState]
+    [modalDispatch]
   );
 
   const lastTranscribedClipId = useMemo(
@@ -328,7 +323,9 @@ export const VideoPlayerPanel = () => {
         ? undefined
         : "Waiting for transcription to complete",
     },
-    addVideoToLesson: lessonId ? () => setIsAddVideoModalOpen(true) : undefined,
+    addVideoToLesson: lessonId
+      ? () => modalDispatch({ type: "add-video-to-lesson-clicked" })
+      : undefined,
   });
   return (
     <>
@@ -437,7 +434,12 @@ export const VideoPlayerPanel = () => {
               allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
               isPending={exportToDavinciResolveFetcher.state === "submitting"}
             />
-            <Button variant="secondary" onClick={onAddNoteFromClipboard}>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                modalDispatch({ type: "add-note-from-clipboard-clicked" })
+              }
+            >
               <ClipboardIcon className="w-4 h-4 mr-1" />
               Add Note
             </Button>
@@ -510,7 +512,7 @@ export const VideoPlayerPanel = () => {
           lessonId={lessonId}
           videoCount={videoCount}
           open={isAddVideoModalOpen}
-          onOpenChange={setIsAddVideoModalOpen}
+          onOpenChange={onAddVideoModalOpenChange}
         />
       </Suspense>
 

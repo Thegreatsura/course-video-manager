@@ -1,11 +1,6 @@
 {
   "use-state": [
     {
-      "file": "apps/local/app/components/app-sidebar.tsx",
-      "count": 5,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 2."
-    },
-    {
       "file": "apps/local/app/features/animatic/animatic-comments.tsx",
       "count": 6,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
@@ -19,11 +14,6 @@
       "file": "apps/local/app/features/diagrams/palette/use-palette.ts",
       "count": 9,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 8."
-    },
-    {
-      "file": "apps/local/app/features/video-editor/video-editor.tsx",
-      "count": 6,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 2."
     },
     {
       "file": "apps/local/app/features/video-posting/ai-hero-page.tsx",

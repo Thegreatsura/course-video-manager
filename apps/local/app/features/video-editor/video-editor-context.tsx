@@ -11,6 +11,7 @@ import type {
 } from "./clip-state-reducer";
 import type { SessionPanelData } from "./video-editor-selectors";
 import type { videoStateReducer } from "./video-state-reducer";
+import type { editorModalsReducer } from "./editor-modals-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
@@ -152,21 +153,14 @@ export type VideoEditorContextType = {
   isCopied: boolean;
   isChaptersCopied: boolean;
 
-  // Modal state (local useState, passed through context for access)
   exportToDavinciResolveFetcher: FetcherWithComponents<unknown>;
-  isAddVideoModalOpen: boolean;
-  setIsAddVideoModalOpen: (value: boolean) => void;
-  onAddNoteFromClipboard: () => void;
-  isRenameVideoModalOpen: boolean;
-  setIsRenameVideoModalOpen: (value: boolean) => void;
-  isCopyVideoModalOpen: boolean;
-  setIsCopyVideoModalOpen: (value: boolean) => void;
-  isCreateVideoModalOpen: boolean;
-  setIsCreateVideoModalOpen: (value: boolean) => void;
 
-  // Suggestion state for inline display
+  // From editorModalsReducer: the open dialog and the inline suggestion
+  openModal: editorModalsReducer.Modal | null;
+  modalDispatch: (action: editorModalsReducer.Action) => void;
+  /** Each dialog's `onOpenChange`; stable, so a dialog may list it in an effect. */
+  onModalOpenChange: Record<editorModalsReducer.Modal, (open: boolean) => void>;
   suggestionState: SuggestionState;
-  setSuggestionState: (state: SuggestionState) => void;
 
   // AI Chapter generation
   onOpenAutofillChaptersModal: () => void;
