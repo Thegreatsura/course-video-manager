@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1-3 are done; batch 4 (posting) is in progress (section 7.7). Matt's decisions are in section 6;
+**Status:** Batches 1-4 are done (batch 4, posting: section 7.7). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -523,3 +523,31 @@ Google's URLs; verify-cvm sets every posting base URL to the discard port
 unless the caller exports a strict loopback URL.
 
 No migration: `interrupted` already existed.
+
+**Second PR: Buffer, AI Hero and Skills Changelog.** Each is a posting kind
+(`kinds/buffer.ts`, `kinds/ai-hero.ts`, `kinds/skills-changelog.ts`), and the
+guard test now requires all five posting types to be registered. Deleted:
+`api.videos.$videoId.post-social.ts`, `post-ai-hero.ts`,
+`post-skills-changelog.ts` and `sse-social-client.ts`, `sse-ai-hero-client.ts`,
+`sse-skills-changelog-client.ts`. `bufferPostProgram`, `postToAiHero` and
+`postSkillsChangelogToAiHero` ask for `SidecarContext`. `S3_ENDPOINT` points the
+object store at a path-style stand-in.
+
+What each check can say:
+
+| Kind             | How it looks                                                     | Can say                                                                                 |
+| ---------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| YouTube, Shorts  | the channel's latest 50 uploads, by title, since the run started | posted (with link) / not posted                                                         |
+| Buffer           | the `video_post` row this run wrote                              | posted (Buffer gave an id) / not posted (no row) / unknown (cut off mid-upload or post) |
+| AI Hero          | `GET /api/posts?slugOrId=<slug>`                                 | a post with that slug exists (with state) / not posted; unknown with no slug            |
+| Skills Changelog | nothing: AI Hero picks the slug                                  | always unknown, says where to look                                                      |
+
+**A dead Buffer key** (`BufferAuthError`, #1884) fails the Job before any
+upload, after one pre-flight request; the row and toast carry the fix
+(`BUFFER_AUTH_ERROR_MESSAGE`) and no Retry. Fix the key, then post again.
+
+Left for later: the spawn guard's dependency-cruiser rule and
+`FfmpegRun` / `OverlayContentRenderer` behind `SidecarContext` wait for
+Publish (batch 6); the Upload Manager's `server-job-succeeded` /
+`server-job-failed` actions and the posting entries' browser config go with
+`upload-reducer.ts` in batch 8.

@@ -9,8 +9,13 @@ export class ObjectStoreError extends Data.TaggedError("ObjectStoreError")<{
 const createObjectStoreOperations = (opts: {
   bucket: string;
   region: string;
+  /** A local stand-in for S3 (`S3_ENDPOINT`), path-style; `null` for AWS. */
+  endpoint: string | null;
 }) => {
-  const client = new S3Client({ region: opts.region });
+  const client = new S3Client({
+    region: opts.region,
+    ...(opts.endpoint ? { endpoint: opts.endpoint, forcePathStyle: true } : {}),
+  });
 
   return {
     upload: (uploadOpts: {
@@ -59,7 +64,9 @@ const createObjectStoreOperations = (opts: {
 
         uploadOpts.onProgress?.(100);
 
-        const url = `https://${opts.bucket}.s3.${opts.region}.amazonaws.com/${uploadOpts.pathname}`;
+        const url = opts.endpoint
+          ? `${opts.endpoint}/${opts.bucket}/${uploadOpts.pathname}`
+          : `https://${opts.bucket}.s3.${opts.region}.amazonaws.com/${uploadOpts.pathname}`;
         return { url };
       }),
   };
@@ -71,7 +78,15 @@ export class ObjectStoreService extends Effect.Service<ObjectStoreService>()(
     effect: Effect.gen(function* () {
       const bucket = yield* Config.string("S3_BUCKET");
       const region = yield* Config.string("AWS_REGION");
-      return createObjectStoreOperations({ bucket, region });
+      // Overridable so a verification run uploads to a local stub; nothing
+      // sets it day to day. verify-cvm defaults it to a dead port.
+      const endpoint = yield* Config.string("S3_ENDPOINT").pipe(
+        Config.option,
+        Config.map((o) =>
+          o._tag === "Some" ? o.value.replace(/\/+$/, "") : null
+        )
+      );
+      return createObjectStoreOperations({ bucket, region, endpoint });
     }),
     dependencies: [],
   }

@@ -4,13 +4,20 @@ import { VideoPostOperationsService } from "@/services/db-video-post-operations.
 import { BufferApiService } from "@/services/buffer-api-service.server";
 import { ObjectStoreService } from "@/services/object-store-service.server";
 import type { SendEvent } from "@/lib/create-sse-response.server";
+import { SidecarContext } from "@/services/sidecar-context";
 
+/**
+ * Post a vertical Short to Buffer. It POSTS, so it runs only in the Sidecar
+ * (`SidecarContext`), as a posting Job that runs once (decision 5 in
+ * docs/plans/background-jobs-sidecar.md).
+ */
 export const bufferPostProgram = (opts: {
   videoId: string;
   caption: string;
   sendEvent: SendEvent;
 }) =>
   Effect.gen(function* () {
+    yield* SidecarContext;
     const finishedDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");
     const channelId = yield* Config.string("BUFFER_CHANNEL_ID");
     const fs = yield* FileSystem.FileSystem;

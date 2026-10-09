@@ -1,10 +1,7 @@
 import type { uploadReducer } from "./upload-reducer";
 import { autofillConfig } from "./upload-type-autofill";
-import { startSSEAiHeroPost } from "./sse-ai-hero-client";
 import { startSSEPublish } from "./sse-publish-client";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
-import { startSSESkillsChangelogPost } from "./sse-skills-changelog-client";
-import { startSSESocialPost } from "./sse-social-client";
 
 type StartUploadAction = Extract<
   uploadReducer.Action,
@@ -202,37 +199,9 @@ const bufferConfig: UploadTypeConfig<
     bufferStage: null,
   }),
 
-  initiate: (uploadId, entry, params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSESocialPost(
-        { videoId: entry.videoId, caption: params.caption },
-        {
-          onProgress: (percentage) => {
-            dispatch({
-              type: "UPDATE_PROGRESS",
-              uploadId,
-              progress: percentage,
-            });
-          },
-          onStageChange: (stage) => {
-            dispatch({ type: "UPDATE_BUFFER_STAGE", uploadId, stage });
-          },
-          onComplete: () => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A Buffer post is a posting Job: the Sidecar runs it, once
+  // (`startSocialUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: true,
 };
@@ -267,40 +236,9 @@ const aiHeroConfig: UploadTypeConfig<
     aiHeroSlug: action.aiHeroSlug ?? null,
   }),
 
-  initiate: (uploadId, entry, params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSEAiHeroPost(
-        {
-          videoId: entry.videoId,
-          title: entry.title,
-          body: params.body,
-          description: params.description,
-          slug: params.slug,
-        },
-        {
-          onProgress: (percentage) => {
-            dispatch({
-              type: "UPDATE_PROGRESS",
-              uploadId,
-              progress: percentage,
-            });
-          },
-          onComplete: (aiHeroSlug) => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId, aiHeroSlug });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // An AI Hero post is a posting Job: the Sidecar runs it, once
+  // (`startAiHeroUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: true,
 };
@@ -338,47 +276,9 @@ const skillsChangelogConfig: UploadTypeConfig<
     skillsChangelogSlug: action.skillsChangelogSlug ?? null,
   }),
 
-  initiate: (uploadId, entry, params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSESkillsChangelogPost(
-        {
-          videoId: entry.videoId,
-          title: entry.title,
-          slug: params.slug,
-          body: params.body,
-          description: params.description,
-          newsletterSubject: params.newsletterSubject,
-          newsletterPreviewText: params.newsletterPreviewText,
-          newsletterCopy: params.newsletterCopy,
-        },
-        {
-          onProgress: (percentage) => {
-            dispatch({
-              type: "UPDATE_PROGRESS",
-              uploadId,
-              progress: percentage,
-            });
-          },
-          onComplete: (skillsChangelogSlug) => {
-            dispatch({
-              type: "UPLOAD_SUCCESS",
-              uploadId,
-              skillsChangelogSlug,
-            });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A Skills Changelog post is a posting Job: the Sidecar runs it,
+  // once (`startSkillsChangelogUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: true,
 };

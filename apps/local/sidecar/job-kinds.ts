@@ -6,6 +6,9 @@ import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
+import { aiHeroJobKind } from "./kinds/ai-hero";
+import { bufferJobKind } from "./kinds/buffer";
+import { skillsChangelogJobKind } from "./kinds/skills-changelog";
 import { youtubeJobKind } from "./kinds/youtube";
 import { youtubeShortsJobKind } from "./kinds/youtube-shorts";
 import type { SidecarContext } from "@/services/sidecar-context";
@@ -22,6 +25,9 @@ export const JOB_KINDS = {
   // Posting kinds (decision 5): one attempt each, never re-queued.
   youtube: youtubeJobKind,
   "youtube-shorts": youtubeShortsJobKind,
+  buffer: bufferJobKind,
+  "ai-hero": aiHeroJobKind,
+  "skills-changelog": skillsChangelogJobKind,
 } as const satisfies Record<string, JobKind<JobServices>>;
 
 export type JobKindName = keyof typeof JOB_KINDS;

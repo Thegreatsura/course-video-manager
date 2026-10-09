@@ -4,6 +4,7 @@ import { useContext, useEffect, useState } from "react";
 import { hasLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
+import { findVideoJobRow } from "@/features/jobs/jobs-selectors";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -76,17 +77,18 @@ export function SkillsChangelogPage({
     setNewsletterCopy,
   } = useSkillsChangelogForm(videoId);
 
-  const { uploads, startSkillsChangelogUpload, startExportUpload } =
+  const { jobs, startSkillsChangelogUpload, startExportUpload } =
     useContext(UploadContext);
 
-  const activeUpload = Object.values(uploads).find(
-    (u) =>
-      u.uploadType === "skills-changelog" &&
-      u.videoId === videoId &&
-      (u.status === "uploading" ||
-        u.status === "retrying" ||
-        u.status === "waiting")
-  );
+  // This Video's skills-changelog post: a posting Job the Sidecar runs.
+  const jobRow = findVideoJobRow(jobs, videoId, "skills-changelog");
+  const activeUpload =
+    jobRow &&
+    (jobRow.status === "uploading" ||
+      jobRow.status === "retrying" ||
+      jobRow.status === "waiting")
+      ? jobRow
+      : undefined;
 
   const [storedSlug, setStoredSlug] = useState<string | null>(null);
 
@@ -97,21 +99,14 @@ export function SkillsChangelogPage({
   }, [videoId]);
 
   useEffect(() => {
-    for (const upload of Object.values(uploads)) {
-      if (
-        upload.uploadType === "skills-changelog" &&
-        upload.videoId === videoId &&
-        upload.status === "success" &&
-        upload.skillsChangelogSlug
-      ) {
-        localStorage.setItem(
-          SLUG_STORAGE_KEY(videoId),
-          upload.skillsChangelogSlug
-        );
-        setStoredSlug(upload.skillsChangelogSlug);
-      }
+    if (jobRow?.status === "success" && jobRow.skillsChangelogSlug) {
+      localStorage.setItem(
+        SLUG_STORAGE_KEY(videoId),
+        jobRow.skillsChangelogSlug
+      );
+      setStoredSlug(jobRow.skillsChangelogSlug);
     }
-  }, [uploads, videoId]);
+  }, [jobRow, videoId]);
 
   const isDescriptionTooLong = description.length > 160;
 

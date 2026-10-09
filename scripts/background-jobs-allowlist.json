@@ -14,29 +14,9 @@
       "file": "apps/local/app/routes/api.videos.$videoId.autofill-chapters.ts",
       "count": 1,
       "reason": "Interactive, not background work: the chapter Autofill modal streams to the person watching it (the plan's question 5). Stays."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.post-ai-hero.ts",
-      "count": 1,
-      "reason": "AI Hero post (#4). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.post-skills-changelog.ts",
-      "count": 1,
-      "reason": "Skills Changelog post (#5). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.post-social.ts",
-      "count": 1,
-      "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
     }
   ],
   "browser-driver": [
-    {
-      "file": "apps/local/app/features/upload-manager/sse-ai-hero-client.ts",
-      "count": 1,
-      "reason": "AI Hero post (#4). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
     {
       "file": "apps/local/app/features/upload-manager/sse-autofill-client.ts",
       "count": 1,
@@ -46,16 +26,6 @@
       "file": "apps/local/app/features/upload-manager/sse-publish-client.ts",
       "count": 1,
       "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
-    },
-    {
-      "file": "apps/local/app/features/upload-manager/sse-skills-changelog-client.ts",
-      "count": 1,
-      "reason": "Skills Changelog post (#5). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/features/upload-manager/sse-social-client.ts",
-      "count": 1,
-      "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
     },
     {
       "file": "apps/local/app/features/video-editor/components/autofill-chapters-modal.tsx",
