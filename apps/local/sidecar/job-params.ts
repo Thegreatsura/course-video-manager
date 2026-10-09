@@ -37,6 +37,16 @@ export const JOB_PARAMS = {
   "transcribe-clips": Schema.Struct({
     clipIds: Schema.NonEmptyArray(Schema.String),
   }),
+  /** A body whose local images go to Cloudinary; the body itself is never written back. */
+  "upload-images": Schema.Struct({
+    videoId: Schema.String,
+    body: Schema.String,
+  }),
+  /** Local image files the tab swapped Cloudinary URLs in for; at least one. */
+  "remove-local-images": Schema.Struct({
+    videoId: Schema.String,
+    filePaths: Schema.NonEmptyArray(Schema.String),
+  }),
   /** One Footage file, by its absolute path (Footage has no row). */
   "transcribe-footage": Schema.Struct({
     path: Schema.String.pipe(

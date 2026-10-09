@@ -152,8 +152,8 @@ local stub that answers `POST /v1/audio/transcriptions` (the server and the
 sidecar both inherit it); everything else in the render runs for real.
 **Posting never leaves the box.** Every posting service's base URL —
 `YOUTUBE_API_URL`, `GOOGLE_OAUTH_TOKEN_URL`, `BUFFER_API_URL`, `S3_ENDPOINT`,
-`AI_HERO_BASE_URL`, and Dropbox's `DROPBOX_API_URL` and `DROPBOX_CONTENT_URL`
-— is set to the discard port (127.0.0.1:9) on a clone run.
+`AI_HERO_BASE_URL`, `DROPBOX_API_URL`, `DROPBOX_CONTENT_URL` and
+`CLOUDINARY_UPLOAD_PREFIX` — is set to the discard port (127.0.0.1:9) on a clone run.
 To see a post succeed, start a local stub and export the variable as a plain
 loopback URL (`http://127.0.0.1:<port>` or `http://localhost:<port>`, a path at
 most) before `launch`; anything else is replaced by the discard port. Read
