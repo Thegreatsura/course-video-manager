@@ -12,6 +12,7 @@ import {
 import { ICON_NAMES } from "@cvm/lucide-icons";
 import {
   CREATE_HELP,
+  GET_HELP,
   HELP,
   RENDER_HELP,
   SNAPSHOT_ADD_HELP,
@@ -193,6 +194,30 @@ describe("cvm diagram --help documents what 'create' accepts", () => {
   });
 });
 
+describe("cvm diagram get --help documents what 'get' prints", () => {
+  it("documents the head and every snapshot field", () => {
+    const output = GET_HELP.slice(GET_HELP.indexOf("Output:"));
+    expect(output).toMatch(
+      /\{"id":"…","name":"…","url":"…","head":\{"shapes":\[…\]\},\s+"snapshots":\[\{"id":"…","preserved":true,"clipIds":\[…\],"diagramText":"…","createdAt":"…"\}/
+    );
+    for (const field of ["id", "name", "url", "head", "snapshots"]) {
+      expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
+    }
+    for (const field of ["preserved", "clipIds", "diagramText", "createdAt"]) {
+      expect(output).toMatch(new RegExp(`^ {4}${field} `, "m"));
+    }
+  });
+
+  it("documents --snapshot's output and the 'other' shape", () => {
+    expect(GET_HELP).toContain('{"snapshotId":"…","shapes":[…]}');
+    expect(GET_HELP).toContain('{"type":"other","id":"…"}');
+  });
+
+  it("puts the --snapshot flag before the id", () => {
+    expect(GET_HELP).toContain("cvm diagram get --snapshot 9c41… 3f2a…");
+  });
+});
+
 describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
   const icons = new Set<string>(ICON_NAMES);
 
@@ -202,6 +227,7 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
       "create --file <path|->",
       "snapshot add --file <path|-> <diagramId>",
       "render <snapshotId>",
+      "get [--snapshot <snapshotId>] <diagramId>",
     ]);
   });
 

@@ -22,4 +22,7 @@ export const diagramService = (client: RpcClient) =>
     getDiagramSnapshot: rpcMethod((json) =>
       client.rpc.diagram.getDiagramSnapshot.$post({ json })
     ),
+    listSnapshotsWithClips: rpcMethod((json) =>
+      client.rpc.diagram.listSnapshotsWithClips.$post({ json })
+    ),
   }) satisfies RemoteService<DiagramOperationsService>;
