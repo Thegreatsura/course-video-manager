@@ -3,7 +3,7 @@ import { FileSystem } from "@effect/platform";
 import { Config, ConfigProvider, Effect, Option } from "effect";
 import { homedir } from "node:os";
 import path from "node:path";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import {
   computeFileContentHash,
   readFootageTranscript,
@@ -107,13 +107,13 @@ const listCmd = Command.make("list", { dir: dirOption }, ({ dir }) =>
 /**
  * The heavy service graph `footage transcribe` runs its Whisper/ffmpeg work
  * inside, built LOCALLY here rather than merged into the shared cliRuntime —
- * exactly like `course publish` (see course-publish.ts): VideoProcessingService
+ * exactly like `course publish` (see course-publish.ts): WhisperTranscriptionService
  * reads OPENAI_API_KEY at BUILD time, and no read command should have to satisfy
  * that key. It is only reached on the branch below where the service was not
- * already provided — which is what lets a test inject a fake VideoProcessingService
+ * already provided — which is what lets a test inject a fake WhisperTranscriptionService
  * and never touch real ffmpeg or OpenAI.
  */
-const footageProcessingLayer = VideoProcessingService.Default;
+const footageProcessingLayer = WhisperTranscriptionService.Default;
 
 const transcribeCmd = Command.make(
   "transcribe",
@@ -130,18 +130,18 @@ const transcribeCmd = Command.make(
         );
       }
 
-      // Use an ambiently-provided VideoProcessingService if there is one (a test
+      // Use an ambiently-provided WhisperTranscriptionService if there is one (a test
       // fake); otherwise build the real one here. loadRepoEnv MUST run OUTSIDE
       // the provided effect: Effect.provide builds footageProcessingLayer before
       // the inner effect starts, and the layer reads OPENAI_API_KEY at build time.
-      const provided = yield* Effect.serviceOption(VideoProcessingService);
+      const provided = yield* Effect.serviceOption(WhisperTranscriptionService);
       const transcript = yield* Option.match(provided, {
         onSome: (svc) => svc.transcribeFootageFile(sourcePath),
         onNone: () =>
           Effect.sync(() => loadRepoEnv()).pipe(
             Effect.zipRight(
               Effect.gen(function* () {
-                const svc = yield* VideoProcessingService;
+                const svc = yield* WhisperTranscriptionService;
                 return yield* svc.transcribeFootageFile(sourcePath);
               }).pipe(
                 Effect.provide(footageProcessingLayer),

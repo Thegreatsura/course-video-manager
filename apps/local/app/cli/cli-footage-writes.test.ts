@@ -4,7 +4,7 @@ import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
 import { createTestDb, type TestDb } from "@/test-utils/pglite";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
@@ -20,8 +20,8 @@ import {
 //
 // Footage has NO database row — its identity is a path and its transcript is a
 // sidecar file on disk. These verbs touch the DISK (and would run ffmpeg +
-// Whisper), so the whole VideoProcessingService is FAKED via
-// Layer.succeed(VideoProcessingService, {...}) — the same pattern as
+// Whisper), so the whole WhisperTranscriptionService is FAKED via
+// Layer.succeed(WhisperTranscriptionService, {...}) — the same pattern as
 // render-vertical-video-service.test.ts — and NO real ffmpeg / OpenAI ever
 // runs. Touching the disk is also what makes footage LOCAL-ONLY, so the suite
 // declares the machine local the way cli-file-writes.test.ts does; the refusals
@@ -40,9 +40,9 @@ const FAKE_TRANSCRIPT = {
 // A fake whose transcribeFootageFile ignores its input and returns a canned
 // transcript — the command under test is what hashes the source and writes the
 // sidecar, so this never has to be real.
-const fakeVideoProcessing = Layer.succeed(VideoProcessingService, {
+const fakeVideoProcessing = Layer.succeed(WhisperTranscriptionService, {
   transcribeFootageFile: () => Effect.succeed(FAKE_TRANSCRIPT),
-} as unknown as VideoProcessingService);
+} as unknown as WhisperTranscriptionService);
 
 let testDb: TestDb;
 let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;

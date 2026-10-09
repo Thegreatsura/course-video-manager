@@ -51,8 +51,13 @@
     },
     {
       "file": "apps/local/app/services/video-processing-service.ts",
-      "count": 5,
-      "reason": "Interactive, on the app server: the first/last frame of a recording, the DaVinci Resolve script, and the audio a transcription uploads to Whisper (a clip's; the vertical Short's, in the Sidecar). Clip transcription (#12) moves to the Sidecar in batch 7 of docs/plans/background-jobs-sidecar.md."
+      "count": 3,
+      "reason": "Interactive, on the app server: the first/last frame of a recording and the DaVinci Resolve script. A person waits on each for a moment. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
+    },
+    {
+      "file": "apps/local/app/services/whisper-transcription-service.ts",
+      "count": 1,
+      "reason": "Sidecar only (and `cvm footage transcribe`): ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job) or a vertical Short (the render-vertical Job). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
     },
     {
       "file": "apps/local/app/services/footage-transcription.ts",

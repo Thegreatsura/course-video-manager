@@ -6,13 +6,15 @@ import { OverlayRenderCacheService } from "@/services/overlay-render-cache.serve
 import { RenderVerticalVideoService } from "@/services/render-vertical-video-service";
 import { SidecarContextLive } from "@/services/sidecar-context";
 import { VideoExportService } from "@/services/video-export-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 
 /**
  * The work only the **Sidecar** does: the encodes (`FFmpegEncodeService`,
  * through `ffmpeg-run.ts`), the Overlay renderer (Remotion's `bin.mjs`, behind
  * `OverlayRenderCacheService`), and the services built on them — a course
- * export, a Batch export and a Publish (`CoursePublishService`), and the
- * vertical Short (`RenderVerticalVideoService`).
+ * export, a Batch export and a Publish (`CoursePublishService`), the
+ * vertical Short (`RenderVerticalVideoService`), and Whisper transcription
+ * (`WhisperTranscriptionService`: ffmpeg extracts a Clip's audio for it).
  *
  * None of it is in the app server's `layerLive`, and no module a route can
  * reach imports this file (`.dependency-cruiser.cjs`,
@@ -28,7 +30,8 @@ const encodeLayer = Layer.mergeAll(
 
 export const sidecarLayer = Layer.mergeAll(
   CoursePublishService.Default,
-  RenderVerticalVideoService.Default
+  RenderVerticalVideoService.Default,
+  WhisperTranscriptionService.Default
 ).pipe(
   Layer.provideMerge(encodeLayer),
   Layer.provideMerge(layerLive),

@@ -11,6 +11,7 @@ import type { OverlayRenderCacheService } from "./overlay-render-cache.server";
 import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import type { SidecarContext } from "./sidecar-context";
 import type { VideoExportService } from "./video-export-service";
+import { WhisperTranscriptionService } from "./whisper-transcription-service";
 import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
 // The runtime guard of docs/plans/background-jobs-sidecar.md, section 3.7:
@@ -37,6 +38,7 @@ describe("SidecarContext", () => {
         | FFmpegEncodeService
         | VideoExportService
         | OverlayRenderCacheService
+        | WhisperTranscriptionService
       >
     >().toEqualTypeOf<never>();
     expectTypeOf<
@@ -76,6 +78,19 @@ describe("SidecarContext", () => {
       service.renderVerticalVideo({ videoId: "a-video" })
     );
     expectTypeOf<NeedsSidecar<typeof render>>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a Clip transcription and a whole-Video transcription need the Sidecar", () => {
+    const clips = Effect.flatMap(WhisperTranscriptionService, (whisper) =>
+      whisper.transcribeClips([
+        { id: "a-clip", inputVideo: "a.mp4", startTime: 0, duration: 1 },
+      ])
+    );
+    expectTypeOf<NeedsSidecar<typeof clips>>().toEqualTypeOf<SidecarContext>();
+    const video = Effect.flatMap(WhisperTranscriptionService, (whisper) =>
+      whisper.transcribeVideoFile("a.mp4")
+    );
+    expectTypeOf<NeedsSidecar<typeof video>>().toEqualTypeOf<SidecarContext>();
   });
 
   it("a Batch export, a Video export and a Publish need the Sidecar", () => {

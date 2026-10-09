@@ -19,7 +19,7 @@ import { buildWriteLayer, type RunResult } from "./cli-write-test-harness";
  * the suites would start the Clip Mockup daemon and load Kokoro onto a GPU for
  * real. The whole
  * ClipMockupSpeechService is replaced by `Layer.succeed`, exactly as the
- * `cvm footage` suite replaces VideoProcessingService to keep real ffmpeg and
+ * `cvm footage` suite replaces WhisperTranscriptionService to keep real ffmpeg and
  * real Whisper out of the run. NO MODEL IS EVER LOADED IN A TEST.
  *
  * What makes the fake REACHABLE is the `Effect.serviceOption` branch in

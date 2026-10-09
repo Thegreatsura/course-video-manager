@@ -41,7 +41,7 @@ NOT_A_COMMENT='^[0-9]+[:-][[:space:]]*($|//|\*|/\*)'
 # Where a read stream is allowed to exist.
 STREAM_OWNER="apps/local/app/services/web-file-stream.server.ts"
 # An upload to the OpenAI SDK, which takes a Node stream and never a Response.
-STREAM_UPLOAD="apps/local/app/services/video-processing-service.ts"
+STREAM_UPLOAD="apps/local/app/services/whisper-transcription-service.ts"
 
 found_violations=0
 
