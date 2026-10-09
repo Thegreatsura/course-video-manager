@@ -63,6 +63,8 @@ export default function Teleprompter() {
           capture: msg.capture,
           tab: msg.tab,
           marks: msg.marks,
+          markClipIds: msg.markClipIds,
+          playingClipId: msg.playingClipId,
           latestTranscript: msg.latestTranscript,
           videoLengthSeconds: msg.videoLengthSeconds,
           at: Date.now(),
@@ -196,7 +198,21 @@ export default function Teleprompter() {
         Always mounted: with no session under way it draws nothing at all, so
         the glass is unchanged until you press record.
       */}
-      {state.editorConnected && <SessionMarks marks={state.marks} />}
+      {state.editorConnected && (
+        <SessionMarks
+          marks={state.marks}
+          clipIds={state.markClipIds}
+          playingClipId={state.playingClipId}
+          // The editor decides play or pause, and the answer comes back as
+          // `playingClipId` on its next push: the glass holds no opinion.
+          onMarkClicked={(clipId) =>
+            teleprompterChannel.sendToParent({
+              type: "clipMarkClicked",
+              clipId,
+            })
+          }
+        />
+      )}
 
       {state.editorConnected && (
         <LatestTranscript text={state.latestTranscript} />
