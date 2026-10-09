@@ -181,6 +181,43 @@ const editByHand = async (diagramId: string) => {
 
 const eqId = (id: string) => eq(schema.diagrams.id, id);
 
+/**
+ * Matt polishes the drawing in the playground: what the simple format cannot
+ * say, on shapes it can, plus a hand-drawn scribble it reads as `other`.
+ */
+const polishByHand = async (diagramId: string) => {
+  const row = await testDb.query.diagrams.findFirst({
+    where: (d, { eq }) => eq(d.id, diagramId),
+  });
+  const scene = structuredClone(row!.headScene as Scene);
+  type Rec = { props: Record<string, unknown>; [k: string]: unknown };
+  const at = (id: string) => scene.store[id] as unknown as Rec;
+  Object.assign(at("shape:bot").props, { w: 96, h: 96 });
+  Object.assign(at("shape:label").props, {
+    font: "sans",
+    autoSize: false,
+    w: 300,
+  });
+  at("shape:agent").props.size = "xl";
+  at("shape:tools").opacity = 0.5;
+  Object.assign(at("binding:call-end").props, {
+    normalizedAnchor: { x: 0.1, y: 0.9 },
+    isPrecise: true,
+  });
+  scene.store["shape:scribble"] = {
+    ...scene.store["shape:rule"]!,
+    id: "shape:scribble",
+    type: "draw",
+    index: "a9",
+    props: { segments: [], color: "black", size: "m", isComplete: true },
+  } as Scene["store"][string];
+  await testDb
+    .update(schema.diagrams)
+    .set({ headScene: scene })
+    .where(eqId(diagramId));
+  return scene;
+};
+
 describe("cvm diagram snapshot add", () => {
   it("preserves Matt's unheld hand edit FIRST, then adds the drawing as a Preserved Snapshot and makes it the head", async () => {
     const diagram = await created();
@@ -221,6 +258,84 @@ describe("cvm diagram snapshot add", () => {
     expect(line!.image).toBe(nodePath.join(RENDERS, `${line!.snapshotId}.png`));
     expect(nodeFs.readFileSync(line!.image, "utf8")).toBe("RENDERED-PNG");
     nodeFs.rmSync(line!.image);
+  });
+
+  it("applies the drawing ONTO the head: get -> change one text -> snapshot add changes only that text", async () => {
+    const diagram = await created();
+    const head = await polishByHand(diagram.id);
+
+    const got = await run(["diagram", "get", diagram.id]);
+    const [{ head: read }] = ndjson(got.stdout) as [
+      { head: { shapes: Array<Record<string, unknown>> } },
+    ];
+    const edited = read.shapes.map((s) =>
+      s.id === "label" ? { ...s, text: "Agent v2" } : s
+    );
+    const r = await run([
+      "diagram",
+      "snapshot",
+      "add",
+      "--file",
+      file({ shapes: edited }),
+      diagram.id,
+    ]);
+
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    const added = (await snapshotsOf(diagram.id)).at(-1)!.scene as Scene;
+    // Everything Matt did by hand survives — icon size, font, wrapping
+    // width, stroke size, opacity, a dragged arrow anchor, a scribble the
+    // format cannot say — and the one text is the only change.
+    const label = "shape:label";
+    expect({ ...added.store, [label]: head.store[label] }).toEqual(head.store);
+    expect(added.schema).toEqual(head.schema);
+    expect(readSimpleDiagram(added.store).shapes).toEqual(edited);
+  });
+
+  it("removes a shape the drawing leaves out, gives a new one Matt's defaults, and keeps an unlisted 'other'", async () => {
+    const diagram = await created();
+    const head = await polishByHand(diagram.id);
+    const shapes = readSimpleDiagram(head.store).shapes.filter(
+      (s) => s.id !== "rule" && s.type !== "other"
+    );
+    const memory = { type: "box", id: "memory", x: 800, y: 0, w: 200, h: 100 };
+
+    const r = await run([
+      "diagram",
+      "snapshot",
+      "add",
+      "--file",
+      file({ shapes: [...shapes, memory] }),
+      diagram.id,
+    ]);
+
+    expect(r.exitCode).toBe(0);
+    const added = (await snapshotsOf(diagram.id)).at(-1)!.scene as Scene;
+    expect(added.store["shape:rule"]).toBeUndefined();
+    expect(added.store["shape:scribble"]).toEqual(head.store["shape:scribble"]);
+    expect(readSimpleDiagram(added.store).shapes.at(-1)).toEqual(memory);
+    expect(added.store["shape:memory"]!.props).toEqual(
+      expect.objectContaining({ font: "draw", size: "m", dash: "draw" })
+    );
+  });
+
+  it("refuses an 'other' the head does not have, exit 3, and draws nothing", async () => {
+    const diagram = await created();
+    render.calls = [];
+
+    const r = await run([
+      "diagram",
+      "snapshot",
+      "add",
+      "--file",
+      file({ shapes: [...STEP_2.shapes, { type: "other", id: "ghost" }] }),
+      diagram.id,
+    ]);
+
+    expect(r.exitCode).toBe(3);
+    expect(failureOf(r).message).toContain('other "ghost"');
+    expect(await snapshotsOf(diagram.id)).toHaveLength(1);
+    expect(render.calls).toEqual([]);
   });
 
   it("adds no extra snapshot when the head is already held by one", async () => {
