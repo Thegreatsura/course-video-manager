@@ -15,7 +15,7 @@
     {
       "file": "apps/local/app/features/video-editor/edit-effect-handlers.ts",
       "count": 1,
-      "reason": "OBS clip ingestion (#13), tied to a live Recording Session: not in this migration (the plan's question 6)."
+      "reason": "OBS clip ingestion (#13), tied to a live Recording Session: not in this migration (the plan's question 6, Matt's decision 4). Stays."
     },
     {
       "file": "apps/local/app/features/video-editor/obs-connector.tsx",
@@ -47,12 +47,12 @@
     {
       "file": "apps/local/app/services/ffmpeg-commands.ts",
       "count": 4,
-      "reason": "Interactive, on the app server: ffprobe for a duration or frame rate, silence detection, and one frame for a screenshot. A person waits on each for a moment; none is background work. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
+      "reason": "Shared by the app server and the Sidecar. On the app server: silence detection and an ffprobe frame rate for OBS clip ingestion (append-from-obs), which runs during the live Recording Session, not as background work; the frame rate for Export to DaVinci Resolve; and one frame for the Article Writer's screenshot. In the Sidecar the same calls serve exports, the vertical Short and Footage transcription. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
     },
     {
       "file": "apps/local/app/services/video-processing-service.ts",
       "count": 3,
-      "reason": "Interactive, on the app server: the first/last frame of a recording and the DaVinci Resolve script. A person waits on each for a moment. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
+      "reason": "Interactive, on the app server: a Clip's first or last frame for a thumbnail, and the DaVinci Resolve script behind Export to DaVinci Resolve. Each is one request the author's page waits on. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
     },
     {
       "file": "apps/local/app/services/whisper-transcription-service.ts",

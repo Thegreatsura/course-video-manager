@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ALLOWLIST_PATH,
   compare,
   scan,
   type Allowlist,
@@ -109,4 +113,57 @@ describe("compare", () => {
     const found = new Map([[ROUTE, [hit("sse-route")]]]);
     expect(compare(found, allowlist, new Set([ROUTE]), true)).toEqual([]);
   });
+});
+
+// ADR 0032 section 7 names every file the guards let start a process, stream
+// or loop outside the Sidecar. This holds the ADR to the guards' own lists:
+// add a file to either list and the ADR must say why it stays.
+describe("ADR 0032 names every allowed entry point", () => {
+  const root = path.resolve(import.meta.dirname, "..");
+  const adr = readFileSync(
+    path.join(root, "docs/adr/0032-background-work-runs-in-the-sidecar.md"),
+    "utf8"
+  );
+  const named = (file: string) => {
+    const base = path.basename(file).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`[\`/]${base}\``).test(adr);
+  };
+
+  const allowlist = JSON.parse(
+    readFileSync(path.join(root, ALLOWLIST_PATH), "utf8")
+  ) as Allowlist;
+  const allowlisted = Object.values(allowlist).flatMap((entries) =>
+    (entries ?? []).map((e) => e.file)
+  );
+
+  const spawnConfig = createRequire(import.meta.url)(
+    path.join(root, "apps/local/.dependency-cruiser.spawn.cjs")
+  ) as {
+    forbidden: { name: string; from: { pathNot?: string } }[];
+  };
+  const childProcessEntryPoints = (
+    spawnConfig.forbidden.find(
+      (rule) => rule.name === "child-process-outside-interactive-entry-points"
+    )?.from.pathNot ?? ""
+  )
+    .split("|")
+    .filter((pattern) => pattern !== "^sidecar/")
+    // "^app/routes/api\\.feedback\\.ts$" → "app/routes/api.feedback.ts"
+    .map((pattern) => pattern.replace(/^\^|\$$/g, "").replace(/\\/g, ""));
+
+  it("reads both lists", () => {
+    expect(allowlisted.length).toBeGreaterThan(0);
+    expect(childProcessEntryPoints).toContain("app/routes/api.feedback.ts");
+  });
+
+  it.each(allowlisted)("names %s, from the allowlist", (file) => {
+    expect(named(file)).toBe(true);
+  });
+
+  it.each(childProcessEntryPoints)(
+    "names %s, from .dependency-cruiser.spawn.cjs",
+    (file) => {
+      expect(named(file)).toBe(true);
+    }
+  );
 });
