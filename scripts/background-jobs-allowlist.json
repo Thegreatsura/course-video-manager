@@ -29,16 +29,6 @@
       "file": "apps/local/app/routes/api.videos.$videoId.post-social.ts",
       "count": 1,
       "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.post-youtube-shorts.ts",
-      "count": 1,
-      "reason": "YouTube Shorts post (#3). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/routes/api.videos.$videoId.upload.ts",
-      "count": 1,
-      "reason": "YouTube upload (#1). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
     }
   ],
   "browser-driver": [
@@ -66,16 +56,6 @@
       "file": "apps/local/app/features/upload-manager/sse-social-client.ts",
       "count": 1,
       "reason": "Buffer social post (#2). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/features/upload-manager/sse-upload-client.ts",
-      "count": 1,
-      "reason": "YouTube upload (#1). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
-    },
-    {
-      "file": "apps/local/app/features/upload-manager/sse-youtube-shorts-client.ts",
-      "count": 1,
-      "reason": "YouTube Shorts post (#3). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 4."
     },
     {
       "file": "apps/local/app/features/video-editor/components/autofill-chapters-modal.tsx",

@@ -5,8 +5,6 @@ import { startSSEPublish } from "./sse-publish-client";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import { startSSESkillsChangelogPost } from "./sse-skills-changelog-client";
 import { startSSESocialPost } from "./sse-social-client";
-import { startSSEUpload } from "./sse-upload-client";
-import { startSSEYoutubeShortsPost } from "./sse-youtube-shorts-client";
 
 type StartUploadAction = Extract<
   uploadReducer.Action,
@@ -134,40 +132,9 @@ const youtubeConfig: UploadTypeConfig<
     youtubeVideoId: action.youtubeVideoId ?? null,
   }),
 
-  initiate: (uploadId, entry, params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSEUpload(
-        {
-          videoId: entry.videoId,
-          title: entry.title,
-          description: params.description,
-          privacyStatus: params.privacyStatus,
-          thumbnailId: params.thumbnailId,
-        },
-        {
-          onProgress: (percentage) => {
-            dispatch({
-              type: "UPDATE_PROGRESS",
-              uploadId,
-              progress: percentage,
-            });
-          },
-          onComplete: (youtubeVideoId) => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId, youtubeVideoId });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A YouTube upload is a posting Job: the Sidecar runs it, once
+  // (`startUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: true,
 };
@@ -200,38 +167,9 @@ const youtubeShortsConfig: UploadTypeConfig<
     youtubeVideoId: action.youtubeVideoId ?? null,
   }),
 
-  initiate: (uploadId, entry, params, dispatch, abortControllers) => {
-    withAbortManagement(uploadId, abortControllers, () =>
-      startSSEYoutubeShortsPost(
-        {
-          videoId: entry.videoId,
-          title: entry.title,
-          description: params.description,
-        },
-        {
-          onProgress: (percentage) => {
-            dispatch({
-              type: "UPDATE_PROGRESS",
-              uploadId,
-              progress: percentage,
-            });
-          },
-          onComplete: (youtubeVideoId) => {
-            dispatch({ type: "UPLOAD_SUCCESS", uploadId, youtubeVideoId });
-            abortControllers.delete(uploadId);
-          },
-          onError: (message) => {
-            dispatch({
-              type: "UPLOAD_ERROR",
-              uploadId,
-              errorMessage: message,
-            });
-            abortControllers.delete(uploadId);
-          },
-        }
-      )
-    );
-  },
+  // A Shorts post is a posting Job: the Sidecar runs it, once
+  // (`startYoutubeShortsUpload` enqueues it), never as a browser entry.
+  initiate: null,
 
   supportsDependsOn: true,
 };

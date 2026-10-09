@@ -139,6 +139,7 @@ describe("failJobAttempt", () => {
               holder: "h",
               failure,
               interrupted: false,
+              mayRetry: true,
             })
           );
         }
@@ -175,6 +176,7 @@ describe("failJobAttempt", () => {
           holder: "new",
           failure,
           interrupted: false,
+          mayRetry: true,
         })
       ).toBe("not-held");
       expect(yield* ops.completeJob({ jobId: job.id, holder: "new" })).toBe(
@@ -215,7 +217,9 @@ describe("recoverExpiredJobs", () => {
         });
         yield* lapse;
 
-        const recovered = yield* ops.recoverExpiredJobs();
+        const recovered = yield* ops.recoverExpiredJobs({
+          neverRetryKinds: [],
+        });
 
         expect(
           Object.fromEntries(recovered.map((r) => [r.jobId, r.outcome]))
@@ -230,6 +234,112 @@ describe("recoverExpiredJobs", () => {
         expect((yield* ops.getJob(alive.id))?.status).toBe("running");
         const events = (yield* ops.listJobEvents(once.id)).map((e) => e.type);
         expect(events).toEqual(["queued", "started", "interrupted"]);
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("a kind that must never run again on its own (a post)", () => {
+  it.effect(
+    "ends a failed attempt for good, and recovery ends a lost one interrupted, whatever the row's attempts say",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const failed = yield* enqueue({ title: "post", maxAttempts: 3 });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        expect(
+          yield* ops.failJobAttempt({
+            jobId: failed.id,
+            holder: "h",
+            failure,
+            interrupted: false,
+            mayRetry: false,
+          })
+        ).toBe("failed");
+
+        const lost = yield* enqueue({ title: "lost post", maxAttempts: 3 });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "dead",
+          leaseMs: 1,
+        });
+        yield* lapse;
+        const recovered = yield* ops.recoverExpiredJobs({
+          neverRetryKinds: ["noop"],
+        });
+        expect(recovered).toEqual([{ jobId: lost.id, outcome: "interrupted" }]);
+        expect(yield* ops.getJob(lost.id)).toMatchObject({
+          status: "interrupted",
+          attempt: 1,
+          error: { message: expect.stringContaining("check before retrying") },
+        });
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "the author's Retry runs it once more: the same row, its next attempt, and that attempt its last",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const job = yield* enqueue({ title: "post", maxAttempts: 1 });
+        expect((yield* ops.retryJob({ jobId: job.id })).outcome).toBe(
+          "not-retryable"
+        );
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        yield* ops.failJobAttempt({
+          jobId: job.id,
+          holder: "h",
+          failure,
+          interrupted: true,
+          mayRetry: false,
+        });
+
+        const retried = yield* ops.retryJob({ jobId: job.id });
+        expect(retried).toMatchObject({
+          outcome: "queued",
+          job: { status: "queued", attempt: 2, maxAttempts: 2 },
+        });
+        const events = yield* ops.listJobEvents(job.id);
+        expect(events.at(-1)).toMatchObject({
+          type: "queued",
+          data: { attempt: 2, retriedBy: "author" },
+        });
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "lists the interrupted posts nobody has looked for yet, and stops once one has been",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const job = yield* enqueue({ title: "post", maxAttempts: 1 });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "dead",
+          leaseMs: 1,
+        });
+        yield* lapse;
+        yield* ops.recoverExpiredJobs({ neverRetryKinds: ["noop"] });
+        const look = () =>
+          ops.listInterruptedJobsWithoutEvent({
+            kinds: ["noop"],
+            eventType: "post-check",
+            finishedWithinMs: 60_000,
+          });
+        expect((yield* look()).map((j) => j.id)).toEqual([job.id]);
+        yield* ops.appendJobEvent({
+          jobId: job.id,
+          type: "post-check",
+          data: { verdict: "unknown" },
+        });
+        expect(yield* look()).toEqual([]);
       }).pipe(Effect.provide(testLayer))
   );
 });

@@ -4,6 +4,8 @@ import { jobEvents, jobs, sidecarLease } from "../db/schema.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
+import { createPostingJobOperations } from "./db-job-posting.server.js";
+import { makeDbCall } from "./db-job-calls.server.js";
 
 /**
  * Every statement against the background-job tables (`db/schema-jobs.ts`).
@@ -15,7 +17,9 @@ import { withDbTransaction } from "./with-db-transaction.server.js";
  *
  * THE RETRY RULE lives here, once (`settleFailure`): a failed or interrupted
  * attempt goes back to `queued` as `attempt + 1` while `attempt < max_attempts`,
- * and is final otherwise. A Job that ends any way but `succeeded` fails every
+ * and is final otherwise — and ALWAYS final for a kind the caller names as
+ * one that must never run again on its own (a posting kind: Matt's decision
+ * 5). Only `retryJob`, the author's Retry, runs such a Job again. A Job that ends any way but `succeeded` fails every
  * Job still queued behind it. Both copy the Upload Manager — see
  * docs/plans/background-jobs-sidecar.md, "What the sidecar copies".
  */
@@ -73,14 +77,15 @@ export type FailureOutcome =
   /** The Job was no longer this holder's to settle (recovered, or finished). */
   | "not-held";
 
-const makeDbCall = <T>(fn: () => Promise<T>) =>
-  Effect.tryPromise({
-    try: fn,
-    catch: (e) => new UnknownDBServiceError({ cause: e }),
-  });
-
 const leaseEnd = (leaseMs: number) =>
   sql`now() + (${leaseMs} * interval '1 millisecond')`;
+
+/**
+ * What a cut-off post says, on its row and in its toast: it may or may not
+ * have gone out, and nothing will run it again until the author says so.
+ */
+export const INTERRUPTED_POST_MESSAGE =
+  "Interrupted — check before retrying: the post was cut off, so it may or may not have gone out";
 
 /** The message the Upload Manager gives a Job whose dependency failed (upload-reducer.ts). */
 export const dependencyFailedMessage = (title: string) =>
@@ -126,15 +131,19 @@ export const createJobOperations = (db: Database) => {
       }
     });
 
-  /** The retry rule. `job` is locked by the caller's transaction. */
+  /**
+   * The retry rule. `job` is locked by the caller's transaction. `mayRetry`
+   * false (a posting kind) makes this attempt final whatever the counts say.
+   */
   const settleFailure = (
     tx: Database,
     job: Job,
     failure: JobFailure,
-    interrupted: boolean
+    interrupted: boolean,
+    mayRetry: boolean
   ): Effect.Effect<FailureOutcome, UnknownDBServiceError> =>
     Effect.gen(function* () {
-      if (job.attempt < job.maxAttempts) {
+      if (mayRetry && job.attempt < job.maxAttempts) {
         yield* makeDbCall(() =>
           tx
             .update(jobs)
@@ -349,18 +358,28 @@ export const createJobOperations = (db: Database) => {
     );
   });
 
-  /** Settle a held Job's failed (or interrupted) attempt by the retry rule. */
+  /**
+   * Settle a held Job's failed (or interrupted) attempt by the retry rule.
+   * `mayRetry: false` (a posting kind) ends it here, whatever its attempts.
+   */
   const failJobAttempt = Effect.fn("failJobAttempt")(function* (input: {
     jobId: string;
     holder: string;
     failure: JobFailure;
     interrupted: boolean;
+    mayRetry: boolean;
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
         const job = yield* lockHeld(tx, input.jobId, input.holder);
         if (!job) return "not-held" as const;
-        return yield* settleFailure(tx, job, input.failure, input.interrupted);
+        return yield* settleFailure(
+          tx,
+          job,
+          input.failure,
+          input.interrupted,
+          input.mayRetry
+        );
       })
     );
   });
@@ -405,9 +424,13 @@ export const createJobOperations = (db: Database) => {
   /**
    * Every running Job whose lease has run out — its sidecar died, or was
    * stopped without settling it — is settled as an interrupted attempt by the
-   * retry rule. Safe to call at any time and from any process.
+   * retry rule. A Job of a kind in `neverRetryKinds` (posting) ends
+   * `interrupted` whatever its attempts. Safe to call at any time and from
+   * any process.
    */
-  const recoverExpiredJobs = Effect.fn("recoverExpiredJobs")(function* () {
+  const recoverExpiredJobs = Effect.fn("recoverExpiredJobs")(function* (input: {
+    neverRetryKinds: readonly string[];
+  }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
         const expired = yield* makeDbCall(() =>
@@ -422,14 +445,17 @@ export const createJobOperations = (db: Database) => {
         );
         const recovered: { jobId: string; outcome: FailureOutcome }[] = [];
         for (const job of expired) {
+          const mayRetry = !input.neverRetryKinds.includes(job.kind);
           const failure: JobFailure = {
             tag: "JobInterrupted",
-            message: "The sidecar running this job stopped before it finished",
+            message: mayRetry
+              ? "The sidecar running this job stopped before it finished"
+              : INTERRUPTED_POST_MESSAGE,
             cause: `lease held by ${job.holder ?? "nobody"} expired at ${job.leaseUntil?.toISOString() ?? "?"}`,
           };
           recovered.push({
             jobId: job.id,
-            outcome: yield* settleFailure(tx, job, failure, true),
+            outcome: yield* settleFailure(tx, job, failure, true, mayRetry),
           });
         }
         return recovered;
@@ -492,6 +518,11 @@ export const createJobOperations = (db: Database) => {
    */
   const listRecentJobs = Effect.fn("listRecentJobs")(function* (input: {
     finishedWithinMs: number;
+    /**
+     * An interrupted Job of these kinds waits for the author (a post:
+     * "check before retrying"), so it stays in a snapshot this much longer.
+     */
+    interrupted?: { kinds: readonly string[]; withinMs: number };
   }) {
     const recent = yield* makeDbCall(() =>
       db
@@ -503,7 +534,17 @@ export const createJobOperations = (db: Database) => {
             gt(
               jobs.finishedAt,
               sql`now() - (${input.finishedWithinMs} * interval '1 millisecond')`
-            )
+            ),
+            input.interrupted && input.interrupted.kinds.length > 0
+              ? and(
+                  eq(jobs.status, "interrupted"),
+                  inArray(jobs.kind, [...input.interrupted.kinds]),
+                  gt(
+                    jobs.finishedAt,
+                    sql`now() - (${input.interrupted.withinMs} * interval '1 millisecond')`
+                  )
+                )
+              : undefined
           )
         )
         .orderBy(asc(jobs.createdAt), asc(jobs.id))
@@ -612,6 +653,7 @@ export const createJobOperations = (db: Database) => {
     completeJob,
     failJobAttempt,
     returnJobToQueue,
+    ...createPostingJobOperations(db),
     recoverExpiredJobs,
     latestJobEventId,
     listJobEventsAfter,

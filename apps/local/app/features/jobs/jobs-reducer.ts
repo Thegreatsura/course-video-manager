@@ -1,10 +1,13 @@
 import type { EffectReducer } from "use-effect-reducer";
-import type {
-  JobEventMessage,
-  JobSnapshotMessage,
-  WireJob,
-  WireJobEvent,
+import {
+  isPostingJobKind,
+  type JobSnapshotMessage,
+  type WireJob,
+  type WireJobEvent,
 } from "./job-wire";
+import { toJobsAction } from "./job-event-actions";
+
+export { toJobsAction };
 
 /**
  * Background **Jobs** as this tab sees them: built only from the **Job
@@ -45,6 +48,16 @@ export namespace jobsReducer {
     percent: number | null;
     /** The last failed attempt's message, kept while it retries. */
     errorMessage: string | null;
+    /** The last failure's `_tag` (`BufferAuthError`, `JobInterrupted`, …). */
+    errorTag: string | null;
+    /** The Job this one waits for (a post waits for its export), if any. */
+    dependsOn: string | null;
+    /** `false` until this tab's enqueue lands: what waits on it is held. */
+    enqueued: boolean;
+    /** What a post reported once it went out (`posted`): an id, a slug. */
+    result: Record<string, unknown> | null;
+    /** What the sidecar found when it looked for a cut-off post. */
+    postCheck: PostCheckView | null;
     /** The newest Job Event applied: an older or repeated one is ignored. */
     lastEventId: number;
     /**
@@ -67,11 +80,20 @@ export namespace jobsReducer {
     errorMessage: string | null;
   }
 
+  /** A `post-check` Job Event: did the interrupted post go out? */
+  export interface PostCheckView {
+    verdict: "posted" | "not-posted" | "unknown";
+    detail: string;
+    url: string | null;
+  }
+
   /** What this tab knows of the sidecar, from the stream. */
   export type SidecarStatus = "unknown" | "running" | "not-running";
 
   export interface State {
     jobs: Record<string, JobView>;
+    /** Enqueues held, by the id of the Job they wait on, until it lands. */
+    held: Record<string, EnqueueJobEffect[]>;
     /** Hidden by the author (or the idle timer); events still update nothing visible. */
     dismissed: Record<string, true>;
     sidecar: SidecarStatus;
@@ -88,15 +110,20 @@ export namespace jobsReducer {
 
   /** A Job Event this reducer understands (see `toJobsAction`). */
   export type JobStreamAction =
-    | StreamFact<"job-queued">
+    | StreamFact<
+        "job-queued",
+        { attempt: number | null; dependsOn: string | null }
+      >
     | StreamFact<"job-started", { attempt: number }>
     | StreamFact<"job-stage-entered", { stage: string }>
     | StreamFact<"job-progressed", { stage: string; percent: number }>
     | StreamFact<"job-retrying", { nextAttempt: number; message: string }>
     | StreamFact<"job-requeued", { attempt: number }>
     | StreamFact<"job-succeeded">
-    | StreamFact<"job-failed", { message: string }>
-    | StreamFact<"job-interrupted", { message: string }>
+    | StreamFact<"job-failed", { message: string; tag: string | null }>
+    | StreamFact<"job-interrupted", { message: string; tag: string | null }>
+    | StreamFact<"job-posted", { result: Record<string, unknown> }>
+    | StreamFact<"job-post-checked", { check: PostCheckView }>
     // A Batch export's Videos
     | StreamFact<
         "batch-videos-announced",
@@ -125,8 +152,13 @@ export namespace jobsReducer {
         params: Record<string, unknown>;
         subject: { type: string; id: string } | null;
         attemptsSpent: number;
+        /** A Job this one waits for: it runs only once that one succeeds. */
+        dependsOn: string | null;
       }
     | { type: "press-dismiss"; id: string }
+    /** The author's Retry on a failed or interrupted post. */
+    | { type: "press-retry"; id: string }
+    | { type: "retry-failed"; id: string; message: string }
     /** Nothing has run for a while: the finished rows have been seen. */
     | { type: "idle-timeout-elapsed" }
     // The enqueue request's outcome
@@ -137,16 +169,21 @@ export namespace jobsReducer {
     | { type: "sidecar-unavailable"; message: string }
     | JobStreamAction;
 
+  export interface EnqueueJobEffect {
+    type: "enqueue-job";
+    id: string;
+    kind: string;
+    title: string;
+    params: Record<string, unknown>;
+    subject: { type: string; id: string } | null;
+    attemptsSpent: number;
+    dependsOn: string | null;
+  }
+
   export type Effect =
-    | {
-        type: "enqueue-job";
-        id: string;
-        kind: string;
-        title: string;
-        params: Record<string, unknown>;
-        subject: { type: string; id: string } | null;
-        attemptsSpent: number;
-      }
+    | EnqueueJobEffect
+    | { type: "retry-job"; id: string }
+    | { type: "show-retry-failed-toast"; title: string; message: string }
     | {
         type: "show-job-succeeded-toast";
         jobId: string;
@@ -175,6 +212,7 @@ export namespace jobsReducer {
 
 export const createInitialJobsState = (): jobsReducer.State => ({
   jobs: {},
+  held: {},
   dismissed: {},
   sidecar: "unknown",
   sidecarMessage: null,
@@ -196,142 +234,6 @@ const FINISHED: readonly jobsReducer.JobStatus[] = [
 export const isFinishedJob = (job: jobsReducer.JobView) =>
   FINISHED.includes(job.status);
 
-const errorMessageOf = (data: Record<string, unknown>): string => {
-  const error = data.error;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "The job failed";
-};
-
-const numberOr = (value: unknown, fallback: number) =>
-  typeof value === "number" ? value : fallback;
-
-/**
- * One Job Event off the wire as a reducer action, or `null` for a type this
- * tab has no use for. `event.type` is what `db-job-operations` and the
- * handlers write: `queued`, `started`, `stage`, `progress`, `retrying`,
- * `requeued`, `succeeded`, `failed`, `interrupted`.
- */
-export const toJobsAction = (
-  message: JobEventMessage
-): jobsReducer.JobStreamAction | null => {
-  const { job, event } = message;
-  const base = { job, eventId: event.id };
-  const data = event.data;
-  switch (event.type) {
-    case "queued":
-      return { ...base, type: "job-queued" };
-    case "started":
-      return {
-        ...base,
-        type: "job-started",
-        attempt: numberOr(data.attempt, job.attempt),
-      };
-    case "stage":
-      return typeof data.stage === "string"
-        ? { ...base, type: "job-stage-entered", stage: data.stage }
-        : null;
-    case "progress":
-      return typeof data.stage === "string" && typeof data.percent === "number"
-        ? {
-            ...base,
-            type: "job-progressed",
-            stage: data.stage,
-            percent: data.percent,
-          }
-        : null;
-    case "retrying":
-      return {
-        ...base,
-        type: "job-retrying",
-        nextAttempt: numberOr(data.nextAttempt, job.attempt),
-        message: errorMessageOf(data),
-      };
-    case "requeued":
-      return {
-        ...base,
-        type: "job-requeued",
-        attempt: numberOr(data.attempt, job.attempt),
-      };
-    case "succeeded":
-      return { ...base, type: "job-succeeded" };
-    case "failed":
-      return { ...base, type: "job-failed", message: errorMessageOf(data) };
-    case "interrupted":
-      return {
-        ...base,
-        type: "job-interrupted",
-        message: errorMessageOf(data),
-      };
-    case "videos":
-      return Array.isArray(data.videos)
-        ? {
-            ...base,
-            type: "batch-videos-announced",
-            videos: data.videos.flatMap((v: unknown) =>
-              typeof v === "object" &&
-              v !== null &&
-              "id" in v &&
-              "title" in v &&
-              typeof v.id === "string" &&
-              typeof v.title === "string"
-                ? [{ id: v.id, title: v.title }]
-                : []
-            ),
-          }
-        : null;
-    case "video-stage":
-      return typeof data.videoId === "string" && typeof data.stage === "string"
-        ? {
-            ...base,
-            type: "batch-video-stage-entered",
-            videoId: data.videoId,
-            stage: data.stage,
-          }
-        : null;
-    case "video-progress":
-      return typeof data.videoId === "string" &&
-        typeof data.stage === "string" &&
-        typeof data.percent === "number"
-        ? {
-            ...base,
-            type: "batch-video-progressed",
-            videoId: data.videoId,
-            stage: data.stage,
-            percent: data.percent,
-          }
-        : null;
-    case "video-succeeded":
-      return typeof data.videoId === "string"
-        ? { ...base, type: "batch-video-succeeded", videoId: data.videoId }
-        : null;
-    case "video-failed":
-      return typeof data.videoId === "string"
-        ? {
-            ...base,
-            type: "batch-video-failed",
-            videoId: data.videoId,
-            message:
-              typeof data.message === "string"
-                ? data.message
-                : "The export failed",
-          }
-        : null;
-    case "video-handed-off":
-      return typeof data.videoId === "string"
-        ? { ...base, type: "batch-video-handed-off", videoId: data.videoId }
-        : null;
-    default:
-      return null;
-  }
-};
-
 const viewOf = (
   job: WireJob,
   status: jobsReducer.JobStatus
@@ -346,6 +248,11 @@ const viewOf = (
   stage: null,
   percent: null,
   errorMessage: null,
+  errorTag: null,
+  dependsOn: null,
+  enqueued: true,
+  result: null,
+  postCheck: null,
   lastEventId: 0,
   videos: null,
 });
@@ -408,7 +315,22 @@ const applyStreamAction = (
   };
   switch (action.type) {
     case "job-queued":
-      return { ...job, status: "queued" };
+      if (action.attempt === null) {
+        return { ...job, status: "queued", dependsOn: action.dependsOn };
+      }
+      // The author's Retry: a fresh run of a finished Job.
+      return {
+        ...job,
+        status: "queued",
+        attempt: action.attempt,
+        dependsOn: action.dependsOn,
+        stage: null,
+        percent: null,
+        errorMessage: null,
+        errorTag: null,
+        result: null,
+        postCheck: null,
+      };
     case "job-started":
       return {
         ...job,
@@ -439,11 +361,30 @@ const applyStreamAction = (
         percent: null,
       };
     case "job-succeeded":
-      return { ...job, status: "succeeded", errorMessage: null };
+      return {
+        ...job,
+        status: "succeeded",
+        errorMessage: null,
+        errorTag: null,
+      };
     case "job-failed":
-      return { ...job, status: "failed", errorMessage: action.message };
+      return {
+        ...job,
+        status: "failed",
+        errorMessage: action.message,
+        errorTag: action.tag,
+      };
     case "job-interrupted":
-      return { ...job, status: "interrupted", errorMessage: action.message };
+      return {
+        ...job,
+        status: "interrupted",
+        errorMessage: action.message,
+        errorTag: action.tag,
+      };
+    case "job-posted":
+      return { ...job, result: action.result };
+    case "job-post-checked":
+      return { ...job, postCheck: action.check };
     case "batch-videos-announced":
       return announceVideos(job, action.videos);
     case "batch-video-stage-entered":
@@ -530,6 +471,55 @@ const foldSnapshotJob = (
   return view;
 };
 
+/** A post cut off mid-run: it waits for the author to check, then Retry. */
+export const needsAuthor = (job: jobsReducer.JobView) =>
+  job.status === "interrupted" && isPostingJobKind(job.kind);
+
+/** An enqueue that failed: it, and every Job held on it, fails here. */
+const failRequested = (
+  state: jobsReducer.State,
+  id: string,
+  message: string,
+  exec: Exec
+): jobsReducer.State => {
+  const job = state.jobs[id];
+  if (!job || job.status !== "requested") return state;
+  const failed: jobsReducer.JobView = {
+    ...job,
+    status: "failed",
+    errorMessage: message,
+  };
+  exec({
+    type: "show-job-failed-toast",
+    jobId: job.id,
+    kind: job.kind,
+    title: job.title,
+    message,
+    hasLog: false,
+  });
+  exec({
+    type: "report-job-settled",
+    jobId: job.id,
+    title: job.title,
+    outcome: "failed",
+  });
+  const { [id]: waiting = [], ...held } = state.held;
+  let next: jobsReducer.State = {
+    ...state,
+    held,
+    jobs: { ...state.jobs, [job.id]: failed },
+  };
+  for (const child of waiting) {
+    next = failRequested(
+      next,
+      child.id,
+      `Dependency "${job.title}" failed`,
+      exec
+    );
+  }
+  return next;
+};
+
 export const jobsReducer: EffectReducer<
   jobsReducer.State,
   jobsReducer.Action,
@@ -537,7 +527,7 @@ export const jobsReducer: EffectReducer<
 > = (state, action, exec) => {
   switch (action.type) {
     case "job-requested": {
-      exec({
+      const enqueue: jobsReducer.EnqueueJobEffect = {
         type: "enqueue-job",
         id: action.id,
         kind: action.kind,
@@ -545,12 +535,26 @@ export const jobsReducer: EffectReducer<
         params: action.params,
         subject: action.subject,
         attemptsSpent: action.attemptsSpent,
-      });
+        dependsOn: action.dependsOn,
+      };
+      // The server refuses a `dependsOn` it has not seen yet.
+      const parent = action.dependsOn ? state.jobs[action.dependsOn] : null;
+      const hold = parent !== null && parent !== undefined && !parent.enqueued;
+      let held = state.held;
+      if (hold && action.dependsOn) {
+        held = {
+          ...held,
+          [action.dependsOn]: [...(held[action.dependsOn] ?? []), enqueue],
+        };
+      } else {
+        exec(enqueue);
+      }
       if (state.sidecar === "not-running") {
         exec({ type: "show-sidecar-not-running-toast", title: action.title });
       }
       return {
         ...state,
+        held,
         jobs: {
           ...state.jobs,
           [action.id]: {
@@ -564,6 +568,11 @@ export const jobsReducer: EffectReducer<
             stage: null,
             percent: null,
             errorMessage: null,
+            errorTag: null,
+            dependsOn: action.dependsOn,
+            enqueued: false,
+            result: null,
+            postCheck: null,
             lastEventId: 0,
             videos: null,
           },
@@ -571,34 +580,45 @@ export const jobsReducer: EffectReducer<
       };
     }
 
-    case "enqueue-succeeded":
+    case "enqueue-succeeded": {
       // The row stays `requested` until the stream says `queued`: the stream
-      // is the only word on a Job's state.
-      return state;
-
-    case "enqueue-failed": {
+      // is the only word on a Job's state. What waited on it may go now.
       const job = state.jobs[action.id];
-      if (!job || job.status !== "requested") return state;
-      const failed: jobsReducer.JobView = {
-        ...job,
-        status: "failed",
-        errorMessage: action.message,
+      if (!job) return state;
+      const { [action.id]: waiting = [], ...held } = state.held;
+      for (const enqueue of waiting) exec(enqueue);
+      return {
+        ...state,
+        held,
+        jobs: { ...state.jobs, [job.id]: { ...job, enqueued: true } },
       };
+    }
+
+    case "enqueue-failed":
+      return failRequested(state, action.id, action.message, exec);
+
+    case "press-retry": {
+      const job = state.jobs[action.id];
+      if (
+        !job ||
+        !isPostingJobKind(job.kind) ||
+        (job.status !== "failed" && job.status !== "interrupted")
+      ) {
+        return state;
+      }
+      exec({ type: "retry-job", id: job.id });
+      return state;
+    }
+
+    case "retry-failed": {
+      const job = state.jobs[action.id];
+      if (!job) return state;
       exec({
-        type: "show-job-failed-toast",
-        jobId: job.id,
-        kind: job.kind,
+        type: "show-retry-failed-toast",
         title: job.title,
         message: action.message,
-        hasLog: false,
       });
-      exec({
-        type: "report-job-settled",
-        jobId: job.id,
-        title: job.title,
-        outcome: "failed",
-      });
-      return { ...state, jobs: { ...state.jobs, [job.id]: failed } };
+      return state;
     }
 
     case "job-snapshot-received": {
@@ -637,6 +657,9 @@ export const jobsReducer: EffectReducer<
       const dismissed = { ...state.dismissed };
       let changed = false;
       for (const job of Object.values(state.jobs)) {
+        // An interrupted post waits for the author ("check before
+        // retrying"): only they dismiss it.
+        if (needsAuthor(job)) continue;
         if (isFinishedJob(job) && !dismissed[job.id]) {
           dismissed[job.id] = true;
           changed = true;
@@ -654,6 +677,8 @@ export const jobsReducer: EffectReducer<
     case "job-succeeded":
     case "job-failed":
     case "job-interrupted":
+    case "job-posted":
+    case "job-post-checked":
     case "batch-videos-announced":
     case "batch-video-stage-entered":
     case "batch-video-progressed":

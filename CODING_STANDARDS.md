@@ -157,7 +157,11 @@ follows it through `jobs-reducer.ts`. Do not stream it from a request that a bro
 tab keeps alive: closing the tab cancels the work, and its failure dies as a
 toast. A new kind is a handler under `apps/local/sidecar/kinds/` and one line
 in `JOB_KINDS`; its lane and attempt count are copied from the job it replaces
-(`retry-policy.ts`), never invented. Work that has moved into a Job asks for
+(`retry-policy.ts`), never invented — except a kind that **posts** to an
+outside service (YouTube, Buffer, AI Hero): define it with
+`definePostingJobKind`, which fixes it at one attempt, never re-queued, and
+makes you say how to check whether a cut-off post went out
+(`sidecar/posting-kinds.test.ts` fails otherwise). Work that has moved into a Job asks for
 `SidecarContext` (`app/services/sidecar-context.ts`), which only the sidecar
 provides, so a route that reaches it does not compile. `scripts/check-background-jobs.ts` holds
 the streaming routes and the browser loops that drive them to a shrink-only

@@ -1,6 +1,8 @@
 import { toast } from "@/components/ui/toast";
-import { jobLogHref } from "./job-wire";
+import { showSuccessToast } from "@/features/upload-manager/upload-toasts";
+import { isPostingJobKind, jobLogHref } from "./job-wire";
 import type { jobsReducer } from "./jobs-reducer";
+import { jobUploadEntry } from "./jobs-selectors";
 
 type Toast<T extends jobsReducer.Effect["type"]> = Extract<
   jobsReducer.Effect,
@@ -15,11 +17,24 @@ const DID: Record<string, string> = {
 const FAILED: Record<string, string> = {
   export: "export failed",
   "render-vertical": "vertical Short render failed",
+  youtube: "upload failed",
+  "youtube-shorts": "YouTube Short post failed",
+  buffer: "Buffer post failed",
+  "ai-hero": "AI Hero post failed",
+  "skills-changelog": "Skills Changelog post failed",
 };
 
 export function showJobSucceededToast(
-  effect: Toast<"show-job-succeeded-toast">
+  effect: Toast<"show-job-succeeded-toast">,
+  job: jobsReducer.JobView | null
 ): void {
+  // A post toasts exactly as the browser-driven upload did: same words,
+  // same links, and AI Hero's link saved to the global links.
+  const entry = job && isPostingJobKind(job.kind) ? jobUploadEntry(job) : null;
+  if (entry) {
+    showSuccessToast(entry);
+    return;
+  }
   const did = DID[effect.kind] ?? "finished";
   toast.success(`"${effect.title}" ${did}`, {
     duration: Infinity,
@@ -64,5 +79,13 @@ export function showSidecarNotRunningToast(
   toast.warning(`"${effect.title}" is queued, but the sidecar is not running`, {
     description:
       "It starts as soon as the sidecar does: `pnpm dev` and `pnpm start` run it.",
+  });
+}
+
+export function showRetryFailedToast(
+  effect: Toast<"show-retry-failed-toast">
+): void {
+  toast.error(`Could not retry "${effect.title}": ${effect.message}`, {
+    duration: Infinity,
   });
 }

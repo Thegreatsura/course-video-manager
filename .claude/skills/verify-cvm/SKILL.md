@@ -150,6 +150,15 @@ OpenAI key is a dud, so on a clone it fails at "transcribing" — a ready-made
 failure path. To see one finish, launch with `OPENAI_BASE_URL` pointed at a
 local stub that answers `POST /v1/audio/transcriptions` (the server and the
 sidecar both inherit it); everything else in the render runs for real.
+**Posting never leaves the box.** Every posting service's base URL —
+`YOUTUBE_API_URL`, `GOOGLE_OAUTH_TOKEN_URL`, `BUFFER_API_URL`, `S3_ENDPOINT`,
+`AI_HERO_BASE_URL` — is set to the discard port (127.0.0.1:9) on a clone run.
+To see a post succeed, start a local stub and export the variable as a plain
+loopback URL (`http://127.0.0.1:<port>` or `http://localhost:<port>`, a path at
+most) before `launch`; anything else is replaced by the discard port. Read
+`/proc/<pid>/environ` of the server and the sidecar to confirm before driving.
+The clone has no YouTube or AI Hero tokens: insert dud ones into its
+`youtube_auth` / `ai_hero_auth` tables to reach the stub.
 To run a Job by hand, post it to the socket and read it back:
 
 ```bash

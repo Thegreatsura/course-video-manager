@@ -18,6 +18,9 @@ const EnqueueJobRequest = Schema.Struct({
     Schema.Struct({ type: Schema.String, id: Schema.String })
   ),
   attemptsSpent: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  dependsOn: Schema.optionalWith(Schema.NullOr(Schema.UUID), {
+    default: () => null,
+  }),
 });
 
 export const action = makeAction({
@@ -31,7 +34,7 @@ export const action = makeAction({
         kind: request.kind,
         title: request.title,
         params: request.params,
-        dependsOn: null,
+        dependsOn: request.dependsOn,
         subject: request.subject,
         attemptsSpent: request.attemptsSpent,
         registry: JOB_KINDS,

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Effect } from "effect";
+import { SidecarContextTest } from "@/services/sidecar-context";
 
 const FAKE_UPLOAD_URI =
   "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=abc123";
@@ -53,7 +54,7 @@ describe("uploadVideoToYouTube", () => {
         privacyStatus: "public",
         notifySubscribers: false,
         onProgress: () => {},
-      }).pipe(Effect.runPromise);
+      }).pipe(Effect.provide(SidecarContextTest), Effect.runPromise);
 
       const initiationCall = capturedFetchCalls[0]!;
       const url = new URL(initiationCall.url);

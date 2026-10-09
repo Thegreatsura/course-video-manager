@@ -25,6 +25,22 @@ export const visibleJobRows = (
     .flatMap(jobUploadEntries)
     .filter((row) => !state.dismissed[row.uploadId]);
 
+/**
+ * The newest visible row a Video's Jobs of `uploadType` draw: what a posting
+ * page shows as "its" upload (a YouTube upload, an AI Hero post).
+ */
+export const findVideoJobRow = <T extends uploadReducer.UploadType>(
+  state: jobsReducer.State,
+  videoId: string,
+  uploadType: T
+): Extract<uploadReducer.UploadEntry, { uploadType: T }> | undefined =>
+  visibleJobRows(state)
+    .filter(
+      (row): row is Extract<uploadReducer.UploadEntry, { uploadType: T }> =>
+        row.videoId === videoId && row.uploadType === uploadType
+    )
+    .at(-1);
+
 const EXPORT_STAGES: readonly string[] = Object.keys(EXPORT_STAGE_BANDS);
 
 const isExportStage = (stage: string): stage is uploadReducer.ExportStage =>
@@ -47,6 +63,8 @@ const uploadStatusOf = (
     case "running":
       return "uploading";
     case "queued":
+      // A post waiting for its export draws as the browser's did: waiting.
+      if (job.dependsOn !== null) return "waiting";
       // Back in the queue after a failed attempt is a retry; the first wait,
       // or a wait after a stopping sidecar put it back, is just a queue.
       return job.errorMessage === null ? "uploading" : "retrying";
@@ -74,9 +92,18 @@ const baseEntryOf = (
   errorMessage: job.errorMessage,
   retryCount: job.attempt - 1,
   terminal: false,
-  dependsOn: null,
+  dependsOn: job.dependsOn,
   parentUploadId: null,
 });
+
+const stringOf = (value: unknown): string | null =>
+  typeof value === "string" ? value : null;
+
+/** An upload's bar: its percent while it runs, full once it is done. */
+const uploadProgressOf = (
+  job: jobsReducer.JobView,
+  status: uploadReducer.UploadStatus
+) => (status === "success" ? 100 : (job.percent ?? 0));
 
 /**
  * A server Job as a row of the Global Upload Progress, which draws Upload
@@ -85,11 +112,17 @@ const baseEntryOf = (
  */
 export const jobUploadEntry = (
   job: jobsReducer.JobView
-):
-  | uploadReducer.ExportUploadEntry
-  | uploadReducer.RenderVerticalUploadEntry
-  | null => {
+): uploadReducer.UploadEntry | null => {
   switch (job.kind) {
+    case "youtube":
+    case "youtube-shorts": {
+      const status = uploadStatusOf(job);
+      return {
+        ...baseEntryOf(job, status, uploadProgressOf(job, status)),
+        uploadType: job.kind,
+        youtubeVideoId: stringOf(job.result?.youtubeVideoId),
+      };
+    }
     case "render-vertical": {
       const stage =
         job.stage !== null && isRenderVerticalStage(job.stage)

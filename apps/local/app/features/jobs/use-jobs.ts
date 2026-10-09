@@ -7,6 +7,7 @@ import {
 } from "./jobs-reducer";
 import {
   decodeStreamData,
+  jobRetryHref,
   JOB_STREAM_EVENTS,
   JobEventMessage,
   JobSnapshotMessage,
@@ -15,6 +16,7 @@ import {
 import {
   showJobFailedToast,
   showJobSucceededToast,
+  showRetryFailedToast,
   showSidecarNotRunningToast,
 } from "./job-toasts";
 
@@ -32,6 +34,8 @@ export interface StartJobRequest {
   subject: { type: string; id: string } | null;
   /** Attempts already spent before this became a Job (0 for new work). */
   attemptsSpent: number;
+  /** A Job this one waits for (a post waits for its export), or `null`. */
+  dependsOn: string | null;
 }
 
 /**
@@ -88,6 +92,7 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
           params: effect.params,
           subject: effect.subject,
           attemptsSpent: effect.attemptsSpent,
+          dependsOn: effect.dependsOn,
         }),
       })
         .then(async (response) => {
@@ -107,8 +112,28 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
           })
         );
     },
-    "show-job-succeeded-toast": (_state, effect) =>
-      showJobSucceededToast(effect),
+    "retry-job": (_state, effect, dispatch) => {
+      fetch(jobRetryHref(effect.id), { method: "POST" })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              (await response.text()) ||
+                `The server answered ${response.status}`
+            );
+          }
+          // The stream brings the re-queued Job; nothing to do here.
+        })
+        .catch((error: unknown) =>
+          dispatch({
+            type: "retry-failed",
+            id: effect.id,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+    },
+    "show-retry-failed-toast": (_state, effect) => showRetryFailedToast(effect),
+    "show-job-succeeded-toast": (state, effect) =>
+      showJobSucceededToast(effect, state.jobs[effect.jobId] ?? null),
     "show-job-failed-toast": (_state, effect) => showJobFailedToast(effect),
     "show-sidecar-not-running-toast": (_state, effect) =>
       showSidecarNotRunningToast(effect),
@@ -131,10 +156,15 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     [dispatch]
   );
 
+  const retryJob = useCallback(
+    (id: string) => dispatch({ type: "press-retry", id }),
+    [dispatch]
+  );
+
   const dismissFinishedJobs = useCallback(
     () => dispatch({ type: "idle-timeout-elapsed" }),
     [dispatch]
   );
 
-  return { state, startJob, dismissJob, dismissFinishedJobs };
+  return { state, startJob, dismissJob, retryJob, dismissFinishedJobs };
 }

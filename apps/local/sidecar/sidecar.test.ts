@@ -65,6 +65,7 @@ const TIMING: SidecarTiming = {
   pollMs: 50,
   recoverEveryMs: 1_000,
   lapseWaitMs: 200,
+  postCheckTimeoutMs: 1_000,
 };
 
 /** Start a sidecar in the background; resolves once its socket answers. */

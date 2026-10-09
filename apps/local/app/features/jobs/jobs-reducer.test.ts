@@ -48,6 +48,7 @@ const requestExport = (): jobsReducer.Action => ({
   params: { videoId: "video-1" },
   subject: { type: "video", id: "video-1" },
   attemptsSpent: 0,
+  dependsOn: null,
 });
 
 const newTester = () =>
@@ -97,6 +98,7 @@ describe("jobsReducer", () => {
         params: { videoId: "video-1" },
         subject: { type: "video", id: "video-1" },
         attemptsSpent: 0,
+        dependsOn: null,
       },
       {
         type: "show-job-succeeded-toast",
@@ -323,6 +325,7 @@ describe("jobsReducer", () => {
         params: { videoId: "video-1" },
         subject: { type: "video", id: "video-1" },
         attemptsSpent: 0,
+        dependsOn: null,
       });
       expect(row(tester.getState())).toMatchObject({
         uploadType: "render-vertical",

@@ -78,3 +78,25 @@ export const decodeStreamData = <A, I>(
 /** Where a Job's log is read in the browser (the sidecar's `<job id>.jsonl`). */
 export const jobLogHref = (jobId: string) =>
   `/api/jobs/${encodeURIComponent(jobId)}/log`;
+
+/**
+ * The Job kinds that POST to an outside service (decision 5 in
+ * docs/plans/background-jobs-sidecar.md): each runs once, a cut-off run ends
+ * "interrupted — check before retrying", and only the author's Retry runs it
+ * again. The sidecar's registry is the authority (`definePostingJobKind`);
+ * `sidecar/posting-kinds.test.ts` holds this list to it.
+ */
+export const POSTING_JOB_KINDS: readonly string[] = [
+  "youtube",
+  "youtube-shorts",
+  "buffer",
+  "ai-hero",
+  "skills-changelog",
+];
+
+export const isPostingJobKind = (kind: string) =>
+  POSTING_JOB_KINDS.includes(kind);
+
+/** Where the author's Retry of a post is sent. */
+export const jobRetryHref = (jobId: string) =>
+  `/api/jobs/${encodeURIComponent(jobId)}/retry`;
