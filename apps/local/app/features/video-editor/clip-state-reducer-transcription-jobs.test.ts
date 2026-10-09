@@ -129,6 +129,45 @@ describe("a re-transcribe", () => {
   });
 });
 
+describe("a request the server joins to a live Job", () => {
+  it("follows that Job: its result lands, and its end fails what it never settled", () => {
+    const tester = new ReducerTester(
+      clipStateReducer,
+      createState({ items: [onDatabase("a"), onDatabase("b")] })
+    )
+      .send(retranscribe("job-live", "a", "b"))
+      .send(transcriptionJobStarted("job-live", ["a", "b"]))
+      // The sidecar dies; the author asks again, and the server answers with
+      // the live Job, which still holds both Clips.
+      .send(retranscribe("job-mine", "a", "b"))
+      .send({
+        type: "transcription-job-joined",
+        requestedJobId: "job-mine",
+        jobId: "job-live",
+      })
+      .send(clipTranscribed("job-live", "a", "landed"))
+      .send(transcriptionJobEnded("job-live", "interrupted"));
+
+    expect(clipIn(tester.getState(), "a")).toMatchObject({
+      text: "landed",
+      transcriptionStatus: "done",
+    });
+    expect(clipIn(tester.getState(), "b").transcriptionStatus).toBe("failed");
+    expect(tester.getState().clipTranscriptionJobs).toEqual({});
+  });
+
+  it("a join for a request this tab does not hold changes nothing", () => {
+    const state = createState({ items: [onDatabase("a")] });
+    const tester = new ReducerTester(clipStateReducer, state).send({
+      type: "transcription-job-joined",
+      requestedJobId: "job-other-tab",
+      jobId: "job-live",
+    });
+
+    expect(tester.getState()).toBe(state);
+  });
+});
+
 describe("a Job that ends without settling its Clips", () => {
   it.each(["failed", "interrupted"] as const)(
     "fails the Clips it never settled, and only those, when it %s",

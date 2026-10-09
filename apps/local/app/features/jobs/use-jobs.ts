@@ -7,6 +7,7 @@ import {
 } from "./jobs-reducer";
 import {
   decodeStreamData,
+  EnqueueAnswer,
   jobRetryHref,
   JOBS_DISMISS_HREF,
   JOB_STREAM_EVENTS,
@@ -29,6 +30,21 @@ export type JobSettledReport = Extract<
   jobsReducer.Effect,
   { type: "report-job-settled" }
 >;
+
+/** A request this tab made that the server answered with another, live Job. */
+export type JobJoinedReport = Extract<
+  jobsReducer.Effect,
+  { type: "report-job-joined" }
+>;
+export type JobJoinListener = (report: JobJoinedReport) => void;
+/** Hear this tab's requests that joined a live Job; the result unsubscribes. */
+export type SubscribeToJobJoins = (listener: JobJoinListener) => () => void;
+
+/** The id of the Job an enqueue answered with (`{ id }`); `asked` if unreadable. */
+const decodeEnqueueAnswer = (body: string, asked: string): string => {
+  const answer = decodeStreamData(EnqueueAnswer, body);
+  return answer?.id ?? asked;
+};
 
 export interface StartJobRequest {
   /**
@@ -96,6 +112,7 @@ function useJobEventStream(
 export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
   const onJobSettledRef = useRef(onJobSettled);
   onJobSettledRef.current = onJobSettled;
+  const [joinListeners] = useState(() => new Set<JobJoinListener>());
 
   const [state, dispatch] = useEffectReducer<
     jobsReducer.State,
@@ -119,7 +136,14 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
         })
           .then(async (response) => {
             if (response.ok) {
-              dispatch({ type: "enqueue-succeeded", id: effect.id });
+              dispatch({
+                type: "enqueue-succeeded",
+                id: effect.id,
+                answeredBy: decodeEnqueueAnswer(
+                  await response.text(),
+                  effect.id
+                ),
+              });
             } else if (response.status < 500) {
               dispatch({
                 type: "enqueue-failed",
@@ -203,9 +227,19 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     "show-sidecar-not-running-toast": (_state, effect) =>
       showSidecarNotRunningToast(effect),
     "report-job-settled": (_state, effect) => onJobSettledRef.current(effect),
+    "report-job-joined": (_state, effect) => {
+      for (const listener of joinListeners) listener(effect);
+    },
   });
 
   const [hub] = useState(createJobEventHub);
+
+  const subscribeToJobJoins = useCallback((listener: JobJoinListener) => {
+    joinListeners.add(listener);
+    return () => {
+      joinListeners.delete(listener);
+    };
+  }, []);
   useJobEventStream(dispatch, hub.publish);
 
   const startJob = useCallback(
@@ -240,6 +274,7 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     state,
     startJob,
     subscribeToJobEvents: hub.subscribe,
+    subscribeToJobJoins,
     dismissJob,
     retryJob,
     dismissFinishedJobs,

@@ -74,6 +74,28 @@ export const holdForRequestedJob = (
   };
 };
 
+/**
+ * The server answered the request for `requestedJobId` with the live Job
+ * `jobId` (it already holds the same Clips), so no Job `requestedJobId` will
+ * ever run: the Clips waiting on it follow `jobId` instead, its result and
+ * its end alike.
+ */
+export const followJoinedJob = (
+  state: ClipReducerState,
+  requestedJobId: string,
+  jobId: string
+): ClipReducerState => {
+  const waiting = Object.entries(state.clipTranscriptionJobs).filter(
+    ([, holder]) => holder.jobId === requestedJobId
+  );
+  if (waiting.length === 0) return state;
+  const clipTranscriptionJobs: Holders = { ...state.clipTranscriptionJobs };
+  for (const [clipId, holder] of waiting) {
+    clipTranscriptionJobs[clipId as DatabaseId] = { ...holder, jobId };
+  }
+  return { ...state, clipTranscriptionJobs };
+};
+
 const ClipsStarted = Schema.Struct({ clipIds: Schema.Array(Schema.String) });
 
 /**

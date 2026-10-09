@@ -47,6 +47,25 @@ const enqueued = (
   };
 };
 
+/**
+ * The server answered with a live Job that already does this work, and added
+ * none: the request is dropped (its id will never be on the stream), and
+ * whoever asked follows the live Job instead. Only a kind with one live Job
+ * per piece of work (`transcribe-clips`) is answered this way, and nothing
+ * waits on one.
+ */
+const joined = (
+  state: jobsReducer.State,
+  id: string,
+  jobId: string,
+  exec: Exec
+): jobsReducer.State => {
+  if (!state.jobs[id]) return state;
+  exec({ type: "report-job-joined", id, jobId });
+  const { [id]: _dropped, ...jobs } = state.jobs;
+  return { ...state, jobs };
+};
+
 /** An enqueue that failed: it, and every Job held on it, fails here. */
 const failRequested = (
   state: jobsReducer.State,
@@ -99,7 +118,9 @@ export const reduceEnqueueOutcome = (
 ): jobsReducer.State => {
   switch (action.type) {
     case "enqueue-succeeded":
-      return enqueued(state, action.id, exec);
+      return action.answeredBy === action.id
+        ? enqueued(state, action.id, exec)
+        : joined(state, action.id, action.answeredBy, exec);
     case "enqueue-failed":
       return failRequested(state, action.id, action.message, exec);
     case "enqueue-unanswered": {

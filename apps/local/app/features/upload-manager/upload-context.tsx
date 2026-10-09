@@ -20,7 +20,11 @@ import {
 } from "./upload-history";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { CompletedStage } from "./upload-timing";
-import { useJobs, type JobSettledReport } from "@/features/jobs/use-jobs";
+import {
+  useJobs,
+  type JobSettledReport,
+  type SubscribeToJobJoins,
+} from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
@@ -32,6 +36,8 @@ export interface UploadContextType {
   dismissJob: (jobId: string) => void;
   /** Hear Job Events as they arrive (the recent ones first). */
   subscribeToJobEvents: SubscribeToJobEvents;
+  /** Hear this tab's requests the server answered with another, live Job. */
+  subscribeToJobJoins: SubscribeToJobJoins;
   /**
    * The author's Retry on a failed or interrupted post: the only way a post
    * runs again (posts never retry on their own).
@@ -492,6 +498,7 @@ export function UploadProvider({
         jobs: jobs.state,
         dismissJob: jobs.dismissJob,
         subscribeToJobEvents: jobs.subscribeToJobEvents,
+        subscribeToJobJoins: jobs.subscribeToJobJoins,
         retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
         clearFinished,

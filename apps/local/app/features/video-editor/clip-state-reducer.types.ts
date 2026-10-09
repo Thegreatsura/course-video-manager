@@ -302,6 +302,15 @@ export type ClipReducerAction =
       jobId: string;
     }
   | {
+      /**
+       * The server answered this tab's request for Job `requestedJobId` with
+       * the live Job `jobId`, which already transcribes the same Clips.
+       */
+      type: "transcription-job-joined";
+      requestedJobId: string;
+      jobId: string;
+    }
+  | {
       /** The Job Event stream said something about this Video's Clip transcriptions. */
       type: "job-event-heard";
       heard: JobEventMessage;

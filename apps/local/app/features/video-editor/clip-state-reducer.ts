@@ -13,6 +13,7 @@ import type {
 import { archiveClips } from "./clip-state-reducer.helpers";
 import {
   applyTranscriptionJobEvent,
+  followJoinedJob,
   requestClipTranscription,
 } from "./clip-state-reducer-transcription-jobs";
 import { handleAddEffectClipAt } from "./clip-state-reducer-effect-clip-helpers";
@@ -80,6 +81,8 @@ export const clipStateReducer: EffectReducer<
         action.jobId,
         exec
       );
+    case "transcription-job-joined":
+      return followJoinedJob(state, action.requestedJobId, action.jobId);
     case "job-event-heard":
       return applyTranscriptionJobEvent(state, action.heard);
     case "set-insertion-point-after": {
