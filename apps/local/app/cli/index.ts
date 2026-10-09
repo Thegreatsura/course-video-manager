@@ -36,7 +36,7 @@ Read-mostly: most verbs are READS. A growing set of nouns has WRITE verbs —
 (create/rename/move/archive), 'lesson'
 (create/update/move/archive), 'video'
 (create/move/update/archive/unarchive), 'file' (add/delete), 'footage' (transcribe), 'pitch'
-(create/update), 'deliverable' (create/update/archive), 'diagram' (create) and
+(create/update), 'deliverable' (create/update/archive), 'diagram' (create/snapshot add) and
 'course' (publish).
 Every other verb is read-only, and each verb's own --help is authoritative about
 whether it reads or writes.
@@ -131,7 +131,7 @@ WHAT NEEDS A MACHINE
     cvm file …              the Video Files directory
     cvm footage …           raw footage files on disk (transcribed with ffmpeg)
     cvm clip-mockup …       the Clip Mockup directory (a Video's Animatic frames)
-    cvm diagram create      a headless browser and the running app (draws the PNG)
+    cvm diagram …           a headless browser and the running app (draws the PNG)
     cvm course readiness    the finished videos directory (exportedness)
     cvm course publish      the same, plus ffmpeg
   Anywhere else they are refused before doing any work — exit 7, _tag
@@ -222,6 +222,11 @@ WRITES
                                      playground url and a PNG per snapshot to
                                      check (LOCAL-ONLY; the format is in
                                      'cvm diagram --help')
+    diagram snapshot add             change a Diagram: add ONE drawing as a
+                                     Preserved Snapshot and make it the head
+                                     (an unheld head is preserved first);
+                                     'diagram render <snapshotId>' draws a
+                                     stored snapshot to a PNG (LOCAL-ONLY)
     course  publish                  Submit the Draft as a Pending Version,
                                      Commit it to Dropbox, Promote to Published
                                      (--name vX.Y.Z, a lowercase-'v' semver)

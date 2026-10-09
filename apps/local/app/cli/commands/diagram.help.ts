@@ -9,19 +9,26 @@ export const HELP = `Diagram — a tldraw drawing Matt films against, edited in 
 
 An agent DRAFTS a Diagram here in the simple shape format — a short list of
 boxes, ellipses, text, arrows, lines and icons in Matt's house style — and
-Matt finishes it by hand. 'create' always makes a NEW Diagram; it never edits
-one Matt may have open.
+Matt finishes it by hand.
 
 A Diagram is the folder; its drawings are SNAPSHOTS, and a snapshot never
 changes. 'create' keeps each drawing you give it as a Preserved Snapshot, in
 order, and opens the Diagram on the FIRST. A batch is a build-up: the steps
 Matt walks through on camera, one snapshot each.
 
+To CHANGE a Diagram, never edit it: 'snapshot add' a new drawing. It becomes
+a Preserved Snapshot and the Diagram's current drawing (its head) — a Restore
+to Head. If Matt drew on the head by hand and no snapshot holds that drawing,
+it is preserved first, so nothing he did is lost.
+
 Verbs:
-  create --file <path|->   WRITE. A new Diagram from a JSON file ("-" = STDIN)
+  create --file <path|->                    WRITE. A new Diagram from a JSON file ("-" = STDIN)
+  snapshot add --file <path|-> <diagramId>  WRITE. One more drawing, made the head
+  render <snapshotId>                       READ. Draw a stored snapshot to a PNG
 
 THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
-and 'create' again until the pictures are right, then hand Matt the url.
+and 'create' again until the pictures are right, then hand Matt the url. Once
+he has the url, change it with 'snapshot add', never a second 'create'.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
@@ -93,13 +100,15 @@ EXAMPLE
 
 LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
-(CVM_APP_URL, default http://localhost:5173). Elsewhere 'create' is refused
+(CVM_APP_URL, default http://localhost:5173). Elsewhere every verb is refused
 before doing anything: _tag "LocalOnlyCommandError", exit 7. Stop; do not
 retry.
 
 Examples:
   cvm diagram create --file agent-loop.json
-  cat agent-loop.json | cvm diagram create --file -`;
+  cat agent-loop.json | cvm diagram create --file -
+  cvm diagram snapshot add --file agent-loop-v2.json <diagramId>
+  cvm diagram render <snapshotId>`;
 
 export const CREATE_HELP = `WRITE. Create a NEW Diagram from a simple-format JSON file: each drawing in it
 becomes a Preserved Snapshot, in order, and the Diagram opens on the FIRST.
@@ -139,3 +148,67 @@ Examples:
   cvm diagram create --file agent-loop.json
   cvm diagram create --file agent-loop.json | jq -r '.snapshots[].image'
   echo '{"shapes":[{"type":"box","id":"a","x":0,"y":0,"w":200,"h":100}]}' | cvm diagram create --file -`;
+
+export const SNAPSHOT_HELP = `A Diagram's snapshots: its drawings, each one immutable.
+
+Verbs:
+  add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
+
+See 'cvm diagram snapshot add --help'.`;
+
+export const SNAPSHOT_ADD_HELP = `WRITE. Add ONE drawing to an existing Diagram as a Preserved Snapshot and make
+it the Diagram's head (a Restore to Head). This is how a Diagram changes: a
+snapshot is never edited, a new one is added. It is drawn as a PNG, and the
+command prints where to look.
+
+  cvm diagram snapshot add --file <path|-> <diagramId>
+
+  <diagramId>       the Diagram: its id, or its playground url.
+  --file <path|->   the drawing as JSON, { "shapes": [...] } — no "name" (the
+                    Diagram has one) and no "snapshots" (one at a time). See
+                    'cvm diagram --help' for the format. "-" reads STDIN.
+
+Nothing is lost. If no snapshot in the Diagram's timeline holds its current
+drawing — Matt drew on it by hand — that drawing is preserved FIRST, then the
+new one is added and restored. If Matt has the Diagram open, the playground
+offers him "Reload" or "Keep my edits".
+
+Output: ONE NDJSON line,
+  {"snapshotId":"…","image":"/tmp/…/….png"}
+  snapshotId  the new DiagramSnapshot's id; the Diagram's head is now this.
+  image       the PNG of the drawing: light mode, white background. READ IT.
+
+Order: the file is checked, the Diagram looked up, the drawing drawn, then
+written. Nothing is written unless all succeed. Adding a drawing the Diagram
+already has re-uses that snapshot.
+
+Exit codes:
+  2  no Diagram with that id (_tag NotFoundError).
+  3  invalid input — EVERY problem at once, each naming its shape.
+  4  the PNG could not be drawn (_tag DiagramRenderError) — usually the app
+     is not running at CVM_APP_URL. Nothing is written.
+  7  not the author's machine (_tag LocalOnlyCommandError). Stop.
+
+Examples:
+  cvm diagram snapshot add --file agent-loop-v2.json 3f2a…
+  cvm diagram snapshot add --file - 3f2a… < agent-loop-v2.json | jq -r .image`;
+
+export const RENDER_HELP = `READ. Draw one stored DiagramSnapshot to a PNG and print where it is. It draws
+a SNAPSHOT — never the head, which Matt may be mid-way through editing.
+
+  cvm diagram render <snapshotId>
+
+Output: ONE NDJSON line,
+  {"snapshotId":"…","image":"/tmp/…/….png"}
+  snapshotId  the snapshot drawn.
+  image       its PNG: light mode, white background, <snapshotId>.png.
+
+Exit codes:
+  2  no snapshot with that id (_tag NotFoundError).
+  4  the PNG could not be drawn (_tag DiagramRenderError) — usually the app
+     is not running at CVM_APP_URL.
+  7  not the author's machine (_tag LocalOnlyCommandError). Stop.
+
+Examples:
+  cvm diagram render 9c41…
+  cvm diagram render 9c41… | jq -r .image`;
