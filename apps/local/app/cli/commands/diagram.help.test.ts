@@ -10,8 +10,13 @@ import {
   SIZES,
 } from "@cvm/core/lib/simple-diagram/index";
 import { ICON_NAMES } from "@cvm/lucide-icons";
-import { CREATE_HELP, HELP } from "./diagram.help";
-import { parseCreateInput } from "./diagram-input";
+import {
+  CREATE_HELP,
+  HELP,
+  RENDER_HELP,
+  SNAPSHOT_ADD_HELP,
+} from "./diagram.help";
+import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
 
 // ===========================================================================
 // The help IS the format's documentation for agents, and the zod schema is
@@ -168,5 +173,42 @@ describe("cvm diagram --help documents what 'create' accepts", () => {
     for (const field of ["id", "url", "snapshots", "image"]) {
       expect(output).toMatch(new RegExp(`^ {2,4}${field} `, "m"));
     }
+  });
+});
+
+describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
+  const icons = new Set<string>(ICON_NAMES);
+
+  it("lists every verb, flags before the positional id", () => {
+    const verbs = block("Verbs:").map((line) => line.trim());
+    expect(verbs.map((v) => v.split(/\s{2,}/)[0])).toEqual([
+      "create --file <path|->",
+      "snapshot add --file <path|-> <diagramId>",
+      "render <snapshotId>",
+    ]);
+  });
+
+  it("gives an EXAMPLE whose shapes 'snapshot add' accepts as one drawing", () => {
+    const { shapes } = example();
+    expect(parseSnapshotInput({ shapes }, icons).ok).toBe(true);
+  });
+
+  it("refuses the whole EXAMPLE to 'snapshot add': a snapshot has no name", () => {
+    expect(parseSnapshotInput(example(), icons).ok).toBe(false);
+  });
+
+  it.each([
+    ["snapshot add", SNAPSHOT_ADD_HELP],
+    ["render", RENDER_HELP],
+  ])("documents the output '%s' prints: {snapshotId, image}", (_, help) => {
+    const output = help.slice(help.indexOf("Output:"));
+    expect(output).toMatch(/\{"snapshotId":"…","image":"[^"]+"\}/);
+    for (const field of ["snapshotId", "image"]) {
+      expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
+    }
+  });
+
+  it("says render draws a SNAPSHOT, never the head", () => {
+    expect(RENDER_HELP).toContain("never the head");
   });
 });

@@ -197,6 +197,25 @@ describe("stageHistoryFrom", () => {
     expect(encodes[0]!.durationMs).toBe(6_000);
   });
 
+  it("leaves out a stage cut short by a requeue", () => {
+    const events = [
+      event(exportJob, 0, "queued"),
+      event(exportJob, 1_000, "started", { attempt: 1 }),
+      event(exportJob, 1_000, "stage", { stage: "concatenating-clips" }),
+      // The sidecar stops 2s in: back to the queue, same attempt.
+      event(exportJob, 3_000, "requeued", { attempt: 1 }),
+      // Restarted ten minutes later, where the stage really takes 60s.
+      event(exportJob, 600_000, "started", { attempt: 1 }),
+      event(exportJob, 600_000, "stage", { stage: "concatenating-clips" }),
+      event(exportJob, 660_000, "stage", { stage: "normalizing-audio" }),
+      event(exportJob, 665_000, "succeeded"),
+    ];
+    const data = stageHistoryFrom({ jobs: [{ job: exportJob, events }] });
+    expect(data["export:concatenating-clips"]).toEqual([
+      { durationMs: 60_000, units: null },
+    ]);
+  });
+
   it("is empty with no Jobs", () => {
     expect(stageHistoryFrom({ jobs: [] })).toEqual({});
   });

@@ -73,6 +73,7 @@ export const timeJobEvent = (
     {
       at: Number.isFinite(action.at) ? action.at : undefined,
       exportWorkId: encodingRowOf(action),
+      cutShort: action.type === "job-requeued",
     }
   );
   if (next === previousTimings) return timings;

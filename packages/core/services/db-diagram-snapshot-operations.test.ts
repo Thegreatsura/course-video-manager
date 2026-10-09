@@ -434,3 +434,108 @@ describe("createDiagramFromSnapshots", () => {
     }).pipe(Effect.provide(testLayer))
   );
 });
+
+describe("addSnapshotToHead", () => {
+  /** Matt's hand edit in the playground: a head no snapshot holds. */
+  const handEdit = {
+    store: { "shape:a": { id: "a", x: 1 }, "shape:hand": { id: "hand" } },
+    schema: { schemaVersion: 2 },
+  };
+
+  it.effect(
+    "preserves an unheld head FIRST, then keeps the new scene and restores it to the head",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const { diagram: created, snapshots: drawn } =
+          yield* diagramOps.createDiagramFromSnapshots({ scenes: [scene1] });
+        yield* diagramOps.updateDiagramHead(created.id, handEdit);
+
+        const { diagram, snapshot, preservedHead } =
+          yield* diagramOps.addSnapshotToHead(created.id, scene2);
+
+        expect(diagram.headScene).toEqual(scene2);
+        expect(snapshot.scene).toEqual(scene2);
+        expect(preservedHead?.scene).toEqual(handEdit);
+        const listed = yield* diagramOps.listSnapshots(created.id);
+        expect(listed.map((s) => [s.id, s.scene, s.preserved])).toEqual([
+          [drawn[0]!.id, scene1, true],
+          [preservedHead!.id, handEdit, true],
+          [snapshot.id, scene2, true],
+        ]);
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("swaps without a new snapshot when the head is already held", () =>
+    Effect.gen(function* () {
+      const diagramOps = yield* DiagramOperationsService;
+      const { diagram: created } = yield* diagramOps.createDiagramFromSnapshots(
+        { scenes: [scene1] }
+      );
+
+      const { preservedHead, diagram } = yield* diagramOps.addSnapshotToHead(
+        created.id,
+        scene2
+      );
+
+      expect(preservedHead).toBeNull();
+      expect(diagram.headScene).toEqual(scene2);
+      const listed = yield* diagramOps.listSnapshots(created.id);
+      expect(listed.map((s) => s.scene)).toEqual([scene1, scene2]);
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "preserves a head whose only snapshot was archived, and brings it back",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const { diagram: created, snapshots: drawn } =
+          yield* diagramOps.createDiagramFromSnapshots({ scenes: [scene1] });
+        yield* diagramOps.setSnapshotArchived(drawn[0]!.id, true);
+
+        const { preservedHead } = yield* diagramOps.addSnapshotToHead(
+          created.id,
+          scene2
+        );
+
+        expect(preservedHead?.id).toBe(drawn[0]!.id);
+        expect(preservedHead?.archived).toBe(false);
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("keeps nothing for an empty head", () =>
+    Effect.gen(function* () {
+      const diagramOps = yield* DiagramOperationsService;
+      const created = yield* diagramOps.createDiagram();
+      yield* diagramOps.updateDiagramHead(created.id, {
+        store: { "page:page": { id: "page:page" } },
+        schema: { schemaVersion: 2 },
+      });
+
+      const { preservedHead } = yield* diagramOps.addSnapshotToHead(
+        created.id,
+        scene1
+      );
+
+      expect(preservedHead).toBeNull();
+      const listed = yield* diagramOps.listSnapshots(created.id);
+      expect(listed.map((s) => s.scene)).toEqual([scene1]);
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "fails NotFoundError for a missing Diagram and writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const error = yield* Effect.flip(
+          diagramOps.addSnapshotToHead(
+            "00000000-0000-0000-0000-000000000000",
+            scene1
+          )
+        );
+        expect(error._tag).toBe("NotFoundError");
+      }).pipe(Effect.provide(testLayer))
+  );
+});
