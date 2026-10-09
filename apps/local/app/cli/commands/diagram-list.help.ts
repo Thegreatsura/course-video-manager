@@ -63,6 +63,13 @@ Output: NDJSON, one line per Component (an empty list prints nothing),
           from 0: shift them all to place it. A shape the format cannot say
           comes back as {"type":"other","id":"…"} — leave it out of a copy.
 
+Every run mints FRESH ids for every Component's shapes (each arrow's
+"from"/"to" follows them), so a copy never collides with the Diagram it came
+from or with anything already drawn: paste its shapes into 'create' or
+'snapshot add' as they are. For a SECOND copy of the same Component, run
+'component list' again — two copies from one run share ids and are refused
+as duplicates.
+
 Examples:
   cvm diagram component list
   cvm diagram component list | jq -c '{name, shapes}'
