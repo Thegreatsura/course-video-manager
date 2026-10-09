@@ -387,6 +387,7 @@ describe("a posting Job in the sidecar", () => {
         expect(yield* ops.getJob(job.id)).toMatchObject({ status: "running" });
         const retry = yield* retryJob({
           jobId: job.id,
+          attempt: 1,
           registry: stub.registry,
         }).pipe(Effect.flip);
         expect(retry._tag).toBe("JobNotRetryableError");
