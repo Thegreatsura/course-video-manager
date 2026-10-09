@@ -118,34 +118,6 @@ export function DependencySelector({
     }
   };
 
-  // Group lessons by section, filtering out the current lesson and applying search
-  const sections = allLessons.reduce<
-    Map<
-      string,
-      { title: string; number: number; lessons: DependencyLessonItem[] }
-    >
-  >((acc, lesson) => {
-    if (lesson.id === lessonId) return acc;
-    if (
-      search !== "" &&
-      !lesson.title.toLowerCase().includes(search.toLowerCase()) &&
-      !lesson.number.includes(search)
-    ) {
-      return acc;
-    }
-    if (!acc.has(lesson.sectionId)) {
-      acc.set(lesson.sectionId, {
-        title: lesson.sectionTitle,
-        number: lesson.sectionNumber,
-        lessons: [],
-      });
-    }
-    acc.get(lesson.sectionId)!.lessons.push(lesson);
-    return acc;
-  }, new Map());
-
-  const filteredSections = Array.from(sections.entries());
-
   const title =
     hasOrderViolation && hasPriorityViolation
       ? `Order violation: depends on later lessons (${orderViolations.map((v) => v.number).join(", ")}). Priority violation: P${lessonPriority} depends on lower priority lessons (${priorityViolations.map((v) => `${v.number} P${v.priority}`).join(", ")})`
@@ -197,64 +169,121 @@ export function DependencySelector({
             className="h-8 text-sm"
           />
         </div>
-        <div
-          className="overflow-y-auto"
-          style={{
-            maxHeight: "var(--radix-popover-content-available-height, 300px)",
-          }}
-        >
-          <div className="p-1">
-            {filteredSections.length === 0 ? (
-              <div className="px-3 py-6 text-sm text-muted-foreground text-center">
-                No lessons found
-              </div>
-            ) : (
-              filteredSections.map(([sectionId, section]) => (
-                <div key={sectionId}>
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.number}. {section.title}
-                  </div>
-                  {section.lessons.map((l) => {
-                    const isCircular =
-                      !dependencies.includes(l.id) &&
-                      wouldCreateCycle(lessonId, l.id, dependencyMap);
-                    return (
-                      <label
-                        key={l.id}
-                        className={`flex items-center gap-2 px-2 pl-4 py-1.5 rounded text-sm ${
-                          isCircular
-                            ? "opacity-50 cursor-not-allowed"
-                            : "hover:bg-muted cursor-pointer"
-                        }`}
-                        title={
-                          isCircular
-                            ? "Would create a circular dependency"
-                            : undefined
-                        }
-                      >
-                        <Checkbox
-                          checked={dependencies.includes(l.id)}
-                          onCheckedChange={() => toggle(l.id)}
-                          disabled={isCircular}
-                        />
-                        <span className="text-muted-foreground w-7 text-right shrink-0">
-                          {l.number}
-                        </span>
-                        <span className="truncate">{l.title}</span>
-                        {isCircular && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            (circular)
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        {/* Its own component, so the Course's whole lesson list is built
+            only while the popover is open, not once per row on every render. */}
+        <DependencyList
+          lessonId={lessonId}
+          dependencies={dependencies}
+          allLessons={allLessons}
+          dependencyMap={dependencyMap}
+          search={search}
+          onToggle={toggle}
+        />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function DependencyList({
+  lessonId,
+  dependencies,
+  allLessons,
+  dependencyMap,
+  search,
+  onToggle,
+}: {
+  lessonId: string;
+  dependencies: string[];
+  allLessons: DependencyLessonItem[];
+  dependencyMap: Record<string, string[]>;
+  search: string;
+  onToggle: (id: string) => void;
+}) {
+  // Group lessons by section, filtering out the current lesson and applying search
+  const sections = allLessons.reduce<
+    Map<
+      string,
+      { title: string; number: number; lessons: DependencyLessonItem[] }
+    >
+  >((acc, lesson) => {
+    if (lesson.id === lessonId) return acc;
+    if (
+      search !== "" &&
+      !lesson.title.toLowerCase().includes(search.toLowerCase()) &&
+      !lesson.number.includes(search)
+    ) {
+      return acc;
+    }
+    if (!acc.has(lesson.sectionId)) {
+      acc.set(lesson.sectionId, {
+        title: lesson.sectionTitle,
+        number: lesson.sectionNumber,
+        lessons: [],
+      });
+    }
+    acc.get(lesson.sectionId)!.lessons.push(lesson);
+    return acc;
+  }, new Map());
+
+  const filteredSections = Array.from(sections.entries());
+
+  return (
+    <div
+      className="overflow-y-auto"
+      style={{
+        maxHeight: "var(--radix-popover-content-available-height, 300px)",
+      }}
+    >
+      <div className="p-1">
+        {filteredSections.length === 0 ? (
+          <div className="px-3 py-6 text-sm text-muted-foreground text-center">
+            No lessons found
+          </div>
+        ) : (
+          filteredSections.map(([sectionId, section]) => (
+            <div key={sectionId}>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {section.number}. {section.title}
+              </div>
+              {section.lessons.map((l) => {
+                const isCircular =
+                  !dependencies.includes(l.id) &&
+                  wouldCreateCycle(lessonId, l.id, dependencyMap);
+                return (
+                  <label
+                    key={l.id}
+                    className={`flex items-center gap-2 px-2 pl-4 py-1.5 rounded text-sm ${
+                      isCircular
+                        ? "opacity-50 cursor-not-allowed"
+                        : "hover:bg-muted cursor-pointer"
+                    }`}
+                    title={
+                      isCircular
+                        ? "Would create a circular dependency"
+                        : undefined
+                    }
+                  >
+                    <Checkbox
+                      checked={dependencies.includes(l.id)}
+                      onCheckedChange={() => onToggle(l.id)}
+                      disabled={isCircular}
+                    />
+                    <span className="text-muted-foreground w-7 text-right shrink-0">
+                      {l.number}
+                    </span>
+                    <span className="truncate">{l.title}</span>
+                    {isCircular && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        (circular)
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

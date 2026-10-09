@@ -73,8 +73,13 @@ export const planDuplicatedVideoFiles = Effect.fn("planDuplicatedVideoFiles")(
     );
     const planned: PlannedCopy[] = [];
     // De-duplicated: two Clip Mockups saying the same words share one WAV.
+    // A row whose voice is not made yet has no WAV to copy.
     const mockupPaths = new Set(
-      rows.flatMap((row) => [row.imagePath, row.audioPath])
+      rows.flatMap((row) =>
+        row.audioPath === null
+          ? [row.imagePath]
+          : [row.imagePath, row.audioPath]
+      )
     );
     for (const relativePath of mockupPaths) {
       const from = yield* resolveClipMockupPath(

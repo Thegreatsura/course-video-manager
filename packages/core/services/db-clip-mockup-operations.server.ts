@@ -99,7 +99,9 @@ const createClipMockupOperations = (db: Database) => {
    */
   const listClipMockupDurationsByVideoIds = (videoIds: readonly string[]) =>
     videoIds.length === 0
-      ? Effect.succeed([] as { videoId: string; durationSeconds: number }[])
+      ? Effect.succeed(
+          [] as { videoId: string; durationSeconds: number | null }[]
+        )
       : makeDbCall(() =>
           db.query.clipMockups.findMany({
             columns: { videoId: true, durationSeconds: true },
@@ -181,6 +183,9 @@ const createClipMockupOperations = (db: Database) => {
             imagePath: entry.imagePath,
             audioPath: entry.speech.audioPath,
             durationSeconds: entry.speech.durationSeconds,
+            // Voiced before the row is saved, so it is born ready.
+            voiceStatus: "ready",
+            voiceError: null,
             order,
           })
           .returning()
@@ -230,6 +235,8 @@ const createClipMockupOperations = (db: Database) => {
                   line: edit.say.line,
                   audioPath: edit.say.speech.audioPath,
                   durationSeconds: edit.say.speech.durationSeconds,
+                  voiceStatus: "ready",
+                  voiceError: null,
                 }),
           })
           .where(eq(clipMockups.id, edit.id))

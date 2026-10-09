@@ -20,11 +20,14 @@ import { ANIMATIC_FPS, segmentFrames } from "./animatic-timeline";
  * Section's Videos in, and the player hands the frame and the rate in.
  */
 
-/** One Video of the Section, with the speech durations of its Clip Mockups. */
+/**
+ * One Video of the Section, with the speech durations of its Clip Mockups —
+ * `null` for one whose voice is not made yet, held like any unvoiced row.
+ */
 export interface AnimaticSectionVideo {
   readonly id: string;
   readonly title: string;
-  readonly durationsSeconds: readonly number[];
+  readonly durationsSeconds: readonly (number | null)[];
 }
 
 /** One Lesson of the Section, in Section order, with its Videos. */
@@ -41,8 +44,8 @@ export interface AnimaticSectionRunTime {
 }
 
 /** The frames a Video's Animatic runs for. Zero for one with no Clip Mockups. */
-function animaticFrames(durationsSeconds: readonly number[]): number {
-  return durationsSeconds.reduce(
+function animaticFrames(durationsSeconds: readonly (number | null)[]): number {
+  return durationsSeconds.reduce<number>(
     (total, seconds) => total + segmentFrames(seconds).durationInFrames,
     0
   );
@@ -63,7 +66,7 @@ export function sectionRunTime(params: {
   readonly lessons: readonly AnimaticSectionLesson[];
   readonly currentVideoId: string;
   /** The current Video's own Clip Mockups, used when it is not in `lessons`. */
-  readonly currentDurationsSeconds: readonly number[];
+  readonly currentDurationsSeconds: readonly (number | null)[];
 }): AnimaticSectionRunTime {
   const videos = params.lessons.flatMap((lesson) =>
     // `localeCompare`, exactly as `db-video-navigation.server.ts` sorts them.

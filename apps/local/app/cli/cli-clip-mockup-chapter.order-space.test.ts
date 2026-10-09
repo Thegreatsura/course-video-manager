@@ -371,6 +371,8 @@ describe("one order space shared with Clip Mockups", () => {
           "imagePath",
           "audioPath",
           "durationSeconds",
+          "voiceStatus",
+          "voiceError",
           "order",
           "archived",
           "createdAt",

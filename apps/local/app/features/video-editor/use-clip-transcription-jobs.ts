@@ -1,5 +1,5 @@
-import { useContext, useEffect } from "react";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useEffect } from "react";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import type { ClipReducerAction } from "./clip-state-reducer.types";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "./transcribe-clips-response";
 
@@ -15,8 +15,7 @@ export function useClipTranscriptionJobs(
   videoId: string,
   dispatch: (action: ClipReducerAction) => void
 ) {
-  const { subscribeToJobEvents, subscribeToJobJoins } =
-    useContext(UploadContext);
+  const { subscribeToJobEvents, subscribeToJobJoins } = useUploadActions();
   useEffect(
     () =>
       subscribeToJobEvents((heard) => {

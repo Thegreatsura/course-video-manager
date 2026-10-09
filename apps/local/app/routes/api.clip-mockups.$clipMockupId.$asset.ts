@@ -49,7 +49,7 @@ export const loader = makeLoader({
       );
       const relativePath = mockup[ASSET_COLUMNS[asset]];
 
-      if (relativePath === "") {
+      if (relativePath === null || relativePath === "") {
         return yield* Effect.die(
           data(`This Clip Mockup has no ${asset}`, { status: 404 })
         );

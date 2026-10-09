@@ -81,10 +81,15 @@ export const loader = makeLoader({
               row.imagePath
             ).pipe(Effect.catchAll(() => Effect.succeed(false)));
 
-            const audioExists = yield* clipMockupFileExists(
-              video.lineageId,
-              row.audioPath
-            ).pipe(Effect.catchAll(() => Effect.succeed(false)));
+            // No `audioPath` means the voice is not made yet — as missing as
+            // a WAV that is not on disk.
+            const audioExists =
+              row.audioPath === null
+                ? false
+                : yield* clipMockupFileExists(
+                    video.lineageId,
+                    row.audioPath
+                  ).pipe(Effect.catchAll(() => Effect.succeed(false)));
 
             return {
               id: row.id,
@@ -167,7 +172,7 @@ const loadSectionLessons = (videoId: string) =>
     const videoIds = section.lessons.flatMap((l) => l.videos.map((v) => v.id));
     const durationRows =
       yield* clipMockupOps.listClipMockupDurationsByVideoIds(videoIds);
-    const durationsByVideo = new Map<string, number[]>();
+    const durationsByVideo = new Map<string, (number | null)[]>();
     for (const row of durationRows) {
       const list = durationsByVideo.get(row.videoId) ?? [];
       list.push(row.durationSeconds);
