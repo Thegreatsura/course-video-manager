@@ -24,6 +24,8 @@ import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
 import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundary";
 import { CommandPalette } from "@/features/diagrams/palette/command-palette";
 import { HeadLoadStatus } from "@/features/diagrams/head-load-status";
+import { HeadChangedElsewherePrompt } from "@/features/diagrams/head-changed-elsewhere-prompt";
+import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { useDiagramPlaygroundReducer } from "@/features/diagrams/use-diagram-playground-reducer";
 
 export const loader = loadDiagramPlaygroundActive;
@@ -35,7 +37,7 @@ const EMPTY_EMBEDS: never[] = [];
 export default function DiagramPlaygroundActive({
   loaderData,
 }: Route.ComponentProps) {
-  const { diagrams } = loaderData;
+  const { diagrams, activeHead } = loaderData;
   const { diagramId } = useParams<{ diagramId: string }>();
   const navigate = useNavigate();
   const {
@@ -45,7 +47,19 @@ export default function DiagramPlaygroundActive({
     attachEditor,
     flushPendingSave,
     requestRestore,
+    reportStoredHead,
   } = useDiagramPlaygroundReducer();
+
+  // Diagrams change elsewhere too (an agent drawing one, another tab): the
+  // rail and the Active Diagram's stored head are refetched every 2s.
+  useFocusRevalidate({ intervalMs: 2000 });
+  useEffect(() => {
+    if (!activeHead) return;
+    reportStoredHead(activeHead.diagramId, {
+      hash: activeHead.headHash,
+      updatedAt: activeHead.updatedAt,
+    });
+  }, [activeHead, reportStoredHead]);
 
   const reloadScene = useCallback(
     (id: string) => dispatch({ type: "head-moved-elsewhere", diagramId: id }),
@@ -274,6 +288,14 @@ export default function DiagramPlaygroundActive({
             <HeadLoadStatus
               status={state.head?.status ?? "loading"}
               onRetry={() => dispatch({ type: "retry-load-clicked" })}
+            />
+          )}
+          {diagramId && state.head?.changedElsewhere && (
+            <HeadChangedElsewherePrompt
+              onLoadChanged={() =>
+                dispatch({ type: "load-changed-head-clicked" })
+              }
+              onKeepMine={() => dispatch({ type: "keep-my-edits-clicked" })}
             />
           )}
           {diagramId && (
