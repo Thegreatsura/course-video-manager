@@ -1,11 +1,12 @@
 import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LayerLive } from "@/services/layer.server";
-import { isPostingKind, type JobKind } from "./job-kind";
+import { isPostingKind, type EnqueueJob, type JobKind } from "./job-kind";
 import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
+import { publishJobKind } from "./kinds/publish";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
 import { aiHeroJobKind } from "./kinds/ai-hero";
 import { bufferJobKind } from "./kinds/buffer";
@@ -24,6 +25,8 @@ export const JOB_KINDS = {
   "render-vertical": renderVerticalJobKind,
   "batch-export": batchExportJobKind,
   autofill: autofillJobKind,
+  // The `publish` lane, one at a time; never run again on its own.
+  publish: publishJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.
   youtube: youtubeJobKind,
   "youtube-shorts": youtubeShortsJobKind,
@@ -112,6 +115,23 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     subject: input.subject,
   });
 });
+
+/**
+ * How a handler starts another Job (`ctx.enqueue`): `enqueueJob` over the
+ * sidecar's registry and database, then `then` (the sidecar's nudge, so a
+ * lane picks it up now rather than at the next poll).
+ */
+export const enqueueThrough =
+  (opts: {
+    readonly registry: JobKindRegistry<unknown>;
+    readonly ops: JobOperationsService;
+    readonly then: Effect.Effect<void>;
+  }): EnqueueJob =>
+  (request) =>
+    enqueueJob({ id: null, ...request, registry: opts.registry }).pipe(
+      Effect.provideService(JobOperationsService, opts.ops),
+      Effect.tap(() => opts.then)
+    );
 
 export class JobNotFoundError extends Data.TaggedError("JobNotFoundError")<{
   readonly jobId: string;

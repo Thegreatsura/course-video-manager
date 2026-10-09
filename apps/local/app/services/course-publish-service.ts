@@ -82,10 +82,6 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
       const videoOps = yield* VideoOperationsService;
       const versionOps = yield* VersionOperationsService;
       const effectFs = yield* FileSystem.FileSystem;
-      // CVM is a single local operator process. Serialize every Publish so two
-      // cannot interleave around the database freeze and Dropbox commit
-      // marker.
-      const courseVersionMutationSemaphore = yield* Effect.makeSemaphore(1);
       const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
         "FINISHED_VIDEOS_DIRECTORY"
       );
@@ -151,6 +147,8 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           percent: number;
         }) => void
       ) {
+        // An export is a Job: only the Sidecar runs it (sidecar-context.ts).
+        yield* SidecarContext;
         const { targetPath, owner } = yield* exportVideoCore(
           videoId,
           onStage,
@@ -499,10 +497,14 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         };
       });
 
+      // A Publish is a Job: only the Sidecar runs it (sidecar-context.ts).
+      // Its `publish` lane runs one at a time, which is what keeps two from
+      // interleaving around the database freeze and the Dropbox commit
+      // marker — the semaphore this service held is gone with the
+      // in-process callers.
       const publish = Effect.fn("publish")(function* (options: PublishOptions) {
-        return yield* courseVersionMutationSemaphore.withPermits(1)(
-          publishUnlocked(options)
-        );
+        yield* SidecarContext;
+        return yield* publishUnlocked(options);
       });
 
       return {
