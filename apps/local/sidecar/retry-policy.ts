@@ -153,6 +153,19 @@ export const CLIP_TRANSCRIPTION_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Footage transcription** (#16) was never an Upload Manager job either:
+ * `cvm footage transcribe` ran it in-process, and a failure was final — no
+ * retry. So: 1 attempt, in the `default` lane like a Clip transcription; the
+ * two share the Sidecar's one `WhisperTranscriptionService` and so its 20
+ * Whisper permits (the limit stays in the service, as section 6 decided). Not
+ * `neverRequeued`: a stop puts it back, and it resumes from its chunk cache.
+ */
+export const FOOTAGE_TRANSCRIPTION_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */

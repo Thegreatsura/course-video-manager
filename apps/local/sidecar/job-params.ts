@@ -37,6 +37,14 @@ export const JOB_PARAMS = {
   "transcribe-clips": Schema.Struct({
     clipIds: Schema.NonEmptyArray(Schema.String),
   }),
+  /** One Footage file, by its absolute path (Footage has no row). */
+  "transcribe-footage": Schema.Struct({
+    path: Schema.String.pipe(
+      Schema.filter((p) => p.startsWith("/"), {
+        message: () => "a footage path must be absolute",
+      })
+    ),
+  }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */
     courseId: Schema.String,

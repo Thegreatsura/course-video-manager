@@ -10,6 +10,7 @@ import { noopJobKind } from "./kinds/noop";
 import { publishJobKind } from "./kinds/publish";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
 import { transcribeClipsJobKind } from "./kinds/transcribe-clips";
+import { transcribeFootageJobKind } from "./kinds/transcribe-footage";
 import { aiHeroJobKind } from "./kinds/ai-hero";
 import { bufferJobKind } from "./kinds/buffer";
 import { skillsChangelogJobKind } from "./kinds/skills-changelog";
@@ -27,6 +28,7 @@ export const JOB_KINDS = {
   "batch-export": batchExportJobKind,
   autofill: autofillJobKind,
   "transcribe-clips": transcribeClipsJobKind,
+  "transcribe-footage": transcribeFootageJobKind,
   // The `publish` lane, one at a time; never run again on its own.
   publish: publishJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.
