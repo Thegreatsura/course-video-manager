@@ -17,6 +17,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -94,6 +95,7 @@ describe("clipStateReducer", () => {
       const stateAfterFirstDb = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "db-1" })],
         })
         .getState();
@@ -117,6 +119,7 @@ describe("clipStateReducer", () => {
       const stateAfterSecondDb = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "db-2" })],
         })
         .getState();
@@ -174,15 +177,18 @@ describe("clipStateReducer", () => {
       // Replace all three with database clips one at a time
       tester.send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-a" })],
       });
       tester.send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-b" })],
       });
       const finalState = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "db-c" })],
         })
         .getState();
@@ -224,6 +230,7 @@ describe("clipStateReducer", () => {
       const state = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "db-2" })],
         })
         .getState();

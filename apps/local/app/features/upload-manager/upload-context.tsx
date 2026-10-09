@@ -23,6 +23,7 @@ import type { CompletedStage } from "./upload-timing";
 import { useJobs, type JobSettledReport } from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
+import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 
 export interface UploadContextType {
   uploads: uploadReducer.State["uploads"];
@@ -120,6 +121,16 @@ export interface UploadContextType {
     versionId: string,
     includeTodoLessons: boolean
   ) => string;
+  /**
+   * Transcribe a Video's Clips: a `transcribe-clips` Job the Sidecar runs,
+   * under the id the editor made. It draws no row; its Job Events come back
+   * to the editor (`subscribeToJobEvents`).
+   */
+  startClipTranscription: (
+    jobId: string,
+    videoId: string,
+    clipIds: readonly string[]
+  ) => void;
   dismissUpload: (uploadId: string) => void;
 }
 
@@ -391,6 +402,24 @@ export function UploadProvider({
     [startJob]
   );
 
+  // A Clip transcription is a Job too. Enqueueing through the jobs reducer
+  // asks again, under the same id, when an answer is lost, so a dropped
+  // response never fails Clips that were queued after all.
+  const startClipTranscription = useCallback(
+    (jobId: string, videoId: string, clipIds: readonly string[]) => {
+      startJob({
+        id: jobId,
+        kind: TRANSCRIBE_CLIPS_JOB_KIND,
+        title: `Transcribe ${clipIds.length} ${clipIds.length === 1 ? "Clip" : "Clips"}`,
+        params: { clipIds: [...clipIds] },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: null,
+      });
+    },
+    [startJob]
+  );
+
   const clearFinishedJobs = jobs.clearFinishedJobs;
   const clearFinished = useCallback(() => {
     clearFinishedJobs();
@@ -479,6 +508,7 @@ export function UploadProvider({
         startBatchExportUpload,
         startPublish,
         startAutofill,
+        startClipTranscription,
         dismissUpload,
       }}
     >

@@ -103,6 +103,8 @@ export function sectionAtIndex(params: {
  * a share of whatever row or divider it is drawn inside, and it is `0` until
  * the player has written a frame.
  */
-export function progressFillStyle(variable: string): { readonly width: string } {
+export function progressFillStyle(variable: string): {
+  readonly width: string;
+} {
   return { width: `calc(var(${variable}, 0) * 100%)` };
 }

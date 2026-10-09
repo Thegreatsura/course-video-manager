@@ -19,6 +19,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -172,6 +173,7 @@ describe("clipStateReducer", () => {
       // Archive the clip, then pair with DB clip (creates ClipOnDatabase with shouldArchive)
       tester.send({ type: "clips-deleted", clipIds: [clipId] }).send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1", text: "Hello world" })],
       });
 
@@ -206,6 +208,7 @@ describe("clipStateReducer", () => {
 
       tester.send({ type: "clips-deleted", clipIds: [clipId] }).send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1", text: "" })],
       });
 
@@ -307,6 +310,7 @@ describe("clipStateReducer", () => {
       // DB clip arrives from file A — should only pair with session 1's clip
       tester.send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1" as DatabaseId })],
         outputPath: session1OutputPath,
       });
@@ -360,6 +364,7 @@ describe("clipStateReducer", () => {
       // Should appear as new unpaired timeline clip
       tester.send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1" as DatabaseId })],
         outputPath: "/tmp/recording-B.mkv",
       });
@@ -398,6 +403,7 @@ describe("clipStateReducer", () => {
       // DB clip arrives without outputPath — should still pair (backwards compat)
       tester.send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1" as DatabaseId })],
       });
 

@@ -17,6 +17,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -168,6 +169,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
       tester.send(
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           outputPath: "/tmp/r.mkv",
           clips: [
             {
@@ -217,6 +219,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
       tester.send(
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           outputPath: "/tmp/r.mkv",
           clips: [{ id: "db-1", diagramSnapshotId: null, pauseType: "none" }],
         })
@@ -255,6 +258,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
       tester.send(
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           outputPath: "/tmp/r.mkv",
           clips: [{ id: "db-1", diagramSnapshotId: null, pauseType: "none" }],
         })
@@ -286,6 +290,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
       tester.send(
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           outputPath: "/tmp/r.mkv",
           clips: [{ id: "db-1", diagramSnapshotId: null, pauseType: "none" }],
         })

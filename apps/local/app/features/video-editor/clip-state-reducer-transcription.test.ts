@@ -2,12 +2,10 @@ import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
   clipStateReducer,
-  type ClipOnDatabase,
   type ClipOptimisticallyAdded,
-  type DatabaseId,
-  type FrontendId,
 } from "./clip-state-reducer";
 import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
+import { clipTranscribed } from "@/test-utils/transcription-job-events";
 
 const createInitialState = (
   overrides: Partial<clipStateReducer.State> = {}
@@ -19,6 +17,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -55,12 +54,14 @@ describe("clipStateReducer", () => {
               text: "",
             }),
           ],
+          transcriptionJobId: "job-1",
         },
         reportEffect
       );
 
       expect(reportEffect).toHaveBeenCalledWith({
         type: "transcribe-clips",
+        jobId: "job-1",
         clipIds: ["123"],
       });
 
@@ -70,17 +71,7 @@ describe("clipStateReducer", () => {
 
       const stateAfterTranscribe = clipStateReducer(
         newState,
-        {
-          type: "clips-transcribed",
-          clips: [
-            {
-              databaseId: "123" as DatabaseId,
-              transcriptionStatus: "done",
-              text: "Hello",
-              hasTranscriptWords: true,
-            },
-          ],
-        },
+        clipTranscribed("job-1", "123", "Hello"),
         reportEffect
       );
 
@@ -115,6 +106,7 @@ describe("clipStateReducer", () => {
         stateWithOneOptimisticClip,
         {
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "123" })],
         },
         reportEffect2
@@ -131,6 +123,7 @@ describe("clipStateReducer", () => {
       });
       expect(reportEffect2).toHaveBeenCalledWith({
         type: "transcribe-clips",
+        jobId: "job-rec",
         clipIds: ["123"],
       });
     });
@@ -164,6 +157,7 @@ describe("clipStateReducer", () => {
         stateWithTwoOptimisticClips,
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "1" })],
         }),
         reportEffect2
@@ -187,6 +181,7 @@ describe("clipStateReducer", () => {
         stateWithOneDatabaseClip,
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "2" })],
         }),
         reportEffect3
@@ -216,6 +211,7 @@ describe("clipStateReducer", () => {
         createInitialState(),
         fromPartial({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "123" })],
         }),
         reportEffect
@@ -285,6 +281,7 @@ describe("clipStateReducer", () => {
         stateWithOneOptimisticClipDeleted,
         {
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [
             fromPartial({
               id: "123",
@@ -316,6 +313,7 @@ describe("clipStateReducer", () => {
       // Transcribes the clip so transcript text is available
       expect(reportEffect).toHaveBeenCalledWith({
         type: "transcribe-clips",
+        jobId: "job-rec",
         clipIds: ["123"],
       });
     });
@@ -350,6 +348,7 @@ describe("clipStateReducer", () => {
         stateWithOneOptimisticClipDeleted,
         {
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "456", text: "" })],
         },
         reportEffect
@@ -380,6 +379,7 @@ describe("clipStateReducer", () => {
         createInitialState(),
         {
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [fromPartial({ id: "123" })],
         },
         reportEffect1
@@ -445,87 +445,6 @@ describe("clipStateReducer", () => {
 
       // Clip should be completely removed, not marked as shouldArchive
       expect(tester.getState().items).toHaveLength(0);
-    });
-  });
-
-  // The Sidecar runs the transcription (a `transcribe-clips` Job); its Job
-  // Events reach the editor as these actions (`transcription-job-events.ts`).
-  describe("A transcription Job's events", () => {
-    const onDatabase = (
-      id: string,
-      transcriptionStatus: ClipOnDatabase["transcriptionStatus"]
-    ): ClipOnDatabase =>
-      fromPartial<ClipOnDatabase>({
-        type: "on-database",
-        frontendId: `f-${id}` as FrontendId,
-        databaseId: id as DatabaseId,
-        text: "old text",
-        transcriptionStatus,
-      });
-    const statusOf = (state: clipStateReducer.State, id: string) =>
-      state.items.find(
-        (item): item is ClipOnDatabase =>
-          item.type === "on-database" && item.databaseId === id
-      )!.transcriptionStatus;
-    const started = (jobId: string, clipIds: string[]) =>
-      ({
-        type: "transcription-job-started",
-        jobId,
-        clipIds: clipIds as DatabaseId[],
-      }) as const;
-
-    it("a Job that fails fails the Clips it never settled, and only those", () => {
-      const tester = new ReducerTester(
-        clipStateReducer,
-        createInitialState({
-          items: [
-            onDatabase("a", "transcribing"),
-            onDatabase("b", "transcribing"),
-          ],
-        })
-      )
-        .send(started("job-1", ["a", "b"]))
-        .send({
-          type: "clips-transcribed",
-          clips: [
-            {
-              databaseId: "a" as DatabaseId,
-              transcriptionStatus: "done",
-              text: "landed",
-              hasTranscriptWords: true,
-            },
-          ],
-        })
-        .send({ type: "transcription-job-failed", jobId: "job-1" });
-
-      expect(statusOf(tester.getState(), "a")).toBe("done");
-      expect(statusOf(tester.getState(), "b")).toBe("failed");
-      expect(tester.getState().clipTranscriptionJobs).toEqual({});
-      expect(tester.getEffects()).toEqual([]);
-    });
-
-    it("a failed Job leaves a Clip a newer Job has taken on", () => {
-      const tester = new ReducerTester(
-        clipStateReducer,
-        createInitialState({ items: [onDatabase("a", "transcribing")] })
-      )
-        .send(started("job-1", ["a"]))
-        .send(started("job-2", ["a"]))
-        .send({ type: "transcription-job-failed", jobId: "job-1" });
-
-      expect(statusOf(tester.getState(), "a")).toBe("transcribing");
-      expect(tester.getState().clipTranscriptionJobs).toEqual({ a: "job-2" });
-    });
-
-    it("a failed Job the editor never saw start changes nothing", () => {
-      const state = createInitialState({
-        items: [onDatabase("a", "transcribing")],
-      });
-      const tester = new ReducerTester(clipStateReducer, state).send({
-        type: "transcription-job-failed",
-        jobId: "job-1",
-      });
-      expect(tester.getState()).toBe(state);
     });
   });
 });

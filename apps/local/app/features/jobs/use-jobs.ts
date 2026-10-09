@@ -31,6 +31,11 @@ export type JobSettledReport = Extract<
 >;
 
 export interface StartJobRequest {
+  /**
+   * The Job's id, when the caller has already named it (the editor's clip
+   * reducer records its Clips against it); otherwise a fresh one.
+   */
+  id?: string;
   kind: string;
   title: string;
   params: Record<string, unknown>;
@@ -204,8 +209,7 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
   useJobEventStream(dispatch, hub.publish);
 
   const startJob = useCallback(
-    (request: StartJobRequest): string => {
-      const id = crypto.randomUUID();
+    ({ id = crypto.randomUUID(), ...request }: StartJobRequest): string => {
       dispatch({ type: "job-requested", id, ...request });
       return id;
     },

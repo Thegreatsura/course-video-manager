@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 import type { DB } from "@/db/schema";
 import type {
   ClipOnDatabase,
@@ -20,6 +20,7 @@ import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
 import { useClipTranscriptionJobs } from "@/features/video-editor/use-clip-transcription-jobs";
+import { UploadContext } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
@@ -88,7 +89,7 @@ export const loader = makeLoader({
       const jobOps = yield* JobOperationsService;
       // Read before the Clips: every Job Event up to here is in them (a
       // Clip's row is written before its event), so the editor applies only
-      // the transcription events after it (`use-clip-transcription-jobs.ts`).
+      // the transcription events after it (the clip reducer's `jobEventCursor`).
       const jobEventCursor = yield* jobOps.latestJobEventId();
       const video = yield* videoOps.getVideoWithClipsById(videoId);
 
@@ -295,11 +296,13 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     error: null,
     sessions: [],
     clipTranscriptionJobs: {},
+    jobEventCursor: props.loaderData.jobEventCursor,
   };
 
   const clipStateRef = useRef(initialState);
   const revalidator = useRevalidator();
 
+  const { startClipTranscription } = useContext(UploadContext);
   const effectHandlers = useMemo(
     () =>
       createEditEffectHandlers({
@@ -308,8 +311,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         clipStateRef,
         revalidate: () => revalidator.revalidate(),
         whiteNoiseAssetPath: props.loaderData.whiteNoiseAssetPath,
+        startClipTranscription,
       }),
-    [props.loaderData.video.id]
+    [props.loaderData.video.id, startClipTranscription]
   );
 
   const [clipState, dispatch] = useEffectReducer(
@@ -320,13 +324,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
 
   clipStateRef.current = clipState;
 
-  // The cursor the reducer's first state was read at; a revalidate moves the
-  // loader's, but not the reducer's Clips.
-  const [loadedThrough] = useState(props.loaderData.jobEventCursor);
-  useClipTranscriptionJobs(
-    { videoId: props.loaderData.video.id, loadedThrough },
-    dispatch
-  );
+  useClipTranscriptionJobs(props.loaderData.video.id, dispatch);
 
   const [silenceLength, setSilenceLength] = useSilenceLength();
   const silenceLengthRef = useRef(silenceLength);
@@ -404,7 +402,11 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         dispatch({ type: "clips-deleted", clipIds: clipIds });
       }}
       onClipsRetranscribe={(clipIds) => {
-        dispatch({ type: "clips-retranscribing", clipIds });
+        dispatch({
+          type: "clips-retranscribing",
+          clipIds,
+          jobId: crypto.randomUUID(),
+        });
       }}
       insertionPoint={clipState.insertionPoint}
       onSetInsertionPoint={(mode, clipId) => {
