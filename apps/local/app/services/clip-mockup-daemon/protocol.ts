@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 /**
  * WHAT THE `cvm` PROCESS AND THE CLIP MOCKUP DAEMON AGREE ON: where the daemon
- * listens, which code it is running, and the shape of the two requests.
+ * listens, which code it is running, and the shape of its requests.
  *
  * WHY THERE IS A DAEMON AT ALL. Voicing a line needs Kokoro on the GPU, and
  * capturing a frame needs Chromium. Both are slow to START and fast to USE:
@@ -44,6 +44,7 @@ const VERSIONED_FILES = [
   "server.ts",
   "daemon.mjs",
   "../frame-capture-service.ts",
+  "../../features/diagrams/diagram-render-contract.ts",
   "../clip-mockup-speech-service.ts",
   "../clip-mockup-speech-kokoro.ts",
   // Dependency versions: a new kokoro-js or Playwright is new behaviour too.
@@ -91,7 +92,7 @@ export const daemonPaths = (version: string): DaemonPaths => ({
 export const DAEMON_IDLE_MS = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
-// The two requests. Paths are absolute: the daemon and `cvm` are on one
+// The requests. Paths are absolute: the daemon and `cvm` are on one
 // machine, so `cvm` names where each file goes and the daemon writes it there.
 // ---------------------------------------------------------------------------
 
@@ -113,6 +114,17 @@ export const SpeakRequest = Schema.Struct({
 });
 export type SpeakRequest = typeof SpeakRequest.Type;
 
+/**
+ * `cvm diagram create`: draw a scene through the app's render page. The app's
+ * origin travels with the request because `cvm` resolves it, not the daemon.
+ */
+export const RenderDiagramRequest = Schema.Struct({
+  appUrl: Schema.String,
+  scene: Schema.Unknown,
+  outputPath: Schema.String,
+});
+export type RenderDiagramRequest = typeof RenderDiagramRequest.Type;
+
 /** A request that failed carries the one message the agent needs to read. */
 const Failed = Schema.Struct({
   ok: Schema.Literal(false),
@@ -123,6 +135,11 @@ const Failed = Schema.Struct({
 export const CaptureResponse = Schema.Union(
   Schema.Struct({ ok: Schema.Literal(true) }),
   Schema.Struct({ ...Failed.fields, htmlPath: Schema.String })
+);
+
+export const RenderDiagramResponse = Schema.Union(
+  Schema.Struct({ ok: Schema.Literal(true) }),
+  Failed
 );
 
 /** One duration per item, in the order the items were sent. */

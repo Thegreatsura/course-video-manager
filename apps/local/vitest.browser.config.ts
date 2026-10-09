@@ -31,6 +31,8 @@ export default defineConfig({
       "react/jsx-dev-runtime",
       "react-router",
       "vitest-browser-react",
+      "vitest-browser-react/pure",
+      "tldraw",
     ],
   },
   test: {
