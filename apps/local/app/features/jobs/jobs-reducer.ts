@@ -128,7 +128,10 @@ export namespace jobsReducer {
     | StreamFact<"job-failed", { message: string; tag: string | null }>
     | StreamFact<"job-interrupted", { message: string; tag: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
-    | StreamFact<"job-post-checked", { check: PostCheckView }>
+    | StreamFact<
+        "job-post-checked",
+        { check: PostCheckView; attempt: number | null }
+      >
     /** The author dismissed it, in this tab or another: it stays hidden. */
     | StreamFact<"job-dismissed">
     // A Batch export's Videos
@@ -192,7 +195,8 @@ export namespace jobsReducer {
 
   export type Effect =
     | EnqueueJobEffect
-    | { type: "retry-job"; id: string }
+    /** The server refuses a Retry of any run but `attempt`. */
+    | { type: "retry-job"; id: string; attempt: number }
     /** Record the author's Dismiss on the server, so no tab sees them again. */
     | { type: "dismiss-jobs"; ids: string[] }
     | { type: "show-dismiss-failed-toast"; count: number; message: string }
@@ -385,6 +389,10 @@ const applyStreamAction = (
     case "job-posted":
       return { ...job, result: action.result };
     case "job-post-checked":
+      // A check of the run before a Retry says nothing about this one.
+      if (action.attempt !== null && action.attempt !== job.attempt) {
+        return job;
+      }
       return { ...job, postCheck: action.check };
     case "job-dismissed":
       return job;
@@ -605,7 +613,7 @@ export const jobsReducer: EffectReducer<
       ) {
         return state;
       }
-      exec({ type: "retry-job", id: job.id });
+      exec({ type: "retry-job", id: job.id, attempt: job.attempt });
       return state;
     }
 

@@ -503,8 +503,16 @@ for every interrupted post with no `post-check` Job Event yet and asks the
 kind's `checkPosted`, read-only (30 s timeout; a failure says `unknown`).
 YouTube and Shorts look for an upload with the post's title among the
 channel's latest 50 since the run started (`findRecentUpload`). The row
-shows the verdict, a link when found, View log, and Retry — which asks
-"Post again?" first unless the check said it did not go out. Auth failures
+shows the verdict, a link when found, View log, and Retry
+(`postRetryOf`). Retry asks "Post again?" first unless the run failed before
+it sent anything (`PostNotStartedError`): a "not posted" check does not skip
+the question, because a check can run before a cut-off request lands, and a
+run that FAILED (rather than was cut off) is never checked at all. A run that
+went out — it wrote `posted` before failing (a YouTube thumbnail), or its
+check found it — offers no Retry, and the server refuses one. A Retry names
+the run it retries (`attempt`), so a second click or a stale tab cannot run
+the post again, and a `post-check` names the run it looked at, so a check
+that lands after a Retry is not shown against the next run. Auth failures
 and failed dependencies show no Retry. An interrupted post stays in a new
 tab's snapshot until the author dismisses it, and is never hidden by the
 idle timer.

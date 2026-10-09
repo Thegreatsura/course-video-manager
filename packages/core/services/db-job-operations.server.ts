@@ -5,6 +5,7 @@ import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { createPostingJobOperations } from "./db-job-posting.server.js";
+export { POSTED_EVENT, POST_CHECK_EVENT } from "./db-job-posting.server.js";
 import {
   createDismissJobOperations,
   notDismissed,

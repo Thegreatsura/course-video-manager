@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { POSTED_EVENT } from "@cvm/core/services/db-job-operations.server";
 import type { JobContext } from "../job-kind";
 import { makeOrderedEvents } from "../ordered-events";
 
@@ -23,7 +24,7 @@ export const reportPost = (ctx: JobContext) =>
         events.emit("progress", { stage, percent });
       },
       posted: (result: Record<string, unknown>) => {
-        events.emit("posted", result);
+        events.emit(POSTED_EVENT, result);
       },
       flush: events.flush,
     };
