@@ -1,3 +1,5 @@
+import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
+
 /**
  * The `transcribe-footage` Job (`sidecar/kinds/transcribe-footage.ts`), as the
  * ones who listen to it know it: `cvm footage transcribe`, which enqueues it and
@@ -15,3 +17,11 @@ export const FOOTAGE_TRANSCRIPTION_EVENTS = {
    */
   transcribed: "footage-transcribed",
 } as const;
+
+/**
+ * Kinds whose settling never toasts: a Clip transcription shows on its Clips
+ * in the editor, and a Footage transcription is the CLI's, which prints the
+ * result itself.
+ */
+export const isUntoastedJobKind = (kind: string): boolean =>
+  kind === TRANSCRIBE_CLIPS_JOB_KIND || kind === TRANSCRIBE_FOOTAGE_JOB_KIND;
