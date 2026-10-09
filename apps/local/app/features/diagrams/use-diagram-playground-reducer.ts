@@ -8,11 +8,14 @@ import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
   isCanvasEditable,
+  type StoredHead,
 } from "./diagram-playground-reducer";
 import {
   createHeadAutosaver,
+  EXPECTED_HEAD_HASH_HEADER,
   HEAD_AUTOSAVE_DEBOUNCE_MS,
   type HeadAutosaver,
+  type HeadSaveResult,
 } from "./head-autosaver";
 import { centreCameraOnContent } from "./centre-camera-on-content";
 import { renderThumbnailPngBase64 } from "./render-thumbnail";
@@ -26,17 +29,38 @@ const clearCanvas = (ed: Editor) => {
   ed.store.remove([...ed.getCurrentPageShapeIds()]);
 };
 
-const saveHead = async (id: string, document: TLStoreSnapshot) => {
+/** Store `document` as `id`'s head, over the head hashed `expectedHash`. */
+const saveHead = async (
+  id: string,
+  document: TLStoreSnapshot,
+  expectedHash: string | null | undefined
+): Promise<
+  | { outcome: "saved"; stored: StoredHead }
+  | Exclude<HeadSaveResult, { outcome: "saved" }>
+> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (expectedHash !== undefined) {
+    headers[EXPECTED_HEAD_HASH_HEADER] = expectedHash ?? "none";
+  }
   try {
     const res = await fetch(`/api/diagrams/${id}/head`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(document),
     });
-    return res.ok;
+    if (res.status === 409) return { outcome: "refused" };
+    if (!res.ok) return { outcome: "failed" };
+    const body: { headHash: string | null; updatedAt: string } =
+      await res.json();
+    return {
+      outcome: "saved",
+      stored: { hash: body.headHash, updatedAt: body.updatedAt },
+    };
   } catch {
     // Network errors during autosave are non-fatal; the next flush retries.
-    return false;
+    return { outcome: "failed" };
   }
 };
 
@@ -84,12 +108,16 @@ export function useDiagramPlaygroundReducer() {
           try {
             const res = await fetch(`/api/diagrams/${effect.diagramId}/head`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data: { headScene: TLStoreSnapshot | null } =
-              await res.json();
+            const data: {
+              headScene: TLStoreSnapshot | null;
+              headHash: string | null;
+              updatedAt: string;
+            } = await res.json();
             dispatch({
               type: "head-loaded",
               diagramId: effect.diagramId,
               scene: data.headScene,
+              stored: { hash: data.headHash, updatedAt: data.updatedAt },
             });
           } catch {
             dispatch({ type: "head-load-failed", diagramId: effect.diagramId });
@@ -101,11 +129,14 @@ export function useDiagramPlaygroundReducer() {
         if (!ed) return;
         if (effect.scene) {
           loadSnapshot(ed.store, { document: effect.scene });
-          centreCameraOnContent(ed);
+          if (effect.centreCamera) centreCameraOnContent(ed);
         } else {
           clearCanvas(ed);
         }
-        autosaver.current?.attach(effect.diagramId);
+        autosaver.current?.attach(effect.diagramId, effect.stored.hash);
+      },
+      "overwrite-stored-head": () => {
+        void autosaver.current?.flush({ overwrite: true });
       },
       "clear-canvas": () => {
         if (editorRef.current) clearCanvas(editorRef.current);
@@ -116,12 +147,20 @@ export function useDiagramPlaygroundReducer() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ snapshotId: effect.snapshot.id }),
         })
-          .then((res) => {
+          .then(async (res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const body: {
+              diagram: { updatedAt: string };
+              headHash: string | null;
+            } = await res.json();
             dispatch({
               type: "restore-succeeded",
               diagramId: effect.diagramId,
               snapshot: effect.snapshot,
+              stored: {
+                hash: body.headHash,
+                updatedAt: body.diagram.updatedAt,
+              },
             });
           })
           .catch(() => dispatch({ type: "restore-failed" }))
@@ -241,17 +280,54 @@ export function useDiagramPlaygroundReducer() {
   useEffect(() => () => autosaver.current?.dispose(), []);
 
   /** Wire a freshly mounted tldraw editor to the page. */
-  const attachEditor = useCallback((editor: Editor) => {
-    editorRef.current = editor;
-    // No head yet, so nothing drawn now could be saved.
-    editor.updateInstanceState({ isReadonly: true });
-    autosaver.current?.dispose();
-    autosaver.current = createHeadAutosaver({
-      store: editor.store,
-      debounceMs: HEAD_AUTOSAVE_DEBOUNCE_MS,
-      save: saveHead,
-    });
-  }, []);
+  const attachEditor = useCallback(
+    (editor: Editor) => {
+      editorRef.current = editor;
+      // No head yet, so nothing drawn now could be saved.
+      editor.updateInstanceState({ isReadonly: true });
+      autosaver.current?.dispose();
+      autosaver.current = createHeadAutosaver({
+        store: editor.store,
+        debounceMs: HEAD_AUTOSAVE_DEBOUNCE_MS,
+        save: async (diagramId, document, expectedHash) => {
+          dispatch({ type: "head-save-started", diagramId });
+          const result = await saveHead(diagramId, document, expectedHash);
+          switch (result.outcome) {
+            case "saved":
+              dispatch({
+                type: "head-saved",
+                diagramId,
+                stored: result.stored,
+              });
+              return { outcome: "saved", headHash: result.stored.hash };
+            case "refused":
+              dispatch({ type: "head-save-refused", diagramId });
+              return result;
+            case "failed":
+              dispatch({ type: "head-save-failed", diagramId });
+              return result;
+          }
+        },
+      });
+    },
+    [dispatch]
+  );
+
+  /**
+   * Report a refetch of `diagramId`'s stored head, with whether the canvas
+   * holds edits the server hasn't got.
+   */
+  const reportStoredHead = useCallback(
+    (diagramId: string, stored: StoredHead) => {
+      dispatch({
+        type: "stored-head-reported",
+        diagramId,
+        stored,
+        canvasHasUnsavedEdits: autosaver.current?.hasUnsavedEdits() ?? false,
+      });
+    },
+    [dispatch]
+  );
 
   /**
    * Asks to restore `snapshot`. Resolves once the head has moved, or at once
@@ -283,5 +359,6 @@ export function useDiagramPlaygroundReducer() {
     attachEditor,
     flushPendingSave,
     requestRestore,
+    reportStoredHead,
   };
 }

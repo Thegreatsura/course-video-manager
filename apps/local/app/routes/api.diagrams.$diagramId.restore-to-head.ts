@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import { makeAction } from "@/services/route-action.server";
 import { data } from "react-router";
+import { hashHead } from "@/lib/scene-hash";
 
 export const action = makeAction({
   input: "json",
@@ -28,6 +29,10 @@ export const action = makeAction({
         snapshotId
       );
 
-      return data({ diagram });
+      return data({
+        diagram,
+        // So the page knows which head its next autosave may replace.
+        headHash: hashHead(diagram.headScene),
+      });
     }),
 });

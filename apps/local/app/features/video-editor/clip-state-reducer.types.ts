@@ -197,8 +197,17 @@ export type RecordingSession = {
   silenceLength: SilenceLength;
 };
 
-/** Which `transcribe-clips` Job a Clip belongs to, and whether it has started. */
-export type ClipTranscriptionJob = { jobId: string; started: boolean };
+/**
+ * Which `transcribe-clips` Job a Clip belongs to, and whether it has started.
+ * While a Job this window asked for has not started, the server may yet
+ * answer that it joined another, live Job: what that other Job said about
+ * the Clip in the meantime is kept (`heardBeforeJoin`) and applied on join.
+ */
+export type ClipTranscriptionJob = {
+  jobId: string;
+  started: boolean;
+  heardBeforeJoin?: readonly JobEventMessage[];
+};
 
 export type ClipReducerState = {
   items: TimelineItem[];
@@ -225,13 +234,17 @@ export type ClipReducerState = {
    * the one this window asked for (`started: false` until its `clips-started`
    * event), or the latest one heard starting on it. Only that Job's result
    * lands on the Clip, and a Job that fails fails only the Clips it holds.
+   * A Clip loaded `transcribing` belongs to the Job whose replayed
+   * `clips-started` names it; one no Job holds is a Job's from before this
+   * tab, and fails when one of this Video's Jobs ends without settling.
    */
   clipTranscriptionJobs: Record<DatabaseId, ClipTranscriptionJob>;
   /**
    * The newest Job Event id applied. Seeded with the one the loader read
    * before the Clips (a Clip's row is written before its event, so anything
    * at or below it is in the loaded Clips already); a Job Event at or below
-   * it is ignored, so a replayed one never turns a newer result back.
+   * it only says which Job holds which Clip, so a replayed one never turns a
+   * newer result back.
    */
   jobEventCursor: number;
   /**
