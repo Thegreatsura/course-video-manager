@@ -14,10 +14,7 @@ import { VERSION_NOT_DRAFT_MESSAGE } from "@/services/version-not-draft-message"
 import type { EffectsMap } from "use-effect-reducer";
 import type React from "react";
 import { diagramChannel } from "@/lib/diagram-protocol";
-import {
-  toTranscribedClipEvent,
-  type TranscribedClip,
-} from "./transcribe-clips-response";
+import { TRANSCRIBE_CLIPS_JOB_KIND } from "./transcribe-clips-response";
 
 export interface EditEffectHandlersDeps {
   videoId: string;
@@ -62,21 +59,27 @@ export function createEditEffectHandlers(
       });
     },
     "transcribe-clips": (_state, effect, dispatch) => {
-      fetch("/clips/transcribe", {
+      // The Sidecar runs it as a Job; its Job Events bring each Clip back
+      // (`use-clip-transcription-jobs.ts`), even to a tab opened later.
+      const count = effect.clipIds.length;
+      fetch("/api/jobs", {
         method: "POST",
-        body: JSON.stringify({ clipIds: effect.clipIds }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: crypto.randomUUID(),
+          kind: TRANSCRIBE_CLIPS_JOB_KIND,
+          title: `Transcribe ${count} ${count === 1 ? "Clip" : "Clips"}`,
+          params: { clipIds: effect.clipIds },
+          subject: { type: "video", id: videoId },
+          attemptsSpent: 0,
+        }),
       })
-        .then((res) => {
+        .then(async (res) => {
           if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            throw new Error(
+              (await res.text()) || `HTTP ${res.status}: ${res.statusText}`
+            );
           }
-          return res.json();
-        })
-        .then((clips: TranscribedClip[]) => {
-          dispatch({
-            type: "clips-transcribed",
-            clips: clips.map(toTranscribedClipEvent),
-          });
         })
         .catch((error) => {
           dispatch({

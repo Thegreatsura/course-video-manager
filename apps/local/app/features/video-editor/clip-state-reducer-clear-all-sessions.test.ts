@@ -23,6 +23,7 @@ const createInitialState = (): clipStateReducer.State => ({
   insertionOrder: 0,
   error: null,
   sessions: [],
+  clipTranscriptionJobs: {},
 });
 
 /**
