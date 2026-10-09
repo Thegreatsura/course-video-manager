@@ -40,9 +40,9 @@ export const PUBLISH_EVENTS = {
 } as const;
 
 /**
- * Why a Publish stopped, worded as the `publish-sse` route worded it for the
- * toast. The service's own error is kept as `cause`, so the Job's log has the
- * whole chain.
+ * Why a Publish stopped, worded for the toast as the browser's Publish route
+ * (since deleted) worded it. The service's own error is kept as `cause`, so
+ * the Job's log has the whole chain.
  */
 export class PublishRunError extends Data.TaggedError("PublishRunError")<{
   readonly message: string;
@@ -135,12 +135,12 @@ const reportInOrder = (events: {
 
 /**
  * **Publish** (#9 in docs/plans/background-jobs-sidecar.md): the same
- * `CoursePublishService.publish` the `publish-sse` route ran — validate,
+ * `CoursePublishService.publish` the browser's Publish route ran — validate,
  * Submit, export and upload overlapped, the `course.json` receipt, Promote —
  * now driven by the sidecar, so closing the tab no longer stops it.
  *
- * - The `publish` lane runs one at a time: it replaces the service's
- *   `courseVersionMutationSemaphore`.
+ * - The `publish` lane runs one at a time: it replaced the one-permit
+ *   semaphore the service used to hold.
  * - 1 attempt: the browser reported every Publish failure as
  *   `UPLOAD_FATAL_ERROR`. Only a failure the service names — a
  *   `PublishValidationError` from a failed export, or a
