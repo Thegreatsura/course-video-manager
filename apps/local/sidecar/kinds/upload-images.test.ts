@@ -21,6 +21,7 @@ import {
   swapImageUploads,
 } from "@/features/image-upload/image-upload-job";
 import type { JobContext } from "../job-kind";
+import { JOB_KIND_SPECS, enqueueJob } from "../job-specs";
 import { removeLocalImagesJobKind, uploadImagesJobKind } from "./upload-images";
 
 let testDb: TestDb;
@@ -269,5 +270,37 @@ describe("an upload-images Job interrupted mid-batch and run again", () => {
         url: "https://res.cloudinary.com/test/a.png",
       },
     ]);
+  });
+
+  it("Upload pressed again after the tab closed: waits for the live Job, then reuses every URL", async () => {
+    writeImages("a.png", "b.png");
+    const body = "![a](a.png)\n![b](b.png)";
+    // What the tab's Upload sends (`POST /api/jobs`): a fresh id each press.
+    const press = () =>
+      Effect.runPromise(
+        enqueueJob({
+          id: crypto.randomUUID(),
+          kind: "upload-images",
+          title: "Upload images to Cloudinary",
+          params: { videoId, body },
+          dependsOn: null,
+          subject: { type: "video", id: videoId },
+          attemptsSpent: 0,
+          registry: JOB_KIND_SPECS,
+        }).pipe(Effect.provide(dbLayer))
+      );
+    const first = await press();
+    const second = await press();
+    // Not a second Job running beside the first: it waits for it.
+    expect(second.dependsOn).toBe(first.id);
+
+    await Effect.runPromise(Fiber.join(startUploadRun(first.id, body).fiber));
+    await Effect.runPromise(Fiber.join(startUploadRun(second.id, body).fiber));
+
+    // Both files are still on disk (nothing swapped), yet each went up once.
+    expect(completed).toEqual(["a.png", "b.png"]);
+    expect(imageUploadsOf(await eventsOf(second.id))).toEqual(
+      imageUploadsOf(await eventsOf(first.id))
+    );
   });
 });

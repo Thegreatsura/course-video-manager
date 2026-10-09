@@ -44,12 +44,35 @@ export interface FootageChunk {
 }
 
 /**
- * Where finished chunks are kept so a run that is cut off (the Sidecar
- * restarting) resumes rather than paying Whisper for them again. Both are best
- * effort: a cache that cannot be read is a miss, one that cannot be written
- * costs only the resume.
+ * How a file is cut: one pass (`whole`), or these silence-aligned windows.
+ * The same file always cuts the same way, so a resumed run reads it back
+ * rather than extracting the full audio and detecting silence again.
+ */
+export type FootageChunkPlan =
+  | { readonly whole: true }
+  | {
+      readonly whole: false;
+      readonly boundaries: ReadonlyArray<{
+        readonly start: number;
+        readonly end: number;
+      }>;
+    };
+
+/**
+ * Where the plan and finished chunks are kept so a run that is cut off (the
+ * Sidecar restarting) resumes rather than paying ffmpeg and Whisper for them
+ * again. All best effort: a cache that cannot be read is a miss, one that
+ * cannot be written costs only the resume.
  */
 export interface FootageChunkCache {
+  readonly getPlan: Effect.Effect<
+    FootageChunkPlan | null,
+    never,
+    FileSystem.FileSystem
+  >;
+  readonly putPlan: (
+    plan: FootageChunkPlan
+  ) => Effect.Effect<void, never, FileSystem.FileSystem>;
   readonly get: (
     chunk: FootageChunk
   ) => Effect.Effect<FootageTranscript | null, never, FileSystem.FileSystem>;
@@ -73,7 +96,8 @@ export interface TranscribeFootageOptions {
  * ~27-minute chunks cut at detected silence (never mid-word), each transcribed
  * on its own, and the pieces' timestamps offset back onto the file's timeline
  * and merged. No diarization, ever. A chunk already in `options.cache` is not
- * extracted or sent to Whisper again.
+ * extracted or sent to Whisper again, and a plan already there skips the full
+ * audio extraction and the silence detection.
  */
 export const transcribeFootage = <EA, RA, ET, RT>(
   deps: {
@@ -112,47 +136,65 @@ export const transcribeFootage = <EA, RA, ET, RT>(
         return transcription;
       });
 
-    const fullAudio = yield* deps.extractAudio(inputVideo, undefined);
-    const stat = yield* fs.stat(fullAudio);
+    const whole: FootageChunk = {
+      key: "whole",
+      index: 0,
+      count: 1,
+      start: 0,
+      end: null,
+    };
+    const cachedPlan = options.cache ? yield* options.cache.getPlan : null;
 
-    if (Number(stat.size) <= WHISPER_MAX_UPLOAD_BYTES) {
-      const whole: FootageChunk = {
-        key: "whole",
-        index: 0,
-        count: 1,
-        start: 0,
-        end: null,
-      };
-      const transcription = yield* transcribeChunk(
+    // A resumed one-pass file: its audio is extracted only on a cache miss.
+    if (cachedPlan?.whole) {
+      return yield* transcribeChunk(
         whole,
-        Effect.succeed(fullAudio)
+        deps.extractAudio(inputVideo, undefined)
       );
-      yield* removeBestEffort(fs, fullAudio);
-      return transcription;
     }
 
-    // Too large for one upload: split at silence near the target size.
-    const durationSeconds =
-      yield* deps.ffmpegCommands.getVideoDurationInSeconds(fullAudio);
-    yield* removeBestEffort(fs, fullAudio);
-    const { clips } = yield* findSilenceInVideo(
-      deps.ffmpegCommands,
-      inputVideo
-    );
-    // The end of each speaking clip is where the file falls silent — the only
-    // place it is safe to cut without splitting a spoken word.
-    const silencePoints = clips.map((clip) => clip.endTime);
-    const boundaries = planChunkBoundaries({ durationSeconds, silencePoints });
+    let boundaries = cachedPlan?.boundaries;
+    if (boundaries === undefined) {
+      const fullAudio = yield* deps.extractAudio(inputVideo, undefined);
+      const stat = yield* fs.stat(fullAudio);
 
+      if (Number(stat.size) <= WHISPER_MAX_UPLOAD_BYTES) {
+        if (options.cache) yield* options.cache.putPlan({ whole: true });
+        const transcription = yield* transcribeChunk(
+          whole,
+          Effect.succeed(fullAudio)
+        );
+        yield* removeBestEffort(fs, fullAudio);
+        return transcription;
+      }
+
+      // Too large for one upload: split at silence near the target size.
+      const durationSeconds =
+        yield* deps.ffmpegCommands.getVideoDurationInSeconds(fullAudio);
+      yield* removeBestEffort(fs, fullAudio);
+      const { clips } = yield* findSilenceInVideo(
+        deps.ffmpegCommands,
+        inputVideo
+      );
+      // The end of each speaking clip is where the file falls silent — the
+      // only place it is safe to cut without splitting a spoken word.
+      const silencePoints = clips.map((clip) => clip.endTime);
+      boundaries = planChunkBoundaries({ durationSeconds, silencePoints });
+      if (options.cache) {
+        yield* options.cache.putPlan({ whole: false, boundaries });
+      }
+    }
+
+    const cuts = boundaries;
     // Sequential: transcribeAudioFile already bounds Whisper concurrency with a
     // semaphore, and chunking exists to stay UNDER a limit, not to fan one file
     // out across the whole permit budget.
-    const chunks = yield* Effect.forEach(boundaries, (boundary, index) =>
+    const chunks = yield* Effect.forEach(cuts, (boundary, index) =>
       transcribeChunk(
         {
           key: `${boundary.start}-${boundary.end}`,
           index,
-          count: boundaries.length,
+          count: cuts.length,
           start: boundary.start,
           end: boundary.end,
         },
