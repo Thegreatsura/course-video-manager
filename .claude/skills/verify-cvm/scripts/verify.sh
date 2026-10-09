@@ -22,6 +22,11 @@
 #   verify.sh sql <run> "<query>"    read back from this run's test clone (test-clone mode only)
 #   verify.sh tiny-course <run> seed the Tiny Course (1 Video, 1 Clip, seconds long) into
 #                               the clone; prints its id. The only Course you Publish or encode.
+#   verify.sh cvm <run> <cvm args…>
+#                               the real `cvm` from this checkout, on this run's
+#                               clone only: its own apps/remote on 127.0.0.1, a
+#                               clone-only token, the local-only gate open for
+#                               the clone. Refuses anything that is not loopback.
 #   verify.sh cleanup <run>     stop what this run started, drop its clone, keep the evidence
 #   verify.sh cleanup --all     the same for every live run THIS worktree launched
 #
@@ -238,27 +243,13 @@ cmd_launch() {
     install_write_ledger "$(url_with_db "$template" "$clone")" ||
       die "could not install the write ledger on $clone — the Ledger would be blind, so the run stops here"
 
-    local scratch="$dir/scratch"
-    mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
-             "$scratch/finished-videos" "$scratch/obs-recordings" "$scratch/dropbox"
     local clone_url; clone_url="$(url_with_db "$template" "$clone")"
     # Age read from the clone, not the template: a connection on the template
     # would block a sibling's clone.
     report_template_age "$clone_url" 2> >(tee "$dir/template-age.txt" >&2)
+    clone_app_env "$dir" "$clone_url"
     SERVER_ENV=(
-      "DATABASE_URL=$clone_url"
-      "DIRECT_DATABASE_URL=$clone_url"
-      # A run's file writes land in its own run directory, never Matt's disk.
-      "VIDEO_FILES_DIR=$scratch/video-files"
-      "CLIP_MOCKUP_DIR=$scratch/clip-mockups"
-      "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
-      "OVERLAY_RENDER_CACHE_DIRECTORY=$scratch/overlay-renders"
-      "FINISHED_VIDEOS_DIRECTORY=$scratch/finished-videos"
-      "OBS_RECORDING_DIR=$scratch/obs-recordings"
-      "DROPBOX_REMOTE_PATH=$scratch/dropbox"
-      "${OFFLINE_SERVICES_ENV[@]}"
-      # One ffmpeg and one Dropbox upload at a time (verify-clones.sh).
-      "${CLONE_ENCODE_CAPS_ENV[@]}"
+      "${CLONE_APP_ENV[@]}"
       # For the Write Ledger: every statement into server.log; who wrote what.
       "CVM_LOG_SQL=1"
       "PGAPPNAME=$LEDGER_APP_SERVER"
@@ -404,6 +395,10 @@ cmd_doctor() {
 # shellcheck source=SCRIPTDIR/verify-tiny-course.sh
 . "$(dirname "${BASH_SOURCE[0]}")/verify-tiny-course.sh"
 
+# --- the real cvm, on this run's clone ---------------------------------------
+# shellcheck source=SCRIPTDIR/verify-cvm-cli.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-cvm-cli.sh"
+
 # --- cleanup --------------------------------------------------------------
 stop_server() {
   local dir="$1"
@@ -436,6 +431,7 @@ drop_run_clone() {
 
 stop_run() {
   local dir="$1"
+  stop_api "$dir"
   stop_sidecar "$dir"
   stop_server "$dir"
   if [ -f "$dir/browser-session" ]; then
@@ -465,7 +461,7 @@ case "$VERB" in
   template) cmd_template ;;
   launch)   shift; cmd_launch "$@" ;;
   cleanup)  shift; cmd_cleanup "$@" ;;
-  url|dir|session|doctor|guard|sql|ab|shot|snap|tiny-course)
+  url|dir|session|doctor|guard|sql|ab|shot|snap|tiny-course|cvm)
     shift; resolve_run "${1:-}"; shift
     case "$VERB" in
       url)     run_base ;;
@@ -474,6 +470,7 @@ case "$VERB" in
       doctor)  cmd_doctor ;;
       sql)     cmd_sql "$@" ;;
       tiny-course) cmd_tiny_course ;;
+      cvm)     cmd_cvm "$@" ;;
       ab)      run_ab "$@" ;;
       shot)    cmd_shot "$@" ;;
       snap)    cmd_snap "$@" ;;
@@ -485,5 +482,5 @@ case "$VERB" in
           *) die "usage: verify.sh guard <run> <baseline|check|forensics <table>>" ;;
         esac ;;
     esac ;;
-  *) sed -n '2,38p' "$0"; exit 1 ;;
+  *) sed -n '2,43p' "$0"; exit 1 ;;
 esac
