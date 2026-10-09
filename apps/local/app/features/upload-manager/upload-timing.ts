@@ -79,6 +79,11 @@ export interface TimingStep {
   at: number | undefined;
   /** The row an export event named in this step: it has an encode to do. */
   exportWorkId?: string;
+  /**
+   * The step stopped the job mid-stage without failing it (a requeue): the
+   * stage it was in ends here, unfinished, and is never recorded.
+   */
+  cutShort?: boolean;
 }
 
 const nextTiming = (
@@ -99,11 +104,12 @@ const nextTiming = (
       completed: [],
       needsExport: false,
     };
-  } else if (stage !== old.stage) {
+  } else if (stage !== old.stage || step.cutShort) {
     // Only a stage that ended in the job moving on counts as a duration. A
-    // stage cut short by a failure says nothing about how long that stage
-    // takes.
+    // stage cut short by a failure or a requeue says nothing about how long
+    // that stage takes.
     const finishedCleanly =
+      !step.cutShort &&
       old.stage !== null &&
       !isWaitStage(old.stage) &&
       (entry.status === "uploading" || entry.status === "success");

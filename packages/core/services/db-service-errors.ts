@@ -157,3 +157,17 @@ export class ClipNotZoomableError extends Data.TaggedError(
   scene: string | null;
   message: string;
 }> {}
+
+/**
+ * A cross-video `moveClipToVideo` refused because the Clip anchors Overlays.
+ * An Overlay cannot move to another Video (GLOSSARY: Overlay) — its length and
+ * the no-overlap rule are judged against its own Video's timeline — so a Clip
+ * carrying any stays put until they are deleted.
+ */
+export class ClipCarriesOverlaysError extends Data.TaggedError(
+  "ClipCarriesOverlaysError"
+)<{
+  clipId: string;
+  overlayCount: number;
+  message: string;
+}> {}

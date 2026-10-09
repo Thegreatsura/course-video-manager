@@ -10,8 +10,14 @@ import {
   SIZES,
 } from "@cvm/core/lib/simple-diagram/index";
 import { ICON_NAMES } from "@cvm/lucide-icons";
-import { CREATE_HELP, HELP } from "./diagram.help";
-import { parseCreateInput } from "./diagram-input";
+import {
+  CREATE_HELP,
+  GET_HELP,
+  HELP,
+  RENDER_HELP,
+  SNAPSHOT_ADD_HELP,
+} from "./diagram.help";
+import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
 
 // ===========================================================================
 // The help IS the format's documentation for agents, and the zod schema is
@@ -160,6 +166,23 @@ describe("cvm diagram --help documents what 'create' accepts", () => {
     expect(parsed.ok && parsed.scenes).toHaveLength(2);
   });
 
+  it("refuses a NUL character anywhere, naming where, before any write", () => {
+    const { name, shapes } = example();
+    const nul = [{ ...(shapes[0] as object), text: "a\u0000b" }];
+    const parsed = parseCreateInput(
+      { name, snapshots: [{ shapes }, { shapes: nul }] },
+      icons
+    );
+    expect(parsed).toEqual({
+      ok: false,
+      errors: [
+        expect.stringMatching(
+          /^diagram\.snapshots\[1\]\.shapes\[0\]\.text: contains a NUL/
+        ),
+      ],
+    });
+  });
+
   it("documents the output 'create' prints: id, url and snapshots of {id, image}", () => {
     const output = CREATE_HELP.slice(CREATE_HELP.indexOf("Output:"));
     expect(output).toMatch(
@@ -168,5 +191,67 @@ describe("cvm diagram --help documents what 'create' accepts", () => {
     for (const field of ["id", "url", "snapshots", "image"]) {
       expect(output).toMatch(new RegExp(`^ {2,4}${field} `, "m"));
     }
+  });
+});
+
+describe("cvm diagram get --help documents what 'get' prints", () => {
+  it("documents the head and every snapshot field", () => {
+    const output = GET_HELP.slice(GET_HELP.indexOf("Output:"));
+    expect(output).toMatch(
+      /\{"id":"…","name":"…","url":"…","head":\{"shapes":\[…\]\},\s+"snapshots":\[\{"id":"…","preserved":true,"clipIds":\[…\],"diagramText":"…","createdAt":"…"\}/
+    );
+    for (const field of ["id", "name", "url", "head", "snapshots"]) {
+      expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
+    }
+    for (const field of ["preserved", "clipIds", "diagramText", "createdAt"]) {
+      expect(output).toMatch(new RegExp(`^ {4}${field} `, "m"));
+    }
+  });
+
+  it("documents --snapshot's output and the 'other' shape", () => {
+    expect(GET_HELP).toContain('{"snapshotId":"…","shapes":[…]}');
+    expect(GET_HELP).toContain('{"type":"other","id":"…"}');
+  });
+
+  it("puts the --snapshot flag before the id", () => {
+    expect(GET_HELP).toContain("cvm diagram get --snapshot 9c41… 3f2a…");
+  });
+});
+
+describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
+  const icons = new Set<string>(ICON_NAMES);
+
+  it("lists every verb, flags before the positional id", () => {
+    const verbs = block("Verbs:").map((line) => line.trim());
+    expect(verbs.map((v) => v.split(/\s{2,}/)[0])).toEqual([
+      "create --file <path|->",
+      "snapshot add --file <path|-> <diagramId>",
+      "render <snapshotId>",
+      "get [--snapshot <snapshotId>] <diagramId>",
+    ]);
+  });
+
+  it("gives an EXAMPLE whose shapes 'snapshot add' accepts as one drawing", () => {
+    const { shapes } = example();
+    expect(parseSnapshotInput({ shapes }, icons).ok).toBe(true);
+  });
+
+  it("refuses the whole EXAMPLE to 'snapshot add': a snapshot has no name", () => {
+    expect(parseSnapshotInput(example(), icons).ok).toBe(false);
+  });
+
+  it.each([
+    ["snapshot add", SNAPSHOT_ADD_HELP],
+    ["render", RENDER_HELP],
+  ])("documents the output '%s' prints: {snapshotId, image}", (_, help) => {
+    const output = help.slice(help.indexOf("Output:"));
+    expect(output).toMatch(/\{"snapshotId":"…","image":"[^"]+"\}/);
+    for (const field of ["snapshotId", "image"]) {
+      expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
+    }
+  });
+
+  it("says render draws a SNAPSHOT, never the head", () => {
+    expect(RENDER_HELP).toContain("never the head");
   });
 });

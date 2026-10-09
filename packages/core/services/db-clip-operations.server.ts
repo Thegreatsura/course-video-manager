@@ -37,6 +37,7 @@ import {
   type TranscriptWordInput,
 } from "./db-transcript-word-operations.server.js";
 import { createClipRetimeOperationsUnwrapped } from "./db-clip-retime.server.js";
+import { createClipMoveOperationsUnwrapped } from "./db-clip-move.server.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -384,41 +385,6 @@ const createClipOperationsUnwrapped = (db: Database) => {
   });
 
   /**
-   * Reposition a Clip to an explicit point in its Video's timeline order,
-   * anchored immediately before `beforeItemId` (a Clip OR Chapter id, since
-   * they share one order space) — `null` appends to the end.
-   *
-   * Unlike `reorderClip` (nudge one slot up/down), this jumps straight to an
-   * arbitrary position. The CLI's `clip move --before/--after` resolves its
-   * target id against `listTimelineOrder` and hands the result here.
-   */
-  const moveClipToPosition = Effect.fn("moveClipToPosition")(function* (
-    clipId: string,
-    beforeItemId: string | null
-  ) {
-    yield* requireDraftVersionForClip(db, clipId);
-    const clip = yield* getClipById(clipId);
-
-    const items = (yield* listTimelineOrder(clip.videoId)).filter(
-      (item) => item.id !== clipId
-    );
-
-    const order = orderKeyBeforeItem(items, beforeItemId);
-    if (order === null) {
-      return yield* new NotFoundError({
-        type: "moveClipToPosition",
-        params: { clipId: beforeItemId },
-      });
-    }
-
-    yield* makeDbCall(() =>
-      db.update(clips).set({ order }).where(eq(clips.id, clipId))
-    );
-
-    return yield* getClipById(clipId);
-  });
-
-  /**
    * Create ONE Clip on a Video's timeline, positioned against the shared
    * clip/chapter order space exactly like `moveClipToPosition`: anchored
    * immediately before `beforeItemId` (a Clip OR Chapter id), or appended to the
@@ -648,7 +614,10 @@ const createClipOperationsUnwrapped = (db: Database) => {
     restoreClip,
     reorderClip,
     listTimelineOrder,
-    moveClipToPosition,
+    ...createClipMoveOperationsUnwrapped(db, {
+      getClipById,
+      listTimelineOrder,
+    }),
     createClip,
     ...chapterOps,
     appendClips,
@@ -670,6 +639,7 @@ export const createClipOperations = (db: Database) =>
     "restoreClip",
     "reorderClip",
     "moveClipToPosition",
+    "moveClipToVideo",
     "createClip",
     "createChapter",
     "createChapterAtInsertionPoint",

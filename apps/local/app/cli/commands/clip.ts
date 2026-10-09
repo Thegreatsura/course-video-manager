@@ -82,6 +82,8 @@ import {
  *     --start <t> --end <t>                   cached footage transcript
  *   clip update <id> [flags]                  set --zoom and/or retime --start/--end
  *   clip move <id> --before/--after <id>      reposition within the Video's timeline
+ *   clip move <id> --video <id> [--before/--after <id>]
+ *                                             move onto another Video (appends without an anchor)
  *   clip delete <id>                          archive (soft delete; see `clip restore`)
  *   clip restore <id>                         undo `clip delete`
  *   clip words <id>                           the Clip's Transcript Words (NDJSON)
@@ -398,34 +400,65 @@ const updateCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(UPDATE_HELP)));
 
+const videoMoveOpt = entityIdOption("video", "video").pipe(
+  Options.withDescription(
+    "Move the clip onto THIS Video's timeline (cross-video move). Anchors then resolve on the target; with neither --before nor --after it appends to the end."
+  ),
+  Options.optional
+);
+
 const moveCmd = Command.make(
   "move",
-  { id: idArg, before: beforeOpt, after: afterOpt },
-  ({ id, before, after }) =>
+  { id: idArg, video: videoMoveOpt, before: beforeOpt, after: afterOpt },
+  ({ id, video, before, after }) =>
     Effect.gen(function* () {
       const existing = yield* requireActiveClip(id);
-      if (Option.isNone(before) && Option.isNone(after)) {
+      const targetVideoId = Option.getOrUndefined(video);
+      const crossVideo =
+        targetVideoId !== undefined && targetVideoId !== existing.videoId;
+
+      if (!crossVideo && Option.isNone(before) && Option.isNone(after)) {
         return yield* parseError(
-          "move needs one of --before / --after",
+          "move needs one of --before / --after (or --video <id> to move it to another Video)",
           "clip"
         );
       }
+
+      if (crossVideo) {
+        // The target must exist — a clean not-found (exit 2) before the
+        // anchors are resolved against its timeline.
+        const videoOps = yield* VideoOperationsService;
+        yield* videoOps
+          .getVideoWithClipsById(targetVideoId)
+          .pipe(
+            Effect.catchTag("NotFoundError", () =>
+              notFound("video", targetVideoId)
+            )
+          );
+      }
+
       const beforeItemId = yield* resolveBeforeItemId({
         entity: "clip",
-        videoId: existing.videoId,
+        videoId: targetVideoId ?? existing.videoId,
         before,
         after,
         excludeId: id,
       });
 
       const clipOps = yield* ClipOperationsService;
-      const moved = yield* clipOps
-        .moveClipToPosition(id, beforeItemId)
-        .pipe(
-          Effect.catchTag("NotFoundError", (e) =>
-            notFound("clip", (e.params as { clipId?: string }).clipId ?? id)
-          )
-        );
+      const moved = yield* (
+        crossVideo
+          ? clipOps.moveClipToVideo(id, targetVideoId, beforeItemId)
+          : clipOps.moveClipToPosition(id, beforeItemId)
+      ).pipe(
+        Effect.catchTag("NotFoundError", (e) =>
+          notFound("clip", (e.params as { clipId?: string }).clipId ?? id)
+        ),
+        // Bad input (exit 3), not an internal fault — same as a zoom refusal.
+        Effect.catchTag("ClipCarriesOverlaysError", (e) =>
+          parseError(e.message, "clip")
+        )
+      );
       yield* emitObject(moved);
     })
 ).pipe(Command.withDescription(detail(MOVE_HELP)));

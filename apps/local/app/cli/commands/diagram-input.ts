@@ -39,10 +39,40 @@ const toScene = (
   return { ok: true, scene: applied.scene };
 };
 
+/**
+ * Where the first NUL character (\u0000) in `value` is, or null. Postgres
+ * stores neither text nor jsonb with one in, so the file is refused before any
+ * write rather than failing half-way through one.
+ */
+const findNul = (value: unknown, path: string): string | null => {
+  if (typeof value === "string") return value.includes("\u0000") ? path : null;
+  if (value === null || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value)) {
+    if (key.includes("\u0000")) return path;
+    const found = findNul(
+      child,
+      Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`
+    );
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+const nulError = (json: unknown, root: string): string[] => {
+  const at = findNul(json, root);
+  return at === null
+    ? []
+    : [
+        `${at}: contains a NUL character (\\u0000), which a Diagram cannot store — remove it`,
+      ];
+};
+
 export const parseCreateInput = (
   json: unknown,
   icons: ReadonlySet<string>
 ): CreateInput => {
+  const nul = nulError(json, "diagram");
+  if (nul.length > 0) return { ok: false, errors: nul };
   if (!isObject(json) || !("snapshots" in json)) {
     const one = toScene(json, icons, "");
     if (!one.ok) return one;
@@ -103,4 +133,26 @@ export const parseCreateInput = (
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, name: json.name as string | undefined, scenes };
+};
+
+/**
+ * What `cvm diagram snapshot add --file` reads: ONE drawing, `{ "shapes": [...] }`.
+ * A snapshot has no name of its own (the Diagram has one), and one drawing is
+ * added at a time.
+ */
+export const parseSnapshotInput = (
+  json: unknown,
+  icons: ReadonlySet<string>
+): { ok: true; scene: unknown } | { ok: false; errors: string[] } => {
+  if (isObject(json) && ("name" in json || "snapshots" in json)) {
+    return {
+      ok: false,
+      errors: [
+        'snapshot: expected { "shapes": [...] } — a snapshot has no "name", and \'snapshot add\' adds ONE drawing (no "snapshots")',
+      ],
+    };
+  }
+  const nul = nulError(json, "snapshot");
+  if (nul.length > 0) return { ok: false, errors: nul };
+  return toScene(json, icons, "");
 };
