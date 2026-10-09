@@ -400,3 +400,118 @@ describe("cvm diagram render", () => {
     expect(render.calls).toEqual([]);
   });
 });
+
+describe("cvm diagram snapshot update", () => {
+  type Updated = Added & {
+    changed: boolean;
+    headMoved: boolean;
+    previous: { shapes: Array<Record<string, unknown>> };
+  };
+
+  /** A batch: the head is the first drawing, STEP_2 the second. */
+  const createdWithTwo = async () => {
+    const r = await run([
+      "diagram",
+      "create",
+      "--file",
+      file({
+        name: "Agent loop",
+        snapshots: [DRAFT, STEP_2].map(({ shapes }) => ({ shapes })),
+      }),
+    ]);
+    expect(r.exitCode).toBe(0);
+    return ndjson(r.stdout)[0] as Created;
+  };
+
+  /** The first drawing with its label nudged off the box edge. */
+  const NUDGED = {
+    shapes: DRAFT.shapes.map((s) =>
+      s.id === "label" ? { ...s, x: 70, y: 40, text: "Agent v2" } : s
+    ),
+  };
+
+  const update = (snapshotId: string, body: unknown) =>
+    run(["diagram", "snapshot", "update", "--file", file(body), snapshotId]);
+
+  it("redraws the snapshot IN PLACE — same id, place and Preserved mark — moves the head that showed it, and prints the old drawing", async () => {
+    const diagram = await createdWithTwo();
+    const before = await snapshotsOf(diagram.id);
+    const target = before[0]!;
+
+    const r = await update(target.id, NUDGED);
+
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    const [line] = ndjson(r.stdout) as Updated[];
+    expect(line).toEqual({
+      snapshotId: target.id,
+      image: nodePath.join(DIAGRAM_RENDERS, `${target.id}.png`),
+      changed: true,
+      headMoved: true,
+      previous: { shapes: DRAFT.shapes },
+    });
+    nodeFs.rmSync(line!.image);
+
+    const after = await snapshotsOf(diagram.id);
+    expect(after.map((s) => [s.id, s.preserved, s.createdAt])).toEqual(
+      before.map((s) => [s.id, s.preserved, s.createdAt])
+    );
+    const scene = after[0]!.scene as Scene;
+    expect(readSimpleDiagram(scene.store).shapes).toEqual(NUDGED.shapes);
+    expect(after[0]!.searchText).toContain("Agent v2");
+    expect(after[1]!.scene).toEqual(before[1]!.scene);
+    const [row] = await db().query.diagrams.findMany();
+    expect(row!.headScene).toEqual(scene);
+  });
+
+  it("REFUSES a filmed snapshot (a live Clip pins it), exit 3, and writes nothing", async () => {
+    const diagram = await createdWithTwo();
+    const [target] = await snapshotsOf(diagram.id);
+    const [video] = await db()
+      .insert(schema.videos)
+      .values({ title: "v.mp4", originalFootagePath: "f.mp4" })
+      .returning();
+    const [clip] = await db()
+      .insert(schema.clips)
+      .values({
+        videoId: video!.id,
+        videoFilename: "a.mp4",
+        sourceStartTime: 0,
+        sourceEndTime: 1,
+        order: "0001",
+        text: "hello",
+        diagramSnapshotId: target!.id,
+      })
+      .returning();
+
+    const r = await update(target!.id, NUDGED);
+
+    expect(r.exitCode).toBe(3);
+    expect(failureOf(r).message).toContain(
+      `REFUSED: snapshot ${target!.id} was FILMED — 1 Clip pins it (${clip!.id})`
+    );
+    expect(await snapshotsOf(diagram.id)).toEqual(
+      expect.arrayContaining([target])
+    );
+    const [row] = await db().query.diagrams.findMany();
+    expect(row!.headScene).toEqual(target!.scene);
+  });
+
+  it("undoes a bad update with a second one: 'previous' brings the old drawing back exactly", async () => {
+    const diagram = await createdWithTwo();
+    const [, target] = await snapshotsOf(diagram.id);
+
+    const bad = await update(target!.id, NUDGED);
+    expect(bad.exitCode).toBe(0);
+    const { previous, headMoved } = ndjson(bad.stdout)[0] as Updated;
+    expect(headMoved).toBe(false);
+
+    const undo = await update(target!.id, previous);
+
+    expect(undo.exitCode).toBe(0);
+    const restored = (await snapshotsOf(diagram.id))[1]!;
+    expect(restored.id).toBe(target!.id);
+    expect(restored.scene).toEqual(target!.scene);
+    expect(restored.contentHash).toBe(target!.contentHash);
+  });
+});

@@ -251,6 +251,7 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
     expect(verbs.map((v) => v.split(/\s{2,}/)[0])).toEqual([
       "create --file <path|->",
       "snapshot add --file <path|-> <diagramId>",
+      "snapshot update --file <path|-> <snapshotId>",
       "render <snapshotId>",
       "get [--snapshot <snapshotId>] <diagramId>",
       "list [--archived] [<query>]",

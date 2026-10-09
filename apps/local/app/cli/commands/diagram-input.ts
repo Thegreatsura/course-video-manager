@@ -162,6 +162,9 @@ const asScene = (head: unknown): Scene | null => {
  * shape left out is removed, a new id is built in Matt's defaults, and an
  * `other` shape — one the format cannot say — is kept as it is. So `get` ->
  * change one thing -> `snapshot add` changes only that thing.
+ *
+ * `snapshot update` reads the same file, applied onto the snapshot it redraws
+ * instead of the head.
  */
 export const parseSnapshotInput = (
   json: unknown,
@@ -172,7 +175,7 @@ export const parseSnapshotInput = (
     return {
       ok: false,
       errors: [
-        'snapshot: expected { "shapes": [...] } — a snapshot has no "name", and \'snapshot add\' adds ONE drawing (no "snapshots")',
+        'snapshot: expected { "shapes": [...] } — a snapshot has no "name", and \'snapshot add\' and \'snapshot update\' take ONE drawing (no "snapshots")',
       ],
     };
   }

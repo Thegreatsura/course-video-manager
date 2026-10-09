@@ -17,6 +17,9 @@ export const diagramService = (client: RpcClient) =>
     addSnapshotToHead: rpcMethod((json) =>
       client.rpc.diagram.addSnapshotToHead.$post({ json })
     ),
+    updateSnapshot: rpcMethod((json) =>
+      client.rpc.diagram.updateSnapshot.$post({ json })
+    ),
     getDiagram: rpcMethod((json) =>
       client.rpc.diagram.getDiagram.$post({ json })
     ),

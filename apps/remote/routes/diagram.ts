@@ -7,7 +7,8 @@ import type { RemoteRuntime } from "../runtime.js";
  * The `diagram` verb group: `cvm diagram create` — a new Diagram, drawn by an
  * agent in the simple shape format and kept as Preserved Snapshots, the first
  * restored to the head; `snapshot add` — one more Preserved Snapshot, restored
- * to the head; `render` — reads one snapshot to draw it; `get` — reads the
+ * to the head; `snapshot update` — redraws one snapshot no Clip has filmed,
+ * in place; `render` — reads one snapshot to draw it; `get` — reads the
  * head and the timeline; `update`, `delete`, `restore` — rename, archive and
  * un-archive the Diagram through `updateDiagram`, never its drawings; `list`
  * — reads every Diagram's summary, and the palette's `searchDiagrams` for a
@@ -22,6 +23,10 @@ export const diagramRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/addSnapshotToHead",
       forward(runtime, DiagramOperationsService, "addSnapshotToHead")
+    )
+    .post(
+      "/updateSnapshot",
+      forward(runtime, DiagramOperationsService, "updateSnapshot")
     )
     .post(
       "/getDiagram",

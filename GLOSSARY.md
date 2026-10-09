@@ -353,7 +353,7 @@ A named, lasting identity: the "home" for a series of snapshots that change acro
 _Avoid_: Drawing, Sketch, Canvas, Scene (reserved for the drawing tool's own term)
 
 **DiagramSnapshot**:
-An immutable copy of a Diagram's drawing at the moment a specific **Clip** was filmed. It is pinned to that Clip, so going back to the Clip later shows the diagram as it was filmed, even after the Diagram has changed.
+A copy of a Diagram's drawing at the moment a specific **Clip** was filmed. It is pinned to that Clip, so going back to the Clip later shows the diagram as it was filmed, even after the Diagram has changed. Once a Clip that is not archived pins it, it is FILMED and never changes. Before that it can be redrawn in place (`cvm diagram snapshot update`) to fix its layout, keeping its id and its place in the timeline.
 _Avoid_: Frame, Revision, Checkpoint, Version (overloaded with **CourseVersion**)
 
 **Diagram Text**:

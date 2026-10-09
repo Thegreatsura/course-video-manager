@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Console, Effect } from "effect";
 import { data } from "react-router";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
@@ -10,6 +11,10 @@ import { hashHead } from "@/lib/scene-hash";
  * The Diagram rail, plus the Active Diagram's stored head as a hash and the
  * time it was written. The page revalidates this every few seconds, and
  * compares the head against the one its canvas last loaded or saved.
+ *
+ * `timelineHash` stands for the Active Diagram's snapshots, drawings included:
+ * a snapshot redrawn in place (`cvm diagram snapshot update`) keeps its id but
+ * changes this, so the timeline refetches it.
  */
 export const loadDiagramPlaygroundActive = async ({
   params,
@@ -56,8 +61,20 @@ export const loadDiagramPlaygroundActive = async ({
       arr.push(s);
     }
 
+    const timelineHash = (diagramId: string) =>
+      createHash("sha1")
+        .update(
+          (snapshotsByDiagram.get(diagramId) ?? [])
+            .map((s) => `${s.id}:${s.contentHash}`)
+            .join("\n")
+        )
+        .digest("hex");
+
     return data({
-      activeHead: active,
+      activeHead: active && {
+        ...active,
+        timelineHash: timelineHash(active.diagramId),
+      },
       diagrams: diagrams.map((d) => {
         const snapshots = snapshotsByDiagram.get(d.id) ?? [];
         const newestId = filteredNewestSnapshot(snapshots);
