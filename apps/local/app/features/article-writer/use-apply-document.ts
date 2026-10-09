@@ -8,19 +8,24 @@ import { hasUnresolvedScreenshots } from "./choose-screenshot-mutations";
 /**
  * Apply: the document's local images go to Cloudinary as an `upload-images`
  * Job, then the URLs are swapped into the document as it is when the Job
- * settles — edits made while it ran survive — and the result is applied.
- * Local files are removed only once their URLs are in the document.
+ * settles — edits made while it ran survive — and the result is saved
+ * through `onApply`. Local files are removed only once that save is
+ * confirmed, and `onApplied` runs then.
  */
 export function useApplyDocument(
   videoId: string,
   documentRef: RefObject<string | undefined>,
   updateDocument: (content: string) => void,
-  onApply?: (finalDocument: string) => void
+  onApply: (finalDocument: string) => Promise<void>,
+  onApplied?: (finalDocument: string) => void
 ) {
   const { isUploading, upload } = useImageUploadJob(videoId, {
     read: () => documentRef.current ?? "",
-    write: updateDocument,
-    onFinished: (finalDocument) => onApply?.(finalDocument),
+    save: (finalDocument) => {
+      updateDocument(finalDocument);
+      return onApply(finalDocument);
+    },
+    onSaved: (finalDocument) => onApplied?.(finalDocument),
   });
 
   const handleApply = useCallback(() => {

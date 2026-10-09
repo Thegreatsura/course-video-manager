@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   IMAGE_UPLOADED_EVENT,
+  filesSafeToRemove,
   imageUploadsOf,
   localImageRefs,
   swapImageUploads,
@@ -107,6 +108,22 @@ describe("swapImageUploads", () => {
     expect(twice.body).toBe(once);
     expect(twice.swappedFilePaths).toEqual([]);
     expect(once.match(/res\.cloudinary\.com\/x\/diagram/g)).toHaveLength(2);
+  });
+});
+
+describe("filesSafeToRemove", () => {
+  it("swaps every form of an uploaded path, and keeps a file the saved body still names", () => {
+    // `./a.png` was uploaded; the author added `a.png` while the Job ran.
+    const upload = { ref: "./a.png", filePath: "/v/a.png", url: "https://c/a" };
+    const swapped = swapImageUploads("![x](./a.png) ![y](a.png)", [upload]);
+    expect(swapped.body).toBe("![x](https://c/a) ![y](https://c/a)");
+    expect(filesSafeToRemove(swapped.body, swapped.swappedFilePaths)).toEqual([
+      "/v/a.png",
+    ]);
+    // Any form left in the saved body keeps the file on disk.
+    for (const left of ["./a.png", "a.png", "img/../a.png", "/v/a.png"]) {
+      expect(filesSafeToRemove(`![z](${left})`, ["/v/a.png"])).toEqual([]);
+    }
   });
 });
 

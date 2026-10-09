@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
+import { postConfirmed } from "@/lib/post-confirmed";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,6 +52,26 @@ export function LessonPage({
       );
     },
     [descriptionFetcher]
+  );
+
+  // The writer's Apply waits for a confirmed save: local images are removed
+  // only after it (`useImageUploadJob`).
+  const { revalidate } = useRevalidator();
+  const applyField = useCallback(
+    async (fields: Record<string, string>) => {
+      await postConfirmed(`/api/videos/${videoId}/lesson-writer`, fields);
+      void revalidate();
+    },
+    [videoId, revalidate]
+  );
+  const applyBody = useCallback(
+    (newValue: string) => applyField({ intent: "updateBody", body: newValue }),
+    [applyField]
+  );
+  const applyDescription = useCallback(
+    (newValue: string) =>
+      applyField({ intent: "updateDescription", description: newValue }),
+    [applyField]
   );
 
   const [isGeneratingSeo, setIsGeneratingSeo] = useState(false);
@@ -117,7 +138,7 @@ export function LessonPage({
             fieldId="video-body"
             value={optimisticBody}
             onChange={persistBody}
-            onApply={persistBody}
+            onApply={applyBody}
             context={writerContext}
             modes={["article", "skill-building"]}
             placeholder="Write your lesson body in markdown..."
@@ -173,7 +194,7 @@ export function LessonPage({
             fieldId="video-description"
             value={optimisticDescription}
             onChange={persistDescription}
-            onApply={persistDescription}
+            onApply={applyDescription}
             context={writerContext}
             modes={["seo-description-document"]}
             height={160}

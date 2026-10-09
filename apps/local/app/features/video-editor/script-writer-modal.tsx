@@ -20,7 +20,7 @@ export function ScriptWriterModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { script, context, persistScript } = useVideoScript(videoId, open);
+  const { script, context, applyScript } = useVideoScript(videoId, open);
 
   return (
     <WriterModal
@@ -31,7 +31,7 @@ export function ScriptWriterModal({
       modes={[]}
       value={script}
       context={context}
-      onApply={persistScript}
+      onApply={applyScript}
     />
   );
 }
