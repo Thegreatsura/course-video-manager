@@ -1,10 +1,16 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { Effect, Layer } from "effect";
+import { Data, Deferred, Effect, Fiber, Layer, Logger, LogLevel } from "effect";
+import { NodeContext } from "@effect/platform-node";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
 import { createTestDb, type TestDb } from "@/test-utils/pglite";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
+import { SidecarContextTest } from "@/services/sidecar-context";
+import { DrizzleService } from "@/services/drizzle-service.server";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import { runSidecar } from "../../sidecar/sidecar";
+import { transcribeFootageJobKind } from "../../sidecar/kinds/transcribe-footage";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
@@ -19,10 +25,11 @@ import {
 // cvm footage: list / transcribe / transcript
 //
 // Footage has NO database row — its identity is a path and its transcript is a
-// sidecar file on disk. These verbs touch the DISK (and would run ffmpeg +
-// Whisper), so the whole WhisperTranscriptionService is FAKED via
+// sidecar file on disk. `transcribe` enqueues a `transcribe-footage` Job, so a
+// REAL Sidecar (`runSidecar`) runs here on the same PGlite database, and only
+// its WhisperTranscriptionService is FAKED via
 // Layer.succeed(WhisperTranscriptionService, {...}) — the same pattern as
-// render-vertical-video-service.test.ts — and NO real ffmpeg / OpenAI ever
+// render-vertical-video-service.test.ts — so NO real ffmpeg / OpenAI ever
 // runs. Touching the disk is also what makes footage LOCAL-ONLY, so the suite
 // declares the machine local the way cli-file-writes.test.ts does; the refusals
 // live in cli-local-only.test.ts.
@@ -37,15 +44,32 @@ const FAKE_TRANSCRIPT = {
   segments: [{ start: 0, end: 3, text: " hello world again" }],
 };
 
+class CouldNotTranscribeError extends Data.TaggedError(
+  "CouldNotTranscribeError"
+)<{ message: string }> {}
+
+/** Set to make the fake Whisper fail, as a refused upload does. */
+let whisperFails = false;
+
 // A fake whose transcribeFootageFile ignores its input and returns a canned
-// transcript — the command under test is what hashes the source and writes the
+// transcript — the Job under test is what hashes the source and writes the
 // sidecar, so this never has to be real.
-const fakeVideoProcessing = Layer.succeed(WhisperTranscriptionService, {
-  transcribeFootageFile: () => Effect.succeed(FAKE_TRANSCRIPT),
+const fakeWhisper = Layer.succeed(WhisperTranscriptionService, {
+  transcribeFootageFile: () =>
+    whisperFails
+      ? Effect.fail(
+          new CouldNotTranscribeError({
+            message: "Whisper API call failed: Error: Connection error.",
+          })
+        )
+      : Effect.succeed(FAKE_TRANSCRIPT),
 } as unknown as WhisperTranscriptionService);
 
 let testDb: TestDb;
 let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
+let jobsLayer: Layer.Layer<JobOperationsService>;
+let stopSidecar: Deferred.Deferred<string>;
+let sidecarFiber: Fiber.RuntimeFiber<unknown, unknown>;
 let footageDir: string;
 const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 const originalObsDir = process.env.OBS_RECORDING_DIR;
@@ -54,7 +78,10 @@ beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
 
-  const layer = Layer.merge(buildWriteLayer(testDb), fakeVideoProcessing);
+  jobsLayer = JobOperationsService.Default.pipe(
+    Layer.provide(Layer.succeed(DrizzleService, testDb as never))
+  );
+  const layer = Layer.merge(buildWriteLayer(testDb), jobsLayer);
   run = async (argv) => {
     const out = makeTestCliOutput();
     const exitCode = await Effect.runPromise(
@@ -64,9 +91,52 @@ beforeAll(async () => {
   };
 
   process.env[LOCAL_MACHINE_ENV_KEY] = "true";
+
+  // The Sidecar that runs the `transcribe-footage` Jobs the command enqueues.
+  stopSidecar = Effect.runSync(Deferred.make<string>());
+  sidecarFiber = Effect.runFork(
+    runSidecar({
+      identity: {
+        holder: "footage-test",
+        pid: process.pid,
+        hostname: "test",
+        checkout: "/checkouts/footage",
+        gitSha: "abc1234",
+        socket: nodePath.join(os.tmpdir(), "cvm-footage-test.sock"),
+      },
+      registry: { "transcribe-footage": transcribeFootageJobKind },
+      timing: {
+        leaseMs: 5_000,
+        leaseRenewMs: 1_000,
+        jobLeaseMs: 5_000,
+        jobHeartbeatMs: 1_000,
+        pollMs: 20,
+        recoverEveryMs: 1_000,
+        lapseWaitMs: 200,
+        postCheckTimeoutMs: 1_000,
+      },
+      stop: stopSidecar,
+      serve: () => Effect.void,
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          jobsLayer,
+          fakeWhisper,
+          NodeContext.layer,
+          SidecarContextTest
+        )
+      ),
+      Logger.withMinimumLogLevel(LogLevel.None)
+    )
+  );
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await Effect.runPromise(
+    Deferred.succeed(stopSidecar, "test over").pipe(
+      Effect.zipRight(Fiber.join(sidecarFiber))
+    )
+  );
   if (originalLocalMachine === undefined) {
     delete process.env[LOCAL_MACHINE_ENV_KEY];
   } else {
@@ -77,6 +147,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  whisperFails = false;
   footageDir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-footage-"));
   // footage list without --dir reads OBS_RECORDING_DIR (see getLatestOBSVideoClips).
   process.env.OBS_RECORDING_DIR = footageDir;
@@ -171,6 +242,45 @@ describe("footage transcribe", () => {
     expect((JSON.parse(r.stderr.trim()) as { _tag: string })._tag).toBe(
       "ParseError"
     );
+  });
+
+  it("ends as the in-process command did when Whisper fails: its tag, exit 4", async () => {
+    whisperFails = true;
+    const file = footageFile("take.mkv", "the-bytes");
+    const r = await run(["footage", "transcribe", file]);
+
+    expect(r.exitCode).toBe(4);
+    expect(r.stdout).toBe("");
+    expect(JSON.parse(r.stderr.trim())).toEqual({
+      _tag: "CouldNotTranscribeError",
+      message: "Whisper API call failed: Error: Connection error.",
+    });
+    expect(nodeFs.existsSync(sidecarOf(file))).toBe(false);
+  });
+
+  it("--no-wait prints the queued Job and returns", async () => {
+    const file = footageFile("take.mkv", "the-bytes");
+    const r = await run(["footage", "transcribe", "--no-wait", file]);
+
+    expect(r.exitCode).toBe(0);
+    const queued = one<{ jobId: string; status: string; path: string }>(
+      r.stdout
+    );
+    expect(queued).toMatchObject({
+      status: "queued",
+      path: nodePath.resolve(file),
+    });
+    const job = await Effect.runPromise(
+      Effect.flatMap(JobOperationsService, (ops) =>
+        ops.getJob(queued.jobId)
+      ).pipe(Effect.provide(jobsLayer))
+    );
+    expect(job).toMatchObject({
+      kind: "transcribe-footage",
+      params: { path: nodePath.resolve(file) },
+      subjectType: "footage",
+      subjectId: nodePath.resolve(file),
+    });
   });
 
   it("re-transcribes (new hash) when the file's bytes change", async () => {

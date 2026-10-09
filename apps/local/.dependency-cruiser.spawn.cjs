@@ -34,6 +34,7 @@ const SIDECAR_SPAWNERS = [
   "^app/services/overlay-renderer-bin\\.ts$",
   "^app/services/render-vertical-video-service\\.ts$",
   "^app/services/whisper-transcription-service\\.ts$",
+  "^app/services/footage-transcription\\.ts$",
   "^app/services/course-publish-service\\.ts$",
   "^sidecar/sidecar-layer\\.ts$",
   "^sidecar/job-kinds\\.ts$",

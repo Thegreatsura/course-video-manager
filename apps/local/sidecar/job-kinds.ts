@@ -10,6 +10,7 @@ import { noopJobKind } from "./kinds/noop";
 import { publishJobKind } from "./kinds/publish";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
 import { transcribeClipsJobKind } from "./kinds/transcribe-clips";
+import { transcribeFootageJobKind } from "./kinds/transcribe-footage";
 import {
   removeLocalImagesJobKind,
   uploadImagesJobKind,
@@ -31,6 +32,7 @@ export const JOB_KINDS = {
   "batch-export": batchExportJobKind,
   autofill: autofillJobKind,
   "transcribe-clips": transcribeClipsJobKind,
+  "transcribe-footage": transcribeFootageJobKind,
   "upload-images": uploadImagesJobKind,
   "remove-local-images": removeLocalImagesJobKind,
   // The `publish` lane, one at a time; never run again on its own.

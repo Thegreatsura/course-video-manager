@@ -7,6 +7,7 @@ import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
   CLIP_TRANSCRIPTION_POLICY,
+  FOOTAGE_TRANSCRIPTION_POLICY,
   IMAGE_UPLOAD_POLICY,
   POSTING_JOB_POLICY,
   RETRYING_JOB_POLICY,
@@ -67,6 +68,14 @@ export const JOB_KIND_SPECS = {
         (params as { clipIds: ReadonlyArray<string> }).clipIds,
         live
       ),
+  },
+  // A second `cvm footage transcribe` of a file already being transcribed
+  // follows the first Job rather than paying Whisper for it twice.
+  "transcribe-footage": {
+    ...spec(FOOTAGE_TRANSCRIPTION_POLICY, JOB_PARAMS["transcribe-footage"]),
+    coveredBy: (params, live) =>
+      (live.params as { path?: unknown } | null)?.path ===
+      (params as { path: string }).path,
   },
   "upload-images": spec(IMAGE_UPLOAD_POLICY, JOB_PARAMS["upload-images"]),
   "remove-local-images": spec(
