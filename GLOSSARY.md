@@ -373,7 +373,7 @@ A **DiagramSnapshot** marked to stay in its Diagram's timeline even when no **Cl
 _Avoid_: Manual snapshot, Saved snapshot, Standalone snapshot, Bookmark
 
 **Restore to Head**:
-Loading an older **DiagramSnapshot** back as the Active Diagram's current drawing. If the current drawing is not held by any snapshot, it is either preserved first or the author is asked to confirm, so nothing is lost without warning. If the current drawing is already held by a snapshot, the restore happens without asking. It does nothing if the drawing already matches the snapshot.
+Loading an older **DiagramSnapshot** back as the Active Diagram's current drawing. The current drawing's last edit is saved first, and if no snapshot on the timeline holds it, it is kept as a Preserved snapshot, so a restore never loses work. If a snapshot already holds it, no new one is made. It does nothing if the drawing already matches the snapshot.
 _Avoid_: Revert, Roll back, Undo
 
 **Snapshot Step**:
