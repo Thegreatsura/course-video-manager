@@ -130,7 +130,8 @@ export const UPLOAD_MANAGER_POLICIES = {
  * **Clip transcription** (#12) was never an Upload Manager job: the editor
  * awaited one `POST /clips/transcribe`, and a failure was final — no retry
  * (`edit-effect-handlers.ts`). So: 1 attempt, nothing holding a second one
- * back (the 20 Whisper permits stay in `VideoProcessingService`). Not
+ * back (the 20 Whisper permits stay in the service,
+ * `whisper-transcription-service.ts`). Not
  * `neverRequeued`: a transcription is safe to run again, so a deliberate stop
  * puts it back (section 7.5's rule).
  */

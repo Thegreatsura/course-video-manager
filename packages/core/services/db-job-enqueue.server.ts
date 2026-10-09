@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { jobEvents, jobs } from "../db/schema.js";
 import type { Database } from "./drizzle-service.server.js";
@@ -8,6 +8,18 @@ import { withDbTransaction } from "./with-db-transaction.server.js";
 
 /** A Job in one of these never succeeds, so nothing waiting on it may start. */
 const UNSUCCESSFUL_FOR_GOOD = ["failed", "interrupted", "cancelled"];
+
+/** A Job in one of these may still run: a request for the same work joins it. */
+const LIVE: Array<"queued" | "running"> = ["queued", "running"];
+
+/** A live Job of the same kind and subject, as `coveredBy` is shown it. */
+export interface LiveJob {
+  readonly params: unknown;
+  readonly events: ReadonlyArray<{
+    readonly type: string;
+    readonly data: unknown;
+  }>;
+}
 
 /** The caller named a Job by an id another, different Job already has. */
 export class JobIdTakenError extends Data.TaggedError("JobIdTakenError")<{
@@ -39,6 +51,12 @@ export const createEnqueueJobOperations = (db: Database) => {
    * enqueue's answer is lost it can ask again: an id that is already the same
    * Job (same kind, same dependency) adds nothing and answers with that Job
    * as it is now. The same id on a different Job is `JobIdTakenError`.
+   *
+   * ONE LIVE JOB PER PIECE OF WORK, when the kind says what that is
+   * (`coveredBy`): a request whose work a live (queued or running) Job of the
+   * same kind and subject already covers adds nothing, and answers with that
+   * Job. A transaction-scoped advisory lock on the kind and subject makes two
+   * such requests at once take turns, so they cannot both add one.
    */
   const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     /**
@@ -54,6 +72,8 @@ export const createEnqueueJobOperations = (db: Database) => {
     maxAttempts: number;
     dependsOn: string | null;
     subject: { type: string; id: string } | null;
+    /** Whether a live Job of this kind and subject already does this work. */
+    coveredBy?: (live: LiveJob) => boolean;
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
@@ -88,6 +108,39 @@ export const createEnqueueJobOperations = (db: Database) => {
               });
             }
             return existing;
+          }
+        }
+        const coveredBy = input.coveredBy;
+        const subject = input.subject;
+        if (coveredBy && subject) {
+          yield* makeDbCall(() =>
+            tx.execute(
+              sql`select pg_advisory_xact_lock(hashtext(${`${input.kind}:${subject.type}:${subject.id}`}))`
+            )
+          );
+          const live = yield* makeDbCall(() =>
+            tx
+              .select()
+              .from(jobs)
+              .where(
+                and(
+                  eq(jobs.kind, input.kind),
+                  eq(jobs.subjectType, subject.type),
+                  eq(jobs.subjectId, subject.id),
+                  inArray(jobs.status, LIVE)
+                )
+              )
+              .orderBy(asc(jobs.createdAt))
+          );
+          for (const job of live) {
+            const events = yield* makeDbCall(() =>
+              tx
+                .select({ type: jobEvents.type, data: jobEvents.data })
+                .from(jobEvents)
+                .where(eq(jobEvents.jobId, job.id))
+                .orderBy(asc(jobEvents.id))
+            );
+            if (coveredBy({ params: job.params, events })) return job;
           }
         }
         const [job] = yield* makeDbCall(() =>
