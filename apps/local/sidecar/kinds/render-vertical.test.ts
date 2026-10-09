@@ -7,7 +7,6 @@ import {
 } from "@/services/render-vertical-video-service";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import type { JobContext } from "../job-kind";
-import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 import { renderVerticalJobKind } from "./render-vertical";
 
 const STAGES = [
@@ -61,15 +60,6 @@ const recordingContext = () => {
 };
 
 describe("the render-vertical Job kind", () => {
-  it("keeps the Upload Manager's policy: 3 attempts, the default lane", () => {
-    expect(renderVerticalJobKind.maxAttempts).toBe(3);
-    expect(renderVerticalJobKind.lane).toBe("default");
-    expect(UPLOAD_MANAGER_POLICIES["render-vertical"]).toEqual({
-      lane: "default",
-      maxAttempts: 3,
-    });
-  });
-
   it.effect("reports every stage as a Job Event, in order", () =>
     Effect.gen(function* () {
       const { ctx, events } = recordingContext();

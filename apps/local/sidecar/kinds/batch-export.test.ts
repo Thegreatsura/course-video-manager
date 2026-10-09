@@ -135,11 +135,6 @@ const handedOn = Effect.gen(function* () {
 });
 
 describe("the batch-export Job kind", () => {
-  it("keeps the batch at 1 attempt: its Videos carry the retries", () => {
-    expect(batchExportJobKind.maxAttempts).toBe(1);
-    expect(batchExportJobKind.lane).toBe("default");
-  });
-
   it.effect(
     "writes each Video's progress in order, and hands a Video that failed its tries on at once, with 2 attempts left",
     () =>

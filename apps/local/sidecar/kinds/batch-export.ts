@@ -73,11 +73,11 @@ const isVideoList = (
   );
 
 /**
- * Every Video this batch announced that has neither finished nor been handed
- * on, read back from its own Job Events — so it is right after a crash, and
- * handing on twice is impossible.
+ * What a batch's own Job Events say it has done so far, over every run — so
+ * it is right after a crash. A Video handed on is not handed on again, save
+ * for a crash between `handOff`'s two writes (the Job, then its event): that
+ * costs a second export of the same content-addressed file, nothing more.
  */
-/** What a batch's own Job Events say it has done so far, over every run. */
 const progressSoFar = (batchJobId: string) =>
   Effect.gen(function* () {
     const ops = yield* JobOperationsService;
