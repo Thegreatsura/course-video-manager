@@ -193,28 +193,14 @@ describe("the clip-mockup-voice Job kind", () => {
     expect(again.spoken).toEqual([]);
   });
 
-  it("leaves the voice pending while it has attempts left", async () => {
+  // Marking it failed once no attempt is left is the Sidecar's terminal
+  // path (`afterFinalFailure`): clip-mockup-voice-final-failure.test.ts.
+  it("leaves the voice pending when an attempt fails", async () => {
     const ids = await addPending("Will fail.");
 
     const exit = await runJob(ids, failingSpeech(), 1);
 
     expect(Exit.isFailure(exit)).toBe(true);
     expect((await readRow(ids[0]!))!.voiceStatus).toBe("pending");
-  });
-
-  it("marks the voice failed, with why, on its last attempt", async () => {
-    const ids = await addPending("Will fail.");
-
-    const exit = await runJob(
-      ids,
-      failingSpeech(),
-      CLIP_MOCKUP_VOICE_POLICY.maxAttempts
-    );
-
-    expect(Exit.isFailure(exit)).toBe(true);
-    const row = (await readRow(ids[0]!))!;
-    expect(row.voiceStatus).toBe("failed");
-    expect(row.voiceError).toBe(SPEECH_FAILURE_MESSAGE);
-    expect(row.audioPath).toBeNull();
   });
 });

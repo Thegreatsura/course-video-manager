@@ -6,16 +6,6 @@ import { defineJobKind } from "../job-kind";
 import { JOB_PARAMS } from "../job-params";
 import { CLIP_MOCKUP_VOICE_POLICY } from "../retry-policy";
 
-/** Why a run failed, in one line for the Clip Mockup's `voiceError`. */
-const messageOf = (error: unknown): string =>
-  typeof error === "object" &&
-  error !== null &&
-  "message" in error &&
-  typeof error.message === "string" &&
-  error.message !== ""
-    ? error.message
-    : String(error);
-
 /**
  * **Clip Mockup voice**, enqueued by `cvm clip-mockup add` and `update`:
  * voice each named Clip Mockup's line with Kokoro, through the Clip Mockup
@@ -34,10 +24,13 @@ const messageOf = (error: unknown): string =>
  * the rest.
  *
  * A failed run is retried at once while attempts remain
- * (`CLIP_MOCKUP_VOICE_POLICY`: 3). The last one marks every Clip Mockup it
- * still holds `failed`, with the reason, and fails the Job; `cvm clip-mockup
- * update` on one queues it again. No toast when it succeeds: a Clip Mockup
- * shows its own voice, as a Clip shows its own transcription.
+ * (`CLIP_MOCKUP_VOICE_POLICY`: 3). Once the Job has ENDED FOR GOOD — by any
+ * route: its last attempt threw or died of a defect, or its last run was lost
+ * to a killed Sidecar or an expired lease — `afterFinalFailure` marks every
+ * Clip Mockup it named that is still `pending` `failed`, with the reason.
+ * That is the one place a row is marked failed. `cvm clip-mockup update` on
+ * one queues it again. No toast when it succeeds: a Clip Mockup shows its
+ * own voice, as a Clip shows its own transcription.
  */
 export const clipMockupVoiceJobKind = defineJobKind({
   ...CLIP_MOCKUP_VOICE_POLICY,
@@ -59,47 +52,14 @@ export const clipMockupVoiceJobKind = defineJobKind({
         maxAttempts: ctx.maxAttempts,
       });
 
-      const voiced = yield* Effect.gen(function* () {
-        const { speeches, files } = yield* resolveClipMockupSpeeches(
-          todo.map((r) => ({ lineageId: r.lineageId, line: r.line }))
-        );
-        // Every WAV before any row says `ready`: a row whose audioPath
-        // points at nothing is the one state nobody can see or fix.
-        for (const file of files) {
-          yield* writeClipMockupFile(file.lineageId, file.audioPath, file.wav);
-        }
-        return speeches;
-      }).pipe(
-        Effect.tapError((error) =>
-          ctx.attempt < ctx.maxAttempts
-            ? Effect.logWarning("clip-mockup-voice: attempt failed", {
-                error: messageOf(error),
-              })
-            : Effect.forEach(
-                todo,
-                (row) =>
-                  voice.markVoiceFailed({
-                    id: row.id,
-                    line: row.line,
-                    error: messageOf(error),
-                  }),
-                { discard: true }
-              ).pipe(
-                Effect.zipRight(
-                  Effect.logError(
-                    "clip-mockup-voice: no attempt left; marked failed",
-                    { error: messageOf(error) }
-                  )
-                ),
-                Effect.catchAll((cause) =>
-                  Effect.logError(
-                    "clip-mockup-voice: could not mark the Clip Mockups failed",
-                    { cause: messageOf(cause) }
-                  )
-                )
-              )
-        )
+      const { speeches: voiced, files } = yield* resolveClipMockupSpeeches(
+        todo.map((r) => ({ lineageId: r.lineageId, line: r.line }))
       );
+      // Every WAV before any row says `ready`: a row whose audioPath points
+      // at nothing is the one state nobody can see or fix.
+      for (const file of files) {
+        yield* writeClipMockupFile(file.lineageId, file.audioPath, file.wav);
+      }
 
       let marked = 0;
       for (const [i, row] of todo.entries()) {
@@ -114,5 +74,18 @@ export const clipMockupVoiceJobKind = defineJobKind({
         ready: marked,
         changedMeanwhile: todo.length - marked,
       });
+    }),
+  afterFinalFailure: (params, failure) =>
+    Effect.gen(function* () {
+      const voice = yield* ClipMockupVoiceOperationsService;
+      const failed = yield* voice.markVoiceFailed({
+        ids: params.clipMockupIds,
+        jobId: failure.jobId,
+        error: failure.message,
+      });
+      yield* Effect.logError(
+        "clip-mockup-voice: no attempt left; marked failed",
+        { clipMockupIds: failed, error: failure.message }
+      );
     }),
 });

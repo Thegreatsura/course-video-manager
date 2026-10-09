@@ -116,36 +116,42 @@ describe("ClipMockupVoiceOperationsService", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("marks a voice failed with its reason, but never a ready one", () =>
-    Effect.gen(function* () {
-      const row = yield* createPending("Say this.");
-      const voice = yield* ClipMockupVoiceOperationsService;
+  it.effect(
+    "marks a pending voice failed with its reason, but never a ready one",
+    () =>
+      Effect.gen(function* () {
+        const row = yield* createPending("Say this.");
+        const voice = yield* ClipMockupVoiceOperationsService;
 
-      expect(
-        yield* voice.markVoiceFailed({
-          id: row.id,
-          line: "Say this.",
-          error: "the GPU would not load",
-        })
-      ).toBe(true);
-      const failed =
-        yield* (yield* ClipMockupOperationsService).getClipMockupById(row.id);
-      expect(failed.voiceStatus).toBe("failed");
-      expect(failed.voiceError).toBe("the GPU would not load");
+        expect(
+          yield* voice.markVoiceFailed({
+            ids: [row.id],
+            jobId: "job-1",
+            error: "the GPU would not load",
+          })
+        ).toEqual([row.id]);
+        const failed =
+          yield* (yield* ClipMockupOperationsService).getClipMockupById(row.id);
+        expect(failed.voiceStatus).toBe("failed");
+        expect(failed.voiceError).toBe("the GPU would not load");
 
-      yield* Effect.promise(() =>
-        testDb
-          .update(clipMockups)
-          .set({ voiceStatus: "ready", audioPath: "a.wav", durationSeconds: 1 })
-          .where(eq(clipMockups.id, row.id))
-      );
-      expect(
-        yield* voice.markVoiceFailed({
-          id: row.id,
-          line: "Say this.",
-          error: "late",
-        })
-      ).toBe(false);
-    }).pipe(Effect.provide(testLayer))
+        yield* Effect.promise(() =>
+          testDb
+            .update(clipMockups)
+            .set({
+              voiceStatus: "ready",
+              audioPath: "a.wav",
+              durationSeconds: 1,
+            })
+            .where(eq(clipMockups.id, row.id))
+        );
+        expect(
+          yield* voice.markVoiceFailed({
+            ids: [row.id],
+            jobId: "job-1",
+            error: "late",
+          })
+        ).toEqual([]);
+      }).pipe(Effect.provide(testLayer))
   );
 });

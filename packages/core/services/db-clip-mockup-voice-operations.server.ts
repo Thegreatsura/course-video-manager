@@ -1,7 +1,8 @@
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
-import { clipMockups, videos } from "../db/schema.js";
+import { clipMockups, jobs, videos } from "../db/schema.js";
+import { CLIP_MOCKUP_VOICE_JOB_KIND } from "../features/clip-mockups/voice-status.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import type { ClipMockupSpeech } from "./db-clip-mockup-operations.server.js";
 
@@ -77,32 +78,38 @@ const createClipMockupVoiceOperations = (db: Database) => {
     ).pipe(Effect.map((rows) => rows.length > 0));
 
   /**
-   * The line could not be voiced, and the Job has no attempt left: record
-   * why. Only a row that still says `line` and is not already `ready`.
+   * The `clip-mockup-voice` Job `jobId` has ended for good, by whatever
+   * route — its last attempt failed, or its last run was lost: every Clip
+   * Mockup it named that is still `pending` is marked `failed`, with why.
+   * Except one another live (`queued` or `running`) voice Job also names:
+   * that Job will still voice it. The check and the write are one statement.
+   * Answers the ids it marked.
    */
   const markVoiceFailed = (input: {
-    readonly id: string;
-    readonly line: string;
+    readonly ids: readonly string[];
+    readonly jobId: string;
     readonly error: string;
   }) =>
-    makeDbCall(() =>
-      db
-        .update(clipMockups)
-        .set({
-          audioPath: null,
-          durationSeconds: null,
-          voiceStatus: "failed",
-          voiceError: input.error,
-        })
-        .where(
-          and(
-            eq(clipMockups.id, input.id),
-            eq(clipMockups.line, input.line),
-            inArray(clipMockups.voiceStatus, ["pending", "failed"])
-          )
-        )
-        .returning({ id: clipMockups.id })
-    ).pipe(Effect.map((rows) => rows.length > 0));
+    input.ids.length === 0
+      ? Effect.succeed([] as string[])
+      : makeDbCall(() =>
+          db
+            .update(clipMockups)
+            .set({
+              audioPath: null,
+              durationSeconds: null,
+              voiceStatus: "failed",
+              voiceError: input.error,
+            })
+            .where(
+              and(
+                inArray(clipMockups.id, [...input.ids]),
+                eq(clipMockups.voiceStatus, "pending"),
+                sql`not exists (select 1 from ${jobs} where ${jobs.kind} = ${CLIP_MOCKUP_VOICE_JOB_KIND} and ${jobs.id} <> ${input.jobId} and ${jobs.status} in ('queued', 'running') and ${jobs.params} -> 'clipMockupIds' @> jsonb_build_array(${clipMockups.id}))`
+              )
+            )
+            .returning({ id: clipMockups.id })
+        ).pipe(Effect.map((rows) => rows.map((r) => r.id)));
 
   return { listClipMockupsToVoice, markVoiceReady, markVoiceFailed };
 };
