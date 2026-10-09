@@ -26,4 +26,8 @@ export const diagramRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/getDiagramSnapshot",
       forward(runtime, DiagramOperationsService, "getDiagramSnapshot")
+    )
+    .post(
+      "/listSnapshotsWithClips",
+      forward(runtime, DiagramOperationsService, "listSnapshotsWithClips")
     );

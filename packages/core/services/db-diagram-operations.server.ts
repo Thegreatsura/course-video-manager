@@ -20,7 +20,10 @@ import {
 import { Effect } from "effect";
 import { hashHead, hashScene } from "../lib/scene-hash.js";
 import { extractSceneText } from "../lib/extract-scene-text/index.js";
-import { agentDiagramOperations } from "./db-diagram-agent-operations.server.js";
+import {
+  agentDiagramOperations,
+  type DiagramPrimitives,
+} from "./db-diagram-agent-operations.server.js";
 import {
   DiagramThumbnailStore,
   type DiagramThumbnailStoreApi,
@@ -405,6 +408,9 @@ const createDiagramOperations = (
           contentHash,
           preserved,
           searchText,
+          // The statement's own time, not the transaction's: snapshots
+          // stored in one transaction keep the order they were stored in.
+          createdAt: sql`clock_timestamp()`,
         })
         .returning()
     );
@@ -683,15 +689,21 @@ const createDiagramOperations = (
     setSnapshotArchived,
     restoreSnapshotToHead,
     restoreFromSearch,
-    ...agentDiagramOperations(db, {
+    ...agentDiagramOperations(
+      db,
+      (tx): DiagramPrimitives =>
+        createDiagramOperations(tx, thumbnails).primitives
+    ),
+    createSnapshotForClip,
+    updateClipDiagramPin,
+    /** What the agent writes are built from; bound to this `db`. */
+    primitives: {
       createDiagram,
       getDiagram,
       storeSnapshot,
       setSnapshotArchived,
       restoreSnapshotToHead,
-    }),
-    createSnapshotForClip,
-    updateClipDiagramPin,
+    },
   };
 };
 

@@ -22,13 +22,15 @@ to Head. If Matt drew on the head by hand and no snapshot holds that drawing,
 it is preserved first, so nothing he did is lost.
 
 Verbs:
-  create --file <path|->                    WRITE. A new Diagram from a JSON file ("-" = STDIN)
-  snapshot add --file <path|-> <diagramId>  WRITE. One more drawing, made the head
-  render <snapshotId>                       READ. Draw a stored snapshot to a PNG
+  create --file <path|->                     WRITE. A new Diagram from a JSON file ("-" = STDIN)
+  snapshot add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
+  render <snapshotId>                        READ. Draw a stored snapshot to a PNG
+  get [--snapshot <snapshotId>] <diagramId>  READ. The head and the snapshots, as JSON
 
 THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
 and 'create' again until the pictures are right, then hand Matt the url. Once
-he has the url, change it with 'snapshot add', never a second 'create'.
+he has the url, change it with 'snapshot add', never a second 'create'. To
+see what Matt has drawn since, 'get' it first.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
@@ -100,15 +102,17 @@ EXAMPLE
 
 LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
-(CVM_APP_URL, default http://localhost:5173). Elsewhere every verb is refused
-before doing anything: _tag "LocalOnlyCommandError", exit 7. Stop; do not
-retry.
+(CVM_APP_URL, default http://localhost:5173). Elsewhere every verb but 'get'
+is refused before doing anything: _tag "LocalOnlyCommandError", exit 7. Stop;
+do not retry.
 
 Examples:
   cvm diagram create --file agent-loop.json
   cat agent-loop.json | cvm diagram create --file -
   cvm diagram snapshot add --file agent-loop-v2.json <diagramId>
-  cvm diagram render <snapshotId>`;
+  cvm diagram render <snapshotId>
+  cvm diagram get <diagramId>
+  cvm diagram get --snapshot <snapshotId> <diagramId>`;
 
 export const CREATE_HELP = `WRITE. Create a NEW Diagram from a simple-format JSON file: each drawing in it
 becomes a Preserved Snapshot, in order, and the Diagram opens on the FIRST.
@@ -212,3 +216,44 @@ Exit codes:
 Examples:
   cvm diagram render 9c41…
   cvm diagram render 9c41… | jq -r .image`;
+
+export const GET_HELP = `READ. Print a Diagram's current drawing (its head) and its snapshots, the
+drawings in the simple shape format of 'cvm diagram --help'. Writes nothing.
+
+  cvm diagram get [--snapshot <snapshotId>] <diagramId>
+
+  <diagramId>              the Diagram: its id, or its playground url.
+  --snapshot <snapshotId>  print just this snapshot's drawing instead.
+
+Output: ONE NDJSON line,
+  {"id":"…","name":"…","url":"…","head":{"shapes":[…]},
+   "snapshots":[{"id":"…","preserved":true,"clipIds":[…],"diagramText":"…","createdAt":"…"}, …]}
+  id           the Diagram's id.
+  name         its name.
+  url          where Matt opens it in the Diagram Playground.
+  head         what the Diagram shows now — Matt may have drawn on it by hand.
+  snapshots    its timeline, oldest first (archived ones left out).
+    id           the DiagramSnapshot's id; 'render' draws it.
+    preserved    a Preserved Snapshot: kept even when no Clip pins it.
+    clipIds      the Clips that pin it, filmed against this drawing.
+    diagramText  every word on its shapes, in one line.
+    createdAt    when it was taken.
+
+With --snapshot, ONE NDJSON line,
+  {"snapshotId":"…","shapes":[…]}
+  snapshotId  the snapshot.
+  shapes      its drawing.
+
+A shape the format cannot say — a hand-drawn stroke, a sticky note, a shape
+in a group or frame — comes back as {"type":"other","id":"…"}. 'create' and
+'snapshot add' refuse "other", so a drawing that has one cannot be passed
+back whole: tell Matt what you would change instead.
+
+Exit codes:
+  2  no Diagram with that id, or no snapshot with that id in this Diagram
+     (_tag NotFoundError).
+
+Examples:
+  cvm diagram get 3f2a…
+  cvm diagram get 3f2a… | jq '.head.shapes'
+  cvm diagram get --snapshot 9c41… 3f2a…`;
