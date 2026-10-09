@@ -15,6 +15,7 @@ import {
   type TestDb,
 } from "@/test-utils/pglite";
 import type { JobContext } from "../job-kind";
+import { enqueueJob, JOB_KINDS } from "../job-kinds";
 import { batchExportJobKind } from "./batch-export";
 
 let testDb: TestDb;
@@ -98,6 +99,11 @@ const startBatch = Effect.gen(function* () {
     maxAttempts: 1,
     emit: (type, data) =>
       ops.appendJobEvent({ jobId: job.id, type, data }).pipe(Effect.orDie),
+    // The sidecar's own: the one enqueue path, over the real registry.
+    enqueue: (request) =>
+      enqueueJob({ id: null, ...request, registry: JOB_KINDS }).pipe(
+        Effect.provideService(JobOperationsService, ops)
+      ),
   };
   return { job, ctx };
 });
@@ -243,8 +249,8 @@ describe("the batch-export Job kind", () => {
         expect(yield* handedOn).toEqual([]);
 
         // Recovery finds the lease expired, and the kind cleans up after it.
-        yield* batchExportJobKind.afterLostRun!({ id: job.id, title: "" });
-        yield* batchExportJobKind.afterLostRun!({ id: job.id, title: "" });
+        yield* batchExportJobKind.afterLostRun!({ id: job.id, title: "" }, ctx);
+        yield* batchExportJobKind.afterLostRun!({ id: job.id, title: "" }, ctx);
         expect((yield* handedOn).map((j) => j.videoId)).toEqual([
           "video-b",
           "video-c",

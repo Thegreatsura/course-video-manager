@@ -16,10 +16,14 @@ import {
   type SidecarLease,
 } from "@cvm/core/services/db-job-operations.server";
 import { formatFailureCause } from "@/services/format-failure-cause";
-import { isPostingKind, type JobContext } from "./job-kind";
+import { isPostingKind, type EnqueueJob, type JobContext } from "./job-kind";
 import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
-import { UnknownJobKindError, type JobKindRegistry } from "./job-kinds";
+import {
+  enqueueJob,
+  UnknownJobKindError,
+  type JobKindRegistry,
+} from "./job-kinds";
 import { LANE_NAMES, LANES, laneHasRoom, type LaneName } from "./lanes";
 
 /**
@@ -239,6 +243,16 @@ export const runSidecar = <R>(opts: {
         Object.hasOwn(registry, name) ? registry[name] : undefined;
 
       /**
+       * How a handler starts another Job: the one enqueue path, then a nudge
+       * so a lane picks it up now rather than at the next poll.
+       */
+      const enqueue: EnqueueJob = (request) =>
+        enqueueJob({ id: null, ...request, registry }).pipe(
+          Effect.provideService(JobOperationsService, ops),
+          Effect.tap(() => nudge)
+        );
+
+      /**
        * A run of `job` was lost — not stopped on purpose — and has been
        * settled as a failed attempt: let its kind clean up after it.
        */
@@ -252,7 +266,7 @@ export const runSidecar = <R>(opts: {
           return Effect.void;
         }
         return kind
-          .afterLostRun({ id: job.id, title: job.title })
+          .afterLostRun({ id: job.id, title: job.title }, { enqueue })
           .pipe(
             Effect.annotateLogs({ jobId: job.id, kind: job.kind }),
             logCause("job: its kind could not clean up after a lost run")
@@ -371,6 +385,7 @@ export const runSidecar = <R>(opts: {
                     Effect.zipRight(feed.wake),
                     logCause("job: could not record an event")
                   ),
+              enqueue,
             };
             yield* Effect.logInfo("job started", {
               title: job.title,

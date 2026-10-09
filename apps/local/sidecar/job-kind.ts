@@ -5,7 +5,27 @@ import {
   type RetryingJobPolicy,
 } from "./retry-policy";
 
-/** What a handler can do besides its work: report what is happening. */
+/** Another Job a handler starts, as it asks for one. */
+export interface JobRequest {
+  readonly kind: string;
+  readonly title: string;
+  readonly params: unknown;
+  readonly subject: { readonly type: string; readonly id: string } | null;
+  /** Attempts the work already spent before it became this Job (0 for new work). */
+  readonly attemptsSpent: number;
+  readonly dependsOn: string | null;
+}
+
+/**
+ * Start another Job through the one path every Job takes (`enqueueJob`):
+ * the kind's own lane and attempts, its params checked, and a dependency
+ * that already failed failing it at once. Never a write to the job table.
+ */
+export type EnqueueJob = (
+  request: JobRequest
+) => Effect.Effect<{ readonly id: string }, unknown>;
+
+/** What a handler can do besides its work: report, and start other Jobs. */
 export interface JobContext {
   readonly jobId: string;
   readonly attempt: number;
@@ -15,12 +35,18 @@ export interface JobContext {
     type: string,
     data: Record<string, unknown>
   ) => Effect.Effect<void>;
+  readonly enqueue: EnqueueJob;
 }
 
 /** A Job whose run the sidecar lost, as `afterLostRun` is told of it. */
 export interface LostJob {
   readonly id: string;
   readonly title: string;
+}
+
+/** What `afterLostRun` can do: start other Jobs. */
+export interface LostRunContext {
+  readonly enqueue: EnqueueJob;
 }
 
 /** A post that was cut off, as `checkPosted` is told of it. */
@@ -60,7 +86,10 @@ export interface RetryingJobKindDefinition<P, I, R> extends RetryingJobPolicy {
    * back. A Batch export hands its unfinished Videos on from here, as the
    * browser did when the stream dropped. Optional; most kinds need nothing.
    */
-  readonly afterLostRun?: (job: LostJob) => Effect.Effect<void, unknown, R>;
+  readonly afterLostRun?: (
+    job: LostJob,
+    ctx: LostRunContext
+  ) => Effect.Effect<void, unknown, R>;
 }
 
 /**
@@ -95,7 +124,10 @@ interface JobKindBase<R> {
 
 export interface RetryingJobKind<R = never>
   extends RetryingJobPolicy, JobKindBase<R> {
-  readonly afterLostRun?: (job: LostJob) => Effect.Effect<void, unknown, R>;
+  readonly afterLostRun?: (
+    job: LostJob,
+    ctx: LostRunContext
+  ) => Effect.Effect<void, unknown, R>;
 }
 
 export interface PostingJobKind<R = never> extends JobKindBase<R> {
