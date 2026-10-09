@@ -310,9 +310,7 @@ export const runSidecar = <R>(opts: {
                 ? Effect.logWarning(
                     posting
                       ? "job interrupted: a post is never run again on its own; it waits for the author's Retry"
-                      : requeuedOnStop
-                        ? "job interrupted"
-                        : "job interrupted: this kind is never run again on its own"
+                      : "job interrupted"
                   )
                 : Effect.logError("job failed", cause)
             ).pipe(
@@ -326,19 +324,24 @@ export const runSidecar = <R>(opts: {
                       : INTERRUPTED
                     : toJobFailure(cause),
                   interrupted,
-                  // A kind that is never put back is never re-run by a stop
-                  // or a lost lease either, whatever its attempts say.
+                  // Never put back: never re-run by a lost lease either.
                   mayRetry: !posting && (requeuedOnStop || !interrupted),
                 })
               ),
               Effect.flatMap((outcome) =>
-                Effect.logInfo(`job settled: ${outcome}`)
-              ),
-              // Interrupted while not stopping: this sidecar lost the Job's
-              // lease mid-run. A handler that failed cleaned up itself. A
-              // post cut off either way is looked for at its service.
-              Effect.zipRight(
-                interrupted && !stopping ? afterLostRun(job) : Effect.void
+                Effect.logInfo(`job settled: ${outcome}`).pipe(
+                  // Interrupted while not stopping: this sidecar lost the
+                  // Job's lease mid-run, so whoever took it settled it — and
+                  // ran `afterLostRun` then (`not-held` here). Only the run
+                  // that settles a lost run cleans up after it, once. A
+                  // handler that failed cleaned up itself. A post cut off
+                  // either way is looked for at its service.
+                  Effect.zipRight(
+                    interrupted && !stopping && outcome !== "not-held"
+                      ? afterLostRun(job)
+                      : Effect.void
+                  )
+                )
               ),
               Effect.zipRight(
                 interrupted && posting && !stopping ? checkPosts : Effect.void
@@ -448,29 +451,33 @@ export const runSidecar = <R>(opts: {
       });
       const checkPosts = postChecks.sweep;
 
-      const recover = ops
-        .recoverExpiredJobs({ neverRetryKinds: postChecks.kinds })
-        .pipe(
-          Effect.flatMap((recovered) =>
-            Effect.forEach(
-              recovered,
-              (r) =>
-                Effect.logWarning(`job recovered: ${r.outcome}`).pipe(
-                  Effect.annotateLogs({ jobId: r.jobId }),
-                  Effect.zipRight(
-                    ops.getJob(r.jobId).pipe(
-                      Effect.flatMap((job) =>
-                        job ? afterLostRun(job) : Effect.void
-                      ),
-                      logCause("sidecar: could not read a recovered job")
-                    )
+      const recover = Effect.suspend(() =>
+        // The Jobs running in this sidecar right now, read at each sweep.
+        ops.recoverExpiredJobs({
+          neverRetryKinds: postChecks.kinds,
+          stillRunning: [...running.keys()],
+        })
+      ).pipe(
+        Effect.flatMap((recovered) =>
+          Effect.forEach(
+            recovered,
+            (r) =>
+              Effect.logWarning(`job recovered: ${r.outcome}`).pipe(
+                Effect.annotateLogs({ jobId: r.jobId }),
+                Effect.zipRight(
+                  ops.getJob(r.jobId).pipe(
+                    Effect.flatMap((job) =>
+                      job ? afterLostRun(job) : Effect.void
+                    ),
+                    logCause("sidecar: could not read a recovered job")
                   )
-                ),
-              { discard: true }
-            )
-          ),
-          logCause("sidecar: the recovery sweep failed")
-        );
+                )
+              ),
+            { discard: true }
+          )
+        ),
+        logCause("sidecar: the recovery sweep failed")
+      );
 
       const heartbeat = Effect.gen(function* () {
         const ids = [...running.keys()];

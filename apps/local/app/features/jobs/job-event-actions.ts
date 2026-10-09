@@ -121,7 +121,14 @@ export const toJobsAction = (
       return { ...base, type: "job-posted", result: { ...data } };
     case "post-check": {
       const check = postCheckOf(data);
-      return check ? { ...base, type: "job-post-checked", check } : null;
+      return check
+        ? {
+            ...base,
+            type: "job-post-checked",
+            check,
+            attempt: typeof data.attempt === "number" ? data.attempt : null,
+          }
+        : null;
     }
     case "videos":
       return Array.isArray(data.videos)

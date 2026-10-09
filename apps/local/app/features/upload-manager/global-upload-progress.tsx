@@ -5,13 +5,9 @@ import { UploadRow, type PostRowControls } from "./upload-row";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import { formatRemaining } from "./upload-eta";
 import type { uploadReducer } from "./upload-reducer";
-import { visibleJobRows } from "@/features/jobs/jobs-selectors";
+import { postRetryOf, visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
-import {
-  isPostingJobKind,
-  jobLogHref,
-  publishPageHref,
-} from "@/features/jobs/job-wire";
+import { jobLogHref, publishPageHref } from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,18 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useState } from "react";
-
-/**
- * Failures a Retry cannot fix: a dead or missing key (fix it, then post again
- * from the page), or an export that never finished (its post never started).
- */
-const RETRY_CANNOT_HELP: readonly string[] = [
-  "BufferAuthError",
-  "NotAuthenticatedError",
-  "YouTubeAuthError",
-  "AiHeroNotAuthenticatedError",
-  "DependencyFailed",
-];
 
 const CIRCLE_RADIUS = 16;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -59,14 +43,13 @@ export function GlobalUploadProgress() {
   /** A failed or cut-off post's check and Retry (posts never retry alone). */
   const postControls = (uploadId: string): PostRowControls | null => {
     const job = jobs.jobs[jobIdOfRow(uploadId)];
-    if (!job || !isPostingJobKind(job.kind)) return null;
-    if (job.status !== "failed" && job.status !== "interrupted") return null;
+    const retry = job ? postRetryOf(job) : null;
+    if (!job || !retry) return null;
     return {
       interrupted: job.status === "interrupted",
       check: job.postCheck,
-      onRetry: RETRY_CANNOT_HELP.includes(job.errorTag ?? "")
-        ? null
-        : () => retryJob(job.id),
+      retry,
+      onRetry: () => retryJob(job.id),
     };
   };
   /** An interrupted Publish: where its Pending Version is reconciled. */

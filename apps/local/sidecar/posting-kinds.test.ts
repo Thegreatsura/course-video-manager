@@ -10,6 +10,8 @@ import {
   type Job,
 } from "@cvm/core/services/db-job-operations.server";
 import { DrizzleService } from "@cvm/core/services/drizzle-service.server";
+import { jobs } from "@cvm/core/db/schema";
+import { eq, sql } from "drizzle-orm";
 import {
   createTestDb,
   truncateAllTables,
@@ -170,7 +172,11 @@ const TIMING: SidecarTiming = {
   postCheckTimeoutMs: 1_000,
 };
 
-const startSidecar = (registry: JobKindRegistry<never>, name: string) =>
+const startSidecar = (
+  registry: JobKindRegistry<never>,
+  name: string,
+  timing: SidecarTiming = TIMING
+) =>
   Effect.gen(function* () {
     const stop = yield* Deferred.make<string>();
     const serving = yield* Deferred.make<void>();
@@ -185,7 +191,7 @@ const startSidecar = (registry: JobKindRegistry<never>, name: string) =>
           socket: path.join(dir, `${name}.sock`),
         },
         registry,
-        timing: TIMING,
+        timing,
         stop,
         serve: () => Deferred.succeed(serving, undefined),
       })
@@ -357,6 +363,40 @@ describe("a posting Job in the sidecar", () => {
   );
 
   it.live(
+    "still running when a late heartbeat lets its lease lapse, is not recovered by its own sidecar: no Retry can run it beside itself",
+    () =>
+      Effect.gen(function* () {
+        const stub = stubPost();
+        // Heartbeats far apart, recovery often: the lease lapses mid-post.
+        const sidecar = yield* startSidecar(stub.registry, "a", {
+          ...TIMING,
+          jobHeartbeatMs: 60_000,
+          recoverEveryMs: 100,
+        });
+        const job = yield* enqueuePost(stub.registry, "hang");
+        yield* waitForJob(job.id, (j) => j.status === "running");
+        yield* Effect.promise(() =>
+          testDb
+            .update(jobs)
+            .set({ leaseUntil: sql`now() - interval '1 second'` })
+            .where(eq(jobs.id, job.id))
+        );
+        yield* Effect.sleep(500); // several recovery sweeps
+
+        const ops = yield* JobOperationsService;
+        expect(yield* ops.getJob(job.id)).toMatchObject({ status: "running" });
+        const retry = yield* retryJob({
+          jobId: job.id,
+          attempt: 1,
+          registry: stub.registry,
+        }).pipe(Effect.flip);
+        expect(retry._tag).toBe("JobNotRetryableError");
+        expect(stub.runs(job.id)).toBe(1);
+        yield* sidecar.stop;
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
     "is never retried on its own even if its row claims more attempts",
     () =>
       Effect.gen(function* () {
@@ -410,6 +450,7 @@ describe("a posting Job in the sidecar", () => {
 
       const retried = yield* retryJob({
         jobId: job.id,
+        attempt: 1,
         registry: stub.registry,
       });
       expect(retried).toMatchObject({ attempt: 2, maxAttempts: 2 });
@@ -432,6 +473,7 @@ describe("a posting Job in the sidecar", () => {
         const job = yield* enqueuePost(stub.registry, "succeed");
         const early = yield* retryJob({
           jobId: job.id,
+          attempt: 1,
           registry: stub.registry,
         }).pipe(Effect.flip);
         expect(early._tag).toBe("JobNotRetryableError");
@@ -448,6 +490,7 @@ describe("a posting Job in the sidecar", () => {
         });
         const refused = yield* retryJob({
           jobId: noop.id,
+          attempt: 1,
           registry: stub.registry,
         }).pipe(Effect.flip);
         expect(refused._tag).toBe("JobNotRetryableError");

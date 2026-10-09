@@ -16,6 +16,7 @@ import type { uploadReducer } from "./upload-reducer";
 import { uploadStageLabel } from "./upload-stage-labels";
 import { etaLabel, type UploadEta } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
+import type { PostRetry } from "@/features/jobs/jobs-selectors";
 
 /**
  * What a POST's failed row offers (decision 5): posts never run again on
@@ -30,8 +31,9 @@ export interface PostRowControls {
     detail: string;
     url: string | null;
   } | null;
-  /** `null` when a Retry cannot help (a dead key: fix it, then post again). */
-  onRetry: (() => void) | null;
+  /** Whether it went out, and whether Retry is offered and asks first. */
+  retry: PostRetry;
+  onRetry: () => void;
 }
 
 export function UploadRow({
@@ -315,8 +317,8 @@ const CHECK_TONE = {
 
 /**
  * A post that failed, or was cut off: why, what the check found at the
- * service, its log, and the author's Retry. A Retry when the post may have
- * gone out asks once more before it sends.
+ * service, its log, and the author's Retry (`postRetryOf`): none once it
+ * went out, and "Post again?" first whenever it may have.
  */
 function PostFailedDetail({
   upload,
@@ -328,9 +330,7 @@ function PostFailedDetail({
   post: PostRowControls;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const mayHavePosted =
-    post.interrupted && post.check?.verdict !== "not-posted";
-  const retry = post.onRetry;
+  const retry = post.retry.type === "retry" ? post.retry : null;
   return (
     <div className="mt-0.5 space-y-0.5">
       <p
@@ -355,6 +355,20 @@ function PostFailedDetail({
           )}
         </p>
       )}
+      {!post.interrupted && post.retry.type === "went-out" && (
+        <p
+          className="text-xs text-yellow-600 dark:text-yellow-500"
+          role="status"
+        >
+          It went out before this failed, so it is not offered again.
+          {post.retry.url && (
+            <>
+              {" "}
+              <SuccessLink href={post.retry.url}>Open</SuccessLink>
+            </>
+          )}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         {retry &&
           (confirming ? (
@@ -364,7 +378,7 @@ function PostFailedDetail({
               onClick={(e) => {
                 e.stopPropagation();
                 setConfirming(false);
-                retry();
+                post.onRetry();
               }}
             >
               Post again?
@@ -375,8 +389,8 @@ function PostFailedDetail({
               className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap inline-flex items-center gap-1"
               onClick={(e) => {
                 e.stopPropagation();
-                if (mayHavePosted) setConfirming(true);
-                else retry();
+                if (retry.confirm) setConfirming(true);
+                else post.onRetry();
               }}
             >
               <RefreshCw className="size-3" />

@@ -180,6 +180,10 @@ export const applyStreamAction = (
     case "job-published":
       return { ...job, result: action.result };
     case "job-post-checked":
+      // A check of the run before a Retry says nothing about this one.
+      if (action.attempt !== null && action.attempt !== job.attempt) {
+        return job;
+      }
       return { ...job, postCheck: action.check };
     case "job-dismissed":
       return job;

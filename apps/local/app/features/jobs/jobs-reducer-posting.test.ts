@@ -5,7 +5,7 @@ import {
   jobsReducer,
   toJobsAction,
 } from "./jobs-reducer";
-import { jobUploadEntry, visibleJobs } from "./jobs-selectors";
+import { jobUploadEntry, postRetryOf, visibleJobs } from "./jobs-selectors";
 import type { WireJob, WireJobEvent } from "./job-wire";
 
 const JOB_ID = "6b0c1f5e-0000-4000-8000-000000000001";
@@ -179,6 +179,7 @@ describe("jobsReducer", () => {
       expect(tester.getEffects().at(-1)).toEqual({
         type: "retry-job",
         id: JOB_ID,
+        attempt: 1,
       });
 
       // The server re-queues the same row as its next attempt.
@@ -189,6 +190,94 @@ describe("jobsReducer", () => {
         errorMessage: null,
         postCheck: null,
       });
+    });
+
+    it("a check of the run before a Retry says nothing about the run after it", () => {
+      const interrupted = post("interrupted", {
+        error: { tag: "JobInterrupted", message: "Interrupted" },
+      });
+      const tester = newTester()
+        .send(requestPost(null))
+        .send(post("queued"))
+        .send(post("started", { attempt: 1 }))
+        .send(interrupted)
+        // The author retries while run 1 is still being looked for.
+        .send(post("queued", { attempt: 2, retriedBy: "author" }))
+        .send(
+          post("post-check", {
+            verdict: "not-posted",
+            detail: "It did not go out",
+            url: null,
+            attempt: 1,
+          })
+        )
+        .send(post("started", { attempt: 2 }))
+        .send(
+          post("interrupted", {
+            error: { tag: "JobInterrupted", message: "Interrupted" },
+          })
+        );
+      const job = tester.getState().jobs[JOB_ID]!;
+      expect(job).toMatchObject({ attempt: 2, postCheck: null });
+      expect(postRetryOf(job)).toEqual({ type: "retry", confirm: true });
+    });
+
+    it("Retry is not offered once the post went out, and asks first whenever it may have", () => {
+      // Thunks: each event's id must come after the run's own.
+      const ran = (...events: (() => jobsReducer.Action)[]) => {
+        const tester = newTester()
+          .send(requestPost(null))
+          .send(post("queued"))
+          .send(post("started", { attempt: 1 }));
+        for (const event of events) tester.send(event());
+        return postRetryOf(tester.getState().jobs[JOB_ID]!);
+      };
+      const failed = (tag: string) => () =>
+        post("failed", { error: { tag, message: "x" } });
+
+      // It went out, then the thumbnail failed.
+      expect(
+        ran(
+          () => post("posted", { youtubeVideoId: "yt-1", url: "https://yt/1" }),
+          failed("YouTubeUploadError")
+        )
+      ).toEqual({ type: "went-out", url: "https://yt/1" });
+      // Cut off, and the check found it.
+      expect(
+        ran(
+          () => post("interrupted", { error: { tag: "JobInterrupted" } }),
+          () =>
+            post("post-check", {
+              verdict: "posted",
+              detail: "It went out",
+              url: "https://yt/2",
+              attempt: 1,
+            })
+        )
+      ).toEqual({ type: "went-out", url: "https://yt/2" });
+      // Failed mid-request, or cut off and found "not posted": ask first.
+      expect(ran(failed("YouTubeUploadError"))).toEqual({
+        type: "retry",
+        confirm: true,
+      });
+      expect(
+        ran(
+          () => post("interrupted", { error: { tag: "JobInterrupted" } }),
+          () =>
+            post("post-check", {
+              verdict: "not-posted",
+              detail: "",
+              url: null,
+              attempt: 1,
+            })
+        )
+      ).toEqual({ type: "retry", confirm: true });
+      // Nothing was sent: no question.
+      expect(ran(failed("PostNotStartedError"))).toEqual({
+        type: "retry",
+        confirm: false,
+      });
+      expect(ran(failed("BufferAuthError"))).toEqual({ type: "cannot-help" });
     });
 
     it("Retry does nothing for a kind that retries on its own, or a post that has not failed", () => {

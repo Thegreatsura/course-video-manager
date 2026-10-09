@@ -129,10 +129,13 @@ export class JobNotRetryableError extends Data.TaggedError(
  * The author's Retry. Only a POST waits for one (decision 5): every other
  * kind retries on its own while it has attempts, and is not run again by
  * hand. Runs the post once more — the same row, `attempt + 1` — and only if
- * it failed or was interrupted.
+ * the run the author saw (`attempt`) failed or was interrupted without
+ * going out.
  */
 export const retryJob = Effect.fn("retryJob")(function* (input: {
   jobId: string;
+  /** The run the author retried: a Retry of any other run is refused. */
+  attempt: number;
   registry: JobKindRegistry<unknown>;
 }) {
   const ops = yield* JobOperationsService;
@@ -152,7 +155,10 @@ export const retryJob = Effect.fn("retryJob")(function* (input: {
       message: `a ${job.kind} Job retries on its own; only a post waits for the author's Retry`,
     });
   }
-  const retried = yield* ops.retryJob({ jobId: job.id });
+  const retried = yield* ops.retryJob({
+    jobId: job.id,
+    attempt: input.attempt,
+  });
   switch (retried.outcome) {
     case "queued":
       return retried.job;
@@ -165,6 +171,16 @@ export const retryJob = Effect.fn("retryJob")(function* (input: {
       return yield* new JobNotRetryableError({
         jobId: job.id,
         message: `"${job.title}" is ${retried.job.status}: only a failed or interrupted post can be retried`,
+      });
+    case "stale":
+      return yield* new JobNotRetryableError({
+        jobId: job.id,
+        message: `"${job.title}" has run again since (run ${retried.job.attempt}); look at that run before retrying`,
+      });
+    case "went-out":
+      return yield* new JobNotRetryableError({
+        jobId: job.id,
+        message: `"${job.title}" went out: retrying would post it twice`,
       });
     case "dependency-not-succeeded":
       return yield* new JobNotRetryableError({

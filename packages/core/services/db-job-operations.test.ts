@@ -3,7 +3,12 @@ import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
 import { inArray, sql } from "drizzle-orm";
 import { jobs } from "../db/schema.js";
-import { JobOperationsService } from "./db-job-operations.server.js";
+import {
+  JobOperationsService,
+  dependencyFailedMessage,
+  POSTED_EVENT,
+  POST_CHECK_EVENT,
+} from "./db-job-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import {
   createTestDb,
@@ -113,6 +118,37 @@ describe("claimNextJob", () => {
       expect(next?.id).toBe(child.id);
     }).pipe(Effect.provide(testLayer))
   );
+
+  it.effect(
+    "fails a Job at once, naming its dependency, when that one has already failed for good",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        // "Export + post": the export fails before the post's enqueue lands.
+        const parent = yield* enqueue({ title: "the export", maxAttempts: 1 });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        yield* ops.failJobAttempt({
+          jobId: parent.id,
+          holder: "h",
+          failure,
+          interrupted: false,
+          mayRetry: true,
+        });
+
+        const child = yield* enqueue({ title: "post", dependsOn: parent.id });
+        expect(child).toMatchObject({
+          status: "failed",
+          error: { message: dependencyFailedMessage("the export") },
+        });
+        expect((yield* ops.listJobEvents(child.id)).map((e) => e.type)).toEqual(
+          ["queued", "failed"]
+        );
+      }).pipe(Effect.provide(testLayer))
+  );
 });
 
 describe("failJobAttempt", () => {
@@ -221,6 +257,7 @@ describe("recoverExpiredJobs", () => {
 
         const recovered = yield* ops.recoverExpiredJobs({
           neverRetryKinds: [],
+          stillRunning: [],
         });
 
         expect(
@@ -271,6 +308,7 @@ describe("a kind that must never run again on its own (a post)", () => {
         yield* lapse;
         const recovered = yield* ops.recoverExpiredJobs({
           neverRetryKinds: ["noop"],
+          stillRunning: [],
         });
         expect(recovered).toEqual([{ jobId: lost.id, outcome: "interrupted" }]);
         expect(yield* ops.getJob(lost.id)).toMatchObject({
@@ -287,9 +325,9 @@ describe("a kind that must never run again on its own (a post)", () => {
       Effect.gen(function* () {
         const ops = yield* JobOperationsService;
         const job = yield* enqueue({ title: "post", maxAttempts: 1 });
-        expect((yield* ops.retryJob({ jobId: job.id })).outcome).toBe(
-          "not-retryable"
-        );
+        expect(
+          (yield* ops.retryJob({ jobId: job.id, attempt: 1 })).outcome
+        ).toBe("not-retryable");
         yield* ops.claimNextJob({
           lane: "default",
           holder: "h",
@@ -303,7 +341,7 @@ describe("a kind that must never run again on its own (a post)", () => {
           mayRetry: false,
         });
 
-        const retried = yield* ops.retryJob({ jobId: job.id });
+        const retried = yield* ops.retryJob({ jobId: job.id, attempt: 1 });
         expect(retried).toMatchObject({
           outcome: "queued",
           job: { status: "queued", attempt: 2, maxAttempts: 2 },
@@ -313,6 +351,66 @@ describe("a kind that must never run again on its own (a post)", () => {
           type: "queued",
           data: { attempt: 2, retriedBy: "author" },
         });
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "refuses a Retry of any run but the latest, and of a run that went out",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const settleRun = (job: { id: string }, posted: boolean) =>
+          Effect.gen(function* () {
+            yield* ops.claimNextJob({
+              lane: "default",
+              holder: "h",
+              leaseMs: LEASE,
+            });
+            if (posted) {
+              yield* ops.appendJobEvent({
+                jobId: job.id,
+                type: POSTED_EVENT,
+                data: { url: "https://example.test/1" },
+              });
+            }
+            yield* ops.failJobAttempt({
+              jobId: job.id,
+              holder: "h",
+              failure,
+              interrupted: false,
+              mayRetry: false,
+            });
+          });
+
+        // The same Retry sent twice, the run failing in between.
+        const twice = yield* enqueue({ title: "post", maxAttempts: 1 });
+        yield* settleRun(twice, false);
+        expect(
+          (yield* ops.retryJob({ jobId: twice.id, attempt: 1 })).outcome
+        ).toBe("queued");
+        yield* settleRun(twice, false);
+        expect(
+          (yield* ops.retryJob({ jobId: twice.id, attempt: 1 })).outcome
+        ).toBe("stale");
+
+        // It went out, then failed (a thumbnail): never again.
+        const posted = yield* enqueue({ title: "posted", maxAttempts: 1 });
+        yield* settleRun(posted, true);
+        expect(
+          (yield* ops.retryJob({ jobId: posted.id, attempt: 1 })).outcome
+        ).toBe("went-out");
+
+        // Its post-check found it at the service.
+        const found = yield* enqueue({ title: "found", maxAttempts: 1 });
+        yield* settleRun(found, false);
+        yield* ops.appendJobEvent({
+          jobId: found.id,
+          type: POST_CHECK_EVENT,
+          data: { verdict: "posted", detail: "", url: null, attempt: 1 },
+        });
+        expect(
+          (yield* ops.retryJob({ jobId: found.id, attempt: 1 })).outcome
+        ).toBe("went-out");
       }).pipe(Effect.provide(testLayer))
   );
 
@@ -328,7 +426,10 @@ describe("a kind that must never run again on its own (a post)", () => {
           leaseMs: 1,
         });
         yield* lapse;
-        yield* ops.recoverExpiredJobs({ neverRetryKinds: ["noop"] });
+        yield* ops.recoverExpiredJobs({
+          neverRetryKinds: ["noop"],
+          stillRunning: [],
+        });
         const look = () =>
           ops.listInterruptedJobsWithoutEvent({
             kinds: ["noop"],

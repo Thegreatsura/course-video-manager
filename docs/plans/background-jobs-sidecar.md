@@ -503,17 +503,37 @@ for every interrupted post with no `post-check` Job Event yet and asks the
 kind's `checkPosted`, read-only (30 s timeout; a failure says `unknown`).
 YouTube and Shorts look for an upload with the post's title among the
 channel's latest 50 since the run started (`findRecentUpload`). The row
-shows the verdict, a link when found, View log, and Retry — which asks
-"Post again?" first unless the check said it did not go out. Auth failures
+shows the verdict, a link when found, View log, and Retry
+(`postRetryOf`). Retry asks "Post again?" first unless the run failed before
+it sent anything (`PostNotStartedError`): a "not posted" check does not skip
+the question, because a check can run before a cut-off request lands, and a
+run that FAILED (rather than was cut off) is never checked at all. A run that
+went out — it wrote `posted` before failing (a YouTube thumbnail), or its
+check found it — offers no Retry, and the server refuses one. A Retry names
+the run it retries (`attempt`), so a second click or a stale tab cannot run
+the post again, and a `post-check` names the run it looked at, so a check
+that lands after a Retry is not shown against the next run. Auth failures
 and failed dependencies show no Retry. An interrupted post stays in a new
 tab's snapshot until the author dismisses it, and is never hidden by the
 idle timer.
+
+**A cut-off post stops for real.** Every request a post sends (YouTube,
+Buffer, S3, AI Hero) takes the fiber's `AbortSignal`, so interrupting the Job
+aborts the request on the wire instead of leaving it to land after the row
+says "interrupted". And a sidecar never recovers a Job it is still running
+(`recoverExpiredJobs`' `stillRunning`): a late heartbeat lets the lease lapse
+while the post goes on, and settling it then let a Retry run the post a
+second time beside it. Only the run that settles a lost run calls
+`afterLostRun`.
 
 **`depends_on` is on the server.** `POST /api/jobs` takes `dependsOn`. The
 jobs reducer holds a post's enqueue until its export's enqueue has
 succeeded (the column is a foreign key), and fails it locally with
 `Dependency "<title>" failed` if that enqueue fails. A queued Job with a
-dependency draws as "Waiting for export".
+dependency draws as "Waiting for export". A Job enqueued behind one that has
+already failed for good (the export failed before the post's enqueue landed)
+is added `failed` with the same message, rather than waiting for ever: the
+enqueue locks the parent's row, so the two cannot cross.
 
 **Moved:** YouTube upload (`kinds/youtube.ts`) and YouTube Shorts post
 (`kinds/youtube-shorts.ts`). Deleted: `api.videos.$videoId.upload.ts`,

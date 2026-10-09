@@ -255,6 +255,7 @@ describe("a Publish Job in the sidecar", () => {
       yield* first.stop;
       const refused = yield* retryJob({
         jobId: job.id,
+        attempt: 1,
         registry: stub.registry,
       }).pipe(Effect.flip);
       expect(refused._tag).toBe("JobNotRetryableError");
