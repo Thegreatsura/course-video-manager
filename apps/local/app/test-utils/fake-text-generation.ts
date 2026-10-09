@@ -38,6 +38,11 @@ export const createFakeTextGeneration = (opts?: {
   readonly descriptionOutcomes?: Record<string, FakeTextGenerationOutcome>;
   readonly chapterOutcomes?: Record<string, FakeTextGenerationOutcome>;
   readonly describe?: (input: AutofillDescriptionRequest) => string;
+  /**
+   * Runs while the model is "thinking", before it answers — where a test plays
+   * the author editing a field the Autofill is still working on.
+   */
+  readonly meanwhile?: (field: "description" | "chapters") => Promise<void>;
 }) => {
   const descriptionCalls: AutofillDescriptionRequest[] = [];
   const chapterCalls: AutofillChaptersRequest[] = [];
@@ -90,18 +95,24 @@ export const createFakeTextGeneration = (opts?: {
   // Everything below is deferred with Effect.suspend, because a retry re-runs
   // the same Effect value: bookkeeping done while BUILDING it would count one
   // call and replay one verdict forever, and a rate limit would never clear.
+  const meanwhile = (field: "description" | "chapters") =>
+    Effect.promise(() => opts?.meanwhile?.(field) ?? Promise.resolve());
+
   const layer = Layer.succeed(TextGenerationService, {
     autofillDescription: (input: AutofillDescriptionRequest) =>
       Effect.suspend(() => {
         descriptionCalls.push(input);
         attempts.description += 1;
         const outcome = outcomeFor(opts?.descriptionOutcomes, input.body);
-        return applyOutcome(
-          `description:${input.body}`,
-          outcome,
-          () =>
-            opts?.describe?.(input) ??
-            `Autofilled description for ${input.body}`
+        return Effect.zipRight(
+          meanwhile("description"),
+          applyOutcome(
+            `description:${input.body}`,
+            outcome,
+            () =>
+              opts?.describe?.(input) ??
+              `Autofilled description for ${input.body}`
+          )
         );
       }),
 
@@ -111,23 +122,26 @@ export const createFakeTextGeneration = (opts?: {
         attempts.chapters += 1;
         const transcript = input.clips.map((clip) => clip.text).join(" ");
         const outcome = outcomeFor(opts?.chapterOutcomes, transcript);
-        return applyOutcome(`chapters:${transcript}`, outcome, () => {
-          // An invented id is the one thing the real service refuses to pass on,
-          // so the fake needs to be able to produce one.
-          const proposals: AutofillChapterProposal[] =
-            outcome.kind === "invalid-clip-id"
-              ? [{ beforeClipId: "no-such-clip", title: "Invented" }]
-              : input.clips.length === 0
-                ? []
-                : [
-                    {
-                      beforeClipId: input.clips[0]!.id,
-                      title: "Autofilled opening",
-                    },
-                  ];
-          for (const proposal of proposals) input.onChapter?.(proposal);
-          return proposals;
-        });
+        return Effect.zipRight(
+          meanwhile("chapters"),
+          applyOutcome(`chapters:${transcript}`, outcome, () => {
+            // An invented id is the one thing the real service refuses to pass on,
+            // so the fake needs to be able to produce one.
+            const proposals: AutofillChapterProposal[] =
+              outcome.kind === "invalid-clip-id"
+                ? [{ beforeClipId: "no-such-clip", title: "Invented" }]
+                : input.clips.length === 0
+                  ? []
+                  : [
+                      {
+                        beforeClipId: input.clips[0]!.id,
+                        title: "Autofilled opening",
+                      },
+                    ];
+            for (const proposal of proposals) input.onChapter?.(proposal);
+            return proposals;
+          })
+        );
       }),
   } as TextGenerationService);
 
