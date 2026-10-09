@@ -61,6 +61,7 @@ describe("restoring a snapshot over the head", () => {
         type: "restore-snapshot",
         diagramId: "d1",
         snapshot: snapshot("s1"),
+        expectedHeadHash: "hash-drawn-more",
         requestId: 7,
       },
       shown("d1", scene("s1"), { stored: storedHead("hash-s1", T2) }),
@@ -107,6 +108,7 @@ describe("restoring a snapshot over the head", () => {
         type: "restore-snapshot",
         diagramId: "d1",
         snapshot: snapshot("s2"),
+        expectedHeadHash: "hash-s1",
         requestId: 2,
       },
     ]);

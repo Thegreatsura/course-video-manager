@@ -3,7 +3,7 @@ import { diagrams, diagramSnapshots } from "../db/schema.js";
 import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { hashScene } from "../lib/scene-hash.js";
+import { hashHead, hashScene } from "../lib/scene-hash.js";
 import {
   isHeadCaptured,
   isVisibleInTimeline,
@@ -45,7 +45,7 @@ const hasShapes = (scene: unknown): boolean => {
 };
 
 /**
- * What `cvm diagram` writes. DiagramSnapshots are immutable: an agent never
+ * What `cvm diagram` and the Playground's restore write. DiagramSnapshots are immutable: an agent never
  * writes a Diagram's head, it ADDS Preserved Snapshots and moves the head to
  * one with `restoreSnapshotToHead` — a Restore to Head.
  *
@@ -70,7 +70,16 @@ export const agentDiagramOperations = (
       writesIn(tx, primitivesFor(tx)).addSnapshotToHead(diagramId, scene)
     );
 
-  return { createDiagramFromSnapshots, addSnapshotToHead };
+  const restoreToHead = (
+    diagramId: string,
+    snapshotId: string,
+    opts: { expectedHeadHash: string | null | undefined }
+  ) =>
+    withDbTransaction(db, (tx) =>
+      writesIn(tx, primitivesFor(tx)).restoreToHead(diagramId, snapshotId, opts)
+    );
+
+  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
 };
 
 /** The agent writes, every statement on `db` — the transaction above. */
@@ -182,5 +191,30 @@ const writesIn = (
     return { diagram, snapshot, preservedHead };
   });
 
-  return { createDiagramFromSnapshots, addSnapshotToHead };
+  /**
+   * The Playground's Restore to Head. `expectedHeadHash` is the head the tab
+   * last saw (`hashHead`; `null` for an empty one): the tab has already kept
+   * that one if the timeline lacked it. A head it never saw — moved by
+   * another tab or the CLI since — is preserved here first, under the row
+   * lock, unless the timeline already holds it. So a restore never destroys a
+   * head the client hasn't seen.
+   */
+  const restoreToHead = Effect.fn("restoreToHead")(function* (
+    diagramId: string,
+    snapshotId: string,
+    opts: { expectedHeadHash: string | null | undefined }
+  ) {
+    const current = yield* lockDiagram(db, diagramId, "restoreToHead");
+    const currentHash = hashHead(current.headScene);
+    if (
+      currentHash !== opts.expectedHeadHash &&
+      hasShapes(current.headScene) &&
+      !isHeadCaptured(yield* timelineSnapshots(diagramId), currentHash)
+    ) {
+      yield* keepInTimeline(diagramId, current.headScene);
+    }
+    return yield* restoreSnapshotToHead(diagramId, snapshotId);
+  });
+
+  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
 };

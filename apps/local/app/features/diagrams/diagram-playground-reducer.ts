@@ -303,6 +303,7 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       type: "restore-snapshot",
       diagramId,
       snapshot: restoring.snapshot,
+      expectedHeadHash: state.head?.seen?.hash ?? null,
       requestId: restoring.requestId,
     });
   };

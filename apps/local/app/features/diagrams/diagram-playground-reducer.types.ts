@@ -114,6 +114,8 @@ export type DiagramPlaygroundEffect =
       type: "restore-snapshot";
       diagramId: string;
       snapshot: Snapshot;
+      /** The head this tab last saw; the server keeps any other first. */
+      expectedHeadHash: string | null;
       requestId: number;
     }
   /** The restore won't happen; whoever asked can stop waiting. */

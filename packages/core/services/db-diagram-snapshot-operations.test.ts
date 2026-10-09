@@ -7,6 +7,7 @@ import { ClipOperationsService } from "./db-clip-operations.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import { DiagramThumbnailStore } from "./diagram-thumbnail-store.js";
+import { hashScene } from "../lib/scene-hash.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -239,6 +240,34 @@ describe("restoreSnapshotToHead", () => {
           .restoreSnapshotToHead(d2.id, snapshot.id)
           .pipe(Effect.flip);
         expect(result._tag).toBe("NotFoundError");
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("restoreToHead", () => {
+  it.effect(
+    "preserves a head the restoring tab never saw before replacing it",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const diagram = yield* diagramOps.createDiagram();
+
+        // The tab sees scene1, held by a Preserved Snapshot.
+        yield* diagramOps.updateDiagramHead(diagram.id, scene1);
+        const seen = yield* diagramOps.createSnapshot(diagram.id, {
+          preserved: true,
+        });
+        // Another tab (or the CLI) moves the head to scene2, held nowhere.
+        yield* diagramOps.updateDiagramHead(diagram.id, scene2);
+
+        const restored = yield* diagramOps.restoreToHead(diagram.id, seen.id, {
+          expectedHeadHash: hashScene(scene1),
+        });
+
+        expect(restored.headScene).toEqual(scene1);
+        const snapshots = yield* diagramOps.listSnapshots(diagram.id);
+        const kept = snapshots.find((s) => s.contentHash === hashScene(scene2));
+        expect(kept?.preserved).toBe(true);
       }).pipe(Effect.provide(testLayer))
   );
 });
