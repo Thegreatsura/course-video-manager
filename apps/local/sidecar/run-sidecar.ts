@@ -18,6 +18,7 @@ import { JOB_KINDS, type JobServices } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
+import { sweepStuckClips } from "./stuck-clip-sweep";
 import { superviseSidecar } from "./supervise";
 
 /**
@@ -148,6 +149,7 @@ const main = async (): Promise<void> => {
             registry: JOB_KINDS,
             timing: SIDECAR_TIMING,
             stop,
+            afterRecovery: sweepStuckClips,
             serve: (handle) =>
               serveSidecarSocket({
                 socket,

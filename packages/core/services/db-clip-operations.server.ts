@@ -1,7 +1,16 @@
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
-import { clips, chapters, clipWebLinks } from "../db/schema.js";
+import {
+  clips,
+  chapters,
+  clipWebLinks,
+  courseVersions,
+  jobs,
+  lessons,
+  sections,
+  videos,
+} from "../db/schema.js";
 import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
 import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
@@ -35,6 +44,13 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
     catch: (e) => new UnknownDBServiceError({ cause: e }),
   });
 };
+
+/**
+ * Whether a live (`queued` or `running`) Job of `jobKind` names the Clip in
+ * its `params.clipIds`: that Job will settle it, so it is not stuck.
+ */
+const heldByLiveJob = (jobKind: string) =>
+  sql`exists (select 1 from ${jobs} where ${jobs.kind} = ${jobKind} and ${jobs.status} in ('queued', 'running') and ${jobs.params} -> 'clipIds' @> jsonb_build_array(${clips.id}))`;
 
 const createClipOperationsUnwrapped = (db: Database) => {
   const getClipById = Effect.fn("getClipById")(function* (clipId: string) {
@@ -105,6 +121,63 @@ const createClipOperationsUnwrapped = (db: Database) => {
         .where(inArray(clips.id, [...clipIds]))
     );
   });
+
+  /**
+   * The Videos that hold a stuck Clip: one in `transcribing` that no live
+   * Job of `jobKind` holds, so nothing will ever settle it. Only Videos a
+   * write may touch (a Draft Version's, or in no Version): a Pending or
+   * Published Version is never written to, stuck Clip or not.
+   */
+  const listVideosWithStuckTranscriptions = Effect.fn(
+    "listVideosWithStuckTranscriptions"
+  )(function* (jobKind: string) {
+    const rows = yield* makeDbCall(() =>
+      db
+        .selectDistinct({ videoId: clips.videoId })
+        .from(clips)
+        .innerJoin(videos, eq(videos.id, clips.videoId))
+        .leftJoin(lessons, eq(lessons.id, videos.lessonId))
+        .leftJoin(sections, eq(sections.id, lessons.sectionId))
+        .leftJoin(courseVersions, eq(courseVersions.id, sections.repoVersionId))
+        .where(
+          and(
+            eq(clips.transcriptionStatus, "transcribing"),
+            or(
+              isNull(courseVersions.id),
+              eq(courseVersions.commitState, "draft")
+            ),
+            sql`not ${heldByLiveJob(jobKind)}`
+          )
+        )
+    );
+    return rows.map((row) => row.videoId);
+  });
+
+  /**
+   * Mark one Video's stuck Clips (see `listVideosWithStuckTranscriptions`)
+   * `failed`, so the author can re-transcribe them by hand. The check and
+   * the write are one statement, so a Clip a Job takes on meanwhile is left
+   * alone. Returns the ids it failed.
+   */
+  const failStuckTranscriptions = Effect.fn("failStuckTranscriptions")(
+    function* (videoId: string, jobKind: string) {
+      yield* requireDraftVersionForVideo(db, videoId);
+      const rows = yield* makeDbCall(() =>
+        db
+          .update(clips)
+          .set({ transcriptionStatus: "failed" })
+          .where(
+            and(
+              eq(clips.videoId, videoId),
+              eq(clips.transcriptionStatus, "transcribing"),
+              sql`not ${heldByLiveJob(jobKind)}`
+            )
+          )
+          .returning({ id: clips.id })
+      );
+      return rows.map((row) => row.id);
+    }
+  );
 
   /**
    * Set a Clip's Clip Zoom.
@@ -568,6 +641,8 @@ const createClipOperationsUnwrapped = (db: Database) => {
     getClipsByIds,
     updateClip,
     setTranscriptionStatus,
+    listVideosWithStuckTranscriptions,
+    failStuckTranscriptions,
     setClipZoom,
     archiveClip,
     restoreClip,
@@ -589,6 +664,7 @@ export const createClipOperations = (db: Database) =>
   transactionalizeWrites(db, createClipOperationsUnwrapped, [
     "updateClip",
     "setTranscriptionStatus",
+    "failStuckTranscriptions",
     "setClipZoom",
     "archiveClip",
     "restoreClip",
