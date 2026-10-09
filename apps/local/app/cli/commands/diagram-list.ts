@@ -1,8 +1,10 @@
 import { Args, Command, Options } from "@effect/cli";
 import { Effect, Option } from "effect";
+import { randomUUID } from "node:crypto";
 import {
   readSimpleDiagram,
   type SceneStore,
+  type SimpleShape,
 } from "@cvm/core/lib/simple-diagram/index";
 import { DiagramComponentOperationsService } from "@/services/db-diagram-component-operations.server";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
@@ -144,6 +146,33 @@ export const fragmentStore = (fragment: unknown): SceneStore => {
   ) as SceneStore;
 };
 
+/**
+ * A Component's shapes with every id swapped for a fresh one, `<prefix>-<n>`,
+ * and each arrow's `from`/`to` swapped with it, so its bindings still hold.
+ * A Component keeps the ids of the shapes Matt saved it from, and those
+ * shapes are often still on a Diagram: pasted as saved, the copy would
+ * collide with them (or with a second copy) and be refused as a duplicate id.
+ */
+export const withFreshIds = (
+  shapes: readonly SimpleShape[],
+  prefix: string
+): SimpleShape[] => {
+  const fresh = new Map(shapes.map((s, i) => [s.id, `${prefix}-${i + 1}`]));
+  const swap = (id: string | undefined) =>
+    id === undefined ? undefined : (fresh.get(id) ?? id);
+  return shapes.map((shape) => {
+    const copy = { ...shape, id: fresh.get(shape.id)! };
+    if (copy.type === "arrow") {
+      if (copy.from !== undefined) copy.from = swap(copy.from);
+      if (copy.to !== undefined) copy.to = swap(copy.to);
+    }
+    return copy;
+  });
+};
+
+/** A short random prefix for one Component's ids in one listing. */
+const mintPrefix = () => `c${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+
 const componentListCmd = Command.make("list", {}, () =>
   Effect.gen(function* () {
     const components = yield* DiagramComponentOperationsService;
@@ -152,7 +181,10 @@ const componentListCmd = Command.make("list", {}, () =>
       rows.map((c) => ({
         id: c.id,
         name: c.name,
-        shapes: readSimpleDiagram(fragmentStore(c.sceneFragment)).shapes,
+        shapes: withFreshIds(
+          readSimpleDiagram(fragmentStore(c.sceneFragment)).shapes,
+          mintPrefix()
+        ),
       }))
     );
   })
