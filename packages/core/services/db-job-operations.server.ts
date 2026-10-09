@@ -5,6 +5,10 @@ import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { createPostingJobOperations } from "./db-job-posting.server.js";
+import {
+  createDismissJobOperations,
+  notDismissed,
+} from "./db-job-dismiss.server.js";
 import { makeDbCall } from "./db-job-calls.server.js";
 
 /**
@@ -512,17 +516,14 @@ export const createJobOperations = (db: Database) => {
   });
 
   /**
-   * What a new subscriber starts from: every Job not yet finished, and every
-   * Job that finished in the last `finishedWithinMs`, each with all of its
-   * events, oldest Job first.
+   * What a new subscriber starts from, each Job with all of its events,
+   * oldest Job first: every Job not yet finished, and every finished Job the
+   * author has not dismissed (`dismissJobs`) — a failed or interrupted one
+   * until they do, because it needs them; any other only if it finished in
+   * the last `finishedWithinMs`.
    */
   const listRecentJobs = Effect.fn("listRecentJobs")(function* (input: {
     finishedWithinMs: number;
-    /**
-     * An interrupted Job of these kinds waits for the author (a post:
-     * "check before retrying"), so it stays in a snapshot this much longer.
-     */
-    interrupted?: { kinds: readonly string[]; withinMs: number };
   }) {
     const recent = yield* makeDbCall(() =>
       db
@@ -531,20 +532,16 @@ export const createJobOperations = (db: Database) => {
         .where(
           or(
             inArray(jobs.status, ["queued", "running"]),
-            gt(
-              jobs.finishedAt,
-              sql`now() - (${input.finishedWithinMs} * interval '1 millisecond')`
-            ),
-            input.interrupted && input.interrupted.kinds.length > 0
-              ? and(
-                  eq(jobs.status, "interrupted"),
-                  inArray(jobs.kind, [...input.interrupted.kinds]),
-                  gt(
-                    jobs.finishedAt,
-                    sql`now() - (${input.interrupted.withinMs} * interval '1 millisecond')`
-                  )
+            and(
+              notDismissed,
+              or(
+                inArray(jobs.status, ["failed", "interrupted"]),
+                gt(
+                  jobs.finishedAt,
+                  sql`now() - (${input.finishedWithinMs} * interval '1 millisecond')`
                 )
-              : undefined
+              )
+            )
           )
         )
         .orderBy(asc(jobs.createdAt), asc(jobs.id))
@@ -658,6 +655,7 @@ export const createJobOperations = (db: Database) => {
     latestJobEventId,
     listJobEventsAfter,
     listRecentJobs,
+    ...createDismissJobOperations(db),
     getJob,
     listJobEvents,
     acquireSidecarLease,

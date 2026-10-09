@@ -89,3 +89,12 @@ export function showRetryFailedToast(
     duration: Infinity,
   });
 }
+
+export function showDismissFailedToast(
+  effect: Toast<"show-dismiss-failed-toast">
+): void {
+  const what = effect.count === 1 ? "that row" : `${effect.count} rows`;
+  toast.error(
+    `Could not dismiss ${what} for good, so it will be back in the next tab: ${effect.message}`
+  );
+}

@@ -100,3 +100,6 @@ export const isPostingJobKind = (kind: string) =>
 /** Where the author's Retry of a post is sent. */
 export const jobRetryHref = (jobId: string) =>
   `/api/jobs/${encodeURIComponent(jobId)}/retry`;
+
+/** Where the author's Dismiss and "Clear finished" go: `{ jobIds }`. */
+export const JOBS_DISMISS_HREF = "/api/jobs/dismiss";

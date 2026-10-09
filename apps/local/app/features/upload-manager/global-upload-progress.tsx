@@ -9,6 +9,7 @@ import { visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
 import { isPostingJobKind, jobLogHref } from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ export function GlobalUploadProgress() {
     dismissJob,
     retryJob,
     dismissFinishedJobs,
+    clearFinished,
   } = useContext(UploadContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -114,7 +116,8 @@ export function GlobalUploadProgress() {
   const strokeDashoffset =
     CIRCLE_CIRCUMFERENCE - (aggregateProgress / 100) * CIRCLE_CIRCUMFERENCE;
 
-  // Auto-dismiss all uploads 5 seconds after all finish
+  // 5 seconds after everything finishes, this tab's own uploads go, and so do
+  // the succeeded Jobs (for good). A failed Job waits for the author.
   useEffect(() => {
     if (!hasUploads || isActive) return;
 
@@ -221,6 +224,18 @@ export function GlobalUploadProgress() {
               )}
             </DialogTitle>
           </DialogHeader>
+          {completedCount + errorCount > 0 && (
+            <div className="flex justify-end -mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={clearFinished}
+              >
+                Clear finished
+              </Button>
+            </div>
+          )}
           {jobs.sidecar === "not-running" && (
             <p
               role="status"

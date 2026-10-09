@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
+import { inArray, sql } from "drizzle-orm";
+import { jobs } from "../db/schema.js";
 import { JobOperationsService } from "./db-job-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import {
@@ -370,6 +372,76 @@ describe("listRecentJobs", () => {
         yield* lapse;
         const later = yield* ops.listRecentJobs({ finishedWithinMs: 1 });
         expect(later.map((r) => r.job.id)).toEqual([waiting.id]);
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
+describe("the snapshot filter", () => {
+  it.effect(
+    "leaves out a dismissed Job and one that succeeded over a day ago, keeps a failed one however old, and never dismisses a running one",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const settle = (title: string, outcome: "succeeded" | "failed") =>
+          Effect.gen(function* () {
+            const job = yield* enqueue({ title, lane: title });
+            yield* ops.claimNextJob({
+              lane: title,
+              holder: "h",
+              leaseMs: LEASE,
+            });
+            if (outcome === "succeeded") {
+              yield* ops.completeJob({ jobId: job.id, holder: "h" });
+            } else {
+              yield* ops.failJobAttempt({
+                jobId: job.id,
+                holder: "h",
+                failure,
+                interrupted: false,
+                mayRetry: false,
+              });
+            }
+            return job;
+          });
+        yield* settle("fresh", "succeeded");
+        const dismissed = yield* settle("dismissed", "succeeded");
+        const stale = yield* settle("stale", "succeeded");
+        const failedLongAgo = yield* settle("failed long ago", "failed");
+        const running = yield* enqueue({ title: "running", lane: "running" });
+        yield* ops.claimNextJob({
+          lane: "running",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        yield* Effect.promise(() =>
+          testDb
+            .update(jobs)
+            .set({ finishedAt: sql`now() - interval '25 hours'` })
+            .where(inArray(jobs.id, [stale.id, failedLongAgo.id]))
+        );
+
+        const done = yield* ops.dismissJobs({
+          jobIds: [dismissed.id, running.id, "no-such-job"],
+        });
+        expect(done).toEqual([dismissed.id]);
+        // Dismissing twice records nothing new.
+        expect(yield* ops.dismissJobs({ jobIds: [dismissed.id] })).toEqual([]);
+
+        const snapshot = yield* ops.listRecentJobs({
+          finishedWithinMs: 24 * 60 * 60_000,
+        });
+        expect(snapshot.map((r) => r.job.title)).toEqual([
+          "fresh",
+          "failed long ago",
+          "running",
+        ]);
+        expect((yield* ops.getJob(running.id))?.status).toBe("running");
+
+        yield* ops.dismissJobs({ jobIds: [failedLongAgo.id] });
+        const after = yield* ops.listRecentJobs({
+          finishedWithinMs: 24 * 60 * 60_000,
+        });
+        expect(after.map((r) => r.job.title)).toEqual(["fresh", "running"]);
       }).pipe(Effect.provide(testLayer))
   );
 });
