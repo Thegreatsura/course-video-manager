@@ -289,7 +289,9 @@ on two exact sources:
   table of the clone before the server starts. Each committed insert, update,
   delete and truncate records itself in `verify_ledger.write` inside the
   writing transaction, so a save shows up the moment it commits — and a write
-  that rolled back never does.
+  that rolled back never does. Each records **who wrote it** too: the server
+  and the sidecar connect under their own `PGAPPNAME`, and the trigger keeps
+  the session's `application_name`.
 - **In both modes, the app's own statement log.** The server runs with
   `CVM_LOG_SQL=1` and prints every statement it sends as a `[cvm-sql]` line in
   `server.log`. The Ledger lists the ones that could write.
@@ -308,16 +310,27 @@ Three verdicts other than clean, and none of them is clean:
 falls inside your window, into `forensics-<table>.txt`.
 
 On a clone the database is this run's alone, so every row in the Ledger is
-your own write:
+your own write. It splits them by the connection that wrote them, never by
+table — the server writes `job` and `job_event` rows itself (an Export it
+enqueues, a Job it dismisses):
+
+- **Writes committed by this run's server** — what your clicks wrote. Any
+  row here makes the verdict `writes landed`, job tables included.
+- **Writes committed by other connections** — your own `psql`, a seed
+  script; named by `application_name`. These count as writes too.
+- **Background, committed by this run's sidecar** — its lease, renewed every
+  few seconds, and the Jobs it runs. Listed, never counted against you; a
+  window with only these reads `no write from this run's server — only the
+sidecar's background`, never `clean`.
+- **Sent but not committed** — per table, any table the server sent a write
+  statement to (from `[cvm-sql]`) without committing a row there: rolled back,
+  rejected, or matched nothing.
 
 ```text
-guard: writes landed in this run's test clone (allowed) — see …/WRITE-LEDGER.md
-course-video-manager_pitch|0|1|0|0
+guard: writes landed in this run's test clone (allowed) — server: course-video-manager_job, course-video-manager_job_event; other connections: none; sidecar: course-video-manager_job, course-video-manager_job_event, course-video-manager_sidecar_lease — see …/WRITE-LEDGER.md
 ```
 
-The sidecar's own writes (its lease, renewed every few seconds, and the Jobs
-it runs) are listed apart, under "Background (this run's sidecar …)", and never
-count against a clean verdict.
+`clean — no writes` means no connection committed a row at all.
 
 Check each table it names is one you meant to write, and report any you did
 not expect — a button that writes three tables when it should write one is a bug

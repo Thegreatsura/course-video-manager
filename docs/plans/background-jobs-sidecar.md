@@ -320,8 +320,9 @@ route (`api.videos.$videoId.export-sse.ts`) and browser client
 sidecar builds the app's own `layerLive`, so handlers reach every service.
 
 - **Job Events to the browser.** The sidecar's socket serves `GET /events`: a
-  snapshot (unfinished Jobs and those finished in the last 10 minutes, each
-  with its events), or a replay after `Last-Event-ID`, then every new event.
+  snapshot (unfinished Jobs, failed and interrupted ones until the author
+  dismisses them, and succeeded ones from the last 24 hours not dismissed,
+  each with its events — see "Dismissal is stored" below), or a replay after `Last-Event-ID`, then every new event.
   One poller reads `job_event` for all subscribers (no LISTEN/NOTIFY on the
   pooler), woken by the sidecar's own writes and by `/nudge`, re-reading a
   window of ids for late commits (`sidecar/job-event-feed.ts`). The app's
@@ -505,7 +506,8 @@ channel's latest 50 since the run started (`findRecentUpload`). The row
 shows the verdict, a link when found, View log, and Retry — which asks
 "Post again?" first unless the check said it did not go out. Auth failures
 and failed dependencies show no Retry. An interrupted post stays in a new
-tab's snapshot for 24 hours and is never hidden by the idle timer.
+tab's snapshot until the author dismisses it, and is never hidden by the
+idle timer.
 
 **`depends_on` is on the server.** `POST /api/jobs` takes `dependsOn`. The
 jobs reducer holds a post's enqueue until its export's enqueue has
@@ -589,3 +591,25 @@ a clone's Autofill reaches only a local stub of the Messages API.
 Left for later: `upload-reducer.ts`'s autofill entry type and
 `UPDATE_AUTOFILL_STAGE` (the type is how the Job draws; batch 8 deletes the
 reducer); an ETA for the Autofill rows (section 7.5's left-out ETA).
+
+## Dismissal is stored
+
+Dismissing a row used to hide it in that tab only, so every new tab's
+snapshot brought it back. Now a settled Job's Dismiss (its row's X, or
+"Clear finished" in the Upload Manager) is a `dismissed` **Job Event**
+(`POST /api/jobs/dismiss`, `db-job-dismiss.server.ts`): no schema change,
+since `job_event.type` is free text. Only a succeeded, failed or interrupted
+Job can be dismissed; dismissing never cancels one that runs.
+
+- **The snapshot** (`listRecentJobs`) leaves out every dismissed Job. A
+  failed or interrupted Job — post or not — stays until it is dismissed,
+  because it needs the author (and its Retry stays reachable). A succeeded
+  one that nobody dismissed falls out after 24 hours.
+- **Other tabs** hear the `dismissed` event on the live stream (the route
+  nudges the sidecar, which wakes the feed) and drop the row
+  (`job-dismissed`).
+- **The idle timer** hides only succeeded Jobs, 5 s after everything has
+  finished, and records that as a dismissal too. It never hides a failure.
+- **This tab's own uploads** (the rows that never became Jobs) live only in
+  the tab's memory: a reload never brings them back. "Clear finished" removes
+  the settled ones with the Jobs.

@@ -8,12 +8,14 @@ import {
 import {
   decodeStreamData,
   jobRetryHref,
+  JOBS_DISMISS_HREF,
   JOB_STREAM_EVENTS,
   JobEventMessage,
   JobSnapshotMessage,
   SidecarUnavailableMessage,
 } from "./job-wire";
 import {
+  showDismissFailedToast,
   showJobFailedToast,
   showJobSucceededToast,
   showRetryFailedToast,
@@ -131,6 +133,31 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
           })
         );
     },
+    "dismiss-jobs": (_state, effect, dispatch) => {
+      fetch(JOBS_DISMISS_HREF, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobIds: effect.ids }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              (await response.text()) ||
+                `The server answered ${response.status}`
+            );
+          }
+          // The stream brings the `dismissed` events to every tab.
+        })
+        .catch((error: unknown) =>
+          dispatch({
+            type: "dismiss-failed",
+            ids: effect.ids,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+    },
+    "show-dismiss-failed-toast": (_state, effect) =>
+      showDismissFailedToast(effect),
     "show-retry-failed-toast": (_state, effect) => showRetryFailedToast(effect),
     "show-job-succeeded-toast": (state, effect) =>
       showJobSucceededToast(effect, state.jobs[effect.jobId] ?? null),
@@ -166,5 +193,17 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     [dispatch]
   );
 
-  return { state, startJob, dismissJob, retryJob, dismissFinishedJobs };
+  const clearFinishedJobs = useCallback(
+    () => dispatch({ type: "press-clear-finished" }),
+    [dispatch]
+  );
+
+  return {
+    state,
+    startJob,
+    dismissJob,
+    retryJob,
+    dismissFinishedJobs,
+    clearFinishedJobs,
+  };
 }

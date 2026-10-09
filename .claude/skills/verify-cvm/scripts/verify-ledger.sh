@@ -19,6 +19,14 @@
 # --- the clone's write ledger: triggers -------------------------------------
 LEDGER_SCHEMA=verify_ledger
 
+# Who wrote. launch gives the run's server and its sidecar each their own
+# PGAPPNAME, and the trigger records the writing session's application_name, so
+# the Ledger tells the two apart by connection, never by table: the server
+# writes job and job_event rows too (an Export it enqueues, a Job it dismisses).
+# Anything else (a seed or script of the agent.s own) is a third writer.
+LEDGER_APP_SERVER=cvm-verify-server
+LEDGER_APP_SIDECAR=cvm-verify-sidecar
+
 # install_write_ledger <clone url> — once, at launch, before the server starts.
 install_write_ledger() {
   psql -X -q -v ON_ERROR_STOP=1 "$1" <<'SQL'
@@ -29,7 +37,8 @@ create table verify_ledger.write (
   at         timestamptz not null default clock_timestamp(),
   table_name text        not null,
   op         text        not null,
-  rows       bigint                -- null for TRUNCATE
+  rows       bigint,               -- null for TRUNCATE
+  app        text        not null default coalesce(current_setting('application_name', true), '')
 );
 create function verify_ledger.record() returns trigger language plpgsql as $$
 declare n bigint;
@@ -94,17 +103,30 @@ ledger_in_flight() {
        and pid <> pg_backend_pid()"
 }
 
-# ledger_writes <run dir> <baseline snapshot> — "table|ins|upd|del|truncates"
-# for every write committed by a transaction the baseline could not see.
+# ledger_attributes <run dir> — does this clone's ledger record the writer?
+# One installed by an older verify.sh does not, and could not split the
+# server's writes from the sidecar's.
+ledger_attributes() {
+  [ "$(psql_ro "$1" -c "select count(*) from information_schema.columns
+     where table_schema = '$LEDGER_SCHEMA' and table_name = 'write' and column_name = 'app'")" = 1 ]
+}
+
+# ledger_writes <run dir> <baseline snapshot> —
+# "writer|table|ins|upd|del|truncates" for every write committed by a
+# transaction the baseline could not see. writer is server, sidecar, or
+# other:<application_name> (other:? when the session set none).
 ledger_writes() {
-  psql_ro "$1" -c "select table_name,
+  psql_ro "$1" -c "select case app when '$LEDGER_APP_SERVER' then 'server'
+                              when '$LEDGER_APP_SIDECAR' then 'sidecar'
+                              else 'other:' || coalesce(nullif(app, ''), '?') end as writer,
+           table_name,
            coalesce(sum(rows) filter (where op = 'INSERT'), 0),
            coalesce(sum(rows) filter (where op = 'UPDATE'), 0),
            coalesce(sum(rows) filter (where op = 'DELETE'), 0),
            count(*) filter (where op = 'TRUNCATE')
       from $LEDGER_SCHEMA.write
      where not pg_visible_in_snapshot(xid, '$2'::pg_snapshot)
-     group by table_name order by table_name"
+     group by 1, table_name order by 1, table_name"
 }
 
 # --- the app's statement log ------------------------------------------------
@@ -131,6 +153,12 @@ SQL_WRITE_RE='^[[:space:](]*(insert|update|delete|merge|truncate|copy|create|alt
 SQL_OVERRIDE_RE='read[[:space:]]+write|transaction_read_only|session_replication_role|set[[:space:]]+(session[[:space:]]+)?role|session_authorization'
 
 sql_writes()    { grep -aiE "$SQL_WRITE_RE" || true; }
+
+# sql_write_tables — the table each write statement on stdin names, one per
+# line ("?" for a statement whose table it cannot read, e.g. a CTE).
+sql_write_tables() {
+  sed -E -n -e 's/^[[:space:](]*(insert[[:space:]]+into|update|delete[[:space:]]+from|truncate([[:space:]]+table)?)[[:space:]]+"?([A-Za-z0-9_.-]+)"?.*/\3/Ip; t' -e 's/.*/?/p'
+}
 sql_overrides() { grep -aiE "$SQL_OVERRIDE_RE" || true; }
 
 # Statements Postgres refused because the connection was read-only.

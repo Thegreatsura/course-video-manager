@@ -191,6 +191,7 @@ start_sidecar() {
 # launch_sidecar <run dir> <run id> <mode> — launch's step, once the server
 # answers. A sidecar that does not come up stops the server and fails the launch.
 # The sidecar shares the server's environment (SERVER_ENV) but not its
+# PGAPPNAME (the Ledger's way to tell their writes apart) nor its
 # statement log: its polling would bury the app's in no time, and the clone's
 # triggers already count its writes, on a line of their own in the Ledger.
 launch_sidecar() {
@@ -199,7 +200,11 @@ launch_sidecar() {
     log "sidecar:  none — production is read-only, so a sidecar could not hold its lease"
     return 0
   fi
-  for e in "${SERVER_ENV[@]}"; do [ "$e" = "CVM_LOG_SQL=1" ] || SIDECAR_ENV+=("$e"); done
+  for e in "${SERVER_ENV[@]}"; do
+    case "$e" in CVM_LOG_SQL=*|PGAPPNAME=*) ;; *) SIDECAR_ENV+=("$e") ;; esac
+  done
+  # Its own application_name, so the Ledger lists its writes apart from the server's.
+  SIDECAR_ENV+=("PGAPPNAME=$LEDGER_APP_SIDECAR")
   start_sidecar "$dir" "$2" || {
     tail -20 "$dir/sidecar.log" >&2
     stop_sidecar "$dir"; stop_server "$dir"

@@ -7,8 +7,9 @@ import {
 } from "./job-wire";
 import { toJobsAction } from "./job-event-actions";
 import { announceVideoSettled } from "./job-video-toasts";
+import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 
-export { toJobsAction };
+export { toJobsAction, isFinishedJob, jobIdOfRow };
 
 /**
  * Background **Jobs** as this tab sees them: built only from the **Job
@@ -95,7 +96,11 @@ export namespace jobsReducer {
     jobs: Record<string, JobView>;
     /** Enqueues held, by the id of the Job they wait on, until it lands. */
     held: Record<string, EnqueueJobEffect[]>;
-    /** Hidden by the author (or the idle timer); events still update nothing visible. */
+    /**
+     * Hidden by the author (or the idle timer); events still update nothing
+     * visible. A settled Job's dismissal is also recorded on the server
+     * (`dismiss-jobs`), which keeps it out of every later snapshot.
+     */
     dismissed: Record<string, true>;
     sidecar: SidecarStatus;
     /** Why the sidecar is `not-running`, as the proxy put it. */
@@ -125,6 +130,8 @@ export namespace jobsReducer {
     | StreamFact<"job-interrupted", { message: string; tag: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
     | StreamFact<"job-post-checked", { check: PostCheckView }>
+    /** The author dismissed it, in this tab or another: it stays hidden. */
+    | StreamFact<"job-dismissed">
     // A Batch export's Videos
     | StreamFact<
         "batch-videos-announced",
@@ -157,10 +164,13 @@ export namespace jobsReducer {
         dependsOn: string | null;
       }
     | { type: "press-dismiss"; id: string }
+    /** "Clear finished": dismiss every settled Job at once. */
+    | { type: "press-clear-finished" }
+    | { type: "dismiss-failed"; ids: string[]; message: string }
     /** The author's Retry on a failed or interrupted post. */
     | { type: "press-retry"; id: string }
     | { type: "retry-failed"; id: string; message: string }
-    /** Nothing has run for a while: the finished rows have been seen. */
+    /** Nothing has run for a while: the succeeded rows have been seen. */
     | { type: "idle-timeout-elapsed" }
     // The enqueue request's outcome
     | { type: "enqueue-succeeded"; id: string }
@@ -184,6 +194,9 @@ export namespace jobsReducer {
   export type Effect =
     | EnqueueJobEffect
     | { type: "retry-job"; id: string }
+    /** Record the author's Dismiss on the server, so no tab sees them again. */
+    | { type: "dismiss-jobs"; ids: string[] }
+    | { type: "show-dismiss-failed-toast"; count: number; message: string }
     | { type: "show-retry-failed-toast"; title: string; message: string }
     | {
         type: "show-job-succeeded-toast";
@@ -222,18 +235,6 @@ export const createInitialJobsState = (): jobsReducer.State => ({
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
 export const batchVideoRowId = (jobId: string, videoId: string) =>
   `${jobId}/${videoId}`;
-
-/** The Job a row belongs to: the row's own id, or a batch row's Job. */
-export const jobIdOfRow = (rowId: string) => rowId.split("/")[0] ?? rowId;
-
-const FINISHED: readonly jobsReducer.JobStatus[] = [
-  "succeeded",
-  "failed",
-  "interrupted",
-];
-
-export const isFinishedJob = (job: jobsReducer.JobView) =>
-  FINISHED.includes(job.status);
 
 const viewOf = (
   job: WireJob,
@@ -386,6 +387,8 @@ const applyStreamAction = (
       return { ...job, result: action.result };
     case "job-post-checked":
       return { ...job, postCheck: action.check };
+    case "job-dismissed":
+      return job;
     case "batch-videos-announced":
       return announceVideos(job, action.videos);
     case "batch-video-stage-entered":
@@ -471,10 +474,6 @@ const foldSnapshotJob = (
   }
   return view;
 };
-
-/** A post cut off mid-run: it waits for the author to check, then Retry. */
-export const needsAuthor = (job: jobsReducer.JobView) =>
-  job.status === "interrupted" && isPostingJobKind(job.kind);
 
 /** An enqueue that failed: it, and every Job held on it, fails here. */
 const failRequested = (
@@ -648,26 +647,12 @@ export const jobsReducer: EffectReducer<
         sidecarMessage: action.message,
       };
 
-    case "press-dismiss": {
-      // A Job's id, or one of a Batch export's rows (`batchVideoRowId`).
-      if (!state.jobs[jobIdOfRow(action.id)]) return state;
-      return { ...state, dismissed: { ...state.dismissed, [action.id]: true } };
-    }
-
-    case "idle-timeout-elapsed": {
-      const dismissed = { ...state.dismissed };
-      let changed = false;
-      for (const job of Object.values(state.jobs)) {
-        // An interrupted post waits for the author ("check before
-        // retrying"): only they dismiss it.
-        if (needsAuthor(job)) continue;
-        if (isFinishedJob(job) && !dismissed[job.id]) {
-          dismissed[job.id] = true;
-          changed = true;
-        }
-      }
-      return changed ? { ...state, dismissed } : state;
-    }
+    case "press-dismiss":
+    case "press-clear-finished":
+    case "idle-timeout-elapsed":
+    case "dismiss-failed":
+    case "job-dismissed":
+      return reduceDismissal(state, action, exec);
 
     case "job-queued":
     case "job-started":

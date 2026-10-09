@@ -33,8 +33,13 @@ export interface UploadContextType {
    * runs again (posts never retry on their own).
    */
   retryJob: (jobId: string) => void;
-  /** Hide every finished Job: the Global Upload Progress's idle timer. */
+  /** Hide every succeeded Job: the Global Upload Progress's idle timer. */
   dismissFinishedJobs: () => void;
+  /**
+   * "Clear finished": dismiss every settled row, Jobs and this tab's own
+   * uploads alike. A Job's dismissal is kept on the server.
+   */
+  clearFinished: () => void;
   /** Inputs to the ETA: see `estimateUploads`. */
   timings: uploadReducer.State["timings"];
   etaHistory: HistoryLookup;
@@ -424,6 +429,12 @@ export function UploadProvider({
     [startJob]
   );
 
+  const clearFinishedJobs = jobs.clearFinishedJobs;
+  const clearFinished = useCallback(() => {
+    clearFinishedJobs();
+    dispatch({ type: "press-clear-finished" });
+  }, [clearFinishedJobs, dispatch]);
+
   const dismissUpload = useCallback((uploadId: string) => {
     const abortController = abortControllersRef.current.get(uploadId);
     if (abortController) {
@@ -491,6 +502,7 @@ export function UploadProvider({
         dismissJob: jobs.dismissJob,
         retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
+        clearFinished,
         timings: state.timings,
         etaHistory: historyStore.lookup,
         clock,

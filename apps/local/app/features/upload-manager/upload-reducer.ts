@@ -205,6 +205,8 @@ export namespace uploadReducer {
     | { type: "server-job-succeeded"; jobId: string }
     | { type: "server-job-failed"; jobId: string; title: string }
     | { type: "DISMISS"; uploadId: string }
+    /** "Clear finished": every settled top-level row goes, with its children. */
+    | { type: "press-clear-finished" }
     | {
         type: "UPDATE_PUBLISH_STAGE";
         uploadId: string;
@@ -240,6 +242,35 @@ export namespace uploadReducer {
         totalBytes: number;
       };
 }
+
+/**
+ * The rows `rootIds`, each with its whole subtree. Children are only ever
+ * rendered nested under their parent, so leaving them behind would strand
+ * them in the list with nothing to belong to.
+ */
+const withoutSubtrees = (
+  state: uploadReducer.State,
+  rootIds: readonly string[]
+): uploadReducer.State => {
+  const dismissed = new Set(rootIds);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const upload of Object.values(state.uploads)) {
+      if (dismissed.has(upload.uploadId)) continue;
+      if (!upload.parentUploadId) continue;
+      if (!dismissed.has(upload.parentUploadId)) continue;
+      dismissed.add(upload.uploadId);
+      grew = true;
+    }
+  }
+  return {
+    ...state,
+    uploads: Object.fromEntries(
+      Object.entries(state.uploads).filter(([id]) => !dismissed.has(id))
+    ),
+  };
+};
 
 export const createInitialUploadState = (): uploadReducer.State => ({
   uploads: {},
@@ -671,29 +702,19 @@ const reduceUploads = (
 
     case "DISMISS": {
       if (!state.uploads[action.uploadId]) return state;
+      return withoutSubtrees(state, [action.uploadId]);
+    }
 
-      // Dismissing a parent takes its whole subtree with it. Children are only
-      // ever rendered nested under their parent, so leaving them behind would
-      // strand them in the list with nothing to belong to.
-      const dismissed = new Set([action.uploadId]);
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const upload of Object.values(state.uploads)) {
-          if (dismissed.has(upload.uploadId)) continue;
-          if (!upload.parentUploadId) continue;
-          if (!dismissed.has(upload.parentUploadId)) continue;
-          dismissed.add(upload.uploadId);
-          grew = true;
-        }
-      }
-
-      return {
-        ...state,
-        uploads: Object.fromEntries(
-          Object.entries(state.uploads).filter(([id]) => !dismissed.has(id))
-        ),
-      };
+    case "press-clear-finished": {
+      const settled = Object.values(state.uploads)
+        .filter(
+          (u) =>
+            !u.parentUploadId &&
+            (u.status === "success" || u.status === "error")
+        )
+        .map((u) => u.uploadId);
+      if (settled.length === 0) return state;
+      return withoutSubtrees(state, settled);
     }
 
     default:
