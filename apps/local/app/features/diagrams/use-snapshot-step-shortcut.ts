@@ -16,9 +16,9 @@ import type { PlaygroundStatus } from "@/features/diagrams/playground-status";
  * Ctrl-[ / Ctrl-] stepping through the **Snapshot Timeline**.
  *
  * A keyboard route to the restore the timeline already performs — same
- * endpoint, same handler, so the "you'll lose the current canvas" confirmation
- * still appears exactly when clicking a timeline row would raise it. Nothing
- * here is a second implementation of restore.
+ * endpoint, same handler, so the head it overwrites is kept exactly when
+ * clicking a timeline row would keep it. Nothing here is a second
+ * implementation of restore.
  *
  * The list is re-read on every keypress rather than mirrored in state: the
  * timeline is hidden in Focus Mode, snapshots arrive from the video editor
@@ -28,10 +28,10 @@ export function useSnapshotStepShortcut(opts: {
   diagramId: string | undefined;
   /** Cancels the debounced autosave and lands it now. */
   flushPendingSave: () => Promise<void>;
-  /** Resolves once the head has moved, or immediately if a dialog intercepts. */
+  /** Resolves once the head has moved, or the restore has given up. */
   onRestoreRequest: (
     snapshot: Snapshot,
-    headIsCaptured: boolean
+    timeline: Snapshot[]
   ) => Promise<void> | void;
   /** Where a step that couldn't run says why. */
   status: PlaygroundStatus;

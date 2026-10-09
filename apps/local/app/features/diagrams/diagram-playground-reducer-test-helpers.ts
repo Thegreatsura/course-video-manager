@@ -1,5 +1,6 @@
 import type { TLStoreSnapshot } from "tldraw";
 import { ReducerTester } from "@/test-utils/reducer-tester";
+import type { Snapshot } from "./snapshot-list";
 import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
@@ -40,3 +41,26 @@ export const openPage = () =>
     diagramPlaygroundReducer,
     createInitialDiagramPlaygroundState({ windowFocused: true })
   ).send({ type: "editor-mounted", diagramId: "d1", isFocusMode: false });
+
+/** The `show-head` effect for `diagramId`. */
+export const shown = (
+  diagramId: string,
+  headScene: TLStoreSnapshot | null,
+  opts: { stored?: StoredHead; centreCamera?: boolean } = {}
+) => ({
+  type: "show-head" as const,
+  diagramId,
+  scene: headScene,
+  stored: opts.stored ?? storedHead(`head-${diagramId}`, T0),
+  centreCamera: opts.centreCamera ?? true,
+});
+
+/** Snapshot `id` of d1, preserved, its scene and hash named after it. */
+export const snapshot = (id: string): Snapshot => ({
+  id,
+  diagramId: "d1",
+  scene: scene(id),
+  contentHash: `hash-${id}`,
+  preserved: true,
+  createdAt: "2026-10-07T00:00:00.000Z",
+});

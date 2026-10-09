@@ -7,10 +7,9 @@
  * than toasting, so the caller owns the wording.
  */
 
-import {
-  isHeadCaptured,
-  type Snapshot,
-  type SnapshotListResponse,
+import type {
+  Snapshot,
+  SnapshotListResponse,
 } from "@/features/diagrams/snapshot-list";
 import {
   snapshotAtStep,
@@ -18,7 +17,7 @@ import {
 } from "@/features/diagrams/snapshot-navigation";
 
 export type SnapshotStepOutcome =
-  /** A restore was raised for `snapshot` — possibly behind the confirm dialog. */
+  /** A restore was raised for `snapshot`. */
   | { kind: "stepped"; snapshot: Snapshot }
   /**
    * The timeline holds no other place to stand — empty, or a single stop the
@@ -40,15 +39,15 @@ export function createSnapshotStepper(deps: {
   /** Cancels the debounced autosave and lands it now. */
   flushPendingSave: () => Promise<void>;
   /**
-   * Raises the restore through the surrounding chrome's own handler, so the
-   * "you'll lose the current canvas" confirmation still appears exactly when
-   * clicking a timeline row would raise it.
+   * Raises the restore through the surrounding chrome's own handler, with the
+   * timeline just read, so the head it overwrites is kept exactly when
+   * clicking a timeline row would keep it.
    *
    * Must not resolve until the head has actually moved — see `inFlight`.
    */
   requestRestore: (
     snapshot: Snapshot,
-    headIsCaptured: boolean
+    timeline: Snapshot[]
   ) => Promise<void> | void;
 }): SnapshotStepper {
   /**
@@ -88,14 +87,11 @@ export function createSnapshotStepper(deps: {
         );
         if (!target) return { kind: "nowhere-to-go" };
 
-        // Set before the request so a confirmed dialog lands on the right
-        // cursor. A dismissed one leaves the head where it was, which makes
-        // this hint stale and therefore ignored.
+        // Set before the request so the restore lands on the right cursor. A
+        // restore that gives up leaves the head where it was, which makes this
+        // hint stale and therefore ignored.
         lastVisitedId = target.id;
-        await deps.requestRestore(
-          target,
-          isHeadCaptured(snapshots, list.headContentHash)
-        );
+        await deps.requestRestore(target, snapshots);
         return { kind: "stepped", snapshot: target };
       } catch {
         return { kind: "unavailable" };

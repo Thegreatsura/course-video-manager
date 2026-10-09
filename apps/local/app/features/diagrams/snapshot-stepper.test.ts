@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Snapshot } from "./snapshot-list";
+import { isHeadCaptured, type Snapshot } from "./snapshot-list";
 import { createSnapshotStepper } from "./snapshot-stepper";
 
 const snapshot = (over: Partial<Snapshot>): Snapshot => ({
@@ -39,7 +39,8 @@ function fakeDiagram(opts: {
   let head = opts.headContentHash;
   let canvas = opts.headContentHash;
   const events: string[] = [];
-  const confirmations: boolean[] = [];
+  /** Whether each restore's timeline held the head it overwrites. */
+  const captured: boolean[] = [];
   /** Every value the server head took, in order. */
   const headWrites: (string | null)[] = [];
   let release: (() => void) | null = null;
@@ -58,9 +59,9 @@ function fakeDiagram(opts: {
       events.push("read");
       return { snapshots: opts.snapshots ?? timeline, headContentHash: head };
     },
-    requestRestore: async (target, headIsCaptured) => {
+    requestRestore: async (target, timelineRead) => {
       events.push(`restore:${target.id}`);
-      confirmations.push(headIsCaptured);
+      captured.push(isHeadCaptured(timelineRead, head));
       // `performRestore` POSTs first, so the head moves server-side before
       // `loadSnapshot` puts the same scene on the canvas.
       setHead(target.contentHash);
@@ -76,7 +77,7 @@ function fakeDiagram(opts: {
   return {
     stepper,
     events,
-    confirmations,
+    captured,
     headWrites,
     get head() {
       return head;
@@ -98,25 +99,25 @@ describe("createSnapshotStepper", () => {
     expect(d.events).toEqual(["flush", "read", "restore:b"]);
   });
 
-  it("carries the confirmation flag through to the restore", async () => {
+  it("hands the restore a timeline that shows unsaved work isn't held", async () => {
     // Unsaved edits sit past the newest snapshot: that head is work existing
-    // nowhere else, so the surrounding chrome must get the chance to warn.
+    // nowhere else, so the surrounding chrome must keep it before restoring.
     const d = fakeDiagram({ headContentHash: "unsaved" });
     await d.stepper.step("older");
-    expect(d.confirmations).toEqual([false]);
+    expect(d.captured).toEqual([false]);
   });
 
-  it("does not ask for confirmation when the head sits on a Clip-pinned snapshot", async () => {
-    // Stepping lands on whatever the timeline holds, preserved or not. Warning
-    // that the head "can't be recovered" when it is the snapshot one row over
-    // would mean a dialog on every hop across a run of auto snapshots.
+  it("hands the restore a timeline that holds a head sitting on a Clip-pinned snapshot", async () => {
+    // Stepping lands on whatever the timeline holds, preserved or not. Keeping
+    // a head that is the snapshot one row over would preserve a duplicate on
+    // every hop across a run of auto snapshots.
     const pinned = [
       snapshot({ id: "a", contentHash: "h1" }),
       snapshot({ id: "b", contentHash: "h2", preserved: false }),
     ];
     const d = fakeDiagram({ snapshots: pinned, headContentHash: "h2" });
     await d.stepper.step("older");
-    expect(d.confirmations).toEqual([true]);
+    expect(d.captured).toEqual([true]);
   });
 
   it("refuses a second step until the first restore has landed", async () => {
