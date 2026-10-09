@@ -52,6 +52,30 @@ describe("videoStateReducer", () => {
     ).toBe(paused);
   });
 
+  it("a playing Clip that leaves the timeline stops playing, so the teleprompter never shows a deleted Clip as playing", () => {
+    const clip1 = "clip-1" as FrontendId;
+    const clip2 = "clip-2" as FrontendId;
+    const reducer = makeVideoEditorReducer([clip1, clip2], [clip1, clip2]);
+    const tester = new ReducerTester(
+      reducer,
+      createInitialState({ currentClipId: clip1 })
+    );
+
+    // A Stream Deck delete archives the playing Clip; the timeline drops it.
+    const state = tester
+      .send({ type: "click-teleprompter-mark", clipId: clip2 })
+      .send({ type: "timeline-clips-changed", clipIds: [clip1] })
+      .getState();
+    expect(state.runningState).toBe("paused");
+    expect(state.currentClipId).toBeUndefined();
+
+    // Playing again cannot bring the deleted Clip back.
+    expect(
+      tester.send({ type: "press-space-bar" }).getState().currentClipId
+    ).toBeUndefined();
+    expect(tester.getEffects()).toEqual([]);
+  });
+
   describe("shift-click multi-select", () => {
     it("should select range from section header to clip when shift-clicking", () => {
       const sectionId = "section-1" as FrontendId;

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import type {
   Clip,
@@ -79,6 +80,17 @@ export const useVideoEditor = (props: {
       },
     }
   );
+
+  // The Clips live in the route's clip-state reducer; report each change so
+  // this reducer can let go of a Clip that has left the timeline.
+  const clipIdsKey = props.clips.map((clip) => clip.frontendId).join("\n");
+  useEffect(() => {
+    dispatch({
+      type: "timeline-clips-changed",
+      clipIds:
+        clipIdsKey === "" ? [] : (clipIdsKey.split("\n") as FrontendId[]),
+    });
+  }, [clipIdsKey, dispatch]);
 
   // A copied `?clip=` / `?chapter=` link selects its item once it loads.
   useDeepLinkFocus({
