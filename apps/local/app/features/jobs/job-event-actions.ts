@@ -204,6 +204,8 @@ export const toJobsAction = (
             totalBytes: data.totalBytes,
           }
         : null;
+    case "submitted":
+      return { ...base, type: "job-submitted" };
     case "published":
       return { ...base, type: "job-published", result: { ...data } };
     case "video-handed-off":

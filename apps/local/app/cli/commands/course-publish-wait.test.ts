@@ -78,7 +78,7 @@ const runAsSidecar = (
       });
     } else {
       yield* Effect.sleep(5);
-      yield* ops.recoverExpiredJobs({ neverRetryKinds: [], stillRunning: [] });
+      yield* ops.recoverExpiredJobs({ neverRetryKinds: {}, stillRunning: [] });
     }
   });
 
@@ -172,6 +172,44 @@ describe("cvm course publish --wait", () => {
         yield* runAsSidecar([], "fail", "PublishRefusedError");
         const error = yield* follow(job.id, []).pipe(Effect.flip);
         expect(error).toMatchObject({ _tag: "PublishValidationError" });
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
+    "a Publish that failed after Submit (its Promote failed) points at Promote / Discard on the publish page",
+    () =>
+      Effect.gen(function* () {
+        const job = yield* enqueue;
+        yield* runAsSidecar(
+          [
+            { type: "submitted", data: { pendingVersionId: "version-1" } },
+            {
+              type: "publish-failed",
+              data: { _tag: "VersionNotPendingError", versionId: "version-1" },
+            },
+          ],
+          "fail",
+          "VersionNotPendingError"
+        );
+        const error = yield* follow(job.id, []).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "PublishJobFailedError",
+          cause: "VersionNotPendingError",
+        });
+        expect(error.message).toContain("Promote or Discard");
+        expect(error.message).toContain("/courses/course-1/publish");
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
+    "a Publish that failed before Submit gives no Promote / Discard hint",
+    () =>
+      Effect.gen(function* () {
+        const job = yield* enqueue;
+        yield* runAsSidecar([], "fail", "DatabaseError");
+        const error = yield* follow(job.id, []).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "PublishJobFailedError" });
+        expect(error.message).not.toContain("Promote or Discard");
       }).pipe(Effect.provide(layer()))
   );
 

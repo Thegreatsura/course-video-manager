@@ -7,6 +7,7 @@ import {
   PublishCommitFailedError,
   PublishValidationError,
 } from "@/services/course-publish-errors";
+import { mayLeavePendingVersion } from "@/features/jobs/job-wire";
 
 /**
  * `cvm course publish --wait`: follow a Publish Job the Sidecar runs until it
@@ -116,10 +117,11 @@ const errorTagOf = (error: unknown): string | null =>
  * `PublishValidationError`, 4 for a `PublishCommitFailedError`).
  */
 const rebuildFailure = (
-  jobId: string,
+  job: { readonly id: string; readonly subjectId: string | null },
   events: readonly JobEvent[],
   jobError: unknown
 ) => {
+  const jobId = job.id;
   const failed = events.findLast((e) => e.type === "publish-failed");
   const fields = (failed?.data ?? {}) as Record<string, unknown>;
   const { _tag, ...rest } = fields;
@@ -138,9 +140,17 @@ const rebuildFailure = (
   if (errorTagOf(jobError) === PUBLISH_REFUSED_TAG) {
     return new PublishValidationError({});
   }
+  const message = errorMessageOf(jobError);
+  const leftPending = mayLeavePendingVersion({
+    status: "failed",
+    submitted: events.some((e) => e.type === "submitted"),
+    errorTag: errorTagOf(jobError),
+  });
   return new PublishJobFailedError({
     jobId,
-    message: errorMessageOf(jobError),
+    message: leftPending
+      ? `${message}. It failed after Submit, so its Pending Version may be waiting on the web publish page (/courses/${job.subjectId ?? "<courseId>"}/publish): Promote or Discard it there, then publish again.`
+      : message,
     cause: errorTagOf(jobError),
   });
 };
@@ -192,7 +202,7 @@ export const waitForPublishJob = Effect.fn("waitForPublishJob")(
           } satisfies PublishedResult;
         }
         case "failed":
-          return yield* rebuildFailure(job.id, events, job.error);
+          return yield* rebuildFailure(job, events, job.error);
         case "interrupted":
         case "cancelled":
           return yield* new PublishInterruptedError({
