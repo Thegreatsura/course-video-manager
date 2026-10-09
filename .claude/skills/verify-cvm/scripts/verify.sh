@@ -255,8 +255,9 @@ cmd_launch() {
       "OBS_RECORDING_DIR=$scratch/obs-recordings"
       "DROPBOX_REMOTE_PATH=$scratch/dropbox"
       "${OFFLINE_SERVICES_ENV[@]}"
-      # Every statement the app sends, into server.log, for the Write Ledger.
+      # For the Write Ledger: every statement into server.log; who wrote what.
       "CVM_LOG_SQL=1"
+      "PGAPPNAME=$LEDGER_APP_SERVER"
     )
   else
     # The app's own connections are read-only (node-postgres reads PGOPTIONS):
