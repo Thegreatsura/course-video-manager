@@ -37,6 +37,12 @@ export interface JobKindSpec {
    * Absent for a kind where two of the same Job are fine.
    */
   readonly coveredBy?: (params: unknown, live: LiveJob) => boolean;
+  /**
+   * Whether a request for `params` must wait for a live Job of this kind,
+   * for the same subject: then it is added depending on that Job, so the
+   * two never run side by side.
+   */
+  readonly queuesBehind?: (params: unknown, live: LiveJob) => boolean;
 }
 
 export type JobKindSpecs = Readonly<Record<string, JobKindSpec>>;
@@ -77,7 +83,15 @@ export const JOB_KIND_SPECS = {
       (live.params as { path?: unknown } | null)?.path ===
       (params as { path: string }).path,
   },
-  "upload-images": spec(IMAGE_UPLOAD_POLICY, JOB_PARAMS["upload-images"]),
+  // Upload pressed again (the tab closed before the first Job settled) waits
+  // for the live Job for the same body, then reuses every URL it recorded
+  // rather than uploading each image a second time.
+  "upload-images": {
+    ...spec(IMAGE_UPLOAD_POLICY, JOB_PARAMS["upload-images"]),
+    queuesBehind: (params, live) =>
+      (live.params as { body?: unknown } | null)?.body ===
+      (params as { body: string }).body,
+  },
   "remove-local-images": spec(
     IMAGE_UPLOAD_POLICY,
     JOB_PARAMS["remove-local-images"]
@@ -156,6 +170,9 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     subject: input.subject,
     ...(kind.coveredBy
       ? { coveredBy: (live: LiveJob) => kind.coveredBy!(params, live) }
+      : {}),
+    ...(kind.queuesBehind
+      ? { queuesBehind: (live: LiveJob) => kind.queuesBehind!(params, live) }
       : {}),
   });
 });

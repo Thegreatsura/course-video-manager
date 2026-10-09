@@ -1,5 +1,5 @@
 import path from "node:path";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { FileSystem } from "@effect/platform";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -16,8 +16,8 @@ import { defineJobKind } from "../job-kind";
 import { JOB_PARAMS } from "../job-params";
 import { IMAGE_UPLOAD_POLICY } from "../retry-policy";
 
-/** Every image any `upload-images` Job recorded for this Video. */
-const recordedForVideo = (videoId: string) =>
+/** Every `image-uploaded` Job Event any `upload-images` Job wrote for this Video. */
+const recordedEventsForVideo = (videoId: string) =>
   Effect.flatMap(JobOperationsService, (ops) =>
     ops.listSubjectJobEvents({
       kind: UPLOAD_IMAGES_JOB_KIND,
@@ -25,7 +25,36 @@ const recordedForVideo = (videoId: string) =>
       subjectId: videoId,
       type: IMAGE_UPLOADED_EVENT,
     })
-  ).pipe(Effect.map(imageUploadsOf));
+  );
+
+/** Every image any `upload-images` Job recorded for this Video. */
+const recordedForVideo = (videoId: string) =>
+  Effect.map(recordedEventsForVideo(videoId), imageUploadsOf);
+
+/**
+ * The URLs earlier Jobs recorded for this Video, by file, that still stand
+ * for it: the file is gone (uploaded, then removed), or it has not changed
+ * since the upload was recorded. A file edited since then is uploaded again.
+ */
+const reusableForVideo = (videoId: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const reusable = new Map<string, string>();
+    for (const event of yield* recordedEventsForVideo(videoId)) {
+      const [upload] = imageUploadsOf([event]);
+      if (!upload) continue;
+      const mtime = yield* fs.stat(upload.filePath).pipe(
+        Effect.map((info) => info.mtime),
+        Effect.orElseSucceed(() => Option.none<Date>())
+      );
+      if (Option.isSome(mtime) && mtime.value > event.at) {
+        reusable.delete(upload.filePath);
+        continue;
+      }
+      reusable.set(upload.filePath, upload.url);
+    }
+    return reusable;
+  });
 
 const videoFolder = (videoId: string) =>
   Effect.gen(function* () {
@@ -43,7 +72,10 @@ const videoFolder = (videoId: string) =>
  *
  * It never writes the body and never deletes a file. A run put back by a
  * deliberate stop reads its own Job's `image-uploaded` events first and
- * uploads only what no earlier run recorded. 1 attempt, in the default lane
+ * uploads only what no earlier run recorded; a file an earlier Job uploaded,
+ * unchanged since, gets that Job's URL (`reusableForVideo`). A second Upload
+ * of the same body while one runs waits behind it (`queuesBehind`,
+ * `job-specs.ts`), then reuses every URL. 1 attempt, in the default lane
  * (`IMAGE_UPLOAD_POLICY`).
  */
 export const uploadImagesJobKind = defineJobKind({
@@ -54,12 +86,7 @@ export const uploadImagesJobKind = defineJobKind({
       const ops = yield* JobOperationsService;
       const markdown = yield* CloudinaryMarkdownService;
       const recorded = imageUploadsOf(yield* ops.listJobEvents(ctx.jobId));
-      const recordedEarlier = new Map(
-        (yield* recordedForVideo(params.videoId)).map((u) => [
-          u.filePath,
-          u.url,
-        ])
-      );
+      const recordedEarlier = yield* reusableForVideo(params.videoId);
       const baseDir = yield* videoFolder(params.videoId);
       const total = localImageRefs(params.body).length;
       let done = recorded.length;
