@@ -26,11 +26,15 @@ Verbs:
   snapshot add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
   render <snapshotId>                        READ. Draw a stored snapshot to a PNG
   get [--snapshot <snapshotId>] <diagramId>  READ. The head and the snapshots, as JSON
+  update --name <name> <diagramId>           WRITE. Rename the Diagram; its drawings stay
+  delete <diagramId>                         WRITE. Archive the Diagram (undo: 'restore')
+  restore <diagramId>                        WRITE. Bring an archived Diagram back
 
 THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
 and 'create' again until the pictures are right, then hand Matt the url. Once
 he has the url, change it with 'snapshot add', never a second 'create'. To
-see what Matt has drawn since, 'get' it first.
+see what Matt has drawn since, 'get' it first. 'update' changes the NAME only;
+nothing changes a drawing in place.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
@@ -102,9 +106,10 @@ EXAMPLE
 
 LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
-(CVM_APP_URL, default http://localhost:5173). Elsewhere every verb but 'get'
-is refused before doing anything: _tag "LocalOnlyCommandError", exit 7. Stop;
-do not retry.
+(CVM_APP_URL, default http://localhost:5173). Elsewhere 'create', 'snapshot
+add' and 'render' are refused before doing anything: _tag
+"LocalOnlyCommandError", exit 7. Stop; do not retry. 'get', 'update',
+'delete' and 'restore' draw nothing and run anywhere.
 
 Examples:
   cvm diagram create --file agent-loop.json
@@ -112,7 +117,10 @@ Examples:
   cvm diagram snapshot add --file agent-loop-v2.json <diagramId>
   cvm diagram render <snapshotId>
   cvm diagram get <diagramId>
-  cvm diagram get --snapshot <snapshotId> <diagramId>`;
+  cvm diagram get --snapshot <snapshotId> <diagramId>
+  cvm diagram update --name "Agent loop" <diagramId>
+  cvm diagram delete <diagramId>
+  cvm diagram restore <diagramId>`;
 
 export const CREATE_HELP = `WRITE. Create a NEW Diagram from a simple-format JSON file: each drawing in it
 becomes a Preserved Snapshot, in order, and the Diagram opens on the FIRST.
@@ -226,10 +234,11 @@ drawings in the simple shape format of 'cvm diagram --help'. Writes nothing.
   --snapshot <snapshotId>  print just this snapshot's drawing instead.
 
 Output: ONE NDJSON line,
-  {"id":"…","name":"…","url":"…","head":{"shapes":[…]},
+  {"id":"…","name":"…","archived":false,"url":"…","head":{"shapes":[…]},
    "snapshots":[{"id":"…","preserved":true,"clipIds":[…],"diagramText":"…","createdAt":"…"}, …]}
   id           the Diagram's id.
   name         its name.
+  archived     true once 'delete' has archived it (see 'restore').
   url          where Matt opens it in the Diagram Playground.
   head         what the Diagram shows now — Matt may have drawn on it by hand.
   snapshots    its timeline, oldest first (archived ones left out).
@@ -257,3 +266,68 @@ Examples:
   cvm diagram get 3f2a…
   cvm diagram get 3f2a… | jq '.head.shapes'
   cvm diagram get --snapshot 9c41… 3f2a…`;
+
+/** What 'update', 'delete' and 'restore' each print: the Diagram, not its drawings. */
+const WRITE_OUTPUT = `Output: ONE NDJSON line,
+  {"id":"…","name":"…","archived":false,"url":"…"}
+  id        the Diagram's id.
+  name      its name.
+  archived  true while it is archived (deleted).
+  url       where Matt opens it in the Diagram Playground.`;
+
+export const UPDATE_HELP = `WRITE. Rename a Diagram. This is ALL 'update' does: it never changes the
+head or any snapshot — to change the drawing, 'snapshot add' a new one. It is
+the same rename as editing the name in the Diagram Playground.
+
+  cvm diagram update --name <name> <diagramId>
+
+  <diagramId>     the Diagram: its id, or its playground url.
+  --name <name>   the new name. Trimmed; it cannot be empty.
+
+${WRITE_OUTPUT}
+
+Exit codes:
+  2  no Diagram with that id (_tag NotFoundError).
+  3  --name is empty.
+
+Examples:
+  cvm diagram update --name "Agent loop" 3f2a…`;
+
+export const DELETE_HELP = `WRITE. Delete a Diagram — an ARCHIVE, exactly as the Diagram Playground's
+delete: the Diagram leaves Playground Home, the playground's list and its
+search, but nothing is removed. Its head and its snapshots stay as they are,
+Clips that pin its snapshots keep them, and 'restore' brings it back.
+
+  cvm diagram delete <diagramId>
+
+  <diagramId>   the Diagram: its id, or its playground url.
+
+${WRITE_OUTPUT}
+
+Deleting an archived Diagram again changes nothing.
+
+Exit codes:
+  2  no Diagram with that id (_tag NotFoundError).
+
+Examples:
+  cvm diagram delete 3f2a…
+  cvm diagram restore 3f2a…   # undo`;
+
+export const RESTORE_HELP = `WRITE. Restore an archived Diagram: undo 'delete'. It is back on Playground
+Home with its head and every snapshot as they were when it was deleted.
+(Not a Restore to Head: that loads a snapshot onto the head and is done with
+'snapshot add'.)
+
+  cvm diagram restore <diagramId>
+
+  <diagramId>   the Diagram: its id, or its playground url.
+
+${WRITE_OUTPUT}
+
+Restoring a Diagram that is not archived changes nothing.
+
+Exit codes:
+  2  no Diagram with that id (_tag NotFoundError).
+
+Examples:
+  cvm diagram restore 3f2a…`;

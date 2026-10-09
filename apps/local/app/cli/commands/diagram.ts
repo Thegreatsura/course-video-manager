@@ -27,11 +27,14 @@ import {
 } from "@/cli/local-only";
 import {
   CREATE_HELP,
+  DELETE_HELP,
   GET_HELP,
   HELP,
   RENDER_HELP,
+  RESTORE_HELP,
   SNAPSHOT_ADD_HELP,
   SNAPSHOT_HELP,
+  UPDATE_HELP,
 } from "./diagram.help";
 import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
 
@@ -46,7 +49,10 @@ import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
  * every snapshot, and only then write, in one transaction — so a failure
  * leaves nothing behind, and nothing after the write can fail. `render` draws a
  * snapshot that is already stored, never the head. `get` only reads: the head
- * and the snapshots, in the simple format.
+ * and the snapshots, in the simple format. `update` renames the Diagram, and
+ * `delete` / `restore` archive and un-archive it, through the same
+ * `updateDiagram` the playground's rename and delete use: none of the three
+ * touches the head or a snapshot.
  */
 
 const ENTITY = "diagram";
@@ -291,6 +297,7 @@ const getCmd = Command.make(
         {
           id: diagram.id,
           name: diagram.name,
+          archived: diagram.archived,
           url: entityDeepLink(
             { type: "diagram", id: diagram.id },
             resolveAppUrl()
@@ -308,7 +315,73 @@ const getCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(GET_HELP)));
 
+/**
+ * Write `fields` on the Diagram through the playground's own `updateDiagram`
+ * (`api.diagrams.$diagramId.update`), and print what an agent needs of it.
+ * The head and the snapshots are never part of `fields`.
+ */
+const writeDiagram = (
+  diagramId: string,
+  fields: { name?: string; archived?: boolean }
+) =>
+  Effect.gen(function* () {
+    const diagrams = yield* DiagramOperationsService;
+    const diagram = yield* diagrams
+      .updateDiagram(diagramId, fields)
+      .pipe(
+        Effect.catchTag("NotFoundError", () => notFound(ENTITY, diagramId))
+      );
+    yield* emitNdjson([
+      {
+        id: diagram.id,
+        name: diagram.name,
+        archived: diagram.archived,
+        url: entityDeepLink(
+          { type: "diagram", id: diagram.id },
+          resolveAppUrl()
+        ),
+      },
+    ]);
+  });
+
+const updateCmd = Command.make(
+  "update",
+  {
+    diagramId: entityIdArg("diagram", "diagramId"),
+    name: Options.text("name").pipe(
+      Options.withDescription("The Diagram's new name.")
+    ),
+  },
+  ({ diagramId, name }) =>
+    Effect.gen(function* () {
+      // Trimmed and refused when empty, as the playground's rename does.
+      const trimmed = name.trim();
+      if (!trimmed) return yield* parseError("--name cannot be empty", ENTITY);
+      yield* writeDiagram(diagramId, { name: trimmed });
+    })
+).pipe(Command.withDescription(detail(UPDATE_HELP)));
+
+const deleteCmd = Command.make(
+  "delete",
+  { diagramId: entityIdArg("diagram", "diagramId") },
+  ({ diagramId }) => writeDiagram(diagramId, { archived: true })
+).pipe(Command.withDescription(detail(DELETE_HELP)));
+
+const restoreCmd = Command.make(
+  "restore",
+  { diagramId: entityIdArg("diagram", "diagramId") },
+  ({ diagramId }) => writeDiagram(diagramId, { archived: false })
+).pipe(Command.withDescription(detail(RESTORE_HELP)));
+
 export const diagramCommand = Command.make("diagram").pipe(
   Command.withDescription(detail(HELP)),
-  Command.withSubcommands([createCmd, snapshotCmd, renderCmd, getCmd])
+  Command.withSubcommands([
+    createCmd,
+    snapshotCmd,
+    renderCmd,
+    getCmd,
+    updateCmd,
+    deleteCmd,
+    restoreCmd,
+  ])
 );
