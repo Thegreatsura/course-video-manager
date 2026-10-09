@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Archive, Copy } from "lucide-react";
-import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { copySceneToClipboard } from "@/features/diagrams/copy-scene-to-clipboard";
@@ -9,6 +8,7 @@ import {
   isHeadCaptured,
   type Snapshot,
 } from "@/features/diagrams/snapshot-list";
+import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
 
 export type { Snapshot };
 
@@ -25,6 +25,7 @@ export function TimelinePanel({
   const [headContentHash, setHeadContentHash] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const status = usePlaygroundStatus();
 
   const fetchSnapshots = useCallback(() => {
     let cancelled = false;
@@ -53,12 +54,16 @@ export function TimelinePanel({
 
   const handleCopy = async (snapshot: Snapshot) => {
     const result = await copySceneToClipboard(snapshot.scene);
-    if (result === "ok") {
-      toast.success("Snapshot copied — paste into the canvas");
-    } else if (result === "empty") {
-      toast.error("Snapshot has no shapes to copy");
-    } else {
-      toast.error("Failed to copy snapshot");
+    switch (result) {
+      case "ok":
+        status.reportSuccess();
+        return;
+      case "empty":
+        status.reportError("Snapshot has no shapes to copy");
+        return;
+      case "error":
+        status.reportError("Failed to copy snapshot");
+        return;
     }
   };
 
@@ -71,12 +76,13 @@ export function TimelinePanel({
         body: JSON.stringify({ archived: true }),
       });
       if (!res.ok) {
-        toast.error("Failed to archive snapshot");
+        status.reportError("Failed to archive snapshot");
         return;
       }
+      status.reportSuccess();
       setSnapshots((prev) => prev.filter((s) => s.id !== snapshot.id));
     } catch {
-      toast.error("Failed to archive snapshot");
+      status.reportError("Failed to archive snapshot");
     } finally {
       setArchivingId(null);
     }

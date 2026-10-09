@@ -85,7 +85,7 @@ function distinctStops(snapshots: readonly Snapshot[]): Snapshot[] {
  *
  * The timeline is a ring: stepping past the newest stop comes back on the
  * oldest and vice versa. Histories are short and walked repeatedly, so an end
- * that stops dead — and toasts to say so — just means reversing the chord all
+ * that stops dead — and says so in the status line — just means reversing the chord all
  * the way back to reach the other side.
  *
  * `null` is therefore only for a timeline with no other place to stand: no

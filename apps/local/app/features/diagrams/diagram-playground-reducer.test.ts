@@ -5,6 +5,7 @@ import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
   isCanvasEditable,
+  STATUS_ERROR_MS,
   type StoredHead,
 } from "./diagram-playground-reducer";
 import type { Snapshot } from "./snapshot-list";
@@ -208,9 +209,11 @@ describe("diagramPlaygroundReducer", () => {
       .send({ type: "snapshot-preserved", created: true });
 
     expect(tester.getState().preserving).toBe(false);
+    // The retry worked, so the empty-diagram error is gone from the status line.
+    expect(tester.getState().error).toBeNull();
     expect(tester.getEffects()).toEqual([
       { type: "preserve-snapshot", diagramId: "d1" },
-      { type: "show-error", message: "Cannot preserve an empty diagram" },
+      { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
       { type: "preserve-snapshot", diagramId: "d1" },
     ]);
   });
@@ -395,9 +398,58 @@ describe("keeping the Active Diagram in step with its stored head", () => {
       saving: false,
       seen: mine,
     });
+    expect(tester.getState().error).toBeNull();
     expect(tester.getEffects()).toEqual([
       { type: "overwrite-stored-head", diagramId: "d1" },
     ]);
+  });
+
+  it("a save refused after keeping my edits says so in the status line, and the prompt returns", () => {
+    const tester = openD1()
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" });
+
+    // A first refusal is the prompt's to explain, not the status line's.
+    expect(tester.getState().error).toBeNull();
+
+    tester
+      .send({ type: "keep-my-edits-clicked" })
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({
+        type: "head-saved",
+        diagramId: "d1",
+        stored: storedHead("mine", T1),
+      })
+      // The head changes elsewhere again before the next autosave lands.
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" });
+
+    expect(tester.getState().error?.message).toBe(
+      "Your edits weren't saved: this diagram changed elsewhere again."
+    );
+    expect(tester.getState().head?.changedElsewhere).toBe(true);
+    expect(tester.getEffects()).toEqual([
+      { type: "overwrite-stored-head", diagramId: "d1" },
+      { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
+    ]);
+  });
+
+  it("a failed autosave shows in the status line until an autosave lands", () => {
+    const tester = openD1()
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-failed", diagramId: "d1" });
+
+    expect(tester.getState().error?.message).toBe(
+      "Couldn't save your edits. The next change retries."
+    );
+
+    tester.send({ type: "head-save-started", diagramId: "d1" }).send({
+      type: "head-saved",
+      diagramId: "d1",
+      stored: storedHead("mine", T1),
+    });
+
+    expect(tester.getState().error).toBeNull();
   });
 
   it("the tab's own autosaves never read as a change elsewhere", () => {
@@ -429,5 +481,88 @@ describe("keeping the Active Diagram in step with its stored head", () => {
 
     expect(tester.getState().head?.status).toBe("ready");
     expect(tester.getEffects()).toEqual([]);
+  });
+});
+
+describe("the status line", () => {
+  const opened = () =>
+    openPage()
+      .send(loaded("d1", scene("d1")))
+      .resetExec();
+
+  it("shows a reported error, and takes it down after its timeout", () => {
+    const tester = opened().send({
+      type: "error-reported",
+      message: "Couldn't delete that component",
+    });
+
+    expect(tester.getState().error).toEqual({
+      message: "Couldn't delete that component",
+      id: 1,
+      fromAutosave: false,
+    });
+    expect(tester.getEffects()).toEqual([
+      { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
+    ]);
+
+    tester.send({ type: "error-timed-out", id: 1 });
+
+    expect(tester.getState().error).toBeNull();
+  });
+
+  it("a newer error outlives the older one's timeout", () => {
+    const tester = opened()
+      .send({ type: "error-reported", message: "first" })
+      .send({ type: "error-reported", message: "second" })
+      .send({ type: "error-timed-out", id: 1 });
+
+    expect(tester.getState().error?.message).toBe("second");
+
+    tester.send({ type: "error-timed-out", id: 2 });
+
+    expect(tester.getState().error).toBeNull();
+  });
+
+  it("the next success clears the error and shows nothing of its own", () => {
+    const tester = opened()
+      .send({ type: "error-reported", message: "Failed to copy diagram" })
+      .send({ type: "operation-succeeded" });
+
+    expect(tester.getState().error).toBeNull();
+    // A success on a clean status line leaves it clean.
+    tester.send({ type: "operation-succeeded" });
+    expect(tester.getState().error).toBeNull();
+  });
+
+  it("a background autosave doesn't clear an error the author hasn't seen off", () => {
+    const tester = opened()
+      .send({
+        type: "error-reported",
+        message: "Couldn't delete that component",
+      })
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({
+        type: "head-saved",
+        diagramId: "d1",
+        stored: storedHead("mine", T1),
+      });
+
+    expect(tester.getState().error?.message).toBe(
+      "Couldn't delete that component"
+    );
+  });
+
+  it("failures the page runs itself go to the status line too", () => {
+    const tester = opened()
+      .send({ type: "create-clicked" })
+      .send({ type: "create-failed" });
+
+    expect(tester.getState().error?.message).toBe("Failed to create diagram");
+
+    tester
+      .send({ type: "create-clicked" })
+      .send({ type: "diagram-created", diagramId: "d2" });
+
+    expect(tester.getState().error).toBeNull();
   });
 });
