@@ -22,12 +22,15 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { CompletedStage } from "./upload-timing";
 import { useJobs, type JobSettledReport } from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
+import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
 
 export interface UploadContextType {
   uploads: uploadReducer.State["uploads"];
   /** Background Jobs the Sidecar runs (a Video export), as this tab sees them. */
   jobs: jobsReducer.State;
   dismissJob: (jobId: string) => void;
+  /** Hear Job Events as they arrive (the recent ones first). */
+  subscribeToJobEvents: SubscribeToJobEvents;
   /**
    * The author's Retry on a failed or interrupted post: the only way a post
    * runs again (posts never retry on their own).
@@ -459,6 +462,7 @@ export function UploadProvider({
         uploads: state.uploads,
         jobs: jobs.state,
         dismissJob: jobs.dismissJob,
+        subscribeToJobEvents: jobs.subscribeToJobEvents,
         retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
         clearFinished,

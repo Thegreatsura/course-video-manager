@@ -10,6 +10,7 @@ import { applyStreamAction, viewOf } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
+import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -288,6 +289,16 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
   // A Batch export toasts each Video as it finishes (as the browser did), and
   // nothing for the batch itself; only its failure is news.
   if (job.kind === "batch-export" && job.status === "succeeded") return;
+  // A Clip transcription shows on its Clips in the editor, never as a toast.
+  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) {
+    exec({
+      type: "report-job-settled",
+      jobId: job.id,
+      title: job.title,
+      outcome: job.status === "succeeded" ? "succeeded" : "failed",
+    });
+    return;
+  }
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",

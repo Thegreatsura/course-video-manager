@@ -9,14 +9,15 @@
  *   moment it is dispatched (`upload-context.tsx`, each `start*` callback calls
  *   `initiateFromRegistry` at once unless the job has a `dependsOn`), so ten
  *   exports run as ten concurrent SSE requests. → `default`: unbounded.
- * - A Publish holds `courseVersionMutationSemaphore`, one permit, for its whole
- *   run (`services/course-publish-service.ts:87` and `:486`), so a second
- *   Publish waits for the first. → `publish`: 1.
+ * - A Publish ran one at a time: the service held a one-permit semaphore for
+ *   its whole run, so a second Publish waited for the first. The lane now
+ *   does that job and the semaphore is gone (`CoursePublishService.publish`).
+ *   → `publish`: 1.
  *
  * Every OTHER limit is on a resource inside a job, and stays where it is, in
  * the service, because the sidecar builds each service layer once per process
  * just as the app server does: ffmpeg's GPU 6 / CPU 12 permits
- * (`ffmpeg-commands.ts:25-26`), `MAX_CONCURRENT_EXPORTS` 6
+ * (`FfmpegPermitsService`, `ffmpeg-permits.ts`), `MAX_CONCURRENT_EXPORTS` 6
  * (`course-publish-export-events.ts:79`), Autofill's 6 Videos
  * (`autofill-service.ts:54`), Dropbox's upload pool (`dropbox-upload-config.ts:17`,
  * default 4), AI Hero's 4 parts (`ai-hero-upload-service.ts:13`) and

@@ -9,7 +9,11 @@ import {
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import * as schema from "@cvm/core/db/schema";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
+import {
+  type SidecarContext,
+  SidecarContextTest,
+} from "@/services/sidecar-context";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import type { JobContext } from "../job-kind";
 import { CLIP_TRANSCRIPTION_POLICY } from "../retry-policy";
@@ -43,7 +47,7 @@ class FakeWhisperError extends Data.TaggedError("FakeWhisperError")<{
 }> {}
 
 /** Whisper, faked: one word per Clip, and a refusal for `bad.mp4`. */
-const fakeWhisper = Layer.succeed(VideoProcessingService, {
+const fakeWhisper = Layer.succeed(WhisperTranscriptionService, {
   transcribeClips: (
     clips: ReadonlyArray<{ id: string; inputVideo: string }>
   ) =>
@@ -58,18 +62,26 @@ const fakeWhisper = Layer.succeed(VideoProcessingService, {
             segments: [{ start: 0, end: 1, text: `said ${clip.inputVideo}` }],
           }))
         ),
-} as unknown as VideoProcessingService);
+} as unknown as WhisperTranscriptionService);
 
 const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    ClipOperationsService | VideoProcessingService | NodeContext.NodeContext
+    | ClipOperationsService
+    | WhisperTranscriptionService
+    | NodeContext.NodeContext
+    | SidecarContext
   >
 ) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(clipOpsLayer, fakeWhisper, NodeContext.layer)
+      Layer.mergeAll(
+        clipOpsLayer,
+        fakeWhisper,
+        NodeContext.layer,
+        SidecarContextTest
+      )
     ),
     Effect.runPromise
   );
@@ -146,10 +158,15 @@ describe("the transcribe-clips Job kind", () => {
         `word-of-${name}`,
       ]);
     }
+    // First the Clips it took on, so a tab can fail them if the Job dies.
+    expect(events[0]).toEqual({
+      type: CLIP_TRANSCRIPTION_EVENTS.clipsStarted,
+      data: { clipIds: [a, b] },
+    });
     expect(
-      [...events].sort((x, y) =>
-        String(x.data.id).localeCompare(String(y.data.id))
-      )
+      events
+        .filter((e) => e.type === CLIP_TRANSCRIPTION_EVENTS.clipSettled)
+        .sort((x, y) => String(x.data.id).localeCompare(String(y.data.id)))
     ).toEqual(
       [
         {

@@ -16,6 +16,8 @@
 
 The ruleset is the only gate, and it holds for agents without exception: merge through the loop above, every time. `--admin`, ruleset bypass and direct pushes to `main` are reserved for the human admin.
 
+Never skip hooks: no `git commit --no-verify`, no `HUSKY=0`, no other way round them. If a hook fails because of something on `main`, merge `main` or wait for the PR that fixes it; never bypass the hook.
+
 ## A PR with a migration
 
 Follow the `deploy-migration` skill (`.claude/skills/deploy-migration/SKILL.md`): the migration and its code may ship in one PR, the `apps/remote` deploy fails on purpose until Matt migrates production, then you redeploy. Agents never run `db:migrate` against production (ADR 0026).

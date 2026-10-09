@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import {
   createInitialJobsState,
@@ -21,6 +21,7 @@ import {
   showRetryFailedToast,
   showSidecarNotRunningToast,
 } from "./job-toasts";
+import { createJobEventHub, snapshotJobEvents } from "./job-event-hub";
 
 type Dispatch = (action: jobsReducer.Action) => void;
 
@@ -42,19 +43,27 @@ export interface StartJobRequest {
 
 /**
  * The bridge to the Sidecar's Job Event stream: one EventSource per tab,
- * which only dispatches what it hears. Closing it cancels nothing.
+ * which only dispatches what it hears, and passes each Job Event on to the
+ * pages listening (`publish`). Closing it cancels nothing.
  */
-function useJobEventStream(dispatch: Dispatch) {
+function useJobEventStream(
+  dispatch: Dispatch,
+  publish: (heard: JobEventMessage) => void
+) {
   useEffect(() => {
     const source = new EventSource("/api/jobs/events");
     source.addEventListener(JOB_STREAM_EVENTS.snapshot, (event) => {
       const snapshot = decodeStreamData(JobSnapshotMessage, event.data);
-      if (snapshot) dispatch({ type: "job-snapshot-received", snapshot });
+      if (!snapshot) return;
+      dispatch({ type: "job-snapshot-received", snapshot });
+      for (const heard of snapshotJobEvents(snapshot)) publish(heard);
     });
     source.addEventListener(JOB_STREAM_EVENTS.jobEvent, (event) => {
       const message = decodeStreamData(JobEventMessage, event.data);
-      const action = message ? toJobsAction(message) : null;
+      if (!message) return;
+      const action = toJobsAction(message);
       if (action) dispatch(action);
+      publish(message);
     });
     source.addEventListener(JOB_STREAM_EVENTS.sidecarAvailable, () =>
       dispatch({ type: "sidecar-available" })
@@ -69,11 +78,13 @@ function useJobEventStream(dispatch: Dispatch) {
       }
     });
     return () => source.close();
-  }, [dispatch]);
+  }, [dispatch, publish]);
 }
 
 /**
  * This tab's view of the background Jobs, and the one way it starts one.
+ * `subscribeToJobEvents` lets a page hear Job Events itself (the editor hears
+ * its Clip transcriptions).
  * `onJobSettled` hears every Job that settles, so the Upload Manager can start
  * (or fail) the uploads waiting on it.
  */
@@ -189,7 +200,8 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     "report-job-settled": (_state, effect) => onJobSettledRef.current(effect),
   });
 
-  useJobEventStream(dispatch);
+  const [hub] = useState(createJobEventHub);
+  useJobEventStream(dispatch, hub.publish);
 
   const startJob = useCallback(
     (request: StartJobRequest): string => {
@@ -223,6 +235,7 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
   return {
     state,
     startJob,
+    subscribeToJobEvents: hub.subscribe,
     dismissJob,
     retryJob,
     dismissFinishedJobs,

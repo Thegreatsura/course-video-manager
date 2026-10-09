@@ -67,7 +67,7 @@ export const isValidPublishVersionName = (name: string): boolean =>
  * The service graph the `publish` command runs inside: enough to check the
  * Course and the name and to write the Job row. The work itself — ffmpeg,
  * Dropbox, the Version lifecycle — is the Sidecar's, so none of its services
- * (nor OPENAI_API_KEY, which VideoProcessingService reads at build time) are
+ * (nor OPENAI_API_KEY, which WhisperTranscriptionService reads at build time) are
  * built here.
  */
 const publishLayer = Layer.mergeAll(
@@ -227,8 +227,8 @@ FAILURE HANDLING
   immediately, naming the missing videos. Either way the command exits 4 with
   PublishCommitFailedError — nothing is lost, your edits are safe in the new
   Draft, so fix the cause and publish again. The upload is content-addressed, so
-  a re-publish re-uploads nothing that already landed, and a Publish interrupted
-  partway resumes rather than failing.
+  a re-publish re-uploads nothing that already landed. A Publish interrupted
+  partway is never resumed: see below.
 
   Edits racing a publish are safe: a write serializes with Submit and either
   lands before the freeze (carried into the new Draft) or is refused with

@@ -33,7 +33,7 @@ import type { LaneName } from "./lanes";
  *
  * The narrow retries INSIDE a service stay inside it, untouched: an export
  * inside a Publish or batch `recurs(2)` (`course-publish-export-events.ts:160`),
- * the Dropbox commit `recurs(1)` (`course-publish-service.ts:413`), Dropbox HTTP
+ * the Dropbox commit `recurs(1)` (`commitPhase` in `CoursePublishService`), Dropbox HTTP
  * `recurs(5)` on a 429/5xx (`dropbox-http-client.ts:36-39`), an AI Hero part 5
  * (`ai-hero-upload-service.ts:12`), Autofill's `recurs(3)` per Video
  * (`autofill-service.ts:57-62`).
@@ -124,7 +124,8 @@ export const UPLOAD_MANAGER_POLICIES = {
   "batch-export": { lane: "default", maxAttempts: 1 },
   /**
    * A Publish: every failure was `UPLOAD_FATAL_ERROR` (1 attempt), and it
-   * held `courseVersionMutationSemaphore`, one permit — the `publish` lane.
+   * ran one at a time (the service's one-permit semaphore, now gone) — the
+   * `publish` lane.
    * It is never put back after a stop either (`neverRequeued`): a run cut off
    * after Submit leaves a Pending Version for the author (section 7.2).
    */
