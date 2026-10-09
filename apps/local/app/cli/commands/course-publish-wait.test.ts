@@ -48,7 +48,8 @@ const enqueue = Effect.gen(function* () {
 /** Play the sidecar: claim the Job, write `events`, then end it as `end` says. */
 const runAsSidecar = (
   events: { type: string; data: Record<string, unknown> }[],
-  end: "succeed" | "fail" | "lose"
+  end: "succeed" | "fail" | "lose",
+  failureTag = "PublishRunError"
 ) =>
   Effect.gen(function* () {
     const ops = yield* JobOperationsService;
@@ -68,9 +69,9 @@ const runAsSidecar = (
         jobId: job.id,
         holder: "test-sidecar",
         failure: {
-          tag: "PublishRunError",
+          tag: failureTag,
           message: "2 course warning(s) must be fixed",
-          cause: "PublishRunError: …",
+          cause: `${failureTag}: …`,
         },
         interrupted: false,
         mayRetry: false,
@@ -158,6 +159,31 @@ describe("cvm course publish --wait", () => {
           _tag: "PublishValidationError",
           courseViewLintCount: 2,
         });
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
+    "a refused Publish still exits 3 when its publish-failed event was never written",
+    () =>
+      Effect.gen(function* () {
+        // `ctx.emit` swallows a failed event write; the Job's own failure
+        // tag is the one record that survives.
+        const job = yield* enqueue;
+        yield* runAsSidecar([], "fail", "PublishRefusedError");
+        const error = yield* follow(job.id, []).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "PublishValidationError" });
+      }).pipe(Effect.provide(layer()))
+  );
+
+  it.live(
+    "a Job that succeeded without its published event is an error, not a release with empty ids",
+    () =>
+      Effect.gen(function* () {
+        const job = yield* enqueue;
+        yield* runAsSidecar([], "succeed");
+        const error = yield* follow(job.id, []).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "PublishResultLostError" });
+        expect(error.message).toContain("cvm course");
       }).pipe(Effect.provide(layer()))
   );
 

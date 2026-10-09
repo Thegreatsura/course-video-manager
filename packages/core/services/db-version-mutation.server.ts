@@ -4,11 +4,12 @@ import {
   NotLatestVersionError,
   PendingVersionExistsError,
   UnknownDBServiceError,
+  VersionNameTakenError,
   VersionNotDraftError,
 } from "./db-service-errors.js";
 import { requireDraftVersion } from "./draft-guard.server.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 
 export type CopyVersionStructureInput = {
@@ -43,6 +44,9 @@ export const lockCourseForVersionMutation = (
  *
  * At most one Pending Version may exist per course — a leftover Pending (a
  * crash in the receipt→Promote gap) must be healed before another Submit.
+ *
+ * A publish name is unique within its course: Submit is where the name is
+ * written, so Submit is where it is checked (`VersionNameTakenError`).
  */
 export const freezeAndCloneVersion = <A, E>(
   db: Database,
@@ -59,6 +63,7 @@ export const freezeAndCloneVersion = <A, E>(
   | E
   | NotLatestVersionError
   | PendingVersionExistsError
+  | VersionNameTakenError
   | VersionNotDraftError
   | UnknownDBServiceError
 > =>
@@ -84,6 +89,29 @@ export const freezeAndCloneVersion = <A, E>(
           repoId: input.repoId,
           pendingVersionId: existingPending.id,
         });
+      }
+      // The name is written here and nowhere earlier, so a check before the
+      // Publish Job was enqueued cannot see a sibling Job's name: two
+      // Publishes of one name queued back to back both pass it. Under the
+      // course lock, this one cannot be raced.
+      if (input.sourceName !== "") {
+        const sameName = yield* makeDbCall(() =>
+          transaction.query.courseVersions.findFirst({
+            where: and(
+              eq(courseVersions.repoId, input.repoId),
+              eq(courseVersions.name, input.sourceName),
+              ne(courseVersions.id, input.sourceVersionId)
+            ),
+            columns: { id: true },
+          })
+        );
+        if (sameName) {
+          return yield* new VersionNameTakenError({
+            repoId: input.repoId,
+            name: input.sourceName,
+            existingVersionId: sameName.id,
+          });
+        }
       }
       // Clone first (its own latest + draft checks run against the untouched
       // source), then stamp the source as the Pending Version.

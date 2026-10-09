@@ -204,13 +204,24 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         // invalidate work already done.
         onStageChange?.("freezing");
         onStageChange?.("cloning");
-        const { version: newDraft } = yield* versionOps.freezeAndCloneVersion({
-          sourceVersionId: latestVersion.id,
-          repoId: courseId,
-          newVersionName: "",
-          sourceName: versionName,
-          sourceDescription: versionDescription,
-        });
+        const { version: newDraft } = yield* versionOps
+          .freezeAndCloneVersion({
+            sourceVersionId: latestVersion.id,
+            repoId: courseId,
+            newVersionName: "",
+            sourceName: versionName,
+            sourceDescription: versionDescription,
+          })
+          .pipe(
+            // A name another Version already wears (a second Publish of the
+            // same name queued before the first ran) is bad input, not a
+            // fault: the same validation error, so exit 3 and the same toast.
+            Effect.catchTag("VersionNameTakenError", (cause) =>
+              Effect.fail(
+                new PublishValidationError({ versionNameTaken: cause.name })
+              )
+            )
+          );
 
         // Re-walk with titles so both halves are observable per Video — the
         // export step emits the same events the standalone batchExport does,

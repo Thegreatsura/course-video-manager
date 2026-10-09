@@ -36,6 +36,9 @@ const EXIT_CODES: Record<string, number> = {
   // the Pending Version was auto-Discarded and the edits are safe in the new
   // Draft (issue #1401). Internal-failure class: exit 4.
   PublishCommitFailedError: 4,
+  // A Publish Job succeeded but its `published` Job Event was never written,
+  // so its ids are unknown. The release is out; the result is what failed.
+  PublishResultLostError: 4,
   // A write refused because it targeted a non-Draft (Pending/Published)
   // version — invalid input, like PublishValidationError.
   VersionNotDraftError: 3,
