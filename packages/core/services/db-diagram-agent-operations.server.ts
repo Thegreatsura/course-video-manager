@@ -1,10 +1,13 @@
 import type { Database } from "./drizzle-service.server.js";
 import { diagrams, diagramSnapshots } from "../db/schema.js";
-import type { NotFoundError } from "./db-service-errors.js";
-import { UnknownDBServiceError } from "./db-service-errors.js";
+import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { hashScene } from "../lib/scene-hash.js";
+import {
+  isHeadCaptured,
+  isVisibleInTimeline,
+} from "../lib/timeline-visibility.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 
 type Diagram = typeof diagrams.$inferSelect;
@@ -17,7 +20,6 @@ type DbError = UnknownDBServiceError;
  */
 export interface DiagramPrimitives {
   createDiagram: (opts?: { name?: string }) => Effect.Effect<Diagram, DbError>;
-  getDiagram: (id: string) => Effect.Effect<Diagram, NotFoundError | DbError>;
   storeSnapshot: (
     diagramId: string,
     scene: unknown,
@@ -75,7 +77,6 @@ const writesIn = (
   db: Database,
   {
     createDiagram,
-    getDiagram,
     storeSnapshot,
     setSnapshotArchived,
     restoreSnapshotToHead,
@@ -131,34 +132,73 @@ const writesIn = (
   });
 
   /**
+   * The Diagram, its row locked until the transaction ends. The autosave PATCH
+   * (`updateDiagramHead`) locks the same row, so a head read here cannot be
+   * overwritten by one in between: an autosave either commits first — and is
+   * the head this sees — or waits and is refused for a moved head.
+   */
+  const lockDiagram = Effect.fn("lockDiagram")(function* (diagramId: string) {
+    const [diagram] = yield* Effect.tryPromise({
+      try: () =>
+        db
+          .select()
+          .from(diagrams)
+          .where(eq(diagrams.id, diagramId))
+          .for("update"),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+    if (!diagram) {
+      return yield* new NotFoundError({
+        type: "addSnapshotToHead",
+        params: { diagramId },
+      });
+    }
+    return diagram;
+  });
+
+  /** The snapshots the Diagram's timeline shows — what the Playground lists. */
+  const timelineSnapshots = Effect.fn("timelineSnapshots")(function* (
+    diagramId: string
+  ) {
+    const rows = yield* Effect.tryPromise({
+      try: () =>
+        db.query.diagramSnapshots.findMany({
+          where: and(
+            eq(diagramSnapshots.diagramId, diagramId),
+            eq(diagramSnapshots.archived, false)
+          ),
+          columns: { contentHash: true, preserved: true },
+          with: { clips: { columns: { archived: true } } },
+        }),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+    return rows.filter((s) => isVisibleInTimeline(s, s.clips));
+  });
+
+  /**
    * Add `scene` to a Diagram as a Preserved Snapshot and make it the head, by
    * the Restore to Head rules: when no snapshot in the timeline holds the
    * current head (Matt drew on it by hand since), that drawing is preserved
-   * FIRST, so nothing is lost. A head with no shapes on it holds nothing worth
-   * keeping. `cvm diagram snapshot add` is the caller.
+   * FIRST, so nothing is lost. "Held" is the Playground's own rule
+   * (`isHeadCaptured`): a snapshot the timeline hides holds nothing. A head
+   * with no shapes on it holds nothing worth keeping. `cvm diagram snapshot
+   * add` is the caller.
    */
   const addSnapshotToHead = Effect.fn("addSnapshotToHead")(function* (
     diagramId: string,
     scene: unknown
   ) {
-    const current = yield* getDiagram(diagramId);
+    const current = yield* lockDiagram(diagramId);
 
     let preservedHead: DiagramSnapshot | null = null;
-    if (hasShapes(current.headScene)) {
-      const held = yield* Effect.tryPromise({
-        try: () =>
-          db.query.diagramSnapshots.findFirst({
-            where: and(
-              eq(diagramSnapshots.diagramId, diagramId),
-              eq(diagramSnapshots.contentHash, hashScene(current.headScene)),
-              eq(diagramSnapshots.archived, false)
-            ),
-          }),
-        catch: (e) => new UnknownDBServiceError({ cause: e }),
-      });
-      if (!held) {
-        preservedHead = yield* keepInTimeline(diagramId, current.headScene);
-      }
+    if (
+      hasShapes(current.headScene) &&
+      !isHeadCaptured(
+        yield* timelineSnapshots(diagramId),
+        hashScene(current.headScene)
+      )
+    ) {
+      preservedHead = yield* keepInTimeline(diagramId, current.headScene);
     }
 
     const snapshot = yield* keepInTimeline(diagramId, scene);

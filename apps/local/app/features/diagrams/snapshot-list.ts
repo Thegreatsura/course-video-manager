@@ -45,11 +45,9 @@ export async function fetchSnapshotList(
 }
 
 /**
- * Whether the current head state is already safely captured — i.e. some snapshot
- * *on the timeline* has the same content hash.
- *
- * When this is false, restoring discards work that exists nowhere else, which is
- * what the confirmation dialog is for.
+ * Whether the current head state is already safely captured. The rule lives in
+ * `@/lib/timeline-visibility` because `cvm diagram snapshot add` decides "is
+ * the head held?" with it too.
  *
  * Preserved and Clip-pinned both count. The endpoint has already dropped the
  * snapshots that are no longer visible, so anything still in this list is
@@ -59,10 +57,4 @@ export async function fetchSnapshotList(
  * would otherwise make the next keypress raise a dialog about the snapshot it
  * just landed on, so walking a run of them meant confirming every hop.
  */
-export function isHeadCaptured(
-  snapshots: readonly Snapshot[],
-  headContentHash: string | null
-): boolean {
-  if (headContentHash === null) return false;
-  return snapshots.some((s) => s.contentHash === headContentHash);
-}
+export { isHeadCaptured } from "@/lib/timeline-visibility";
