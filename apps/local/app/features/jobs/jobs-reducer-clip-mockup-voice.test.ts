@@ -67,12 +67,10 @@ describe("a Clip Mockup voice Job", () => {
     expect(toasts(tester)).toEqual([]);
   });
 
-  it("toasts its failure once every attempt is spent", () => {
+  it("shows no toast when it fails for good either: the Clip Mockup and the Jobs list show it", () => {
     const tester = new ReducerTester(jobsReducer, createInitialJobsState())
       .send(voice("started", { attempt: 3 }))
       .send(voice("failed", { error: { message: "the GPU would not load" } }));
-    expect(toasts(tester)).toMatchObject([
-      { type: "show-job-failed-toast", kind: "clip-mockup-voice" },
-    ]);
+    expect(toasts(tester)).toEqual([]);
   });
 });
