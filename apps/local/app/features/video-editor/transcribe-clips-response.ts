@@ -20,6 +20,50 @@ export const CLIP_TRANSCRIPTION_EVENTS = {
 } as const;
 
 /**
+ * The Clips of `clipIds` that a `transcribe-clips` Job's own Job Events
+ * (over every run of it) have not yet settled. A run put back by a
+ * deliberate stop takes on only these, so a Clip that already landed is
+ * never sent to Whisper twice; and a request for the same Clips joins a live
+ * Job only while it still holds all of them.
+ */
+export const unsettledClipIds = (
+  clipIds: ReadonlyArray<string>,
+  events: ReadonlyArray<{ readonly type: string; readonly data: unknown }>
+): string[] => {
+  const settled = new Set<string>();
+  for (const event of events) {
+    if (event.type !== CLIP_TRANSCRIPTION_EVENTS.clipSettled) continue;
+    const id = (event.data as { id?: unknown } | null)?.id;
+    if (typeof id === "string") settled.add(id);
+  }
+  return clipIds.filter((id) => !settled.has(id));
+};
+
+/**
+ * Whether a live `transcribe-clips` Job (its params and Job Events) still
+ * holds exactly the Clips `clipIds` names: the same set, none settled yet.
+ */
+export const liveJobCoversClips = (
+  clipIds: ReadonlyArray<string>,
+  live: {
+    readonly params: unknown;
+    readonly events: ReadonlyArray<{
+      readonly type: string;
+      readonly data: unknown;
+    }>;
+  }
+): boolean => {
+  const liveIds = (live.params as { clipIds?: unknown } | null)?.clipIds;
+  if (!Array.isArray(liveIds)) return false;
+  const wanted = new Set(clipIds);
+  const held = new Set(liveIds as string[]);
+  if (held.size !== wanted.size || [...wanted].some((id) => !held.has(id))) {
+    return false;
+  }
+  return unsettledClipIds([...held], live.events).length === held.size;
+};
+
+/**
  * One Clip's Transcription, as a `clip-settled` Job Event carries it: either
  * it landed (its new text, and whether it gave the Clip any Transcript
  * Words), or it failed. The clip reducer lands it on the Clip

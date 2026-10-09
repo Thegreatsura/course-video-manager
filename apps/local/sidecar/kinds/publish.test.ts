@@ -57,7 +57,8 @@ const untouched = Layer.mergeAll(
 const fakePublish = (
   script: (
     emit: EmitPublishDetailEvent,
-    stage: NonNullable<PublishOptions["onStageChange"]>
+    stage: NonNullable<PublishOptions["onStageChange"]>,
+    submitted: NonNullable<PublishOptions["onSubmitted"]>
   ) => void,
   end: Effect.Effect<typeof RESULT, unknown> = Effect.succeed(RESULT)
 ) =>
@@ -67,7 +68,8 @@ const fakePublish = (
         calls.push(options);
         script(
           options.onDetailEvent ?? (() => {}),
-          options.onStageChange ?? (() => {})
+          options.onStageChange ?? (() => {}),
+          options.onSubmitted ?? (() => {})
         );
         return yield* end;
       }),
@@ -146,6 +148,8 @@ describe("the publish Job kind", () => {
         expect(yield* publishEvents(job.id)).toEqual([
           "stage validating",
           "stage freezing",
+          // Past Submit: from here a failure may leave a Pending Version.
+          "submitted",
           "videos",
           "video-upload-queued video-b",
           "stage exporting",
@@ -161,6 +165,10 @@ describe("the publish Job kind", () => {
           "published",
         ]);
         const ops = yield* JobOperationsService;
+        const submitted = (yield* ops.listJobEvents(job.id)).find(
+          (e) => e.type === "submitted"
+        );
+        expect(submitted?.data).toEqual({ pendingVersionId: "version-1" });
         const published = (yield* ops.listJobEvents(job.id)).find(
           (e) => e.type === "published"
         );
@@ -172,9 +180,10 @@ describe("the publish Job kind", () => {
       }).pipe(
         Effect.provide(
           layer(
-            fakePublish((emit, stage) => {
+            fakePublish((emit, stage, submitted) => {
               stage("validating");
               stage("freezing");
+              submitted({ pendingVersionId: "version-1" });
               emit({
                 event: "upload-videos",
                 data: {

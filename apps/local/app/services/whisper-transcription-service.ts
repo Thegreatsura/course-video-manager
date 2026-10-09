@@ -33,6 +33,31 @@ const transcribeClipsSchema = Schema.Array(
   })
 );
 
+/**
+ * Where `extractAudio` writes one call's mp3: named for what it holds, plus a
+ * nonce, so two calls for the same range at once (two Jobs for the same Clip)
+ * never overwrite or delete each other's file.
+ */
+export const whisperAudioPath = (
+  outputDir: string,
+  inputVideo: string,
+  range: { startTime: number; duration: number } | undefined
+): string => {
+  const outputHash = crypto
+    .createHash("sha256")
+    .update(
+      range
+        ? `${inputVideo}-${range.startTime}-${range.duration}`
+        : `${inputVideo}-full-audio`
+    )
+    .digest("hex")
+    .slice(0, 12);
+  return path.join(
+    outputDir,
+    `${outputHash}-${crypto.randomUUID().slice(0, 8)}.mp3`
+  );
+};
+
 class CouldNotTranscribeError extends Data.TaggedError(
   "CouldNotTranscribeError"
 )<{
@@ -81,16 +106,7 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
         const outputDir = path.join(tmpdir(), "whisper-audio");
         yield* effectFs.makeDirectory(outputDir, { recursive: true });
 
-        const outputHash = crypto
-          .createHash("sha256")
-          .update(
-            range
-              ? `${inputVideo}-${range.startTime}-${range.duration}`
-              : `${inputVideo}-full-audio`
-          )
-          .digest("hex")
-          .slice(0, 12);
-        const outputFile = path.join(outputDir, `${outputHash}.mp3`);
+        const outputFile = whisperAudioPath(outputDir, inputVideo, range);
 
         const rangeArgs = range
           ? ["-ss", range.startTime.toString(), "-t", range.duration.toString()]

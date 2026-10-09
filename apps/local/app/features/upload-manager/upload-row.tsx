@@ -52,8 +52,9 @@ export function UploadRow({
   /** A failed or interrupted post's check and Retry; `null` otherwise. */
   post?: PostRowControls | null;
   /**
-   * An interrupted Publish: the publish page, where its Pending Version is
-   * Promoted or Discarded by hand. `null` otherwise.
+   * A Publish that was cut off, or failed past Submit without Discarding: the
+   * publish page, where its Pending Version is Promoted or Discarded by hand.
+   * `null` otherwise (`publishRecoveryHrefOf`).
    */
   publishRecoveryHref?: string | null;
   /** Called when a link in the row takes the author to another page. */
@@ -231,7 +232,7 @@ function UploadStatusDetail({
     case "error":
       if (publishRecoveryHref) {
         return (
-          <InterruptedPublishDetail
+          <PublishRecoveryDetail
             message={upload.errorMessage}
             logHref={logHref}
             recoveryHref={publishRecoveryHref}
@@ -283,10 +284,11 @@ function UploadStatusDetail({
 }
 
 /**
- * A Publish that was cut off (plan §7.2): it never runs again on its own, and
- * a Pending Version it may have left is reconciled on the publish page.
+ * A Publish that was cut off, or failed past Submit (plan §7.2): it never runs
+ * again on its own, and a Pending Version it may have left is reconciled on
+ * the publish page.
  */
-function InterruptedPublishDetail({
+function PublishRecoveryDetail({
   message,
   logHref,
   recoveryHref,

@@ -122,6 +122,62 @@ describe("CoursePublishService — Submit before export", () => {
     );
   });
 
+  it("reports Submit once it has landed, naming the Pending Version it made", async () => {
+    // The publish Job kind turns this into its `submitted` Job Event: from
+    // then on, a failure may leave a Pending Version for the author.
+    const { course, version, run } = await setup();
+    const timeline: string[] = [];
+    await run(
+      Effect.gen(function* () {
+        const svc = yield* CoursePublishService;
+        yield* svc.publish({
+          courseId: course.id,
+          versionName: "v1.0",
+          versionDescription: "First release",
+          includeTodoLessons: true,
+          placeholderFloor: ANNOUNCE_NOTHING,
+          onStageChange: (stage) => {
+            timeline.push(stage);
+          },
+          onSubmitted: ({ pendingVersionId }) => {
+            timeline.push(`submitted ${pendingVersionId}`);
+          },
+        });
+      })
+    );
+    const submittedAt = timeline.indexOf(`submitted ${version.id}`);
+    expect(timeline.filter((t) => t.startsWith("submitted"))).toHaveLength(1);
+    expect(submittedAt).toBeGreaterThan(timeline.indexOf("cloning"));
+    expect(submittedAt).toBeLessThan(timeline.indexOf("uploading"));
+  });
+
+  it("never reports Submit for a Publish refused at Submit", async () => {
+    const { course, run } = await setup();
+    const submitted: string[] = [];
+    const publishV1 = Effect.gen(function* () {
+      const svc = yield* CoursePublishService;
+      return yield* svc.publish({
+        courseId: course.id,
+        versionName: "v1.0.0",
+        versionDescription: "d",
+        includeTodoLessons: true,
+        placeholderFloor: ANNOUNCE_NOTHING,
+        onSubmitted: ({ pendingVersionId }) => {
+          submitted.push(pendingVersionId);
+        },
+      });
+    });
+    await run(
+      Effect.gen(function* () {
+        yield* publishV1;
+        // The name is taken now: Submit refuses the second inside its
+        // transaction, so it never got past Submit.
+        yield* publishV1.pipe(Effect.flip);
+      })
+    );
+    expect(submitted).toHaveLength(1);
+  });
+
   it("Discards the Pending Version when export fails, leaving no version to reconcile", async () => {
     const failingMock = Layer.succeed(VideoExportService, {
       exportVideoClips: () =>
