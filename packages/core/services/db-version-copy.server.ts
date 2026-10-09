@@ -337,6 +337,8 @@ export const createVersionCopyOps = (db: Database) => {
                     imagePath: clipMockup.imagePath,
                     audioPath: clipMockup.audioPath,
                     durationSeconds: clipMockup.durationSeconds,
+                    voiceStatus: clipMockup.voiceStatus,
+                    voiceError: clipMockup.voiceError,
                     order: clipMockup.order,
                   }))
                 )

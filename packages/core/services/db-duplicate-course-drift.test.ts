@@ -114,7 +114,15 @@ describe("duplicateCourse — schema-drift guard", () => {
     },
     clipMockup: {
       table: schema.clipMockups,
-      copied: ["line", "imagePath", "audioPath", "durationSeconds", "order"],
+      copied: [
+        "line",
+        "imagePath",
+        "audioPath",
+        "durationSeconds",
+        "voiceStatus",
+        "voiceError",
+        "order",
+      ],
       notCopied: ["id", "videoId", "archived", "createdAt"],
     },
     clipMockupChapter: {
@@ -239,6 +247,8 @@ describe("duplicateCourse — schema-drift guard", () => {
       imagePath: "frame-001.png",
       audioPath: "speech-001.wav",
       durationSeconds: 2.75,
+      voiceStatus: "failed",
+      voiceError: "Coverage voice error",
       order: "m",
     });
     const [coverageChapter] = await testDb
