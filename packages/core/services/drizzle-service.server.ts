@@ -37,6 +37,25 @@ export class GitWorktreeProbe extends Context.Tag("GitWorktreeProbe")<
   });
 }
 
+/**
+ * The connection pool, with the error listener `pg` requires. A pooled
+ * connection the database drops while it sits idle (a restart, a network
+ * blip, the pooler recycling it) makes the pool emit `error`; with no
+ * listener that is an uncaught exception, and it killed the whole process —
+ * the sidecar on any database outage, the app server too. The pool has
+ * already dropped the dead connection; the next query opens a fresh one, and
+ * fails as a query (a tagged error) while the database is still away.
+ */
+export const makeConnectionPool = (url: string): Pool => {
+  const pool = new Pool({ connectionString: url });
+  pool.on("error", (error) => {
+    console.error(
+      `[db] a pooled connection dropped (${error.message}); the next query opens a new one`
+    );
+  });
+  return pool;
+};
+
 export class DrizzleService extends Effect.Service<DrizzleService>()(
   "DrizzleService",
   {
@@ -60,7 +79,7 @@ export class DrizzleService extends Effect.Service<DrizzleService>()(
         return yield* Effect.die(new Error(formatConnectionRefusal(verdict)));
       }
       const logger = sqlStatementLogger();
-      return drizzle(new Pool({ connectionString: url }), {
+      return drizzle(makeConnectionPool(url), {
         schema,
         ...(logger ? { logger } : {}),
       }) as DrizzleDB;
