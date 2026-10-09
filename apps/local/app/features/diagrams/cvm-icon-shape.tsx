@@ -23,6 +23,7 @@ import {
   resizeBox,
   type Geometry2d,
   type RecordProps,
+  type SvgExportContext,
   type TLBaseShape,
   type TLDefaultColorStyle,
   type TLDefaultDashStyle,
@@ -165,8 +166,26 @@ export class CvmIconShapeUtil extends BaseBoxShapeUtil<CvmIconShape> {
   }
 
   override component(shape: CvmIconShape) {
-    const colors =
-      this.editor.getCurrentTheme().colors[this.editor.getColorMode()];
+    return (
+      <SVGContainer>
+        {this.glyph(shape, this.editor.getColorMode())}
+      </SVGContainer>
+    );
+  }
+
+  /**
+   * The same glyph as plain SVG, for `toImage` / `getSvgString` (snapshot
+   * thumbnails and `cvm diagram create`'s PNG). Without it tldraw exports the
+   * HTML component in a `foreignObject` sized to the glyph's stroke bounds,
+   * which cuts the icon off part way down. The export's own colour mode is
+   * used, so a light render of a dark-mode editor gets light-mode colours.
+   */
+  override toSvg(shape: CvmIconShape, ctx: SvgExportContext) {
+    return <g>{this.glyph(shape, ctx.colorMode)}</g>;
+  }
+
+  private glyph(shape: CvmIconShape, colorMode: "dark" | "light") {
+    const colors = this.editor.getCurrentTheme().colors[colorMode];
     const color = getColorValue(colors, shape.props.color, "solid");
     const path = getIconPathBuilder(shape.props.name, iconSide(shape));
 
@@ -177,7 +196,7 @@ export class CvmIconShapeUtil extends BaseBoxShapeUtil<CvmIconShape> {
     // table removal.
     if (!path) {
       return (
-        <SVGContainer>
+        <>
           <title>{`Unknown icon "${shape.props.name}"`}</title>
           <rect
             x={1}
@@ -190,12 +209,12 @@ export class CvmIconShapeUtil extends BaseBoxShapeUtil<CvmIconShape> {
             strokeDasharray="4 4"
             aria-label={`Unknown icon ${shape.props.name}`}
           />
-        </SVGContainer>
+        </>
       );
     }
 
     return (
-      <SVGContainer>
+      <>
         <title>{shape.props.name}</title>
         {/* Fill pass, under the stroke pass: the handful of lucide dots and
             pupils carrying fill="currentColor". They share the shape's colour —
@@ -212,7 +231,7 @@ export class CvmIconShapeUtil extends BaseBoxShapeUtil<CvmIconShape> {
             strokeLinejoin: "round",
           },
         })}
-      </SVGContainer>
+      </>
     );
   }
 

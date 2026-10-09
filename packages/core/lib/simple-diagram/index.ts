@@ -25,6 +25,7 @@ export {
   DEFAULTS,
   FILLS,
   HEADS,
+  SHAPE_SCHEMAS,
   SHAPE_TYPES,
   SIZES,
   type SimpleArrow,

@@ -32,7 +32,8 @@ const createDiagramOperations = (
   db: Database,
   thumbnails: DiagramThumbnailStoreApi
 ) => {
-  const createDiagram = Effect.fn("createDiagram")(function* () {
+  /** The lowest "Untitled N" no live Diagram is already called. */
+  const nextUntitledName = Effect.fn("nextUntitledName")(function* () {
     const existing = yield* makeDbCall(() =>
       db.query.diagrams.findMany({
         where: eq(diagrams.archived, false),
@@ -52,11 +53,31 @@ const createDiagramOperations = (
     while (usedNumbers.has(nextNumber)) {
       nextNumber++;
     }
+    return `Untitled ${nextNumber}`;
+  });
+
+  /**
+   * A new Diagram. The playground calls it bare and gets an empty "Untitled
+   * N". `cvm diagram create` passes the scene an agent drew as its head, and
+   * the name if the agent gave one, in the same insert, so a Diagram is never
+   * seen half-made.
+   */
+  const createDiagram = Effect.fn("createDiagram")(function* (opts?: {
+    name?: string;
+    headScene?: unknown;
+  }) {
+    const headScene = opts?.headScene ?? null;
+    const name = opts?.name?.trim() || (yield* nextUntitledName());
 
     const results = yield* makeDbCall(() =>
       db
         .insert(diagrams)
-        .values({ name: `Untitled ${nextNumber}` })
+        .values({
+          name,
+          headScene,
+          searchText:
+            headScene === null ? undefined : extractSceneText(headScene),
+        })
         .returning()
     );
 

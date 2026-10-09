@@ -7,6 +7,8 @@ import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { CourseWriteService } from "@/services/course-write-service";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
+import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
+import { diagramService } from "./rpc-layer.diagram";
 import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
@@ -498,6 +500,7 @@ export type RemoteServices =
   | ClipMockupCommentOperationsService
   | PitchOperationsService
   | DeliverableOperationsService
+  | DiagramOperationsService
   | CourseWriteService;
 
 /**
@@ -546,6 +549,7 @@ export const makeRemoteLayer = (
     ),
     remoteLayer(PitchOperationsService, pitchService, client),
     remoteLayer(DeliverableOperationsService, deliverableService, client),
+    remoteLayer(DiagramOperationsService, diagramService, client),
     remoteLayer(CourseWriteService, courseWriteService, client)
   );
 };
