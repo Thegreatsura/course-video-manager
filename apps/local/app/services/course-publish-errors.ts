@@ -7,6 +7,8 @@ export class PublishValidationError extends Data.TaggedError(
   failedExportVideoIds?: string[];
   missingVideoIds?: string[];
   unfrozenCourseVersionId?: string;
+  /** Submit found another Version of the course already wearing this name. */
+  versionNameTaken?: string;
 }> {}
 
 /**

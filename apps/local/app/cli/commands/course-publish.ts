@@ -44,8 +44,11 @@ import { waitForPublishJob } from "./course-publish-wait";
  *   The version name MUST be a lowercase-'v' prefixed semver — `v1.2.3`,
  *   optionally with a `-prerelease` and/or `+build` suffix. We validate the
  *   SHAPE here (exit 3 on a bad name) and additionally refuse a name already
- *   worn by a Published Version of this course, so a publish can never silently
- *   duplicate a release tag.
+ *   worn by a Published Version of this course. That check is only a fast
+ *   path: the name is written at Submit, inside the Job, so Submit checks it
+ *   again under the course lock (`VersionNameTakenError` →
+ *   `PublishValidationError`) — two Publishes of one name queued back to back
+ *   both pass this one.
  */
 
 // The official SemVer 2.0.0 regex, prefixed with a required lowercase `v`.
@@ -174,7 +177,10 @@ VERSION NAME (--name, required)
   Must be a lowercase-'v' prefixed SemVer: v<major>.<minor>.<patch>, optionally
   with a -prerelease and/or +build suffix. Examples: v1.0.0, v2.3.1,
   v1.0.0-beta.2. A malformed name, or one already used by a Published Version of
-  this course, is rejected (exit 3) before anything is written.
+  this course, is rejected (exit 3) before anything is written. The name is
+  checked again at Submit, so a second Publish of the same name queued before
+  the first ran ends PublishValidationError { versionNameTaken } (exit 3, with
+  --wait) and releases nothing.
 
 THE PLACEHOLDER FLOOR (--placeholders)
   A PLACEHOLDER LESSON is a Lesson this release announces by title alone — no
@@ -259,7 +265,9 @@ OUTPUT
   ({ "event": "stage", "stage": "exporting" }, …); a failure's tagged object is
   the LAST line of STDERR. A failed Publish ends PublishValidationError (exit
   3) or PublishCommitFailedError (exit 4) as before, or PublishJobFailedError
-  (exit 4) for any other cause — read the Job's log for the whole chain.
+  (exit 4) for any other cause — read the Job's log for the whole chain. A Job
+  that succeeded but never recorded its result ends PublishResultLostError
+  (exit 4): the release IS out, so do not publish again.
   Errors go to STDERR as the usual tagged contract object.
 
 EXAMPLES
