@@ -27,10 +27,13 @@ import { teleprompterSession } from "@/features/teleprompter/teleprompter-sessio
 import { SessionMarks } from "@/features/teleprompter/session-marks";
 import { LatestTranscript } from "@/features/teleprompter/latest-transcript";
 import { VideoLength } from "@/features/teleprompter/video-length";
+import { NO_TOASTS } from "@/lib/route-toasts";
 import type { Route } from "./+types/teleprompter";
 
 const PING_INTERVAL_MS = 2000;
 const POLL_INTERVAL_MS = 3000;
+
+export const handle = NO_TOASTS;
 
 export const meta: Route.MetaFunction = () => [{ title: "Teleprompter" }];
 
