@@ -3,7 +3,13 @@ import { JOB_PARAMS } from "../job-params";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { CoursePublishService } from "@/services/course-publish-service";
 import type { PublishDetailEvent } from "@/services/course-publish-export-events";
-import { defineJobKind, type JobContext, type LostJob } from "../job-kind";
+import {
+  defineJobKind,
+  type EnqueueJob,
+  type JobContext,
+  type LostJob,
+  type LostRunContext,
+} from "../job-kind";
 import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 
 /**
@@ -32,23 +38,23 @@ const ATTEMPTS_SPENT_IN_THE_BATCH = 1;
 
 /**
  * Hand a Video on as its own `export` Job, with the attempts the browser
- * would have given it. Written straight to the job table, beside the
- * `video-handed-off` event the row is replaced by: `enqueueJob` lives with
- * the kind registry, which imports this file.
+ * would have given it, through the one enqueue path (`ctx.enqueue`), then
+ * record the `video-handed-off` event the row is replaced by.
  */
-const handOff = (batchJobId: string, video: { id: string; title: string }) =>
+const handOff = (
+  enqueue: EnqueueJob,
+  batchJobId: string,
+  video: { id: string; title: string }
+) =>
   Effect.gen(function* () {
     const ops = yield* JobOperationsService;
-    const policy = UPLOAD_MANAGER_POLICIES.export;
-    const job = yield* ops.enqueueJob({
-      id: null,
+    const job = yield* enqueue({
       kind: "export",
       title: video.title,
-      lane: policy.lane,
       params: { videoId: video.id },
-      maxAttempts: policy.maxAttempts - ATTEMPTS_SPENT_IN_THE_BATCH,
-      dependsOn: null,
       subject: { type: "video", id: video.id },
+      attemptsSpent: ATTEMPTS_SPENT_IN_THE_BATCH,
+      dependsOn: null,
     });
     yield* ops.appendJobEvent({
       jobId: batchJobId,
@@ -101,15 +107,17 @@ const progressSoFar = (batchJobId: string) =>
     return { announced, succeeded, handedOff };
   });
 
-const handOffUnfinished = (batch: LostJob) =>
+const handOffUnfinished = (batch: LostJob, ctx: LostRunContext) =>
   Effect.gen(function* () {
     const { announced, succeeded, handedOff } = yield* progressSoFar(batch.id);
     const unfinished = announced.filter(
       (video) => !succeeded.has(video.id) && !handedOff.has(video.id)
     );
-    yield* Effect.forEach(unfinished, (video) => handOff(batch.id, video), {
-      discard: true,
-    });
+    yield* Effect.forEach(
+      unfinished,
+      (video) => handOff(ctx.enqueue, batch.id, video),
+      { discard: true }
+    );
   });
 
 /**
@@ -159,7 +167,7 @@ const reportInOrder = (ctx: JobContext) =>
             // The browser retried a failed row at once, on its own, while
             // the rest of the batch carried on. So does the sidecar.
             const videoId = event.data.videoId;
-            return yield* handOff(ctx.jobId, {
+            return yield* handOff(ctx.enqueue, ctx.jobId, {
               id: videoId,
               title: titles.get(videoId) ?? videoId,
             }).pipe(
@@ -252,7 +260,7 @@ export const batchExportJobKind = defineJobKind({
           Effect.tapErrorCause((cause) =>
             Cause.isInterruptedOnly(cause)
               ? Effect.void
-              : handOffUnfinished({ id: ctx.jobId, title: "" }).pipe(
+              : handOffUnfinished({ id: ctx.jobId, title: "" }, ctx).pipe(
                   Effect.catchAllCause((cause) =>
                     Effect.logError(
                       "batch-export: could not hand the unfinished Videos on",
