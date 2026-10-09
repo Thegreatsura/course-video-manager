@@ -1,6 +1,7 @@
 import { Config, Data, Effect } from "effect";
 import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
 import { getValidOAuthAccessToken } from "@/services/oauth-token-refresh";
+import { dropboxApiUrl } from "./dropbox-http-client";
 
 export class DropboxAuthError extends Data.TaggedError("DropboxAuthError")<{
   message: string;
@@ -26,9 +27,10 @@ export const dropboxAppCredentials = Config.all({
 
 export const getValidDropboxAccessToken = Effect.gen(function* () {
   const linkAuthOps = yield* LinkAuthOperationsService;
+  const apiUrl = yield* dropboxApiUrl;
   return yield* getValidOAuthAccessToken({
     name: "Dropbox",
-    tokenEndpoint: "https://api.dropboxapi.com/oauth2/token",
+    tokenEndpoint: `${apiUrl}/oauth2/token`,
     clientCredentials: dropboxAppCredentials,
     getStoredTokens: linkAuthOps.getDropboxAuth(),
     saveAccessToken: linkAuthOps.updateDropboxAccessToken,
