@@ -1,42 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { TLStoreSnapshot } from "tldraw";
 import {
   isCanvasEditable,
   mustKeepCanvasBeforeLeaving,
   STATUS_ERROR_MS,
   type StoredHead,
 } from "./diagram-playground-reducer";
-import type { Snapshot } from "./snapshot-list";
 import {
   loaded,
   openPage,
   scene,
+  shown,
   storedHead,
   T0,
   T1,
   T2,
 } from "./diagram-playground-reducer-test-helpers";
-
-const shown = (
-  diagramId: string,
-  headScene: TLStoreSnapshot | null,
-  opts: { stored?: StoredHead; centreCamera?: boolean } = {}
-) => ({
-  type: "show-head" as const,
-  diagramId,
-  scene: headScene,
-  stored: opts.stored ?? storedHead(`head-${diagramId}`, T0),
-  centreCamera: opts.centreCamera ?? true,
-});
-
-const snapshot = (id: string): Snapshot => ({
-  id,
-  diagramId: "d1",
-  scene: scene(id),
-  contentHash: `hash-${id}`,
-  preserved: true,
-  createdAt: "2026-10-07T00:00:00.000Z",
-});
 
 describe("diagramPlaygroundReducer", () => {
   it("opening a diagram shows its head without ever saving it", () => {
@@ -100,79 +78,6 @@ describe("diagramPlaygroundReducer", () => {
       status: "loading",
     });
     expect(tester.getEffects()).toEqual([]);
-  });
-
-  it("restoring over a canvas the timeline hasn't captured asks first, then shows the restored head", () => {
-    const tester = openPage()
-      .send(loaded("d1", scene("d1")))
-      .resetExec()
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s1"),
-        headIsCaptured: false,
-        canvasIsEmpty: false,
-        requestId: 7,
-      });
-
-    expect(tester.getState().pendingRestore).toEqual(snapshot("s1"));
-
-    tester
-      .send({ type: "restore-dismissed" })
-      .send({ type: "restore-confirmed", snapshot: snapshot("s1") })
-      .send({
-        type: "restore-succeeded",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        stored: storedHead("hash-s1", T1),
-      });
-
-    expect(tester.getState().pendingRestore).toBeNull();
-    expect(tester.getEffects()).toEqual([
-      { type: "release-restore-request", requestId: 7 },
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        requestId: null,
-      },
-      shown("d1", scene("s1"), { stored: storedHead("hash-s1", T1) }),
-    ]);
-  });
-
-  it("restores straight away when the head is already on the timeline or the canvas is empty", () => {
-    const tester = openPage()
-      .send(loaded("d1", scene("d1")))
-      .resetExec()
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s1"),
-        headIsCaptured: true,
-        canvasIsEmpty: false,
-        requestId: 1,
-      })
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s2"),
-        headIsCaptured: false,
-        canvasIsEmpty: true,
-        requestId: 2,
-      });
-
-    expect(tester.getState().pendingRestore).toBeNull();
-    expect(tester.getEffects()).toEqual([
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        requestId: 1,
-      },
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s2"),
-        requestId: 2,
-      },
-    ]);
   });
 
   it("preserving ignores repeat clicks until it finishes, and a failure can be retried", () => {
