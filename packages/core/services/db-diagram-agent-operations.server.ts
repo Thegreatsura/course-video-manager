@@ -9,6 +9,7 @@ import {
   isVisibleInTimeline,
 } from "../lib/timeline-visibility.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
+import { lockDiagram } from "./lock-diagram.server.js";
 
 type Diagram = typeof diagrams.$inferSelect;
 type DiagramSnapshot = typeof diagramSnapshots.$inferSelect;
@@ -131,31 +132,6 @@ const writesIn = (
       : snapshot;
   });
 
-  /**
-   * The Diagram, its row locked until the transaction ends. The autosave PATCH
-   * (`updateDiagramHead`) locks the same row, so a head read here cannot be
-   * overwritten by one in between: an autosave either commits first — and is
-   * the head this sees — or waits and is refused for a moved head.
-   */
-  const lockDiagram = Effect.fn("lockDiagram")(function* (diagramId: string) {
-    const [diagram] = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .select()
-          .from(diagrams)
-          .where(eq(diagrams.id, diagramId))
-          .for("update"),
-      catch: (e) => new UnknownDBServiceError({ cause: e }),
-    });
-    if (!diagram) {
-      return yield* new NotFoundError({
-        type: "addSnapshotToHead",
-        params: { diagramId },
-      });
-    }
-    return diagram;
-  });
-
   /** The snapshots the Diagram's timeline shows — what the Playground lists. */
   const timelineSnapshots = Effect.fn("timelineSnapshots")(function* (
     diagramId: string
@@ -188,7 +164,7 @@ const writesIn = (
     diagramId: string,
     scene: unknown
   ) {
-    const current = yield* lockDiagram(diagramId);
+    const current = yield* lockDiagram(db, diagramId, "addSnapshotToHead");
 
     let preservedHead: DiagramSnapshot | null = null;
     if (
