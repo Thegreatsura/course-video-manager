@@ -166,6 +166,20 @@ export const FOOTAGE_TRANSCRIPTION_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Image upload** to Cloudinary was never an Upload Manager job either: the
+ * Article Writer's Apply and the Skills Changelog's "Upload Images" awaited
+ * one `POST /api/videos/<id>/upload-images`, and a failure was final — no
+ * retry. So: 1 attempt, both for the upload and for removing the local files
+ * afterwards. Not `neverRequeued`: both are safe to run again (an image
+ * already recorded is not uploaded twice, and a file already gone is the goal
+ * reached), so a deliberate stop puts them back (section 7.5's rule).
+ */
+export const IMAGE_UPLOAD_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */
