@@ -5,10 +5,11 @@ import type { RemoteRuntime } from "../runtime.js";
 
 /**
  * The `diagram` verb group: `cvm diagram create` — a new Diagram, drawn by an
- * agent in the simple shape format and stored as its head scene.
+ * agent in the simple shape format and kept as Preserved Snapshots, the first
+ * restored to the head.
  */
 export const diagramRoutes = (runtime: RemoteRuntime) =>
   new Hono().post(
-    "/createDiagram",
-    forward(runtime, DiagramOperationsService, "createDiagram")
+    "/createDiagramFromSnapshots",
+    forward(runtime, DiagramOperationsService, "createDiagramFromSnapshots")
   );

@@ -217,9 +217,11 @@ WRITES
                                      'archive' is the only hide
     diagram create                   draft a NEW Diagram in the simple shape
                                      format — boxes, text, arrows, lines,
-                                     icons — and get back its playground url
-                                     and a PNG to check (LOCAL-ONLY; the
-                                     format is in 'cvm diagram --help')
+                                     icons — one drawing or a batch, each kept
+                                     as a Preserved Snapshot; get back its
+                                     playground url and a PNG per snapshot to
+                                     check (LOCAL-ONLY; the format is in
+                                     'cvm diagram --help')
     course  publish                  Submit the Draft as a Pending Version,
                                      Commit it to Dropbox, Promote to Published
                                      (--name vX.Y.Z, a lowercase-'v' semver)

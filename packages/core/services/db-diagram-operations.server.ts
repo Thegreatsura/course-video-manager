@@ -61,28 +61,17 @@ const createDiagramOperations = (
   });
 
   /**
-   * A new Diagram. The playground calls it bare and gets an empty "Untitled
-   * N". `cvm diagram create` passes the scene an agent drew as its head, and
-   * the name if the agent gave one, in the same insert, so a Diagram is never
-   * seen half-made.
+   * A new, empty Diagram: "Untitled N" unless a name is given. Its head starts
+   * empty; a drawing reaches it only through a snapshot (see
+   * `createDiagramFromSnapshots`) or the playground's own head writes.
    */
   const createDiagram = Effect.fn("createDiagram")(function* (opts?: {
     name?: string;
-    headScene?: unknown;
   }) {
-    const headScene = opts?.headScene ?? null;
     const name = opts?.name?.trim() || (yield* nextUntitledName());
 
     const results = yield* makeDbCall(() =>
-      db
-        .insert(diagrams)
-        .values({
-          name,
-          headScene,
-          searchText:
-            headScene === null ? undefined : extractSceneText(headScene),
-        })
-        .returning()
+      db.insert(diagrams).values({ name }).returning()
     );
 
     const diagram = results[0];
@@ -352,31 +341,17 @@ const createDiagramOperations = (
     }
   });
 
-  const createSnapshot = Effect.fn("createSnapshot")(function* (
+  /**
+   * Keep `scene` as one of the Diagram's snapshots. Snapshots are unique per
+   * drawing (content hash), so storing a drawing the Diagram already holds
+   * returns that snapshot, preserving it if asked.
+   */
+  const storeSnapshot = Effect.fn("storeSnapshot")(function* (
     diagramId: string,
+    scene: unknown,
     opts: { preserved?: boolean; thumbnailPng?: Buffer }
   ) {
-    const diagram = yield* makeDbCall(() =>
-      db.query.diagrams.findFirst({
-        where: eq(diagrams.id, diagramId),
-      })
-    );
-
-    if (!diagram) {
-      return yield* new NotFoundError({
-        type: "createSnapshot",
-        params: { diagramId },
-      });
-    }
-
-    if (diagram.headScene == null) {
-      return yield* new NotFoundError({
-        type: "createSnapshot",
-        params: { diagramId, reason: "headScene is null" },
-      });
-    }
-
-    const contentHash = hashScene(diagram.headScene);
+    const contentHash = hashScene(scene);
     const preserved = opts.preserved ?? false;
 
     // Write thumbnail before DB so a row never references a missing file.
@@ -418,14 +393,14 @@ const createDiagramOperations = (
       return existing;
     }
 
-    const searchText = extractSceneText(diagram.headScene);
+    const searchText = extractSceneText(scene);
 
     const results = yield* makeDbCall(() =>
       db
         .insert(diagramSnapshots)
         .values({
           diagramId,
-          scene: diagram.headScene!,
+          scene,
           contentHash,
           preserved,
           searchText,
@@ -440,6 +415,33 @@ const createDiagramOperations = (
       });
     }
     return snapshot;
+  });
+
+  const createSnapshot = Effect.fn("createSnapshot")(function* (
+    diagramId: string,
+    opts: { preserved?: boolean; thumbnailPng?: Buffer }
+  ) {
+    const diagram = yield* makeDbCall(() =>
+      db.query.diagrams.findFirst({
+        where: eq(diagrams.id, diagramId),
+      })
+    );
+
+    if (!diagram) {
+      return yield* new NotFoundError({
+        type: "createSnapshot",
+        params: { diagramId },
+      });
+    }
+
+    if (diagram.headScene == null) {
+      return yield* new NotFoundError({
+        type: "createSnapshot",
+        params: { diagramId, reason: "headScene is null" },
+      });
+    }
+
+    return yield* storeSnapshot(diagramId, diagram.headScene, opts);
   });
 
   const listSnapshots = Effect.fn("listSnapshots")(function* (
@@ -624,6 +626,38 @@ const createDiagramOperations = (
     return yield* restoreSnapshotToHead(diagramId, snapshotId);
   });
 
+  /**
+   * A new Diagram whose timeline is `scenes`, in order: each is kept as a
+   * Preserved Snapshot, then the FIRST is restored to the head. The head is
+   * never written any other way, so what an agent drew is always held by a
+   * snapshot. `cvm diagram create` is the caller; it refuses an empty list
+   * and two identical drawings before it gets here.
+   */
+  const createDiagramFromSnapshots = Effect.fn("createDiagramFromSnapshots")(
+    function* (opts: { name?: string; scenes: readonly unknown[] }) {
+      const [firstScene, ...rest] = opts.scenes;
+      if (firstScene === undefined) {
+        return yield* new UnknownDBServiceError({
+          cause: "createDiagramFromSnapshots needs at least one scene",
+        });
+      }
+
+      const created = yield* createDiagram({ name: opts.name });
+      const first = yield* storeSnapshot(created.id, firstScene, {
+        preserved: true,
+      });
+      const snapshots = [first];
+      for (const scene of rest) {
+        snapshots.push(
+          yield* storeSnapshot(created.id, scene, { preserved: true })
+        );
+      }
+
+      const diagram = yield* restoreSnapshotToHead(created.id, first.id);
+      return { diagram, snapshots };
+    }
+  );
+
   const createSnapshotForClip = Effect.fn("createSnapshotForClip")(function* (
     diagramId: string,
     clipId: string,
@@ -680,6 +714,7 @@ const createDiagramOperations = (
     setSnapshotArchived,
     restoreSnapshotToHead,
     restoreFromSearch,
+    createDiagramFromSnapshots,
     createSnapshotForClip,
     updateClipDiagramPin,
   };
