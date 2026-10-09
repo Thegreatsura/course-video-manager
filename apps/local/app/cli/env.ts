@@ -92,6 +92,23 @@ export const isLocalMachine = (): boolean => {
   return declared && !isInsideGitWorktree();
 };
 
+/**
+ * Where the author's Course Video Manager app runs. `cvm diagram create`
+ * draws its PNG through this app's render page and links Matt to its Diagram
+ * Playground, so it is the app on THIS machine — not the deployed API.
+ */
+export const APP_URL_ENV_KEY = "CVM_APP_URL";
+
+/** The app's own dev port (apps/local/vite.config.ts). */
+export const DEFAULT_APP_URL = "http://localhost:5173";
+
+/** The app's origin, from the environment or the repo-root `.env`. */
+export const resolveAppUrl = (): string =>
+  (resolveEnvKey(APP_URL_ENV_KEY)?.trim() || DEFAULT_APP_URL).replace(
+    /\/+$/,
+    ""
+  );
+
 export const ensureApiConfig = (): EnsureApiConfigResult => {
   const baseUrl = resolveEnvKey(API_URL_ENV_KEY);
   const token = resolveEnvKey(API_TOKEN_ENV_KEY);

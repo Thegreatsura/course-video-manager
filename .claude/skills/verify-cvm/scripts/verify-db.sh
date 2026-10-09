@@ -167,6 +167,16 @@ run_db_label() {
   fi
 }
 
+# psql_clone_write <run dir> <application_name> ARGS — a WRITABLE psql on
+# this run's own clone and nothing else: a production run is refused. The
+# application_name is what the Write Ledger names the writer by.
+psql_clone_write() {
+  local dir="$1" app="$2"; shift 2
+  [ "$(run_mode "$dir")" = test-clone ] ||
+    die "refusing a writable psql: this run is on PRODUCTION, not a test clone"
+  PGAPPNAME="$app" psql -X -v ON_ERROR_STOP=1 -q "$(run_clone_url "$dir")" "$@"
+}
+
 # psql_ro <run dir> ARGS — read-only psql against the run's database.
 psql_ro() {
   local dir="$1"; shift
@@ -175,4 +185,22 @@ psql_ro() {
   else
     PGOPTIONS="$PSQL_RO_OPTIONS" prod_ssl psql -X "$(db_url)" -At -F'|' "$@"
   fi
+}
+
+# --- read-back --------------------------------------------------------------
+# The `cvm` CLI reads through the deployed apps/remote, which is PRODUCTION —
+# it cannot see a test clone. Read a write back here instead. Read-only: the
+# writes belong to the browser, the read-back only proves they landed.
+cmd_sql() {
+  local dir; dir="$(run_dir)"
+  [ "$(run_mode "$dir")" = test-clone ] ||
+    die "this run is on PRODUCTION — 'sql' only reads test clones. Read back with the cvm CLI."
+  local query="${1:-}"
+  [ -n "$query" ] || query="$(cat)"
+  [ -n "$query" ] || die 'usage: verify.sh sql "<query>"   (or the query on stdin)'
+  {
+    printf -- '-- %s\n%s\n' "$(date --iso-8601=seconds)" "$query"
+  } >> "$dir/sql.log"
+  PGOPTIONS="$PSQL_RO_OPTIONS" psql -X -v ON_ERROR_STOP=1 "$(run_clone_url "$dir")" -c "$query" |
+    tee -a "$dir/sql.log"
 }

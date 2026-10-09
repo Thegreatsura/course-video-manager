@@ -20,6 +20,8 @@
 #   verify.sh guard <run> forensics <table> [since]
 #                               name the rows that moved in one table
 #   verify.sh sql <run> "<query>"    read back from this run's test clone (test-clone mode only)
+#   verify.sh tiny-course <run> seed the Tiny Course (1 Video, 1 Clip, seconds long) into
+#                               the clone; prints its id. The only Course you Publish or encode.
 #   verify.sh cleanup <run>     stop what this run started, drop its clone, keep the evidence
 #   verify.sh cleanup --all     the same for every live run THIS worktree launched
 #
@@ -255,6 +257,8 @@ cmd_launch() {
       "OBS_RECORDING_DIR=$scratch/obs-recordings"
       "DROPBOX_REMOTE_PATH=$scratch/dropbox"
       "${OFFLINE_SERVICES_ENV[@]}"
+      # One ffmpeg and one Dropbox upload at a time (verify-clones.sh).
+      "${CLONE_ENCODE_CAPS_ENV[@]}"
       # For the Write Ledger: every statement into server.log; who wrote what.
       "CVM_LOG_SQL=1"
       "PGAPPNAME=$LEDGER_APP_SERVER"
@@ -396,23 +400,9 @@ cmd_doctor() {
 # shellcheck source=SCRIPTDIR/verify-guard.sh
 . "$(dirname "${BASH_SOURCE[0]}")/verify-guard.sh"
 
-# --- read-back --------------------------------------------------------------
-# The `cvm` CLI reads through the deployed apps/remote, which is PRODUCTION —
-# it cannot see a test clone. Read a write back here instead. Read-only: the
-# writes belong to the browser, the read-back only proves they landed.
-cmd_sql() {
-  local dir; dir="$(run_dir)"
-  [ "$(run_mode "$dir")" = test-clone ] ||
-    die "this run is on PRODUCTION — 'sql' only reads test clones. Read back with the cvm CLI."
-  local query="${1:-}"
-  [ -n "$query" ] || query="$(cat)"
-  [ -n "$query" ] || die 'usage: verify.sh sql "<query>"   (or the query on stdin)'
-  {
-    printf -- '-- %s\n%s\n' "$(date --iso-8601=seconds)" "$query"
-  } >> "$dir/sql.log"
-  PGOPTIONS="$PSQL_RO_OPTIONS" psql -X -v ON_ERROR_STOP=1 "$(run_clone_url "$dir")" -c "$query" |
-    tee -a "$dir/sql.log"
-}
+# --- the Tiny Course --------------------------------------------------------
+# shellcheck source=SCRIPTDIR/verify-tiny-course.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-tiny-course.sh"
 
 # --- cleanup --------------------------------------------------------------
 stop_server() {
@@ -475,7 +465,7 @@ case "$VERB" in
   template) cmd_template ;;
   launch)   shift; cmd_launch "$@" ;;
   cleanup)  shift; cmd_cleanup "$@" ;;
-  url|dir|session|doctor|guard|sql|ab|shot|snap)
+  url|dir|session|doctor|guard|sql|ab|shot|snap|tiny-course)
     shift; resolve_run "${1:-}"; shift
     case "$VERB" in
       url)     run_base ;;
@@ -483,6 +473,7 @@ case "$VERB" in
       session) run_session ;;
       doctor)  cmd_doctor ;;
       sql)     cmd_sql "$@" ;;
+      tiny-course) cmd_tiny_course ;;
       ab)      run_ab "$@" ;;
       shot)    cmd_shot "$@" ;;
       snap)    cmd_snap "$@" ;;
@@ -494,5 +485,5 @@ case "$VERB" in
           *) die "usage: verify.sh guard <run> <baseline|check|forensics <table>>" ;;
         esac ;;
     esac ;;
-  *) sed -n '2,36p' "$0"; exit 1 ;;
+  *) sed -n '2,38p' "$0"; exit 1 ;;
 esac
