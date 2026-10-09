@@ -86,7 +86,7 @@ assert_clone_db_url() {
 
 # --- the run's API ------------------------------------------------------------
 api_state()  { printf '%s/api.json\n' "$1"; }
-api_field()  { sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\).*/\1/p" "$(api_state "$1")" 2>/dev/null; }
+api_field()  { sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\).*/\1/p" "$(api_state "$1")" 2>/dev/null || true; }
 api_pid()    { api_field "$1" pid; }
 api_url()    { printf 'http://127.0.0.1:%s\n' "$(api_field "$1" port)"; }
 
