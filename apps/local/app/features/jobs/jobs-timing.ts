@@ -50,8 +50,9 @@ const encodingRowOf = (
 /**
  * Every row's timings after one Job Event moved its Job from `before` to
  * `after`. Only that Job's rows change. `replayed`: the event comes from a
- * snapshot, so the stages it finishes were recorded to the history before
- * (if this tab heard them) and are not recorded again.
+ * snapshot, or from a Job this tab joined late (`State.joinedLate`), so the
+ * stages it finishes were recorded to the history by a tab that heard them
+ * from the start, and are not recorded again.
  */
 export const timeJobEvent = (
   timings: Record<string, UploadTiming>,

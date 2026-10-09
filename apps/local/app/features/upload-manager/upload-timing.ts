@@ -26,8 +26,9 @@ export interface CompletedStage {
   durationMs: number;
   units: number | null;
   /**
-   * Finished in a snapshot's replay: a tab that heard it live has already
-   * recorded it to the history, so it is not recorded again.
+   * Finished in a replay (a snapshot, or a Job this tab joined part-way):
+   * a tab that heard it live has already recorded it to the history, so it
+   * is not recorded again.
    */
   replayed?: true;
 }

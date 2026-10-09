@@ -80,6 +80,7 @@ const runLive = (actions: jobsReducer.Action[]) =>
     .getState();
 
 const exportEvents = () => [
+  event(exportJob, 0, "queued"),
   event(exportJob, 0, "started", { attempt: 1 }),
   event(exportJob, 1_000, "stage", { stage: "concatenating-clips" }),
   event(exportJob, 5_000, "progress", {
@@ -141,6 +142,7 @@ describe("a Job row's timings", () => {
 
   it("time a Publish's parent row and each of its Videos", () => {
     const events = [
+      event(publishJob, 0, "queued"),
       event(publishJob, 0, "started", { attempt: 1 }),
       event(publishJob, 500, "stage", { stage: "validating" }),
       event(publishJob, 1_000, "stage", { stage: "cloning" }),
@@ -246,7 +248,7 @@ describe("the tab's clock offset", () => {
     const lookup = createHistoryStore(history).lookup;
     const etaAt = (skewMs: number) => {
       const state = runLive(
-        live(exportEvents().slice(0, 2), exportJob, skewMs)
+        live(exportEvents().slice(0, 3), exportJob, skewMs)
       );
       const rows = Object.fromEntries(
         jobUploadEntries(state.jobs[exportJob.id]!).map((r) => [r.uploadId, r])
@@ -276,6 +278,7 @@ describe("a Publish Job's estimate", () => {
       "publish:finalizing": runs(30_000),
     }).lookup;
     const events = [
+      event(publishJob, 0, "queued"),
       event(publishJob, 0, "started", { attempt: 1 }),
       event(publishJob, 0, "stage", { stage: "cloning" }),
       event(publishJob, 0, "videos", {
@@ -319,5 +322,59 @@ describe("a Publish Job's estimate", () => {
       ms: 110_000,
       scope: "job",
     });
+  });
+});
+
+describe("a Job this tab joins part-way", () => {
+  // The stream's catch-up re-sends the last minute of events when the first
+  // tab subscribes, a dismissed Job's included: it is not in the snapshot,
+  // and every one of its events is older than the snapshot's cursor.
+  const caughtUp = ({ from }: { from: "queued" | "mid-stage" }) => {
+    const all = [
+      ...exportEvents(),
+      event(exportJob, 21_000, "stage", { stage: "normalizing-audio" }),
+      event(exportJob, 26_000, "succeeded", { attempt: 1 }),
+      event(exportJob, 31_000, "dismissed"),
+    ];
+    const events = from === "queued" ? all : all.slice(3);
+    return runLive([
+      {
+        type: "job-snapshot-received",
+        snapshot: { cursor: all.at(-1)!.id, jobs: [] },
+      },
+      ...live(events, exportJob, 60_000),
+    ]);
+  };
+
+  for (const from of ["queued", "mid-stage"] as const) {
+    it(`records none of its stages to the history, caught up from ${from}: the tab that saw them did`, () => {
+      const state = caughtUp({ from });
+      expect(state.timings[exportJob.id]?.completed).toEqual([
+        expect.objectContaining({
+          key: "export:concatenating-clips",
+          replayed: true,
+        }),
+        expect.objectContaining({
+          key: "export:normalizing-audio",
+          replayed: true,
+        }),
+      ]);
+    });
+  }
+
+  it("does not move the clock offset with its late deliveries", () => {
+    expect(clockOffsetOf(caughtUp({ from: "queued" }))).toBe(0);
+  });
+
+  it("is timed like any other when its `queued` event is newer than the snapshot", () => {
+    const events = [
+      ...exportEvents(),
+      event(exportJob, 21_000, "stage", { stage: "normalizing-audio" }),
+    ];
+    const state = runLive(live(events, exportJob, 200));
+    expect(state.timings[exportJob.id]?.completed).toEqual([
+      { key: "export:concatenating-clips", durationMs: 20_000, units: null },
+    ]);
+    expect(clockOffsetOf(state)).toBe(200);
   });
 });

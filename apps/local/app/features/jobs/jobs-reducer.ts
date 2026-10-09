@@ -136,6 +136,20 @@ export namespace jobsReducer {
      * (`clockOffsetOf`).
      */
     clockSkews: readonly number[];
+    /**
+     * The newest Job Event the last snapshot covered. The live stream starts
+     * with a catch-up that re-sends the last minute of events, ones older
+     * than this included: a Job the snapshot left out on purpose (dismissed)
+     * comes back that way.
+     */
+    snapshotCursor: number;
+    /**
+     * Jobs this tab first heard of from the catch-up, or part-way through:
+     * not in the snapshot, and not from a `queued` event newer than it. A tab
+     * that watched them has already recorded their stages, and their events
+     * arrive late: they feed neither the stage history nor the clock offset.
+     */
+    joinedLate: Record<string, true>;
   }
 
   /** A Job Event from the stream, as a fact about one Job. */
@@ -303,6 +317,8 @@ export const createInitialJobsState = (): jobsReducer.State => ({
   sidecarMessage: null,
   timings: {},
   clockSkews: [],
+  snapshotCursor: 0,
+  joinedLate: {},
 });
 
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
@@ -475,6 +491,8 @@ export const jobsReducer: EffectReducer<
         ...state,
         jobs,
         timings,
+        snapshotCursor: action.snapshot.cursor,
+        joinedLate: {},
         sidecar: "running",
         sidecarMessage: null,
       };
@@ -525,6 +543,10 @@ export const jobsReducer: EffectReducer<
         announceSettled(exec, after);
       }
       announceVideoSettled(exec, after, action, before);
+      const caughtUp = action.eventId <= state.snapshotCursor;
+      const late =
+        state.joinedLate[after.id] === true ||
+        (before === undefined && (caughtUp || action.type !== "job-queued"));
       return {
         ...state,
         // An event is proof the sidecar is up.
@@ -532,9 +554,16 @@ export const jobsReducer: EffectReducer<
         sidecarMessage: null,
         jobs: { ...state.jobs, [after.id]: after },
         timings: timeJobEvent(state.timings, before, after, action, {
-          replayed: false,
+          replayed: late,
         }),
-        clockSkews: recordClockSkew(state.clockSkews, action),
+        clockSkews:
+          late || caughtUp
+            ? state.clockSkews
+            : recordClockSkew(state.clockSkews, action),
+        joinedLate:
+          late && !state.joinedLate[after.id]
+            ? { ...state.joinedLate, [after.id]: true }
+            : state.joinedLate,
       };
     }
   }
