@@ -35,6 +35,8 @@ const framesOf = (durations: number[]) =>
       audioUrl: null,
       imageMissing: false,
       audioMissing: false,
+      voiceStatus: "ready",
+      voiceError: null,
     }))
   ).durationInFrames;
 

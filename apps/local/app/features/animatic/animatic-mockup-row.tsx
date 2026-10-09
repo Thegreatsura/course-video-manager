@@ -10,6 +10,7 @@ import {
 import { MOCKUP_PROGRESS_VAR, progressFillStyle } from "./animatic-progress";
 import { formatDuration } from "@/lib/format-duration";
 import { ANIMATIC_FPS } from "./animatic-timeline";
+import { isFileMissing } from "./animatic-broken-files";
 
 /**
  * One Clip Mockup's row in the Animatic's sidebar. The same row whether it
@@ -78,7 +79,22 @@ export const AnimaticMockupRow = (props: {
             </span>
             <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
               {formatDuration(segment.startFrame / ANIMATIC_FPS)}
-              {(segment.mockup.imageMissing || segment.mockup.audioMissing) && (
+              {segment.mockup.voiceStatus === "pending" && (
+                <span className="text-sky-600 dark:text-sky-300">
+                  {" "}
+                  · voice pending
+                </span>
+              )}
+              {segment.mockup.voiceStatus === "failed" && (
+                <span
+                  className="text-red-600 dark:text-red-400"
+                  title={segment.mockup.voiceError ?? undefined}
+                >
+                  {" "}
+                  · voice failed
+                </span>
+              )}
+              {isFileMissing(segment.mockup) && (
                 <span className="text-amber-600 dark:text-amber-300">
                   {" "}
                   · file missing

@@ -1,4 +1,7 @@
 import { AUTO_EDITED_END_PADDING_SECONDS } from "@/silence-detection-constants";
+import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
+import type { ClipMockupVoiceStatus } from "@cvm/core/features/clip-mockups/voice-status";
+import { formatDuration } from "@/lib/format-duration";
 
 /**
  * The Animatic's clock.
@@ -50,15 +53,28 @@ export const ANIMATIC_FPS = 30;
 export const CLIP_MOCKUP_PREMOUNT_IN_FRAMES = ANIMATIC_FPS / 2;
 
 /**
- * How long a Clip Mockup with no measured speech is held for.
- *
- * `durationSeconds` is NULL on a Clip Mockup whose voice is not `ready`
- * (migration 0030): `cvm clip-mockup add` and `update` leave it `pending` for
- * the Sidecar's `clip-mockup-voice` Job. This holds such a row on screen
- * rather than flashing it past at one frame while the author reads the
- * "speech missing" report.
+ * How long a Clip Mockup with no measured speech AND no words to guess from is
+ * held for — so it does not flash past at one frame.
  */
 export const UNVOICED_HOLD_SECONDS = 2;
+
+/**
+ * The seconds a Clip Mockup's speech runs for on the timeline.
+ *
+ * `durationSeconds` is NULL on a Clip Mockup whose voice is not `ready`
+ * (migration 0030): the Sidecar's `clip-mockup-voice` Job has not made it yet,
+ * or gave up. Such a row is held for the word-count guess — the SAME guess
+ * `cvm clip-mockup` prints — so the Animatic's run time agrees with the one
+ * the agent reported, and moves to the measured length once the voice lands.
+ */
+export function clipMockupSpeechSeconds(mockup: {
+  readonly durationSeconds: number | null;
+  readonly line: string;
+}): number {
+  if (mockup.durationSeconds !== null) return mockup.durationSeconds;
+  const estimate = estimateSpokenSeconds(mockup.line);
+  return estimate > 0 ? estimate : UNVOICED_HOLD_SECONDS;
+}
 
 /** One Clip Mockup as the Animatic page needs it. */
 export interface AnimaticClipMockup {
@@ -73,8 +89,12 @@ export interface AnimaticClipMockup {
    * else (see `animatic-chapters.ts`).
    */
   readonly order: string;
-  /** Measured seconds of speech, or `null` for an unvoiced row. */
+  /** Measured seconds of speech, or `null` while the voice is not `ready`. */
   readonly durationSeconds: number | null;
+  /** Where its voice stands. Not `ready` means the timeline holds a guess. */
+  readonly voiceStatus: ClipMockupVoiceStatus;
+  /** Why the voice failed, when `voiceStatus` is `failed`. */
+  readonly voiceError: string | null;
   readonly imageUrl: string;
   readonly audioUrl: string | null;
   /** The frame named by the row is not on disk. */
@@ -100,6 +120,10 @@ export interface AnimaticTimeline {
   readonly durationInFrames: number;
   /** The whole Animatic in seconds, summed off the floats, never rounded. */
   readonly totalSeconds: number;
+  /** Clip Mockups timed by the word-count guess: voice not made yet. */
+  readonly voicesPending: number;
+  /** Clip Mockups timed by the word-count guess: voice gave up. */
+  readonly voicesFailed: number;
 }
 
 /**
@@ -107,11 +131,10 @@ export interface AnimaticTimeline {
  * The ONE place this rounding happens, so the Animatic's own clock and the
  * Section clock that sums other Videos' Animatics count the same frames.
  */
-export function segmentFrames(durationSeconds: number | null): {
+export function segmentFrames(speechSeconds: number): {
   readonly speechInFrames: number;
   readonly durationInFrames: number;
 } {
-  const speechSeconds = durationSeconds ?? UNVOICED_HOLD_SECONDS;
   const speechInFrames = Math.max(1, Math.round(speechSeconds * ANIMATIC_FPS));
   return {
     speechInFrames,
@@ -131,12 +154,14 @@ export function buildAnimaticTimeline(
   const segments: AnimaticSegment[] = [];
   let startFrame = 0;
   let totalSeconds = 0;
+  let voicesPending = 0;
+  let voicesFailed = 0;
 
   for (const mockup of mockups) {
-    const speechSeconds = mockup.durationSeconds ?? UNVOICED_HOLD_SECONDS;
-    const { speechInFrames, durationInFrames } = segmentFrames(
-      mockup.durationSeconds
-    );
+    const speechSeconds = clipMockupSpeechSeconds(mockup);
+    const { speechInFrames, durationInFrames } = segmentFrames(speechSeconds);
+    if (mockup.voiceStatus === "pending") voicesPending++;
+    if (mockup.voiceStatus === "failed") voicesFailed++;
 
     segments.push({ mockup, startFrame, speechInFrames, durationInFrames });
     startFrame += durationInFrames;
@@ -147,7 +172,23 @@ export function buildAnimaticTimeline(
     segments,
     durationInFrames: Math.max(1, startFrame),
     totalSeconds,
+    voicesPending,
+    voicesFailed,
   };
+}
+
+/**
+ * The run time as the page prints it: `2:10` once every voice is measured,
+ * `~2:10 (3 voices pending)` while any line is still timed by its words.
+ */
+export function formatAnimaticRunTime(timeline: AnimaticTimeline): string {
+  const notes = [
+    timeline.voicesPending > 0 &&
+      `${timeline.voicesPending} voice${timeline.voicesPending === 1 ? "" : "s"} pending`,
+    timeline.voicesFailed > 0 && `${timeline.voicesFailed} failed`,
+  ].filter((note): note is string => note !== false);
+  const runTime = formatDuration(timeline.totalSeconds);
+  return notes.length === 0 ? runTime : `~${runTime} (${notes.join(", ")})`;
 }
 
 /** The index of the segment the playhead sits in, or `-1` for an empty timeline. */

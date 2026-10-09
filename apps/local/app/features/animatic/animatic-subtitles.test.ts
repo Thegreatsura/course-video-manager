@@ -29,6 +29,8 @@ const segmentFor = (line: string, durationSeconds: number) =>
       audioUrl: "/api/clip-mockups/cm_1/audio",
       imageMissing: false,
       audioMissing: false,
+      voiceStatus: "ready",
+      voiceError: null,
     } satisfies AnimaticClipMockup,
   ]).segments[0]!;
 
