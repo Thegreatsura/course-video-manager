@@ -121,6 +121,8 @@ export interface AutofillUploadEntry extends BaseUploadEntry {
   uploadType: "autofill";
   autofillStage: AutofillStage | null;
   courseId: string;
+  /** Fields the author changed mid-run: their text stayed; this is offered. */
+  kept: readonly { field: string; proposal: string }[];
 }
 
 export interface RenderVerticalUploadEntry extends BaseUploadEntry {
