@@ -84,35 +84,50 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     jobsReducer.Effect
   >(jobsReducer, createInitialJobsState(), {
     "enqueue-job": (_state, effect, dispatch) => {
-      fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: effect.id,
-          kind: effect.kind,
-          title: effect.title,
-          params: effect.params,
-          subject: effect.subject,
-          attemptsSpent: effect.attemptsSpent,
-          dependsOn: effect.dependsOn,
-        }),
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(
-              (await response.text()) ||
-                `The server answered ${response.status}`
-            );
-          }
-          dispatch({ type: "enqueue-succeeded", id: effect.id });
-        })
-        .catch((error: unknown) =>
-          dispatch({
-            type: "enqueue-failed",
+      const send = () =>
+        fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             id: effect.id,
-            message: `Could not queue it: ${error instanceof Error ? error.message : String(error)}`,
+            kind: effect.kind,
+            title: effect.title,
+            params: effect.params,
+            subject: effect.subject,
+            attemptsSpent: effect.attemptsSpent,
+            dependsOn: effect.dependsOn,
+          }),
+        })
+          .then(async (response) => {
+            if (response.ok) {
+              dispatch({ type: "enqueue-succeeded", id: effect.id });
+            } else if (response.status < 500) {
+              dispatch({
+                type: "enqueue-failed",
+                id: effect.id,
+                message: `Could not queue it: ${(await response.text()) || `the server answered ${response.status}`}`,
+              });
+            } else {
+              dispatch({
+                type: "enqueue-unanswered",
+                enqueue: effect,
+                message: `The server answered ${response.status}`,
+              });
+            }
           })
-        );
+          .catch((error: unknown) =>
+            dispatch({
+              type: "enqueue-unanswered",
+              enqueue: effect,
+              message: error instanceof Error ? error.message : String(error),
+            })
+          );
+      if (effect.afterMs === 0) {
+        void send();
+        return;
+      }
+      const timer = setTimeout(() => void send(), effect.afterMs);
+      return () => clearTimeout(timer);
     },
     "retry-job": (_state, effect, dispatch) => {
       fetch(jobRetryHref(effect.id), {

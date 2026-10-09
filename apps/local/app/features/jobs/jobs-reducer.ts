@@ -9,6 +9,8 @@ import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction, viewOf } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
+import { reduceEnqueueOutcome } from "./jobs-enqueue";
+export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
 
@@ -195,7 +197,13 @@ export namespace jobsReducer {
     | { type: "idle-timeout-elapsed" }
     // The enqueue request's outcome
     | { type: "enqueue-succeeded"; id: string }
+    /** The server answered, and refused it. */
     | { type: "enqueue-failed"; id: string; message: string }
+    /**
+     * No answer came (the network failed, or the server broke before it could
+     * say): the Job may or may not exist. `enqueue` is the request as sent.
+     */
+    | { type: "enqueue-unanswered"; enqueue: EnqueueJobEffect; message: string }
     // The stream
     | { type: "job-snapshot-received"; snapshot: JobSnapshotMessage }
     | { type: "sidecar-unavailable"; message: string }
@@ -210,6 +218,10 @@ export namespace jobsReducer {
     subject: { type: string; id: string } | null;
     attemptsSpent: number;
     dependsOn: string | null;
+    /** How many times this request went unanswered before: 0 the first time. */
+    checks: number;
+    /** Wait this long before sending it. */
+    afterMs: number;
   }
 
   export type Effect =
@@ -313,51 +325,6 @@ const foldSnapshotJob = (
   return view;
 };
 
-/** An enqueue that failed: it, and every Job held on it, fails here. */
-const failRequested = (
-  state: jobsReducer.State,
-  id: string,
-  message: string,
-  exec: Exec
-): jobsReducer.State => {
-  const job = state.jobs[id];
-  if (!job || job.status !== "requested") return state;
-  const failed: jobsReducer.JobView = {
-    ...job,
-    status: "failed",
-    errorMessage: message,
-  };
-  exec({
-    type: "show-job-failed-toast",
-    jobId: job.id,
-    kind: job.kind,
-    title: job.title,
-    message,
-    hasLog: false,
-  });
-  exec({
-    type: "report-job-settled",
-    jobId: job.id,
-    title: job.title,
-    outcome: "failed",
-  });
-  const { [id]: waiting = [], ...held } = state.held;
-  let next: jobsReducer.State = {
-    ...state,
-    held,
-    jobs: { ...state.jobs, [job.id]: failed },
-  };
-  for (const child of waiting) {
-    next = failRequested(
-      next,
-      child.id,
-      `Dependency "${job.title}" failed`,
-      exec
-    );
-  }
-  return next;
-};
-
 export const jobsReducer: EffectReducer<
   jobsReducer.State,
   jobsReducer.Action,
@@ -374,6 +341,8 @@ export const jobsReducer: EffectReducer<
         subject: action.subject,
         attemptsSpent: action.attemptsSpent,
         dependsOn: action.dependsOn,
+        checks: 0,
+        afterMs: 0,
       };
       // The server refuses a `dependsOn` it has not seen yet.
       const parent = action.dependsOn ? state.jobs[action.dependsOn] : null;
@@ -418,22 +387,10 @@ export const jobsReducer: EffectReducer<
       };
     }
 
-    case "enqueue-succeeded": {
-      // The row stays `requested` until the stream says `queued`: the stream
-      // is the only word on a Job's state. What waited on it may go now.
-      const job = state.jobs[action.id];
-      if (!job) return state;
-      const { [action.id]: waiting = [], ...held } = state.held;
-      for (const enqueue of waiting) exec(enqueue);
-      return {
-        ...state,
-        held,
-        jobs: { ...state.jobs, [job.id]: { ...job, enqueued: true } },
-      };
-    }
-
+    case "enqueue-succeeded":
     case "enqueue-failed":
-      return failRequested(state, action.id, action.message, exec);
+    case "enqueue-unanswered":
+      return reduceEnqueueOutcome(state, action, exec);
 
     case "press-retry": {
       const job = state.jobs[action.id];

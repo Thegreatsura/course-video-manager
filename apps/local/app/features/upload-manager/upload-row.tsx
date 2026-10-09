@@ -17,6 +17,7 @@ import { uploadStageLabel } from "./upload-stage-labels";
 import { etaLabel, type UploadEta } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
 import type { PostRetry } from "@/features/jobs/jobs-selectors";
+import { ENQUEUE_UNCONFIRMED_MESSAGE } from "@/features/jobs/jobs-reducer";
 
 /**
  * What a POST's failed row offers (decision 5): posts never run again on
@@ -215,7 +216,12 @@ function UploadStatusDetail({
     case "retrying":
       return (
         <InlineProgress
-          label={`Retrying (attempt ${upload.retryCount + 1})`}
+          label={
+            // An enqueue gone unanswered is being asked again, not retried.
+            upload.errorMessage === ENQUEUE_UNCONFIRMED_MESSAGE
+              ? ENQUEUE_UNCONFIRMED_MESSAGE
+              : `Retrying (attempt ${upload.retryCount + 1})`
+          }
           percent={upload.progress}
           tone="retrying"
         />

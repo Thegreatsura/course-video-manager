@@ -109,7 +109,13 @@ export const applyStreamAction = (
   switch (action.type) {
     case "job-queued":
       if (action.attempt === null) {
-        return { ...job, status: "queued", dependsOn: action.dependsOn };
+        return {
+          ...job,
+          status: "queued",
+          dependsOn: action.dependsOn,
+          // An enqueue that went unanswered is answered now.
+          errorMessage: known?.status === "requested" ? null : job.errorMessage,
+        };
       }
       // The author's Retry: a fresh run of a finished Job.
       return {

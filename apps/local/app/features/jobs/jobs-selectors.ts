@@ -67,6 +67,8 @@ const uploadStatusOf = (
 ): uploadReducer.UploadStatus => {
   switch (job.status) {
     case "requested":
+      // Unanswered, being asked again: in progress, never failed.
+      return job.errorMessage === null ? "uploading" : "retrying";
     case "running":
       return "uploading";
     case "queued":
