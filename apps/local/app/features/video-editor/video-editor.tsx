@@ -335,6 +335,13 @@ export const VideoEditor = (props: {
     tab: activeTab,
     items: props.items,
     sessions: props.sessions,
+    playingClipId:
+      state.runningState === "playing" ? (state.currentClipId ?? null) : null,
+    onClipMarkClicked: (clipId) =>
+      dispatch({
+        type: "click-teleprompter-mark",
+        clipId: clipId as FrontendId,
+      }),
   });
   useTeleprompterShortcuts();
 
