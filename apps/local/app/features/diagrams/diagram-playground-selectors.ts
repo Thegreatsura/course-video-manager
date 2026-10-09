@@ -4,9 +4,13 @@ import type { diagramPlaygroundReducer } from "./diagram-playground-reducer";
 
 type State = diagramPlaygroundReducer.State;
 
-/** Anything but a loaded head is read-only, so no edit is made that can't be saved. */
+/**
+ * Anything but a loaded head is read-only, so no edit is made that can't be
+ * saved; so is a canvas a restore is about to replace, so no edit lands after
+ * its last save and is lost under the restored snapshot.
+ */
 export const isCanvasEditable = (state: State) =>
-  state.head?.status === "ready";
+  state.head?.status === "ready" && state.restoring === null;
 
 /**
  * The canvas holds edits the server refused to save over a head changed
