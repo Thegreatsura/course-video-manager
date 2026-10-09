@@ -173,6 +173,22 @@ describe("shapes the format cannot express", () => {
     ]);
   });
 
+  it("other covers an arrow attached to one shape at both ends", () => {
+    const scene = build({
+      shapes: [
+        { type: "box", id: "b", x: 0, y: 0, w: 10, h: 10 },
+        { type: "box", id: "c", x: 50, y: 0, w: 10, h: 10 },
+        { type: "arrow", id: "loop", from: "b", to: "c" },
+      ],
+    });
+    const store = structuredClone(scene.store);
+    store["binding:loop-end"]!.toId = "shape:b";
+    expect(readSimpleDiagram(store).shapes.at(-1)).toEqual({
+      type: "other",
+      id: "loop",
+    });
+  });
+
   it("are never changed by an update, listed or not", () => {
     const before = sceneWithUnknowns();
     const read = readSimpleDiagram(before.store).shapes;

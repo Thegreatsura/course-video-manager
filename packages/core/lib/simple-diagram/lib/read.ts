@@ -136,7 +136,9 @@ export function readShape(
         !end ||
         typeof p.bend !== "number" ||
         // A head on the start only: the format cannot say it.
-        (hasStartHead && !hasEndHead)
+        (hasStartHead && !hasEndHead) ||
+        // Both ends on one shape: a loop the format refuses to draw.
+        (ends.start !== undefined && ends.start === ends.end)
       ) {
         return other;
       }

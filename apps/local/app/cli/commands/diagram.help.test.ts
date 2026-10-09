@@ -5,6 +5,8 @@ import {
   DEFAULTS,
   FILLS,
   HEADS,
+  MAX_COORDINATE,
+  MAX_SHAPES,
   SHAPE_SCHEMAS,
   SHAPE_TYPES,
   SIZES,
@@ -223,6 +225,15 @@ describe("cvm diagram get --help documents what 'get' prints", () => {
     expect(GET_HELP).toContain('{"type":"other","id":"…"}');
   });
 
+  it("says the head can be passed back whole: 'snapshot add' keeps every 'other'", () => {
+    expect(GET_HELP).toContain("pass the head back whole");
+    expect(SNAPSHOT_ADD_HELP).toContain("ONTO the head");
+    expect(SNAPSHOT_ADD_HELP).toContain('"other" shape is kept as it is');
+    expect(
+      block("SHAPES").find((line) => line.trimStart().startsWith("other"))
+    ).toContain("'snapshot add' keeps it");
+  });
+
   it("puts the --snapshot flag before the id", () => {
     expect(GET_HELP).toContain("cvm diagram get --snapshot 9c41… 3f2a…");
   });
@@ -246,11 +257,16 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
 
   it("gives an EXAMPLE whose shapes 'snapshot add' accepts as one drawing", () => {
     const { shapes } = example();
-    expect(parseSnapshotInput({ shapes }, icons).ok).toBe(true);
+    expect(parseSnapshotInput({ shapes }, icons, null).ok).toBe(true);
   });
 
   it("refuses the whole EXAMPLE to 'snapshot add': a snapshot has no name", () => {
-    expect(parseSnapshotInput(example(), icons).ok).toBe(false);
+    expect(parseSnapshotInput(example(), icons, null).ok).toBe(false);
+  });
+
+  it("states the limits the format enforces", () => {
+    expect(HELP).toContain(`at most ${MAX_SHAPES} shapes`);
+    expect(HELP).toContain(`within ±${MAX_COORDINATE}`);
   });
 
   it.each([
