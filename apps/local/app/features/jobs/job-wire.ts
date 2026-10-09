@@ -13,6 +13,9 @@ import { Either, Schema } from "effect";
  *   (`Last-Event-ID`) instead of starting over.
  * - `sidecar-unavailable` (from the proxy alone): nothing answered on the
  *   sidecar's socket. The browser reconnects on its own.
+ * - `sidecar-available` (from the proxy alone, first): the sidecar answered.
+ *   A reconnect after a restart replays after `Last-Event-ID` and sends no
+ *   snapshot, so this is what says the sidecar is back.
  *
  * The sidecar writes these with `JSON.stringify`, so dates arrive as ISO
  * strings. Both ends import this file; the browser decodes with it.
@@ -22,6 +25,7 @@ export const JOB_STREAM_EVENTS = {
   snapshot: "snapshot",
   jobEvent: "job-event",
   sidecarUnavailable: "sidecar-unavailable",
+  sidecarAvailable: "sidecar-available",
 } as const;
 
 export const WireJob = Schema.Struct({

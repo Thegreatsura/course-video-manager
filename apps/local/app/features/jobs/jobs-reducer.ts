@@ -189,6 +189,8 @@ export namespace jobsReducer {
     // The stream
     | { type: "job-snapshot-received"; snapshot: JobSnapshotMessage }
     | { type: "sidecar-unavailable"; message: string }
+    /** The proxy reached the sidecar: it runs, whatever the stream sends next. */
+    | { type: "sidecar-available" }
     | JobStreamAction;
 
   export interface EnqueueJobEffect {
@@ -610,6 +612,9 @@ export const jobsReducer: EffectReducer<
       }
       return { ...state, jobs, sidecar: "running", sidecarMessage: null };
     }
+
+    case "sidecar-available":
+      return { ...state, sidecar: "running", sidecarMessage: null };
 
     case "sidecar-unavailable":
       return {

@@ -55,7 +55,7 @@ const supervise = (
 
 describe("the sidecar's supervisor", () => {
   it.effect(
-    "runs the sidecar again after a database outage lapses its lease, waiting longer each time",
+    "runs the sidecar again after a database outage lapses its lease, waiting longer each time it cannot start",
     () =>
       Effect.gen(function* () {
         const sidecar = scriptedSidecar([
@@ -67,10 +67,12 @@ describe("the sidecar's supervisor", () => {
         const signalled = yield* Deferred.make<string>();
         const fiber = yield* Effect.fork(supervise(sidecar, signalled));
 
-        yield* TestClock.adjust(1_000 + 2_000 + 4_000 + 8_000);
+        yield* TestClock.adjust(1_000 + 2_000 + 4_000 + 1_000);
         expect(sidecar.runs).toHaveLength(5);
+        // A run that held the lease starts the wait over; each run in a row
+        // that could not start doubles it.
         expect(sidecar.restarts.map((r) => r.delayMs)).toEqual([
-          1_000, 2_000, 4_000, 8_000,
+          1_000, 2_000, 4_000, 1_000,
         ]);
         expect(sidecar.restarts[0]?.why).toContain("lease lapsed");
         expect(sidecar.restarts[1]?.why).toContain("ECONNREFUSED");
@@ -97,20 +99,22 @@ describe("the sidecar's supervisor", () => {
     })
   );
 
-  it.effect("waits only a second again after a run that stayed up", () =>
-    Effect.gen(function* () {
-      const sidecar = scriptedSidecar([
-        { end: "failed" },
-        { end: "failed" },
-        { end: "lapsed", afterMs: 2 * 60 * 60_000 },
-      ]);
-      const signalled = yield* Deferred.make<string>();
-      yield* Effect.fork(supervise(sidecar, signalled));
-      yield* TestClock.adjust(1_000 + 2_000 + 2 * 60 * 60_000);
-      expect(sidecar.restarts.map((r) => r.delayMs)).toEqual([
-        1_000, 2_000, 1_000,
-      ]);
-    })
+  it.effect(
+    "waits only a second again after a run that stayed up, however it ended",
+    () =>
+      Effect.gen(function* () {
+        const sidecar = scriptedSidecar([
+          { end: "failed" },
+          { end: "failed" },
+          { end: "failed", afterMs: 2 * 60 * 60_000 },
+        ]);
+        const signalled = yield* Deferred.make<string>();
+        yield* Effect.fork(supervise(sidecar, signalled));
+        yield* TestClock.adjust(1_000 + 2_000 + 2 * 60 * 60_000);
+        expect(sidecar.restarts.map((r) => r.delayMs)).toEqual([
+          1_000, 2_000, 1_000,
+        ]);
+      })
   );
 
   it.effect("a signal stops the run and runs it no more, even mid-wait", () =>

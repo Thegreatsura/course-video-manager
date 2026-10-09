@@ -32,7 +32,7 @@ import { superviseSidecar } from "./supervise";
  *
  * IT RESTARTS ITSELF. A run that ends any other way — a database outage that
  * lapsed its lease, a database it could not reach, a crash — runs again after
- * a wait that doubles up to a minute (`superviseSidecar`), so Jobs never
+ * a wait that doubles up to 30 s (`superviseSidecar`), so Jobs never
  * stall behind a sidecar nobody restarted. Only a signal ends it. While it
  * is down the app says so on every page (`SidecarDownBanner`), and nothing
  * is lost: an enqueued Job is a row, and waits.
@@ -154,8 +154,8 @@ const main = async (): Promise<void> => {
           }).pipe(Effect.provide(layer)),
         signalled,
         initialDelayMs: 1_000,
-        maxDelayMs: 60_000,
-        healthyAfterMs: 5 * 60_000,
+        maxDelayMs: 30_000,
+        healthyAfterMs: 60_000,
         onRestart: ({ delayMs, why }) =>
           Effect.sync(() =>
             say(

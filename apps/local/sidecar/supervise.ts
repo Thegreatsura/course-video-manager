@@ -3,9 +3,10 @@ import type { SidecarOutcome } from "./sidecar";
 
 /**
  * Keep the sidecar running: a run that ends for any reason but a signal or
- * another sidecar holding the lease runs again, after a wait that doubles
- * each time (1 s, 2 s, 4 s … up to `maxDelayMs`) and starts over once a run
- * has stayed up for `healthyAfterMs`.
+ * another sidecar holding the lease runs again. The wait is `initialDelayMs`
+ * after a run that was up (it held the lease, or stayed `healthyAfterMs`),
+ * and doubles with each run in a row that could not start (1 s, 2 s, 4 s …
+ * up to `maxDelayMs`).
  *
  * A database outage longer than the lease (`lease lapsed`) used to end the
  * process with exit 0, and nothing started it again: every Job waited in the
@@ -63,7 +64,9 @@ export const superviseSidecar = <E, R>(
       }
 
       const ranMs = (yield* Clock.currentTimeMillis) - startedAt;
-      if (ranMs >= opts.healthyAfterMs) delayMs = opts.initialDelayMs;
+      if (Exit.isSuccess(exit) || ranMs >= opts.healthyAfterMs) {
+        delayMs = opts.initialDelayMs;
+      }
       yield* opts.onRestart({ delayMs, why });
       const signalledMeanwhile = yield* Deferred.await(opts.signalled).pipe(
         Effect.timeoutOption(delayMs)

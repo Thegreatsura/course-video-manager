@@ -28,8 +28,9 @@ export function SidecarDownBanner({
         </p>
         <p className="text-white/90">
           Exports, renders and posts wait in the queue until it is back. It
-          restarts on its own; if this stays, read the `pnpm dev` / `pnpm start`
-          terminal (`.data/logs/dev-latest.log`).
+          restarts on its own; if this stays, read the <code>pnpm dev</code> /{" "}
+          <code>pnpm start</code> terminal (
+          <code>.data/logs/dev-latest.log</code>).
         </p>
       </div>
     </div>
