@@ -101,6 +101,14 @@ OFFLINE_SERVICES_ENV=(
   "${POSTING_URLS_ENV[@]}"
 )
 
+# A clone run's encodes, capped. Matt's machine runs 6 GPU and 12 CPU ffmpeg
+# processes at once and 4 Dropbox uploads; a run gets one of each, so an
+# encode Job on a real Course, pressed by mistake, cannot take the machine's
+# memory with it. Publish the Tiny Course (`tiny-course <run>`) all the same.
+CLONE_ENCODE_CAPS_ENV=(
+  "FFMPEG_GPU_PERMITS=1" "FFMPEG_CPU_PERMITS=1" "DROPBOX_UPLOAD_CONCURRENCY=1"
+)
+
 # --- stale clones -----------------------------------------------------------
 # A run is live while the launch building it, or the server it started, is
 # alive. Either pid file may be missing; a dead or absent pid is not live.
