@@ -1,4 +1,4 @@
-import { Cause, Effect } from "effect";
+import { Cause, Data, Effect } from "effect";
 import {
   JobOperationsService,
   POST_CHECK_EVENT,
@@ -8,6 +8,11 @@ import { isPostingKind, type PostCheck } from "./job-kind";
 import type { JobKindRegistry } from "./job-kinds";
 
 export { POST_CHECK_EVENT };
+
+/** The service did not answer a post-check in time. */
+export class PostCheckTimeoutError extends Data.TaggedError(
+  "PostCheckTimeoutError"
+)<{ readonly message: string }> {}
 
 /** An interrupted post older than this is not looked for any more. */
 const POST_CHECK_WITHIN_MS = 24 * 60 * 60_000;
@@ -54,7 +59,9 @@ export const makePostChecks = <R>(opts: {
           Effect.timeoutFail({
             duration: opts.timeoutMs,
             onTimeout: () =>
-              new Error(`no answer in ${Math.round(opts.timeoutMs / 1000)}s`),
+              new PostCheckTimeoutError({
+                message: `no answer in ${Math.round(opts.timeoutMs / 1000)}s`,
+              }),
           }),
           Effect.catchAllCause((cause) =>
             Effect.logWarning("post-check: could not look", cause).pipe(

@@ -14,11 +14,20 @@ import {
  * them), and a `/nudge` after an enqueue wakes it for the rest, so the poll
  * interval is only a backstop.
  *
- * A bigserial id is taken at insert but becomes visible at commit, so two
- * writers can commit out of order. The poller therefore re-reads the last
- * `lookback` ids each time and publishes only the ones it has not published
- * before. A subscriber may still see an event twice (once in its snapshot,
- * once live); the jobs reducer ignores an event it has already applied.
+ * LATE COMMITS. A bigserial id is taken at insert but becomes visible at
+ * commit, so writers can commit out of order: id 7 may appear after id 300.
+ * The poller keeps every id below its cursor that it has not yet seen — a
+ * GAP — and asks for those again on every read, however far behind the
+ * newest they are. A gap that stays empty for `GAP_TTL_MS` on the database's
+ * clock was a rolled-back insert or a sequence value Postgres burned, and is
+ * dropped; see `GAP_TTL_MS` for why nothing that commits can be that late.
+ *
+ * ONE CLOCK. Every time here is the database's (`now()`, which also stamps
+ * `job_event.at`), never the sidecar's: a sidecar whose clock was a minute
+ * off once dropped every live event as "old".
+ *
+ * A subscriber may still see an event twice (once in its snapshot, once
+ * live); the jobs reducer ignores an event it has already applied.
  */
 export interface JobEventFeed {
   /** Look for new events now rather than at the next poll. */
@@ -32,16 +41,26 @@ export interface JobEventFeed {
 }
 
 /**
- * How long before a resync an event may have been written and still be
- * published by it: the late commits and the snapshot's edge that `lookback`
- * is for are a matter of seconds.
+ * How far before the first subscriber arrives the feed starts reading, on the
+ * database's clock: the new subscriber's snapshot is read after it subscribes,
+ * so an event committed around then may miss the snapshot, and is streamed
+ * instead. Anything older is in the snapshot, or left out of it on purpose
+ * (dismissed, or succeeded too long ago) — streaming those again brought
+ * yesterday's uploads back as rows and toasts in the morning's first tab.
  */
 const SNAPSHOT_EDGE_MS = 60_000;
 
+/**
+ * How long an unseen id is waited for before it is taken as never coming.
+ * Every write to `job_event` is a short transaction in
+ * `packages/core/services/db-job-*.server.ts` — a few statements, no outside
+ * call — so a writer holds an id for milliseconds. Ten minutes is far past
+ * any of them; an id still missing then was rolled back or burned.
+ */
+const GAP_TTL_MS = 10 * 60_000;
+
 export const makeJobEventFeed = (opts: {
   readonly pollMs: number;
-  /** How many ids back each poll looks again, for late commits. */
-  readonly lookback: number;
   /** How many events one read takes at most. */
   readonly pageSize: number;
 }): Effect.Effect<JobEventFeed, unknown, JobOperationsService | Scope.Scope> =>
@@ -50,49 +69,51 @@ export const makeJobEventFeed = (opts: {
     const pubsub = yield* PubSub.unbounded<readonly JobEventWithJob[]>();
     const wakeQueue = yield* Queue.sliding<void>(1);
     let subscribers = 0;
-    let cursor = 0;
     // Set when the first subscriber arrives: the events written while nobody
     // listened are in that subscriber's snapshot, so the poller starts over
-    // from the newest (less `lookback`, which also covers the snapshot's edge).
+    // from just before the snapshot's edge.
     let resync = true;
-    // When the last resync happened. The window it re-reads holds old events
-    // too — the newest 50 may be yesterday's — and those are already in the
-    // new subscriber's snapshot, or left out of it on purpose (dismissed, or
-    // succeeded too long ago). Publishing them again brought yesterday's
-    // uploads back as rows and toasts in the morning's first tab, so an event
-    // written well before the resync is marked seen, never published.
-    let resyncedAt = 0;
-    const published = new Set<number>();
+    /** Every id at or below it has been seen, or is a gap. `null`: from the first. */
+    let cursor: number | null = null;
+    /** Unseen ids below the cursor → when (database clock) they were first missed. */
+    const gaps = new Map<number, number>();
 
     const poll = Effect.gen(function* () {
       if (subscribers > 0 && resync) {
         resync = false;
-        cursor = yield* ops.latestJobEventId();
-        published.clear();
-        resyncedAt = Date.now();
+        cursor = yield* ops.jobEventFeedStart({ edgeMs: SNAPSHOT_EDGE_MS });
+        gaps.clear();
       }
       while (subscribers > 0) {
-        const rows = yield* ops.listJobEventsAfter({
-          after: Math.max(0, cursor - opts.lookback),
+        const { rows, nowMs } = yield* ops.readJobEventFeed({
+          after: cursor ?? 0,
+          missing: [...gaps.keys()],
           limit: opts.pageSize,
         });
-        const fresh = rows.filter((r) => !published.has(r.event.id));
-        for (const row of fresh) {
-          published.add(row.event.id);
-          cursor = Math.max(cursor, row.event.id);
+        const news: JobEventWithJob[] = [];
+        for (const row of rows) {
+          const id = row.event.id;
+          if (gaps.delete(id)) {
+            news.push(row);
+            continue;
+          }
+          if (cursor !== null && id <= cursor) continue;
+          if (cursor !== null) {
+            for (let missed = cursor + 1; missed < id; missed++) {
+              gaps.set(missed, nowMs);
+            }
+          }
+          cursor = id;
+          news.push(row);
         }
-        for (const id of published) {
-          if (id <= cursor - opts.lookback) published.delete(id);
+        for (const [id, missedAt] of gaps) {
+          if (nowMs - missedAt > GAP_TTL_MS) gaps.delete(id);
         }
-        const news = fresh.filter(
-          (r) => r.event.at.getTime() >= resyncedAt - SNAPSHOT_EDGE_MS
-        );
         if (news.length > 0) yield* PubSub.publish(pubsub, news);
-        // A full page of news means there is more behind it; anything less is all.
-        if (fresh.length === 0 || rows.length < opts.pageSize) return;
+        // A full page means there is more behind it; anything less is all.
+        if (rows.length < opts.pageSize) return;
       }
     });
-
     yield* Effect.forkScoped(
       Effect.forever(
         poll.pipe(

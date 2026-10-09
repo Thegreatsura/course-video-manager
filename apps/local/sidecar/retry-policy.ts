@@ -6,30 +6,29 @@ import type { LaneName } from "./lanes";
  * (docs/plans/background-jobs-sidecar.md, section 6). The sidecar adds no
  * policy of its own.
  *
- * Today, in the browser:
+ * Today, in the browser (as found on 2026-10-08; section 7.1 of the plan):
  *
  * - A job's failure (`UPLOAD_ERROR`) counts an attempt; while fewer than 3
  *   have run and the entry is not `terminal`, it goes to `retrying`
- *   (`features/upload-manager/upload-reducer.ts:567`), and
- *   `planUploadReactions` re-runs it AT ONCE with the params it started with
- *   (`upload-transitions.ts:51`, `upload-context.tsx:620`). No delay, no
- *   backoff, and every error is retryable. So: 3 attempts.
- * - A Publish and an Autofill report every failure as `UPLOAD_FATAL_ERROR`
- *   (`upload-type-registry.ts:577-634`; the Autofill's browser driver,
- *   `upload-type-autofill.ts`, went with batch 5),
- *   which sets `terminal` (`upload-reducer.ts:533`) — and so do the per-Video
- *   rows each fans out into. So: 1 attempt.
+ *   (`upload-reducer.ts`, `UPLOAD_ERROR`), and `planUploadReactions` re-runs
+ *   it AT ONCE with the params it started with. No delay, no backoff, and
+ *   every error is retryable. So: 3 attempts.
+ * - A Publish and an Autofill report every failure as `UPLOAD_FATAL_ERROR`,
+ *   which sets `terminal` — and so do the per-Video rows each fans out into.
+ *   So: 1 attempt.
  * - EXCEPT posting (YouTube, Shorts, Buffer, AI Hero, Skills Changelog):
  *   Matt's decision 5 gives each exactly 1 attempt and no re-queue — see
  *   `PostingJobPolicy` below.
  * - A dropped stream is a failure like any other: the reader rejects, the
  *   client calls `onError`, and the job spends an attempt. The sidecar treats
- *   a run it lost — its lease ran out, or it was stopped — the same way
- *   (`recoverExpiredJobs` / an interrupted fiber), so a cut-off attempt is
- *   retried while attempts remain and is `interrupted` on the last.
+ *   a run it LOST — its lease ran out (`recoverExpiredJobs`), or it lost the
+ *   lease mid-run — the same way: retried while attempts remain,
+ *   `interrupted` on the last. A deliberate stop (a signal) is not a lost
+ *   run: it puts the Job back at the same attempt (`returnJobToQueue`).
  * - When a job fails for good, every job waiting on it fails with
- *   `Dependency "<title>" failed` (`upload-reducer.ts:554` and `:597`). The
- *   sidecar does the same, in the same transaction.
+ *   `Dependency "<title>" failed`. The sidecar does the same, in the same
+ *   transaction (`failDependents`), and fails a Job enqueued behind one that
+ *   had already failed.
  *
  * The narrow retries INSIDE a service stay inside it, untouched: an export
  * inside a Publish or batch `recurs(2)` (`course-publish-export-events.ts:160`),

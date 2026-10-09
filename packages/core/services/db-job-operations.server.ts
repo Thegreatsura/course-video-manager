@@ -23,6 +23,10 @@ import {
 } from "./db-job-dismiss.server.js";
 import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
 import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
+import {
+  createJobFeedOperations,
+  jobSummaryColumns,
+} from "./db-job-feed.server.js";
 export { dependencyFailedMessage } from "./db-job-calls.server.js";
 
 /**
@@ -64,18 +68,6 @@ export interface JobEventWithJob {
   readonly event: JobEvent;
   readonly job: JobSummary;
 }
-
-const jobSummaryColumns = {
-  id: jobs.id,
-  kind: jobs.kind,
-  title: jobs.title,
-  status: jobs.status,
-  attempt: jobs.attempt,
-  maxAttempts: jobs.maxAttempts,
-  subjectType: jobs.subjectType,
-  subjectId: jobs.subjectId,
-  createdAt: jobs.createdAt,
-};
 
 /** What `job.error` holds: enough to diagnose without the log. */
 export interface JobFailure {
@@ -604,11 +596,6 @@ export const createJobOperations = (db: Database) => {
     );
   });
 
-  const getSidecarLease = Effect.fn("getSidecarLease")(function* () {
-    const [lease] = yield* makeDbCall(() => db.select().from(sidecarLease));
-    return lease;
-  });
-
   return {
     ...createEnqueueJobOperations(db),
     claimNextJob,
@@ -621,6 +608,7 @@ export const createJobOperations = (db: Database) => {
     recoverExpiredJobs,
     latestJobEventId,
     listJobEventsAfter,
+    ...createJobFeedOperations(db),
     listRecentJobs,
     ...createDismissJobOperations(db),
     getJob,
@@ -628,7 +616,6 @@ export const createJobOperations = (db: Database) => {
     acquireSidecarLease,
     renewSidecarLease,
     releaseSidecarLease,
-    getSidecarLease,
   };
 };
 

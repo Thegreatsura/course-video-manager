@@ -217,7 +217,6 @@ export const runSidecar = <R>(opts: {
       const queues = [...wake.values()];
       const feed = yield* makeJobEventFeed({
         pollMs: timing.pollMs,
-        lookback: 50,
         pageSize: 500,
       });
       const nudge = Effect.forEach(
