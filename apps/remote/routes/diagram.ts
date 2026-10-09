@@ -9,7 +9,9 @@ import type { RemoteRuntime } from "../runtime.js";
  * restored to the head; `snapshot add` — one more Preserved Snapshot, restored
  * to the head; `render` — reads one snapshot to draw it; `get` — reads the
  * head and the timeline; `update`, `delete`, `restore` — rename, archive and
- * un-archive the Diagram through `updateDiagram`, never its drawings.
+ * un-archive the Diagram through `updateDiagram`, never its drawings; `list`
+ * — reads every Diagram's summary, and the palette's `searchDiagrams` for a
+ * query.
  */
 export const diagramRoutes = (runtime: RemoteRuntime) =>
   new Hono()
@@ -32,6 +34,14 @@ export const diagramRoutes = (runtime: RemoteRuntime) =>
     .post(
       "/getDiagramSnapshot",
       forward(runtime, DiagramOperationsService, "getDiagramSnapshot")
+    )
+    .post(
+      "/listDiagramSummaries",
+      forward(runtime, DiagramOperationsService, "listDiagramSummaries")
+    )
+    .post(
+      "/searchDiagrams",
+      forward(runtime, DiagramOperationsService, "searchDiagrams")
     )
     .post(
       "/listSnapshotsWithClips",

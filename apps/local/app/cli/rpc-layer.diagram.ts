@@ -1,3 +1,4 @@
+import type { DiagramComponentOperationsService } from "@/services/db-diagram-component-operations.server";
 import type { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import { rpcMethod, type RemoteService, type RpcClient } from "./rpc-client";
 
@@ -28,4 +29,19 @@ export const diagramService = (client: RpcClient) =>
     listSnapshotsWithClips: rpcMethod((json) =>
       client.rpc.diagram.listSnapshotsWithClips.$post({ json })
     ),
+    listDiagramSummaries: rpcMethod((json) =>
+      client.rpc.diagram.listDiagramSummaries.$post({ json })
+    ),
+    searchDiagrams: rpcMethod((json) =>
+      client.rpc.diagram.searchDiagrams.$post({ json })
+    ),
   }) satisfies RemoteService<DiagramOperationsService>;
+
+/** Components, read-only: the one endpoint `cvm diagram component list` uses. */
+export const diagramComponentService = (client: RpcClient) =>
+  ({
+    _tag: "DiagramComponentOperationsService",
+    listComponentFragments: rpcMethod((json) =>
+      client.rpc["diagram-component"].listComponentFragments.$post({ json })
+    ),
+  }) satisfies RemoteService<DiagramComponentOperationsService>;
