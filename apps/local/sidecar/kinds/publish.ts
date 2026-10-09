@@ -203,8 +203,11 @@ export const publishJobKind = defineJobKind({
                 cause.failedExportVideoIds &&
                 cause.failedExportVideoIds.length > 0
               ) {
+                const headline = cause.exportFailureMessage
+                  ?.split("\n")
+                  .find((line) => line.trim() !== "");
                 parts.push(
-                  `${cause.failedExportVideoIds.length} video(s) failed to export`
+                  `${cause.failedExportVideoIds.length} video(s) failed to export${headline ? `: ${headline.trim()}` : ""}`
                 );
               }
               if (cause.versionNameTaken) {

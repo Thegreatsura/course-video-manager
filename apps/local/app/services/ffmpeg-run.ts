@@ -4,7 +4,11 @@ import { registerFfmpegChild } from "./ffmpeg-child-registry";
 import { createFfmpegProgressParser } from "./ffmpeg-progress";
 import { appendBoundedTail, withStderrTail } from "./ffmpeg-log-capture";
 import { SidecarContext } from "./sidecar-context";
-import { FFmpegError, type FfmpegLogInfo } from "./ffmpeg-error";
+import {
+  FFmpegError,
+  landscapeCpuFallbackArgs,
+  type FfmpegLogInfo,
+} from "./ffmpeg-error";
 
 /**
  * How every long ffmpeg ENCODE in this app is started, and the three things
@@ -55,6 +59,12 @@ export {
  * block on a full buffer, and the encode would hang forever — a hang
  * invisible to `Effect.retry`, since a process that never exits never
  * resolves to a failure to retry.
+ *
+ * It is also where a landscape pass falls back from the GPU. A pass encoding
+ * with `LANDSCAPE_VIDEO_ENCODE_ARGS` (h264_nvenc) that fails because NVENC
+ * could not open — no CUDA context, no capable device — is run once more,
+ * whole, on libx264 (`landscapeCpuFallbackArgs`), with a WARN in the Job's
+ * log. Every caller gets it by construction; none decides for itself.
  */
 export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
   function* (opts: {
@@ -70,94 +80,114 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
   }) {
     // An encode is a Job's: only the Sidecar provides this.
     yield* SidecarContext;
-    const commandLine = ["ffmpeg", ...opts.args];
     const toError = (cause: unknown, detail: string, stderrTail: string) =>
       new FFmpegError({
         cause,
         message: withStderrTail(`${opts.errorPrefix}${detail}`, stderrTail),
       });
 
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        const child = yield* Command.start(
-          Command.make(
-            "ffmpeg",
-            "-nostats",
-            "-progress",
-            "pipe:1",
-            ...opts.args
-          )
-        ).pipe(Effect.mapError((e) => toError(e, `: ${e.message}`, "")));
+    const first = yield* runOnce(opts.args);
+    if (first.code === 0) return;
 
-        yield* Effect.acquireRelease(
-          Effect.sync(() => registerFfmpegChild(child.pid)),
-          (unregister) => Effect.sync(unregister)
-        );
+    const fallbackArgs = landscapeCpuFallbackArgs(opts.args, first.stderrTail);
+    if (!fallbackArgs) {
+      return yield* toError(
+        null,
+        `, exit code: ${first.code}`,
+        first.stderrTail
+      );
+    }
 
-        const parser = createFfmpegProgressParser({
-          totalDurationSeconds: opts.totalDurationSeconds,
-          onPercent: opts.onProgress ?? (() => {}),
-        });
-
-        // Drain stdout even when nobody listens — an unread pipe would
-        // eventually block ffmpeg. The stream ends when the process
-        // does. A failing chunk (see the function doc) is contained
-        // right here, per chunk, so the loop keeps running instead of
-        // Effect.ignore below only stopping it after the fact.
-        const drainStdout = child.stdout.pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) =>
-            Effect.sync(() => parser.push(chunk)).pipe(
-              Effect.catchAllCause(() => Effect.void)
-            )
-          ),
-          Effect.ignore
-        );
-
-        // Tee stderr to our own stderr (so a developer watching the
-        // terminal sees what they always have) while accumulating a
-        // bounded tail for the error message and the per-video log.
-        // Written into a Ref rather than folded through the stream's
-        // own return value: a Ref keeps whatever was captured so far
-        // even if the stream itself dies partway (a decode error, a
-        // closed fd) — the same per-chunk containment as stdout above,
-        // so one bad chunk can't cost the whole tail.
-        const stderrTailRef = yield* Ref.make("");
-        const drainStderr = child.stderr.pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) =>
-            Effect.sync(() => {
-              try {
-                process.stderr.write(chunk);
-              } catch {
-                // Best-effort tee only; never let a closed fd stop capture.
-              }
-            }).pipe(
-              Effect.zipRight(
-                Ref.update(stderrTailRef, (tail) =>
-                  appendBoundedTail(tail, chunk)
-                )
-              ),
-              Effect.catchAllCause(() => Effect.void)
-            )
-          ),
-          Effect.ignore
-        );
-
-        yield* Effect.all([drainStdout, drainStderr], {
-          concurrency: 2,
-        });
-        const stderrTail = yield* Ref.get(stderrTailRef);
-
-        opts.onLog({ command: commandLine, stderrTail });
-
-        const code = yield* child.exitCode.pipe(
-          Effect.mapError((e) => toError(e, `: ${e.message}`, stderrTail))
-        );
-        if (code !== 0) {
-          return yield* toError(null, `, exit code: ${code}`, stderrTail);
-        }
-      })
+    yield* Effect.logWarning(
+      "ffmpeg: h264_nvenc could not open (no usable GPU); running this pass again on libx264",
+      { errorPrefix: opts.errorPrefix, exitCode: first.code }
     );
+    const fallback = yield* runOnce(fallbackArgs);
+    if (fallback.code !== 0) {
+      return yield* toError(
+        null,
+        `, exit code: ${fallback.code} (on the libx264 fallback, after h264_nvenc could not open)`,
+        fallback.stderrTail
+      );
+    }
+
+    /** One ffmpeg run: its exit code and the tail of its stderr. */
+    function runOnce(args: readonly string[]) {
+      const commandLine = ["ffmpeg", ...args];
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const child = yield* Command.start(
+            Command.make("ffmpeg", "-nostats", "-progress", "pipe:1", ...args)
+          ).pipe(Effect.mapError((e) => toError(e, `: ${e.message}`, "")));
+
+          yield* Effect.acquireRelease(
+            Effect.sync(() => registerFfmpegChild(child.pid)),
+            (unregister) => Effect.sync(unregister)
+          );
+
+          const parser = createFfmpegProgressParser({
+            totalDurationSeconds: opts.totalDurationSeconds,
+            onPercent: opts.onProgress ?? (() => {}),
+          });
+
+          // Drain stdout even when nobody listens — an unread pipe would
+          // eventually block ffmpeg. The stream ends when the process
+          // does. A failing chunk (see the function doc) is contained
+          // right here, per chunk, so the loop keeps running instead of
+          // Effect.ignore below only stopping it after the fact.
+          const drainStdout = child.stdout.pipe(
+            Stream.decodeText(),
+            Stream.runForEach((chunk) =>
+              Effect.sync(() => parser.push(chunk)).pipe(
+                Effect.catchAllCause(() => Effect.void)
+              )
+            ),
+            Effect.ignore
+          );
+
+          // Tee stderr to our own stderr (so a developer watching the
+          // terminal sees what they always have) while accumulating a
+          // bounded tail for the error message and the per-video log.
+          // Written into a Ref rather than folded through the stream's
+          // own return value: a Ref keeps whatever was captured so far
+          // even if the stream itself dies partway (a decode error, a
+          // closed fd) — the same per-chunk containment as stdout above,
+          // so one bad chunk can't cost the whole tail.
+          const stderrTailRef = yield* Ref.make("");
+          const drainStderr = child.stderr.pipe(
+            Stream.decodeText(),
+            Stream.runForEach((chunk) =>
+              Effect.sync(() => {
+                try {
+                  process.stderr.write(chunk);
+                } catch {
+                  // Best-effort tee only; never let a closed fd stop capture.
+                }
+              }).pipe(
+                Effect.zipRight(
+                  Ref.update(stderrTailRef, (tail) =>
+                    appendBoundedTail(tail, chunk)
+                  )
+                ),
+                Effect.catchAllCause(() => Effect.void)
+              )
+            ),
+            Effect.ignore
+          );
+
+          yield* Effect.all([drainStdout, drainStderr], {
+            concurrency: 2,
+          });
+          const stderrTail = yield* Ref.get(stderrTailRef);
+
+          opts.onLog({ command: commandLine, stderrTail });
+
+          const code = yield* child.exitCode.pipe(
+            Effect.mapError((e) => toError(e, `: ${e.message}`, stderrTail))
+          );
+          return { code: Number(code), stderrTail };
+        })
+      );
+    }
   }
 );
