@@ -6,6 +6,7 @@ import type {
   ClipTranscriptionJob,
   DatabaseId,
   FrontendId,
+  TimelineItem,
 } from "./clip-state-reducer.types";
 import {
   CLIP_TRANSCRIPTION_EVENTS,
@@ -78,7 +79,8 @@ export const holdForRequestedJob = (
  * The server answered the request for `requestedJobId` with the live Job
  * `jobId` (it already holds the same Clips), so no Job `requestedJobId` will
  * ever run: the Clips waiting on it follow `jobId` instead, its result and
- * its end alike.
+ * its end alike. What `jobId` said about them before this answer came (its
+ * events and the answer travel apart) applies now.
  */
 export const followJoinedJob = (
   state: ClipReducerState,
@@ -90,10 +92,19 @@ export const followJoinedJob = (
   );
   if (waiting.length === 0) return state;
   const clipTranscriptionJobs: Holders = { ...state.clipTranscriptionJobs };
+  const heardEarly = new Map<number, JobEventMessage>();
   for (const [clipId, holder] of waiting) {
-    clipTranscriptionJobs[clipId as DatabaseId] = { ...holder, jobId };
+    clipTranscriptionJobs[clipId as DatabaseId] = {
+      jobId,
+      started: holder.started,
+    };
+    for (const heard of holder.heardBeforeJoin ?? []) {
+      if (heard.job.id === jobId) heardEarly.set(heard.event.id, heard);
+    }
   }
-  return { ...state, clipTranscriptionJobs };
+  return [...heardEarly.values()]
+    .sort((a, b) => a.event.id - b.event.id)
+    .reduce(applyJobEvent, { ...state, clipTranscriptionJobs });
 };
 
 const ClipsStarted = Schema.Struct({ clipIds: Schema.Array(Schema.String) });
@@ -101,33 +112,77 @@ const ClipsStarted = Schema.Struct({ clipIds: Schema.Array(Schema.String) });
 /**
  * One Job Event of this Video's `transcribe-clips` Jobs. One at or below
  * `jobEventCursor` is already in the Clips (the loader read them after it),
- * or was applied here before, so it is ignored.
+ * or was applied here before: it only says which Job holds which Clip, so a
+ * tab opened mid-Job knows the Job whose end fails its Clips.
  */
 export const applyTranscriptionJobEvent = (
   state: ClipReducerState,
+  heard: JobEventMessage
+): ClipReducerState => {
+  if (heard.event.id <= state.jobEventCursor) {
+    const replayed = applyJobEvent(state, heard);
+    return replayed.clipTranscriptionJobs === state.clipTranscriptionJobs
+      ? state
+      : { ...state, clipTranscriptionJobs: replayed.clipTranscriptionJobs };
+  }
+  return applyJobEvent(
+    keepForJoin({ ...state, jobEventCursor: heard.event.id }, heard),
+    heard
+  );
+};
+
+const applyJobEvent = (
+  state: ClipReducerState,
   { job, event }: JobEventMessage
 ): ClipReducerState => {
-  if (event.id <= state.jobEventCursor) return state;
-  const heard = { ...state, jobEventCursor: event.id };
   switch (event.type) {
     case CLIP_TRANSCRIPTION_EVENTS.clipsStarted: {
       const started = Schema.decodeUnknownEither(ClipsStarted)(event.data);
       return Either.isRight(started)
-        ? jobStarted(heard, job.id, started.right.clipIds as DatabaseId[])
-        : heard;
+        ? jobStarted(state, job.id, started.right.clipIds as DatabaseId[])
+        : state;
     }
     case CLIP_TRANSCRIPTION_EVENTS.clipSettled: {
       const clip = Schema.decodeUnknownEither(TranscribedClip)(event.data);
       return Either.isRight(clip)
-        ? clipSettled(heard, job.id, clip.right)
-        : heard;
+        ? clipSettled(state, job.id, clip.right)
+        : state;
     }
     case "failed":
     case "interrupted":
-      return jobEnded(heard, job.id);
+      return jobEnded(state, job.id);
     default:
-      return heard;
+      return state;
   }
+};
+
+/**
+ * A Clip waiting on a Job this window asked for may yet follow another Job
+ * the server joins it to: keep what another Job says about it (its result,
+ * or that the Job ended) until the Clip's own Job starts or the join answer
+ * comes (`followJoinedJob`).
+ */
+const keepForJoin = (
+  state: ClipReducerState,
+  heard: JobEventMessage
+): ClipReducerState => {
+  const { type, data } = heard.event;
+  const ended = type === "failed" || type === "interrupted";
+  const settledClipId =
+    type === CLIP_TRANSCRIPTION_EVENTS.clipSettled ? data.id : undefined;
+  if (!ended && settledClipId === undefined) return state;
+  const clipTranscriptionJobs: Holders = { ...state.clipTranscriptionJobs };
+  let kept = false;
+  for (const [clipId, holder] of Object.entries(state.clipTranscriptionJobs)) {
+    if (holder.started || holder.jobId === heard.job.id) continue;
+    if (!ended && clipId !== settledClipId) continue;
+    clipTranscriptionJobs[clipId as DatabaseId] = {
+      ...holder,
+      heardBeforeJoin: [...(holder.heardBeforeJoin ?? []), heard],
+    };
+    kept = true;
+  }
+  return kept ? { ...state, clipTranscriptionJobs } : state;
 };
 
 /**
@@ -184,8 +239,8 @@ const clipSettled = (
   const databaseId = clip.id as DatabaseId;
   const holder = state.clipTranscriptionJobs[databaseId];
   if (holder && holder.jobId !== jobId) return state;
-  const { [databaseId]: _settled, ...clipTranscriptionJobs } =
-    state.clipTranscriptionJobs;
+  const { [databaseId]: _settled, ...released } = state.clipTranscriptionJobs;
+  const clipTranscriptionJobs = holder ? released : state.clipTranscriptionJobs;
   const withWords = new Set(state.clipIdsWithTranscriptWords);
 
   const items = state.items.map((item) => {
@@ -218,7 +273,10 @@ const clipSettled = (
 /**
  * The Job ended (failed or interrupted) without settling the Clips it still
  * holds: each shows it failed and can be retried. A Clip a newer Job has
- * taken on is that Job's.
+ * taken on is that Job's. A Clip loaded `transcribing` that no Job holds here
+ * was taken on before this tab heard of it; one of this Video's Jobs ending
+ * is the only word it will get, so it fails too (a Job still running on it
+ * lands its result over this when it settles).
  */
 const jobEnded = (state: ClipReducerState, jobId: string): ClipReducerState => {
   const held = new Set(
@@ -226,19 +284,25 @@ const jobEnded = (state: ClipReducerState, jobId: string): ClipReducerState => {
       .filter(([, holder]) => holder.jobId === jobId)
       .map(([clipId]) => clipId)
   );
-  if (held.size === 0) return state;
-  const clipTranscriptionJobs: Holders = Object.fromEntries(
-    Object.entries(state.clipTranscriptionJobs).filter(
-      ([clipId]) => !held.has(clipId)
-    )
-  );
+  const fails = (item: TimelineItem) =>
+    item.type === "on-database" &&
+    item.transcriptionStatus === "transcribing" &&
+    (held.has(item.databaseId) ||
+      !(item.databaseId in state.clipTranscriptionJobs));
+  if (held.size === 0 && !state.items.some(fails)) return state;
+  const clipTranscriptionJobs: Holders =
+    held.size === 0
+      ? state.clipTranscriptionJobs
+      : Object.fromEntries(
+          Object.entries(state.clipTranscriptionJobs).filter(
+            ([clipId]) => !held.has(clipId)
+          )
+        );
   return {
     ...state,
     clipTranscriptionJobs,
     items: state.items.map((item) =>
-      item.type === "on-database" &&
-      held.has(item.databaseId) &&
-      item.transcriptionStatus === "transcribing"
+      fails(item) && item.type === "on-database"
         ? { ...item, transcriptionStatus: "failed" as const }
         : item
     ),
