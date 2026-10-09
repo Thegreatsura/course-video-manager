@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "@/components/ui/toast";
+import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
 import type { Editor } from "tldraw";
 import { searchIconNames } from "@/packages/lucide-icons";
 import { renderThumbnailPngBase64 } from "@/features/diagrams/render-thumbnail";
@@ -84,6 +84,7 @@ export function usePalette(opts: {
   handlers: PaletteHandlers;
 }) {
   const { editorRef, handlers } = opts;
+  const status = usePlaygroundStatus();
 
   const [open, setOpen] = useState(false);
   const [nav, dispatchNav] = useReducer(
@@ -157,12 +158,14 @@ export function usePalette(opts: {
     const editor = editorRef.current;
     if (!editor) return;
     const onMaxShapes = () =>
-      toast.error("This page is full — tldraw's shape limit was reached");
+      status.reportError(
+        "This page is full — tldraw's shape limit was reached"
+      );
     editor.on("max-shapes", onMaxShapes);
     return () => {
       editor.off("max-shapes", onMaxShapes);
     };
-  }, [editorRef, open]);
+  }, [editorRef, open, status]);
 
   // --- Root ----------------------------------------------------------------
   const rootActions = useMemo(
@@ -233,7 +236,7 @@ export function usePalette(opts: {
       });
       // Synchronous, so it closes instantly — by the same rule the async
       // component path follows: the palette goes when the shapes LAND. At the
-      // page's shape cap nothing lands, and the `max-shapes` toast below is the
+      // page's shape cap nothing lands, and the `max-shapes` error below is the
       // only thing the author should see.
       if (!landed) return;
       // Recorded only for an icon that actually landed, so a run into the shape
@@ -255,12 +258,12 @@ export function usePalette(opts: {
       if (!replaceIconName(editor, selectedIcon.id, name)) {
         // Same rule as the insert paths — the palette stays up when the canvas
         // did not change, rather than vanishing on a keypress that did nothing.
-        toast.error("That icon is no longer on the canvas");
+        status.reportError("That icon is no longer on the canvas");
         return;
       }
       setOpen(false);
     },
-    [editorRef, selectedIcon]
+    [editorRef, selectedIcon, status]
   );
 
   // --- Components ----------------------------------------------------------
@@ -316,7 +319,7 @@ export function usePalette(opts: {
           // and rewrites root shapes into page coordinates.
           const content = editor.getContentFromCurrentPage(shapeIds);
           if (!content) {
-            toast.error("Couldn't capture that selection");
+            status.reportError("Couldn't capture that selection");
             return;
           }
           // `users` is collaborator presence — meaningless here, and the
@@ -338,17 +341,17 @@ export function usePalette(opts: {
             }),
           });
           if (!res.ok) {
-            toast.error("Couldn't save that component");
+            status.reportError("Couldn't save that component");
             return;
           }
-          toast.success(`Saved “${name.trim()}”`);
+          status.reportSuccess();
           setOpen(false);
         } catch {
-          toast.error("Couldn't save that component");
+          status.reportError("Couldn't save that component");
         }
       });
     },
-    [editorRef, withSpinner]
+    [editorRef, withSpinner, status]
   );
 
   const insertComponent = useCallback(
@@ -367,18 +370,18 @@ export function usePalette(opts: {
             // Reachable, because delete is a hard DELETE: another window may
             // have removed it. Drop the tile so the library heals itself
             // instead of offering something that can never work.
-            toast.error("That component no longer exists");
+            status.reportError("That component no longer exists");
             setComponents((cs) => cs.filter((c) => c.id !== component.id));
             return;
           }
           if (!res.ok) {
-            toast.error("Couldn't insert component");
+            status.reportError("Couldn't insert component");
             return;
           }
           fragment = (await res.json()).sceneFragment;
         } catch {
           // A network blip leaves the palette open, so retrying is one Enter.
-          toast.error("Couldn't insert component");
+          status.reportError("Couldn't insert component");
           return;
         }
 
@@ -392,21 +395,24 @@ export function usePalette(opts: {
           // stored schema and throws when it cannot migrate. The row is left
           // untouched: no broken flag, no migration-on-read backfill.
           //
-          // Logged as well as toasted: the toast names the likeliest cause, but
-          // any throw out of the put lands here, so the real one has to stay
-          // reachable from the console.
+          // Logged as well as reported: the message names the likeliest cause,
+          // but any throw out of the put lands here, so the real one has to
+          // stay reachable from the console.
           console.error("Component insert failed", error);
-          toast.error(
+          status.reportError(
             "This component was saved with an incompatible tldraw version"
           );
           return;
         }
         // The palette closes when the shapes LAND, never before — so at the
         // page's shape cap it stays up and retrying is one Enter.
-        if (landed) setOpen(false);
+        if (landed) {
+          status.reportSuccess();
+          setOpen(false);
+        }
       });
     },
-    [editorRef, withSpinner]
+    [editorRef, withSpinner, status]
   );
 
   const [componentUnderEdit, setComponentUnderEdit] =
@@ -417,30 +423,36 @@ export function usePalette(opts: {
       if (!name.trim()) return;
       const body = new FormData();
       body.set("name", name.trim());
+      // A server that is down rejects the fetch: that is a failure too.
       const res = await fetch(`/api/diagram-components/${id}/rename`, {
         method: "POST",
         body,
-      });
-      if (!res.ok) {
-        toast.error("Couldn't rename that component");
+      }).catch(() => null);
+      if (!res?.ok) {
+        status.reportError("Couldn't rename that component");
         return;
       }
+      status.reportSuccess();
       await refreshComponents();
       dispatchNav({ type: "pop" });
     },
-    [refreshComponents]
+    [refreshComponents, status]
   );
 
-  const deleteComponent = useCallback(async (id: string) => {
-    const res = await fetch(`/api/diagram-components/${id}/delete`, {
-      method: "POST",
-    });
-    if (!res.ok) {
-      toast.error("Couldn't delete that component");
-      return;
-    }
-    setComponents((cs) => cs.filter((c) => c.id !== id));
-  }, []);
+  const deleteComponent = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/diagram-components/${id}/delete`, {
+        method: "POST",
+      }).catch(() => null);
+      if (!res?.ok) {
+        status.reportError("Couldn't delete that component");
+        return;
+      }
+      status.reportSuccess();
+      setComponents((cs) => cs.filter((c) => c.id !== id));
+    },
+    [status]
+  );
 
   // --- Diagrams (server-side search) ---------------------------------------
   const [diagramHits, setDiagramHits] = useState<DiagramHit[]>([]);

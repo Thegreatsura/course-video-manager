@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { toast } from "@/components/ui/toast";
 import {
   fetchSnapshotList,
   type Snapshot,
@@ -11,6 +10,7 @@ import {
   type SnapshotStep,
 } from "@/features/diagrams/snapshot-navigation";
 import { createSnapshotStepper } from "@/features/diagrams/snapshot-stepper";
+import type { PlaygroundStatus } from "@/features/diagrams/playground-status";
 
 /**
  * Ctrl-[ / Ctrl-] stepping through the **Snapshot Timeline**.
@@ -33,8 +33,10 @@ export function useSnapshotStepShortcut(opts: {
     snapshot: Snapshot,
     headIsCaptured: boolean
   ) => Promise<void> | void;
+  /** Where a step that couldn't run says why. */
+  status: PlaygroundStatus;
 }) {
-  const { diagramId, flushPendingSave, onRestoreRequest } = opts;
+  const { diagramId, flushPendingSave, onRestoreRequest, status } = opts;
 
   useEffect(() => {
     if (!diagramId) return;
@@ -50,9 +52,9 @@ export function useSnapshotStepShortcut(opts: {
     async function step(direction: SnapshotStep) {
       const outcome = await stepper.step(direction);
       if (outcome.kind === "unavailable") {
-        toast.error("Failed to load snapshots");
+        status.reportError("Failed to load snapshots");
       } else if (outcome.kind === "nowhere-to-go") {
-        toast.info("No other snapshot to step to");
+        status.reportError("No other snapshot to step to");
       }
     }
 
@@ -66,5 +68,5 @@ export function useSnapshotStepShortcut(opts: {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [diagramId, flushPendingSave, onRestoreRequest]);
+  }, [diagramId, flushPendingSave, onRestoreRequest, status]);
 }

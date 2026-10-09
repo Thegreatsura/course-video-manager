@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import { useNavigate } from "react-router";
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
-import { toast } from "@/components/ui/toast";
 import { diagramChannel } from "@/lib/diagram-protocol";
 import {
   createInitialDiagramPlaygroundState,
@@ -19,6 +18,7 @@ import {
 } from "./head-autosaver";
 import { centreCameraOnContent } from "./centre-camera-on-content";
 import { renderThumbnailPngBase64 } from "./render-thumbnail";
+import type { PlaygroundStatus } from "./playground-status";
 import type { Snapshot } from "./snapshot-list";
 
 /**
@@ -258,8 +258,12 @@ export function useDiagramPlaygroundReducer() {
           diagramName: effect.diagramName,
         });
       },
-      "show-error": (_state, effect) => {
-        toast.error(effect.message);
+      "time-out-error": (_state, effect, dispatch) => {
+        const timer = setTimeout(
+          () => dispatch({ type: "error-timed-out", id: effect.id }),
+          effect.ms
+        );
+        return () => clearTimeout(timer);
       },
       // The store listener on the route reports the flip back as
       // `focus-mode-changed`.
@@ -352,9 +356,18 @@ export function useDiagramPlaygroundReducer() {
     [dispatch]
   );
 
+  const status = useMemo<PlaygroundStatus>(
+    () => ({
+      reportError: (message) => dispatch({ type: "error-reported", message }),
+      reportSuccess: () => dispatch({ type: "operation-succeeded" }),
+    }),
+    [dispatch]
+  );
+
   return {
     state,
     dispatch,
+    status,
     editorRef,
     attachEditor,
     flushPendingSave,
