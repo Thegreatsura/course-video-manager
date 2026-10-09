@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DB } from "@/db/schema";
 import type {
   ClipOnDatabase,
@@ -19,11 +19,13 @@ import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
+import { useClipTranscriptionJobs } from "@/features/video-editor/use-clip-transcription-jobs";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { runtimeLive } from "@/services/layer.server";
 import { makeLoader } from "@/services/route-action.server";
 import { FileSystem } from "@effect/platform";
@@ -83,6 +85,11 @@ export const loader = makeLoader({
       const beatOps = yield* BeatOperationsService;
       const clipOps = yield* ClipOperationsService;
       const overlayOps = yield* OverlayOperationsService;
+      const jobOps = yield* JobOperationsService;
+      // Read before the Clips: every Job Event up to here is in them (a
+      // Clip's row is written before its event), so the editor applies only
+      // the transcription events after it (`use-clip-transcription-jobs.ts`).
+      const jobEventCursor = yield* jobOps.latestJobEventId();
       const video = yield* videoOps.getVideoWithClipsById(videoId);
 
       // This video's own Beat plan, shown (and edited, when idle) in the
@@ -168,6 +175,7 @@ export const loader = makeLoader({
         video: slimVideo,
         hasScript,
         clipIdsWithTranscriptWords,
+        jobEventCursor,
         items: sortedItems,
         waveformData: undefined,
         videoCount: lesson?.videos.length ?? 1,
@@ -286,6 +294,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     insertionPoint: getDefaultInsertionPoint(initialItems),
     error: null,
     sessions: [],
+    clipTranscriptionJobs: {},
   };
 
   const clipStateRef = useRef(initialState);
@@ -310,6 +319,14 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   );
 
   clipStateRef.current = clipState;
+
+  // The cursor the reducer's first state was read at; a revalidate moves the
+  // loader's, but not the reducer's Clips.
+  const [loadedThrough] = useState(props.loaderData.jobEventCursor);
+  useClipTranscriptionJobs(
+    { videoId: props.loaderData.video.id, loadedThrough },
+    dispatch
+  );
 
   const [silenceLength, setSilenceLength] = useSilenceLength();
   const silenceLengthRef = useRef(silenceLength);

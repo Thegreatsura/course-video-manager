@@ -421,7 +421,7 @@ export const clipWebLinks = createTable("clip_web_link", {
  * Offsets are CLIP-RELATIVE seconds (`0` = the Clip's own start), so they stay
  * meaningful independently of the source Footage file the Clip was cut from
  * (which can be re-recorded, moved, or deleted). Written whole-Clip-at-a-time
- * by a transcription (the `clips.transcribe` route) or by slicing the Footage
+ * by a transcription (the `transcribe-clips` Job) or by slicing the Footage
  * sidecar on `cvm clip add`; read back by `cvm clip words`.
  *
  * There is no ordering column — order IS `start` ascending. Cascade-deleted

@@ -1,59 +1,20 @@
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Config, Data, Effect, Option, Schema, Stream } from "effect";
+import { Config, Data, Effect, Option, Stream } from "effect";
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { homedir, tmpdir } from "os";
-import OpenAI from "openai";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { findSilenceInVideo } from "./silence-detection";
-import { transcribeFootage } from "./footage-transcription";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import type { SilenceLength } from "@/silence-detection-constants";
-import { removeBestEffort } from "@/services/remove-best-effort";
 
 export type PauseType = "none" | "long";
 
-const TRANSCRIPTION_PERMITS = 20;
 const AUTO_EDITED_VIDEO_FINAL_END_PADDING = 0.5;
 
 const FUSCRIPT_LOCATION =
   "/mnt/d/Program Files/Blackmagic Design/DaVinci Resolve/fuscript.exe";
-
-const transcribeClipsSchema = Schema.Array(
-  Schema.Struct({
-    id: Schema.String,
-    words: Schema.Array(
-      Schema.Struct({
-        start: Schema.Number,
-        end: Schema.Number,
-        text: Schema.String,
-      })
-    ),
-    segments: Schema.Array(
-      Schema.Struct({
-        start: Schema.Number,
-        end: Schema.Number,
-        text: Schema.String,
-      })
-    ),
-  })
-);
-
-class CouldNotTranscribeError extends Data.TaggedError(
-  "CouldNotTranscribeError"
-)<{
-  cause: unknown;
-  message: string;
-}> {}
-
-class CouldNotExtractAudioError extends Data.TaggedError(
-  "CouldNotExtractAudioError"
-)<{
-  cause: unknown;
-  message: string;
-}> {}
 
 class CouldNotRunDavinciResolveScriptError extends Data.TaggedError(
   "CouldNotRunDavinciResolveScriptError"
@@ -68,12 +29,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
     effect: Effect.gen(function* () {
       const effectFs = yield* FileSystem.FileSystem;
       const ffmpegCommands = yield* FFmpegCommandsService;
-      const transcriptionSemaphore = yield* Effect.makeSemaphore(
-        TRANSCRIPTION_PERMITS
-      );
-
-      const openaiApiKey = yield* Config.string("OPENAI_API_KEY");
-      const openai = new OpenAI({ apiKey: openaiApiKey });
 
       const getLatestOBSVideoClips = Effect.fn("getLatestOBSVideoClips")(
         function* (opts: {
@@ -127,209 +82,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           });
         }
       );
-
-      /**
-       * Extract audio from a video clip segment using ffmpeg.
-       */
-      const extractAudioClip = Effect.fn("extractAudioClip")(function* (
-        inputVideo: string,
-        startTime: number,
-        duration: number
-      ) {
-        const outputDir = path.join(tmpdir(), "whisper-audio");
-        yield* effectFs.makeDirectory(outputDir, { recursive: true });
-
-        const outputHash = crypto
-          .createHash("sha256")
-          .update(`${inputVideo}-${startTime}-${duration}`)
-          .digest("hex")
-          .slice(0, 12);
-        const outputFile = path.join(outputDir, `${outputHash}.mp3`);
-
-        const code = yield* Command.exitCode(
-          Command.make(
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-ss",
-            startTime.toString(),
-            "-t",
-            duration.toString(),
-            "-i",
-            inputVideo,
-            "-vn",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "384k",
-            outputFile
-          )
-        ).pipe(
-          Effect.mapError(
-            (e) =>
-              new CouldNotExtractAudioError({
-                cause: e,
-                message: `Failed to extract audio: ${e.message}`,
-              })
-          )
-        );
-        if (code !== 0) {
-          return yield* new CouldNotExtractAudioError({
-            cause: null,
-            message: `Failed to extract audio, exit code: ${code}`,
-          });
-        }
-
-        return outputFile;
-      });
-
-      /**
-       * Transcribe a single audio file using OpenAI Whisper API.
-       */
-      const transcribeAudioFile = Effect.fn("transcribeAudioFile")(function* (
-        audioPath: string
-      ) {
-        const response = yield* transcriptionSemaphore.withPermits(1)(
-          Effect.tryPromise({
-            try: async () => {
-              const stream = fs.createReadStream(audioPath);
-              return openai.audio.transcriptions.create({
-                file: stream,
-                model: "whisper-1",
-                response_format: "verbose_json",
-                timestamp_granularities: ["segment", "word"],
-              });
-            },
-            catch: (e) =>
-              new CouldNotTranscribeError({
-                cause: e,
-                message: `Whisper API call failed: ${e}`,
-              }),
-          })
-        );
-
-        return {
-          segments: (response.segments ?? []).map((segment) => ({
-            start: segment.start,
-            end: segment.end,
-            text: segment.text,
-          })),
-          words: (response.words ?? []).map((word) => ({
-            start: word.start,
-            end: word.end,
-            text: word.word,
-          })),
-        };
-      });
-
-      const transcribeClips = Effect.fn("transcribeClips")(function* (
-        clips: {
-          id: string;
-          inputVideo: string;
-          startTime: number;
-          duration: number;
-        }[]
-      ) {
-        const results = yield* Effect.forEach(
-          clips,
-          (clip) =>
-            Effect.gen(function* () {
-              // Extract audio segment from video
-              const audioPath = yield* extractAudioClip(
-                clip.inputVideo,
-                clip.startTime,
-                clip.duration
-              );
-
-              // Transcribe the audio clip
-              const transcription = yield* transcribeAudioFile(audioPath);
-
-              // Clean up audio file
-              yield* removeBestEffort(effectFs, audioPath);
-
-              return {
-                id: clip.id,
-                words: transcription.words,
-                segments: transcription.segments,
-              };
-            }),
-          { concurrency: "unbounded" }
-        );
-
-        return yield* Schema.decodeUnknown(transcribeClipsSchema)(results);
-      });
-
-      /**
-       * Transcribe an entire, already-concatenated video in a single Whisper
-       * pass. Extracts the full audio track (audio-only, so it stays well under
-       * Whisper's 25MB upload limit even though the source video does not) and
-       * transcribes it once.
-       *
-       * Unlike {@link transcribeClips}, the returned segment timestamps are on
-       * the video's own final timeline, so downstream callers need no per-clip
-       * offset — matching the original Total TypeScript renderer, which
-       * transcribed a single concatenated audio file.
-       */
-      const transcribeVideoFile = Effect.fn("transcribeVideoFile")(function* (
-        inputVideo: string
-      ) {
-        const outputDir = path.join(tmpdir(), "whisper-audio");
-        yield* effectFs.makeDirectory(outputDir, { recursive: true });
-
-        const outputHash = crypto
-          .createHash("sha256")
-          .update(`${inputVideo}-full-audio`)
-          .digest("hex")
-          .slice(0, 12);
-        const audioPath = path.join(outputDir, `${outputHash}.mp3`);
-
-        const code = yield* Command.exitCode(
-          Command.make(
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-i",
-            inputVideo,
-            "-vn",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "384k",
-            audioPath
-          )
-        ).pipe(
-          Effect.mapError(
-            (e) =>
-              new CouldNotExtractAudioError({
-                cause: e,
-                message: `Failed to extract audio: ${e.message}`,
-              })
-          )
-        );
-        if (code !== 0) {
-          return yield* new CouldNotExtractAudioError({
-            cause: null,
-            message: `Failed to extract audio, exit code: ${code}`,
-          });
-        }
-
-        const transcription = yield* transcribeAudioFile(audioPath);
-
-        yield* removeBestEffort(effectFs, audioPath);
-
-        return transcription;
-      });
-
-      /**
-       * Transcribe a whole raw FOOTAGE file (see GLOSSARY.md "Footage"): a file on
-       * disk that is not — and never becomes — a database row. The ffmpeg +
-       * silence-chunking orchestration lives in {@link transcribeFootage} (split
-       * out only for the file-size budget); it reuses THIS service's
-       * {@link transcribeAudioFile} per chunk, so faking VideoProcessingService
-       * still fakes all of footage transcription. No diarization, ever.
-       */
-      const transcribeFootageFile = (inputVideo: string) =>
-        transcribeFootage({ ffmpegCommands, transcribeAudioFile }, inputVideo);
 
       const getLastFrame = Effect.fn("getLastFrame")(function* (
         inputVideo: string,
@@ -540,9 +292,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
          * this is the seam a Publish test replaces.
          */
         getVideoDurationInSeconds: ffmpegCommands.getVideoDurationInSeconds,
-        transcribeClips,
-        transcribeVideoFile,
-        transcribeFootageFile,
         getLastFrame,
         getFirstFrame,
         sendClipsToDavinciResolve,

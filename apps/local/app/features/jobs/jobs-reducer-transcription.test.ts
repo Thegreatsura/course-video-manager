@@ -56,3 +56,24 @@ describe("a Clip transcription Job", () => {
     expect(rowsOf()).toEqual([]);
   });
 });
+
+// The Clip shows its own state; a Job per recording would toast on every take.
+describe("a Clip transcription Job settling", () => {
+  it.each(["succeeded", "failed", "interrupted"])(
+    "shows no toast when it %s",
+    (outcome) => {
+      const tester = new ReducerTester(jobsReducer, createInitialJobsState())
+        .send(transcription("started", { attempt: 1 }))
+        .send(transcription(outcome, { error: { message: "boom" } }));
+      expect(
+        tester
+          .getEffects()
+          .filter(
+            (e) =>
+              e.type === "show-job-succeeded-toast" ||
+              e.type === "show-job-failed-toast"
+          )
+      ).toEqual([]);
+    }
+  );
+});

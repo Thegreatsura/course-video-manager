@@ -217,6 +217,12 @@ export type ClipReducerState = {
    */
   sessions: RecordingSession[];
   /**
+   * The `transcribe-clips` Job each Clip's latest Transcription runs in, as
+   * its Job Events told this window (`transcription-job-started`). A Job that
+   * fails fails the Clips it still holds here.
+   */
+  clipTranscriptionJobs: Record<DatabaseId, string>;
+  /**
    * Live browser link-capture state, fed by `browser-event` actions from the
    * Chrome extension. `browserFocus` + `browserUrl` fold to the single web page
    * currently visible on screen; this is ambient device state, not part of the
@@ -296,6 +302,17 @@ export type ClipReducerAction =
       type: "clips-transcription-failed";
       clipIds: DatabaseId[];
       message: string;
+    }
+  | {
+      /** A `transcribe-clips` Job took these Clips on. */
+      type: "transcription-job-started";
+      jobId: string;
+      clipIds: DatabaseId[];
+    }
+  | {
+      /** A `transcribe-clips` Job ended failed or interrupted. */
+      type: "transcription-job-failed";
+      jobId: string;
     }
   | {
       type: "set-insertion-point-after";

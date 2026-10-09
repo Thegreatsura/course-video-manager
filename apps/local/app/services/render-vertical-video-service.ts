@@ -5,7 +5,7 @@ import path from "node:path";
 import { tmpdir } from "os";
 import crypto from "node:crypto";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { VideoProcessingService } from "./video-processing-service";
+import { WhisperTranscriptionService } from "./whisper-transcription-service";
 import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
@@ -35,7 +35,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
   {
     effect: Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
-      const videoProcessing = yield* VideoProcessingService;
+      const whisper = yield* WhisperTranscriptionService;
       const ffmpegCommands = yield* FFmpegCommandsService;
       const ffmpegEncode = yield* FFmpegEncodeService;
       const effectFs = yield* FileSystem.FileSystem;
@@ -146,7 +146,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // and the long-pause padding / audio normalization are accounted for.
             enterStage("transcribing");
             const transcription =
-              yield* videoProcessing.transcribeVideoFile(concatenatedPath);
+              yield* whisper.transcribeVideoFile(concatenatedPath);
 
             // Step 3: Get FPS from the concatenated video
             const fps = yield* ffmpegCommands.getFPS(concatenatedPath);
@@ -226,7 +226,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
     }),
     dependencies: [
       NodeContext.layer,
-      VideoProcessingService.Default,
+      WhisperTranscriptionService.Default,
       FFmpegCommandsService.Default,
       FFmpegEncodeService.Default,
       VideoEditorLoggerService.Default,

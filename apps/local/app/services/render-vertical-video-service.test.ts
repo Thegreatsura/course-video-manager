@@ -3,7 +3,7 @@ import { beforeAll, beforeEach } from "vitest";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import { FFmpegEncodeService } from "@/services/ffmpeg-encode-commands";
 import { DrizzleService } from "@/services/drizzle-service.server";
@@ -95,7 +95,7 @@ describe("RenderVerticalVideoService", () => {
   }) {
     const dbLayer = Layer.succeed(DrizzleService, testDb as any);
 
-    const fakeVideoProcessing = Layer.succeed(VideoProcessingService, {
+    const fakeWhisper = Layer.succeed(WhisperTranscriptionService, {
       transcribeVideoFile: () =>
         Effect.succeed({
           words: [
@@ -124,7 +124,7 @@ describe("RenderVerticalVideoService", () => {
     const depsLayer = Layer.mergeAll(
       VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
       ClipOperationsService.Default.pipe(Layer.provide(dbLayer)),
-      fakeVideoProcessing,
+      fakeWhisper,
       fakeFfmpeg,
       Layer.succeed(FFmpegEncodeService, {} as any),
       configLayer,
@@ -180,7 +180,7 @@ describe("RenderVerticalVideoService", () => {
       const dbLayer = Layer.succeed(DrizzleService, testDb as any);
       const depsLayer = Layer.mergeAll(
         VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
-        Layer.succeed(VideoProcessingService, {} as any),
+        Layer.succeed(WhisperTranscriptionService, {} as any),
         Layer.succeed(FFmpegCommandsService, {} as any),
         Layer.succeed(FFmpegEncodeService, {
           createAndConcatenateVideoClipsSinglePass: () =>
