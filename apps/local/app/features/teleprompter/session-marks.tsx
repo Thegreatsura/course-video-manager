@@ -21,8 +21,9 @@
  * that happen to be near each other.
  *
  * One more colour, over both axes: light blue for the Clip the Video Editor is
- * playing right now. Clicking a dot plays its Clip in the editor, or pauses it
- * if it is the one playing, so a take can be checked from the glass.
+ * playing right now. Clicking a landed dot plays its Clip in the editor, or
+ * pauses it if it is the one playing, so a take can be checked from the glass.
+ * Every other dot has no Clip on the timeline to play, so it is not clickable.
  *
  * Colours are the editor's own vocabulary from `recording-session-panel.tsx`
  * (amber = orphaned, red = archived): you should not have to learn a second
@@ -155,8 +156,11 @@ export function SessionMarks(props: {
           const mark = playing
             ? { colour: PLAYING, filled: true }
             : MARK[state];
+          // Only a landed Clip is on the timeline to play: a pending one has
+          // no database Clip yet, an orphaned one never will, and a deleted
+          // one is archived. Those dots are not offered as buttons at all.
           const onClick =
-            clipId !== null && props.onMarkClicked
+            clipId !== null && state === "landed" && props.onMarkClicked
               ? () => props.onMarkClicked!(clipId)
               : undefined;
           return (
