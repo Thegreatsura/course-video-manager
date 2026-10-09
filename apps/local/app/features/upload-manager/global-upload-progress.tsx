@@ -13,6 +13,7 @@ import {
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
 import { jobLogHref } from "@/features/jobs/job-wire";
 import { SidecarDownBanner } from "@/features/jobs/sidecar-down-banner";
+import { clockOffsetOf } from "@/features/jobs/jobs-timing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,12 +86,15 @@ export function GlobalUploadProgress() {
     const interval = setInterval(() => setNow(clock()), 1000);
     return () => clearInterval(interval);
   }, [isActive, clock]);
-  // No Job row has an ETA yet: its timings come from its Job Events next.
-  const etaRows: Record<string, UploadEntry> = {};
+  // Each row's timings come from its Job Events, by the database's clock:
+  // "now" is moved onto that clock too (`clockOffsetOf`).
+  const etaRows: Record<string, UploadEntry> = Object.fromEntries(
+    allEntries.map((row) => [row.uploadId, row])
+  );
   const etas = estimateUploads(etaRows, {
-    timings: {},
+    timings: jobs.timings,
     history: etaHistory,
-    now,
+    now: now - clockOffsetOf(jobs),
   });
   const allDoneMs = allDoneEta(etaRows, etas);
 
