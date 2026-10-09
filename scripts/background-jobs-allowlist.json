@@ -57,12 +57,7 @@
     {
       "file": "apps/local/app/services/whisper-transcription-service.ts",
       "count": 1,
-      "reason": "Sidecar only (and `cvm footage transcribe`): ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job) or a vertical Short (the render-vertical Job). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
-    },
-    {
-      "file": "apps/local/app/services/footage-transcription.ts",
-      "count": 2,
-      "reason": "Footage transcription (#16): run by `cvm footage transcribe` on the author's machine, never by a request."
+      "reason": "Sidecar only: ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job), a vertical Short (the render-vertical Job) or a Footage file (the transcribe-footage Job, which `cvm footage transcribe` enqueues). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
     }
   ]
 }

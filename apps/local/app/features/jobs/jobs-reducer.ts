@@ -15,6 +15,7 @@ import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
+import { TRANSCRIBE_FOOTAGE_JOB_KIND } from "./transcribe-footage-job";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -364,6 +365,8 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
   if (job.kind === "batch-export" && job.status === "succeeded") return;
   // A Clip transcription shows on its Clips in the editor, never as a toast.
   if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) return;
+  // A Footage transcription is the CLI's: it prints the result itself.
+  if (job.kind === TRANSCRIBE_FOOTAGE_JOB_KIND) return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",

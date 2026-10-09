@@ -1,8 +1,5 @@
-import { Command, FileSystem } from "@effect/platform";
-import { Data, Effect } from "effect";
-import crypto from "node:crypto";
-import path from "node:path";
-import { tmpdir } from "os";
+import { FileSystem } from "@effect/platform";
+import { Effect } from "effect";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
 import { findSilenceInVideo } from "./silence-detection";
 import {
@@ -13,17 +10,17 @@ import {
 import { removeBestEffort } from "@/services/remove-best-effort";
 
 /**
- * Whole-file **Footage** transcription — the ffmpeg + chunking orchestration
- * behind `WhisperTranscriptionService.transcribeFootageFile`. Split out of that
+ * Whole-file **Footage** transcription — the chunking orchestration behind
+ * `WhisperTranscriptionService.transcribeFootageFile`. Split out of that
  * service purely to keep it under the repo's per-file token budget; it is not a
- * seam. `transcribeFootage` takes the service's own `transcribeAudioFile` (the
- * Whisper call, with its semaphore and API key) as a parameter, so every chunk
- * still transcribes through exactly that one path and the whole thing stays
+ * seam. It starts no process of its own: the audio comes from the service's
+ * `extractAudio` and every chunk goes through its `transcribeAudioFile` (the
+ * Whisper call, with its permits and API key), so the whole thing stays
  * fakeable by faking WhisperTranscriptionService.
  *
  * DELIBERATELY SEPARATE from the per-clip transcription path: the audio here is
  * mono 64kbps (small enough that most files upload in one Whisper pass), never
- * the 384kbps stereo `extractAudio` produces.
+ * the 384kbps stereo a Clip's audio is extracted as.
  */
 
 /**
@@ -33,125 +30,111 @@ import { removeBestEffort } from "@/services/remove-best-effort";
  */
 const WHISPER_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-export class CouldNotExtractFootageAudioError extends Data.TaggedError(
-  "CouldNotExtractFootageAudioError"
-)<{
-  cause: unknown;
-  message: string;
-}> {}
+/**
+ * One piece of a footage file Whisper hears on its own: the whole file
+ * (`key: "whole"`), or a silence-aligned `[start, end)` window of a long one.
+ */
+export interface FootageChunk {
+  /** Stable for the same file and the same cut: what the chunk cache is keyed by. */
+  readonly key: string;
+  readonly index: number;
+  readonly count: number;
+  readonly start: number;
+  readonly end: number | null;
+}
 
 /**
- * Extract footage audio as mono, 64kbps mp3. Pass a `startTime`/`durationSeconds`
- * to extract one chunk of a long file.
+ * Where finished chunks are kept so a run that is cut off (the Sidecar
+ * restarting) resumes rather than paying Whisper for them again. Both are best
+ * effort: a cache that cannot be read is a miss, one that cannot be written
+ * costs only the resume.
  */
-const extractFootageAudio = Effect.fn("extractFootageAudio")(function* (
-  inputVideo: string,
-  startTime?: number,
-  durationSeconds?: number
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const outputDir = path.join(tmpdir(), "whisper-footage-audio");
-  yield* fs.makeDirectory(outputDir, { recursive: true });
+export interface FootageChunkCache {
+  readonly get: (
+    chunk: FootageChunk
+  ) => Effect.Effect<FootageTranscript | null, never, FileSystem.FileSystem>;
+  readonly put: (
+    chunk: FootageChunk,
+    transcript: FootageTranscript
+  ) => Effect.Effect<void, never, FileSystem.FileSystem>;
+}
 
-  const outputHash = crypto
-    .createHash("sha256")
-    .update(`${inputVideo}-${startTime ?? "full"}-${durationSeconds ?? "full"}`)
-    .digest("hex")
-    .slice(0, 12);
-  const outputFile = path.join(outputDir, `${outputHash}.mp3`);
-
-  const args = ["-y", "-hide_banner"];
-  if (startTime !== undefined) args.push("-ss", startTime.toString());
-  if (durationSeconds !== undefined)
-    args.push("-t", durationSeconds.toString());
-  args.push(
-    "-i",
-    inputVideo,
-    "-vn",
-    "-ac",
-    "1",
-    "-c:a",
-    "libmp3lame",
-    "-b:a",
-    "64k",
-    outputFile
-  );
-
-  const code = yield* Command.exitCode(Command.make("ffmpeg", ...args)).pipe(
-    Effect.mapError(
-      (e) =>
-        new CouldNotExtractFootageAudioError({
-          cause: e,
-          message: `Failed to extract footage audio: ${e.message}`,
-        })
-    )
-  );
-  if (code !== 0) {
-    return yield* new CouldNotExtractFootageAudioError({
-      cause: null,
-      message: `Failed to extract footage audio, exit code: ${code}`,
-    });
-  }
-
-  return outputFile;
-});
-
-const getAudioDurationSeconds = Effect.fn("getAudioDurationSeconds")(function* (
-  audioPath: string
-) {
-  const result = yield* Command.string(
-    Command.make(
-      "ffprobe",
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      audioPath
-    )
-  ).pipe(
-    Effect.mapError(
-      (e) =>
-        new CouldNotExtractFootageAudioError({
-          cause: e,
-          message: `Failed to read audio duration: ${e.message}`,
-        })
-    )
-  );
-  return Number(result.trim());
-});
+export interface TranscribeFootageOptions {
+  readonly cache?: FootageChunkCache;
+  /** Called once per chunk as it settles, from the cache or from Whisper. */
+  readonly onChunk?: (
+    chunk: FootageChunk & { readonly cached: boolean }
+  ) => Effect.Effect<void>;
+}
 
 /**
  * Transcribe a whole raw footage file. Extracts the full audio (mono 64k); if it
  * fits under Whisper's 25MB cap it is one pass, otherwise the file is split into
  * ~27-minute chunks cut at detected silence (never mid-word), each transcribed
  * on its own, and the pieces' timestamps offset back onto the file's timeline
- * and merged. No diarization, ever.
+ * and merged. No diarization, ever. A chunk already in `options.cache` is not
+ * extracted or sent to Whisper again.
  */
-export const transcribeFootage = <E, R>(
+export const transcribeFootage = <EA, RA, ET, RT>(
   deps: {
     readonly ffmpegCommands: FFmpegCommandsService;
+    /** ffmpeg writes the file's audio (or a range of it) as mono 64k mp3. */
+    readonly extractAudio: (
+      inputVideo: string,
+      range: { startTime: number; duration: number } | undefined
+    ) => Effect.Effect<string, EA, RA>;
     readonly transcribeAudioFile: (
       audioPath: string
-    ) => Effect.Effect<FootageTranscript, E, R>;
+    ) => Effect.Effect<FootageTranscript, ET, RT>;
   },
-  inputVideo: string
+  inputVideo: string,
+  options: TranscribeFootageOptions = {}
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
-    const fullAudio = yield* extractFootageAudio(inputVideo);
+    /** A chunk from the cache, or extracted, through Whisper, and cached. */
+    const transcribeChunk = (
+      chunk: FootageChunk,
+      audio: Effect.Effect<string, EA, RA>
+    ) =>
+      Effect.gen(function* () {
+        const cached = options.cache ? yield* options.cache.get(chunk) : null;
+        if (cached) {
+          yield* options.onChunk?.({ ...chunk, cached: true }) ?? Effect.void;
+          return cached;
+        }
+        const audioPath = yield* audio;
+        const transcription = yield* deps.transcribeAudioFile(audioPath);
+        yield* removeBestEffort(fs, audioPath);
+        if (options.cache) yield* options.cache.put(chunk, transcription);
+        yield* options.onChunk?.({ ...chunk, cached: false }) ?? Effect.void;
+        return transcription;
+      });
+
+    const fullAudio = yield* deps.extractAudio(inputVideo, undefined);
     const stat = yield* fs.stat(fullAudio);
 
     if (Number(stat.size) <= WHISPER_MAX_UPLOAD_BYTES) {
-      const transcription = yield* deps.transcribeAudioFile(fullAudio);
+      const whole: FootageChunk = {
+        key: "whole",
+        index: 0,
+        count: 1,
+        start: 0,
+        end: null,
+      };
+      const transcription = yield* transcribeChunk(
+        whole,
+        Effect.succeed(fullAudio)
+      );
       yield* removeBestEffort(fs, fullAudio);
       return transcription;
     }
 
     // Too large for one upload: split at silence near the target size.
-    const durationSeconds = yield* getAudioDurationSeconds(fullAudio);
+    const durationSeconds =
+      yield* deps.ffmpegCommands.getVideoDurationInSeconds(fullAudio);
+    yield* removeBestEffort(fs, fullAudio);
     const { clips } = yield* findSilenceInVideo(
       deps.ffmpegCommands,
       inputVideo
@@ -164,24 +147,27 @@ export const transcribeFootage = <E, R>(
     // Sequential: transcribeAudioFile already bounds Whisper concurrency with a
     // semaphore, and chunking exists to stay UNDER a limit, not to fan one file
     // out across the whole permit budget.
-    const chunks = yield* Effect.forEach(boundaries, (boundary) =>
-      Effect.gen(function* () {
-        const chunkAudio = yield* extractFootageAudio(
-          inputVideo,
-          boundary.start,
-          boundary.end - boundary.start
-        );
-        const transcription = yield* deps.transcribeAudioFile(chunkAudio);
-        yield* removeBestEffort(fs, chunkAudio);
-        return {
+    const chunks = yield* Effect.forEach(boundaries, (boundary, index) =>
+      transcribeChunk(
+        {
+          key: `${boundary.start}-${boundary.end}`,
+          index,
+          count: boundaries.length,
+          start: boundary.start,
+          end: boundary.end,
+        },
+        deps.extractAudio(inputVideo, {
+          startTime: boundary.start,
+          duration: boundary.end - boundary.start,
+        })
+      ).pipe(
+        Effect.map((transcription) => ({
           offset: boundary.start,
           words: transcription.words,
           segments: transcription.segments,
-        };
-      })
+        }))
+      )
     );
-
-    yield* removeBestEffort(fs, fullAudio);
 
     return mergeChunkTranscripts(chunks);
   });
