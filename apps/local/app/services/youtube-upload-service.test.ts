@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { SidecarContextTest } from "@/services/sidecar-context";
 
 const FAKE_UPLOAD_URI =
@@ -59,6 +59,52 @@ describe("uploadVideoToYouTube", () => {
       const initiationCall = capturedFetchCalls[0]!;
       const url = new URL(initiationCall.url);
       expect(url.searchParams.get("notifySubscribers")).toBe("false");
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+});
+
+describe("uploadVideoToYouTube, interrupted", () => {
+  // A post cut off by the sidecar must stop sending: a request left running
+  // can land after the Job says "interrupted", and after its check said
+  // "it did not go out".
+  it("aborts the chunk still on the wire", async () => {
+    const calls: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        calls.push(init);
+        if (init.method === "POST") {
+          return Promise.resolve(
+            new Response(null, {
+              status: 200,
+              headers: { Location: FAKE_UPLOAD_URI },
+            })
+          );
+        }
+        return new Promise(() => {}); // the chunk never gets an answer
+      })
+    );
+    const { uploadVideoToYouTube } = await import("./youtube-upload-service");
+    const fs = await import("fs");
+    const tmpFile = "/tmp/test-video-interrupted.mp4";
+    fs.writeFileSync(tmpFile, Buffer.alloc(1024));
+    try {
+      const fiber = Effect.runFork(
+        uploadVideoToYouTube({
+          accessToken: "fake-token",
+          filePath: tmpFile,
+          title: "Test",
+          description: "Test",
+          privacyStatus: "public",
+          notifySubscribers: false,
+          onProgress: () => {},
+        }).pipe(Effect.provide(SidecarContextTest))
+      );
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      await Effect.runPromise(Fiber.interrupt(fiber));
+      expect(calls[1]?.signal?.aborted).toBe(true);
     } finally {
       fs.unlinkSync(tmpFile);
     }

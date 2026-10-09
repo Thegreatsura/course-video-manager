@@ -47,14 +47,15 @@ const createObjectStoreOperations = (opts: {
         );
 
         yield* Effect.tryPromise({
-          try: () =>
+          try: (signal) =>
             client.send(
               new PutObjectCommand({
                 Bucket: opts.bucket,
                 Key: uploadOpts.pathname,
                 Body: fileContent,
                 ContentType: "video/mp4",
-              })
+              }),
+              { abortSignal: signal }
             ),
           catch: (e) =>
             new ObjectStoreError({

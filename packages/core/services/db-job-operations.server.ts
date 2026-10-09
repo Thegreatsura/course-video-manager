@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  lt,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { Effect } from "effect";
 import { jobEvents, jobs, sidecarLease } from "../db/schema.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
@@ -378,9 +389,12 @@ export const createJobOperations = (db: Database) => {
    * retry rule. A Job of a kind in `neverRetryKinds` (posting) ends
    * `interrupted` whatever its attempts. Safe to call at any time and from
    * any process.
+   * Never one in `stillRunning`, the caller's own live runs: a late
+   * heartbeat can lapse a lease while the post goes on.
    */
   const recoverExpiredJobs = Effect.fn("recoverExpiredJobs")(function* (input: {
     neverRetryKinds: readonly string[];
+    stillRunning: readonly string[];
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
@@ -389,7 +403,13 @@ export const createJobOperations = (db: Database) => {
             .select()
             .from(jobs)
             .where(
-              and(eq(jobs.status, "running"), lt(jobs.leaseUntil, sql`now()`))
+              and(
+                eq(jobs.status, "running"),
+                lt(jobs.leaseUntil, sql`now()`),
+                input.stillRunning.length === 0
+                  ? undefined
+                  : notInArray(jobs.id, [...input.stillRunning])
+              )
             )
             .orderBy(asc(jobs.createdAt))
             .for("update", { skipLocked: true })

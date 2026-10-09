@@ -35,13 +35,14 @@ const initiateResumableUpload = (opts: {
   fileSize: number;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const url = new URL(`${opts.apiUrl}/upload/youtube/v3/videos`);
       url.searchParams.set("uploadType", "resumable");
       url.searchParams.set("part", "snippet,status");
       url.searchParams.set("notifySubscribers", String(opts.notifySubscribers));
 
       const res = await fetch(url.toString(), {
+        signal,
         method: "POST",
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
@@ -155,8 +156,9 @@ export const uploadVideoToYouTube = (opts: {
             });
 
             const response = yield* Effect.tryPromise({
-              try: async () => {
+              try: async (signal) => {
                 const res = await fetch(uploadUri, {
+                  signal,
                   method: "PUT",
                   headers: {
                     "Content-Length": chunkSize.toString(),
@@ -237,10 +239,11 @@ export const setYouTubeThumbnail = (opts: {
     });
 
     yield* Effect.tryPromise({
-      try: async () => {
+      try: async (signal) => {
         const res = await fetch(
           `${apiUrl}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(opts.youtubeVideoId)}`,
           {
+            signal,
             method: "POST",
             headers: {
               Authorization: `Bearer ${opts.accessToken}`,
@@ -272,8 +275,13 @@ export const setYouTubeThumbnail = (opts: {
     );
   });
 
-const getJson = async (url: string, accessToken: string): Promise<unknown> => {
+const getJson = async (
+  url: string,
+  accessToken: string,
+  signal: AbortSignal
+): Promise<unknown> => {
   const res = await fetch(url, {
+    signal,
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
@@ -296,10 +304,11 @@ export const findRecentUpload = (opts: {
   Effect.gen(function* () {
     const apiUrl = yield* youtubeApiUrl;
     return yield* Effect.tryPromise({
-      try: async () => {
+      try: async (signal) => {
         const channels = (await getJson(
           `${apiUrl}/youtube/v3/channels?part=contentDetails&mine=true`,
-          opts.accessToken
+          opts.accessToken,
+          signal
         )) as {
           items?: {
             contentDetails?: { relatedPlaylists?: { uploads?: string } };
@@ -310,7 +319,8 @@ export const findRecentUpload = (opts: {
         if (!uploads) throw new Error("the channel has no uploads playlist");
         const items = (await getJson(
           `${apiUrl}/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(uploads)}`,
-          opts.accessToken
+          opts.accessToken,
+          signal
         )) as {
           items?: {
             snippet?: {

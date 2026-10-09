@@ -257,6 +257,7 @@ describe("recoverExpiredJobs", () => {
 
         const recovered = yield* ops.recoverExpiredJobs({
           neverRetryKinds: [],
+          stillRunning: [],
         });
 
         expect(
@@ -307,6 +308,7 @@ describe("a kind that must never run again on its own (a post)", () => {
         yield* lapse;
         const recovered = yield* ops.recoverExpiredJobs({
           neverRetryKinds: ["noop"],
+          stillRunning: [],
         });
         expect(recovered).toEqual([{ jobId: lost.id, outcome: "interrupted" }]);
         expect(yield* ops.getJob(lost.id)).toMatchObject({
@@ -424,7 +426,10 @@ describe("a kind that must never run again on its own (a post)", () => {
           leaseMs: 1,
         });
         yield* lapse;
-        yield* ops.recoverExpiredJobs({ neverRetryKinds: ["noop"] });
+        yield* ops.recoverExpiredJobs({
+          neverRetryKinds: ["noop"],
+          stillRunning: [],
+        });
         const look = () =>
           ops.listInterruptedJobsWithoutEvent({
             kinds: ["noop"],
