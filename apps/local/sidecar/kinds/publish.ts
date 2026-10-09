@@ -129,8 +129,12 @@ const reportInOrder = (events: {
  * - The `publish` lane runs one at a time: it replaces the service's
  *   `courseVersionMutationSemaphore`.
  * - 1 attempt: the browser reported every Publish failure as
- *   `UPLOAD_FATAL_ERROR`. A failed export or Commit has already Discarded the
- *   Pending Version inside the service (issue #1401).
+ *   `UPLOAD_FATAL_ERROR`. Only a failure the service names — a
+ *   `PublishValidationError` from a failed export, or a
+ *   `PublishCommitFailedError` (`sync_failed`, `missing_assets`) — has
+ *   already Discarded the Pending Version (issue #1401). Any other failure
+ *   after Submit (Promote itself failing, say) leaves it Pending, for the
+ *   publish page's Promote or Discard.
  * - Never run again on its own (`neverRequeued`), not even after a
  *   deliberate stop. A run cut off after Submit leaves a Pending Version; the
  *   publish page reads its `course.json` receipt and offers Promote or
