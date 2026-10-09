@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import {
   fetchSnapshotList,
-  isHeadCaptured,
   type Snapshot,
 } from "@/features/diagrams/snapshot-list";
 import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
@@ -22,7 +21,7 @@ export type PaletteWiring = {
   /** Cancels the debounced autosave and lands it now. */
   flushPendingSave: () => Promise<void>;
   preserveSnapshot: () => void;
-  handleRestoreRequest: (snapshot: Snapshot, headIsCaptured: boolean) => void;
+  handleRestoreRequest: (snapshot: Snapshot, timeline: Snapshot[]) => void;
   handleCopyDiagramContents: (id: string) => Promise<void>;
   handleCreateDiagram: () => void;
   /** Re-reads head from the server and loads it into the editor. */
@@ -56,8 +55,8 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
       onRestoreToHead: async () => {
         // "Discard changes since the last snapshot" — the same restore the
         // timeline performs, on the newest snapshot, and through the same
-        // handler, so the confirm dialog still appears when the head is not
-        // already captured on the timeline.
+        // handler, so a head the timeline doesn't hold is kept as a snapshot
+        // before it is discarded.
         const data = await fetchSnapshotList(diagramId);
         if (!data) {
           status.reportError("Failed to load snapshots");
@@ -70,10 +69,7 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
           status.reportError("No snapshots to restore");
           return;
         }
-        handleRestoreRequest(
-          newest,
-          isHeadCaptured(data.snapshots, data.headContentHash)
-        );
+        handleRestoreRequest(newest, data.snapshots);
       },
 
       onCopyContents: () => handleCopyDiagramContents(diagramId),

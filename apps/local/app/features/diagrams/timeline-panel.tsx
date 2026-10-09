@@ -5,7 +5,6 @@ import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { copySceneToClipboard } from "@/features/diagrams/copy-scene-to-clipboard";
 import {
   fetchSnapshotList,
-  isHeadCaptured,
   type Snapshot,
 } from "@/features/diagrams/snapshot-list";
 import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
@@ -18,11 +17,14 @@ export function TimelinePanel({
   refreshKey,
 }: {
   diagramId: string;
-  onRestoreRequest: (snapshot: Snapshot, headIsCaptured: boolean) => void;
+  /**
+   * `timeline` is the list the row was picked from; the page decides from it
+   * whether the head it overwrites must be kept first.
+   */
+  onRestoreRequest: (snapshot: Snapshot, timeline: Snapshot[]) => void;
   refreshKey: number;
 }) {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [headContentHash, setHeadContentHash] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const status = usePlaygroundStatus();
@@ -34,7 +36,6 @@ export function TimelinePanel({
       if (cancelled) return;
       if (data) {
         setSnapshots(data.snapshots);
-        setHeadContentHash(data.headContentHash);
       }
       setHasLoadedOnce(true);
     });
@@ -49,7 +50,7 @@ export function TimelinePanel({
   }, [fetchSnapshots, refreshKey]);
 
   const handleRestoreClick = (snapshot: Snapshot) => {
-    onRestoreRequest(snapshot, isHeadCaptured(snapshots, headContentHash));
+    onRestoreRequest(snapshot, snapshots);
   };
 
   const handleCopy = async (snapshot: Snapshot) => {

@@ -1,5 +1,8 @@
 /** The Active Diagram page's data, as `diagramPlaygroundReducer` holds it. */
 
+import type { TLStoreSnapshot } from "tldraw";
+import type { Snapshot } from "./snapshot-list";
+
 /**
  * Where the open diagram's head stands. Only a `ready` canvas holds the
  * stored head, so only a `ready` canvas may be edited or saved.
@@ -50,6 +53,18 @@ export interface LeaveDestination {
 }
 
 /**
+ * A restore waiting for the head it overwrites to be held on the timeline:
+ * the canvas's last edit saved, then, unless `timeline` already holds that
+ * head, the canvas kept as a preserved snapshot.
+ */
+export interface PendingRestore {
+  snapshot: Snapshot;
+  /** The snapshots the timeline showed when the restore was asked for. */
+  timeline: readonly { contentHash: string }[];
+  requestId: number;
+}
+
+/**
  * How the save made before leaving settled. `saved` also covers a canvas that
  * turned out to have nothing new to save.
  */
@@ -71,3 +86,64 @@ export interface StatusError {
    */
   fromAutosave: boolean;
 }
+
+/** What `diagramPlaygroundReducer` asks its runner to do. */
+export type DiagramPlaygroundEffect =
+  /**
+   * Fetch `diagramId`'s head. With `saveOpenHeadFirst`, the head currently
+   * open is saved before the canvas stops saving — leaving a diagram keeps
+   * its edits; reloading the same one discards them.
+   */
+  | { type: "load-head"; diagramId: string; saveOpenHeadFirst: boolean }
+  /**
+   * Put `scene` on the canvas as `diagramId`'s stored head; edits now save,
+   * and only over `stored`.
+   */
+  | {
+      type: "show-head";
+      diagramId: string;
+      scene: TLStoreSnapshot | null;
+      stored: StoredHead;
+      centreCamera: boolean;
+    }
+  /** Save the canvas over whatever head is stored now, seen or not. */
+  | { type: "overwrite-stored-head"; diagramId: string }
+  /** Don't leave the previous diagram's shapes standing in for this one. */
+  | { type: "clear-canvas" }
+  | {
+      type: "restore-snapshot";
+      diagramId: string;
+      snapshot: Snapshot;
+      requestId: number;
+    }
+  /** The restore won't happen; whoever asked can stop waiting. */
+  | { type: "release-restore-request"; requestId: number }
+  | { type: "preserve-snapshot"; diagramId: string }
+  /** Save the canvas's pending edits as the head now, and report back. */
+  | { type: "save-before-leaving"; diagramId: string }
+  /**
+   * Store the canvas as it stands — not the stored head — as one of
+   * `diagramId`'s preserved snapshots.
+   */
+  | { type: "keep-canvas-as-snapshot"; diagramId: string }
+  /** Send the held navigation on its way. */
+  | { type: "continue-leaving"; destination: LeaveDestination }
+  | { type: "create-diagram" }
+  | { type: "go-to-diagram"; diagramId: string }
+  | {
+      type: "take-clip-snapshot";
+      clipId: string;
+      diagramId: string;
+      diagramName: string | null;
+    }
+  | {
+      type: "report-clip-snapshot";
+      clipId: string;
+      ok: boolean;
+      snapshotId: string | null;
+      diagramName: string | null;
+    }
+  /** Report `error-timed-out` for error `id` once `ms` have passed. */
+  | { type: "time-out-error"; id: number; ms: number }
+  /** Turn tldraw's Focus Mode on (sidebar hidden) or off (sidebar shown). */
+  | { type: "set-focus-mode"; isFocusMode: boolean };

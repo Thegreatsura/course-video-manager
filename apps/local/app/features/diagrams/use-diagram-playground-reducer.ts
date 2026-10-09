@@ -92,8 +92,7 @@ export function useDiagramPlaygroundReducer() {
     await autosaver.current?.flush();
   }, []);
 
-  const releaseRestoreRequest = (requestId: number | null) => {
-    if (requestId === null) return;
+  const releaseRestoreRequest = (requestId: number) => {
     restoreWaiters.current.get(requestId)?.();
     restoreWaiters.current.delete(requestId);
   };
@@ -449,21 +448,19 @@ export function useDiagramPlaygroundReducer() {
   );
 
   /**
-   * Asks to restore `snapshot`. Resolves once the head has moved, or at once
-   * if the confirmation dialog takes over — so a Snapshot Step can wait for
-   * one restore before aiming the next.
+   * Asks to restore `snapshot`, given the `timeline` it was picked from.
+   * Resolves once the head has moved, or the restore has given up — so a
+   * Snapshot Step can wait for one restore before aiming the next.
    */
   const requestRestore = useCallback(
-    (snapshot: Snapshot, headIsCaptured: boolean) => {
-      const ed = editorRef.current;
+    (snapshot: Snapshot, timeline: readonly { contentHash: string }[]) => {
       const requestId = nextRestoreRequestId.current++;
       return new Promise<void>((resolve) => {
         restoreWaiters.current.set(requestId, resolve);
         dispatch({
           type: "restore-requested",
           snapshot,
-          headIsCaptured,
-          canvasIsEmpty: ed ? ed.getCurrentPageShapeIds().size === 0 : false,
+          timeline,
           requestId,
         });
       });
