@@ -3,7 +3,6 @@ import { Tldraw, type Editor } from "tldraw";
 import "tldraw/tldraw.css";
 import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
-import { toast } from "@/components/ui/toast";
 import {
   diagramChannel,
   type ParentToChildMessage,
@@ -24,8 +23,8 @@ import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playgro
 import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
 import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundary";
 import { CommandPalette } from "@/features/diagrams/palette/command-palette";
-import { HeadLoadStatus } from "@/features/diagrams/head-load-status";
-import { HeadChangedElsewherePrompt } from "@/features/diagrams/head-changed-elsewhere-prompt";
+import { PlaygroundStatusArea } from "@/features/diagrams/head-load-status";
+import { PlaygroundStatusProvider } from "@/features/diagrams/playground-status";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { useDiagramPlaygroundReducer } from "@/features/diagrams/use-diagram-playground-reducer";
 
@@ -37,6 +36,9 @@ const EMPTY_MIME_TYPES: string[] = [];
 
 const EMPTY_EMBEDS: never[] = [];
 
+const UNSUPPORTED_CONTENT =
+  "Images, videos, and embeds aren't supported. Only vector shapes and text are allowed.";
+
 export default function DiagramPlaygroundActive({
   loaderData,
 }: Route.ComponentProps) {
@@ -46,6 +48,7 @@ export default function DiagramPlaygroundActive({
   const {
     state,
     dispatch,
+    status,
     editorRef,
     attachEditor,
     flushPendingSave,
@@ -87,6 +90,7 @@ export default function DiagramPlaygroundActive({
     diagramId,
     flushPendingSave,
     onRestoreRequest: requestRestore,
+    status,
   });
   useRecentreDiagramShortcut(diagramId ? recentreDiagram : null);
 
@@ -183,15 +187,18 @@ export default function DiagramPlaygroundActive({
     (editor: Editor) => {
       attachEditor(editor);
 
+      // A pasted or dropped file would only ever become an image or video,
+      // and tldraw's own answer is a toast of its own: say it here instead.
+      editor.registerExternalContentHandler("files", () => {
+        status.reportError(UNSUPPORTED_CONTENT);
+      });
       editor.sideEffects.registerBeforeCreateHandler("shape", (shape) => {
         if (
           shape.type === "image" ||
           shape.type === "video" ||
           shape.type === "embed"
         ) {
-          toast.warning(
-            "Images, videos, and embeds are not supported in v1. Only vector shapes and text are allowed."
-          );
+          status.reportError(UNSUPPORTED_CONTENT);
           return undefined as never;
         }
         return shape;
@@ -215,7 +222,7 @@ export default function DiagramPlaygroundActive({
         isFocusMode,
       });
     },
-    [attachEditor, diagramId, dispatch]
+    [attachEditor, diagramId, dispatch, status]
   );
 
   const revalidator = useRevalidator();
@@ -229,9 +236,10 @@ export default function DiagramPlaygroundActive({
           body: fd,
         });
         if (!res.ok) {
-          toast.error("Failed to delete diagram");
+          status.reportError("Failed to delete diagram");
           return;
         }
+        status.reportSuccess();
         if (id === diagramId) {
           const idx = diagrams.findIndex((d) => d.id === id);
           const neighbor =
@@ -246,10 +254,10 @@ export default function DiagramPlaygroundActive({
           revalidator.revalidate();
         }
       } catch {
-        toast.error("Failed to delete diagram");
+        status.reportError("Failed to delete diagram");
       }
     },
-    [diagramId, diagrams, navigate, revalidator]
+    [diagramId, diagrams, navigate, revalidator, status]
   );
 
   const openDiagramId = state.head?.diagramId;
@@ -258,9 +266,9 @@ export default function DiagramPlaygroundActive({
       // Copying the OPEN diagram reads its stored head like any other, so the
       // debounced save has to land first or the clipboard is up to 500ms stale.
       if (id === openDiagramId) await flushPendingSave();
-      await copyDiagramContents(id);
+      await copyDiagramContents(id, status);
     },
-    [flushPendingSave, openDiagramId]
+    [flushPendingSave, openDiagramId, status]
   );
 
   const handleNavigateHome = useCallback(async () => {
@@ -276,103 +284,102 @@ export default function DiagramPlaygroundActive({
   const timelineVisible = diagramId && !isFocusMode;
 
   return (
-    <div className="flex h-screen w-screen">
-      <div className="relative flex-1">
-        <DiagramEditorBoundary>
-          <Tldraw
-            onMount={handleMount}
-            colorScheme="dark"
-            acceptedImageMimeTypes={EMPTY_MIME_TYPES}
-            acceptedVideoMimeTypes={EMPTY_MIME_TYPES}
-            embeds={EMPTY_EMBEDS}
-            shapeUtils={CVM_SHAPE_UTILS}
-          />
-          {diagramId && (
-            <HeadLoadStatus
-              status={state.head?.status ?? "loading"}
-              onRetry={() => dispatch({ type: "retry-load-clicked" })}
+    <PlaygroundStatusProvider value={status}>
+      <div className="flex h-screen w-screen">
+        <div className="relative flex-1">
+          <DiagramEditorBoundary>
+            <Tldraw
+              onMount={handleMount}
+              colorScheme="dark"
+              acceptedImageMimeTypes={EMPTY_MIME_TYPES}
+              acceptedVideoMimeTypes={EMPTY_MIME_TYPES}
+              embeds={EMPTY_EMBEDS}
+              shapeUtils={CVM_SHAPE_UTILS}
             />
-          )}
-          {diagramId && state.head?.changedElsewhere && (
-            <HeadChangedElsewherePrompt
-              onLoadChanged={() =>
-                dispatch({ type: "load-changed-head-clicked" })
-              }
-              onKeepMine={() => dispatch({ type: "keep-my-edits-clicked" })}
-            />
-          )}
-          {diagramId && (
-            <button
-              onClick={preserveSnapshot}
-              disabled={state.preserving}
-              title="Preserve Snapshot"
-              aria-label="Preserve Snapshot"
-              className="absolute bottom-16 right-2 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 shadow hover:bg-zinc-600 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-            </button>
-          )}
-        </DiagramEditorBoundary>
-        {/* Active Diagram window only — never Playground Home. */}
-        {diagramId && (
-          <CommandPalette
-            diagramId={diagramId}
-            editorRef={editorRef}
-            flushPendingSave={flushPendingSave}
-            preserveSnapshot={preserveSnapshot}
-            handleRestoreRequest={requestRestore}
-            handleCopyDiagramContents={handleCopyDiagramContents}
-            handleCreateDiagram={handleCreateDiagram}
-            reloadScene={reloadScene}
-            recentreDiagram={recentreDiagram}
-          />
-        )}
-        <ConnectionStatusIndicator
-          editorConnected={state.videoEditorConnected}
-          windowFocused={state.windowFocused}
-        />
-        {diagramId && <DiagramCenteringDebug editorRef={editorRef} />}
-      </div>
-      {!isFocusMode && (
-        <div className="flex w-64 shrink-0 flex-col border-l border-zinc-700 bg-zinc-900">
-          {timelineVisible && (
-            <div className="flex h-1/2 min-h-0 flex-col border-b border-zinc-700">
-              <div className="border-b border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300">
-                Snapshot Timeline
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <TimelinePanel
-                  diagramId={diagramId}
-                  onRestoreRequest={requestRestore}
-                  refreshKey={state.timelineVersion}
-                />
-              </div>
-            </div>
-          )}
-          <div
-            className={
-              "flex min-h-0 flex-col " + (timelineVisible ? "h-1/2" : "flex-1")
+            {diagramId && (
+              <button
+                onClick={preserveSnapshot}
+                disabled={state.preserving}
+                title="Preserve Snapshot"
+                aria-label="Preserve Snapshot"
+                className="absolute bottom-16 right-2 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 shadow hover:bg-zinc-600 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+              </button>
+            )}
+          </DiagramEditorBoundary>
+          <PlaygroundStatusArea
+            status={diagramId ? (state.head?.status ?? "loading") : null}
+            onRetry={() => dispatch({ type: "retry-load-clicked" })}
+            changedElsewhere={state.head?.changedElsewhere ?? false}
+            onLoadChanged={() =>
+              dispatch({ type: "load-changed-head-clicked" })
             }
-          >
-            <DiagramRail
-              diagrams={diagrams}
-              activeDiagramId={diagramId}
-              creating={state.creating}
-              onNavigateHome={handleNavigateHome}
-              onCreateDiagram={handleCreateDiagram}
-              onCopyContents={handleCopyDiagramContents}
-              onDelete={handleDeleteDiagram}
+            onKeepMine={() => dispatch({ type: "keep-my-edits-clicked" })}
+            error={state.error}
+          />
+          {/* Active Diagram window only — never Playground Home. */}
+          {diagramId && (
+            <CommandPalette
+              diagramId={diagramId}
+              editorRef={editorRef}
+              flushPendingSave={flushPendingSave}
+              preserveSnapshot={preserveSnapshot}
+              handleRestoreRequest={requestRestore}
+              handleCopyDiagramContents={handleCopyDiagramContents}
+              handleCreateDiagram={handleCreateDiagram}
+              reloadScene={reloadScene}
+              recentreDiagram={recentreDiagram}
             />
-          </div>
+          )}
+          <ConnectionStatusIndicator
+            editorConnected={state.videoEditorConnected}
+            windowFocused={state.windowFocused}
+          />
+          {diagramId && <DiagramCenteringDebug editorRef={editorRef} />}
         </div>
-      )}
-      <RestoreSnapshotDialog
-        pendingRestore={state.pendingRestore}
-        onDismiss={() => dispatch({ type: "restore-dismissed" })}
-        onConfirm={(snapshot) =>
-          dispatch({ type: "restore-confirmed", snapshot })
-        }
-      />
-    </div>
+        {!isFocusMode && (
+          <div className="flex w-64 shrink-0 flex-col border-l border-zinc-700 bg-zinc-900">
+            {timelineVisible && (
+              <div className="flex h-1/2 min-h-0 flex-col border-b border-zinc-700">
+                <div className="border-b border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300">
+                  Snapshot Timeline
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <TimelinePanel
+                    diagramId={diagramId}
+                    onRestoreRequest={requestRestore}
+                    refreshKey={state.timelineVersion}
+                  />
+                </div>
+              </div>
+            )}
+            <div
+              className={
+                "flex min-h-0 flex-col " +
+                (timelineVisible ? "h-1/2" : "flex-1")
+              }
+            >
+              <DiagramRail
+                diagrams={diagrams}
+                activeDiagramId={diagramId}
+                creating={state.creating}
+                onNavigateHome={handleNavigateHome}
+                onCreateDiagram={handleCreateDiagram}
+                onCopyContents={handleCopyDiagramContents}
+                onDelete={handleDeleteDiagram}
+              />
+            </div>
+          </div>
+        )}
+        <RestoreSnapshotDialog
+          pendingRestore={state.pendingRestore}
+          onDismiss={() => dispatch({ type: "restore-dismissed" })}
+          onConfirm={(snapshot) =>
+            dispatch({ type: "restore-confirmed", snapshot })
+          }
+        />
+      </div>
+    </PlaygroundStatusProvider>
   );
 }

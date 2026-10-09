@@ -109,6 +109,39 @@
       }
     },
     {
+      // The Diagram Playground turns toasts off (`handle = NO_TOASTS`), so a
+      // toast fired here is never seen. Its one way to report an error is the
+      // status line: `usePlaygroundStatus()` from
+      // features/diagrams/playground-status.ts.
+      "files": [
+        "apps/local/app/features/diagrams/**",
+        "apps/local/app/routes/diagram-playground*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/components/ui/toast",
+                "message": "Toasts are off on the Diagram Playground. Report errors with usePlaygroundStatus() from @/features/diagrams/playground-status; successes stay silent."
+              },
+              {
+                "name": "sonner",
+                "message": "Toasts are off on the Diagram Playground. Report errors with usePlaygroundStatus() from @/features/diagrams/playground-status; successes stay silent."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/components/ui/toast", "**/components/ui/sonner"],
+                "message": "Toasts are off on the Diagram Playground. Report errors with usePlaygroundStatus() from @/features/diagrams/playground-status; successes stay silent."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // The hook itself is the one place raw localStorage belongs.
       "files": ["apps/local/app/hooks/use-local-storage.ts"],
       "rules": { "no-restricted-globals": "off" }
