@@ -10,10 +10,11 @@ import { copyClipMockupFiles } from "./clip-mockup-files";
  * so the frames and the WAVs have to be carried over HERE, at the duplicate's
  * call site in `apps/local`, which is the half of the app that owns a machine.
  *
- * Both duplicate paths land on this module: `POST /api/videos/:videoId/copy`
- * for one Video, and `POST /api/courses/:courseId/duplicate` for every Video
- * in a Course. The Draft Version snapshot path deliberately does NOT — it
- * copies `lineageId`, so source and copy already share one directory.
+ * `POST /api/videos/:videoId/copy` lands here, for one Video. A Course
+ * duplicate copies its Videos' files in the `duplicate-course` Job instead
+ * (`course-duplicate-files.ts`), resumably and checked. The Draft Version
+ * snapshot path deliberately does neither — it copies `lineageId`, so source
+ * and copy already share one directory.
  */
 
 /** A duplicated Video, paired with the Video it was copied from. */
@@ -47,12 +48,4 @@ export const copyClipMockupAssetsForVideo = Effect.fn(
     video.newLineageId,
     rows.flatMap((row) => [row.imagePath, row.audioPath])
   );
-});
-
-/** The same, for every Video a duplicated Course produced. */
-export const copyClipMockupAssetsForVideos = Effect.fn(
-  "copyClipMockupAssetsForVideos"
-)(function* (videos: readonly DuplicatedVideo[]) {
-  const counts = yield* Effect.forEach(videos, copyClipMockupAssetsForVideo);
-  return counts.reduce((total, n) => total + n, 0);
 });

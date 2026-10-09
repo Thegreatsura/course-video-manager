@@ -1,6 +1,7 @@
 import type {
   AutofillStage,
   BufferStage,
+  DuplicateCourseStage,
   ExportStage,
   PublishStage,
   RenderVerticalStage,
@@ -47,6 +48,11 @@ const RENDER_VERTICAL_STAGE_LABELS: Record<RenderVerticalStage, string> = {
   compositing: "Compositing video",
 };
 
+const DUPLICATE_COURSE_STAGE_LABELS: Record<DuplicateCourseStage, string> = {
+  "copying-rows": "Copying lessons and videos",
+  "copying-files": "Copying frames and files",
+};
+
 /**
  * What an in-flight job is doing right now, for the label beside its progress
  * bar. `null` when the job type has no stages (a plain upload streams a real
@@ -80,6 +86,10 @@ export function uploadStageLabel(upload: UploadEntry): string | null {
     case "render-vertical":
       return upload.renderVerticalStage
         ? RENDER_VERTICAL_STAGE_LABELS[upload.renderVerticalStage]
+        : null;
+    case "duplicate-course":
+      return upload.duplicateCourseStage
+        ? DUPLICATE_COURSE_STAGE_LABELS[upload.duplicateCourseStage]
         : null;
     // A plain upload has no stages: its bar streams a byte percentage.
     case "youtube":

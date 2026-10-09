@@ -69,6 +69,12 @@ export const makeDuplicateCourse = (db: Database) =>
   Effect.fn("duplicateCourse")(function* (input: {
     sourceCourseId: string;
     name: string;
+    /**
+     * The new Course's id, when the caller has already chosen it: a
+     * `duplicate-course` Job names it up front, so a resumed run can tell
+     * whether this copy already committed.
+     */
+    newCourseId?: string;
   }) {
     // Fetch source course
     const sourceCourse = yield* makeDbCall(() =>
@@ -183,7 +189,7 @@ export const makeDuplicateCourse = (db: Database) =>
     const commentValues: (typeof clipMockupComments.$inferInsert)[] = [];
     const thumbnailValues: (typeof thumbnails.$inferInsert)[] = [];
 
-    const newCourseId = crypto.randomUUID();
+    const newCourseId = input.newCourseId ?? crypto.randomUUID();
     const newVersionId = crypto.randomUUID();
 
     for (const sourceSection of sourceSections) {

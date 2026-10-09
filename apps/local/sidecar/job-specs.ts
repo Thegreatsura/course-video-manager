@@ -7,6 +7,7 @@ import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
   CLIP_TRANSCRIPTION_POLICY,
+  COURSE_DUPLICATE_POLICY,
   FOOTAGE_TRANSCRIPTION_POLICY,
   IMAGE_UPLOAD_POLICY,
   POSTING_JOB_POLICY,
@@ -95,6 +96,10 @@ export const JOB_KIND_SPECS = {
   "remove-local-images": spec(
     IMAGE_UPLOAD_POLICY,
     JOB_PARAMS["remove-local-images"]
+  ),
+  "duplicate-course": spec(
+    COURSE_DUPLICATE_POLICY,
+    JOB_PARAMS["duplicate-course"]
   ),
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),

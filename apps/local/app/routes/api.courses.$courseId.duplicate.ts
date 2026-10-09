@@ -1,9 +1,10 @@
 import { Effect, Schema } from "effect";
-import { CourseOperationsService } from "@/services/db-course-operations.server";
-import { copyClipMockupAssetsForVideos } from "@/services/clip-mockup-copy-forward.server";
-import { copyVideoFilesDirectory } from "@/services/video-files";
+import { checkDuplicateCourseName } from "@/services/course-duplicate-name";
 import { makeAction } from "@/services/route-action.server";
-import { data, redirect } from "react-router";
+import { nudgeSidecar } from "@/services/sidecar-socket.server";
+import { DUPLICATE_COURSE_JOB_KIND } from "@/features/jobs/duplicate-course-job";
+import { data } from "react-router";
+import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
 
 const duplicateCourseSchema = Schema.Struct({
   name: Schema.String.pipe(
@@ -11,59 +12,49 @@ const duplicateCourseSchema = Schema.Struct({
   ),
 });
 
+/**
+ * Duplicate a Course: check the name, so the modal can say what is wrong with
+ * it, then enqueue a `duplicate-course` Job (`sidecar/kinds/duplicate-course.ts`)
+ * and answer with its id and the new Course's. The Sidecar copies the rows and
+ * every Video's files; the Job's row in the Upload Manager shows it, and links
+ * to the copy once it is done.
+ */
 export const action = makeAction({
   input: "formData",
-  errors: { NotFoundError: 404, InvalidClipMockupPathError: 400 },
+  errors: {
+    NotFoundError: 404,
+    UnknownJobKindError: 400,
+    NoAttemptsLeftError: 400,
+  },
   effect: ({ params, payload }) =>
     Effect.gen(function* () {
       const parsed = yield* Schema.decodeUnknown(duplicateCourseSchema)(
         payload
       );
-
       const name = parsed.name.trim();
+      const sourceCourseId = params.courseId!;
 
-      const courseOps = yield* CourseOperationsService;
-
-      const sourceCourse = yield* courseOps.getCourseById(params.courseId!);
-
-      if (name === sourceCourse.name) {
-        return yield* Effect.die(
-          data(
-            { error: "New course name must differ from the original" },
-            { status: 400 }
-          )
-        );
-      }
-
-      const allCourses = yield* courseOps.getCourses();
-      const archivedCourses = yield* courseOps.getArchivedCourses();
-      const allCoursesCombined = [...allCourses, ...archivedCourses];
-
-      if (allCoursesCombined.some((c) => c.name === name)) {
-        return yield* Effect.die(
-          data(
-            { error: "A course with this name already exists" },
-            { status: 400 }
-          )
-        );
-      }
-
-      const result = yield* courseOps.duplicateCourse({
-        sourceCourseId: params.courseId!,
-        name,
-      });
-
-      // Same as the single-Video duplicate, once per Video the Course
-      // produced: each got a fresh `lineageId`, so both stores keyed by one
-      // have to be carried into the new directory here — the Clip Mockups'
-      // frames and WAVs (#1669), and the Video Files, with them the PNGs the
-      // Thumbnails now name, `@cvm/core` having rewritten those paths onto the
-      // copy (#1674).
-      yield* copyClipMockupAssetsForVideos(result.videoLineageMappings);
-      yield* Effect.forEach(result.videoLineageMappings, (video) =>
-        copyVideoFilesDirectory(video.sourceLineageId, video.newLineageId)
+      yield* checkDuplicateCourseName({ sourceCourseId, name }).pipe(
+        Effect.catchTag("DuplicateCourseNameError", (error) =>
+          Effect.die(data({ error: error.message }, { status: 400 }))
+        )
       );
 
-      return redirect(`/courses/${result.course.id}`);
+      const newCourseId = crypto.randomUUID();
+      const job = yield* enqueueJob({
+        id: null,
+        kind: DUPLICATE_COURSE_JOB_KIND,
+        // The copy's name: its row reads "Cohort 003", and a failure toasts
+        // "Cohort 003" duplicate failed.
+        title: name,
+        params: { sourceCourseId, name, newCourseId },
+        // The new Course: the row links to it once the copy is done.
+        subject: { type: "course", id: newCourseId },
+        attemptsSpent: 0,
+        dependsOn: null,
+        registry: JOB_KIND_SPECS,
+      });
+      yield* nudgeSidecar();
+      return { jobId: job.id, courseId: newCourseId };
     }),
 });

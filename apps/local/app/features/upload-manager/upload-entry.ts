@@ -3,6 +3,7 @@ import type {
   PublishStage as PublishServiceStage,
 } from "@/services/course-publish-export-events";
 import type { RenderVerticalStage as RenderVerticalServiceStage } from "@/services/render-vertical-video-service";
+import type { DuplicateCourseStage as DuplicateCourseJobStage } from "@/features/jobs/duplicate-course-job";
 
 /**
  * One row of the Upload Manager: how a Job draws (`jobUploadEntries` in
@@ -23,7 +24,8 @@ export type UploadType =
   | "export"
   | "publish"
   | "autofill"
-  | "render-vertical";
+  | "render-vertical"
+  | "duplicate-course";
 export type BufferStage =
   "uploading-blob" | "creating-post" | "polling" | "cleaning-up";
 // Every stage union below is the SERVICE's own union, never a restatement of
@@ -36,6 +38,7 @@ export type BufferStage =
 export type ExportStage = ExportServiceStage;
 export type RenderVerticalStage = RenderVerticalServiceStage;
 export type PublishStage = PublishServiceStage;
+export type DuplicateCourseStage = DuplicateCourseJobStage;
 // An Autofill only ever does two things: work out which Videos it has work
 // for, then write their text. The parent passes through both; a per-Video
 // child is born already writing.
@@ -130,6 +133,14 @@ export interface RenderVerticalUploadEntry extends BaseUploadEntry {
   renderVerticalStage: RenderVerticalStage | null;
 }
 
+/** A Course duplicate: its rows, then every Video's files. */
+export interface DuplicateCourseUploadEntry extends BaseUploadEntry {
+  uploadType: "duplicate-course";
+  duplicateCourseStage: DuplicateCourseStage | null;
+  /** The new Course, which the row links to once it is done. */
+  courseId: string;
+}
+
 export type UploadEntry =
   | YouTubeUploadEntry
   | YouTubeShortsUploadEntry
@@ -139,4 +150,5 @@ export type UploadEntry =
   | ExportUploadEntry
   | PublishUploadEntry
   | AutofillUploadEntry
-  | RenderVerticalUploadEntry;
+  | RenderVerticalUploadEntry
+  | DuplicateCourseUploadEntry;

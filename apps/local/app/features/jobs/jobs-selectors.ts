@@ -1,6 +1,7 @@
 import type {
   AutofillStage,
   AutofillUploadEntry,
+  DuplicateCourseUploadEntry,
   BaseUploadEntry,
   ExportStage,
   ExportUploadEntry,
@@ -14,6 +15,7 @@ import type {
 import {
   AUTOFILL_STAGE_BANDS,
   AUTOFILL_WORK_BAND,
+  DUPLICATE_COURSE_STAGE_BANDS,
   EXPORT_STAGE_BANDS,
   exportStageBands,
   fillBand,
@@ -27,6 +29,7 @@ import {
   isFinishedJob,
   type jobsReducer,
 } from "./jobs-reducer";
+import { isDuplicateCourseStage } from "./duplicate-course-job";
 import {
   isPostingJobKind,
   mayLeavePendingVersion,
@@ -208,9 +211,37 @@ export const jobUploadEntry = (
         totalBytes: null,
       };
     }
+    case "duplicate-course":
+      return duplicateCourseEntry(job);
     default:
       return null;
   }
+};
+
+/**
+ * A Course duplicate: one row, about the NEW Course (its subject), whose bar
+ * is the rows, then the files, a real percentage.
+ */
+const duplicateCourseEntry = (
+  job: jobsReducer.JobView
+): DuplicateCourseUploadEntry => {
+  const stage =
+    job.stage !== null && isDuplicateCourseStage(job.stage) ? job.stage : null;
+  const status = uploadStatusOf(job);
+  const progress =
+    status === "success"
+      ? 100
+      : stage === null
+        ? 0
+        : fillBand(DUPLICATE_COURSE_STAGE_BANDS[stage], job.percent ?? 0);
+  return {
+    ...baseEntryOf(job, status, progress),
+    // The row names a Course, not a Video.
+    videoId: "",
+    uploadType: "duplicate-course",
+    duplicateCourseStage: status === "success" ? null : stage,
+    courseId: job.subjectId ?? "",
+  };
 };
 
 /** A batch Video's row status, read with its batch's. */
