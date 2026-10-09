@@ -6,11 +6,6 @@
       "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
     },
     {
-      "file": "apps/local/app/features/diagrams/diagram-playground-active.loader.server.ts",
-      "count": 1,
-      "reason": "Hand-rolled 500 pipeline in a loader helper called without route args; move to makeLoader with its caller."
-    },
-    {
       "file": "apps/local/app/routes/_app.videos.$videoId.ai-hero.tsx",
       "count": 1,
       "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
@@ -26,22 +21,12 @@
       "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
     },
     {
-      "file": "apps/local/app/routes/_app.videos.$videoId.move-to-course.tsx",
-      "count": 1,
-      "reason": "Hand-rolled error pipeline with its own 404 text ('Not found'); makeAction would echo the error's message instead."
-    },
-    {
       "file": "apps/local/app/routes/_app.videos.$videoId.skills-changelog.tsx",
       "count": 1,
       "reason": "Deferred loader data: a second promise React Router streams after the first response; makeLoader has no deferred form yet."
     },
     {
       "file": "apps/local/app/routes/api.auth.dropbox.callback.ts",
-      "count": 1,
-      "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
-    },
-    {
-      "file": "apps/local/app/routes/api.auth.dropbox.initiate.ts",
       "count": 1,
       "reason": "OAuth redirect: dies with a Response and sets its own ConfigProvider; makeLoader's error mapping would change what a missing key returns."
     },
@@ -69,11 +54,6 @@
       "file": "apps/local/app/routes/api.videos.$videoId.stream.ts",
       "count": 1,
       "reason": "Range-request loader returning a raw 206/404 Response; the Effect only resolves the export path before plain-Node streaming."
-    },
-    {
-      "file": "apps/local/app/routes/videos.$videoId.export-to-davinci-resolve.ts",
-      "count": 1,
-      "reason": "Hand-rolled error pipeline with its own 404 text ('Video not found'); makeAction would echo the error's message instead."
     },
     {
       "file": "apps/local/app/services/ffmpeg-video-logger.ts",

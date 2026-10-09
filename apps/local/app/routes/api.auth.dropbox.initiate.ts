@@ -1,6 +1,7 @@
 import { Config, ConfigProvider, Console, Effect } from "effect";
 import { redirect } from "react-router";
 import { runtimeLive } from "@/services/layer.server";
+import { runRouteEffect } from "@/services/route-action.server";
 
 export const loader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
@@ -28,6 +29,6 @@ export const loader = async ({ request }: { request: Request }) => {
       );
     }),
     Effect.withConfigProvider(ConfigProvider.fromEnv()),
-    runtimeLive.runPromise
+    (effect) => runRouteEffect(runtimeLive, effect)
   );
 };

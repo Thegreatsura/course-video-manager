@@ -2,6 +2,7 @@ import { Console, Effect } from "effect";
 import { data } from "react-router";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import { runtimeLive } from "@/services/layer.server";
+import { runRouteEffect } from "@/services/route-action.server";
 import { filteredNewestSnapshot } from "@/lib/filtered-newest-snapshot";
 
 export const loadDiagramPlaygroundActive = async () => {
@@ -50,6 +51,6 @@ export const loadDiagramPlaygroundActive = async () => {
     Effect.catchAll(() =>
       Effect.die(data("Internal server error", { status: 500 }))
     ),
-    runtimeLive.runPromise
+    (effect) => runRouteEffect(runtimeLive, effect)
   );
 };
