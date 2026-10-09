@@ -1,5 +1,5 @@
-import { videos } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { chapters as chaptersTable, videos } from "@/db/schema";
+import { and, asc, eq } from "drizzle-orm";
 import { Data, Effect, Schedule } from "effect";
 import {
   selectAutofillCandidates,
@@ -49,6 +49,10 @@ import { SidecarContext } from "@/services/sidecar-context";
  *   Retry         a refusal that says "later" — a rate limit, a server error —
  *                 backs off and tries again, and does NOT consume the Video's
  *                 one attempt. Everything else does.
+ *   Author wins   a field is written only if it is still exactly as it was
+ *                 when the run read it. One the author changed meanwhile is
+ *                 kept, and the Autofill's text is offered beside it (`kept`)
+ *                 instead of written over it.
  */
 
 /** Six Videos at a time: enough that thirty finish in minutes. */
@@ -80,7 +84,18 @@ export type AutofillVideoResult = {
   readonly status: "filled" | "failed";
   /** The fields actually written. Empty on a failure — nothing landed. */
   readonly fields: readonly AutofillField[];
+  /**
+   * The fields the author changed while the Autofill ran: their text stayed,
+   * and this is what the Autofill would have written, offered instead.
+   */
+  readonly kept: readonly AutofillKept[];
   readonly message?: string;
+};
+
+export type AutofillKept = {
+  readonly field: AutofillField;
+  /** The description, or the Chapter titles in order joined by " · ". */
+  readonly proposal: string;
 };
 
 export type AutofillRunResult = {
@@ -104,7 +119,24 @@ type CandidatePayload = {
   readonly body: string;
   readonly clips: ReadonlyArray<{ id: string; order: string; text: string }>;
   readonly chapters: ReadonlyArray<{ order: string; name: string }>;
+  /** The two fields as the run first read them: a write lands only on these. */
+  readonly startedFrom: FieldsSnapshot;
 };
+
+type FieldsSnapshot = {
+  readonly description: string | null;
+  readonly chapters: string;
+};
+
+/** A Video's live Chapters as one comparable value: a rename or a move counts. */
+const chaptersFingerprint = (
+  chapters: ReadonlyArray<{ id: string; order: string; name: string }>
+) =>
+  JSON.stringify(
+    [...chapters]
+      .sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0))
+      .map((chapter) => [chapter.id, chapter.order, chapter.name])
+  );
 
 const makeAutofillService = (
   db: Database,
@@ -123,33 +155,83 @@ const makeAutofillService = (
    */
   const commitVideo = (input: {
     videoId: string;
+    startedFrom: FieldsSnapshot;
     description: string | null;
     chapters: readonly AutofillChapterProposal[] | null;
   }) =>
     withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
         yield* requireDraftVersionForVideo(tx, input.videoId);
+        // Compare-and-set: the Video row is locked, then each field is
+        // re-read. One the author changed since the run read it is theirs.
+        const now = yield* Effect.tryPromise({
+          try: async () => {
+            const [row] = await tx
+              .select({ description: videos.description })
+              .from(videos)
+              .where(eq(videos.id, input.videoId))
+              .for("update");
+            const liveChapters = await tx
+              .select({
+                id: chaptersTable.id,
+                order: chaptersTable.order,
+                name: chaptersTable.name,
+              })
+              .from(chaptersTable)
+              .where(
+                and(
+                  eq(chaptersTable.videoId, input.videoId),
+                  eq(chaptersTable.archived, false)
+                )
+              )
+              .orderBy(asc(chaptersTable.order));
+            return {
+              description: row?.description ?? null,
+              chapters: chaptersFingerprint(liveChapters),
+            };
+          },
+          catch: (cause) => new UnknownDBServiceError({ cause }),
+        });
+
+        const fields: AutofillField[] = [];
+        const kept: AutofillKept[] = [];
+
         if (input.description !== null) {
-          yield* Effect.tryPromise({
-            try: () =>
-              tx
-                .update(videos)
-                .set({ description: input.description, updatedAt: new Date() })
-                .where(eq(videos.id, input.videoId)),
-            catch: (cause) => new UnknownDBServiceError({ cause }),
-          });
+          const description = input.description;
+          if (now.description !== input.startedFrom.description) {
+            kept.push({ field: "description", proposal: description });
+          } else {
+            yield* Effect.tryPromise({
+              try: () =>
+                tx
+                  .update(videos)
+                  .set({ description, updatedAt: new Date() })
+                  .where(eq(videos.id, input.videoId)),
+              catch: (cause) => new UnknownDBServiceError({ cause }),
+            });
+            fields.push("description");
+          }
         }
         if (input.chapters !== null) {
           const chapters = input.chapters;
-          yield* Effect.tryPromise({
-            try: () =>
-              replaceVideoChapters(tx, {
-                videoId: input.videoId,
-                proposals: chapters,
-              }),
-            catch: (cause) => new UnknownDBServiceError({ cause }),
-          });
+          if (now.chapters !== input.startedFrom.chapters) {
+            kept.push({
+              field: "chapters",
+              proposal: chapters.map((chapter) => chapter.title).join(" · "),
+            });
+          } else {
+            yield* Effect.tryPromise({
+              try: () =>
+                replaceVideoChapters(tx, {
+                  videoId: input.videoId,
+                  proposals: chapters,
+                }),
+              catch: (cause) => new UnknownDBServiceError({ cause }),
+            });
+            fields.push("chapters");
+          }
         }
+        return { fields, kept };
       })
     );
 
@@ -212,8 +294,9 @@ const makeAutofillService = (
         }
       }
 
-      yield* commitVideo({
+      const { fields, kept } = yield* commitVideo({
         videoId: candidate.videoId,
+        startedFrom: payload.startedFrom,
         description,
         chapters: validChapters,
       });
@@ -222,7 +305,8 @@ const makeAutofillService = (
         videoId: candidate.videoId,
         title: candidate.title,
         status: "filled",
-        fields: candidate.fields,
+        fields,
+        kept,
       } satisfies AutofillVideoResult;
     });
 
@@ -263,6 +347,10 @@ const makeAutofillService = (
               order: chapter.order,
               name: chapter.name,
             })),
+            startedFrom: {
+              description: video.description ?? null,
+              chapters: chaptersFingerprint(video.chapters),
+            },
           });
         }
       }
@@ -289,6 +377,7 @@ const makeAutofillService = (
                 title: candidate.title,
                 status: "failed",
                 fields: [],
+                kept: [],
                 message:
                   error instanceof Error
                     ? error.message
@@ -301,6 +390,7 @@ const makeAutofillService = (
                 title: candidate.title,
                 status: "failed",
                 fields: [],
+                kept: [],
                 message:
                   defect instanceof Error ? defect.message : String(defect),
               } satisfies AutofillVideoResult)

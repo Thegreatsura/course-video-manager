@@ -86,6 +86,7 @@ const announceVideos = (
       uploadStage: null,
       uploadedBytes: 0,
       totalBytes: null,
+      kept: [],
     });
   }
   return { ...job, videos: [...known.values()] };
@@ -218,6 +219,7 @@ export const applyStreamAction = (
         stage: null,
         percent: null,
         errorMessage: null,
+        kept: action.kept,
       });
     case "batch-video-failed":
       return updateLiveVideo(job, action.videoId, {

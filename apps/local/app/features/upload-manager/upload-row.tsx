@@ -481,8 +481,20 @@ function SuccessDetail({ upload }: { upload: UploadEntry }) {
       return <SuccessBadge label="Complete" />;
     case "autofill":
       // An autofill run's result lands in the Video itself; there is no
-      // destination to name.
-      return null;
+      // destination to name — except a field the author changed while it
+      // ran, which kept their text, so the Autofill's is offered here.
+      return upload.kept.length > 0 ? (
+        <div className="mt-0.5 space-y-0.5">
+          {upload.kept.map((kept) => (
+            <p
+              key={kept.field}
+              className="text-xs text-muted-foreground select-text"
+            >
+              Kept your {kept.field}. Autofill offered: {kept.proposal}
+            </p>
+          ))}
+        </div>
+      ) : null;
   }
 }
 

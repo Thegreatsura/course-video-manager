@@ -123,7 +123,11 @@ describe("the autofill Job kind", () => {
       expect.arrayContaining([
         {
           type: "video-succeeded",
-          data: { videoId: fine, fields: ["description", "chapters"] },
+          data: {
+            videoId: fine,
+            fields: ["description", "chapters"],
+            kept: [],
+          },
         },
         {
           type: "video-failed",
