@@ -12,16 +12,25 @@ boxes, ellipses, text, arrows, lines and icons in Matt's house style — and
 Matt finishes it by hand. 'create' always makes a NEW Diagram; it never edits
 one Matt may have open.
 
+A Diagram is the folder; its drawings are SNAPSHOTS, and a snapshot never
+changes. 'create' keeps each drawing you give it as a Preserved Snapshot, in
+order, and opens the Diagram on the FIRST. A batch is a build-up: the steps
+Matt walks through on camera, one snapshot each.
+
 Verbs:
   create --file <path|->   WRITE. A new Diagram from a JSON file ("-" = STDIN)
 
-THE LOOP. Write the JSON, 'create' it, READ THE PNG it prints, fix the JSON
-and 'create' again until the picture is right, then hand Matt the url.
+THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
+and 'create' again until the pictures are right, then hand Matt the url.
 
-FORMAT. One JSON object:
+FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
+or a BATCH of drawings, first to last:
+  { "name"?: "Auth flow", "snapshots": [ { "shapes": [...] }, { "shapes": [...] } ] }
 "name" is the Diagram's name (default "Untitled N"). Every shape has a "type"
-and an "id" you choose — letters, digits, "_" or "-", unique in the Diagram.
+and an "id" you choose — letters, digits, "_" or "-", unique in its drawing.
+In a batch, keep a shape's id from one snapshot to the next and every
+snapshot must differ from the others.
 
 SHAPES ("?" = optional; leave a field out to get Matt's default)
   box      id, x, y, w, h, color?, fill?, dash?
@@ -82,7 +91,7 @@ EXAMPLE
     ]
   }
 
-LOCAL-ONLY. The PNG is drawn by the Clip Mockup daemon's headless browser on
+LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
 (CVM_APP_URL, default http://localhost:5173). Elsewhere 'create' is refused
 before doing anything: _tag "LocalOnlyCommandError", exit 7. Stop; do not
@@ -92,33 +101,41 @@ Examples:
   cvm diagram create --file agent-loop.json
   cat agent-loop.json | cvm diagram create --file -`;
 
-export const CREATE_HELP = `WRITE. Create a NEW Diagram from a simple-format JSON file, draw it as a PNG,
-and print where to look.
+export const CREATE_HELP = `WRITE. Create a NEW Diagram from a simple-format JSON file: each drawing in it
+becomes a Preserved Snapshot, in order, and the Diagram opens on the FIRST.
+Each is drawn as a PNG, and the command prints where to look.
 
   cvm diagram create --file <path|->
 
-  --file <path|->   the Diagram as JSON (see 'cvm diagram --help' for the
-                    format). "-" reads STDIN.
+  --file <path|->   the Diagram as JSON — one drawing {name?, shapes} or a
+                    batch {name?, snapshots: [{shapes}, …]} (see
+                    'cvm diagram --help' for the format). "-" reads STDIN.
 
 Output: ONE NDJSON line,
-  {"id":"…","url":"http://localhost:5173/diagram-playground/…","image":"/tmp/…/….png"}
-  id      the new Diagram's id.
-  url     where Matt opens it in the Diagram Playground — hand him this.
-  image   the PNG of what you drew: light mode, white background. READ IT
-          before you hand the url over.
+  {"id":"…","url":"http://localhost:5173/diagram-playground/…",
+   "snapshots":[{"id":"…","image":"/tmp/…/….png"}, …]}
+  id         the new Diagram's id.
+  url        where Matt opens it in the Diagram Playground — hand him this.
+  snapshots  one per drawing, in the file's order; the first is what the
+             Diagram shows when Matt opens it.
+    id       the DiagramSnapshot's id.
+    image    the PNG of that drawing: light mode, white background. READ
+             EVERY ONE before you hand the url over.
 
 Order: the file is checked, then drawn, then written. Nothing is written
 unless all three succeed, so a failed 'create' can simply be run again.
 
 Exit codes:
-  3  invalid input — EVERY problem at once, each naming its shape:
-     an unknown type, field or icon; an arrow pointing at a missing id or at
-     a line; both or neither of "from" and x1, y1; a duplicate id.
+  3  invalid input — EVERY problem at once, each naming its shape (and, in a
+     batch, its snapshot): an unknown type, field or icon; an arrow pointing
+     at a missing id or at a line; both or neither of "from" and x1, y1; a
+     duplicate id; both "shapes" and "snapshots"; an empty batch; two
+     snapshots that draw the same thing.
   4  the PNG could not be drawn (_tag DiagramRenderError) — usually the app
      is not running at CVM_APP_URL. Nothing is written.
   7  not the author's machine (_tag LocalOnlyCommandError). Stop.
 
 Examples:
   cvm diagram create --file agent-loop.json
-  cvm diagram create --file agent-loop.json | jq -r .image
+  cvm diagram create --file agent-loop.json | jq -r '.snapshots[].image'
   echo '{"shapes":[{"type":"box","id":"a","x":0,"y":0,"w":200,"h":100}]}' | cvm diagram create --file -`;
