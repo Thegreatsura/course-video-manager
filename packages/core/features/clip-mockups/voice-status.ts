@@ -35,25 +35,43 @@ export const CLIP_MOCKUP_VOICING_EVENT = "voicing";
 /**
  * A Clip Mockup's voice as a COPY of it carries it (a Version's Submit, a
  * Course's duplicate, a Video's copy). The copy is a new row no voice Job
- * names: a `ready` voice comes with its WAV; any other comes `pending`, and
- * the Sidecar's sweep (`sidecar/clip-mockup-voice-sweep.ts`) queues a Job
- * for it.
+ * names:
+ *
+ * - a `ready` voice comes with its WAV;
+ * - a `failed` voice stays `failed`, with its `voiceError`. A voice never
+ *   re-queues on its own: only the author's `cvm clip-mockup update` queues
+ *   it again (`CLIP_MOCKUP_VOICE_POLICY`, `sidecar/retry-policy.ts`);
+ * - a `pending` voice stays `pending`, and the Sidecar's sweep
+ *   (`sidecar/clip-mockup-voice-sweep.ts`) queues a Job for it, since the Job
+ *   that names the original row does not name the copy.
  */
 export const copiedVoice = (row: {
   readonly audioPath: string | null;
   readonly durationSeconds: number | null;
   readonly voiceStatus: ClipMockupVoiceStatus;
-}) =>
-  row.voiceStatus === "ready"
-    ? {
+  readonly voiceError: string | null;
+}) => {
+  switch (row.voiceStatus) {
+    case "ready":
+      return {
         audioPath: row.audioPath,
         durationSeconds: row.durationSeconds,
         voiceStatus: "ready" as const,
         voiceError: null,
-      }
-    : {
+      };
+    case "failed":
+      return {
+        audioPath: null,
+        durationSeconds: null,
+        voiceStatus: "failed" as const,
+        voiceError: row.voiceError,
+      };
+    case "pending":
+      return {
         audioPath: null,
         durationSeconds: null,
         voiceStatus: "pending" as const,
         voiceError: null,
       };
+  }
+};
