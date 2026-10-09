@@ -10,7 +10,6 @@ import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { findSilenceInVideo } from "./silence-detection";
 import { transcribeFootage } from "./footage-transcription";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
-import { makeVideoExportPasses } from "./video-export-passes";
 import type { SilenceLength } from "@/silence-detection-constants";
 import { removeBestEffort } from "@/services/remove-best-effort";
 
@@ -69,7 +68,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
     effect: Effect.gen(function* () {
       const effectFs = yield* FileSystem.FileSystem;
       const ffmpegCommands = yield* FFmpegCommandsService;
-      const videoEditorLogger = yield* VideoEditorLoggerService;
       const transcriptionSemaphore = yield* Effect.makeSemaphore(
         TRANSCRIPTION_PERMITS
       );
@@ -129,9 +127,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           });
         }
       );
-
-      const { exportVideoClips, compositeOverlaysOntoExport } =
-        makeVideoExportPasses({ ffmpegCommands, effectFs, videoEditorLogger });
 
       /**
        * Extract audio from a video clip segment using ffmpeg.
@@ -536,8 +531,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
 
       return {
         getLatestOBSVideoClips,
-        exportVideoClips,
-        compositeOverlaysOntoExport,
         /**
          * The container duration of a finished file, in seconds.
          *

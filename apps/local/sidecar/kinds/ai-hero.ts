@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import {
   findAiHeroPost,
@@ -18,13 +19,7 @@ export const aiHeroUrl = (slug: string) => `https://aihero.dev/${slug}`;
  * re-queued, and only the author's Retry runs it again.
  */
 export const aiHeroJobKind = definePostingJobKind({
-  params: Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    body: Schema.String,
-    description: Schema.String,
-    slug: Schema.String,
-  }),
+  params: JOB_PARAMS["ai-hero"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const publish = yield* CoursePublishService;

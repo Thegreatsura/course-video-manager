@@ -1,4 +1,4 @@
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { webFileStream } from "@/services/web-file-stream.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { runtimeLive } from "@/services/layer.server";
@@ -14,7 +14,7 @@ export const loader = async (args: Route.LoaderArgs) => {
   const request = args.request;
 
   const videoPath = await Effect.gen(function* () {
-    const publishService = yield* CoursePublishService;
+    const publishService = yield* CoursePublishReadService;
     return yield* publishService.resolveExportPath(videoId);
   }).pipe(
     Effect.catchAll(() => Effect.succeed(null)),
@@ -67,7 +67,7 @@ const innerAction = makeAction({
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const fs = yield* FileSystem.FileSystem;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       yield* videoOps.getVideoDeepById(params.videoId!);
 

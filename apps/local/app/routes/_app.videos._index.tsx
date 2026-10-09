@@ -7,7 +7,7 @@ import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { formatDuration } from "@/lib/format-duration";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
@@ -24,7 +24,7 @@ export const loader = makeLoader({
   effect: () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       const [videos, archivedVideos] = yield* Effect.all(
         [

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { makeAction } from "@/services/route-action.server";
 import { nudgeSidecar } from "@/services/sidecar-socket.server";
-import { enqueueJob, JOB_KINDS } from "../../sidecar/job-kinds";
+import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
 
 /**
  * Enqueue a background **Job** for the **Sidecar** to run: a row, then a
@@ -41,7 +41,7 @@ export const action = makeAction({
         dependsOn: request.dependsOn,
         subject: request.subject,
         attemptsSpent: request.attemptsSpent,
-        registry: JOB_KINDS,
+        registry: JOB_KIND_SPECS,
       });
       yield* nudgeSidecar();
       return { id: job.id };

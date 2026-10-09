@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import { data } from "react-router";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { makeAction } from "@/services/route-action.server";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -78,7 +78,7 @@ const revealInExplorer = (
 export const action = makeAction({
   effect: ({ params }) =>
     Effect.gen(function* () {
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
       const exportPath = yield* publishService.resolveExportPath(
         params.videoId!
       );

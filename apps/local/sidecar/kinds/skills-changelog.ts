@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { postSkillsChangelogToAiHero } from "@/services/ai-hero-upload-service";
 import { definePostingJobKind, type PostCheck } from "../job-kind";
@@ -13,20 +14,7 @@ import { PostNotStartedError } from "./youtube";
  * author's Retry runs it again.
  */
 export const skillsChangelogJobKind = definePostingJobKind({
-  params: Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    slug: Schema.String,
-    body: Schema.String,
-    description: Schema.String,
-    newsletterSubject: Schema.Trim.pipe(Schema.nonEmptyString()),
-    newsletterPreviewText: Schema.String,
-    newsletterCopy: Schema.String.pipe(
-      Schema.filter((copy) => copy.trim().length > 0, {
-        message: () => "Newsletter copy is required",
-      })
-    ),
-  }),
+  params: JOB_PARAMS["skills-changelog"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const publish = yield* CoursePublishService;

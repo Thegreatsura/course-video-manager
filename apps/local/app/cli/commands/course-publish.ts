@@ -16,7 +16,7 @@ import {
   ANNOUNCE_NOTHING_BAND,
   PLACEHOLDER_FLOOR_BANDS,
 } from "@/packages/course-json";
-import { enqueueJob, JOB_KINDS } from "../../../sidecar/job-kinds";
+import { enqueueJob, JOB_KIND_SPECS } from "../../../sidecar/job-specs";
 import { waitForPublishJob } from "./course-publish-wait";
 
 /**
@@ -346,7 +346,7 @@ export const publishCmd = Command.make(
         dependsOn: null,
         subject: { type: "course", id: courseId },
         attemptsSpent: 0,
-        registry: JOB_KINDS,
+        registry: JOB_KIND_SPECS,
       });
       // Best effort, and silent: a sidecar that is down finds the Job when it
       // starts, and the CLI's STDERR is its error contract.

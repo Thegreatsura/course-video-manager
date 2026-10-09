@@ -93,7 +93,7 @@
       "reason": "The digest sidecar is a cache: a missing, torn or unreadable one reads as 'no digest' and is recomputed (see the file comments)."
     },
     {
-      "file": "apps/local/app/services/ffmpeg-commands.ts",
+      "file": "apps/local/app/services/ffmpeg-encode-commands.ts",
       "count": 1,
       "reason": "Per-chunk stderr handler: keeps the drain loop running so a bad chunk never stalls FFmpeg on a full pipe."
     },

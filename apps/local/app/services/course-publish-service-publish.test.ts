@@ -4,7 +4,7 @@ import { Cause, Effect, Exit, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { FFmpegError } from "@/services/ffmpeg-run";
 import {
@@ -312,7 +312,7 @@ describe("CoursePublishService — publish", () => {
   });
 
   it("emits a per-video error event and still fails with PublishValidationError", async () => {
-    const failingMock = Layer.succeed(VideoProcessingService, {
+    const failingMock = Layer.succeed(VideoExportService, {
       exportVideoClips: () =>
         Effect.fail(
           new FFmpegError({ cause: null, message: "ffmpeg crashed" })

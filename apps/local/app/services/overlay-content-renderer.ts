@@ -11,6 +11,7 @@ import {
   type OverlayContent,
 } from "./overlay-render-cache";
 import { removeBestEffort } from "@/services/remove-best-effort";
+import { SidecarContext } from "./sidecar-context";
 
 export class OverlayContentRenderError extends Data.TaggedError(
   "OverlayContentRenderError"
@@ -122,6 +123,9 @@ export class OverlayContentRendererService extends Effect.Service<OverlayContent
         content: OverlayContent,
         outputPath: string
       ) {
+        // A render boots Chromium for minutes: a Job's work, so only the
+        // Sidecar provides this (docs/plans/background-jobs-sidecar.md).
+        yield* SidecarContext;
         const propsJson = JSON.stringify(overlayRenderProps(content));
 
         const propsDir = path.join(tmpdir(), "cvm-overlay-content-props");

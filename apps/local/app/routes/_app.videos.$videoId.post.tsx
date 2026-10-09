@@ -13,7 +13,7 @@ import { useFetcher } from "react-router";
 import { toast } from "@/components/ui/toast";
 import type { Route } from "./+types/_app.videos.$videoId.post";
 import { VideoContextPanel } from "@/components/video-context-panel";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { FilePreviewModal } from "@/components/file-preview-modal";
 import { AddLinkModal } from "@/components/add-link-modal";
 import { VideoFileManagementModal } from "@/components/video-file-management-modal";
@@ -30,7 +30,7 @@ export const loader = makeLoader({
       const linkAuthOps = yield* LinkAuthOperationsService;
       const thumbnailOps = yield* ThumbnailOperationsService;
       const pitchOps = yield* PitchOperationsService;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       const [youtubeAuth, videoThumbnails, videoExists] = yield* Effect.all(
         [

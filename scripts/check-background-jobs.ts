@@ -3,7 +3,7 @@
 // A background job — work the author starts and walks away from — that runs as
 // one HTTP request, kept alive by a browser tab, dies with that tab, and its
 // failure is a toast nobody logged. docs/plans/background-jobs-sidecar.md moves
-// every such job into the Sidecar (`apps/local/sidecar/`). These two guards
+// every such job into the Sidecar (`apps/local/sidecar/`). These guards
 // count the shapes a job takes while it still lives in the request and the
 // tab, so none is added while the old ones are moved out:
 //
@@ -14,6 +14,12 @@
 //    `consumeSSEStream(`, `new EventSource(` or a `while (!unmounted)` loop,
 //    anywhere in apps/local/app outside `features/jobs/` (the Job Event
 //    subscription, which only listens and cancels nothing).
+// 3. `spawn` — starting a process with `@effect/platform`'s `Command.make(`,
+//    anywhere in apps/local/app. Each file that may is listed with why: the
+//    Sidecar's own spawners (unreachable from routes — the dependency-cruiser
+//    half of this guard, `apps/local/.dependency-cruiser.spawn.cjs`, which also
+//    holds `child_process` to its interactive entry points), and the app
+//    server's interactive calls a person waits on for a moment.
 //
 // Each file is parsed with oxc-parser, so a comment or a string cannot fool
 // it. Test code is out of scope. Hits are matched against
@@ -30,8 +36,12 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseSync, type Node } from "oxc-parser";
 
-export type Guard = "sse-route" | "browser-driver";
-export const GUARDS: readonly Guard[] = ["sse-route", "browser-driver"];
+export type Guard = "sse-route" | "browser-driver" | "spawn";
+export const GUARDS: readonly Guard[] = [
+  "sse-route",
+  "browser-driver",
+  "spawn",
+];
 
 export interface Hit {
   guard: Guard;
@@ -62,12 +72,13 @@ const inRoutes = (file: string) =>
 const inBrowserScope = (file: string) =>
   file.startsWith("apps/local/app/") &&
   !file.startsWith("apps/local/app/features/jobs/");
+const inSpawnScope = (file: string) => file.startsWith("apps/local/app/");
 
 export const isInScope = (file: string): boolean =>
   /\.(ts|tsx)$/.test(file) &&
   !file.endsWith(".d.ts") &&
   !isTestFile(file) &&
-  (inRoutes(file) || inBrowserScope(file));
+  (inRoutes(file) || inBrowserScope(file) || inSpawnScope(file));
 
 // ---------------------------------------------------------------------------
 // AST helpers
@@ -127,7 +138,7 @@ const isEventStreamLiteral = (node: Node): boolean =>
 export function scan(file: string, source: string): Hit[] {
   if (!isInScope(file)) return [];
   if (
-    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted/.test(
+    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted|Command/.test(
       source
     )
   ) {
@@ -159,8 +170,44 @@ export function scan(file: string, source: string): Hit[] {
     hits.push({ guard, line, text });
   };
 
+  // `Command` as imported from `@effect/platform` (its local name), or the
+  // `@effect/platform/Command` module itself: `@effect/cli` has a `Command`
+  // too, and building a CLI starts no process.
+  const platformCommands = new Set<string>();
+  for (const statement of program.body) {
+    if (statement.type !== "ImportDeclaration") continue;
+    const from = statement.source.value;
+    for (const specifier of statement.specifiers) {
+      if (
+        from === "@effect/platform" &&
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported.type === "Identifier" &&
+        specifier.imported.name === "Command"
+      ) {
+        platformCommands.add(specifier.local.name);
+      }
+      if (
+        from === "@effect/platform/Command" &&
+        specifier.type === "ImportNamespaceSpecifier"
+      ) {
+        platformCommands.add(specifier.local.name);
+      }
+    }
+  }
+  const isPlatformCommandMake = (node: Node): boolean =>
+    node.type === "CallExpression" &&
+    node.callee.type === "MemberExpression" &&
+    !node.callee.computed &&
+    node.callee.object.type === "Identifier" &&
+    platformCommands.has(node.callee.object.name) &&
+    node.callee.property.type === "Identifier" &&
+    node.callee.property.name === "make";
+
   walk(program, (node) => {
     const name = calleeName(node);
+    if (inSpawnScope(file) && isPlatformCommandMake(node)) {
+      hit("spawn", node);
+    }
     if (inRoutes(file)) {
       if (node.type === "CallExpression" && name === "createSSEResponse") {
         hit("sse-route", node);
@@ -187,6 +234,7 @@ export function scan(file: string, source: string): Hit[] {
 const ADVICE: Record<Guard, string> = {
   "sse-route": `A job the author walks away from is a Job: add a kind under apps/local/sidecar/kinds/ and enqueue it, rather than stream it from a request. See ${DOC}.`,
   "browser-driver": `A browser tab must not keep background work alive: enqueue a Job and follow its Job Events. See ${DOC}.`,
+  spawn: `Starting a process is the Sidecar's job, or one of the app server's named interactive entry points: enqueue a Job, or (if a person waits on it for a moment) add the file to the allowlist with why. See ${DOC}.`,
 };
 
 /**

@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { FFmpegError } from "@/services/ffmpeg-run";
 import { computeExportHash, toExportClips } from "@/services/export-hash";
@@ -73,7 +73,7 @@ describe("CoursePublishService — Submit before export", () => {
     // Section writes — and a Video's title is its path inside the bundle. So
     // the freeze has to happen before a single frame is encoded.
     const commitStatesDuringExport: string[][] = [];
-    const observingMock = Layer.succeed(VideoProcessingService, {
+    const observingMock = Layer.succeed(VideoExportService, {
       exportVideoClips: (exportOpts: any) =>
         Effect.promise(async () => {
           const rows = await testDb.select().from(courseVersionsTable);
@@ -123,7 +123,7 @@ describe("CoursePublishService — Submit before export", () => {
   });
 
   it("Discards the Pending Version when export fails, leaving no version to reconcile", async () => {
-    const failingMock = Layer.succeed(VideoProcessingService, {
+    const failingMock = Layer.succeed(VideoExportService, {
       exportVideoClips: () =>
         Effect.fail(
           new FFmpegError({ cause: null, message: "ffmpeg crashed" })

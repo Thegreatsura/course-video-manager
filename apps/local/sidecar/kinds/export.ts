@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import type { ExportStage } from "@/services/course-publish-export-events";
 import { defineJobKind, type JobContext } from "../job-kind";
@@ -43,7 +44,7 @@ const reportInOrder = (ctx: JobContext) =>
  */
 export const exportJobKind = defineJobKind({
   ...UPLOAD_MANAGER_POLICIES.export,
-  params: Schema.Struct({ videoId: Schema.String }),
+  params: JOB_PARAMS["export"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const publish = yield* CoursePublishService;

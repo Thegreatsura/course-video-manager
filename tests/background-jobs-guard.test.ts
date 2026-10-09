@@ -37,6 +37,47 @@ describe("scan", () => {
     ).toEqual(["browser-driver", "browser-driver", "browser-driver"]);
   });
 
+  it("finds a process started with @effect/platform's Command, under any name", () => {
+    const SERVICE = "apps/local/app/services/thing.ts";
+    expect(
+      guards(
+        scan(
+          SERVICE,
+          `import { Command, FileSystem } from "@effect/platform";
+           const c = Command.make("ffmpeg", "-i", file);`
+        )
+      )
+    ).toEqual(["spawn"]);
+    expect(
+      guards(
+        scan(
+          SERVICE,
+          `import { Command as Proc } from "@effect/platform";
+           Proc.make("ls");`
+        )
+      )
+    ).toEqual(["spawn"]);
+    expect(
+      guards(
+        scan(
+          SERVICE,
+          `import * as Cmd from "@effect/platform/Command";
+           Cmd.make("ls");`
+        )
+      )
+    ).toEqual(["spawn"]);
+  });
+
+  it("does not count @effect/cli's Command, which starts no process", () => {
+    expect(
+      scan(
+        "apps/local/app/cli/commands/thing.ts",
+        `import { Command } from "@effect/cli";
+         export const cmd = Command.make("list", {}, () => run);`
+      )
+    ).toEqual([]);
+  });
+
   it("ignores comments, tests, the jobs feature and code outside the app", () => {
     const src = `createSSEResponse(p); consumeSSEStream(c); new EventSource("/x");`;
     expect(scan(ROUTE, `// createSSEResponse(program)`)).toEqual([]);

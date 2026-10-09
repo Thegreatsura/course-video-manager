@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import { asc, eq } from "drizzle-orm";
 import { CoursePublishService } from "@/services/course-publish-service";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { FFmpegError } from "@/services/ffmpeg-run";
 import { clips as clipsTable, overlays as overlaysTable } from "@/db/schema";
 import {
@@ -270,7 +270,7 @@ describe("Definition Cards in a course export", () => {
 
     it("records a failed ffmpeg pass under the stage it was in", async () => {
       const { video, run, videoLog } = await setup({
-        mockVideoProcessing: Layer.succeed(VideoProcessingService, {
+        mockVideoProcessing: Layer.succeed(VideoExportService, {
           exportVideoClips: () =>
             Effect.fail(
               new FFmpegError({
@@ -278,7 +278,7 @@ describe("Definition Cards in a course export", () => {
                 message: "ffmpeg exited with code 254: clip.mp4: No such file",
               })
             ),
-        } as unknown as VideoProcessingService),
+        } as unknown as VideoExportService),
       });
 
       await expect(run(exportVideo(video.id))).rejects.toThrow();

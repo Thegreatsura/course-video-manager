@@ -1,4 +1,5 @@
-import { Cause, Effect, Fiber, Queue, Schema } from "effect";
+import { Cause, Effect, Fiber, Queue } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { CoursePublishService } from "@/services/course-publish-service";
 import type { PublishDetailEvent } from "@/services/course-publish-export-events";
@@ -225,13 +226,7 @@ const reportInOrder = (ctx: JobContext) =>
  */
 export const batchExportJobKind = defineJobKind({
   ...UPLOAD_MANAGER_POLICIES["batch-export"],
-  params: Schema.Struct({
-    versionId: Schema.String,
-    // Export All ships everything unless to-do Lessons are being withheld.
-    includeTodoLessons: Schema.optionalWith(Schema.Boolean, {
-      default: () => true,
-    }),
-  }),
+  params: JOB_PARAMS["batch-export"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const publish = yield* CoursePublishService;

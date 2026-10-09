@@ -1,4 +1,5 @@
-import { Config, Effect, Schema } from "effect";
+import { Config, Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { FileSystem } from "@effect/platform";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { getValidAccessToken } from "@/services/youtube-auth-service";
@@ -19,11 +20,7 @@ export const shortUrl = (youtubeVideoId: string) =>
  * only the author's Retry runs it again.
  */
 export const youtubeShortsJobKind = definePostingJobKind({
-  params: Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    description: Schema.Trim.pipe(Schema.nonEmptyString()),
-  }),
+  params: JOB_PARAMS["youtube-shorts"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const finishedDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");

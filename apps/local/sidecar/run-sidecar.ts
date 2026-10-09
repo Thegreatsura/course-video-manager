@@ -12,8 +12,7 @@ import {
 } from "@cvm/core/db/connection-guard";
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { leaveSignalsToTheProcess } from "@/services/ffmpeg-child-registry";
-import { layerLive } from "@/services/layer.server";
-import { SidecarContextLive } from "@/services/sidecar-context";
+import { sidecarLayer } from "./sidecar-layer";
 import { JOB_KINDS, type JobServices } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
@@ -104,14 +103,14 @@ const main = async (): Promise<void> => {
   // killing the process before any Job is put back.
   leaveSignalsToTheProcess();
 
-  // The app server's own services, built once in this process as they are in
-  // the app's (so ffmpeg's GPU/CPU permits are process-wide here too), on the
-  // same guarded database client (`layerLive` includes the Job operations).
-  // `SidecarContext` is provided here and nowhere else in the app: work that
-  // has moved into a Job asks for it, so only the sidecar can run it.
+  // The app server's own services and the Sidecar's alone (`sidecar-layer.ts`:
+  // the encodes, the Overlay renderer, the export and Publish), built once in
+  // this process (so ffmpeg's GPU/CPU permits are process-wide here too), on
+  // the same guarded database client. `SidecarContext` is provided there and
+  // nowhere else: work that has moved into a Job asks for it, so only the
+  // sidecar can run it.
   const layer = Layer.mergeAll(
-    layerLive,
-    SidecarContextLive,
+    sidecarLayer,
     Logger.replace(
       Logger.defaultLogger,
       makeJsonLogger({ logDir, write: (text) => process.stdout.write(text) })

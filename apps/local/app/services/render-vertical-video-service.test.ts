@@ -5,6 +5,7 @@ import { NodeContext } from "@effect/platform-node";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
+import { FFmpegEncodeService } from "@/services/ffmpeg-encode-commands";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import {
@@ -125,6 +126,7 @@ describe("RenderVerticalVideoService", () => {
       ClipOperationsService.Default.pipe(Layer.provide(dbLayer)),
       fakeVideoProcessing,
       fakeFfmpeg,
+      Layer.succeed(FFmpegEncodeService, {} as any),
       configLayer,
       NodeContext.layer
     );
@@ -179,7 +181,8 @@ describe("RenderVerticalVideoService", () => {
       const depsLayer = Layer.mergeAll(
         VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
         Layer.succeed(VideoProcessingService, {} as any),
-        Layer.succeed(FFmpegCommandsService, {
+        Layer.succeed(FFmpegCommandsService, {} as any),
+        Layer.succeed(FFmpegEncodeService, {
           createAndConcatenateVideoClipsSinglePass: () =>
             Effect.fail(
               new RenderVerticalError({

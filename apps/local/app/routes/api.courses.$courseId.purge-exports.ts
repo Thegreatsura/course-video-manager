@@ -3,7 +3,7 @@ import { assertUnderEffect } from "@/services/assert-under";
 import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { makeAction } from "@/services/route-action.server";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 
 const purgeExportsSchema = Schema.Struct({
   versionId: Schema.String.pipe(Schema.minLength(1)),
@@ -18,7 +18,7 @@ export const action = makeAction({
 
       const versionOps = yield* VersionOperationsService;
       const fs = yield* FileSystem.FileSystem;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       const videoIds = yield* versionOps.getVideoIdsForVersion(versionId);
       const finishedVideosDir = yield* Config.string(

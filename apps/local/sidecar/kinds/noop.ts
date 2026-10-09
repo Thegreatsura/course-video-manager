@@ -1,4 +1,5 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { defineJobKind } from "../job-kind";
 import { RETRYING_JOB_POLICY } from "../retry-policy";
 
@@ -15,18 +16,7 @@ export class NoopJobFailedError extends Data.TaggedError("NoopJobFailedError")<{
  */
 export const noopJobKind = defineJobKind({
   ...RETRYING_JOB_POLICY,
-  params: Schema.Struct({
-    /** How long to take, in steps of up to 100 ms, reporting each. */
-    durationMs: Schema.optionalWith(
-      Schema.Number.pipe(Schema.int(), Schema.between(0, 600_000)),
-      { default: () => 0 }
-    ),
-    /** Fail every attempt up to and including this one. */
-    failAttempts: Schema.optionalWith(
-      Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-      { default: () => 0 }
-    ),
-  }),
+  params: JOB_PARAMS["noop"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       yield* Effect.logInfo("noop: started", { durationMs: params.durationMs });

@@ -16,7 +16,7 @@ import {
   type Priority,
 } from "@/components/priority-selector";
 import { PitchStateBadge } from "@/components/status-icon-badge";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { makeLoader } from "@/services/route-action.server";
 import { formatDuration } from "@/lib/format-duration";
@@ -74,7 +74,7 @@ export const loader = makeLoader({
   effect: ({ params }) =>
     Effect.gen(function* () {
       const db = yield* PitchOperationsService;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       const pitchRaw = yield* db.getPitchWithVideos(params.pitchId!);
 
