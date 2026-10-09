@@ -8,10 +8,7 @@ import {
 import { jobUploadEntries } from "./jobs-selectors";
 import { clockOffsetOf } from "./jobs-timing";
 import type { WireJob, WireJobEvent } from "./job-wire";
-import {
-  createHistoryStore,
-  type HistoryData,
-} from "@/features/upload-manager/upload-history";
+import { historyLookupOf, type HistoryData } from "./job-stage-history";
 import { estimateUploads } from "@/features/upload-manager/upload-eta-schedule";
 
 /**
@@ -128,15 +125,8 @@ describe("a Job row's timings", () => {
     ];
     const heardLive = runLive(live(events, exportJob));
     const replayed = runLive([snapshotOf(exportJob, events)]);
-    const { completed: liveCompleted, ...liveRest } =
-      heardLive.timings[exportJob.id]!;
-    const { completed: replayCompleted, ...replayRest } =
-      replayed.timings[exportJob.id]!;
-    expect(replayRest).toEqual(liveRest);
-    // A replayed stage was recorded by whichever tab heard it live: it is
-    // marked, so the history does not count it twice.
-    expect(replayCompleted).toEqual(
-      liveCompleted.map((stage) => ({ ...stage, replayed: true }))
+    expect(replayed.timings[exportJob.id]).toEqual(
+      heardLive.timings[exportJob.id]
     );
   });
 
@@ -245,7 +235,7 @@ describe("the tab's clock offset", () => {
       "export:concatenating-clips": [{ durationMs: 60_000, units: null }],
       "export:normalizing-audio": [{ durationMs: 10_000, units: null }],
     };
-    const lookup = createHistoryStore(history).lookup;
+    const lookup = historyLookupOf(history);
     const etaAt = (skewMs: number) => {
       const state = runLive(
         live(exportEvents().slice(0, 3), exportJob, skewMs)
@@ -271,12 +261,12 @@ describe("a Publish Job's estimate", () => {
   it("gives a number for the parent and both Videos, from history", () => {
     const runs = (durationMs: number) =>
       Array.from({ length: 3 }, () => ({ durationMs, units: null }));
-    const lookup = createHistoryStore({
+    const lookup = historyLookupOf({
       "export:concatenating-clips": runs(50_000),
       "export:normalizing-audio": runs(10_000),
       "export:uploading": runs(20_000),
       "publish:finalizing": runs(30_000),
-    }).lookup;
+    });
     const events = [
       event(publishJob, 0, "queued"),
       event(publishJob, 0, "started", { attempt: 1 }),
@@ -347,24 +337,10 @@ describe("a Job this tab joins part-way", () => {
   };
 
   for (const from of ["queued", "mid-stage"] as const) {
-    it(`records none of its stages to the history, caught up from ${from}: the tab that saw them did`, () => {
-      const state = caughtUp({ from });
-      expect(state.timings[exportJob.id]?.completed).toEqual([
-        expect.objectContaining({
-          key: "export:concatenating-clips",
-          replayed: true,
-        }),
-        expect.objectContaining({
-          key: "export:normalizing-audio",
-          replayed: true,
-        }),
-      ]);
+    it(`does not move the clock offset with its late deliveries, caught up from ${from}`, () => {
+      expect(clockOffsetOf(caughtUp({ from }))).toBe(0);
     });
   }
-
-  it("does not move the clock offset with its late deliveries", () => {
-    expect(clockOffsetOf(caughtUp({ from: "queued" }))).toBe(0);
-  });
 
   it("is timed like any other when its `queued` event is newer than the snapshot", () => {
     const events = [

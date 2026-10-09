@@ -25,8 +25,9 @@ $V cvm <run> diagram create --file tiny.json   # prints the Diagram's url on thi
   database is this run's clone before it starts anything, and refuses a
   `--production` run outright.
 - **Its writes are in the Ledger** as another connection, `cvm-verify-api`.
-- **The first `diagram create` on a fresh run can time out** while Vite
-  compiles the render page for the first time. Run it again.
+- **The first `diagram` call on a run waits for the run's app** to compile
+  its render page (`app-ready` in the run directory marks it done; up to 180s,
+  then a clear failure). Every later call goes straight through.
 
 Read its result back with `$V sql`, or in the browser: a Diagram's url opens on
 this run's app.

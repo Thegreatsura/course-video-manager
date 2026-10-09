@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createHistoryStore, type HistoryData } from "./upload-history";
+import {
+  historyLookupOf,
+  type HistoryData,
+} from "@/features/jobs/job-stage-history";
 import { etaLabel, formatRemaining, jobEta } from "./upload-eta";
 import type { TimedRows } from "./upload-timing";
 import {
@@ -23,7 +26,7 @@ const runs = (durationMs: number, count = 3, units: number | null = null) =>
 const etaOf = (state: TimedRows, now: number, past: HistoryData = {}) =>
   jobEta(state.uploads.u1!, state.timings.u1, {
     timings: state.timings,
-    history: createHistoryStore(past).lookup,
+    history: historyLookupOf(past),
     now,
   });
 

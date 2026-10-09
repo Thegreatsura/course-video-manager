@@ -134,6 +134,55 @@ stop_api() {
   rm -f "$(api_state "$dir")"
 }
 
+# --- the run's app, warm ----------------------------------------------------------
+# `cvm diagram` renders through the run's app: a browser opens /diagram-render
+# and waits for the page to install its render function. On a fresh run Vite
+# compiles that page (tldraw and all) on the first visit, which takes longer
+# than the render's own 30s timeout. So before the first `diagram` call, the
+# run's app is made to answer for real: a throwaway browser session opens the
+# render page and polls until the render function exists, bounded by
+# APP_READY_TIMEOUT seconds. Done once per run (app-ready marks it); Vite keeps
+# what it compiled for every later call.
+APP_READY_TIMEOUT="${APP_READY_TIMEOUT:-180}"
+APP_READY_REOPEN=20
+DIAGRAM_RENDER_PATH=/diagram-render
+DIAGRAM_RENDER_GLOBAL=__cvmRenderDiagram
+
+ensure_app_ready() {
+  local dir="$1" app="$2" session deadline ok=1
+  [ -f "$dir/app-ready" ] && return 0
+  assert_loopback_url "the run's app" "$app"
+  session="$(run_session)-warmup"
+  deadline=$(( SECONDS + APP_READY_TIMEOUT ))
+  log "cvm: waiting for this run's app to compile $DIAGRAM_RENDER_PATH (up to ${APP_READY_TIMEOUT}s, once per run)"
+  local ab=(env -u AGENT_BROWSER_SESSION -u AGENT_BROWSER_SESSION_NAME -u AGENT_BROWSER_PROFILE -u AGENT_BROWSER_STATE
+            agent-browser --session "$session")
+  until curl -sf --max-time 5 -o /dev/null "$app/"; do
+    [ "$SECONDS" -lt "$deadline" ] || break
+    sleep 2
+  done
+  # The first visit does not recover on its own: Vite optimises tldraw's
+  # dependencies mid-load and reloads, and that page never installs the render
+  # function. So the page is opened afresh every APP_READY_REOPEN seconds until
+  # one does; Vite keeps what it compiled between visits.
+  local got opened_at=-1
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ "$opened_at" -lt 0 ] || [ $(( SECONDS - opened_at )) -ge "$APP_READY_REOPEN" ]; then
+      opened_at=$SECONDS
+      timeout 60 "${ab[@]}" open "$app$DIAGRAM_RENDER_PATH" >> "$dir/app-ready.log" 2>&1 || true
+    fi
+    got="$(timeout 10 "${ab[@]}" eval "typeof window.$DIAGRAM_RENDER_GLOBAL" 2>>"$dir/app-ready.log" | tr -d '"[:space:]')"
+    printf '%s eval: %s\n' "$(date +%T)" "${got:-<no answer>}" >> "$dir/app-ready.log"
+    [ "$got" = function ] && { ok=0; break; }
+    sleep 2
+  done
+  "${ab[@]}" close >/dev/null 2>&1 || true
+  [ "$ok" = 0 ] ||
+    die "this run's app at $app never served a working $DIAGRAM_RENDER_PATH within ${APP_READY_TIMEOUT}s — see $dir/app-ready.log and $dir/server.log"
+  date --iso-8601=seconds > "$dir/app-ready"
+  log "cvm: this run's app is ready ($app$DIAGRAM_RENDER_PATH)"
+}
+
 # --- the verb -------------------------------------------------------------------
 cmd_cvm() {
   local dir clone url api app code=0
@@ -150,6 +199,7 @@ cmd_cvm() {
   assert_loopback_url "the run's API" "$api"
   app="$(run_base)"
   assert_loopback_url "the run's app" "$app"
+  [ "$1" = diagram ] && ensure_app_ready "$dir" "$app"
 
   clone_app_env "$dir" "$url"
   printf '%s cvm %s\n' "$(date --iso-8601=seconds)" "$*" >> "$dir/cvm.log"

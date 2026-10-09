@@ -1,5 +1,5 @@
 import type { UploadEntry } from "./upload-entry";
-import type { HistoryLookup } from "./upload-history";
+import type { HistoryLookup } from "@/features/jobs/job-stage-history";
 import type { UploadTiming } from "./upload-timing";
 import {
   historyKey,
@@ -12,7 +12,7 @@ import {
 /**
  * A single job's time-to-finish, from two sources blended together:
  *
- * - **history** — how long this stage has taken before (`upload-history`),
+ * - **history** — how long this stage has taken before (`job-stage-history`),
  *   the only basis for a stage that streams no percentage or has not started;
  * - **live rate** — how fast the bar has moved over the last
  *   `SAMPLE_WINDOW_MS`, once there is enough of it to trust.

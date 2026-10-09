@@ -27,6 +27,8 @@
 #                               clone only: its own apps/remote on 127.0.0.1, a
 #                               clone-only token, the local-only gate open for
 #                               the clone. Refuses anything that is not loopback.
+#                               A run's first `cvm diagram` waits for the run's app
+#                               to serve its render page first.
 #   verify.sh cleanup <run>     stop what this run started, drop its clone, keep the evidence
 #   verify.sh cleanup --all     the same for every live run THIS worktree launched
 #
@@ -482,5 +484,5 @@ case "$VERB" in
           *) die "usage: verify.sh guard <run> <baseline|check|forensics <table>>" ;;
         esac ;;
     esac ;;
-  *) sed -n '2,43p' "$0"; exit 1 ;;
+  *) sed -n '2,45p' "$0"; exit 1 ;;
 esac
