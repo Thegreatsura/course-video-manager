@@ -33,6 +33,10 @@ export const clipRoutes = (runtime: RemoteRuntime) =>
       forward(runtime, ClipOperationsService, "moveClipToPosition")
     )
     .post(
+      "/moveClipToVideo",
+      forward(runtime, ClipOperationsService, "moveClipToVideo")
+    )
+    .post(
       "/archiveClip",
       forward(runtime, ClipOperationsService, "archiveClip")
     )

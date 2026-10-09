@@ -56,6 +56,7 @@ const ERROR_CONSTRUCTORS: Record<
   LessonPathTakenError: DomainErrors.LessonPathTakenError,
   VideoTitleTakenError: DomainErrors.VideoTitleTakenError,
   ClipNotZoomableError: DomainErrors.ClipNotZoomableError,
+  ClipCarriesOverlaysError: DomainErrors.ClipCarriesOverlaysError,
 };
 
 /**
