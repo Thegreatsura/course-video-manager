@@ -9,6 +9,33 @@ import type { Snapshot } from "./snapshot-list";
 export type HeadStatus = "loading" | "failed" | "ready";
 
 /**
+ * A Diagram's head as the server stores it: the content hash of its drawing
+ * (`null` when it has never been drawn on) and when it was last written.
+ */
+export interface StoredHead {
+  hash: string | null;
+  /** ISO time. */
+  updatedAt: string;
+}
+
+/** The Active Diagram's head, as the canvas holds it. */
+export interface CanvasHead {
+  diagramId: string;
+  status: HeadStatus;
+  /** The stored head this tab last loaded or saved; `null` until it loads. */
+  seen: StoredHead | null;
+  /** One of this tab's autosaves is on its way to the server. */
+  saving: boolean;
+  /**
+   * The stored head changed elsewhere while the canvas had unsaved edits, so
+   * neither was overwritten: the author picks which one to keep.
+   */
+  changedElsewhere: boolean;
+  /** A reload in place: the new head keeps the camera where it is. */
+  keepCamera: boolean;
+}
+
+/**
  * The Active Diagram page: loading a diagram's head onto the canvas, restoring
  * snapshots over it, preserving it, creating new diagrams, and the link to the
  * video editor. See docs/FRONTEND_STATE.md.
@@ -17,7 +44,7 @@ export namespace diagramPlaygroundReducer {
   export interface State {
     editorMounted: boolean;
     /** The diagram the canvas holds or is loading; `null` until one loads. */
-    head: { diagramId: string; status: HeadStatus } | null;
+    head: CanvasHead | null;
     /** A restore waiting on the "you'll lose the canvas" dialog. */
     pendingRestore: Snapshot | null;
     preserving: boolean;
@@ -39,8 +66,31 @@ export namespace diagramPlaygroundReducer {
     /** The palette's search restore moved the open diagram's head on the server. */
     | { type: "head-moved-elsewhere"; diagramId: string }
     | { type: "retry-load-clicked" }
-    | { type: "head-loaded"; diagramId: string; scene: TLStoreSnapshot | null }
+    | {
+        type: "head-loaded";
+        diagramId: string;
+        scene: TLStoreSnapshot | null;
+        stored: StoredHead;
+      }
     | { type: "head-load-failed"; diagramId: string }
+    // Keeping in step with the stored head
+    /**
+     * The page refetched the Active Diagram's stored head. The canvas's own
+     * unsaved edits ride along, since only the editor knows them.
+     */
+    | {
+        type: "stored-head-reported";
+        diagramId: string;
+        stored: StoredHead;
+        canvasHasUnsavedEdits: boolean;
+      }
+    | { type: "head-save-started"; diagramId: string }
+    | { type: "head-saved"; diagramId: string; stored: StoredHead }
+    | { type: "head-save-failed"; diagramId: string }
+    /** The server refused the save: the stored head isn't the one this tab saw. */
+    | { type: "head-save-refused"; diagramId: string }
+    | { type: "load-changed-head-clicked" }
+    | { type: "keep-my-edits-clicked" }
     // Restore
     | {
         type: "restore-requested";
@@ -51,7 +101,12 @@ export namespace diagramPlaygroundReducer {
       }
     | { type: "restore-dismissed" }
     | { type: "restore-confirmed"; snapshot: Snapshot }
-    | { type: "restore-succeeded"; diagramId: string; snapshot: Snapshot }
+    | {
+        type: "restore-succeeded";
+        diagramId: string;
+        snapshot: Snapshot;
+        stored: StoredHead;
+      }
     | { type: "restore-failed" }
     // Preserve
     | { type: "preserve-clicked" }
@@ -102,8 +157,19 @@ export namespace diagramPlaygroundReducer {
      * its edits; reloading the same one discards them.
      */
     | { type: "load-head"; diagramId: string; saveOpenHeadFirst: boolean }
-    /** Put `scene` on the canvas as `diagramId`'s stored head; edits now save. */
-    | { type: "show-head"; diagramId: string; scene: TLStoreSnapshot | null }
+    /**
+     * Put `scene` on the canvas as `diagramId`'s stored head; edits now save,
+     * and only over `stored`.
+     */
+    | {
+        type: "show-head";
+        diagramId: string;
+        scene: TLStoreSnapshot | null;
+        stored: StoredHead;
+        centreCamera: boolean;
+      }
+    /** Save the canvas over whatever head is stored now, seen or not. */
+    | { type: "overwrite-stored-head"; diagramId: string }
     /** Don't leave the previous diagram's shapes standing in for this one. */
     | { type: "clear-canvas" }
     | {
@@ -169,7 +235,11 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
   action,
   exec
 ): State => {
-  const startLoad = (from: State, diagramId: string): State => {
+  const startLoad = (
+    from: State,
+    diagramId: string,
+    opts: { keepCamera?: boolean } = {}
+  ): State => {
     const openId = from.head?.diagramId;
     exec({
       type: "load-head",
@@ -178,13 +248,47 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
     });
     return {
       ...from,
-      head: { diagramId, status: "loading" },
+      head: {
+        diagramId,
+        status: "loading",
+        seen: null,
+        saving: false,
+        changedElsewhere: false,
+        keepCamera: opts.keepCamera ?? false,
+      },
       timelineVersion: from.timelineVersion + 1,
     };
   };
 
   /** A result for a diagram the canvas has since moved away from. */
   const isStale = (diagramId: string) => state.head?.diagramId !== diagramId;
+
+  /** The head now on the canvas is `stored`, as loaded or restored. */
+  const showHead = (
+    diagramId: string,
+    scene: TLStoreSnapshot | null,
+    stored: StoredHead,
+    centreCamera: boolean
+  ): State => {
+    exec({ type: "show-head", diagramId, scene, stored, centreCamera });
+    return {
+      ...state,
+      head: {
+        diagramId,
+        status: "ready",
+        seen: stored,
+        saving: false,
+        changedElsewhere: false,
+        keepCamera: false,
+      },
+    };
+  };
+
+  /** Patch the canvas head, if `diagramId` is still the one on it. */
+  const updateHead = (diagramId: string, patch: Partial<CanvasHead>): State =>
+    !state.head || isStale(diagramId)
+      ? state
+      : { ...state, head: { ...state.head, ...patch } };
 
   switch (action.type) {
     case "editor-mounted": {
@@ -208,23 +312,61 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       if (!state.head) return state;
       return startLoad(state, state.head.diagramId);
     case "head-loaded":
-      if (isStale(action.diagramId)) return state;
-      exec({
-        type: "show-head",
-        diagramId: action.diagramId,
-        scene: action.scene,
-      });
-      return {
-        ...state,
-        head: { diagramId: action.diagramId, status: "ready" },
-      };
+      if (!state.head || isStale(action.diagramId)) return state;
+      return showHead(
+        action.diagramId,
+        action.scene,
+        action.stored,
+        !state.head.keepCamera
+      );
     case "head-load-failed":
       if (isStale(action.diagramId)) return state;
       exec({ type: "clear-canvas" });
-      return {
-        ...state,
-        head: { diagramId: action.diagramId, status: "failed" },
-      };
+      return updateHead(action.diagramId, { status: "failed" });
+
+    case "stored-head-reported": {
+      const head = state.head;
+      if (!head || isStale(action.diagramId)) return state;
+      // Until the head loads, and while a save of ours is on its way, the
+      // report can't be told apart from our own write.
+      if (head.status !== "ready" || !head.seen || head.saving) return state;
+      const { stored } = action;
+      if (stored.hash === head.seen.hash) return state;
+      // Fetched before our last save landed: old news.
+      if (Date.parse(stored.updatedAt) <= Date.parse(head.seen.updatedAt)) {
+        return state;
+      }
+      if (action.canvasHasUnsavedEdits) {
+        return head.changedElsewhere
+          ? state
+          : updateHead(head.diagramId, { changedElsewhere: true });
+      }
+      // Nothing of ours to lose: take the new head in place.
+      return startLoad(state, head.diagramId, { keepCamera: true });
+    }
+    case "head-save-started":
+      return updateHead(action.diagramId, { saving: true });
+    case "head-saved":
+      return updateHead(action.diagramId, {
+        saving: false,
+        seen: action.stored,
+        changedElsewhere: false,
+      });
+    case "head-save-failed":
+      return updateHead(action.diagramId, { saving: false });
+    case "head-save-refused":
+      return updateHead(action.diagramId, {
+        saving: false,
+        changedElsewhere: true,
+      });
+    case "load-changed-head-clicked":
+      if (!state.head?.changedElsewhere) return state;
+      // The author chose the stored head: their unsaved edits go.
+      return startLoad(state, state.head.diagramId, { keepCamera: true });
+    case "keep-my-edits-clicked":
+      if (!state.head?.changedElsewhere) return state;
+      exec({ type: "overwrite-stored-head", diagramId: state.head.diagramId });
+      return updateHead(state.head.diagramId, { changedElsewhere: false });
 
     case "restore-requested": {
       if (!state.head) {
@@ -254,19 +396,17 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
         requestId: null,
       });
       return { ...state, pendingRestore: null };
-    case "restore-succeeded":
+    case "restore-succeeded": {
       if (isStale(action.diagramId)) return state;
       // The server has already moved the head to this snapshot.
-      exec({
-        type: "show-head",
-        diagramId: action.diagramId,
-        scene: action.snapshot.scene as TLStoreSnapshot,
-      });
-      return {
-        ...state,
-        head: { diagramId: action.diagramId, status: "ready" },
-        timelineVersion: state.timelineVersion + 1,
-      };
+      const shown = showHead(
+        action.diagramId,
+        action.snapshot.scene as TLStoreSnapshot,
+        action.stored,
+        true
+      );
+      return { ...shown, timelineVersion: state.timelineVersion + 1 };
+    }
     case "restore-failed":
       exec({ type: "show-error", message: "Failed to restore snapshot" });
       return state;

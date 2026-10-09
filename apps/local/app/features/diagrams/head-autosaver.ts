@@ -3,6 +3,12 @@ import type { TLStore, TLStoreSnapshot } from "tldraw";
 export const HEAD_AUTOSAVE_DEBOUNCE_MS = 500;
 
 /**
+ * Names the head a head PATCH may replace: its hash, or `none` for an empty
+ * head. Without it, the write is unconditional.
+ */
+export const EXPECTED_HEAD_HASH_HEADER = "X-Expected-Head-Hash";
+
+/**
  * Debounced autosave of the open diagram's head, which writes only when the
  * canvas differs from the head it last loaded or saved.
  *
@@ -12,36 +18,87 @@ export const HEAD_AUTOSAVE_DEBOUNCE_MS = 500;
  * diagram from drawing on it. The comparison against what was loaded is what
  * keeps a page that is only opened from writing.
  *
+ * Each save names the stored head it replaces (by hash), and the server
+ * refuses it if the head has since changed elsewhere: the autosaver never
+ * overwrites a head it hasn't seen. Once refused, it stops saving until the
+ * author picks a side — `flush({ overwrite: true })`, or a fresh `attach`.
+ * Saves run one at a time, so each knows the hash the one before it left.
+ *
  * It saves only while attached to a head. When to attach and detach — and so
  * whether the canvas may be edited — is the page reducer's decision
  * (`diagram-playground-reducer.ts`); this module only keeps the store honest.
  */
+/** What became of one save. */
+export type HeadSaveResult =
+  | { outcome: "saved"; headHash: string | null }
+  /** The stored head isn't the one named: it changed elsewhere. */
+  | { outcome: "refused" }
+  | { outcome: "failed" };
+
 export function createHeadAutosaver(opts: {
   store: TLStore;
-  /** Resolves `true` once the head is stored; `false` leaves it to retry. */
-  save: (diagramId: string, document: TLStoreSnapshot) => Promise<boolean>;
+  /**
+   * Store `document` as `diagramId`'s head, over the head whose hash is
+   * `expectedHash` — or over anything when it is `undefined`. Never throws.
+   */
+  save: (
+    diagramId: string,
+    document: TLStoreSnapshot,
+    expectedHash: string | null | undefined
+  ) => Promise<HeadSaveResult>;
   debounceMs: number;
 }) {
   const { store } = opts;
-  /** The diagram the canvas holds, and its head as last loaded or saved. */
-  let head: { diagramId: string; serialized: string } | null = null;
+  /**
+   * The diagram the canvas holds; its head as last loaded or saved, both as
+   * the canvas serialized it and as the server hashed it; and whether the
+   * server has refused a save over it.
+   */
+  let head: {
+    diagramId: string;
+    serialized: string;
+    hash: string | null;
+    refused: boolean;
+  } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The save in progress, if any; the next one starts after it. */
+  let queue: Promise<unknown> = Promise.resolve();
 
   const cancel = () => {
     if (timer) clearTimeout(timer);
     timer = null;
   };
 
-  const flush = async () => {
-    cancel();
+  const saveOnce = async (overwrite: boolean) => {
     if (!head) return;
+    if (head.refused && !overwrite) return;
     const document = store.getStoreSnapshot("document");
     const serialized = JSON.stringify(document);
     if (serialized === head.serialized) return;
     const target = head;
-    if (await opts.save(target.diagramId, document)) {
+    const result = await opts.save(
+      target.diagramId,
+      document,
+      overwrite ? undefined : target.hash
+    );
+    if (result.outcome === "saved") {
       target.serialized = serialized;
+      target.hash = result.headHash;
+      target.refused = false;
+    } else if (result.outcome === "refused") {
+      target.refused = true;
     }
+  };
+
+  /**
+   * Save now if the canvas has changed; resolves once the save has landed.
+   * `overwrite` saves over whatever head is stored, even one it hasn't seen.
+   */
+  const flush = (flushOpts: { overwrite?: boolean } = {}) => {
+    cancel();
+    const run = queue.then(() => saveOnce(flushOpts.overwrite ?? false));
+    queue = run.catch(() => {});
+    return run;
   };
 
   const unlisten = store.listen(
@@ -67,17 +124,25 @@ export function createHeadAutosaver(opts: {
       head = null;
     },
     /**
-     * The canvas now holds `diagramId`'s stored head — call right after
-     * loading or restoring it. Edits from here on are saved.
+     * The canvas now holds `diagramId`'s stored head, whose hash is `hash` —
+     * call right after loading or restoring it. Edits from here on are saved.
      */
-    attach(diagramId: string) {
+    attach(diagramId: string, hash: string | null) {
       cancel();
       head = {
         diagramId,
         serialized: JSON.stringify(store.getStoreSnapshot("document")),
+        hash,
+        refused: false,
       };
     },
-    /** Save now if the canvas has changed; resolves once the save has landed. */
+    /** Whether the canvas differs from the head it last loaded or saved. */
+    hasUnsavedEdits() {
+      if (!head) return false;
+      return (
+        JSON.stringify(store.getStoreSnapshot("document")) !== head.serialized
+      );
+    },
     flush,
     dispose() {
       cancel();
