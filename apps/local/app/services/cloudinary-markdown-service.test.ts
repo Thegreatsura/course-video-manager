@@ -3,6 +3,7 @@ import { beforeEach, vi } from "vitest";
 import { Effect, Layer } from "effect";
 import { CloudinaryMarkdownService } from "./cloudinary-markdown-service";
 import { CloudinaryService } from "./cloudinary-service";
+import type { ImageUploaded } from "@/features/image-upload/image-upload-job";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -20,103 +21,120 @@ vi.mock("node:fs", async () => {
 });
 
 let testLayer: Layer.Layer<CloudinaryMarkdownService>;
-let uploadCounter: number;
+let uploads: string[];
 
-const uploadImagesInMarkdown = (body: string, baseDir: string) =>
+const run = (
+  body: string,
+  options: {
+    recorded?: ImageUploaded[];
+    recordedEarlier?: Map<string, string>;
+  } = {}
+) =>
   Effect.gen(function* () {
     const service = yield* CloudinaryMarkdownService;
-    return yield* service.uploadImagesInMarkdown(body, baseDir);
-  });
+    const records: ImageUploaded[] = [];
+    const result = yield* service.uploadLocalImages(body, "/base", {
+      recorded: options.recorded ?? [],
+      recordedEarlier: options.recordedEarlier ?? new Map(),
+      record: (image) => Effect.sync(() => void records.push(image)),
+    });
+    return { ...result, records };
+  }).pipe(Effect.provide(testLayer));
 
-describe("CloudinaryMarkdownService", () => {
+describe("CloudinaryMarkdownService.uploadLocalImages", () => {
   beforeEach(() => {
-    uploadCounter = 0;
-
-    // Mock CloudinaryService that returns predictable URLs
+    uploads = [];
     const mockCloudinaryLayer = Layer.succeed(CloudinaryService, {
       upload: (filePath: string) =>
-        Effect.gen(function* () {
-          uploadCounter++;
-          const filename = path.basename(filePath, path.extname(filePath));
-          return `https://res.cloudinary.com/test/ai-hero-images/${filename}_${uploadCounter}`;
+        Effect.sync(() => {
+          uploads.push(filePath);
+          return `https://res.cloudinary.com/test/${path.basename(filePath)}`;
         }),
     } as any);
-
     testLayer = CloudinaryMarkdownService.Default.pipe(
       Layer.provide(mockCloudinaryLayer)
     );
-
-    // Default: all files exist
     vi.mocked(fs.existsSync).mockReturnValue(true);
   });
 
-  it.effect("returns unchanged markdown when no images present", () =>
+  it.effect("records nothing when the body has no local image", () =>
     Effect.gen(function* () {
-      const body = "# Hello World\n\nThis is a paragraph with no images.";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toBe(body);
-      expect(result.uploadedFilePaths).toEqual([]);
-    }).pipe(Effect.provide(testLayer))
-  );
-
-  it.effect("replaces local image reference with Cloudinary URL", () =>
-    Effect.gen(function* () {
-      const body = "Check this out:\n\n![diagram](diagram.png)\n\nNice!";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toBe(
-        "Check this out:\n\n![diagram](https://res.cloudinary.com/test/ai-hero-images/diagram_1)\n\nNice!"
+      const result = yield* run(
+        "# Hello\n\n![remote](https://cdn.example.com/a.png)"
       );
-      expect(result.uploadedFilePaths).toEqual([
-        path.resolve("/base", "diagram.png"),
-      ]);
-    }).pipe(Effect.provide(testLayer))
+      expect(result.records).toEqual([]);
+      expect(uploads).toEqual([]);
+    })
   );
 
-  it.effect("handles mixed local, https and http images", () =>
+  it.effect("uploads each local image once and records it by reference", () =>
     Effect.gen(function* () {
-      const body = [
-        "![local](screenshot.png)",
-        "![remote](https://cdn.example.com/photo.jpg)",
-        "![plain-http](http://example.com/other.jpg)",
-        "![another-local](images/chart.png)",
-      ].join("\n");
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toBe(
+      const result = yield* run(
         [
-          "![local](https://res.cloudinary.com/test/ai-hero-images/screenshot_1)",
-          "![remote](https://cdn.example.com/photo.jpg)",
-          "![plain-http](http://example.com/other.jpg)",
-          "![another-local](https://res.cloudinary.com/test/ai-hero-images/chart_2)",
+          "![one](a.png)",
+          "![again](a.png)",
+          "![other ref, same file](./a.png)",
+          "![chart](images/chart.png)",
         ].join("\n")
       );
-      expect(result.uploadedFilePaths).toEqual([
-        path.resolve("/base", "screenshot.png"),
+      expect(uploads).toEqual([
+        path.resolve("/base", "a.png"),
         path.resolve("/base", "images/chart.png"),
       ]);
-    }).pipe(Effect.provide(testLayer))
+      expect(result.records.map((r) => r.ref)).toEqual([
+        "a.png",
+        "./a.png",
+        "images/chart.png",
+      ]);
+      expect(result.records[1]!.url).toBe(result.records[0]!.url);
+      expect(result.uploaded).toBe(2);
+    })
   );
 
-  it.effect("handles empty alt text", () =>
+  it.effect("skips what an earlier run of the Job recorded", () =>
     Effect.gen(function* () {
-      const body = "![](image.png)";
-      const result = yield* uploadImagesInMarkdown(body, "/base");
-      expect(result.body).toBe(
-        "![](https://res.cloudinary.com/test/ai-hero-images/image_1)"
-      );
-    }).pipe(Effect.provide(testLayer))
+      const result = yield* run("![a](a.png)\n![b](b.png)", {
+        recorded: [
+          {
+            ref: "a.png",
+            filePath: path.resolve("/base", "a.png"),
+            url: "https://c/a",
+          },
+        ],
+      });
+      expect(uploads).toEqual([path.resolve("/base", "b.png")]);
+      expect(result.records.map((r) => r.ref)).toEqual(["b.png"]);
+    })
   );
 
-  it.effect("fails when image file does not exist", () =>
-    Effect.gen(function* () {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      const body = "![missing](nonexistent.png)";
-      const result = yield* Effect.either(
-        uploadImagesInMarkdown(body, "/base")
-      );
-      expect(result._tag).toBe("Left");
-      if (result._tag === "Left") {
-        expect((result.left as any).message).toContain("Image file not found");
-      }
-    }).pipe(Effect.provide(testLayer))
+  it.effect(
+    "gives a removed file the URL an earlier Job recorded, without uploading",
+    () =>
+      Effect.gen(function* () {
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+        const filePath = path.resolve("/base", "gone.png");
+        const result = yield* run("![gone](gone.png)", {
+          recordedEarlier: new Map([[filePath, "https://c/gone"]]),
+        });
+        expect(uploads).toEqual([]);
+        expect(result.records).toEqual([
+          { ref: "gone.png", filePath, url: "https://c/gone" },
+        ]);
+      })
+  );
+
+  it.effect(
+    "fails when an image file does not exist and was never uploaded",
+    () =>
+      Effect.gen(function* () {
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+        const result = yield* Effect.either(run("![missing](nonexistent.png)"));
+        expect(result._tag).toBe("Left");
+        if (result._tag === "Left") {
+          expect((result.left as any).message).toContain(
+            "Image file not found"
+          );
+        }
+      })
   );
 });

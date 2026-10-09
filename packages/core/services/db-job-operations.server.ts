@@ -451,6 +451,37 @@ export const createJobOperations = (db: Database) => {
     );
   });
 
+  /**
+   * Every event of one `type` written by any Job of `kind` about one subject,
+   * oldest first: what earlier Jobs recorded about the same thing (the
+   * images an earlier `upload-images` Job uploaded for a Video).
+   */
+  const listSubjectJobEvents = Effect.fn("listSubjectJobEvents")(
+    function* (input: {
+      kind: string;
+      subjectType: string;
+      subjectId: string;
+      type: string;
+    }) {
+      const rows = yield* makeDbCall(() =>
+        db
+          .select({ event: jobEvents })
+          .from(jobEvents)
+          .innerJoin(jobs, eq(jobs.id, jobEvents.jobId))
+          .where(
+            and(
+              eq(jobs.kind, input.kind),
+              eq(jobs.subjectType, input.subjectType),
+              eq(jobs.subjectId, input.subjectId),
+              eq(jobEvents.type, input.type)
+            )
+          )
+          .orderBy(asc(jobEvents.id))
+      );
+      return rows.map((row) => row.event);
+    }
+  );
+
   // -- Subscribers -----------------------------------------------------------
 
   /** The newest Job Event's id, or 0 when there is none: where a feed starts. */
@@ -628,6 +659,7 @@ export const createJobOperations = (db: Database) => {
     ...createDismissJobOperations(db),
     getJob,
     listJobEvents,
+    listSubjectJobEvents,
     acquireSidecarLease,
     renewSidecarLease,
     releaseSidecarLease,

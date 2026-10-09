@@ -57,7 +57,7 @@ migrate_run_clone() {
 # A clone run is writable, so nothing it does may leave the box. Every external
 # service's credential is replaced with a dud — they win over a linked .env,
 # because the process environment beats .env — so Buffer, S3, Dropbox, YouTube,
-# OpenAI, Anthropic, remove.bg and AI Hero all fail closed. The services that
+# OpenAI, Anthropic, remove.bg, AI Hero and Cloudinary all fail closed. The services that
 # read these at startup still need SOME value, or every page 500s.
 OFFLINE='verify-cvm-offline'
 
@@ -99,6 +99,10 @@ OFFLINE_SERVICES_ENV=(
   # Dropbox: the discard port, or a loopback stub the caller started
   # (POSTING_URL_VARS above).
   "${POSTING_URLS_ENV[@]}"
+  # Cloudinary (an image upload Job): a dud account whose uploads go to the
+  # discard port, or to a loopback stub the caller names in
+  # CLOUDINARY_UPLOAD_PREFIX. The SDK reads `upload_prefix` from the URL.
+  "CLOUDINARY_URL=cloudinary://$OFFLINE:$OFFLINE@$OFFLINE?upload_prefix=$(loopback_or_discard "${CLOUDINARY_UPLOAD_PREFIX:-}")"
 )
 
 # A clone run's encodes, capped. Matt's machine runs 6 GPU and 12 CPU ffmpeg
