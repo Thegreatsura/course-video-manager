@@ -1,4 +1,13 @@
-import type { uploadReducer } from "./upload-reducer";
+import type {
+  AutofillStage,
+  BufferStage,
+  ExportStage,
+  ExportUploadEntry,
+  PublishStage,
+  RenderVerticalStage,
+  UploadEntry,
+  VideoUploadStage,
+} from "./upload-entry";
 
 /**
  * The progress model behind every bar in the upload manager.
@@ -19,32 +28,27 @@ export interface StageBand {
   width: number;
 }
 
-export const EXPORT_STAGE_BANDS: Record<uploadReducer.ExportStage, StageBand> =
-  {
-    queued: { start: 0, width: 0 },
-    "concatenating-clips": { start: 0, width: 80 },
-    "normalizing-audio": { start: 80, width: 19 },
-  };
+export const EXPORT_STAGE_BANDS: Record<ExportStage, StageBand> = {
+  queued: { start: 0, width: 0 },
+  "concatenating-clips": { start: 0, width: 80 },
+  "normalizing-audio": { start: 80, width: 19 },
+};
 
 // Only the blob upload streams a real byte percentage; Buffer's own pipeline
 // gives us stage transitions and nothing finer.
-export const BUFFER_STAGE_BANDS: Record<uploadReducer.BufferStage, StageBand> =
-  {
-    "uploading-blob": { start: 0, width: 50 },
-    "creating-post": { start: 50, width: 0 },
-    polling: { start: 70, width: 0 },
-    "cleaning-up": { start: 90, width: 0 },
-  };
+export const BUFFER_STAGE_BANDS: Record<BufferStage, StageBand> = {
+  "uploading-blob": { start: 0, width: 50 },
+  "creating-post": { start: 50, width: 0 },
+  polling: { start: 70, width: 0 },
+  "cleaning-up": { start: 90, width: 0 },
+};
 
 // A Publish's stages are only sequential either side of the work: it
 // validates, Submits (freezing, cloning), and only then encodes and uploads —
 // and those two overlap, so neither can own a band of its own. The bands here
 // are just the prologue's floors; everything from PUBLISH_WORK_BAND onwards is
 // derived from the per-Video children instead (see deriveParentProgress).
-export const PUBLISH_STAGE_BANDS: Record<
-  uploadReducer.PublishStage,
-  StageBand
-> = {
+export const PUBLISH_STAGE_BANDS: Record<PublishStage, StageBand> = {
   validating: { start: 2, width: 0 },
   freezing: { start: 4, width: 0 },
   cloning: { start: 6, width: 0 },
@@ -63,31 +67,24 @@ export const PUBLISH_WORK_BAND: StageBand = { start: 10, width: 89 };
 // upload — so its single bar is split in half rather than spent entirely on
 // the export. A standalone export keeps EXPORT_STAGE_BANDS: it has no upload
 // half to leave room for.
-const PUBLISH_VIDEO_EXPORT_BANDS: Record<uploadReducer.ExportStage, StageBand> =
-  {
-    queued: { start: 0, width: 0 },
-    "concatenating-clips": { start: 0, width: 40 },
-    "normalizing-audio": { start: 40, width: 9 },
-  };
+const PUBLISH_VIDEO_EXPORT_BANDS: Record<ExportStage, StageBand> = {
+  queued: { start: 0, width: 0 },
+  "concatenating-clips": { start: 0, width: 40 },
+  "normalizing-audio": { start: 40, width: 9 },
+};
 
-export const PUBLISH_VIDEO_UPLOAD_BANDS: Record<
-  uploadReducer.VideoUploadStage,
-  StageBand
-> = {
+export const PUBLISH_VIDEO_UPLOAD_BANDS: Record<VideoUploadStage, StageBand> = {
   "queued-for-upload": { start: 50, width: 0 },
   uploading: { start: 50, width: 49 },
 };
 
-export const exportStageBands = (upload: uploadReducer.ExportUploadEntry) =>
+export const exportStageBands = (upload: ExportUploadEntry) =>
   upload.parentUploadId ? PUBLISH_VIDEO_EXPORT_BANDS : EXPORT_STAGE_BANDS;
 
 // An Autofill reports nothing finer than "which Video am I on", so its stages
 // are floors rather than bands. The parent leaves everything above
 // AUTOFILL_WORK_BAND.start to its per-Video children.
-export const AUTOFILL_STAGE_BANDS: Record<
-  uploadReducer.AutofillStage,
-  StageBand
-> = {
+export const AUTOFILL_STAGE_BANDS: Record<AutofillStage, StageBand> = {
   selecting: { start: 1, width: 0 },
   writing: { start: 2, width: 0 },
 };
@@ -97,7 +94,7 @@ export const AUTOFILL_STAGE_BANDS: Record<
 export const AUTOFILL_WORK_BAND: StageBand = { start: 2, width: 97 };
 
 export const RENDER_VERTICAL_STAGE_BANDS: Record<
-  uploadReducer.RenderVerticalStage,
+  RenderVerticalStage,
   StageBand
 > = {
   "concatenating-clips": { start: 10, width: 0 },
@@ -107,7 +104,7 @@ export const RENDER_VERTICAL_STAGE_BANDS: Record<
 };
 
 /** A job that has said its final word: nothing may move it again. */
-export const isSettled = (upload: uploadReducer.UploadEntry) =>
+export const isSettled = (upload: UploadEntry) =>
   upload.status === "success" || upload.status === "error";
 
 /** Where in the bar `percent` (0–100, within the stage) lands. */
@@ -119,9 +116,7 @@ export const fillBand = (band: StageBand, percent: number) =>
  * streams a real percentage for its whole life rather than per stage, in which
  * case the percentage already *is* the bar position.
  */
-export const streamedProgressBand = (
-  upload: uploadReducer.UploadEntry
-): StageBand | null => {
+export const streamedProgressBand = (upload: UploadEntry): StageBand | null => {
   if (upload.uploadType === "buffer" && upload.bufferStage) {
     return BUFFER_STAGE_BANDS[upload.bufferStage];
   }
@@ -136,8 +131,8 @@ export const streamedProgressBand = (
  * cannot collapse to whatever has landed so far.
  */
 const deriveParentProgress = (
-  parent: uploadReducer.UploadEntry,
-  children: uploadReducer.UploadEntry[]
+  parent: UploadEntry,
+  children: UploadEntry[]
 ): number | null => {
   if (children.length === 0) return null;
 
@@ -150,7 +145,7 @@ const deriveParentProgress = (
     knownSizes.length > 0
       ? knownSizes.reduce((sum, bytes) => sum + bytes, 0) / knownSizes.length
       : 1;
-  const weightOf = (child: uploadReducer.UploadEntry) =>
+  const weightOf = (child: UploadEntry) =>
     child.uploadType === "export" && child.totalBytes !== null
       ? child.totalBytes
       : meanKnown;
@@ -177,9 +172,9 @@ const deriveParentProgress = (
  * mean downwards.
  */
 export const withDerivedParentProgress = (
-  uploads: uploadReducer.State["uploads"]
-): uploadReducer.State["uploads"] => {
-  const childrenByParent = new Map<string, uploadReducer.UploadEntry[]>();
+  uploads: Record<string, UploadEntry>
+): Record<string, UploadEntry> => {
+  const childrenByParent = new Map<string, UploadEntry[]>();
   for (const upload of Object.values(uploads)) {
     if (!upload.parentUploadId) continue;
     const siblings = childrenByParent.get(upload.parentUploadId) ?? [];

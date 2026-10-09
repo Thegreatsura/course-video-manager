@@ -4,7 +4,7 @@ import { UploadContext } from "./upload-context";
 import { UploadRow, type PostRowControls } from "./upload-row";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import { formatRemaining } from "./upload-eta";
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import {
   postRetryOf,
   publishRecoveryHrefOf,
@@ -68,7 +68,7 @@ export function GlobalUploadProgress() {
   // top-level jobs speak for the badge counts and the floating indicator.
   // A Job's child rows (an Autofill's Videos) nest under it the same way.
   const allEntries = [...jobEntries, ...uploadEntries];
-  const rootEntries: uploadReducer.UploadEntry[] = allEntries.filter(
+  const rootEntries: UploadEntry[] = allEntries.filter(
     (u) => !u.parentUploadId
   );
   const childrenOf = (parentUploadId: string) =>

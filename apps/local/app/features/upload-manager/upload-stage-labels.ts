@@ -1,27 +1,32 @@
-import type { uploadReducer } from "./upload-reducer";
+import type {
+  AutofillStage,
+  BufferStage,
+  ExportStage,
+  PublishStage,
+  RenderVerticalStage,
+  UploadEntry,
+  VideoUploadStage,
+} from "./upload-entry";
 
-const BUFFER_STAGE_LABELS: Record<uploadReducer.BufferStage, string> = {
+const BUFFER_STAGE_LABELS: Record<BufferStage, string> = {
   "uploading-blob": "Uploading to cloud",
   "creating-post": "Creating Buffer post",
   polling: "Waiting for delivery",
   "cleaning-up": "Cleaning up",
 };
 
-const EXPORT_STAGE_LABELS: Record<uploadReducer.ExportStage, string> = {
+const EXPORT_STAGE_LABELS: Record<ExportStage, string> = {
   queued: "Queued",
   "concatenating-clips": "Concatenating clips",
   "normalizing-audio": "Normalizing audio",
 };
 
-const VIDEO_UPLOAD_STAGE_LABELS: Record<
-  uploadReducer.VideoUploadStage,
-  string
-> = {
+const VIDEO_UPLOAD_STAGE_LABELS: Record<VideoUploadStage, string> = {
   "queued-for-upload": "Waiting to upload",
   uploading: "Uploading to Dropbox",
 };
 
-const PUBLISH_STAGE_LABELS: Record<uploadReducer.PublishStage, string> = {
+const PUBLISH_STAGE_LABELS: Record<PublishStage, string> = {
   validating: "Validating",
   exporting: "Exporting videos",
   uploading: "Uploading to Dropbox",
@@ -30,15 +35,12 @@ const PUBLISH_STAGE_LABELS: Record<uploadReducer.PublishStage, string> = {
   complete: "Finishing up",
 };
 
-const AUTOFILL_STAGE_LABELS: Record<uploadReducer.AutofillStage, string> = {
+const AUTOFILL_STAGE_LABELS: Record<AutofillStage, string> = {
   selecting: "Choosing videos",
   writing: "Writing missing text",
 };
 
-const RENDER_VERTICAL_STAGE_LABELS: Record<
-  uploadReducer.RenderVerticalStage,
-  string
-> = {
+const RENDER_VERTICAL_STAGE_LABELS: Record<RenderVerticalStage, string> = {
   "concatenating-clips": "Concatenating clips",
   transcribing: "Transcribing audio",
   "rendering-overlay": "Rendering subtitles",
@@ -51,9 +53,7 @@ const RENDER_VERTICAL_STAGE_LABELS: Record<
  * byte percentage, so the bar alone says everything) or when a staged job has
  * not reported its first stage yet.
  */
-export function uploadStageLabel(
-  upload: uploadReducer.UploadEntry
-): string | null {
+export function uploadStageLabel(upload: UploadEntry): string | null {
   switch (upload.uploadType) {
     case "export":
       // A per-Video task under a Publish encodes first and uploads after, so

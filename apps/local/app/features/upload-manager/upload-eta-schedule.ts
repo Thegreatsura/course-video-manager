@@ -1,4 +1,4 @@
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import {
   AUTOFILL_POOL_CONCURRENCY,
   ENCODE_STAGES,
@@ -33,7 +33,7 @@ import {
  * schedule `null`, rather than a schedule that quietly leaves it out.
  */
 
-type Entry = uploadReducer.UploadEntry;
+type Entry = UploadEntry;
 type Finishes = Map<string, number>;
 
 /** List scheduling: each job takes the slot that frees first. */
