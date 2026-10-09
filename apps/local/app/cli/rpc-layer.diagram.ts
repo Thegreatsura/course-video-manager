@@ -10,7 +10,7 @@ import { rpcMethod, type RemoteService, type RpcClient } from "./rpc-client";
 export const diagramService = (client: RpcClient) =>
   ({
     _tag: "DiagramOperationsService",
-    createDiagram: rpcMethod((json) =>
-      client.rpc.diagram.createDiagram.$post({ json })
+    createDiagramFromSnapshots: rpcMethod((json) =>
+      client.rpc.diagram.createDiagramFromSnapshots.$post({ json })
     ),
   }) satisfies RemoteService<DiagramOperationsService>;

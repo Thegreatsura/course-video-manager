@@ -119,19 +119,40 @@ const DRAFT = {
   ],
 };
 
+type Created = {
+  id: string;
+  url: string;
+  snapshots: Array<{ id: string; image: string }>;
+};
+
+const RENDERS = nodePath.join(os.tmpdir(), "cvm-diagram-renders");
+
+/** The Diagram's snapshots, oldest first. */
+const snapshotsOf = (diagramId: string) =>
+  testDb.query.diagramSnapshots.findMany({
+    where: (s, { eq }) => eq(s.diagramId, diagramId),
+    orderBy: (s, { asc }) => [asc(s.createdAt)],
+  });
+
+/** Agent loop, one step further: the box Matt reveals next. */
+const STEP_2 = {
+  shapes: [
+    ...DRAFT.shapes,
+    { type: "box", id: "memory", x: 800, y: 0, w: 200, h: 100 },
+  ],
+};
+
+const { name: _name, ...DRAFT_SHAPES } = DRAFT;
+
 describe("cvm diagram create", () => {
-  it("creates a NEW Diagram whose head reads back as the shapes given, and prints {id, url, image}", async () => {
+  it("keeps one drawing as a Preserved Snapshot, opens the Diagram on it, and prints {id, url, snapshots}", async () => {
     const r = await run(["diagram", "create", "--file", file(DRAFT)]);
 
     expect(r.stderr).toBe("");
     expect(r.exitCode).toBe(0);
-    const [line, ...rest] = ndjson(r.stdout) as Array<{
-      id: string;
-      url: string;
-      image: string;
-    }>;
+    const [line, ...rest] = ndjson(r.stdout) as Created[];
     expect(rest).toEqual([]);
-    expect(Object.keys(line!).sort()).toEqual(["id", "image", "url"]);
+    expect(Object.keys(line!).sort()).toEqual(["id", "snapshots", "url"]);
 
     const rows = await testDb.query.diagrams.findMany();
     expect(rows).toHaveLength(1);
@@ -139,36 +160,125 @@ describe("cvm diagram create", () => {
     expect(line!.id).toBe(row.id);
     expect(row.name).toBe("Agent loop");
     expect(row.archived).toBe(false);
-    // The head is the scene the simple format builds, so it reads back as
+
+    const [snapshot, ...others] = await snapshotsOf(row.id);
+    expect(others).toEqual([]);
+    expect(snapshot!.preserved).toBe(true);
+    // The snapshot is the scene the simple format builds, so it reads back as
     // exactly what was drawn — the arrow still bound to both boxes.
-    expect(readSimpleDiagram((row.headScene as Scene).store)).toEqual({
+    expect(readSimpleDiagram((snapshot!.scene as Scene).store)).toEqual({
       shapes: DRAFT.shapes,
     });
+    // The head is that snapshot, restored: the same drawing, held by it.
+    expect(row.headScene).toEqual(snapshot!.scene);
     // Search finds the words on the canvas, like a Diagram drawn by hand.
     expect(row.searchText).toContain("Agent");
+    expect(snapshot!.searchText).toContain("Agent");
 
     expect(line!.url).toBe(
       `http://localhost:5299/diagram-playground/${row.id}`
     );
-    expect(line!.image).toBe(
-      nodePath.join(os.tmpdir(), "cvm-diagram-renders", `${row.id}.png`)
+    expect(line!.snapshots).toEqual([
+      {
+        id: snapshot!.id,
+        image: nodePath.join(RENDERS, `${snapshot!.id}.png`),
+      },
+    ]);
+    expect(nodeFs.readFileSync(line!.snapshots[0]!.image, "utf8")).toBe(
+      "RENDERED-PNG"
     );
-    expect(nodeFs.readFileSync(line!.image, "utf8")).toBe("RENDERED-PNG");
-    nodeFs.rmSync(line!.image);
+    nodeFs.rmSync(line!.snapshots[0]!.image);
+  });
+
+  it("keeps a batch as Preserved Snapshots IN ORDER, one PNG each, and opens the Diagram on the FIRST", async () => {
+    const r = await run([
+      "diagram",
+      "create",
+      "--file",
+      file({ name: "Agent loop", snapshots: [DRAFT_SHAPES, STEP_2] }),
+    ]);
+
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    const [line] = ndjson(r.stdout) as Created[];
+    const [row, ...more] = await testDb.query.diagrams.findMany();
+    expect(more).toEqual([]);
+    expect(row!.name).toBe("Agent loop");
+
+    const snapshots = await snapshotsOf(row!.id);
+    expect(snapshots.map((s) => s.preserved)).toEqual([true, true]);
+    expect(
+      snapshots.map((s) => readSimpleDiagram((s.scene as Scene).store))
+    ).toEqual([{ shapes: DRAFT.shapes }, { shapes: STEP_2.shapes }]);
+    expect(row!.headScene).toEqual(snapshots[0]!.scene);
+
+    expect(line!.snapshots.map((s) => s.id)).toEqual(
+      snapshots.map((s) => s.id)
+    );
+    // Each PNG is the drawing of ITS snapshot.
+    expect(render.calls.map((c) => c.scene)).toEqual(
+      snapshots.map((s) => s.scene)
+    );
+    for (const { id, image } of line!.snapshots) {
+      expect(image).toBe(nodePath.join(RENDERS, `${id}.png`));
+      expect(nodeFs.existsSync(image)).toBe(true);
+      nodeFs.rmSync(image);
+    }
+  });
+
+  it("refuses a bad batch with every problem named by its snapshot, exit 3, and writes and draws nothing", async () => {
+    const r = await run([
+      "diagram",
+      "create",
+      "--file",
+      file({
+        name: "Agent loop",
+        shapes: [],
+        snapshots: [
+          DRAFT_SHAPES,
+          { shapes: [{ type: "triangle", id: "t" }] },
+          { name: "step 3", shapes: [] },
+          DRAFT_SHAPES,
+        ],
+      }),
+    ]);
+
+    expect(r.exitCode).toBe(3);
+    expect(r.stdout).toBe("");
+    const { message } = failureOf(r);
+    expect(message).toContain("not both");
+    expect(message).toContain(
+      'snapshots[1]: shapes[0] ("t"): unknown type "triangle"'
+    );
+    expect(message).toContain('snapshots[2]: a snapshot has no "name"');
+    expect(message).toContain(
+      "snapshots[3]: draws exactly what snapshots[0] draws"
+    );
+    expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(render.calls).toEqual([]);
+  });
+
+  it("refuses an empty batch, exit 3", async () => {
+    const r = await run([
+      "diagram",
+      "create",
+      "--file",
+      file({ snapshots: [] }),
+    ]);
+
+    expect(r.exitCode).toBe(3);
+    expect(failureOf(r).message).toContain("at least one");
+    expect(await testDb.query.diagrams.findMany()).toEqual([]);
   });
 
   it("draws the very scene it stores, through the app at CVM_APP_URL", async () => {
     await run(["diagram", "create", "--file", file(DRAFT)]);
 
-    const [row] = await testDb.query.diagrams.findMany();
+    const [snapshot] = await testDb.query.diagramSnapshots.findMany();
     expect(render.calls).toHaveLength(1);
     expect(render.calls[0]!.appUrl).toBe("http://localhost:5299");
-    expect(render.calls[0]!.scene).toEqual(row!.headScene);
-    expect(
-      render.calls[0]!.outputPath.startsWith(
-        nodePath.join(os.tmpdir(), "cvm-diagram-renders")
-      )
-    ).toBe(true);
+    expect(render.calls[0]!.scene).toEqual(snapshot!.scene);
+    expect(render.calls[0]!.outputPath.startsWith(RENDERS)).toBe(true);
   });
 
   it("names a Diagram with no name 'Untitled N', like the playground", async () => {
@@ -237,6 +347,7 @@ describe("cvm diagram create", () => {
     expect(r.stdout).toBe("");
     expect(failureOf(r)._tag).toBe("DiagramRenderError");
     expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(await testDb.query.diagramSnapshots.findMany()).toEqual([]);
   });
 
   it("is local-only: refused with exit 7 before the file is even read", async () => {
