@@ -39,7 +39,7 @@ import {
 // say a Lesson is 34 minutes before anybody presses play.
 //
 // The speech service is replaced wholesale by Layer.succeed, exactly as the
-// `cvm footage` suite replaces VideoProcessingService: NO MODEL IS EVER
+// `cvm footage` suite replaces WhisperTranscriptionService: NO MODEL IS EVER
 // LOADED HERE, and `speech.spoken` is the record of what the command actually
 // asked to have voiced — which is how the WAV cache is asserted.
 // ===========================================================================

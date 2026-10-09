@@ -14,16 +14,16 @@ import { removeBestEffort } from "@/services/remove-best-effort";
 
 /**
  * Whole-file **Footage** transcription — the ffmpeg + chunking orchestration
- * behind `VideoProcessingService.transcribeFootageFile`. Split out of that
+ * behind `WhisperTranscriptionService.transcribeFootageFile`. Split out of that
  * service purely to keep it under the repo's per-file token budget; it is not a
  * seam. `transcribeFootage` takes the service's own `transcribeAudioFile` (the
  * Whisper call, with its semaphore and API key) as a parameter, so every chunk
  * still transcribes through exactly that one path and the whole thing stays
- * fakeable by faking VideoProcessingService.
+ * fakeable by faking WhisperTranscriptionService.
  *
  * DELIBERATELY SEPARATE from the per-clip transcription path: the audio here is
  * mono 64kbps (small enough that most files upload in one Whisper pass), never
- * the 384kbps stereo `extractAudioClip` produces.
+ * the 384kbps stereo `extractAudio` produces.
  */
 
 /**

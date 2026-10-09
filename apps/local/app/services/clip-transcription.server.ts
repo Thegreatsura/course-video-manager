@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import type { TranscribedClip } from "@/features/video-editor/transcribe-clips-response";
 
 /**
@@ -23,7 +23,7 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
     } = {}
   ) {
     const clipOps = yield* ClipOperationsService;
-    const videoProcessing = yield* VideoProcessingService;
+    const whisper = yield* WhisperTranscriptionService;
     const onClipSettled = opts.onClipSettled ?? (() => Effect.void);
 
     const clips = yield* clipOps.getClipsByIds([...clipIds]);
@@ -40,7 +40,7 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
       clips,
       (clip) =>
         Effect.gen(function* () {
-          const [transcribedClip] = yield* videoProcessing.transcribeClips([
+          const [transcribedClip] = yield* whisper.transcribeClips([
             {
               id: clip.id,
               inputVideo: clip.videoFilename,

@@ -34,7 +34,7 @@ import {
 //
 // The capture is the ONE thing in this feature that cannot run in a test: it
 // drives a real headless browser. So FrameCaptureService is faked with
-// Layer.succeed the way cli-footage-writes.test.ts fakes VideoProcessingService
+// Layer.succeed the way cli-footage-writes.test.ts fakes WhisperTranscriptionService
 // — the command branches on Effect.serviceOption, finds the fake and uses it,
 // and NO CHROMIUM EVER LAUNCHES HERE. The fake writes canned bytes at exactly
 // the path it was asked for, which is all the rest of the verb needs to be

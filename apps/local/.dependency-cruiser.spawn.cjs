@@ -8,8 +8,9 @@
 //
 // 1. Nothing a route can reach may reach the Sidecar's spawners: the ffmpeg
 //    encode runner and the encodes built on it, the Overlay renderer
-//    (Remotion's `bin.mjs`), the vertical Short, and the Sidecar's own layer
-//    and Job handlers. A route enqueues a Job instead.
+//    (Remotion's `bin.mjs`), the vertical Short, Whisper transcription (its
+//    ffmpeg audio extraction), and the Sidecar's own layer and Job handlers.
+//    A route enqueues a Job instead.
 //
 // 2. Outside the Sidecar (`sidecar/`), `child_process` is imported only by
 //    the INTERACTIVE entry points, each named below with why it stays: a
@@ -32,6 +33,7 @@ const SIDECAR_SPAWNERS = [
   "^app/services/overlay-content-renderer\\.ts$",
   "^app/services/overlay-renderer-bin\\.ts$",
   "^app/services/render-vertical-video-service\\.ts$",
+  "^app/services/whisper-transcription-service\\.ts$",
   "^app/services/course-publish-service\\.ts$",
   "^sidecar/sidecar-layer\\.ts$",
   "^sidecar/job-kinds\\.ts$",
@@ -67,7 +69,7 @@ module.exports = {
     {
       name: "spawn-runner-reachable-from-routes",
       comment:
-        "A route reaches a Sidecar-only spawner (an encode, an Overlay render, a Publish). Enqueue a Job instead: docs/plans/background-jobs-sidecar.md.",
+        "A route reaches a Sidecar-only spawner (an encode, an Overlay render, a Publish, a Whisper transcription). Enqueue a Job instead: docs/plans/background-jobs-sidecar.md.",
       severity: "error",
       from: { path: "^app/routes/" },
       to: { path: SIDECAR_SPAWNERS, reachable: true },
