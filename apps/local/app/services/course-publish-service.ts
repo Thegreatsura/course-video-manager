@@ -151,6 +151,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           unexportedVideos,
           exportVideo: exportVideoCore,
           onDetailEvent,
+          afterAFailure: "keep-going",
         });
 
         if (unexportedVideos.length === 0) return;
@@ -293,12 +294,15 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
 
         const exportPhase = Effect.gen(function* () {
           if (unexportedVideos.length === 0) {
-            return { failedVideoIds: [] as string[] };
+            return { failedVideoIds: [], failures: [] };
           }
           return yield* runObservedExportLoop({
             unexportedVideos,
             exportVideo: exportVideoCore,
             onDetailEvent,
+            // One Video that will not export means this Publish cannot ship:
+            // stop the other encodes rather than finish them for nothing.
+            afterAFailure: "stop",
             onVideoSettled: ({ videoId, exported }) => {
               const latch = exportLatches.get(videoId)!;
               if (exported) {
@@ -337,6 +341,17 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
                 ),
               { discard: true }
             )
+          ),
+          // A failed export fails this phase, so the Effect.all below
+          // interrupts the Commit at once instead of letting it finish the
+          // uploads of a Bundle that can never be committed.
+          Effect.filterOrFail(
+            (result) => result.failures.length === 0,
+            (result) =>
+              new PublishValidationError({
+                failedExportVideoIds: result.failedVideoIds,
+                exportFailureMessage: result.failures[0]?.message,
+              })
           )
         );
 
@@ -357,24 +372,23 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           }).pipe(Effect.retry(Schedule.recurs(1)))
         );
 
-        // Both pools run to completion. Neither can fail outright — the export
-        // loop collects its failures, the commit is captured as an Exit — so
-        // neither ever interrupts the other mid-encode or mid-transfer.
-        const [exportResult, commitExit] = yield* Effect.all(
-          [exportPhase, commitPhase],
-          { concurrency: 2 }
+        // The two pools run side by side. The Commit is captured as an Exit,
+        // so it never interrupts an encode. A failed export DOES end the run:
+        // the Commit cannot succeed without that Video, so it is interrupted
+        // mid-transfer (the sync is content-addressed and idempotent; nothing
+        // is committed before the `course.json` rename) and the Publish fails
+        // now, not after every other Video has encoded.
+        const [, commitExit] = yield* Effect.all([exportPhase, commitPhase], {
+          concurrency: 2,
+        }).pipe(
+          Effect.tapErrorTag("PublishValidationError", () =>
+            // A Pending Version exists by the time export can fail, so Discard
+            // it rather than strand it for manual reconciliation. The error
+            // the caller sees is the failed export, ahead of whatever the
+            // commit made of it.
+            versionOps.discardPendingVersion(latestVersion.id)
+          )
         );
-
-        if (exportResult.failedVideoIds.length > 0) {
-          // A Pending Version now exists by the time export can fail, so
-          // Discard it rather than stranding it for manual reconciliation.
-          // The error the caller sees is unchanged: the failed Video ids —
-          // reported ahead of whatever the commit made of the failure.
-          yield* versionOps.discardPendingVersion(latestVersion.id);
-          return yield* new PublishValidationError({
-            failedExportVideoIds: exportResult.failedVideoIds,
-          });
-        }
         if (Exit.isFailure(commitExit)) {
           yield* versionOps.discardPendingVersion(latestVersion.id);
           return yield* new PublishCommitFailedError({
