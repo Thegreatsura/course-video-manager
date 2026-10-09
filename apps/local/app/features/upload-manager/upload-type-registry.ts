@@ -1,5 +1,4 @@
 import type { uploadReducer } from "./upload-reducer";
-import { autofillConfig } from "./upload-type-autofill";
 import { startSSEPublish } from "./sse-publish-client";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 
@@ -484,6 +483,41 @@ const renderVerticalConfig: UploadTypeConfig<
 
   // A vertical render is a background Job: it runs in the Sidecar
   // (`startRenderVerticalUpload` enqueues it), never as a browser entry.
+  initiate: null,
+
+  supportsDependsOn: false,
+};
+
+const autofillConfig: UploadTypeConfig<
+  undefined,
+  uploadReducer.AutofillUploadEntry
+> = {
+  createEntry: (base, action) => ({
+    ...base,
+    uploadType: "autofill" as const,
+    // A child is born already writing; the parent still has to work out which
+    // Videos it has work for.
+    autofillStage: action.parentUploadId ? "writing" : "selecting",
+    courseId: action.courseId ?? "",
+  }),
+
+  resetEntry: (base, prev) => ({
+    ...base,
+    uploadType: "autofill" as const,
+    autofillStage: "selecting" as const,
+    courseId: prev.courseId,
+  }),
+
+  applySuccess: (entry) => ({
+    ...entry,
+    status: "success" as const,
+    progress: 100,
+    errorMessage: null,
+    autofillStage: null,
+  }),
+
+  // A Course Autofill is a background Job: it runs in the Sidecar
+  // (`startAutofill` enqueues it), never as a browser entry.
   initiate: null,
 
   supportsDependsOn: false,

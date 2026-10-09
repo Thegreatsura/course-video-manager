@@ -2,7 +2,7 @@ import { toast } from "@/components/ui/toast";
 import { showSuccessToast } from "@/features/upload-manager/upload-toasts";
 import { isPostingJobKind, jobLogHref } from "./job-wire";
 import type { jobsReducer } from "./jobs-reducer";
-import { jobUploadEntry } from "./jobs-selectors";
+import { jobUploadEntries, jobUploadEntry } from "./jobs-selectors";
 
 type Toast<T extends jobsReducer.Effect["type"]> = Extract<
   jobsReducer.Effect,
@@ -22,6 +22,9 @@ const FAILED: Record<string, string> = {
   buffer: "Buffer post failed",
   "ai-hero": "AI Hero post failed",
   "skills-changelog": "Skills Changelog post failed",
+  autofill: "failed",
+  /** One Video of a Course Autofill: nothing of it was written. */
+  "autofill-video": "autofill failed",
 };
 
 export function showJobSucceededToast(
@@ -30,7 +33,14 @@ export function showJobSucceededToast(
 ): void {
   // A post toasts exactly as the browser-driven upload did: same words,
   // same links, and AI Hero's link saved to the global links.
-  const entry = job && isPostingJobKind(job.kind) ? jobUploadEntry(job) : null;
+  // So does an Autofill: "<title> finished", with "Back to Publish".
+  const entry = !job
+    ? null
+    : isPostingJobKind(job.kind)
+      ? jobUploadEntry(job)
+      : job.kind === "autofill"
+        ? (jobUploadEntries(job)[0] ?? null)
+        : null;
   if (entry) {
     showSuccessToast(entry);
     return;

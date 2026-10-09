@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { UploadContext } from "@/features/upload-manager/upload-context";
+import { isFinishedJob } from "@/features/jobs/jobs-reducer";
+import { latestJobFor } from "@/features/jobs/jobs-selectors";
 import {
   parseSemver,
   formatSemver,
@@ -38,7 +40,14 @@ import { classifyPendingRecovery } from "@/services/pending-recovery.server";
 import { makeAction, makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
 import { ArrowLeft, ChevronRight, Sparkles } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { data, Link, useNavigate, useRevalidator } from "react-router";
 import type { Route } from "./+types/_app.courses.$courseId.publish";
 
@@ -199,7 +208,8 @@ export default function Component(props: Route.ComponentProps) {
   } = props.loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
-  const { uploads, startPublish, startAutofill } = useContext(UploadContext);
+  const { uploads, jobs, startPublish, startAutofill } =
+    useContext(UploadContext);
 
   // The version name is never free-typed: it is a lowercase-'v' semver computed
   // from the previous published version by a patch/minor/major bump, so the UI
@@ -230,31 +240,32 @@ export default function Component(props: Route.ComponentProps) {
   );
   const [publishStarted, setPublishStarted] = useState(false);
 
-  const [autofillUploadId, setAutofillUploadId] = useState<string | null>(null);
-
   const isLive = (status: string) =>
     status === "uploading" || status === "waiting" || status === "retrying";
 
   const hasActivePublish = Object.values(uploads).some(
     (u) => u.uploadType === "publish" && isLive(u.status)
   );
-  // Only THIS page's run: an Autofill started elsewhere is watched in the
-  // upload surface, not held against this button.
-  const activeAutofill = autofillUploadId
-    ? uploads[autofillUploadId]
-    : undefined;
-  const hasActiveAutofill = !!activeAutofill && isLive(activeAutofill.status);
+  // This Course's Autofill, a Job the Sidecar runs: one started in this tab,
+  // or one still running when the tab was reopened, holds the button.
+  const autofillJob = latestJobFor(jobs, "autofill", course.id);
+  const hasActiveAutofill = !!autofillJob && !isFinishedJob(autofillJob);
 
   useFocusRevalidate({ enabled: !publishStarted });
 
   // When the run settles the page re-reads Publish Readiness and re-evaluates
   // the button — which is how the same button comes back reading "Publish".
   // It never rolls on into a Publish: the second press is the author's.
+  const autofillWasActive = useRef(false);
   useEffect(() => {
-    if (!activeAutofill || isLive(activeAutofill.status)) return;
-    setAutofillUploadId(null);
+    if (hasActiveAutofill) {
+      autofillWasActive.current = true;
+      return;
+    }
+    if (!autofillWasActive.current) return;
+    autofillWasActive.current = false;
     revalidator.revalidate();
-  }, [activeAutofill, revalidator]);
+  }, [hasActiveAutofill, revalidator]);
 
   // The warnings and the publish button reflect whichever toggle position is
   // currently selected — flipping the toggle switches them instantly, with no
@@ -287,14 +298,7 @@ export default function Component(props: Route.ComponentProps) {
   });
 
   const handleAutofill = useCallback(() => {
-    setAutofillUploadId(
-      startAutofill(
-        course.id,
-        course.name,
-        latestVersion.id,
-        includeTodoLessons
-      )
-    );
+    startAutofill(course.id, course.name, latestVersion.id, includeTodoLessons);
   }, [
     course.id,
     course.name,

@@ -404,39 +404,24 @@ export function UploadProvider({
     []
   );
 
+  // A Course Autofill is a background Job: the Sidecar runs it, so closing
+  // the tab no longer stops it. Its rows come from its Job Events.
   const startAutofill = useCallback(
     (
       courseId: string,
       courseName: string,
       versionId: string,
       includeTodoLessons: boolean
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = { courseId, versionId, includeTodoLessons };
-      paramsMapRef.current.set(uploadId, { type: "autofill", params });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId: "",
+    ) =>
+      startJob({
+        kind: "autofill",
         title: `Autofill ${courseName}`,
-        uploadType: "autofill" as const,
-        courseId,
-      };
-      dispatch(action);
-
-      initiateFromRegistry(
-        "autofill",
-        action,
-        params,
-        dispatch,
-        abortControllersRef.current
-      );
-
-      return uploadId;
-    },
-    []
+        params: { courseId, versionId, includeTodoLessons },
+        subject: { type: "course", id: courseId },
+        attemptsSpent: 0,
+        dependsOn: null,
+      }),
+    [startJob]
   );
 
   const dismissUpload = useCallback((uploadId: string) => {

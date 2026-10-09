@@ -24,6 +24,7 @@ import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.se
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { SidecarContextTest } from "@/services/sidecar-context";
 import { createFakeTextGeneration } from "@/test-utils/fake-text-generation";
 import type { TestDb } from "@/test-utils/pglite";
 
@@ -152,6 +153,8 @@ export const makeAutofillTestLayer = (
   const deps = Layer.mergeAll(opsLayer, drizzleLayer, fake.layer);
   return Layer.mergeAll(
     deps,
+    // The Autofill runs only in the Sidecar; a test stands in for it.
+    SidecarContextTest,
     AutofillService.DefaultWithoutDependencies.pipe(Layer.provide(deps))
   );
 };

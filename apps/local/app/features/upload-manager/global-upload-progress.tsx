@@ -67,12 +67,13 @@ export function GlobalUploadProgress() {
 
   // A child task is already counted inside its parent's bar, so only the
   // top-level jobs speak for the badge counts and the floating indicator.
-  const rootEntries: uploadReducer.UploadEntry[] = [
-    ...jobEntries,
-    ...uploadEntries.filter((u) => !u.parentUploadId),
-  ];
+  // A Job's child rows (an Autofill's Videos) nest under it the same way.
+  const allEntries = [...jobEntries, ...uploadEntries];
+  const rootEntries: uploadReducer.UploadEntry[] = allEntries.filter(
+    (u) => !u.parentUploadId
+  );
   const childrenOf = (parentUploadId: string) =>
-    uploadEntries.filter((u) => u.parentUploadId === parentUploadId);
+    allEntries.filter((u) => u.parentUploadId === parentUploadId);
 
   const activeUploads = rootEntries.filter(
     (u) =>

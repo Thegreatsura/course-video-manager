@@ -1,11 +1,6 @@
 {
   "sse-route": [
     {
-      "file": "apps/local/app/routes/api.courses.$courseId.autofill-sse.ts",
-      "count": 1,
-      "reason": "Course Autofill (#10). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 5."
-    },
-    {
       "file": "apps/local/app/routes/api.courses.$courseId.publish-sse.ts",
       "count": 1,
       "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
@@ -17,11 +12,6 @@
     }
   ],
   "browser-driver": [
-    {
-      "file": "apps/local/app/features/upload-manager/sse-autofill-client.ts",
-      "count": 1,
-      "reason": "Course Autofill (#10). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 5."
-    },
     {
       "file": "apps/local/app/features/upload-manager/sse-publish-client.ts",
       "count": 1,
