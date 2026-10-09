@@ -21,7 +21,7 @@
  * (`course-publish-export-events.ts:79`), Autofill's 6 Videos
  * (`autofill-service.ts:54`), Dropbox's upload pool (`dropbox-upload-config.ts:17`,
  * default 4), AI Hero's 4 parts (`ai-hero-upload-service.ts:13`) and
- * Transcription's 20 (`video-processing-service.ts:19`).
+ * Whisper's 20 (`whisper-transcription-service.ts`, `TRANSCRIPTION_PERMITS`).
  */
 export const LANES = {
   default: { concurrency: "unbounded" },

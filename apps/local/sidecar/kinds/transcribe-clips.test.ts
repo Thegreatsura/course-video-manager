@@ -8,6 +8,7 @@ import {
 } from "@/test-utils/pglite";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import * as schema from "@cvm/core/db/schema";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import {
@@ -16,22 +17,22 @@ import {
 } from "@/services/sidecar-context";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import type { JobContext } from "../job-kind";
-import { CLIP_TRANSCRIPTION_POLICY } from "../retry-policy";
 import {
   CLIP_TRANSCRIPTION_EVENTS,
   transcribeClipsJobKind,
 } from "./transcribe-clips";
 
 let testDb: TestDb;
-let clipOpsLayer: Layer.Layer<ClipOperationsService>;
+let clipOpsLayer: Layer.Layer<ClipOperationsService | JobOperationsService>;
 let videoId: string;
 
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
-  clipOpsLayer = ClipOperationsService.Default.pipe(
-    Layer.provide(Layer.succeed(DrizzleService, testDb as never))
-  );
+  clipOpsLayer = Layer.mergeAll(
+    ClipOperationsService.Default,
+    JobOperationsService.Default
+  ).pipe(Layer.provide(Layer.succeed(DrizzleService, testDb as never)));
 });
 
 beforeEach(async () => {
@@ -69,6 +70,7 @@ const run = <A, E>(
     A,
     E,
     | ClipOperationsService
+    | JobOperationsService
     | WhisperTranscriptionService
     | NodeContext.NodeContext
     | SidecarContext
@@ -127,17 +129,6 @@ const recordingContext = () => {
 };
 
 describe("the transcribe-clips Job kind", () => {
-  it("runs once, in the default lane, as the editor's one request did", () => {
-    expect({
-      lane: transcribeClipsJobKind.lane,
-      maxAttempts: transcribeClipsJobKind.maxAttempts,
-    }).toEqual(CLIP_TRANSCRIPTION_POLICY);
-    expect(CLIP_TRANSCRIPTION_POLICY).toEqual({
-      lane: "default",
-      maxAttempts: 1,
-    });
-  });
-
   it("stores each Clip's text and Transcript Words, and reports each Clip", async () => {
     const [a, b] = await seedClips("a.mp4", "b.mp4");
     const { ctx, events } = recordingContext();

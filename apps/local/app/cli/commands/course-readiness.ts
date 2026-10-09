@@ -302,7 +302,7 @@ export const readinessCmd = Command.make(
 
     // FINISHED_VIDEOS_DIRECTORY comes from the repo .env, and the export-hash
     // existence checks need a real filesystem — hence NodeContext here rather
-    // than in the shared cliLayer. Unlike `course publish`, this pulls in no
+    // than in the shared cliLayer. Like `course publish`, this builds no
     // WhisperTranscriptionService, so no OPENAI_API_KEY is demanded.
     //
     // LOCAL-ONLY, and checked FIRST: exportedness is a fact about this

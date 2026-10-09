@@ -1,5 +1,7 @@
 import { Data, Effect, Schema, type ParseResult } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import type { LiveJob } from "@cvm/core/services/db-job-enqueue.server";
+import { liveJobCoversClips } from "@/features/video-editor/transcribe-clips-response";
 import { isPostingKind } from "./job-kind";
 import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
@@ -27,6 +29,12 @@ export interface JobKindSpec {
   readonly decodeParams: (
     raw: unknown
   ) => Effect.Effect<unknown, ParseResult.ParseError>;
+  /**
+   * Whether a live Job of this kind, for the same subject, already does the
+   * work `params` asks for: then an enqueue answers with it and adds none.
+   * Absent for a kind where two of the same Job are fine.
+   */
+  readonly coveredBy?: (params: unknown, live: LiveJob) => boolean;
 }
 
 export type JobKindSpecs = Readonly<Record<string, JobKindSpec>>;
@@ -48,10 +56,17 @@ export const JOB_KIND_SPECS = {
     JOB_PARAMS["batch-export"]
   ),
   autofill: spec(UPLOAD_MANAGER_POLICIES.autofill, JOB_PARAMS.autofill),
-  "transcribe-clips": spec(
-    CLIP_TRANSCRIPTION_POLICY,
-    JOB_PARAMS["transcribe-clips"]
-  ),
+  // Two live Jobs for the same Clips would pay Whisper twice and race for
+  // the Clips' rows: a second tab's or a double click's request joins the
+  // first while it still holds every one of them.
+  "transcribe-clips": {
+    ...spec(CLIP_TRANSCRIPTION_POLICY, JOB_PARAMS["transcribe-clips"]),
+    coveredBy: (params, live) =>
+      liveJobCoversClips(
+        (params as { clipIds: ReadonlyArray<string> }).clipIds,
+        live
+      ),
+  },
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),
   "youtube-shorts": spec(POSTING_JOB_POLICY, JOB_PARAMS["youtube-shorts"]),
@@ -106,7 +121,7 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
       message: `no such job kind: ${input.kind}`,
     });
   }
-  yield* kind.decodeParams(input.params);
+  const params = yield* kind.decodeParams(input.params);
   const maxAttempts = kind.maxAttempts - input.attemptsSpent;
   if (input.attemptsSpent < 0 || maxAttempts < 1) {
     return yield* new NoAttemptsLeftError({
@@ -124,6 +139,9 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     maxAttempts,
     dependsOn: input.dependsOn,
     subject: input.subject,
+    ...(kind.coveredBy
+      ? { coveredBy: (live: LiveJob) => kind.coveredBy!(params, live) }
+      : {}),
   });
 });
 
