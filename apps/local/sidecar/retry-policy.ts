@@ -15,7 +15,8 @@ import type { LaneName } from "./lanes";
  *   (`upload-transitions.ts:51`, `upload-context.tsx:620`). No delay, no
  *   backoff, and every error is retryable. So: 3 attempts.
  * - A Publish and an Autofill report every failure as `UPLOAD_FATAL_ERROR`
- *   (`upload-type-registry.ts:577-634`, `upload-type-autofill.ts:88-108`),
+ *   (`upload-type-registry.ts:577-634`; the Autofill's browser driver,
+ *   `upload-type-autofill.ts`, went with batch 5),
  *   which sets `terminal` (`upload-reducer.ts:533`) — and so do the per-Video
  *   rows each fans out into. So: 1 attempt.
  * - EXCEPT posting (YouTube, Shorts, Buffer, AI Hero, Skills Changelog):

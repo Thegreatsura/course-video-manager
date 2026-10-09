@@ -159,6 +159,11 @@ most) before `launch`; anything else is replaced by the discard port. Read
 `/proc/<pid>/environ` of the server and the sidecar to confirm before driving.
 The clone has no YouTube or AI Hero tokens: insert dud ones into its
 `youtube_auth` / `ai_hero_auth` tables to reach the stub.
+**The model never leaves the box either.** `ANTHROPIC_BASE_URL` gets the same
+rule: the discard port, unless you export a plain loopback URL (the AI SDK
+wants its `/v1`, e.g. `http://127.0.0.1:<port>/v1`). A Course Autofill — a Job
+the run's sidecar runs — then calls a local stub of the Messages API instead of
+failing at once.
 To run a Job by hand, post it to the socket and read it back:
 
 ```bash
@@ -333,12 +338,16 @@ the run found.
 
 ## What not to press
 
-Two buttons stay off limits **even on a clone**, because their job is to leave
-the database: **Submit** on the publish page (`/courses/:id/publish`) ships a
-Bundle to Dropbox, and **Autofill** on that same page calls Anthropic. A clone
-run's credentials are duds, so both should fail closed — but nobody has proved
-every leg does. Observe them, screenshot them, read their counts — press
-nothing.
+**Submit** on the publish page (`/courses/:id/publish`) stays off limits
+**even on a clone**, because its job is to leave the database: it ships a
+Bundle to Dropbox. A clone run's credentials are duds, so it should fail
+closed — but nobody has proved every leg does. Observe it, screenshot it, read
+its counts — press nothing.
+
+**Autofill** on that same page calls Anthropic, and on a clone that call can
+only reach the discard port or your own loopback stub (`ANTHROPIC_BASE_URL`,
+above). Press it only with a stub running: without one every Video fails, which
+is a fine failure path but writes nothing.
 
 ## Production, read-only
 

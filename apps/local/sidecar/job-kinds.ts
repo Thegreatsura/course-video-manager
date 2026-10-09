@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LayerLive } from "@/services/layer.server";
 import { isPostingKind, type JobKind } from "./job-kind";
+import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
@@ -22,6 +23,7 @@ export const JOB_KINDS = {
   export: exportJobKind,
   "render-vertical": renderVerticalJobKind,
   "batch-export": batchExportJobKind,
+  autofill: autofillJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.
   youtube: youtubeJobKind,
   "youtube-shorts": youtubeShortsJobKind,

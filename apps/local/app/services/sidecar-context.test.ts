@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { Effect } from "effect";
 import type { LayerLive } from "./layer.server";
+import { AutofillService } from "./autofill-service";
 import { CoursePublishService } from "./course-publish-service";
 import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import type { SidecarContext } from "./sidecar-context";
@@ -25,6 +26,17 @@ describe("SidecarContext", () => {
       service.batchExport("a-version", true)
     );
     type Missing = Exclude<Effect.Effect.Context<typeof batch>, LayerLive>;
+    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a Course Autofill needs the Sidecar: layerLive cannot run it", () => {
+    const autofill = Effect.flatMap(AutofillService, (service) =>
+      service.autofillCourseVersion({
+        versionId: "a-version",
+        includeTodoLessons: true,
+      })
+    );
+    type Missing = Exclude<Effect.Effect.Context<typeof autofill>, LayerLive>;
     expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
   });
 });

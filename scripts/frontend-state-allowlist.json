@@ -47,7 +47,7 @@
     },
     {
       "file": "apps/local/app/routes/_app.courses.$courseId.publish.tsx",
-      "count": 5,
+      "count": 4,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 4."
     },
     {

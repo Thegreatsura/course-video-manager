@@ -233,16 +233,19 @@ function UploadStatusDetail({
             </a>
           )}
           {/* A child task's Video belongs to the job above it, not to a
-              social post — the same reason a Publish offers no link here. */}
-          {upload.uploadType !== "publish" && !upload.parentUploadId && (
-            <Link
-              to={`/videos/${upload.videoId}/post`}
-              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Go to Post
-            </Link>
-          )}
+              social post — the same reason a Publish or an Autofill (a
+              Course, not a Video) offers no link here. */}
+          {upload.uploadType !== "publish" &&
+            upload.uploadType !== "autofill" &&
+            !upload.parentUploadId && (
+              <Link
+                to={`/videos/${upload.videoId}/post`}
+                className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Go to Post
+              </Link>
+            )}
         </div>
       );
   }

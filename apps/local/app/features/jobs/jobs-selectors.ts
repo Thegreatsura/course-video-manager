@@ -1,5 +1,7 @@
 import type { uploadReducer } from "@/features/upload-manager/upload-reducer";
 import {
+  AUTOFILL_STAGE_BANDS,
+  AUTOFILL_WORK_BAND,
   EXPORT_STAGE_BANDS,
   fillBand,
   RENDER_VERTICAL_STAGE_BANDS,
@@ -218,13 +220,93 @@ const batchVideoStatusOf = (
 };
 
 /**
+ * The newest Job of `kind` about one subject (a Course's Autofill), known to
+ * this tab — started here, or met in the stream's snapshot after a reload.
+ */
+export const latestJobFor = (
+  state: jobsReducer.State,
+  kind: string,
+  subjectId: string
+): jobsReducer.JobView | undefined =>
+  Object.values(state.jobs)
+    .filter((job) => job.kind === kind && job.subjectId === subjectId)
+    .at(-1);
+
+const AUTOFILL_STAGES: readonly string[] = Object.keys(AUTOFILL_STAGE_BANDS);
+
+const isAutofillStage = (stage: string): stage is uploadReducer.AutofillStage =>
+  AUTOFILL_STAGES.includes(stage);
+
+/**
+ * A Course Autofill as the browser-driven run drew it: a parent row whose bar
+ * is its Videos, and one child row per **Autofill Candidate** under it
+ * (`parentUploadId`). A Video's row has no finer progress than "writing";
+ * it ends filled or failed, never retried.
+ */
+const autofillUploadEntries = (
+  job: jobsReducer.JobView
+): uploadReducer.AutofillUploadEntry[] => {
+  const status = uploadStatusOf(job);
+  const courseId = job.subjectId ?? "";
+  const children = (job.videos ?? []).map(
+    (video): uploadReducer.AutofillUploadEntry => {
+      const videoStatus = batchVideoStatusOf(job, video);
+      return {
+        uploadId: batchVideoRowId(job.id, video.id),
+        videoId: video.id,
+        title: video.title,
+        progress:
+          videoStatus === "success" ? 100 : AUTOFILL_STAGE_BANDS.writing.start,
+        status: videoStatus,
+        errorMessage:
+          video.errorMessage ??
+          (videoStatus === "error" ? job.errorMessage : null),
+        retryCount: 0,
+        terminal: videoStatus === "error",
+        dependsOn: null,
+        parentUploadId: job.id,
+        uploadType: "autofill",
+        autofillStage: videoStatus === "success" ? null : "writing",
+        courseId,
+      };
+    }
+  );
+  const stage =
+    job.stage !== null && isAutofillStage(job.stage) ? job.stage : null;
+  // A Video that has settled, either way, is work done.
+  const settled = children.filter(
+    (child) => child.status === "success" || child.status === "error"
+  ).length;
+  const progress =
+    status === "success"
+      ? 100
+      : stage === "writing" && children.length > 0
+        ? fillBand(AUTOFILL_WORK_BAND, (100 * settled) / children.length)
+        : stage === null
+          ? 0
+          : AUTOFILL_STAGE_BANDS[stage].start;
+  const parent: uploadReducer.AutofillUploadEntry = {
+    ...baseEntryOf(job, status, progress),
+    // The parent names a Course, not a Video.
+    videoId: "",
+    terminal: status === "error",
+    uploadType: "autofill",
+    autofillStage: status === "success" ? null : (stage ?? "selecting"),
+    courseId,
+  };
+  return [parent, ...children];
+};
+
+/**
  * The rows a Job draws. A Batch export draws one export row per Video, as
  * the browser-driven batch did (`isBatchEntry`); a Video it handed on is
- * drawn by its own export Job instead. Every other kind draws one row.
+ * drawn by its own export Job instead. An Autofill draws a parent row and a
+ * child row per Video. Every other kind draws one row.
  */
 export const jobUploadEntries = (
   job: jobsReducer.JobView
 ): uploadReducer.UploadEntry[] => {
+  if (job.kind === "autofill") return autofillUploadEntries(job);
   if (job.kind !== "batch-export") {
     const entry = jobUploadEntry(job);
     return entry ? [entry] : [];
