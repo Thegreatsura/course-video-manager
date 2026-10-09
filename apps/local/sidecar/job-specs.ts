@@ -4,6 +4,7 @@ import { isPostingKind } from "./job-kind";
 import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
+  CLIP_TRANSCRIPTION_POLICY,
   POSTING_JOB_POLICY,
   RETRYING_JOB_POLICY,
   UPLOAD_MANAGER_POLICIES,
@@ -47,6 +48,10 @@ export const JOB_KIND_SPECS = {
     JOB_PARAMS["batch-export"]
   ),
   autofill: spec(UPLOAD_MANAGER_POLICIES.autofill, JOB_PARAMS.autofill),
+  "transcribe-clips": spec(
+    CLIP_TRANSCRIPTION_POLICY,
+    JOB_PARAMS["transcribe-clips"]
+  ),
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),
   "youtube-shorts": spec(POSTING_JOB_POLICY, JOB_PARAMS["youtube-shorts"]),
