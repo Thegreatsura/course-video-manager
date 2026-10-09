@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createHistoryStore, type HistoryData } from "./upload-history";
+import {
+  historyLookupOf,
+  type HistoryData,
+} from "@/features/jobs/job-stage-history";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import type { TimedRows } from "./upload-timing";
 import {
@@ -21,7 +24,7 @@ const runs = (durationMs: number) =>
 const estimate = (state: TimedRows, now: number, past: HistoryData) =>
   estimateUploads(state.uploads, {
     timings: state.timings,
-    history: createHistoryStore(past).lookup,
+    history: historyLookupOf(past),
     now,
   });
 

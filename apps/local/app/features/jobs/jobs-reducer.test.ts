@@ -112,6 +112,8 @@ describe("jobsReducer", () => {
           revealVideoId: "video-1",
         },
       },
+      // Its stages join the ETA's stage history.
+      { type: "load-stage-history", requestId: 1 },
     ]);
   });
 
@@ -165,7 +167,8 @@ describe("jobsReducer", () => {
     const tester = newTester().send({
       type: "job-snapshot-received",
       snapshot: {
-        cursor: 500,
+        // The newest of the five events below: what follows is live.
+        cursor: nextEventId + 5,
         jobs: [
           {
             job: wireJob(),
@@ -196,7 +199,56 @@ describe("jobsReducer", () => {
 
     tester.send(streamed(wireEvent("succeeded")));
     expect(tester.getEffects().map((e) => e.type)).toEqual([
+      "load-stage-history",
       "show-job-succeeded-toast",
+      "load-stage-history",
+    ]);
+  });
+
+  // The stream's catch-up re-sends the last minute of Job Events after the
+  // snapshot, older than its cursor: a Job already finished, or dismissed (so
+  // the snapshot left it out), arrives again in a tab that never watched it.
+  it("a new tab toasts nothing for a Job the catch-up replays: only a settlement heard live is news", () => {
+    const tester = newTester().send({
+      type: "job-snapshot-received",
+      snapshot: { cursor: 10_000, jobs: [] },
+    });
+    tester
+      .send(streamed(wireEvent("queued")))
+      .send(streamed(wireEvent("started", { attempt: 1 })))
+      .send(streamed(wireEvent("succeeded")))
+      .send(
+        streamed(
+          wireEvent("failed", { error: { message: "disk full" } }),
+          wireJob({ id: "failed-earlier", title: "Old one" })
+        )
+      );
+
+    // The snapshot's stage-history load, and no toast.
+    expect(tester.getEffects()).toEqual([
+      { type: "load-stage-history", requestId: 1 },
+    ]);
+  });
+
+  it("a new tab toasts nothing for a Batch export Video the catch-up replays", () => {
+    const batch = wireJob({ kind: "batch-export", title: "Export all" });
+    const tester = newTester()
+      .send({
+        type: "job-snapshot-received",
+        snapshot: { cursor: 10_000, jobs: [] },
+      })
+      .send(
+        streamed(
+          wireEvent("videos", { videos: [{ id: "video-a", title: "Intro" }] }),
+          batch
+        )
+      )
+      .send(
+        streamed(wireEvent("video-succeeded", { videoId: "video-a" }), batch)
+      );
+
+    expect(tester.getEffects()).toEqual([
+      { type: "load-stage-history", requestId: 1 },
     ]);
   });
 
@@ -230,6 +282,7 @@ describe("jobsReducer", () => {
         message: "disk full",
         hasLog: true,
       },
+      { type: "load-stage-history", requestId: 1 },
     ]);
   });
 
@@ -499,6 +552,7 @@ describe("jobsReducer", () => {
             revealVideoId: "video-a",
           },
         },
+        { type: "load-stage-history", requestId: 1 },
       ]);
     });
 
@@ -562,7 +616,9 @@ describe("jobsReducer", () => {
         ["S1/L1/Intro", "success"],
         ["S1/L2/Generics", "uploading"],
       ]);
-      expect(tester.getEffects()).toEqual([]);
+      expect(tester.getEffects()).toEqual([
+        { type: "load-stage-history", requestId: 1 },
+      ]);
     });
 
     it("dismissing one Video's row hides only that row", () => {

@@ -23,6 +23,8 @@ import {
 } from "./db-job-dismiss.server.js";
 import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
 import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
+import { createStageHistoryOperations } from "./db-job-stage-history.server.js";
+export { STAGE_HISTORY_JOBS_PER_KIND } from "./db-job-stage-history.server.js";
 import {
   createJobFeedOperations,
   jobSummaryColumns,
@@ -622,6 +624,7 @@ export const createJobOperations = (db: Database) => {
     listJobEventsAfter,
     ...createJobFeedOperations(db),
     listRecentJobs,
+    ...createStageHistoryOperations(db),
     ...createDismissJobOperations(db),
     getJob,
     listJobEvents,

@@ -1,14 +1,9 @@
-import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useMemo } from "react";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import {
-  HISTORY_STORAGE_KEY,
-  createHistoryStore,
-  parseHistory,
+  historyLookupOf,
   type HistoryLookup,
-  type UploadHistoryStore,
-} from "./upload-history";
-import type { CompletedStage } from "./upload-timing";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+} from "@/features/jobs/job-stage-history";
 import { useJobs, type SubscribeToJobJoins } from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
@@ -127,46 +122,22 @@ export const UploadContext = createContext<UploadContextType>(null!);
 export function UploadProvider({
   children,
   clock = Date.now,
-  history,
 }: {
   children: React.ReactNode;
   /** "Now" for the ETA, so the ETA never reads a clock itself. */
   clock?: () => number;
-  /** Where finished stage durations are kept. Defaults to localStorage. */
-  history?: UploadHistoryStore;
 }) {
-  const [storedHistory, setStoredHistory] =
-    useLocalStorage(HISTORY_STORAGE_KEY);
-  const [historyStore] = useState(
-    () =>
-      history ??
-      createHistoryStore(parseHistory(storedHistory), (data) =>
-        setStoredHistory(JSON.stringify(data))
-      )
-  );
-
   // Every kind of background work is a Job the Sidecar runs: the tab only
   // enqueues it and draws its Job Events.
   const jobs = useJobs();
   const { startJob } = jobs;
 
-  // Every stage a Job finished while this tab listened becomes history for
-  // the next ETA. A stage finished in a snapshot's replay is skipped: a tab
-  // that heard it live recorded it then.
-  const recordedStagesRef = useRef(new WeakSet<CompletedStage>());
-  const timings = jobs.state.timings;
-  useEffect(() => {
-    for (const timing of Object.values(timings)) {
-      for (const stage of timing.completed) {
-        if (stage.replayed || recordedStagesRef.current.has(stage)) continue;
-        recordedStagesRef.current.add(stage);
-        historyStore.record(stage.key, {
-          durationMs: stage.durationMs,
-          units: stage.units,
-        });
-      }
-    }
-  }, [timings, historyStore]);
+  // The ETA's stage history, read from `job_event` by the jobs reducer.
+  const stageHistory = jobs.state.stageHistory;
+  const etaHistory = useMemo(
+    () => historyLookupOf(stageHistory),
+    [stageHistory]
+  );
 
   // A YouTube upload is a posting Job: the Sidecar runs it once, and only
   // after the Job it waits on (its export) has succeeded.
@@ -390,7 +361,7 @@ export function UploadProvider({
         retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
         clearFinished: jobs.clearFinishedJobs,
-        etaHistory: historyStore.lookup,
+        etaHistory,
         clock,
         startUpload,
         startSocialUpload,

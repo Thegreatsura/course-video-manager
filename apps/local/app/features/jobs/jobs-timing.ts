@@ -2,8 +2,12 @@ import type { UploadEntry } from "@/features/upload-manager/upload-entry";
 import { ENCODE_STAGES } from "@/features/upload-manager/upload-eta-stages";
 import {
   trackTimings,
+  type CompletedStage,
   type UploadTiming,
 } from "@/features/upload-manager/upload-timing";
+import type { WireJob, WireJobEvent } from "./job-wire";
+import { toJobsAction } from "./job-event-actions";
+import { applyStreamAction, viewOf } from "./jobs-fold";
 import { batchVideoRowId, type jobsReducer } from "./jobs-reducer";
 import { jobUploadEntries } from "./jobs-selectors";
 
@@ -49,17 +53,13 @@ const encodingRowOf = (
 
 /**
  * Every row's timings after one Job Event moved its Job from `before` to
- * `after`. Only that Job's rows change. `replayed`: the event comes from a
- * snapshot, or from a Job this tab joined late (`State.joinedLate`), so the
- * stages it finishes were recorded to the history by a tab that heard them
- * from the start, and are not recorded again.
+ * `after`. Only that Job's rows change.
  */
 export const timeJobEvent = (
   timings: Record<string, UploadTiming>,
   before: jobsReducer.JobView | undefined,
   after: jobsReducer.JobView,
-  action: jobsReducer.JobStreamAction,
-  { replayed }: { replayed: boolean }
+  action: jobsReducer.JobStreamAction
 ): Record<string, UploadTiming> => {
   const previousRows = rowsOf(before);
   const previousTimings: Record<string, UploadTiming> = {};
@@ -73,13 +73,45 @@ export const timeJobEvent = (
     {
       at: Number.isFinite(action.at) ? action.at : undefined,
       exportWorkId: encodingRowOf(action),
-      replayed,
     }
   );
   if (next === previousTimings) return timings;
   const rest = { ...timings };
   for (const id of Object.keys(previousTimings)) delete rest[id];
   return { ...rest, ...next };
+};
+
+/**
+ * Fold one Job's events, oldest first, timing its rows as the live stream
+ * would have: a snapshot's replay, or a finished Job's history. `completed`
+ * is every stage any of its rows finished, in order, a row's that went away
+ * on the way (a Video handed off) included.
+ */
+export const foldJobEvents = (
+  job: WireJob,
+  events: readonly WireJobEvent[]
+): {
+  view: jobsReducer.JobView;
+  timings: Record<string, UploadTiming>;
+  completed: CompletedStage[];
+} => {
+  let view: jobsReducer.JobView = viewOf(job, "queued");
+  let timings: Record<string, UploadTiming> = {};
+  const completed: CompletedStage[] = [];
+  for (const event of events) {
+    const action = toJobsAction({ job, event });
+    if (!action) continue;
+    const next = applyStreamAction(view, action);
+    if (!next) continue;
+    const nextTimings = timeJobEvent(timings, view, next, action);
+    for (const [id, timing] of Object.entries(nextTimings)) {
+      const was = timings[id]?.completed.length ?? 0;
+      completed.push(...timing.completed.slice(was));
+    }
+    timings = nextTimings;
+    view = next;
+  }
+  return { view, timings, completed };
 };
 
 /** The skews to keep after a Job Event: a live one adds its own. */

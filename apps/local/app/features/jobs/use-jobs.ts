@@ -13,6 +13,8 @@ import {
   JOB_STREAM_EVENTS,
   JobEventMessage,
   JobSnapshotMessage,
+  JobStageHistoryMessage,
+  JOBS_STAGE_HISTORY_HREF,
   SidecarUnavailableMessage,
 } from "./job-wire";
 import {
@@ -208,6 +210,33 @@ export function useJobs() {
             message: error instanceof Error ? error.message : String(error),
           })
         );
+    },
+    "load-stage-history": (_state, effect, dispatch) => {
+      const controller = new AbortController();
+      fetch(JOBS_STAGE_HISTORY_HREF, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`The server answered ${response.status}`);
+          }
+          const history = decodeStreamData(
+            JobStageHistoryMessage,
+            await response.text()
+          );
+          if (!history) throw new Error("Unreadable stage history");
+          dispatch({
+            type: "stage-history-loaded",
+            requestId: effect.requestId,
+            history,
+          });
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          dispatch({
+            type: "stage-history-load-failed",
+            requestId: effect.requestId,
+          });
+        });
+      return () => controller.abort();
     },
     "show-dismiss-failed-toast": (_state, effect) =>
       showDismissFailedToast(effect),
