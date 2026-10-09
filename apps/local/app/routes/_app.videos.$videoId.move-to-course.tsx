@@ -15,7 +15,7 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { CourseWriteService } from "@/services/course-write-service";
 import { runtimeLive } from "@/services/layer.server";
-import { makeLoader } from "@/services/route-action.server";
+import { makeLoader, runRouteEffect } from "@/services/route-action.server";
 import { Console, Effect, Schema } from "effect";
 import { ArrowRightLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -99,7 +99,7 @@ export const action = async (args: Route.ActionArgs) => {
     Effect.catchAll(() => {
       return Effect.die(data("Internal server error", { status: 500 }));
     }),
-    runtimeLive.runPromise
+    (effect) => runRouteEffect(runtimeLive, effect)
   );
 };
 
