@@ -57,8 +57,27 @@ export const FLOW: SimpleDiagram = {
       color: "light-blue",
       fill: "semi",
       dash: "solid",
+      opacity: 0.75,
     },
     { type: "text", id: "client-label", x: 40, y: 25, text: "Client" },
+    {
+      // A heading and a faded description, at scales Matt really uses.
+      type: "text",
+      id: "heading",
+      x: 0,
+      y: -120,
+      text: "Agent loop",
+      scale: 2.4360630567746884,
+    },
+    {
+      type: "text",
+      id: "description",
+      x: 0,
+      y: -60,
+      text: "Runs until the work is done.",
+      scale: 0.6778877926536484,
+      opacity: 0.5,
+    },
     {
       type: "text",
       id: "aside",
@@ -89,6 +108,7 @@ export const FLOW: SimpleDiagram = {
       x2: 120,
       y2: 330,
       heads: "none",
+      opacity: 0.25,
     },
     { type: "line", id: "divider", x1: 0, y1: 250, x2: 560, y2: 250 },
     {
@@ -100,9 +120,18 @@ export const FLOW: SimpleDiagram = {
       y2: 360,
       dash: "dotted",
       color: "grey",
+      opacity: 0.5,
     },
     { type: "icon", id: "db", x: 460, y: 100, name: "database" },
-    { type: "icon", id: "bot", x: 20, y: 100, name: "bot", color: "orange" },
+    {
+      type: "icon",
+      id: "bot",
+      x: 20,
+      y: 100,
+      name: "bot",
+      color: "orange",
+      opacity: 0.1,
+    },
   ],
 };
 

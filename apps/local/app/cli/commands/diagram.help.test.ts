@@ -6,7 +6,10 @@ import {
   FILLS,
   HEADS,
   MAX_COORDINATE,
+  MAX_SCALE,
   MAX_SHAPES,
+  MIN_SCALE,
+  OPACITIES,
   SHAPE_SCHEMAS,
   SHAPE_TYPES,
   SIZES,
@@ -106,6 +109,7 @@ describe("cvm diagram --help documents the simple shape format exactly", () => {
     ["dash", DASHES, DEFAULTS.dash],
     ["size", SIZES, DEFAULTS.size],
     ["heads", HEADS, DEFAULTS.heads],
+    ["opacity", OPACITIES.map(String), String(DEFAULTS.opacity)],
   ] as const)(
     "lists every %s value and marks the default",
     (name, values, fallback) => {
@@ -269,6 +273,9 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
   it("states the limits the format enforces", () => {
     expect(HELP).toContain(`at most ${MAX_SHAPES} shapes`);
     expect(HELP).toContain(`within ±${MAX_COORDINATE}`);
+    expect(HELP).toContain(
+      `any number from\n             ${MIN_SCALE} to ${MAX_SCALE} (default ${DEFAULTS.scale})`
+    );
   });
 
   it.each([
