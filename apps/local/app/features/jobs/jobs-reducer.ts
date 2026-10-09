@@ -8,6 +8,7 @@ import {
 import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction, viewOf } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
+import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
@@ -256,6 +257,8 @@ export namespace jobsReducer {
         kind: string;
         title: string;
         subjectId: string | null;
+        /** Everything the toast says and links to, decided here. */
+        toast: SucceededToast;
       }
     | {
         type: "show-job-failed-toast";
@@ -323,6 +326,7 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
       kind: job.kind,
       title: job.title,
       subjectId: job.subjectId,
+      toast: succeededToastOf(job),
     });
     exec({
       type: "report-job-settled",

@@ -155,6 +155,11 @@ describe("a Publish Job", () => {
       kind: "publish",
       title: "Generics",
       subjectId: "course-1",
+      toast: {
+        shape: "publish",
+        courseId: "course-1",
+        newDraftVersionId: "version-2",
+      },
     });
   });
 

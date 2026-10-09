@@ -1,19 +1,12 @@
 import { toast } from "@/components/ui/toast";
-import { showSuccessToast } from "@/features/upload-manager/upload-toasts";
-import { isPostingJobKind, jobLogHref } from "./job-wire";
+import { jobLogHref } from "./job-wire";
 import type { jobsReducer } from "./jobs-reducer";
-import { jobUploadEntries, jobUploadEntry } from "./jobs-selectors";
 
 type Toast<T extends jobsReducer.Effect["type"]> = Extract<
   jobsReducer.Effect,
   { type: T }
 >;
 
-/** What a kind of Job did, for the toast's headline. */
-const DID: Record<string, string> = {
-  export: "exported successfully",
-  "render-vertical": "rendered as a vertical Short",
-};
 const FAILED: Record<string, string> = {
   export: "export failed",
   "render-vertical": "vertical Short render failed",
@@ -30,43 +23,135 @@ const FAILED: Record<string, string> = {
   "publish-video": "failed in the Publish",
 };
 
-export function showJobSucceededToast(
-  effect: Toast<"show-job-succeeded-toast">,
-  job: jobsReducer.JobView | null
-): void {
-  // A post toasts exactly as the browser-driven upload did: same words,
-  // same links, and AI Hero's link saved to the global links.
-  // So does an Autofill: "<title> finished", with "Back to Publish"; and a
-  // Publish: "published successfully", with "Go to Draft".
-  const entry = !job
-    ? null
-    : isPostingJobKind(job.kind)
-      ? jobUploadEntry(job)
-      : job.kind === "autofill" || job.kind === "publish"
-        ? (jobUploadEntries(job)[0] ?? null)
-        : null;
-  if (entry) {
-    showSuccessToast(entry);
-    return;
-  }
-  const did = DID[effect.kind] ?? "finished";
-  toast.success(`"${effect.title}" ${did}`, {
-    duration: Infinity,
-    // The export's toast as the browser-driven export showed it.
-    cancel:
-      effect.kind === "export" && effect.subjectId
-        ? {
-            label: "Open",
-            onClick: () => {
-              fetch(`/api/videos/${effect.subjectId}/reveal`, {
-                method: "POST",
-              }).catch(() => {
-                // Revealing the file is a convenience; the toast said where it is.
-              });
-            },
-          }
-        : undefined,
+const goTo = (label: string, href: string) => ({
+  label,
+  onClick: () => {
+    window.location.href = href;
+  },
+});
+
+/** Saves a posted page to the global links; fire-and-forget. */
+const addGlobalLink = (title: string, url: string) => {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("url", url);
+  fetch("/api/links", { method: "POST", body: formData }).catch(() => {
+    // Silently ignore errors (including duplicate URL conflicts)
   });
+};
+
+/**
+ * A Job succeeded: the toast the reducer decided (`effect.toast`). A post
+ * toasts exactly as the browser-driven upload did: same words, same links,
+ * and AI Hero's link saved to the global links.
+ */
+export function showJobSucceededToast(
+  effect: Toast<"show-job-succeeded-toast">
+): void {
+  const { title, toast: decided } = effect;
+  switch (decided.shape) {
+    case "buffer":
+      toast.success(`"${title}" sent to Buffer`, {
+        duration: Infinity,
+        cancel: goTo("Go to Post", `/videos/${decided.videoId}/post`),
+      });
+      return;
+    case "youtube": {
+      const { youtubeVideoId } = decided;
+      toast.success(`"${title}" uploaded to YouTube`, {
+        duration: Infinity,
+        action: youtubeVideoId
+          ? {
+              label: "Copy YouTube Studio Link",
+              onClick: () =>
+                navigator.clipboard.writeText(
+                  `https://studio.youtube.com/video/${youtubeVideoId}/edit`
+                ),
+            }
+          : undefined,
+        cancel: goTo("Go to Post", `/videos/${decided.videoId}/post`),
+      });
+      return;
+    }
+    case "youtube-shorts": {
+      const { youtubeVideoId } = decided;
+      toast.success(`"${title}" posted as YouTube Short`, {
+        duration: Infinity,
+        action: youtubeVideoId
+          ? {
+              label: "Open on YouTube",
+              onClick: () =>
+                window.open(
+                  `https://youtube.com/shorts/${youtubeVideoId}`,
+                  "_blank"
+                ),
+            }
+          : undefined,
+      });
+      return;
+    }
+    case "ai-hero":
+      toast.success(`"${title}" posted to AI Hero`, {
+        duration: Infinity,
+        cancel: goTo("Go to AI Hero", `/videos/${decided.videoId}/ai-hero`),
+      });
+      if (decided.slug) {
+        addGlobalLink(title, `https://aihero.dev/${decided.slug}`);
+      }
+      return;
+    case "skills-changelog":
+      toast.success(`"${title}" published as Skills Changelog`, {
+        duration: Infinity,
+        cancel: goTo(
+          "Go to Skills Changelog",
+          `/videos/${decided.videoId}/skills-changelog`
+        ),
+      });
+      if (decided.slug) {
+        addGlobalLink(title, `https://www.aihero.dev/skills/${decided.slug}`);
+      }
+      return;
+    case "autofill":
+      // The Autofill never rolls on into a Publish — the second press is the
+      // author's. So the toast carries them back to where that press happens.
+      toast.success(`${title} finished`, {
+        duration: Infinity,
+        action: goTo("Back to Publish", `/courses/${decided.courseId}/publish`),
+      });
+      return;
+    case "publish": {
+      const { courseId, newDraftVersionId } = decided;
+      toast.success(`"${title}" published successfully`, {
+        duration: Infinity,
+        action: newDraftVersionId
+          ? goTo(
+              "Go to Draft",
+              `/courses/${courseId}?versionId=${newDraftVersionId}`
+            )
+          : undefined,
+      });
+      return;
+    }
+    case "generic": {
+      const { revealVideoId } = decided;
+      toast.success(`"${title}" ${decided.did}`, {
+        duration: Infinity,
+        cancel: revealVideoId
+          ? {
+              label: "Open",
+              onClick: () => {
+                fetch(`/api/videos/${revealVideoId}/reveal`, {
+                  method: "POST",
+                }).catch(() => {
+                  // Revealing the file is a convenience; the toast said where it is.
+                });
+              },
+            }
+          : undefined,
+      });
+      return;
+    }
+  }
 }
 
 export function showJobFailedToast(

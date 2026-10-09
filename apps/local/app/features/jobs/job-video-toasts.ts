@@ -1,5 +1,6 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { jobsReducer } from "./jobs-reducer";
+import { genericSucceededToast } from "./job-succeeded-toast";
 
 type Exec = Parameters<
   EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
@@ -32,6 +33,7 @@ export const announceVideoSettled = (
         kind: "export",
         title: video.title,
         subjectId: video.id,
+        toast: genericSucceededToast("export", video.id),
       });
     }
   }

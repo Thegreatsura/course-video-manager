@@ -221,8 +221,8 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     "show-dismiss-failed-toast": (_state, effect) =>
       showDismissFailedToast(effect),
     "show-retry-failed-toast": (_state, effect) => showRetryFailedToast(effect),
-    "show-job-succeeded-toast": (state, effect) =>
-      showJobSucceededToast(effect, state.jobs[effect.jobId] ?? null),
+    "show-job-succeeded-toast": (_state, effect) =>
+      showJobSucceededToast(effect),
     "show-job-failed-toast": (_state, effect) => showJobFailedToast(effect),
     "show-sidecar-not-running-toast": (_state, effect) =>
       showSidecarNotRunningToast(effect),

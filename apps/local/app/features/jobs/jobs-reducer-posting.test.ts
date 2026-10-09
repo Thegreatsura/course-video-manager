@@ -151,6 +151,57 @@ describe("jobsReducer", () => {
       });
     });
 
+    describe("succeeded, its toast is decided here, from what it posted", () => {
+      const toastOf = (kind: string, result: Record<string, unknown>) => {
+        const job = wireJob({ kind, maxAttempts: 1 });
+        const effects = newTester()
+          .send(streamed(wireEvent("queued"), job))
+          .send(streamed(wireEvent("started", { attempt: 1 }), job))
+          .send(streamed(wireEvent("posted", result), job))
+          .send(streamed(wireEvent("succeeded"), job))
+          .getEffects();
+        return effects.flatMap((e) =>
+          e.type === "show-job-succeeded-toast" ? [e.toast] : []
+        );
+      };
+
+      it("YouTube: the Post page and the YouTube id for the Studio link", () => {
+        expect(toastOf("youtube", { youtubeVideoId: "yt-1" })).toEqual([
+          { shape: "youtube", videoId: "video-1", youtubeVideoId: "yt-1" },
+        ]);
+      });
+
+      it("a YouTube Short: the YouTube id for Open on YouTube", () => {
+        expect(toastOf("youtube-shorts", { youtubeVideoId: "yt-2" })).toEqual([
+          { shape: "youtube-shorts", youtubeVideoId: "yt-2" },
+        ]);
+      });
+
+      it("Buffer: the Post page", () => {
+        expect(toastOf("buffer", {})).toEqual([
+          { shape: "buffer", videoId: "video-1" },
+        ]);
+      });
+
+      it("AI Hero and the Skills Changelog: the slug for the global link", () => {
+        expect(toastOf("ai-hero", { slug: "intro-to-generics" })).toEqual([
+          { shape: "ai-hero", videoId: "video-1", slug: "intro-to-generics" },
+        ]);
+        expect(toastOf("skills-changelog", { slug: "v1-2" })).toEqual([
+          { shape: "skills-changelog", videoId: "video-1", slug: "v1-2" },
+        ]);
+      });
+
+      it("a post that reported nothing still toasts, without the links", () => {
+        expect(toastOf("youtube", {})).toEqual([
+          { shape: "youtube", videoId: "video-1", youtubeVideoId: null },
+        ]);
+        expect(toastOf("ai-hero", {})).toEqual([
+          { shape: "ai-hero", videoId: "video-1", slug: null },
+        ]);
+      });
+    });
+
     it("cut off, it waits for the author: the idle timer leaves it, it shows what the check found, and Retry asks the server", () => {
       const tester = newTester()
         .send(requestPost(null))

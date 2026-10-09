@@ -137,6 +137,8 @@ describe("a Course Autofill Job", () => {
       kind: "autofill",
       title: "Autofill Generics",
       subjectId: "course-1",
+      // "<title> finished", with "Back to Publish".
+      toast: { shape: "autofill", courseId: "course-1" },
     });
     expect(rows(tester.getState())[0]).toMatchObject({
       status: "success",
