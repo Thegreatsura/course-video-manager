@@ -110,9 +110,11 @@ export const copyPlannedFile = (copy: PlannedCopy) =>
   Effect.gen(function* () {
     if (yield* isInPlace(copy)) return "skipped" as const;
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.makeDirectory(path.dirname(copy.to), { recursive: true });
+    // Checked before any folder is made: a symlink in the store must not get
+    // a directory created wherever it points.
     const to = yield* assertUnderEffect(copy.store, copy.to);
     const partial = yield* assertUnderEffect(copy.store, `${copy.to}.partial`);
+    yield* fs.makeDirectory(path.dirname(to), { recursive: true });
     yield* fs.copyFile(copy.from, partial);
     yield* fs.rename(partial, to);
     const size = yield* sizeOf(copy.to);
