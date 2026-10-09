@@ -596,6 +596,12 @@ export const createJobOperations = (db: Database) => {
     );
   });
 
+  /** The database's sidecar lease, if any sidecar ever took it. */
+  const getSidecarLease = Effect.fn("getSidecarLease")(function* () {
+    const [lease] = yield* makeDbCall(() => db.select().from(sidecarLease));
+    return lease;
+  });
+
   return {
     ...createEnqueueJobOperations(db),
     claimNextJob,
@@ -616,6 +622,7 @@ export const createJobOperations = (db: Database) => {
     acquireSidecarLease,
     renewSidecarLease,
     releaseSidecarLease,
+    getSidecarLease,
   };
 };
 

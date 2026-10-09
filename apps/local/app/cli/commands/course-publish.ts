@@ -1,29 +1,23 @@
 import { Command, Options } from "@effect/cli";
 import { entityIdArg } from "../entity-id";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { ConfigProvider, Effect, Layer, Logger, LogLevel } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
-import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
-import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
-import { OverlayRenderCacheService } from "@/services/overlay-render-cache.server";
-import { CoursePublishService } from "@/services/course-publish-service";
-import { VideoEditorLoggerService } from "@/services/video-editor-logger-service";
+import { nudgeSidecar } from "@/services/sidecar-socket.server";
 import { loadRepoEnv } from "@/services/repo-env";
-import {
-  NEEDS_FINISHED_VIDEOS_AND_FFMPEG,
-  requireLocalMachine,
-} from "@/cli/local-only";
+import { NEEDS_THE_SIDECAR, requireLocalMachine } from "@/cli/local-only";
 import { detail, emitObject, notFound, parseError } from "@/cli/helpers";
+import { CliOutput } from "@/cli/output";
 import {
   ANNOUNCE_NOTHING_BAND,
   PLACEHOLDER_FLOOR_BANDS,
-  placeholderFloorFromBand,
 } from "@/packages/course-json";
+import { enqueueJob, JOB_KINDS } from "../../../sidecar/job-kinds";
+import { waitForPublishJob } from "./course-publish-wait";
 
 /**
  * `cvm course publish <courseId> --name vX.Y.Z` — the ONE write verb that
@@ -36,10 +30,15 @@ import {
  * `course.schema.json`) — the two overlap, a Video uploading as soon as its
  * own export finishes — ending in the atomic `course.json` rename (the commit
  * receipt); Promote then marks it Published. A caught Commit failure — or a
- * failed export — auto-Discards the Pending Version. This just wraps
- * CoursePublishService.publish for the CLI; the heavy lifting (validation
- * gate, the export/upload pipeline, lifecycle transitions) lives there — so
- * the CLI inherits the pipelining with its output contract untouched.
+ * failed export — auto-Discards the Pending Version.
+ *
+ * The command runs none of that itself. It ENQUEUES a `publish` Job, which the
+ * Sidecar runs (`sidecar/kinds/publish.ts`, plan §3 of
+ * docs/plans/background-jobs-sidecar.md) — the same Job the publish page
+ * starts, in the same one-at-a-time lane, logged in the same place. `--wait`
+ * follows it to the end and keeps the output contract of the in-process
+ * command it replaced: the same result object, the same tagged errors and
+ * exit codes.
  *
  * NAME CONTRACT
  *   The version name MUST be a lowercase-'v' prefixed semver — `v1.2.3`,
@@ -62,33 +61,21 @@ export const isValidPublishVersionName = (name: string): boolean =>
   SEMVER_WITH_V.test(name);
 
 /**
- * The self-contained service graph the `publish` command runs inside. It is
- * built LOCALLY (inside the handler via Effect.provide), NOT merged into the
- * shared cliRuntime, on purpose: CoursePublishService pulls in
- * VideoProcessingService, which reads OPENAI_API_KEY at BUILD time. Merging it
- * into the shared layer would make every read command demand that key. Building
- * it here means only `publish` pays that cost.
+ * The service graph the `publish` command runs inside: enough to check the
+ * Course and the name and to write the Job row. The work itself — ffmpeg,
+ * Dropbox, the Version lifecycle — is the Sidecar's, so none of its services
+ * (nor OPENAI_API_KEY, which VideoProcessingService reads at build time) are
+ * built here.
  */
-const publishDeps = Layer.mergeAll(
+const publishLayer = Layer.mergeAll(
   CourseOperationsService.Default,
-  VideoOperationsService.Default,
   VersionOperationsService.Default,
-  LinkAuthOperationsService.Default,
-  VideoProcessingService.Default,
-  FFmpegCommandsService.Default,
-  OverlayRenderCacheService.Default,
-  // The export writes why a stage failed into the Video's own log, so the
-  // CLI's publish needs the same logger the app's export does.
-  VideoEditorLoggerService.Default,
+  JobOperationsService.Default,
   NodeContext.layer
 ).pipe(
   Layer.provideMerge(
     DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbeLive))
   )
-);
-
-const publishLayer = CoursePublishService.Default.pipe(
-  Layer.provideMerge(publishDeps)
 );
 
 // ---------------------------------------------------------------------------
@@ -121,6 +108,12 @@ const excludeTodoOpt = Options.boolean("exclude-todo").pipe(
 // flag publishes exactly what it published before ADR 0029 — and the band's
 // meaning is shared with `cvm course readiness` through one module, so the two
 // verbs can never disagree about what `--placeholders p2` announces.
+const waitOpt = Options.boolean("wait").pipe(
+  Options.withDescription(
+    "follow the Publish Job until it settles and print its result (default: print the queued Job and return)"
+  )
+);
+
 const placeholdersOpt = Options.choice("placeholders", [
   ...PLACEHOLDER_FLOOR_BANDS,
 ]).pipe(
@@ -147,11 +140,22 @@ bundle's address is knowable before any encoding starts. The published
 snapshot is immutable and can never be deleted; a failed export or Commit
 auto-Discards the Pending Version (see FAILURE HANDLING).
 
+A JOB THE SIDECAR RUNS
+  This command checks the name and the Course, then ENQUEUES a Publish Job and
+  returns. The Sidecar (started by 'pnpm dev' / 'pnpm start' on the author's
+  machine) runs it, exactly as it runs a Publish pressed on the web publish
+  page: one Publish at a time, its progress in the Upload Manager, its log at
+  .data/logs/jobs/<jobId>.jsonl. A Publish runs ONCE: it is never retried, and
+  never re-run on its own after the Sidecar stops or dies mid-run. Pass --wait
+  to follow it to the end. If the Sidecar is not running, the Job waits in the
+  queue until it is.
+
 LOCAL-ONLY
-  Publish renders with ffmpeg and mirrors the finished videos directory to
-  Dropbox, so it needs the author's machine. On any other box it is refused
-  before anything happens — _tag "LocalOnlyCommandError", exit 7, no Pending
-  Version, nothing half-done. Stop rather than retry.
+  The Publish is run by this machine's Sidecar, which renders with ffmpeg and
+  mirrors the finished videos directory to Dropbox, so it needs the author's
+  machine. On any other box it is refused before anything happens — _tag
+  "LocalOnlyCommandError", exit 7, no Job, nothing half-done. Stop rather than
+  retry.
 
 CONCURRENCY
   Export and upload are separate pools with separate budgets, connected by a
@@ -224,9 +228,11 @@ FAILURE HANDLING
   lands before the freeze (carried into the new Draft) or is refused with
   VersionNotDraftError (exit 3) — retry it against the new Draft.
 
-  A crash between the course.json rename and Promote strands the Pending
-  Version at rest; the web publish page reconciles it on load (Promote if the
-  receipt committed, else one-click Discard). No CLI recovery verb exists.
+  A Publish cut off mid-run (its Sidecar stopped or died) ends "interrupted"
+  and is NEVER re-run on its own. If it got past Submit it strands a Pending
+  Version; the web publish page reconciles it on load (Promote if the receipt
+  committed, else one-click Discard). No CLI recovery verb exists: with --wait
+  this ends PublishInterruptedError, exit 4.
 
 FLAGS
   --name <vX.Y.Z>     (required) the Published Version name.
@@ -236,19 +242,29 @@ FLAGS
   --placeholders <band>
                       the Placeholder Floor: none | p1 | p2 | p3 (default none —
                       announce nothing, today's behaviour exactly).
+  --wait              follow the Publish Job until it settles (default: return
+                      as soon as it is queued).
 
 OUTPUT
-  One pretty JSON object: { publishedVersionId, newDraftVersionId, name,
-  description, lessons }. 'lessons' is { ships, placeholders, withheld } — the
-  three Lesson Publish Status counts for the release that just went out, under
-  the floor and the to-do setting this run used. Together they are every Lesson
-  in the version tree. Run 'cvm course readiness --placeholders <band>' to see
-  which Lessons they are.
+  Without --wait: one pretty JSON object, { jobId, status: "queued", name,
+  description, log } — the Job is queued, not done. Follow it in the Upload
+  Manager, or run the command with --wait.
+  With --wait: one pretty JSON object once the Publish succeeds: { jobId,
+  publishedVersionId, newDraftVersionId, name, description, lessons }.
+  'lessons' is { ships, placeholders, withheld } — the three Lesson Publish
+  Status counts for the release that just went out, under the floor and the
+  to-do setting this run used. Together they are every Lesson in the version
+  tree. Run 'cvm course readiness --placeholders <band>' to see which Lessons
+  they are. While it runs, STDERR carries one JSON line per step of the Job
+  ({ "event": "stage", "stage": "exporting" }, …); a failure's tagged object is
+  the LAST line of STDERR. A failed Publish ends PublishValidationError (exit
+  3) or PublishCommitFailedError (exit 4) as before, or PublishJobFailedError
+  (exit 4) for any other cause — read the Job's log for the whole chain.
   Errors go to STDERR as the usual tagged contract object.
 
 EXAMPLES
   cvm course publish course_123 --name v1.0.0 --description "first cut"
-  cvm course publish course_123 --name v1.1.0 --description "adds the testing section"
+  cvm course publish course_123 --name v1.1.0 --description "adds the testing section" --wait
   cvm course publish course_123 --name v2.0.0-beta.1 --description "beta" --exclude-todo
   cvm course publish course_123 --name v0.1.0 --description "the syllabus" --placeholders p2`;
 
@@ -264,23 +280,23 @@ export const publishCmd = Command.make(
     description: descriptionOpt,
     excludeTodo: excludeTodoOpt,
     placeholders: placeholdersOpt,
+    wait: waitOpt,
   },
-  ({ courseId, name, description, excludeTodo, placeholders }) => {
+  ({ courseId, name, description, excludeTodo, placeholders, wait }) => {
     const includeTodoLessons = !excludeTodo;
-    const placeholderFloor = placeholderFloorFromBand(placeholders);
 
-    // MACHINE GATE FIRST, ahead of even the name check: Publish renders with
-    // ffmpeg and mirrors the finished videos directory to Dropbox, so on a
-    // Remote Box a perfectly-formed name would not have helped. Refusing here
-    // also means the Draft is never Submitted — a Publish that stopped halfway
-    // would strand a Pending Version.
+    // MACHINE GATE FIRST, ahead of even the name check: the Publish is run by
+    // this machine's Sidecar, which renders with ffmpeg and mirrors the
+    // finished videos directory to Dropbox, so on a Remote Box a
+    // perfectly-formed name would not have helped. Refusing here also means no
+    // Job is ever queued.
     const machine = requireLocalMachine(
       "cvm course publish",
-      NEEDS_FINISHED_VIDEOS_AND_FFMPEG
+      NEEDS_THE_SIDECAR
     );
 
     // Shape gate SECOND, outside the provided layer: a malformed name fails fast
-    // (exit 3) without building the heavy publish stack or reading .env config.
+    // (exit 3) without building the layer or reading .env config.
     if (!isValidPublishVersionName(name)) {
       return machine.pipe(
         Effect.zipRight(
@@ -314,20 +330,47 @@ export const publishCmd = Command.make(
         );
       }
 
-      // A PublishValidationError (unexported videos / lint) is left to surface
-      // with its own tag: render.ts maps it to exit 3 and its enumerable fields
-      // (unexportedVideoIds, courseViewLintCount) reach the agent verbatim,
-      // whereas a flattened ParseError message would be dropped by the renderer.
-      const publishSvc = yield* CoursePublishService;
-      const result = yield* publishSvc.publish({
-        courseId,
-        versionName: name,
-        versionDescription: description,
-        includeTodoLessons,
-        placeholderFloor,
+      // The one way in (plan §3.7): the same `publish` Job the publish page
+      // enqueues, checked against the kind's own params schema.
+      const job = yield* enqueueJob({
+        id: null,
+        kind: "publish",
+        title: course.name,
+        params: {
+          courseId,
+          name,
+          description,
+          includeTodoLessons,
+          placeholders,
+        },
+        dependsOn: null,
+        subject: { type: "course", id: courseId },
+        attemptsSpent: 0,
+        registry: JOB_KINDS,
       });
+      // Best effort, and silent: a sidecar that is down finds the Job when it
+      // starts, and the CLI's STDERR is its error contract.
+      yield* nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None));
+      const log = `.data/logs/jobs/${job.id}.jsonl`;
 
+      if (!wait) {
+        return yield* emitObject({
+          jobId: job.id,
+          status: "queued",
+          name,
+          description,
+          log,
+        });
+      }
+
+      const out = yield* CliOutput;
+      const result = yield* waitForPublishJob({
+        jobId: job.id,
+        pollMs: 1_000,
+        onProgress: (line) => out.stderr(JSON.stringify(line) + "\n"),
+      });
       yield* emitObject({
+        jobId: job.id,
         publishedVersionId: result.publishedVersionId,
         newDraftVersionId: result.newDraftVersionId,
         name,
@@ -338,13 +381,12 @@ export const publishCmd = Command.make(
         // see that `--placeholders p2` announced anything, or how many Lessons
         // it left behind. Ask `cvm course readiness --placeholders <band>` for
         // the Lessons themselves.
-        lessons: result.lessonCounts,
+        lessons: result.lessons,
       });
     });
 
-    // loadRepoEnv MUST run before publishLayer is built: VideoProcessingService
-    // reads OPENAI_API_KEY at build time and the sync reads DROPBOX_REMOTE_PATH /
-    // FINISHED_VIDEOS_DIRECTORY at runtime, all from process.env.
+    // loadRepoEnv MUST run before publishLayer is built: DrizzleService reads
+    // DATABASE_URL from process.env.
     return machine.pipe(
       Effect.zipRight(Effect.sync(() => loadRepoEnv())),
       Effect.zipRight(

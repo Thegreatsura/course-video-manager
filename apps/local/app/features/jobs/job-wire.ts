@@ -104,3 +104,17 @@ export const jobRetryHref = (jobId: string) =>
 
 /** Where the author's Dismiss and "Clear finished" go: `{ jobIds }`. */
 export const JOBS_DISMISS_HREF = "/api/jobs/dismiss";
+
+/**
+ * What an interrupted Publish says, on its row and in its toast. A Publish is
+ * never run again on its own (section 7.2 of
+ * docs/plans/background-jobs-sidecar.md): cut off after Submit, it leaves a
+ * Pending Version, and the publish page reads the Dropbox receipt and offers
+ * Promote or Discard. Cut off before Submit, there is nothing to reconcile.
+ */
+export const PUBLISH_INTERRUPTED_MESSAGE =
+  "Interrupted, and never re-run on its own. If it got past Submit, its Pending Version is waiting on the publish page: Promote or Discard it there, then publish again";
+
+/** Where an interrupted Publish is reconciled, by hand. */
+export const publishPageHref = (courseId: string) =>
+  `/courses/${encodeURIComponent(courseId)}/publish`;

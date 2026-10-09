@@ -110,6 +110,16 @@ export interface PostingJobKind<R = never> extends JobKindBase<R> {
 
 export type JobKind<R = never> = RetryingJobKind<R> | PostingJobKind<R>;
 
+/**
+ * Whether a deliberate stop may put a running Job of this kind back in the
+ * queue (section 7.5). Never for a post (decision 5), nor for a kind marked
+ * `neverRequeued` (a Publish, section 7.2): those end `interrupted`.
+ */
+export const isRequeuedOnStop = (
+  kind:
+    { readonly posting?: boolean; readonly neverRequeued?: boolean } | undefined
+): boolean => kind?.posting !== true && kind?.neverRequeued !== true;
+
 /** Whether a kind posts: 1 attempt, never re-queued, Retry by hand only. */
 export const isPostingKind = (
   kind: { readonly posting?: boolean } | JobPolicy | undefined
@@ -122,6 +132,7 @@ export const defineJobKind = <P, I, R = never>(
   return {
     lane: definition.lane,
     maxAttempts: definition.maxAttempts,
+    ...(definition.neverRequeued ? { neverRequeued: true as const } : {}),
     decodeParams: decode,
     runRaw: (raw, ctx) =>
       Effect.flatMap(decode(raw), (params) => definition.run(params, ctx)),

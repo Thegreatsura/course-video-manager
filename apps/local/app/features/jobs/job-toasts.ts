@@ -25,6 +25,9 @@ const FAILED: Record<string, string> = {
   autofill: "failed",
   /** One Video of a Course Autofill: nothing of it was written. */
   "autofill-video": "autofill failed",
+  publish: "publish failed",
+  /** One Video of a Publish: its export or its upload. */
+  "publish-video": "failed in the Publish",
 };
 
 export function showJobSucceededToast(
@@ -33,12 +36,13 @@ export function showJobSucceededToast(
 ): void {
   // A post toasts exactly as the browser-driven upload did: same words,
   // same links, and AI Hero's link saved to the global links.
-  // So does an Autofill: "<title> finished", with "Back to Publish".
+  // So does an Autofill: "<title> finished", with "Back to Publish"; and a
+  // Publish: "published successfully", with "Go to Draft".
   const entry = !job
     ? null
     : isPostingJobKind(job.kind)
       ? jobUploadEntry(job)
-      : job.kind === "autofill"
+      : job.kind === "autofill" || job.kind === "publish"
         ? (jobUploadEntries(job)[0] ?? null)
         : null;
   if (entry) {

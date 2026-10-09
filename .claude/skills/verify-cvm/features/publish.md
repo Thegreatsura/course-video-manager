@@ -21,8 +21,18 @@ From the Course View, the `Actions` menu, then Publish. Or the route directly.
 
 ## Driving it with agent-browser
 
-**Read this page; do not press `Publish`.** It Submits the Draft, renders
-Videos and commits a Bundle to Dropbox, and is not undoable from here.
+**Press `Publish` only with a Dropbox stub.** It Submits the Draft, renders
+Videos and commits a Bundle to Dropbox. It is a Job the run's sidecar runs
+(the `publish` lane, one at a time, never re-run on its own), and on a clone
+both Dropbox hosts reach only the discard port or a loopback stub you start
+(`DROPBOX_API_URL`, `DROPBOX_CONTENT_URL`, see the skill) — confirm both in
+`/proc/<pid>/environ` of the server and the sidecar before pressing. The clone
+has no Dropbox token: insert a dud one into its `dropbox_auth` table to reach
+the stub. Without a stub it fails at the Commit and Discards its Pending
+Version. Its rows are a parent row for the Course and one child row per
+shipping Video in the Upload Manager; a Publish cut off mid-run reads
+"Interrupted, and never re-run on its own" with **Promote or Discard on the
+publish page**.
 `Autofill` is a Job the run's sidecar runs; on a clone its model calls reach
 only the discard port or a loopback stub you start (`ANTHROPIC_BASE_URL`, see
 the skill), so press it only with a stub, and read the Videos back with

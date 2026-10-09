@@ -1,22 +1,12 @@
 {
   "sse-route": [
     {
-      "file": "apps/local/app/routes/api.courses.$courseId.publish-sse.ts",
-      "count": 1,
-      "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
-    },
-    {
       "file": "apps/local/app/routes/api.videos.$videoId.autofill-chapters.ts",
       "count": 1,
       "reason": "Interactive, not background work: the chapter Autofill modal streams to the person watching it (the plan's question 5). Stays."
     }
   ],
   "browser-driver": [
-    {
-      "file": "apps/local/app/features/upload-manager/sse-publish-client.ts",
-      "count": 1,
-      "reason": "Publish (#9). Moves to the sidecar in docs/plans/background-jobs-sidecar.md, batch 6."
-    },
     {
       "file": "apps/local/app/features/video-editor/components/autofill-chapters-modal.tsx",
       "count": 1,
