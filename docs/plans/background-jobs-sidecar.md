@@ -139,7 +139,8 @@ browser ──(enqueue: POST action)──► app server ──INSERT job──�
 - **Socket:** `<checkout>/.data/sidecar.sock`, a Unix socket rather than a TCP port, so it never touches the 5170-5199 or 5200-5299 bands. `CVM_SIDECAR_SOCKET` overrides it.
 - **Main checkout:** runs against production, as the app does.
 - **Worktree:** the #1868 guard already refuses a remote DB. A worktree sidecar runs only against a local or verify-clone DB. Unlike the live desk (#1867), it does not need to be main-only, because the database and the socket keep it isolated.
-- **If the sidecar is down:** enqueue still succeeds (it is a row), and the UI shows a "sidecar not running" banner from the proxy's health check. Jobs start when the sidecar comes up. Nothing is lost.
+- **If the sidecar is down:** enqueue still succeeds (it is a row), and every page shows a red "Background jobs are stopped" banner (`SidecarDownBanner`) for as long as the proxy finds nothing on the socket. Jobs start when the sidecar comes up. Nothing is lost.
+- **It restarts itself:** a run that ends for any reason but a signal or another sidecar's lease (a database outage that lapsed the lease, a database unreachable at start, a crash inside a run) runs again after 1 s, 2 s, 4 s … up to a minute (`sidecar/supervise.ts`), in both `pnpm dev` and `pnpm start`.
 - **Versioning:** the `sidecar_lease` row carries the git SHA. The app warns when its build and the sidecar's differ. `tsx watch` restarts the sidecar on edit, and lease recovery (§3.2) makes that safe.
 
 ### 3.6 verify-cvm gets its own sidecar

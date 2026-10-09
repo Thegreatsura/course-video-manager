@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Cause, Deferred, Effect, Exit, Layer, Logger } from "effect";
+import { Deferred, Effect, Exit, Layer, Logger } from "effect";
 import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import {
   formatConnectionRefusal,
@@ -18,16 +18,24 @@ import { JOB_KINDS, type JobServices } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
+import { superviseSidecar } from "./supervise";
 
 /**
  * The sidecar's entry point (`pnpm dev` runs it as `dev:sidecar`, `pnpm start`
  * as `start:sidecar`), and its one Effect runtime boundary.
  *
  * EVERY EXIT IS 0. `pnpm dev` runs the app, the forwarder and this side by
- * side, and pnpm stops all of them when one fails — so a sidecar that cannot
- * run (a worktree pointed at production, a database not yet migrated, another
- * sidecar holding the lease) says why, loudly, and gets out of the app's way.
- * Nothing is lost while it is down: an enqueued Job is a row, and waits.
+ * side, and pnpm stops all of them when one fails — so a sidecar that must
+ * not run here (a worktree pointed at production, a read-only connection,
+ * another sidecar holding the lease) says why, loudly, and gets out of the
+ * app's way.
+ *
+ * IT RESTARTS ITSELF. A run that ends any other way — a database outage that
+ * lapsed its lease, a database it could not reach, a crash — runs again after
+ * a wait that doubles up to a minute (`superviseSidecar`), so Jobs never
+ * stall behind a sidecar nobody restarted. Only a signal ends it. While it
+ * is down the app says so on every page (`SidecarDownBanner`), and nothing
+ * is lost: an enqueued Job is a row, and waits.
  */
 
 const say = (message: string) =>
@@ -89,14 +97,16 @@ const main = async (): Promise<void> => {
   fs.mkdirSync(path.dirname(socket), { recursive: true });
   fs.mkdirSync(logDir, { recursive: true });
 
-  const identity: SidecarIdentity = {
+  const identity = (): SidecarIdentity => ({
+    // A fresh holder per run: what an ended run held is recovered, never
+    // mistaken for this one's.
     holder: randomUUID(),
     pid: process.pid,
     hostname: os.hostname(),
     checkout: CHECKOUT,
     gitSha: gitSha(),
     socket,
-  };
+  });
 
   // The sidecar owns its signals: a stop interrupts each running Job, whose
   // scope kills its ffmpeg, and the Job goes back to the queue. The registry's
@@ -118,43 +128,54 @@ const main = async (): Promise<void> => {
     )
   );
 
-  const exit = await Effect.runPromiseExit(
+  const outcome = await Effect.runPromise(
     Effect.gen(function* () {
-      const stop = yield* Deferred.make<string>();
+      const signalled = yield* Deferred.make<string>();
       for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // A signal handler cannot wait; completing a Deferred is synchronous.
         process.once(signal, () =>
-          Deferred.unsafeDone(stop, Exit.succeed(signal))
+          Deferred.unsafeDone(signalled, Exit.succeed(signal))
         );
       }
-      return yield* runSidecar<JobServices>({
-        identity,
-        registry: JOB_KINDS,
-        timing: SIDECAR_TIMING,
-        stop,
-        serve: (handle) =>
-          serveSidecarSocket({ socket, handle, registry: JOB_KINDS, logDir }),
+      return yield* superviseSidecar({
+        runOnce: (stop) =>
+          runSidecar<JobServices>({
+            identity: identity(),
+            registry: JOB_KINDS,
+            timing: SIDECAR_TIMING,
+            stop,
+            serve: (handle) =>
+              serveSidecarSocket({
+                socket,
+                handle,
+                registry: JOB_KINDS,
+                logDir,
+              }),
+          }).pipe(Effect.provide(layer)),
+        signalled,
+        initialDelayMs: 1_000,
+        maxDelayMs: 60_000,
+        healthyAfterMs: 5 * 60_000,
+        onRestart: ({ delayMs, why }) =>
+          Effect.sync(() =>
+            say(
+              `NOT RUNNING — ${why}\nStarting again in ${delayMs / 1000} s. Jobs wait in the queue until then.`
+            )
+          ),
       });
-    }).pipe(Effect.provide(layer))
+    })
   );
 
-  if (Exit.isSuccess(exit)) {
-    const outcome = exit.value;
-    if (outcome._tag === "LeaseHeld") {
-      const lease = outcome.lease;
-      say(
-        lease
-          ? `not started: the sidecar in ${lease.checkout} (pid ${lease.pid} on ${lease.hostname}, ${lease.gitSha.slice(0, 7)}) holds the lease on database ${lease.database}. One sidecar runs per database.`
-          : "not started: another sidecar holds this database's lease."
-      );
-      return;
-    }
-    say(`stopped: ${outcome.reason}`);
+  if (outcome._tag === "LeaseHeld") {
+    const lease = outcome.lease;
+    say(
+      lease
+        ? `not started: the sidecar in ${lease.checkout} (pid ${lease.pid} on ${lease.hostname}, ${lease.gitSha.slice(0, 7)}) holds the lease on database ${lease.database}. One sidecar runs per database.`
+        : "not started: another sidecar holds this database's lease."
+    );
     return;
   }
-  say(
-    `FAILED — the sidecar is not running. Jobs wait in the queue until it is.\n${Cause.pretty(exit.cause, { renderErrorCause: true })}`
-  );
+  say(`stopped: ${outcome.signal}`);
 };
 
 if (!process.env.VITEST) {
