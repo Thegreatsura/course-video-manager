@@ -56,6 +56,9 @@ function useJobEventStream(dispatch: Dispatch) {
       const action = message ? toJobsAction(message) : null;
       if (action) dispatch(action);
     });
+    source.addEventListener(JOB_STREAM_EVENTS.sidecarAvailable, () =>
+      dispatch({ type: "sidecar-available" })
+    );
     source.addEventListener(JOB_STREAM_EVENTS.sidecarUnavailable, (event) => {
       const unavailable = decodeStreamData(
         SidecarUnavailableMessage,

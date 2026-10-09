@@ -8,6 +8,7 @@ import type { uploadReducer } from "./upload-reducer";
 import { postRetryOf, visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
 import { jobLogHref, publishPageHref } from "@/features/jobs/job-wire";
+import { SidecarDownBanner } from "@/features/jobs/sidecar-down-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -136,10 +137,15 @@ export function GlobalUploadProgress() {
     [dismissUpload, dismissJob, jobs.jobs]
   );
 
-  if (!hasUploads) return null;
+  const sidecarDown = (
+    <SidecarDownBanner sidecar={jobs.sidecar} message={jobs.sidecarMessage} />
+  );
+
+  if (!hasUploads) return sidecarDown;
 
   return (
     <>
+      {sidecarDown}
       {/* Floating circular indicator */}
       <button
         onClick={() => setIsModalOpen(true)}
