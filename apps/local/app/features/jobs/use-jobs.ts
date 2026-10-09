@@ -115,7 +115,11 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
         );
     },
     "retry-job": (_state, effect, dispatch) => {
-      fetch(jobRetryHref(effect.id), { method: "POST" })
+      fetch(jobRetryHref(effect.id), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attempt: effect.attempt }),
+      })
         .then(async (response) => {
           if (!response.ok) {
             throw new Error(

@@ -11,6 +11,7 @@ import {
   isFinishedJob,
   type jobsReducer,
 } from "./jobs-reducer";
+import { isPostingJobKind } from "./job-wire";
 
 /** The Jobs the author has not dismissed, oldest first by when this tab met them. */
 export const visibleJobs = (state: jobsReducer.State): jobsReducer.JobView[] =>
@@ -346,4 +347,55 @@ export const jobUploadEntries = (
       ];
     }
   );
+};
+
+/**
+ * Failures a Retry cannot fix: a dead or missing key (fix it, then post again
+ * from the page), or an export that never finished (its post never started).
+ */
+const RETRY_CANNOT_HELP: readonly string[] = [
+  "BufferAuthError",
+  "NotAuthenticatedError",
+  "YouTubeAuthError",
+  "AiHeroNotAuthenticatedError",
+  "DependencyFailed",
+];
+
+/** A failure from before the post sent anything: nothing can have gone out. */
+const NOTHING_SENT: readonly string[] = ["PostNotStartedError"];
+
+/**
+ * What a failed or cut-off POST's row offers (decision 5: "Posting twice
+ * would be disastrous"), or `null` for any other Job.
+ *
+ * - `went-out`: this run's post reached the service — it said so (`posted`)
+ *   before it failed, or the post-check found it. No Retry: it would post
+ *   twice (the server refuses it too).
+ * - `cannot-help`: fix the key, or the export, then post again from the page.
+ * - `retry`: asks "Post again?" first unless the failure came before anything
+ *   was sent. A "not posted" check does not skip the question: a check can
+ *   run before a cut-off request has landed, and a failed run is never
+ *   looked for at all.
+ */
+export type PostRetry =
+  | { readonly type: "went-out"; readonly url: string | null }
+  | { readonly type: "cannot-help" }
+  | { readonly type: "retry"; readonly confirm: boolean };
+
+export const postRetryOf = (job: jobsReducer.JobView): PostRetry | null => {
+  if (!isPostingJobKind(job.kind)) return null;
+  if (job.status !== "failed" && job.status !== "interrupted") return null;
+  if (job.result !== null) {
+    return { type: "went-out", url: stringOf(job.result.url) };
+  }
+  if (job.postCheck?.verdict === "posted") {
+    return { type: "went-out", url: job.postCheck.url };
+  }
+  if (RETRY_CANNOT_HELP.includes(job.errorTag ?? "")) {
+    return { type: "cannot-help" };
+  }
+  return {
+    type: "retry",
+    confirm: !NOTHING_SENT.includes(job.errorTag ?? ""),
+  };
 };

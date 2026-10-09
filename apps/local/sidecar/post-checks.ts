@@ -1,13 +1,13 @@
 import { Cause, Effect } from "effect";
 import {
   JobOperationsService,
+  POST_CHECK_EVENT,
   type Job,
 } from "@cvm/core/services/db-job-operations.server";
 import { isPostingKind, type PostCheck } from "./job-kind";
 import type { JobKindRegistry } from "./job-kinds";
 
-/** The Job Event a post-check writes (`PostCheck`). */
-export const POST_CHECK_EVENT = "post-check";
+export { POST_CHECK_EVENT };
 
 /** An interrupted post older than this is not looked for any more. */
 const POST_CHECK_WITHIN_MS = 24 * 60 * 60_000;
@@ -72,7 +72,8 @@ export const makePostChecks = <R>(opts: {
             ops.appendJobEvent({
               jobId: job.id,
               type: POST_CHECK_EVENT,
-              data: { ...check },
+              // The run it looked at: a Retry may have started the next one.
+              data: { ...check, attempt: job.attempt },
             })
           ),
           Effect.zipRight(opts.wake),
