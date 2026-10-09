@@ -124,10 +124,15 @@ describe("ADR 0032 names every allowed entry point", () => {
     path.join(root, "docs/adr/0032-background-work-runs-in-the-sidecar.md"),
     "utf8"
   );
-  const named = (file: string) => {
-    const base = path.basename(file).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`[\`/]${base}\``).test(adr);
-  };
+  // Section 7 only, up to the next heading: a path named elsewhere in the
+  // ADR does not count as a reason the file stays.
+  const section7 = adr.slice(
+    adr.indexOf("7. **What stays outside the Sidecar"),
+    adr.indexOf("\n## ", adr.indexOf("7. **What stays outside the Sidecar"))
+  );
+  // The repo-relative path, whole, in backticks: `…/client.ts` alone would
+  // let any new client.ts through.
+  const named = (file: string) => section7.includes(`\`${file}\``);
 
   const allowlist = JSON.parse(
     readFileSync(path.join(root, ALLOWLIST_PATH), "utf8")
@@ -148,12 +153,20 @@ describe("ADR 0032 names every allowed entry point", () => {
   )
     .split("|")
     .filter((pattern) => pattern !== "^sidecar/")
-    // "^app/routes/api\\.feedback\\.ts$" → "app/routes/api.feedback.ts"
-    .map((pattern) => pattern.replace(/^\^|\$$/g, "").replace(/\\/g, ""));
+    // "^app/routes/api\\.feedback\\.ts$" → "apps/local/app/routes/api.feedback.ts"
+    .map((pattern) =>
+      path.posix.join(
+        "apps/local",
+        pattern.replace(/^\^|\$$/g, "").replace(/\\/g, "")
+      )
+    );
 
   it("reads both lists", () => {
     expect(allowlisted.length).toBeGreaterThan(0);
-    expect(childProcessEntryPoints).toContain("app/routes/api.feedback.ts");
+    expect(section7.length).toBeGreaterThan(0);
+    expect(childProcessEntryPoints).toContain(
+      "apps/local/app/routes/api.feedback.ts"
+    );
   });
 
   it.each(allowlisted)("names %s, from the allowlist", (file) => {
@@ -164,6 +177,17 @@ describe("ADR 0032 names every allowed entry point", () => {
     "names %s, from .dependency-cruiser.spawn.cjs",
     (file) => {
       expect(named(file)).toBe(true);
+    }
+  );
+
+  it.each([
+    "apps/local/app/services/new-thing/client.ts",
+    "apps/local/app/features/x/job-kind.ts",
+    "apps/local/sidecar/kinds/transcribe-footage.ts",
+  ])(
+    "does not name %s, which shares only a basename or sits outside 7",
+    (file) => {
+      expect(named(file)).toBe(false);
     }
   );
 });

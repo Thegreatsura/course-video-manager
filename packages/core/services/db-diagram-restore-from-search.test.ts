@@ -7,15 +7,19 @@ import { DiagramThumbnailStore } from "./diagram-thumbnail-store.js";
 import {
   createTestDb,
   truncateAllTables,
+  withQueryLog,
   type TestDb,
 } from "../test-utils/pglite.js";
+import type { PGlite } from "@electric-sql/pglite";
 
 let testDb: TestDb;
+let pglite: PGlite;
 let testLayer: Layer.Layer<DiagramOperationsService>;
 
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
+  pglite = result.pglite;
 
   const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
   testLayer = DiagramOperationsService.Default.pipe(
@@ -158,4 +162,42 @@ describe("restoreFromSearch", () => {
       expect(result._tag).toBe("NotFoundError");
     }).pipe(Effect.provide(testLayer))
   );
+
+  // PGlite has one connection, so two transactions cannot interleave here:
+  // this asserts the SQL the guarantee rests on, the same lock `snapshot add`
+  // takes. The autosave PATCH (updateDiagramHead) locks the same row, so an
+  // autosave either lands before the head is read (and is preserved) or waits
+  // and is refused for a moved head; it is never silently overwritten.
+  it("locks the Diagram row FOR UPDATE before it reads the head", async () => {
+    const { diagramId, snapshotId } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const diagram = yield* diagramOps.createDiagram();
+        yield* diagramOps.updateDiagramHead(diagram.id, scene1);
+        const snapshot = yield* diagramOps.createSnapshot(diagram.id, {
+          preserved: true,
+        });
+        yield* diagramOps.updateDiagramHead(diagram.id, scene2);
+        return { diagramId: diagram.id, snapshotId: snapshot.id };
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    const queries: string[] = [];
+    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
+    const loggedLayer = DiagramOperationsService.Default.pipe(
+      Layer.provide(Layer.succeed(DrizzleService, loggedDb as any)),
+      Layer.provide(DiagramThumbnailStore.noop)
+    );
+    await Effect.runPromise(
+      DiagramOperationsService.pipe(
+        Effect.flatMap((ops) => ops.restoreFromSearch(diagramId, snapshotId)),
+        Effect.provide(loggedLayer)
+      )
+    );
+
+    const diagramQueries = queries.filter((q) =>
+      q.includes(`"course-video-manager_diagram"`)
+    );
+    expect(diagramQueries[0]).toMatch(/^select .* for update$/);
+  });
 });

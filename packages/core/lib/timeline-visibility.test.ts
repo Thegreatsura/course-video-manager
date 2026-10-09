@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isVisibleInTimeline } from "./timeline-visibility";
+import { isVisibleInTimeline } from "./timeline-visibility.js";
 
 describe("isVisibleInTimeline", () => {
   it("returns true when snapshot is preserved and has no pinning clips", () => {

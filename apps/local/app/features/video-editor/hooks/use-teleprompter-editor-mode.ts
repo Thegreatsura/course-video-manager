@@ -7,7 +7,8 @@
  *
  * Two effects, doing two different jobs:
  *
- *   - The first answers the popup's heartbeat and its join handshake. State is
+ *   - The first answers the popup's heartbeat, its join handshake and a dot
+ *     clicked on the glass. State and the click handler are
  *     read through a ref rather than captured in the dependencies: the
  *     speech-detector state changes constantly mid-take, and re-subscribing the
  *     channel on every change is the one failure mode a teleprompter can't have.
@@ -22,7 +23,11 @@ import {
   enableTeleprompterEditorMode,
   pushTeleprompterState,
 } from "@/lib/teleprompter-window";
-import type { CaptureStatus, ClipMarks } from "@/lib/teleprompter-protocol";
+import type {
+  CaptureStatus,
+  ClipMarkIds,
+  ClipMarks,
+} from "@/lib/teleprompter-protocol";
 import type { BeatTab } from "../beat-tab";
 import type { RecordingSession, TimelineItem } from "../clip-state-reducer";
 import { useSessionClipMarks } from "../session-clip-marks";
@@ -37,12 +42,19 @@ export type TeleprompterEditorInput = {
   /** The editor's clips and sessions, from which the session state is derived. */
   items: TimelineItem[];
   sessions: RecordingSession[];
+  /** The Clip the editor's player is playing, or `null` when it is paused. */
+  playingClipId: string | null;
+  /** A dot on the glass was clicked: play its Clip, or pause it. */
+  onClipMarkClicked: (clipId: string) => void;
 };
 
 export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
-  const { videoId, capture, tab } = input;
+  const { videoId, capture, tab, playingClipId } = input;
   // One per clip in the current session — see `session-clip-marks.ts`.
-  const marks = useSessionClipMarks(input.items, input.sessions);
+  const { marks, markClipIds } = useSessionClipMarks(
+    input.items,
+    input.sessions
+  );
   // See `session-latest-transcript.ts`.
   const latestTranscript = useLatestSessionTranscript(
     input.items,
@@ -61,25 +73,49 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
     capture,
     tab,
     marks,
+    markClipIds,
+    playingClipId,
     latestTranscript,
     videoLengthSeconds,
   };
   const ref = useRef(state);
   ref.current = state;
+  const onClipMarkClickedRef = useRef(input.onClipMarkClicked);
+  onClipMarkClickedRef.current = input.onClipMarkClicked;
 
-  useEffect(() => enableTeleprompterEditorMode(() => ref.current), []);
+  useEffect(
+    () =>
+      enableTeleprompterEditorMode(
+        () => ref.current,
+        (clipId) => onClipMarkClickedRef.current(clipId)
+      ),
+    []
+  );
 
   // A fresh array every render would push on every frame of a take, so the
-  // dependency is the array's *content*, flattened to a string.
+  // dependency is the arrays' *content*, flattened to a string.
   const marksKey = marks.join(",");
+  const markClipIdsKey = markClipIds.join(",");
   useEffect(() => {
     pushTeleprompterState({
       videoId,
       capture,
       tab,
       marks: marksKey === "" ? [] : (marksKey.split(",") as ClipMarks),
+      markClipIds:
+        markClipIdsKey === "" ? [] : (markClipIdsKey.split(",") as ClipMarkIds),
+      playingClipId,
       latestTranscript,
       videoLengthSeconds,
     });
-  }, [videoId, capture, tab, marksKey, latestTranscript, videoLengthSeconds]);
+  }, [
+    videoId,
+    capture,
+    tab,
+    marksKey,
+    markClipIdsKey,
+    playingClipId,
+    latestTranscript,
+    videoLengthSeconds,
+  ]);
 }
