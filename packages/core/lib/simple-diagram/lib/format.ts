@@ -90,8 +90,26 @@ const Id = z
     "must be letters, digits, '_' or '-' (e.g. \"box-1\")"
   );
 
-const num = z.number().finite();
-const positive = z.number().finite().positive();
+/**
+ * The most shapes one drawing may hold. Matt's Diagrams hold about 10; this
+ * only stops a runaway file before it is drawn and stored.
+ */
+export const MAX_SHAPES = 500;
+
+/**
+ * How far from the origin a coordinate, size or bend may be, in canvas
+ * pixels. A Diagram is filmed in about 1600x900; this only stops a value that
+ * is plainly a mistake.
+ */
+export const MAX_COORDINATE = 100_000;
+
+const inRange = `must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`;
+const num = z
+  .number()
+  .finite()
+  .gte(-MAX_COORDINATE, inRange)
+  .lte(MAX_COORDINATE, inRange);
+const positive = num.positive();
 
 const Box = z.strictObject({
   type: z.literal("box"),

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast, toastError } from "@/components/ui/toast";
+import { localImageRefs } from "@/features/image-upload/image-upload-job";
+import { useImageUploadJob } from "@/features/image-upload/use-image-upload-job";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -32,45 +33,17 @@ export function ImageUploadDropdown({
   body: string;
   onBodyChange: (body: string) => void;
 }) {
-  const [isUploading, setIsUploading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const hasLocalImages = useMemo(() => {
-    const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
-    const matches = Array.from(body.matchAll(imageRegex));
-    return matches.some(
-      (m) => !m[1]!.startsWith("http://") && !m[1]!.startsWith("https://")
-    );
-  }, [body]);
-
-  const handleUpload = async (deleteLocalFiles: boolean) => {
+  const hasLocalImages = useMemo(() => localImageRefs(body).length > 0, [body]);
+  // An `upload-images` Job: the URLs are swapped into the body as it is when
+  // the Job settles, and a local file goes only once its URL is in.
+  const { isUploading, upload } = useImageUploadJob(videoId, {
+    read: () => body,
+    write: onBodyChange,
+  });
+  const handleUpload = (deleteLocalFiles: boolean) => {
     if (!body.trim()) return;
-    setIsUploading(true);
-    try {
-      const response = await fetch(`/api/videos/${videoId}/upload-images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, deleteLocalFiles }),
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to upload images");
-      }
-      const result = await response.json();
-      if (result.body !== body) {
-        onBodyChange(result.body);
-        toast.success(
-          deleteLocalFiles
-            ? "Images uploaded to Cloudinary and local files deleted"
-            : "Images uploaded to Cloudinary"
-        );
-      } else {
-        toast("No local images found to upload");
-      }
-    } catch (error) {
-      toastError(error, "Failed to upload images");
-    } finally {
-      setIsUploading(false);
-    }
+    upload(deleteLocalFiles);
   };
 
   if (!hasLocalImages && !isUploading) return null;

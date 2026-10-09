@@ -5,6 +5,7 @@
 import type { z } from "zod";
 import {
   DiagramEnvelope,
+  MAX_SHAPES,
   SHAPE_SCHEMAS,
   SHAPE_TYPES,
   type SimpleDiagram,
@@ -70,6 +71,15 @@ export function parseSimpleDiagram(
     };
   }
 
+  if (envelope.data.shapes.length > MAX_SHAPES) {
+    return {
+      ok: false,
+      errors: [
+        `diagram.shapes: ${envelope.data.shapes.length} shapes — a Diagram holds at most ${MAX_SHAPES} (Matt's are about 10)`,
+      ],
+    };
+  }
+
   const errors: string[] = [];
   const shapes: SimpleShape[] = [];
 
@@ -109,6 +119,12 @@ export function parseSimpleDiagram(
       );
     }
     if (shape.type !== "arrow") continue;
+    if (shape.from !== undefined && shape.from === shape.to) {
+      errors.push(
+        `arrow "${shape.id}": "from" and "to" are both "${shape.from}" — an arrow joins two different shapes`
+      );
+      continue;
+    }
     const ends = [
       {
         end: "start",

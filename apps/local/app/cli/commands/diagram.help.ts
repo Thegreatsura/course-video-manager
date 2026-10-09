@@ -33,8 +33,10 @@ Verbs:
 THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
 and 'create' again until the pictures are right, then hand Matt the url. Once
 he has the url, change it with 'snapshot add', never a second 'create'. To
-see what Matt has drawn since, 'get' it first. 'update' changes the NAME only;
-nothing changes a drawing in place.
+see what Matt has drawn since, 'get' it first, change what you need in the
+head's shapes, and 'snapshot add' them: it applies them ONTO the head, so all
+he did by hand is kept. 'update' changes the NAME only; nothing changes a
+drawing in place.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
@@ -43,7 +45,8 @@ or a BATCH of drawings, first to last:
 "name" is the Diagram's name (default "Untitled N"). Every shape has a "type"
 and an "id" you choose — letters, digits, "_" or "-", unique in its drawing.
 In a batch, keep a shape's id from one snapshot to the next and every
-snapshot must differ from the others.
+snapshot must differ from the others. A drawing holds at most 500 shapes,
+and every number is within ±100000.
 
 SHAPES ("?" = optional; leave a field out to get Matt's default)
   box      id, x, y, w, h, color?, fill?, dash?
@@ -52,7 +55,7 @@ SHAPES ("?" = optional; leave a field out to get Matt's default)
   arrow    id, from? | x1?, y1?, to? | x2?, y2?, text?, bend?, heads?, color?, dash?
   line     id, x1, y1, x2, y2, color?, dash?
   icon     id, x, y, name, color?
-  other    id   (only in what a read gives back; 'create' refuses it)
+  other    id   (only from 'get'; 'snapshot add' keeps it, 'create' refuses it)
 
 WHAT THE FIELDS MEAN
   x, y       the top-left corner, in canvas pixels; y grows DOWN. A Diagram
@@ -64,7 +67,8 @@ WHAT THE FIELDS MEAN
              over it, as Matt does. Text at size m is about 13px wide per
              character and 32px tall per line, so centre it by eye.
   from, to   an arrow end ATTACHED to another shape's id (box, ellipse, text
-             or icon — not an arrow or line). It meets that shape's outline
+             or icon — not an arrow or line, and not the arrow's other end's
+             shape). It meets that shape's outline
              and follows it when Matt moves the shape. Give each end EITHER
              from/to OR its free point: x1, y1 for the start, x2, y2 for the
              end.
@@ -149,9 +153,10 @@ unless all three succeed, so a failed 'create' can simply be run again.
 Exit codes:
   3  invalid input — EVERY problem at once, each naming its shape (and, in a
      batch, its snapshot): an unknown type, field or icon; an arrow pointing
-     at a missing id or at a line; both or neither of "from" and x1, y1; a
-     duplicate id; both "shapes" and "snapshots"; an empty batch; two
-     snapshots that draw the same thing.
+     at a missing id or at a line, or at one shape from both ends; both or
+     neither of "from" and x1, y1; a duplicate id; more than 500 shapes; a
+     number beyond ±100000; both "shapes" and "snapshots"; an empty batch;
+     two snapshots that draw the same thing.
   4  the PNG could not be drawn (_tag DiagramRenderError) — usually the app
      is not running at CVM_APP_URL. Nothing is written.
   7  not the author's machine (_tag LocalOnlyCommandError). Stop.
@@ -180,6 +185,16 @@ command prints where to look.
                     Diagram has one) and no "snapshots" (one at a time). See
                     'cvm diagram --help' for the format. "-" reads STDIN.
 
+The drawing is applied ONTO the head, matched by id, and the result is the
+new snapshot. Start from 'cvm diagram get' and change only what you mean to:
+  - a shape you list keeps everything the format cannot say — an icon Matt
+    resized, a font, a text's wrapping width, a stroke size, an opacity, an
+    arrow end he dragged — and takes the fields you give it;
+  - a shape you leave out is removed;
+  - a new id is drawn in Matt's defaults;
+  - an "other" shape is kept as it is, listed or not; an "other" whose id the
+    head does not have is refused.
+
 Nothing is lost. If no snapshot in the Diagram's timeline holds its current
 drawing — Matt drew on it by hand — that drawing is preserved FIRST, then the
 new one is added and restored. If Matt has the Diagram open, the playground
@@ -190,13 +205,14 @@ Output: ONE NDJSON line,
   snapshotId  the new DiagramSnapshot's id; the Diagram's head is now this.
   image       the PNG of the drawing: light mode, white background. READ IT.
 
-Order: the file is checked, the Diagram looked up, the drawing drawn, then
-written. Nothing is written unless all succeed. Adding a drawing the Diagram
+Order: the Diagram is looked up, the file checked and applied onto its head,
+the drawing drawn, then written. Nothing is written unless all succeed. Adding a drawing the Diagram
 already has re-uses that snapshot.
 
 Exit codes:
   2  no Diagram with that id (_tag NotFoundError).
-  3  invalid input — EVERY problem at once, each naming its shape.
+  3  invalid input — EVERY problem at once, each naming its shape: as for
+     'create', plus an "other" the head does not have.
   4  the PNG could not be drawn (_tag DiagramRenderError) — usually the app
      is not running at CVM_APP_URL. Nothing is written.
   7  not the author's machine (_tag LocalOnlyCommandError). Stop.
@@ -254,9 +270,10 @@ With --snapshot, ONE NDJSON line,
   shapes      its drawing.
 
 A shape the format cannot say — a hand-drawn stroke, a sticky note, a shape
-in a group or frame — comes back as {"type":"other","id":"…"}. 'create' and
-'snapshot add' refuse "other", so a drawing that has one cannot be passed
-back whole: tell Matt what you would change instead.
+in a group or frame — comes back as {"type":"other","id":"…"}. 'snapshot add'
+keeps every "other" as it is, so you can pass the head back whole: change the
+shapes you mean to and leave the "other"s alone. You cannot change or remove
+one; tell Matt instead.
 
 Exit codes:
   2  no Diagram with that id, or no snapshot with that id in this Diagram

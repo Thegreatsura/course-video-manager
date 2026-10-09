@@ -8,6 +8,7 @@ import type { LaneName } from "./lanes";
 import {
   CLIP_TRANSCRIPTION_POLICY,
   FOOTAGE_TRANSCRIPTION_POLICY,
+  IMAGE_UPLOAD_POLICY,
   POSTING_JOB_POLICY,
   RETRYING_JOB_POLICY,
   UPLOAD_MANAGER_POLICIES,
@@ -76,6 +77,11 @@ export const JOB_KIND_SPECS = {
       (live.params as { path?: unknown } | null)?.path ===
       (params as { path: string }).path,
   },
+  "upload-images": spec(IMAGE_UPLOAD_POLICY, JOB_PARAMS["upload-images"]),
+  "remove-local-images": spec(
+    IMAGE_UPLOAD_POLICY,
+    JOB_PARAMS["remove-local-images"]
+  ),
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),
   "youtube-shorts": spec(POSTING_JOB_POLICY, JOB_PARAMS["youtube-shorts"]),

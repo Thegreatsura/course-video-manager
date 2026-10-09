@@ -13,9 +13,10 @@
 //    A route enqueues a Job instead.
 //
 // 2. Outside the Sidecar (`sidecar/`), `child_process` is imported only by
-//    the INTERACTIVE entry points, each named below with why it stays: a
-//    person is waiting on it, it takes a moment, and it is not background
-//    work. Anything else that needs to start a process is either one of
+//    the entry points named below, each with why it stays: none is work the
+//    author walks away from. ADR 0032 section 7 lists the same files, and
+//    tests/background-jobs-guard.test.ts fails if one is missing there.
+//    Anything else that needs to start a process is either one of
 //    these, or a Job. The rule covers every module the graph reaches, not
 //    just `app/`: the workspace packages (`packages/`, seen here as
 //    `../../packages/…`) run inside the app server too.
@@ -42,8 +43,9 @@ const SIDECAR_SPAWNERS = [
 ].join("|");
 
 /**
- * The app server's interactive entry points to `child_process`. Each is
- * something the author clicks and waits on for a moment.
+ * The entry points to `child_process` outside the Sidecar. Most are something
+ * the author clicks and waits on; the last two start no background work
+ * either (ADR 0032 section 7).
  */
 const INTERACTIVE_CHILD_PROCESS = [
   // "Send feedback": `gh issue create`, while the dialog waits.

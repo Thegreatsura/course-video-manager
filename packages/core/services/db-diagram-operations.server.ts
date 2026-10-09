@@ -705,7 +705,6 @@ const createDiagramOperations = (
     /** What the agent writes are built from; bound to this `db`. */
     primitives: {
       createDiagram,
-      getDiagram,
       storeSnapshot,
       setSnapshotArchived,
       restoreSnapshotToHead,
