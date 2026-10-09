@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import { toast } from "@/components/ui/toast";
 import { useNavigate, useRevalidator } from "react-router";
 import {
   fetchSnapshotList,
   isHeadCaptured,
   type Snapshot,
 } from "@/features/diagrams/snapshot-list";
+import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
 import type { PaletteHandlers } from "./use-palette";
 
 /**
@@ -45,6 +45,7 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
 
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const status = usePlaygroundStatus();
 
   return useMemo(
     () => ({
@@ -59,14 +60,14 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
         // already captured on the timeline.
         const data = await fetchSnapshotList(diagramId);
         if (!data) {
-          toast.error("Failed to load snapshots");
+          status.reportError("Failed to load snapshots");
           return;
         }
         // The list comes back oldest-first.
         const newest: Snapshot | undefined =
           data.snapshots?.[data.snapshots.length - 1];
         if (!newest) {
-          toast.error("No snapshots to restore");
+          status.reportError("No snapshots to restore");
           return;
         }
         handleRestoreRequest(
@@ -83,11 +84,12 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
         const res = await fetch(`/api/diagrams/${diagramId}/update`, {
           method: "POST",
           body,
-        });
-        if (!res.ok) {
-          toast.error("Failed to rename diagram");
+        }).catch(() => null);
+        if (!res?.ok) {
+          status.reportError("Failed to rename diagram");
           return;
         }
+        status.reportSuccess();
         revalidator.revalidate();
       },
 
@@ -112,12 +114,12 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
                 body: JSON.stringify({ snapshotId: target.snapshotId }),
               }
             );
-            // Toasted, unlike on Home: when the hit is in the diagram already
+            // Reported, unlike on Home: when the hit is in the diagram already
             // open, a silent failure would leave the author looking at an
             // unchanged canvas with nothing to explain it.
-            if (!res.ok) toast.error("Failed to restore that snapshot");
+            if (!res.ok) status.reportError("Failed to restore that snapshot");
           } catch {
-            toast.error("Failed to restore that snapshot");
+            status.reportError("Failed to restore that snapshot");
           }
         }
 
@@ -143,6 +145,7 @@ export function usePaletteHandlers(opts: PaletteWiring): PaletteHandlers {
       recentreDiagram,
       navigate,
       revalidator,
+      status,
     ]
   );
 }

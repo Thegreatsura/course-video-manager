@@ -7,7 +7,7 @@
 // paste handler expects a `TLContent` ({ shapes, bindings, assets, rootShapeIds,
 // schema }) wrapped in a tagged HTML envelope. We rebuild that from the scene.
 
-import { toast } from "@/components/ui/toast";
+import type { PlaygroundStatus } from "./playground-status";
 
 interface SerializedRecord {
   typeName: string;
@@ -56,30 +56,38 @@ function buildTldrawClipboardHtml(scene: SceneDocument): string | null {
  * that are copying the open diagram must flush its pending save first, or the
  * copy is up to 500ms stale.
  *
- * Every outcome is a toast, because copying has no other visible result.
+ * A failure goes to the playground's status line; a copy that worked is
+ * silent, like every success on that page.
  */
-export async function copyDiagramContents(diagramId: string): Promise<void> {
+export async function copyDiagramContents(
+  diagramId: string,
+  status: PlaygroundStatus
+): Promise<void> {
   try {
     const res = await fetch(`/api/diagrams/${diagramId}/head`);
     if (!res.ok) {
-      toast.error("Failed to copy diagram");
+      status.reportError("Failed to copy diagram");
       return;
     }
     const data = await res.json();
     if (!data.headScene) {
-      toast.error("Diagram is empty");
+      status.reportError("Diagram is empty");
       return;
     }
     const result = await copySceneToClipboard(data.headScene);
-    if (result === "ok") {
-      toast.success("Diagram copied — paste into the canvas");
-    } else if (result === "empty") {
-      toast.error("Diagram has no shapes to copy");
-    } else {
-      toast.error("Failed to copy diagram");
+    switch (result) {
+      case "ok":
+        status.reportSuccess();
+        return;
+      case "empty":
+        status.reportError("Diagram has no shapes to copy");
+        return;
+      case "error":
+        status.reportError("Failed to copy diagram");
+        return;
     }
   } catch {
-    toast.error("Failed to copy diagram");
+    status.reportError("Failed to copy diagram");
   }
 }
 
