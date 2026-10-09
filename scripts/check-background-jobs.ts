@@ -21,6 +21,17 @@
 //    half of this guard, `apps/local/.dependency-cruiser.spawn.cjs`, which also
 //    holds `child_process` to its interactive entry points), and the app
 //    server's interactive calls a person waits on for a moment.
+// 4. `network` — an outbound call from server or CLI code: a global `fetch(`
+//    (not a path on the app itself, like `fetch("/api/…")`), the AI SDK
+//    (`generateText`, `streamText`, `generateObject`, `streamObject`,
+//    `new ToolLoopAgent`), `new OpenAI`, `new Anthropic`, or the Cloudinary
+//    SDK's `uploader` and `api`. In scope: apps/local/app's services, `.ts`
+//    routes, cli and `*.server.ts`, the workspace packages and apps/remote;
+//    not apps/local/sidecar. Each file that may is listed with why: quick, the
+//    author watches, a live Recording Session, or the posting path. A slow call
+//    the author walks away from is a Job. Dependency-cruiser cannot hold this
+//    one: every route reaches services/layer.server.ts, which builds the
+//    Cloudinary and Buffer clients, so every route "reaches" the network.
 //
 // Each file is parsed with oxc-parser, so a comment or a string cannot fool
 // it. Test code is out of scope. Hits are matched against
@@ -37,11 +48,12 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseSync, type Node } from "oxc-parser";
 
-export type Guard = "sse-route" | "browser-driver" | "spawn";
+export type Guard = "sse-route" | "browser-driver" | "spawn" | "network";
 export const GUARDS: readonly Guard[] = [
   "sse-route",
   "browser-driver",
   "spawn",
+  "network",
 ];
 
 export interface Hit {
@@ -76,11 +88,25 @@ const inBrowserScope = (file: string) =>
 const inSpawnScope = (file: string) =>
   file.startsWith("apps/local/app/") || file.startsWith("packages/");
 
+// Server and CLI code. `.tsx` route modules are left out: they hold the
+// browser's own calls to the app, and no outbound call today.
+const inNetworkScope = (file: string) =>
+  /\.ts$/.test(file) &&
+  (file.startsWith("apps/local/app/services/") ||
+    file.startsWith("apps/local/app/routes/") ||
+    file.startsWith("apps/local/app/cli/") ||
+    (file.startsWith("apps/local/app/") && file.endsWith(".server.ts")) ||
+    file.startsWith("packages/") ||
+    file.startsWith("apps/remote/"));
+
 export const isInScope = (file: string): boolean =>
   /\.(ts|tsx)$/.test(file) &&
   !file.endsWith(".d.ts") &&
   !isTestFile(file) &&
-  (inRoutes(file) || inBrowserScope(file) || inSpawnScope(file));
+  (inRoutes(file) ||
+    inBrowserScope(file) ||
+    inSpawnScope(file) ||
+    inNetworkScope(file));
 
 // ---------------------------------------------------------------------------
 // AST helpers
@@ -128,6 +154,60 @@ const isUnmountedLoop = (node: Node): boolean =>
   node.test.argument.type === "Identifier" &&
   node.test.argument.name === "unmounted";
 
+/** `fetch("/api/…")` or `fetch(`/api/${id}`)`: the app calling itself. */
+const isSameOriginFetch = (node: Node): boolean => {
+  if (node.type !== "CallExpression") return false;
+  const url = node.arguments[0];
+  if (!url) return false;
+  if (url.type === "Literal" && typeof url.value === "string") {
+    return url.value.startsWith("/");
+  }
+  return (
+    url.type === "TemplateLiteral" &&
+    (url.quasis[0]?.value.cooked ?? "").startsWith("/")
+  );
+};
+
+/** `fetch(` or `globalThis.fetch(`. */
+const isGlobalFetch = (node: Node): boolean => {
+  if (node.type !== "CallExpression") return false;
+  const callee = node.callee;
+  if (callee.type === "Identifier") return callee.name === "fetch";
+  return (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.object.type === "Identifier" &&
+    callee.object.name === "globalThis" &&
+    callee.property.type === "Identifier" &&
+    callee.property.name === "fetch"
+  );
+};
+
+/** Every name a pattern binds: `{ fetch }`, `[a, ...b]`, `c = 1`. */
+function patternNames(pattern: unknown, out: Set<string>): void {
+  if (!isNode(pattern)) return;
+  if (pattern.type === "Identifier") out.add(pattern.name);
+  else if (pattern.type === "ObjectPattern") {
+    for (const p of pattern.properties) {
+      patternNames(p.type === "RestElement" ? p.argument : p.value, out);
+    }
+  } else if (pattern.type === "ArrayPattern") {
+    for (const e of pattern.elements) patternNames(e, out);
+  } else if (pattern.type === "AssignmentPattern") {
+    patternNames(pattern.left, out);
+  } else if (pattern.type === "RestElement") {
+    patternNames(pattern.argument, out);
+  }
+}
+
+const AI_SDK_CALLS = new Set([
+  "generateText",
+  "streamText",
+  "generateObject",
+  "streamObject",
+]);
+const AI_SDK_AGENTS = new Set(["ToolLoopAgent", "Experimental_Agent"]);
+
 const isEventStreamLiteral = (node: Node): boolean =>
   (node.type === "Literal" && node.value === "text/event-stream") ||
   (node.type === "TemplateLiteral" &&
@@ -140,7 +220,7 @@ const isEventStreamLiteral = (node: Node): boolean =>
 export function scan(file: string, source: string): Hit[] {
   if (!isInScope(file)) return [];
   if (
-    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted|Command/.test(
+    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted|Command|fetch|"ai"|openai|anthropic-ai|cloudinary/.test(
       source
     )
   ) {
@@ -196,6 +276,95 @@ export function scan(file: string, source: string): Hit[] {
       }
     }
   }
+  // What the file imports from the AI SDK, OpenAI, Anthropic and Cloudinary,
+  // by local name, and whether it binds a `fetch` of its own.
+  const aiCalls = new Set<string>();
+  const aiAgents = new Set<string>();
+  const sdkClients = new Set<string>();
+  const cloudinaryNames = new Set<string>();
+  const localNames = new Set<string>();
+  for (const statement of program.body) {
+    if (statement.type !== "ImportDeclaration") continue;
+    const from = statement.source.value;
+    for (const specifier of statement.specifiers) {
+      const local = specifier.local.name;
+      localNames.add(local);
+      const imported =
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported.type === "Identifier"
+          ? specifier.imported.name
+          : undefined;
+      if (from === "ai" && imported && AI_SDK_CALLS.has(imported)) {
+        aiCalls.add(local);
+      }
+      if (from === "ai" && imported && AI_SDK_AGENTS.has(imported)) {
+        aiAgents.add(local);
+      }
+      if (
+        (from === "openai" || from === "@anthropic-ai/sdk") &&
+        (specifier.type === "ImportDefaultSpecifier" ||
+          imported === "OpenAI" ||
+          imported === "Anthropic")
+      ) {
+        sdkClients.add(local);
+      }
+      if (from === "cloudinary") cloudinaryNames.add(local);
+    }
+  }
+  if (inNetworkScope(file) && /fetch/.test(source)) {
+    walk(program, (node) => {
+      if (node.type === "VariableDeclarator") patternNames(node.id, localNames);
+      if (
+        node.type === "FunctionDeclaration" ||
+        node.type === "FunctionExpression" ||
+        node.type === "ArrowFunctionExpression"
+      ) {
+        if (node.type === "FunctionDeclaration" && node.id) {
+          localNames.add(node.id.name);
+        }
+        for (const param of node.params) patternNames(param, localNames);
+      }
+    });
+  }
+  /** `cloudinary.uploader.upload(…)` or `cloudinary.api.resources(…)`. */
+  const isCloudinaryCall = (node: Node): boolean => {
+    if (node.type !== "CallExpression") return false;
+    const callee = node.callee;
+    if (callee.type !== "MemberExpression") return false;
+    const inner = callee.object;
+    return (
+      inner.type === "MemberExpression" &&
+      !inner.computed &&
+      inner.object.type === "Identifier" &&
+      cloudinaryNames.has(inner.object.name) &&
+      inner.property.type === "Identifier" &&
+      (inner.property.name === "uploader" || inner.property.name === "api")
+    );
+  };
+  const isNetworkCall = (node: Node): boolean => {
+    if (isGlobalFetch(node)) {
+      const bare =
+        node.type === "CallExpression" && node.callee.type === "Identifier";
+      return !(bare && localNames.has("fetch")) && !isSameOriginFetch(node);
+    }
+    const callee =
+      (node.type === "CallExpression" || node.type === "NewExpression") &&
+      node.callee.type === "Identifier"
+        ? node.callee.name
+        : undefined;
+    if (node.type === "CallExpression" && callee && aiCalls.has(callee)) {
+      return true;
+    }
+    if (
+      node.type === "NewExpression" &&
+      callee &&
+      (aiAgents.has(callee) || sdkClients.has(callee))
+    ) {
+      return true;
+    }
+    return isCloudinaryCall(node);
+  };
+
   const isPlatformCommandMake = (node: Node): boolean =>
     node.type === "CallExpression" &&
     node.callee.type === "MemberExpression" &&
@@ -210,6 +379,7 @@ export function scan(file: string, source: string): Hit[] {
     if (inSpawnScope(file) && isPlatformCommandMake(node)) {
       hit("spawn", node);
     }
+    if (inNetworkScope(file) && isNetworkCall(node)) hit("network", node);
     if (inRoutes(file)) {
       if (node.type === "CallExpression" && name === "createSSEResponse") {
         hit("sse-route", node);
@@ -236,6 +406,7 @@ export function scan(file: string, source: string): Hit[] {
 const ADVICE: Record<Guard, string> = {
   "sse-route": `A job the author walks away from is a Job: add a kind under apps/local/sidecar/kinds/ and enqueue it, rather than stream it from a request. See ${DOC}.`,
   "browser-driver": `A browser tab must not keep background work alive: enqueue a Job and follow its Job Events. See ${DOC}.`,
+  network: `A slow network or AI call the author walks away from is a Job: enqueue one. A quick call, one the author watches, a live Recording Session's or the posting path's goes on the allowlist with why. See ${DOC}.`,
   spawn: `Starting a process is the Sidecar's job, or one of the app server's named interactive entry points: enqueue a Job, or (if a person waits on it for a moment) add the file to the allowlist with why. See ${DOC}.`,
 };
 
