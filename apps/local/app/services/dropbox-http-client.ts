@@ -1,4 +1,4 @@
-import { Data, Duration, Effect, Schedule } from "effect";
+import { Config, Data, Duration, Effect, Schedule } from "effect";
 import {
   open as fsOpen,
   readFile as fsReadFile,
@@ -38,13 +38,54 @@ const retrySchedule = Schedule.intersect(
   Schedule.recurs(5)
 );
 
+const DROPBOX_API_HOST = "https://api.dropboxapi.com";
+const DROPBOX_CONTENT_HOST = "https://content.dropboxapi.com";
+
+const baseUrl = (name: string, fallback: string) =>
+  Config.string(name).pipe(
+    Config.withDefault(fallback),
+    Config.map((url) => url.replace(/\/+$/, ""))
+  );
+
+/**
+ * Where Dropbox's two hosts live: the RPC API (and its OAuth token endpoint)
+ * and the content API that moves bytes. Overridable (`DROPBOX_API_URL`,
+ * `DROPBOX_CONTENT_URL`) so a verification run points every Dropbox call at
+ * a local stub; nothing sets them day to day. verify-cvm defaults both to a
+ * dead port.
+ */
+export const dropboxApiUrl = baseUrl("DROPBOX_API_URL", DROPBOX_API_HOST);
+export const dropboxContentUrl = baseUrl(
+  "DROPBOX_CONTENT_URL",
+  DROPBOX_CONTENT_HOST
+);
+
+/** `url` on whichever host the configuration names for it. */
+export const resolveDropboxUrl = (url: string) =>
+  Effect.gen(function* () {
+    if (url.startsWith(DROPBOX_CONTENT_HOST)) {
+      return (
+        (yield* dropboxContentUrl) + url.slice(DROPBOX_CONTENT_HOST.length)
+      );
+    }
+    if (url.startsWith(DROPBOX_API_HOST)) {
+      return (yield* dropboxApiUrl) + url.slice(DROPBOX_API_HOST.length);
+    }
+    return url;
+  });
+
 const fetchWithRetry = Effect.fn("dropboxFetch")(function* (
   url: string,
   init: RequestInit,
   endpoint: string
 ) {
+  const target = yield* resolveDropboxUrl(url).pipe(
+    Effect.mapError(
+      (e) => new DropboxApiError({ message: String(e), endpoint })
+    )
+  );
   return yield* Effect.tryPromise({
-    try: () => fetch(url, init),
+    try: () => fetch(target, init),
     catch: (e) =>
       new DropboxApiError({
         message: e instanceof Error ? e.message : "Network error",
