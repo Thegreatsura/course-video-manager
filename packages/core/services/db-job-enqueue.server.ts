@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { jobEvents, jobs } from "../db/schema.js";
 import type { Database } from "./drizzle-service.server.js";
 import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
@@ -8,6 +8,12 @@ import { withDbTransaction } from "./with-db-transaction.server.js";
 
 /** A Job in one of these never succeeds, so nothing waiting on it may start. */
 const UNSUCCESSFUL_FOR_GOOD = ["failed", "interrupted", "cancelled"];
+
+/** The caller named a Job by an id another, different Job already has. */
+export class JobIdTakenError extends Data.TaggedError("JobIdTakenError")<{
+  readonly jobId: string;
+  readonly message: string;
+}> {}
 
 /**
  * The one statement that adds a Job (the enqueue the kind registry's
@@ -28,6 +34,11 @@ export const createEnqueueJobOperations = (db: Database) => {
    * arrives later would otherwise wait for ever — never claimed, never
    * settled, not dismissable. The parent's row is locked `FOR SHARE` so it
    * cannot settle between the look and the insert.
+   *
+   * IDEMPOTENT ON A CALLER'S ID. The browser picks the id, so when an
+   * enqueue's answer is lost it can ask again: an id that is already the same
+   * Job (same kind, same dependency) adds nothing and answers with that Job
+   * as it is now. The same id on a different Job is `JobIdTakenError`.
    */
   const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     /**
@@ -59,6 +70,26 @@ export const createEnqueueJobOperations = (db: Database) => {
           parent && UNSUCCESSFUL_FOR_GOOD.includes(parent.status)
             ? dependencyFailure(parent.title)
             : null;
+        if (input.id !== null) {
+          const [existing] = yield* makeDbCall(() =>
+            tx
+              .select()
+              .from(jobs)
+              .where(eq(jobs.id, input.id ?? ""))
+          );
+          if (existing) {
+            if (
+              existing.kind !== input.kind ||
+              existing.dependsOn !== input.dependsOn
+            ) {
+              return yield* new JobIdTakenError({
+                jobId: existing.id,
+                message: `Job ${existing.id} is already a ${existing.kind} Job`,
+              });
+            }
+            return existing;
+          }
+        }
         const [job] = yield* makeDbCall(() =>
           tx
             .insert(jobs)
