@@ -30,9 +30,7 @@ export const announceVideoSettled = (
       exec({
         type: "show-job-succeeded-toast",
         jobId: job.id,
-        kind: "export",
         title: video.title,
-        subjectId: video.id,
         toast: genericSucceededToast("export", video.id),
       });
     }

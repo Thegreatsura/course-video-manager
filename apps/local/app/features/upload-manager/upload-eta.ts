@@ -1,4 +1,4 @@
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import type { HistoryLookup } from "./upload-history";
 import type { UploadTiming } from "./upload-timing";
 import {
@@ -48,7 +48,7 @@ export const ESTIMATING: UploadEta = { kind: "estimating" };
 
 /** What a stage of this job should take, by history; `null` with none. */
 export const expectedStageMs = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   stage: string,
   history: HistoryLookup
 ): number | null => {
@@ -108,7 +108,7 @@ export const blendedRemaining = (
 
 /** Time left in the stage the job is in now. */
 export const currentStageRemaining = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   timing: UploadTiming,
   { history, now }: Pick<EtaContext, "history" | "now">
 ): StageRemaining => {
@@ -133,7 +133,7 @@ export const currentStageRemaining = (
  * children can estimate.
  */
 export const stagesAheadMs = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   timing: UploadTiming,
   history: HistoryLookup
 ): number | null => {
@@ -152,7 +152,7 @@ export const stagesAheadMs = (
 
 /** A job estimated on its own: its current stage plus history for the rest. */
 export const jobEta = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   timing: UploadTiming | undefined,
   context: EtaContext
 ): UploadEta => {

@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { uploadReducer } from "./upload-reducer";
+import type {
+  BaseUploadEntry,
+  ExportUploadEntry,
+  UploadEntry,
+} from "./upload-entry";
 import { UploadRow } from "./upload-row";
 
-const base: uploadReducer.BaseUploadEntry = {
+const base: BaseUploadEntry = {
   uploadId: "u1",
   videoId: "v1",
   title: "Test Video",
@@ -16,7 +20,7 @@ const base: uploadReducer.BaseUploadEntry = {
   parentUploadId: null,
 };
 
-const render = (upload: uploadReducer.UploadEntry) =>
+const render = (upload: UploadEntry) =>
   renderToStaticMarkup(
     <UploadRow upload={upload} onDismiss={() => {}} logHref={null} />
   );
@@ -191,8 +195,8 @@ describe("UploadRow success state", () => {
 });
 
 const videoTask = (
-  overrides: Partial<uploadReducer.ExportUploadEntry> = {}
-): uploadReducer.ExportUploadEntry => ({
+  overrides: Partial<ExportUploadEntry> = {}
+): ExportUploadEntry => ({
   ...base,
   parentUploadId: "pub-1",
   uploadType: "export",
@@ -254,14 +258,14 @@ describe("UploadRow for a per-Video task under a Publish", () => {
 });
 
 describe("UploadRow ETA", () => {
-  const youtube: uploadReducer.UploadEntry = {
+  const youtube: UploadEntry = {
     ...base,
     progress: 42,
     uploadType: "youtube",
     youtubeVideoId: null,
   };
   const renderWithEta = (
-    upload: uploadReducer.UploadEntry,
+    upload: UploadEntry,
     eta: Parameters<typeof UploadRow>[0]["eta"]
   ) =>
     renderToStaticMarkup(

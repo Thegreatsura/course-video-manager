@@ -1,4 +1,4 @@
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import {
   AUTOFILL_WORK_BAND,
   BUFFER_STAGE_BANDS,
@@ -46,7 +46,7 @@ const WAIT_STAGES = new Set([
 export const isWaitStage = (stage: string) => WAIT_STAGES.has(stage);
 
 /** A parent job: its bar, and its estimate, come from its children. */
-export const isParentJob = (upload: uploadReducer.UploadEntry) =>
+export const isParentJob = (upload: UploadEntry) =>
   (upload.uploadType === "publish" || upload.uploadType === "autofill") &&
   !upload.parentUploadId;
 
@@ -54,17 +54,17 @@ export const isParentJob = (upload: uploadReducer.UploadEntry) =>
  * The job type as the history sees it. An Autofill's per-Video row shares the
  * `autofill` type with its parent but does entirely different work.
  */
-const jobKind = (upload: uploadReducer.UploadEntry) =>
+const jobKind = (upload: UploadEntry) =>
   upload.uploadType === "autofill" && upload.parentUploadId
     ? "autofill-video"
     : upload.uploadType;
 
-export const historyKey = (upload: uploadReducer.UploadEntry, stage: string) =>
+export const historyKey = (upload: UploadEntry, stage: string) =>
   `${jobKind(upload)}:${stage}`;
 
 const hasUnsettledChildren = (
   parentUploadId: string,
-  uploads: Record<string, uploadReducer.UploadEntry>
+  uploads: Record<string, UploadEntry>
 ) =>
   Object.values(uploads).some(
     (u) => u.parentUploadId === parentUploadId && !isSettled(u)
@@ -72,8 +72,8 @@ const hasUnsettledChildren = (
 
 /** The stage a job is in for timing, or `null` once it is not running. */
 export const timingStage = (
-  upload: uploadReducer.UploadEntry,
-  uploads: Record<string, uploadReducer.UploadEntry>
+  upload: UploadEntry,
+  uploads: Record<string, UploadEntry>
 ): string | null => {
   if (upload.status !== "uploading") return null;
   switch (upload.uploadType) {
@@ -113,7 +113,7 @@ export const timingStage = (
  * to the upload pool.
  */
 export const stagePlan = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   needsExport: boolean
 ): readonly string[] => {
   switch (upload.uploadType) {
@@ -169,7 +169,7 @@ const WHOLE_BAR: StageBand = { start: 0, width: 100 };
  * a stage that only ever reports that it has started.
  */
 export const stageBand = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   stage: string
 ): StageBand | null => {
   switch (upload.uploadType) {
@@ -202,7 +202,7 @@ export const stageBand = (
  * is predicted from a per-byte rate rather than from the average upload.
  */
 export const stageUnits = (
-  upload: uploadReducer.UploadEntry,
+  upload: UploadEntry,
   stage: string
 ): number | null =>
   upload.uploadType === "export" && stage === "uploading"

@@ -105,20 +105,12 @@ describe("jobsReducer", () => {
       {
         type: "show-job-succeeded-toast",
         jobId: JOB_ID,
-        kind: "export",
         title: "Intro to Generics",
-        subjectId: "video-1",
         toast: {
           shape: "generic",
           did: "exported successfully",
           revealVideoId: "video-1",
         },
-      },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Intro to Generics",
-        outcome: "succeeded",
       },
     ]);
   });
@@ -166,12 +158,6 @@ describe("jobsReducer", () => {
         message: "Failed to composite Overlays",
         hasLog: true,
       },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Intro to Generics",
-        outcome: "failed",
-      },
     ]);
   });
 
@@ -211,7 +197,6 @@ describe("jobsReducer", () => {
     tester.send(streamed(wireEvent("succeeded")));
     expect(tester.getEffects().map((e) => e.type)).toEqual([
       "show-job-succeeded-toast",
-      "report-job-settled",
     ]);
   });
 
@@ -244,12 +229,6 @@ describe("jobsReducer", () => {
         title: "Intro to Generics",
         message: "disk full",
         hasLog: true,
-      },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Intro to Generics",
-        outcome: "failed",
       },
     ]);
   });
@@ -297,12 +276,6 @@ describe("jobsReducer", () => {
         title: "Intro to Generics",
         message: "HTTP 500",
         hasLog: false,
-      },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Intro to Generics",
-        outcome: "failed",
       },
     ]);
   });
@@ -375,7 +348,7 @@ describe("jobsReducer", () => {
     const render = (type: string, data: Record<string, unknown> = {}) =>
       streamed(wireEvent(type, data), renderJob);
 
-    it("draws as the render-vertical row it was in the browser, stage by stage, and releases the posts waiting on it", () => {
+    it("draws as the render-vertical row it was in the browser, stage by stage", () => {
       const tester = newTester().send({
         type: "job-requested",
         id: JOB_ID,
@@ -413,15 +386,9 @@ describe("jobsReducer", () => {
         progress: 100,
         renderVerticalStage: null,
       });
-      expect(tester.getEffects()).toContainEqual({
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "My Short",
-        outcome: "succeeded",
-      });
     });
 
-    it("a render that fails every attempt toasts once, with its log, and fails the posts waiting on it", () => {
+    it("a render that fails every attempt toasts once, with its log", () => {
       const error = {
         error: {
           tag: "CouldNotTranscribeError",
@@ -449,12 +416,6 @@ describe("jobsReducer", () => {
           title: "My Short",
           message: "Whisper API call failed: 401",
           hasLog: true,
-        },
-        {
-          type: "report-job-settled",
-          jobId: JOB_ID,
-          title: "My Short",
-          outcome: "failed",
         },
       ]);
     });
@@ -530,9 +491,7 @@ describe("jobsReducer", () => {
         {
           type: "show-job-succeeded-toast",
           jobId: JOB_ID,
-          kind: "export",
           title: "S1/L1/Intro",
-          subjectId: "video-a",
           // A Batch export's Video toasts as an export of its own: Open.
           toast: {
             shape: "generic",

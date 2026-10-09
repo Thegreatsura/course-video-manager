@@ -1,6 +1,10 @@
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { clips, diagrams, diagramSnapshots } from "../db/schema.js";
-import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
+import {
+  DiagramHeadMovedError,
+  NotFoundError,
+  UnknownDBServiceError,
+} from "./db-service-errors.js";
 import {
   and,
   asc,
@@ -14,7 +18,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { Effect } from "effect";
-import { hashScene } from "../lib/scene-hash.js";
+import { hashHead, hashScene } from "../lib/scene-hash.js";
 import { extractSceneText } from "../lib/extract-scene-text/index.js";
 import {
   DiagramThumbnailStore,
@@ -285,48 +289,67 @@ const createDiagramOperations = (
     return diagram;
   });
 
+  /**
+   * Store `headScene` as the Diagram's head. With `expectedHash`, the write
+   * only lands over the head the caller last saw (`hashHead` of it; `null`
+   * for an empty one) and fails with `DiagramHeadMovedError` otherwise, so a
+   * writer never overwrites a head it hasn't seen. Writing the drawing already
+   * stored is a no-op either way.
+   */
   const updateDiagramHead = Effect.fn("updateDiagramHead")(function* (
     id: string,
-    headScene: unknown
+    headScene: unknown,
+    opts: { expectedHash?: string | null } = {}
   ) {
-    const existing = yield* makeDbCall(() =>
-      db.query.diagrams.findFirst({
-        where: eq(diagrams.id, id),
+    const newHash = hashHead(headScene);
+    const searchText = extractSceneText(headScene);
+
+    const outcome = yield* makeDbCall(() =>
+      db.transaction(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(diagrams)
+          .where(eq(diagrams.id, id))
+          .for("update");
+        if (!existing) return { kind: "not-found" as const };
+
+        const existingHash = hashHead(existing.headScene);
+        if (existingHash === newHash) {
+          return { kind: "stored" as const, diagram: existing };
+        }
+        if (
+          opts.expectedHash !== undefined &&
+          opts.expectedHash !== existingHash
+        ) {
+          return { kind: "moved" as const, storedHash: existingHash };
+        }
+
+        const [diagram] = await tx
+          .update(diagrams)
+          .set({ headScene, searchText, updatedAt: new Date() })
+          .where(eq(diagrams.id, id))
+          .returning();
+        return diagram
+          ? { kind: "stored" as const, diagram }
+          : { kind: "not-found" as const };
       })
     );
 
-    if (!existing) {
-      return yield* new NotFoundError({
-        type: "updateDiagramHead",
-        params: { id },
-      });
+    switch (outcome.kind) {
+      case "not-found":
+        return yield* new NotFoundError({
+          type: "updateDiagramHead",
+          params: { id },
+        });
+      case "moved":
+        return yield* new DiagramHeadMovedError({
+          diagramId: id,
+          expectedHash: opts.expectedHash ?? null,
+          storedHash: outcome.storedHash,
+        });
+      case "stored":
+        return outcome.diagram;
     }
-
-    const existingHash =
-      existing.headScene == null ? null : hashScene(existing.headScene);
-    const newHash = headScene == null ? null : hashScene(headScene);
-    if (existingHash === newHash) {
-      return existing;
-    }
-
-    const searchText = extractSceneText(headScene);
-
-    const results = yield* makeDbCall(() =>
-      db
-        .update(diagrams)
-        .set({ headScene, searchText, updatedAt: new Date() })
-        .where(eq(diagrams.id, id))
-        .returning()
-    );
-
-    const diagram = results[0];
-    if (!diagram) {
-      return yield* new NotFoundError({
-        type: "updateDiagramHead",
-        params: { id },
-      });
-    }
-    return diagram;
   });
 
   const createSnapshot = Effect.fn("createSnapshot")(function* (

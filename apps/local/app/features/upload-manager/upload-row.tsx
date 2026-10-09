@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import { useState } from "react";
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import { uploadStageLabel } from "./upload-stage-labels";
 import { etaLabel, type UploadEta } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +47,7 @@ export function UploadRow({
   publishRecoveryHref = null,
   onFollowLink = () => {},
 }: {
-  upload: uploadReducer.UploadEntry;
+  upload: UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
   /** A failed or interrupted post's check and Retry; `null` otherwise. */
   post?: PostRowControls | null;
@@ -98,7 +98,7 @@ export function UploadRow({
   );
 }
 
-function StatusIcon({ upload }: { upload: uploadReducer.UploadEntry }) {
+function StatusIcon({ upload }: { upload: UploadEntry }) {
   switch (upload.status) {
     case "waiting":
       return <Clock className="size-4 text-muted-foreground shrink-0" />;
@@ -193,7 +193,7 @@ function UploadStatusDetail({
   publishRecoveryHref,
   onFollowLink,
 }: {
-  upload: uploadReducer.UploadEntry;
+  upload: UploadEntry;
   eta?: UploadEta;
   logHref: string | null;
   post: PostRowControls | null;
@@ -345,7 +345,7 @@ function PostFailedDetail({
   logHref,
   post,
 }: {
-  upload: uploadReducer.UploadEntry;
+  upload: UploadEntry;
   logHref: string | null;
   post: PostRowControls;
 }) {
@@ -441,7 +441,7 @@ function PostFailedDetail({
 }
 
 /** Where a finished job landed, plus a link to it when there is one to give. */
-function SuccessDetail({ upload }: { upload: uploadReducer.UploadEntry }) {
+function SuccessDetail({ upload }: { upload: UploadEntry }) {
   switch (upload.uploadType) {
     case "buffer":
       return <SuccessBadge label="Sent to Buffer" />;

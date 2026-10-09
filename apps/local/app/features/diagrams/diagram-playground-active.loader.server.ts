@@ -4,12 +4,36 @@ import { DiagramOperationsService } from "@/services/db-diagram-operations.serve
 import { runtimeLive } from "@/services/layer.server";
 import { runRouteEffect } from "@/services/route-action.server";
 import { filteredNewestSnapshot } from "@/lib/filtered-newest-snapshot";
+import { hashHead } from "@/lib/scene-hash";
 
-export const loadDiagramPlaygroundActive = async () => {
+/**
+ * The Diagram rail, plus the Active Diagram's stored head as a hash and the
+ * time it was written. The page revalidates this every few seconds, and
+ * compares the head against the one its canvas last loaded or saved.
+ */
+export const loadDiagramPlaygroundActive = async ({
+  params,
+}: {
+  params: { diagramId?: string };
+}) => {
   return Effect.gen(function* () {
     const diagramOps = yield* DiagramOperationsService;
-    const [diagrams, allSnapshots] = yield* Effect.all(
-      [diagramOps.listDiagrams(), diagramOps.listAllSnapshotsWithClips()],
+    const activeId = params.diagramId;
+    const [diagrams, allSnapshots, active] = yield* Effect.all(
+      [
+        diagramOps.listDiagrams(),
+        diagramOps.listAllSnapshotsWithClips(),
+        activeId
+          ? diagramOps.getDiagram(activeId).pipe(
+              Effect.map((d) => ({
+                diagramId: d.id,
+                headHash: hashHead(d.headScene),
+                updatedAt: d.updatedAt.toISOString(),
+              })),
+              Effect.catchTag("NotFoundError", () => Effect.succeed(null))
+            )
+          : Effect.succeed(null),
+      ],
       { concurrency: "unbounded" }
     );
 
@@ -33,6 +57,7 @@ export const loadDiagramPlaygroundActive = async () => {
     }
 
     return data({
+      activeHead: active,
       diagrams: diagrams.map((d) => {
         const snapshots = snapshotsByDiagram.get(d.id) ?? [];
         const newestId = filteredNewestSnapshot(snapshots);

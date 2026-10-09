@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { uploadReducer } from "@/features/upload-manager/upload-reducer";
+import type {
+  UploadStatus,
+  UploadType,
+} from "@/features/upload-manager/upload-entry";
 import { hasNewSuccessForTypes } from "./use-upload-revalidate";
 
-function entry(
-  status: uploadReducer.UploadStatus,
-  uploadType: uploadReducer.UploadType
-) {
+function entry(status: UploadStatus, uploadType: UploadType) {
   return { status, uploadType };
 }
 
