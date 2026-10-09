@@ -23,7 +23,7 @@ export function HeadChangedElsewherePrompt({
       <Button size="sm" onClick={onLoadChanged}>
         Reload, drop my edits
       </Button>
-      <Button size="sm" variant="outline" onClick={onKeepMine}>
+      <Button size="sm" variant="secondary" onClick={onKeepMine}>
         Keep my edits
       </Button>
     </div>
