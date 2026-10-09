@@ -156,6 +156,67 @@ describe("a request the server joins to a live Job", () => {
     expect(tester.getState().clipTranscriptionJobs).toEqual({});
   });
 
+  it("join race: the live Job's clip-settled heard before the join answer still lands", () => {
+    const tester = new ReducerTester(
+      clipStateReducer,
+      createState({ items: [onDatabase("a", "transcribing")] })
+    )
+      .send(transcriptionJobStarted("job-live", ["a"]))
+      .send(retranscribe("job-mine", "a"))
+      // server joins job-mine to job-live (nothing settled yet); job-live then
+      // settles `a` and its event reaches the tab before the POST answer.
+      .send(clipTranscribed("job-live", "a", "landed"))
+      .send({
+        type: "transcription-job-joined",
+        requestedJobId: "job-mine",
+        jobId: "job-live",
+      });
+    expect(clipIn(tester.getState(), "a")).toMatchObject({
+      text: "landed",
+      transcriptionStatus: "done",
+    });
+  });
+
+  it("a live Job that ends before the join answer fails the Clips that follow it", () => {
+    const tester = new ReducerTester(
+      clipStateReducer,
+      createState({ items: [onDatabase("a"), onDatabase("b")] })
+    )
+      .send(transcriptionJobStarted("job-live", ["a"]))
+      .send(retranscribe("job-mine", "a"))
+      .send(transcriptionJobEnded("job-live", "interrupted"));
+    // Until the answer comes, the Clip is this tab's request's.
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe(
+      "transcribing"
+    );
+
+    tester.send({
+      type: "transcription-job-joined",
+      requestedJobId: "job-mine",
+      jobId: "job-live",
+    });
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe("failed");
+    expect(clipIn(tester.getState(), "b").transcriptionStatus).toBe("done");
+    expect(tester.getState().clipTranscriptionJobs).toEqual({});
+  });
+
+  it("a request that runs itself drops what another Job said meanwhile", () => {
+    const tester = new ReducerTester(
+      clipStateReducer,
+      createState({ items: [onDatabase("a")] })
+    )
+      .send(transcriptionJobStarted("job-other", ["a"]))
+      .send(retranscribe("job-mine", "a"))
+      .send(clipTranscribed("job-other", "a", "theirs"))
+      .send(transcriptionJobStarted("job-mine", ["a"]))
+      .send(clipTranscribed("job-mine", "a", "mine"));
+    expect(clipIn(tester.getState(), "a")).toMatchObject({
+      text: "mine",
+      transcriptionStatus: "done",
+    });
+    expect(tester.getState().clipTranscriptionJobs).toEqual({});
+  });
+
   it("a join for a request this tab does not hold changes nothing", () => {
     const state = createState({ items: [onDatabase("a")] });
     const tester = new ReducerTester(clipStateReducer, state).send({
@@ -198,13 +259,57 @@ describe("a Job that ends without settling its Clips", () => {
     expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe("failed");
   });
 
-  it("changes nothing when it holds no Clip here", () => {
-    const state = createState({ items: [onDatabase("a", "transcribing")] });
-    const tester = new ReducerTester(clipStateReducer, state).send(
-      transcriptionJobEnded("job-1", "failed")
-    );
+  // A tab reloaded mid-Job loads the Clip `transcribing`; the Job's
+  // `clips-started` is at or below the loader's cursor.
+  it("reopened tab: a Job interrupted after the tab loaded fails the Clip it was transcribing", () => {
+    // The tab never heard the Job start (its replay fell out of the history),
+    // so it holds no Job for the Clip.
+    const tester = new ReducerTester(
+      clipStateReducer,
+      createState({
+        items: [onDatabase("a", "transcribing")],
+        jobEventCursor: 0,
+      })
+    ).send(transcriptionJobEnded("job-live", "interrupted"));
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe("failed");
+  });
 
+  it("reopened tab: a replayed start says which Job holds the Clip, so another Job's end leaves it be", () => {
+    const state = createState({
+      items: [onDatabase("a", "transcribing"), onDatabase("b", "transcribing")],
+      jobEventCursor: 10,
+    });
+    const tester = new ReducerTester(clipStateReducer, state)
+      .send(
+        heardTranscriptionEvent(
+          "job-a",
+          "clips-started",
+          { clipIds: ["a"] },
+          { id: 4 }
+        )
+      )
+      .send(
+        heardTranscriptionEvent(
+          "job-b",
+          "clips-started",
+          { clipIds: ["b"] },
+          { id: 5 }
+        )
+      );
+    // The replay changes no Clip: the loader read them after it.
     expect(tester.getState().items).toBe(state.items);
+
+    tester.send(transcriptionJobEnded("job-b", "interrupted"));
+    expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe(
+      "transcribing"
+    );
+    expect(clipIn(tester.getState(), "b").transcriptionStatus).toBe("failed");
+
+    tester.send(clipTranscribed("job-a", "a", "landed"));
+    expect(clipIn(tester.getState(), "a")).toMatchObject({
+      text: "landed",
+      transcriptionStatus: "done",
+    });
   });
 });
 
@@ -238,7 +343,7 @@ describe("a Job another tab asked for", () => {
     expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe(
       "transcribing"
     );
-    expect(tester.getState().clipTranscriptionJobs).toEqual({
+    expect(tester.getState().clipTranscriptionJobs).toMatchObject({
       a: { jobId: "job-mine", started: false },
     });
   });
