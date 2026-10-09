@@ -107,6 +107,9 @@
       ],
       "@/lib/sort-by-order": ["../../packages/core/lib/sort-by-order"],
       "@/lib/scene-hash": ["../../packages/core/lib/scene-hash"],
+      "@/lib/timeline-visibility": [
+        "../../packages/core/lib/timeline-visibility"
+      ],
       "@/lib/transcript-builder": [
         "../../packages/core/lib/transcript-builder"
       ],

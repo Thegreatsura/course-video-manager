@@ -1,4 +1,4 @@
-import { isVisibleInTimeline } from "./timeline-visibility";
+import { isVisibleInTimeline } from "@/lib/timeline-visibility";
 
 type SnapshotRow = {
   id: string;
