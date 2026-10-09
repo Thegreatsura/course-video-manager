@@ -424,9 +424,14 @@ const createDiagramOperations = (
     return snapshot;
   });
 
+  /**
+   * Keep the Diagram's head as a snapshot — or, given `scene`, that drawing
+   * instead: a canvas the head refused, kept so leaving it loses nothing. The
+   * head is never moved.
+   */
   const createSnapshot = Effect.fn("createSnapshot")(function* (
     diagramId: string,
-    opts: { preserved?: boolean; thumbnailPng?: Buffer }
+    opts: { preserved?: boolean; thumbnailPng?: Buffer; scene?: unknown }
   ) {
     const diagram = yield* makeDbCall(() =>
       db.query.diagrams.findFirst({
@@ -441,14 +446,15 @@ const createDiagramOperations = (
       });
     }
 
-    if (diagram.headScene == null) {
+    const scene = opts.scene ?? diagram.headScene;
+    if (scene == null) {
       return yield* new NotFoundError({
         type: "createSnapshot",
         params: { diagramId, reason: "headScene is null" },
       });
     }
 
-    return yield* storeSnapshot(diagramId, diagram.headScene, opts);
+    return yield* storeSnapshot(diagramId, scene, opts);
   });
 
   const listSnapshots = Effect.fn("listSnapshots")(function* (

@@ -116,6 +116,28 @@ describe("listSnapshots", () => {
   );
 });
 
+describe("createSnapshot with a scene", () => {
+  it.effect(
+    "keeps the given drawing as a snapshot and leaves the head alone",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const diagram = yield* diagramOps.createDiagram();
+        yield* diagramOps.updateDiagramHead(diagram.id, scene1);
+
+        const kept = yield* diagramOps.createSnapshot(diagram.id, {
+          preserved: true,
+          scene: scene2,
+        });
+
+        expect(kept.scene).toEqual(scene2);
+        expect(kept.preserved).toBe(true);
+        const after = yield* diagramOps.getDiagram(diagram.id);
+        expect(after.headScene).toEqual(scene1);
+      }).pipe(Effect.provide(testLayer))
+  );
+});
+
 describe("listSnapshotsWithClips", () => {
   it.effect("returns snapshots with their pinning clips", () =>
     Effect.gen(function* () {
