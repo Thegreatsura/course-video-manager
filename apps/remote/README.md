@@ -10,15 +10,15 @@ revoke in one click, not full database credentials.
 
 ## What is here
 
-| File         | What it is                                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`   | The Vercel entry point. Default-exports the app; nothing else.                                                                 |
-| `app.ts`     | The verb groups, mounted. `RemoteApp` is the type the CLI's client is built from.                                              |
-| `auth.ts`    | Bearer authentication. One answer for every way a token can be no good.                                                        |
-| `version.ts` | The version gate: a caller built against another schema is refused outright, with both numbers and the word "pull".            |
-| `runtime.ts` | The single module-scope `ManagedRuntime`.                                                                                      |
-| `rpc.ts`     | The Effect/HTTP boundary: an Effect's two channels become the envelope, and `forward`, which is every route.                   |
-| `routes/`    | One file per domain noun: `course`, `version`, `section`, `lesson`, `video`, `clip`, `beat`, `pitch`, `deliverable`, `search`. |
+| File         | What it is                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`   | The Vercel entry point. Default-exports the app; nothing else.                                                                            |
+| `app.ts`     | The verb groups, mounted. `RemoteApp` is the type the CLI's client is built from.                                                         |
+| `auth.ts`    | Bearer authentication. One answer for every way a token can be no good.                                                                   |
+| `version.ts` | The version gate: a caller built against another schema is refused outright, with both numbers and the word "pull".                       |
+| `runtime.ts` | The single module-scope `ManagedRuntime`.                                                                                                 |
+| `rpc.ts`     | The Effect/HTTP boundary: an Effect's two channels become the envelope, and `forward`, which is every route.                              |
+| `routes/`    | One file per domain noun: `course`, `version`, `section`, `lesson`, `video`, `clip`, `beat`, `pitch`, `deliverable`, `diagram`, `search`. |
 
 ## Rules
 

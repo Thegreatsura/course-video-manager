@@ -16,6 +16,7 @@ import { fileCommand } from "./commands/file";
 import { footageCommand } from "./commands/footage";
 import { pitchCommand } from "./commands/pitch";
 import { deliverableCommand } from "./commands/deliverable";
+import { diagramCommand } from "./commands/diagram";
 import { searchCommand } from "./commands/search";
 
 /**
@@ -35,7 +36,8 @@ Read-mostly: most verbs are READS. A growing set of nouns has WRITE verbs —
 (create/rename/move/archive), 'lesson'
 (create/update/move/archive), 'video'
 (create/move/update/archive/unarchive), 'file' (add/delete), 'footage' (transcribe), 'pitch'
-(create/update), 'deliverable' (create/update/archive) and 'course' (publish).
+(create/update), 'deliverable' (create/update/archive), 'diagram' (create) and
+'course' (publish).
 Every other verb is read-only, and each verb's own --help is authoritative about
 whether it reads or writes.
 
@@ -129,6 +131,7 @@ WHAT NEEDS A MACHINE
     cvm file …              the Video Files directory
     cvm footage …           raw footage files on disk (transcribed with ffmpeg)
     cvm clip-mockup …       the Clip Mockup directory (a Video's Animatic frames)
+    cvm diagram create      a headless browser and the running app (draws the PNG)
     cvm course readiness    the finished videos directory (exportedness)
     cvm course publish      the same, plus ffmpeg
   Anywhere else they are refused before doing any work — exit 7, _tag
@@ -212,6 +215,11 @@ WRITES
                                      patches any subset (--date to slip a
                                      deadline, --status to close it out);
                                      'archive' is the only hide
+    diagram create                   draft a NEW Diagram in the simple shape
+                                     format — boxes, text, arrows, lines,
+                                     icons — and get back its playground url
+                                     and a PNG to check (LOCAL-ONLY; the
+                                     format is in 'cvm diagram --help')
     course  publish                  Submit the Draft as a Pending Version,
                                      Commit it to Dropbox, Promote to Published
                                      (--name vX.Y.Z, a lowercase-'v' semver)
@@ -223,6 +231,7 @@ WRITES
 NOUNS
   course version section learning-goal lesson video clip clip-mockup
   clip-mockup-chapter clip-mockup-comment chapter overlay beat file footage pitch deliverable
+  diagram
 
 SEARCH
   search <query>   Case-insensitive substring search DOWN THE TREE across every
@@ -255,6 +264,7 @@ export const rootCommand = Command.make("cvm").pipe(
     footageCommand,
     pitchCommand,
     deliverableCommand,
+    diagramCommand,
     searchCommand,
   ])
 );

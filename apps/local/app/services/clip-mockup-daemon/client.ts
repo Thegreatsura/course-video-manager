@@ -4,16 +4,21 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import { SpeechSynthesisError } from "../clip-mockup-speech-service";
-import { FrameCaptureError } from "../frame-capture-service";
+import {
+  DiagramRenderError,
+  FrameCaptureError,
+} from "../frame-capture-service";
 import {
   CaptureResponse,
   DAEMON_LAUNCHER,
+  RenderDiagramResponse,
   daemonPaths,
   daemonVersion,
   SpeakResponse,
   VersionResponse,
   type CaptureRequest,
   type DaemonPaths,
+  type RenderDiagramRequest,
   type SpeakRequest,
 } from "./protocol";
 
@@ -193,5 +198,32 @@ export const speakLinesInDaemon = (items: SpeakRequest["items"]) =>
     Effect.catchTag(
       "DaemonUnavailable",
       (e) => new SpeechSynthesisError({ cause: null, message: e.message })
+    )
+  );
+
+/**
+ * Render a Diagram's scene as a PNG at `outputPath`, through the app's render
+ * page, or a `DiagramRenderError` saying why not.
+ */
+export const renderDiagramInDaemon = (params: RenderDiagramRequest) =>
+  Effect.gen(function* () {
+    const paths = yield* ensureDaemon;
+    const text = yield* request(
+      paths.socket,
+      "POST",
+      "/render-diagram",
+      params
+    );
+    const answer = yield* decode(RenderDiagramResponse, text);
+    if (!answer.ok) {
+      return yield* new DiagramRenderError({
+        cause: null,
+        message: answer.message,
+      });
+    }
+  }).pipe(
+    Effect.catchTag(
+      "DaemonUnavailable",
+      (e) => new DiagramRenderError({ cause: null, message: e.message })
     )
   );

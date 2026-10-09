@@ -66,6 +66,10 @@ const EXIT_CODES: Record<string, number> = {
   // the input was a real, readable file, something on this machine broke. It
   // is listed rather than left to the default so the contract is written down.
   FrameCaptureError: 4,
+  // `cvm diagram create` could not draw its PNG — usually the app is not
+  // running at CVM_APP_URL. Same class: something on this machine, not the
+  // input. Nothing is written.
+  DiagramRenderError: 4,
   // CVM_API_URL / CVM_API_TOKEN are missing. Same class as a missing
   // DATABASE_URL always was: exit 4.
   ConfigurationError: 4,

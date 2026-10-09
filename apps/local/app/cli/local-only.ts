@@ -32,6 +32,8 @@ export const NEEDS_THE_SIDECAR =
   "it queues a Publish for this machine's Sidecar, which renders Videos with ffmpeg and reads the finished videos directory on this machine's disk";
 export const NEEDS_CLIP_MOCKUP_DIRECTORY =
   "it reads and writes the Clip Mockup directory on this machine's disk, where a Video's Animatic frames are kept, and captures frames with a headless browser installed on this machine";
+export const NEEDS_THE_APP_AND_A_BROWSER =
+  "it draws the Diagram as a PNG with the headless browser installed on this machine, through the Course Video Manager app running on it";
 export const NEEDS_FOOTAGE_ON_DISK =
   "it reads raw footage files on this machine's disk (with ffmpeg) and caches their transcripts beside them";
 

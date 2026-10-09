@@ -22,6 +22,8 @@ import {
   DAEMON_IDLE_MS,
   daemonPaths,
   daemonVersion,
+  RenderDiagramRequest,
+  RenderDiagramResponse,
   SpeakRequest,
   SpeakResponse,
   VersionResponse,
@@ -152,7 +154,7 @@ const daemon = (version: string) =>
       )
     );
 
-    // -- The two requests --------------------------------------------------
+    // -- The requests ------------------------------------------------------
     const speak = (request: SpeakRequest) =>
       Effect.gen(function* () {
         const done = yield* Deferred.make<ReadonlyArray<number>, string>();
@@ -187,6 +189,16 @@ const daemon = (version: string) =>
         )
       );
 
+    const renderDiagram = (request: RenderDiagramRequest) =>
+      capture.renderDiagramToPng(request).pipe(
+        Effect.as<typeof RenderDiagramResponse.Type>({ ok: true }),
+        Effect.catchTag(
+          "DiagramRenderError",
+          (e): Effect.Effect<typeof RenderDiagramResponse.Type> =>
+            Effect.succeed({ ok: false, message: e.message })
+        )
+      );
+
     // -- The socket --------------------------------------------------------
     const runtime = yield* Effect.runtime<never>();
     const run = Runtime.runPromise(runtime);
@@ -205,6 +217,11 @@ const daemon = (version: string) =>
         const request = Schema.decodeUnknownSync(CaptureRequest)(body);
         log(`capture ${request.items.length} page(s)`);
         return run(captureAll(request));
+      }
+      if (req.method === "POST" && req.url === "/render-diagram") {
+        const request = Schema.decodeUnknownSync(RenderDiagramRequest)(body);
+        log("render a diagram");
+        return run(renderDiagram(request));
       }
       if (req.method === "POST" && req.url === "/speak") {
         const request = Schema.decodeUnknownSync(SpeakRequest)(body);
