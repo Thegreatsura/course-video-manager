@@ -11,6 +11,7 @@ import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
 import { CLIP_MOCKUP_VOICE_JOB_KIND } from "@cvm/core/features/clip-mockups/voice-status";
+import { voiceJobRequests } from "@cvm/core/features/clip-mockups/voice-job-cover";
 import { nudgeSidecar } from "@/services/sidecar-socket.server";
 import { loadRepoEnv } from "@/services/repo-env";
 import { enqueueJob, JOB_KIND_SPECS } from "../../../sidecar/job-specs";
@@ -73,24 +74,17 @@ export const queueClipMockupVoices = (
     ? Effect.succeed([])
     : withJobOperations(
         Effect.gen(function* () {
-          const byVideo = Map.groupBy(rows, (r) => r.videoId);
-          const queued = yield* Effect.forEach(byVideo, ([videoId, group]) =>
-            enqueueJob({
-              id: null,
-              kind: CLIP_MOCKUP_VOICE_JOB_KIND,
-              title:
-                group.length === 1
-                  ? "Voice 1 Clip Mockup"
-                  : `Voice ${group.length} Clip Mockups`,
-              params: {
-                clipMockupIds: group.map((r) => r.id),
-                lines: Object.fromEntries(group.map((r) => [r.id, r.line])),
-              },
-              dependsOn: null,
-              subject: { type: "video", id: videoId },
-              attemptsSpent: 0,
-              registry: JOB_KIND_SPECS,
-            })
+          const queued = yield* Effect.forEach(
+            voiceJobRequests(rows),
+            (request) =>
+              enqueueJob({
+                id: null,
+                kind: CLIP_MOCKUP_VOICE_JOB_KIND,
+                ...request,
+                dependsOn: null,
+                attemptsSpent: 0,
+                registry: JOB_KIND_SPECS,
+              })
           );
           // Best effort, and silent: STDERR is the CLI's error contract.
           yield* nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None));

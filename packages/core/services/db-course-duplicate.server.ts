@@ -22,6 +22,7 @@ import {
 } from "./thumbnail-path-rebase.js";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
+import { copiedVoice } from "../features/clip-mockups/voice-status.js";
 import {
   copyClipMockupCommentValues,
   newIdsFor,
@@ -324,10 +325,7 @@ export const makeDuplicateCourse = (db: Database) =>
               videoId: newVideoId,
               line: clipMockup.line,
               imagePath: clipMockup.imagePath,
-              audioPath: clipMockup.audioPath,
-              durationSeconds: clipMockup.durationSeconds,
-              voiceStatus: clipMockup.voiceStatus,
-              voiceError: clipMockup.voiceError,
+              ...copiedVoice(clipMockup),
               order: clipMockup.order,
             }))
           );

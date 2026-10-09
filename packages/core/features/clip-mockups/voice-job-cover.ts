@@ -7,6 +7,30 @@ export interface ClipMockupVoiceRequest {
   readonly lines: Readonly<Record<string, string>>;
 }
 
+/**
+ * The voice Jobs to queue for `rows`: ONE PER VIDEO (the Job's subject, which
+ * `coveredBy` dedupes within), each carrying its rows' lines as the dedupe
+ * key.
+ */
+export const voiceJobRequests = (
+  rows: ReadonlyArray<{
+    readonly id: string;
+    readonly videoId: string;
+    readonly line: string;
+  }>
+) =>
+  [...Map.groupBy(rows, (r) => r.videoId)].map(([videoId, group]) => ({
+    title:
+      group.length === 1
+        ? "Voice 1 Clip Mockup"
+        : `Voice ${group.length} Clip Mockups`,
+    params: {
+      clipMockupIds: group.map((r) => r.id),
+      lines: Object.fromEntries(group.map((r) => [r.id, r.line])),
+    } satisfies ClipMockupVoiceRequest,
+    subject: { type: "video", id: videoId },
+  }));
+
 /** The Job Events that start a run afresh, or put it back to be run again. */
 const RUN_STARTS = new Set(["started", "retrying", "requeued"]);
 

@@ -31,3 +31,29 @@ export const CLIP_MOCKUP_VOICE_JOB_KIND = "clip-mockup-voice";
  * request for the same words is covered by it (`voice-job-cover.ts`).
  */
 export const CLIP_MOCKUP_VOICING_EVENT = "voicing";
+
+/**
+ * A Clip Mockup's voice as a COPY of it carries it (a Version's Submit, a
+ * Course's duplicate, a Video's copy). The copy is a new row no voice Job
+ * names: a `ready` voice comes with its WAV; any other comes `pending`, and
+ * the Sidecar's sweep (`sidecar/clip-mockup-voice-sweep.ts`) queues a Job
+ * for it.
+ */
+export const copiedVoice = (row: {
+  readonly audioPath: string | null;
+  readonly durationSeconds: number | null;
+  readonly voiceStatus: ClipMockupVoiceStatus;
+}) =>
+  row.voiceStatus === "ready"
+    ? {
+        audioPath: row.audioPath,
+        durationSeconds: row.durationSeconds,
+        voiceStatus: "ready" as const,
+        voiceError: null,
+      }
+    : {
+        audioPath: null,
+        durationSeconds: null,
+        voiceStatus: "pending" as const,
+        voiceError: null,
+      };

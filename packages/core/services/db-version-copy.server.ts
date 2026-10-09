@@ -21,6 +21,7 @@ import {
 } from "./db-service-errors.js";
 import { asc, and, desc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
+import { copiedVoice } from "../features/clip-mockups/voice-status.js";
 import { requireDraftVersion } from "./draft-guard.server.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { assertCopyComplete } from "./version-copy-check.server.js";
@@ -335,10 +336,7 @@ export const createVersionCopyOps = (db: Database) => {
                     videoId: newVideo.id,
                     line: clipMockup.line,
                     imagePath: clipMockup.imagePath,
-                    audioPath: clipMockup.audioPath,
-                    durationSeconds: clipMockup.durationSeconds,
-                    voiceStatus: clipMockup.voiceStatus,
-                    voiceError: clipMockup.voiceError,
+                    ...copiedVoice(clipMockup),
                     order: clipMockup.order,
                   }))
                 )
