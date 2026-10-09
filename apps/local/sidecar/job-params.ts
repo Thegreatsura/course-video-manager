@@ -61,6 +61,13 @@ export const JOB_PARAMS = {
     name: Schema.Trim.pipe(Schema.nonEmptyString()),
     newCourseId: Schema.UUID,
   }),
+  /**
+   * The Clip Mockups one `cvm clip-mockup add` or `update` left with a
+   * voice to make; at least one.
+   */
+  "clip-mockup-voice": Schema.Struct({
+    clipMockupIds: Schema.NonEmptyArray(Schema.String),
+  }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */
     courseId: Schema.String,

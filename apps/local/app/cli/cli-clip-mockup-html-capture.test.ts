@@ -25,8 +25,9 @@ import {
 } from "./cli-write-test-harness";
 import {
   addArgv,
-  fakeSpeech,
   updateArgv,
+  voiceJobs,
+  voiceQueueLayer,
 } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
@@ -82,12 +83,10 @@ let s: WriteSeed;
 let frames: ReturnType<typeof makeTempClipMockupDir>;
 let sourceDir: string;
 /**
- * `add` and `update` voice every "say" line (#1643), so this suite needs the
- * shared speech fake merged in beside the capture fake — otherwise every
- * write here would start the Clip Mockup daemon and load Kokoro. Neither
- * Chromium nor Kokoro ever runs in this file.
+ * `add` and `update` queue each line's voice as a `clip-mockup-voice` Job, so
+ * this suite merges in the Job table of its own database beside the capture
+ * fake. Neither Chromium nor Kokoro ever runs in this file.
  */
-const speech = fakeSpeech();
 const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 
 beforeAll(async () => {
@@ -96,7 +95,7 @@ beforeAll(async () => {
   const layer = Layer.mergeAll(
     buildWriteLayer(testDb),
     fakeFrameCapture,
-    speech.layer
+    voiceQueueLayer(testDb)
   );
   run = async (argv) => {
     const out = makeTestCliOutput();
@@ -126,7 +125,6 @@ beforeEach(async () => {
   nodeFs.rmSync(frames.dir, { recursive: true, force: true });
   nodeFs.mkdirSync(frames.dir, { recursive: true });
   capture = { mode: "succeed", bytes: "CAPTURED-PNG", calls: [] };
-  speech.spoken.length = 0;
 });
 
 describe("cvm clip-mockup --html", () => {
@@ -135,9 +133,9 @@ describe("cvm clip-mockup --html", () => {
     videoId: string;
     line: string;
     imagePath: string;
-    audioPath: string;
+    audioPath: string | null;
     imageFile: string;
-    audioFile: string;
+    audioFile: string | null;
     durationSeconds: number | null;
     order: string;
     archived: boolean;
@@ -209,8 +207,10 @@ describe("cvm clip-mockup --html", () => {
     expect(nodeFs.readFileSync(nodePath.join(dir, row.imagePath), "utf8")).toBe(
       "CAPTURED-PNG"
     );
-    // One capture AND one synthesis: the picture and the line are one entry.
-    expect(speech.spoken).toEqual(["Here's the problem."]);
+    // One capture, and the line's voice queued for the Sidecar.
+    expect(await voiceJobs(testDb)).toMatchObject([
+      { clipMockupIds: [row.id] },
+    ]);
   });
 
   it("add captures every page of a batch, and a page used twice only once", async () => {
@@ -357,9 +357,13 @@ describe("cvm clip-mockup --html", () => {
         ])
       ).pipe(
         Effect.provide(out.layer),
-        // The speech fake too: without it the line would go to the real daemon.
+        // The voice queue too: without it the Job would go to the .env database.
         Effect.provide(
-          Layer.mergeAll(buildWriteLayer(testDb), broken, speech.layer)
+          Layer.mergeAll(
+            buildWriteLayer(testDb),
+            broken,
+            voiceQueueLayer(testDb)
+          )
         )
       )
     );
@@ -393,7 +397,6 @@ describe("cvm clip-mockup --html", () => {
     const created = await addPage(sourceHtml("v1.html"), "Number 14.");
 
     capture.bytes = "RECAPTURED-PNG";
-    speech.spoken.length = 0;
     const r = await run(
       updateArgv([{ id: created.id, html: sourceHtml("v2.html") }])
     );
@@ -402,9 +405,8 @@ describe("cvm clip-mockup --html", () => {
     const updated = rowsOf(r.stdout)[0]!;
     expect(updated.imagePath).not.toBe(created.imagePath);
     expect(updated.line).toBe("Number 14.");
-    // A NEW PICTURE IS NOT NEW WORDS: swapping the frame never re-voices the
-    // line, so the measured duration is the one 'add' wrote.
-    expect(speech.spoken).toEqual([]);
+    // A NEW PICTURE IS NOT NEW WORDS: swapping the frame never drops the
+    // line's voice, so its duration is the one 'add' wrote.
     expect(updated.durationSeconds).toBe(created.durationSeconds);
 
     const dir = frameDir(s.standaloneActiveLineageId);
@@ -444,13 +446,13 @@ describe("cvm clip-mockup --html", () => {
   const expectFiles = (row: Mockup) => {
     const dir = frameDir(s.standaloneActiveLineageId);
     expect(row.imageFile).toBe(nodePath.join(dir, row.imagePath));
-    expect(row.audioFile).toBe(nodePath.join(dir, row.audioPath));
     expect(nodePath.isAbsolute(row.imageFile)).toBe(true);
     expect(nodeFs.readFileSync(row.imageFile, "utf8")).toContain("PNG");
-    expect(nodeFs.existsSync(row.audioFile)).toBe(true);
-    // Additive: the relative fields are exactly as they always were.
+    // The voice is the Sidecar's to make: no WAV, so no audio file, yet.
+    expect(row.audioPath).toBeNull();
+    expect(row.audioFile).toBeNull();
+    // Additive: the relative field is exactly as it always was.
     expect(nodePath.isAbsolute(row.imagePath)).toBe(false);
-    expect(nodePath.isAbsolute(row.audioPath)).toBe(false);
   };
 
   it("add, list, get and update all print the absolute imageFile and audioFile", async () => {

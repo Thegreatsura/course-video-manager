@@ -30,8 +30,8 @@ import {
 } from "./cli-write-test-harness";
 import {
   addArgv,
-  fakeSpeech,
   updateArgv,
+  voiceQueueLayer,
 } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
@@ -120,7 +120,6 @@ let s: WriteSeed;
 let storeDir: string;
 let sourceDir: string;
 let root: string;
-const speech = fakeSpeech();
 const originalStore = process.env.CLIP_MOCKUP_DIR;
 
 interface Mockup {
@@ -146,7 +145,7 @@ beforeAll(async () => {
   const layer = Layer.mergeAll(
     buildWriteLayer(testDb),
     fakeFrameCapture,
-    speech.layer
+    voiceQueueLayer(testDb)
   );
   run = async (argv) => {
     const out = makeTestCliOutput();
@@ -171,7 +170,6 @@ beforeEach(async () => {
   s = await seedWrite(testDb);
   capture.bytes = "CAPTURED-PNG";
   capture.calls.length = 0;
-  speech.spoken.length = 0;
 });
 
 describe("cvm clip-mockup with CLIP_MOCKUP_DIR only in the repo .env", () => {
@@ -300,7 +298,11 @@ describe("cvm clip-mockup with CLIP_MOCKUP_DIR only in the repo .env", () => {
       ).pipe(
         Effect.provide(out.layer),
         Effect.provide(
-          Layer.mergeAll(buildWriteLayer(testDb), broken, speech.layer)
+          Layer.mergeAll(
+            buildWriteLayer(testDb),
+            broken,
+            voiceQueueLayer(testDb)
+          )
         )
       )
     );

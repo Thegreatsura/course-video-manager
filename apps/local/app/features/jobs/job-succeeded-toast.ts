@@ -1,3 +1,4 @@
+import { CLIP_MOCKUP_VOICE_JOB_KIND } from "@cvm/core/features/clip-mockups/voice-status";
 import { isPostingJobKind } from "./job-wire";
 import { isUntoastedJobKind } from "./transcribe-footage-job";
 import { isImageUploadJobKind } from "@/features/image-upload/image-upload-job";
@@ -98,6 +99,9 @@ export const isSilentSettlement = (job: jobsReducer.JobView): boolean => {
   // nothing for the batch itself; only its failure is news.
   if (job.kind === "batch-export" && succeeded) return true;
   if (isUntoastedJobKind(job.kind)) return true;
+  // A Clip Mockup's voice shows on the Clip Mockup. Only its failure — every
+  // attempt spent — is news worth a toast, with the Job's log.
+  if (job.kind === CLIP_MOCKUP_VOICE_JOB_KIND && succeeded) return true;
   // A Course duplicate's row links to the copy; only its failure is news.
   if (job.kind === DUPLICATE_COURSE_JOB_KIND && succeeded) return true;
   // An image upload shows in the body it changed; only its failure is news.

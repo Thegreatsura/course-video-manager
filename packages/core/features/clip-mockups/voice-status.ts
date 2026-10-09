@@ -8,9 +8,11 @@
  * - `ready` — the voice is on disk: `audioPath` and `durationSeconds` are set.
  * - `failed` — making the voice did not finish; `voiceError` says why.
  *
- * Today every write voices the line before it saves the row, so every Clip
- * Mockup is `ready`. `pending` and `failed` exist for voicing in the
- * background (migration 0030).
+ * `cvm clip-mockup add` and `update` write a new line `pending` and queue a
+ * `clip-mockup-voice` Job (`CLIP_MOCKUP_VOICE_JOB_KIND`), which the Sidecar
+ * runs: it makes the voice and sets `ready`, or `failed` once its attempts are
+ * spent. Until then the line's run time is a guess from its words
+ * (`estimate-spoken-seconds.ts`).
  */
 export const CLIP_MOCKUP_VOICE_STATUSES = [
   "pending",
@@ -19,3 +21,6 @@ export const CLIP_MOCKUP_VOICE_STATUSES = [
 ] as const;
 
 export type ClipMockupVoiceStatus = (typeof CLIP_MOCKUP_VOICE_STATUSES)[number];
+
+/** The kind of the Job that makes a Clip Mockup's voice (`sidecar/kinds/clip-mockup-voice.ts`). */
+export const CLIP_MOCKUP_VOICE_JOB_KIND = "clip-mockup-voice";

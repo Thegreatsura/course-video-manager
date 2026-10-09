@@ -196,6 +196,22 @@ export const COURSE_DUPLICATE_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Clip Mockup voice**: Kokoro, on this machine's GPU, through the Clip
+ * Mockup daemon. Never an Upload Manager job — `cvm clip-mockup add` used to
+ * voice the line before it returned — so this policy is chosen, not copied
+ * (Matt, 2026-10-09: "auto-retry OK"). Voicing is local, free and
+ * content-addressed (a WAV is named by a hash of its line), so a run again
+ * repeats nothing that already landed. 3 attempts, the Upload Manager's
+ * ordinary count, then the Clip Mockups it holds are marked `failed`; the
+ * author's `cvm clip-mockup update` queues them again. Not a posting kind,
+ * and safe to put back after a deliberate stop.
+ */
+export const CLIP_MOCKUP_VOICE_POLICY = {
+  lane: "default",
+  maxAttempts: 3,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */

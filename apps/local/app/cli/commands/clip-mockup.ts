@@ -13,10 +13,6 @@ import {
   writeClipMockupFile,
 } from "@/services/clip-mockup-files";
 import {
-  resolveClipMockupSpeeches,
-  type SpokenFile,
-} from "@/services/resolve-clip-mockup-speech";
-import {
   detail,
   emitGet,
   emitNdjson,
@@ -39,6 +35,7 @@ import {
   type UpdateEntry,
 } from "./clip-mockup.batch";
 import { captureCmd } from "./clip-mockup.capture";
+import { queueClipMockupVoices, withVoiceDuration } from "./clip-mockup.voice";
 import {
   HELP,
   ADD_HELP,
@@ -249,16 +246,22 @@ const resolveTargetClipMockup = (params: {
     return row;
   });
 
-/** Write the WAVs a batch voiced, each into its own Video's directory. */
-const writeSpokenFiles = (files: ReadonlyArray<SpokenFile>) =>
-  Effect.forEach(
-    files,
-    (file) =>
-      asParseError(
-        writeClipMockupFile(file.lineageId, file.audioPath, file.wav)
-      ),
-    { discard: true }
-  );
+/**
+ * A Clip Mockup row as every verb here prints it: its files as absolute paths
+ * beside the relative ones, and a run time even while its voice is pending.
+ */
+const present = <
+  Row extends {
+    readonly imagePath: string;
+    readonly audioPath: string | null;
+    readonly line: string;
+    readonly durationSeconds: number | null;
+    readonly voiceStatus: string;
+  },
+>(
+  lineageId: string,
+  row: Row
+) => withVoiceDuration(withClipMockupFiles(lineageId, row));
 
 /**
  * Find the Clip Mockup each `update` entry is aimed at, from either form of
@@ -344,29 +347,18 @@ const addCmd = Command.make(
 
       const moments = entries.filter((e) => e.type === "clipMockup");
 
-      // Frames and speech together: the one is Chromium on the CPU, the other
-      // Kokoro on the GPU, so neither waits for the other. Neither writes to
-      // the store: a failure in either leaves no file and no row behind.
-      const [frames, { speeches, files }] = yield* Effect.all(
-        [
-          produceFrames(moments.map((m) => m.frame)),
-          asParseError(
-            resolveClipMockupSpeeches(
-              moments.map((m) => ({ lineageId: row.lineageId, line: m.line }))
-            )
-          ),
-        ],
-        { concurrency: 2 }
-      );
+      // Only the frames are made here. The VOICE is not waited for: the rows
+      // are written `pending` and one `clip-mockup-voice` Job, run by this
+      // machine's Sidecar, voices every line after this command returns.
+      const frames = yield* produceFrames(moments.map((m) => m.frame));
 
-      // Every file BEFORE any row: a row whose imagePath points at nothing is
-      // the one state an authoring agent cannot see or fix.
+      // Every frame BEFORE any row: a row whose imagePath points at nothing
+      // is the one state an authoring agent cannot see or fix.
       for (const frame of new Set(frames)) {
         yield* asParseError(
           writeClipMockupFile(row.lineageId, frame.filename, frame.content)
         );
       }
-      yield* writeSpokenFiles(files);
 
       let m = 0;
       const batch = entries.map((entry): ClipMockupBatchEntry => {
@@ -376,15 +368,17 @@ const addCmd = Command.make(
           type: "clipMockup",
           line: entry.line,
           imagePath: frames[i]!.filename,
-          speech: speeches[i]!,
         };
       });
 
       const svc = yield* ClipMockupOperationsService;
       const created = yield* svc.createClipMockups(row.id, batch);
+      yield* queueClipMockupVoices(
+        created.flatMap((r) => (r.type === "clipMockup" ? [r] : []))
+      );
       yield* emitNdjson(
         created.map((r) =>
-          r.type === "clipMockup" ? withClipMockupFiles(row.lineageId, r) : r
+          r.type === "clipMockup" ? present(row.lineageId, r) : r
         )
       );
     })
@@ -404,14 +398,14 @@ const listCmd = Command.make(
         const rows = yield* listAnimaticRows(row.id);
         yield* emitNdjson(
           rows.map((r) =>
-            r.type === "clipMockup" ? withClipMockupFiles(row.lineageId, r) : r
+            r.type === "clipMockup" ? present(row.lineageId, r) : r
           )
         );
         return;
       }
       const svc = yield* ClipMockupOperationsService;
       const rows = yield* svc.listClipMockupsByVideoId(row.id);
-      yield* emitNdjson(rows.map((r) => withClipMockupFiles(row.lineageId, r)));
+      yield* emitNdjson(rows.map((r) => present(row.lineageId, r)));
     })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
@@ -442,7 +436,7 @@ const getCmd = Command.make("get", { ids: idsArg }, ({ ids }) =>
               Effect.catchTag("NotFoundError", () => Effect.succeed(undefined))
             );
           if (row === undefined || row.archived) return undefined;
-          return withClipMockupFiles(yield* lineage(row.videoId), row);
+          return present(yield* lineage(row.videoId), row);
         }),
     });
   })
@@ -472,29 +466,16 @@ const updateCmd = Command.make(
       const framed = entries.flatMap((e, i) =>
         e.frame === undefined ? [] : [{ i, frame: e.frame }]
       );
-      const worded = entries.flatMap((e, i) =>
-        e.line === undefined ? [] : [{ i, line: e.line }]
-      );
 
       // The line and the picture are independent: an entry that changes one
       // leaves the other exactly as it was. New WORDS are new SPEECH, though:
-      // the line is voiced again and its measured duration replaced in the
-      // same write, so no row claims a run time for words it no longer says.
-      const [frames, { speeches, files }] = yield* Effect.all(
-        [
-          produceFrames(framed.map((f) => f.frame)),
-          asParseError(
-            resolveClipMockupSpeeches(
-              worded.map((w) => ({ lineageId: lineage(w.i), line: w.line }))
-            )
-          ),
-        ],
-        { concurrency: 2 }
-      );
+      // the old voice is dropped in the same write and the row goes back to
+      // `pending`, so no row claims a run time for words it no longer says.
+      // The new voice is made by the Sidecar, after this command returns.
+      const frames = yield* produceFrames(framed.map((f) => f.frame));
 
-      // Files first, as in 'add': a failure after this leaves an orphan file
-      // rather than a row whose picture or speech does not exist.
-      yield* writeSpokenFiles(files);
+      // Frames first, as in 'add': a failure after this leaves an orphan file
+      // rather than a row whose picture does not exist.
       for (const [k, { i }] of framed.entries()) {
         yield* asParseError(
           writeClipMockupFile(
@@ -506,19 +487,24 @@ const updateCmd = Command.make(
       }
 
       const frameOf = new Map(framed.map((f, k) => [f.i, frames[k]!.filename]));
-      const speechOf = new Map(
-        worded.map((w, k) => [w.i, { line: w.line, speech: speeches[k]! }])
-      );
+      // Every entry also re-queues a voice that is not `ready` — one that
+      // FAILED, or one still pending whose Job is gone — whatever it changes.
       const edits = rows.map((row, i): ClipMockupEdit => ({
         id: row.id,
         ...(frameOf.has(i) ? { imagePath: frameOf.get(i)! } : {}),
-        ...(speechOf.has(i) ? { say: speechOf.get(i)! } : {}),
+        ...(entries[i]!.line === undefined
+          ? {}
+          : { say: { line: entries[i]!.line } }),
+        requeueVoice: true,
       }));
 
       const svc = yield* ClipMockupOperationsService;
       const updated = yield* svc.updateClipMockups(edits);
+      yield* queueClipMockupVoices(
+        updated.filter((r) => r.voiceStatus === "pending")
+      );
       yield* emitNdjson(
-        updated.map((r) => withClipMockupFiles(lineageOf.get(r.videoId)!, r))
+        updated.map((r) => present(lineageOf.get(r.videoId)!, r))
       );
     })
 ).pipe(Command.withDescription(detail(UPDATE_HELP)));
@@ -554,7 +540,7 @@ const moveCmd = Command.make(
             notFound("clipMockup", (e.params as { id?: string }).id ?? row.id)
           )
         );
-      yield* emitObject(moved);
+      yield* emitObject(withVoiceDuration(moved));
     })
 ).pipe(Command.withDescription(detail(MOVE_HELP)));
 
@@ -572,7 +558,7 @@ const deleteCmd = Command.make(
         .pipe(
           Effect.catchTag("NotFoundError", () => notFound("clipMockup", row.id))
         );
-      yield* emitObject(archived);
+      yield* emitObject(withVoiceDuration(archived));
     })
 ).pipe(Command.withDescription(detail(DELETE_HELP)));
 

@@ -259,13 +259,12 @@ describe("cvm clip-mockup: ordering and addressing", () => {
 
     expect(row.line).toBe("Shorter, and it lands harder.");
     expect(row.imagePath).toBe(created.imagePath);
-    // New words are new speech; what the picture is has not changed.
-    expect(row.audioPath).not.toBe(created.audioPath);
+    // New words are new speech, queued for the Sidecar; the picture is the
+    // same file.
+    expect(row.audioPath).toBeNull();
     expect(
       nodeFs.readdirSync(frameDir(s.standaloneActiveLineageId)).sort()
-    ).toEqual(
-      [created.imagePath, created.audioPath, row.audioPath].sort() as string[]
-    );
+    ).toEqual([created.imagePath]);
   });
 
   it("update takes an image and a line in one entry", async () => {

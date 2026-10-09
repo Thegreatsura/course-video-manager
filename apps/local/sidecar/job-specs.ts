@@ -6,6 +6,7 @@ import { isPostingKind } from "./job-kind";
 import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
+  CLIP_MOCKUP_VOICE_POLICY,
   CLIP_TRANSCRIPTION_POLICY,
   COURSE_DUPLICATE_POLICY,
   FOOTAGE_TRANSCRIPTION_POLICY,
@@ -100,6 +101,13 @@ export const JOB_KIND_SPECS = {
   "duplicate-course": spec(
     COURSE_DUPLICATE_POLICY,
     JOB_PARAMS["duplicate-course"]
+  ),
+  // No `coveredBy`: a running Job may already have voiced a Clip Mockup's old
+  // line, so a new request always gets its own Job. A repeat costs nothing —
+  // the WAV of a line already voiced is found on disk.
+  "clip-mockup-voice": spec(
+    CLIP_MOCKUP_VOICE_POLICY,
+    JOB_PARAMS["clip-mockup-voice"]
   ),
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),

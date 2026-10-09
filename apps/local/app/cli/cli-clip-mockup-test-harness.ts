@@ -11,13 +11,17 @@ import {
   SpeechSynthesisError,
 } from "@/services/clip-mockup-speech-service";
 import { buildWriteLayer, type RunResult } from "./cli-write-test-harness";
+import { DrizzleService } from "@/services/drizzle-service.server";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 
 /**
  * The speech fake every `cvm clip-mockup` suite runs on.
  *
- * `clip-mockup add` and `update` synthesise every "say" line, so without this
- * the suites would start the Clip Mockup daemon and load Kokoro onto a GPU for
- * real. The whole
+ * `clip-mockup add` and `update` no longer voice anything themselves — they
+ * queue a `clip-mockup-voice` Job for the Sidecar (`voiceQueueLayer`) — so
+ * this is now a GUARD: a command that voiced a line in-process would reach
+ * the fake (and `spoken` would show it) instead of starting the Clip Mockup
+ * daemon and loading Kokoro onto a GPU for real. The whole
  * ClipMockupSpeechService is replaced by `Layer.succeed`, exactly as the
  * `cvm footage` suite replaces WhisperTranscriptionService to keep real ffmpeg and
  * real Whisper out of the run. NO MODEL IS EVER LOADED IN A TEST.
@@ -85,6 +89,30 @@ export const failingSpeech = (): SpeechFake => {
 };
 
 /**
+ * Where `add` and `update` queue a Clip Mockup's voice: the Job table of the
+ * test's own database, through the seam in `clip-mockup.voice.ts`, so no
+ * connection is opened from `.env`. Nothing runs the Job: a suite reads the
+ * row it queued (`voiceJobs`).
+ */
+export const voiceQueueLayer = (db: TestDb) =>
+  JobOperationsService.Default.pipe(
+    Layer.provide(Layer.succeed(DrizzleService, db as never))
+  );
+
+/** Every `clip-mockup-voice` Job queued so far, oldest first. */
+export const voiceJobs = async (db: TestDb) =>
+  (
+    await db.query.jobs.findMany({
+      where: (t, { eq }) => eq(t.kind, "clip-mockup-voice"),
+      orderBy: (t, { asc }) => asc(t.createdAt),
+    })
+  ).map((job) => ({
+    title: job.title,
+    maxAttempts: job.maxAttempts,
+    clipMockupIds: (job.params as { clipMockupIds: string[] }).clipMockupIds,
+  }));
+
+/**
  * A run() with the write layer AND a speech fake merged in. The footage suite
  * inlines this for the same reason: `makeRun` provides one layer, and these
  * verbs need two.
@@ -93,7 +121,11 @@ export const makeClipMockupRun =
   (db: TestDb, speech: SpeechFake) =>
   async (argv: ReadonlyArray<string>): Promise<RunResult> => {
     const out = makeTestCliOutput();
-    const layer = Layer.merge(buildWriteLayer(db), speech.layer);
+    const layer = Layer.mergeAll(
+      buildWriteLayer(db),
+      speech.layer,
+      voiceQueueLayer(db)
+    );
     const exitCode = await Effect.runPromise(
       buildProgram(argv).pipe(Effect.provide(out.layer), Effect.provide(layer))
     );
