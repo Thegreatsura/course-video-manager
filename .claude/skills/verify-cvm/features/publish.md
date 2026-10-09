@@ -21,9 +21,13 @@ From the Course View, the `Actions` menu, then Publish. Or the route directly.
 
 ## Driving it with agent-browser
 
-**Read this page; press nothing on it.** `Publish` Submits the Draft, renders
-Videos and commits a Bundle to Dropbox. `Autofill` spends Anthropic tokens
-rewriting real Video descriptions and Chapters. Neither is undoable from here.
+**Read this page; do not press `Publish`.** It Submits the Draft, renders
+Videos and commits a Bundle to Dropbox, and is not undoable from here.
+`Autofill` is a Job the run's sidecar runs; on a clone its model calls reach
+only the discard port or a loopback stub you start (`ANTHROPIC_BASE_URL`, see
+the skill), so press it only with a stub, and read the Videos back with
+`$V sql`. The template may have no Autofill Candidates: clear a few Videos'
+`video_description` on your clone first.
 
 ```bash
 # AB="$V ab <run>" from the skill's launch step — this run's own browser and server.

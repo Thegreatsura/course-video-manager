@@ -22,6 +22,7 @@ import {
 } from "./text-generation-service";
 import { withDbTransaction } from "@/services/with-db-transaction.server";
 import { UnknownDBServiceError } from "@/services/db-service-errors";
+import { SidecarContext } from "@/services/sidecar-context";
 
 /**
  * THE AUTOFILL — a review-free generation pass that writes every shipping
@@ -228,6 +229,9 @@ const makeAutofillService = (
   const autofillCourseVersion = Effect.fn("autofillCourseVersion")(function* (
     options: AutofillRunOptions
   ) {
+    // An Autofill is a Job: only the Sidecar runs it, never a request a
+    // browser tab keeps alive (sidecar-context.ts).
+    yield* SidecarContext;
     const version = yield* versionOps.getVersionWithSections(options.versionId);
     // Only the Draft Version is ever written to. Refusing up front is cheaper
     // and clearer than letting every per-Video guard refuse in turn.

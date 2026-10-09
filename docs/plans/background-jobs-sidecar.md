@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1-4 are done (batch 4, posting: section 7.7). Matt's decisions are in section 6;
+**Status:** Batches 1-5 are done (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -178,7 +178,7 @@ Each batch is one PR. Each can be merged on its own, and each leaves the app wor
 | 2 ✅  | **Done.** **Upload Manager front end on job events.** `/api/jobs/events` proxy; `jobs-reducer.ts` and its bridge; the Global Upload Progress renders server jobs next to the old ones. First kind: **Video export (#6)**, whose SSE route is deleted.                                                                                 | Close the tab mid-export, reopen it: the export is still running and finishes. The allowlist drops by 1. |
 | 3     | Batch export (#7) as N `export` jobs with a parent, plus the vertical Shorts render (#8).                                                                                                                                                                                                                                             | Kill the sidecar mid-render; it re-queues on restart.                                                    |
 | 4     | Posting: YouTube upload, Shorts, Buffer, AI Hero, Skills Changelog (#1-#5). `depends_on` moves to the server. Non-idempotent: an interrupted post asks before running again.                                                                                                                                                          | Chain "upload → AI Hero post" survives a reload.                                                         |
-| 5     | Course Autofill (#10), in the `ai` lane.                                                                                                                                                                                                                                                                                              | —                                                                                                        |
+| 5 ✅  | **Done.** Course Autofill (#10), in the default lane: no `ai` lane (section 7.8).                                                                                                                                                                                                                                                     | —                                                                                                        |
 | 6     | **Publish (#9).** The `publish` lane replaces the semaphore. Recovery runs Promote/Discard automatically on startup. `cvm course publish` enqueues and tails events (a `--wait` flag).                                                                                                                                                | A restart mid-Publish recovers without a human.                                                          |
 | 7     | Transcription (#12): the sweeper picks up `queued` clips, so the browser no longer drives them.                                                                                                                                                                                                                                       | No clip stays stuck in `transcribing` after a restart.                                                   |
 | 8     | **Delete** `upload-reducer.ts`, the `sse-*-client.ts` files, `planUploadReactions` and the localStorage ETA history. Allowlist at 0 except the listed interactive streams. Write ADR 0032.                                                                                                                                            | `check` is green with the guard at 0.                                                                    |
@@ -553,6 +553,44 @@ Left for later: the spawn guard's dependency-cruiser rule and
 Publish (batch 6); the Upload Manager's `server-job-succeeded` /
 `server-job-failed` actions and the posting entries' browser config go with
 `upload-reducer.ts` in batch 8.
+
+### 7.8 What batch 5 built (Course Autofill)
+
+**Course Autofill (#10) is a kind** (`apps/local/sidecar/kinds/autofill.ts`):
+`AutofillService.autofillCourseVersion` unchanged — 6 Videos at a time, a
+Video's two fields in one transaction, a rate limit backed off `recurs(3)`
+inside the service. 1 attempt (`UPLOAD_MANAGER_POLICIES.autofill`, copied: the
+browser reported every Autofill failure as `UPLOAD_FATAL_ERROR`).
+`autofillCourseVersion` now asks for `SidecarContext`. Deleted:
+`api.courses.$courseId.autofill-sse.ts`, `sse-autofill-client.ts`,
+`upload-type-autofill.ts` (its entry config moved into the registry with
+`initiate: null`) and both allowlist entries.
+
+**Default lane, not `ai`.** Section 3.2's `ai` lane (1 at a time) is one of
+the lane numbers section 4's note supersedes: decision 3 copies today's
+limits, and nothing held a second Autofill back in the browser. The 6 Videos
+at a time stay in the service. `lanes.ts` has no `ai` lane.
+
+What the browser did around the stream is copied:
+
+| Today, in the browser                                                                                | In the sidecar                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A parent row ("Autofill <Course>", selecting → writing) and one child row per **Autofill Candidate** | The same rows, drawn from the Job's `stage`, `videos`, `video-succeeded` and `video-failed` events — the Batch export's per-Video events, so the jobs reducer folds them with no new action (`jobs-selectors.ts`) |
+| A Video that fails: its row errors and toasts by name; the run carries on                            | `video-failed`, a warning in the Job's log, and the same toast, now with **View log**                                                                                                                             |
+| The run settles: "<title> finished", **Back to Publish**                                             | `succeeded` (even when Videos failed, as before), the same toast                                                                                                                                                  |
+| The stream fails (Version not a Draft, or gone): every unfinished row errors                         | The Job fails (`AutofillRunError`, the route's words), toasts once with **View log**; its unfinished Videos draw as failed                                                                                        |
+| The publish page held its button on the run it started (component state)                             | It holds it on this Course's newest live Autofill Job, so a reopened tab still says "Autofilling…"                                                                                                                |
+
+A deliberate stop puts the Job back (section 7.5); its re-run selects again,
+and a Video the first run filled is no longer a candidate. A lost run is
+`interrupted` (1 attempt), as a dropped stream was.
+
+**verify-cvm:** `ANTHROPIC_BASE_URL` joins the loopback-or-discard rule, so
+a clone's Autofill reaches only a local stub of the Messages API.
+
+Left for later: `upload-reducer.ts`'s autofill entry type and
+`UPDATE_AUTOFILL_STAGE` (the type is how the Job draws; batch 8 deletes the
+reducer); an ETA for the Autofill rows (section 7.5's left-out ETA).
 
 ## Dismissal is stored
 

@@ -6,6 +6,7 @@ import {
   type WireJobEvent,
 } from "./job-wire";
 import { toJobsAction } from "./job-event-actions";
+import { announceVideoSettled } from "./job-video-toasts";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -676,19 +677,7 @@ export const jobsReducer: EffectReducer<
       if (!(before && isFinishedJob(before)) && isFinishedJob(after)) {
         announceSettled(exec, after);
       }
-      if (action.type === "batch-video-succeeded") {
-        // Each Video of a batch toasts as it lands, as the browser's rows did.
-        const video = after.videos?.find((v) => v.id === action.videoId);
-        if (video) {
-          exec({
-            type: "show-job-succeeded-toast",
-            jobId: after.id,
-            kind: "export",
-            title: video.title,
-            subjectId: video.id,
-          });
-        }
-      }
+      announceVideoSettled(exec, after, action);
       return {
         ...state,
         // An event is proof the sidecar is up.
