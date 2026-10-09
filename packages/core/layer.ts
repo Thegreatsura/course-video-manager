@@ -8,6 +8,7 @@ import { ClipOperationsService } from "./services/db-clip-operations.server.js";
 import { CourseOperationsService } from "./services/db-course-operations.server.js";
 import { CourseWriteService } from "./services/course-write-service.js";
 import { DeliverableOperationsService } from "./services/db-deliverable-operations.server.js";
+import { DiagramComponentOperationsService } from "./services/db-diagram-component-operations.server.js";
 import { DiagramOperationsService } from "./services/db-diagram-operations.server.js";
 import { DiagramThumbnailStore } from "./services/diagram-thumbnail-store.js";
 import { LearningGoalOperationsService } from "./services/db-learning-goal-operations.server.js";
@@ -50,6 +51,11 @@ export const domainServicesLayer = Layer.mergeAll(
   // No disk on the deployed box: a Diagram written through the API is stored
   // without a snapshot thumbnail, which is only ever a cache of its scene.
   DiagramOperationsService.Default.pipe(
+    Layer.provide(DiagramThumbnailStore.noop)
+  ),
+  // Read through the API only (`cvm diagram component list`); a Component's
+  // thumbnail is written by the playground, never here.
+  DiagramComponentOperationsService.Default.pipe(
     Layer.provide(DiagramThumbnailStore.noop)
   ),
   CourseWriteService.Default
