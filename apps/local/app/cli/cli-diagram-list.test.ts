@@ -211,11 +211,60 @@ describe("cvm diagram component list", () => {
 
     expect(r.stderr).toBe("");
     expect(r.exitCode).toBe(0);
-    expect(ndjson(r.stdout)).toEqual([
-      { id: saved.id, name: "Agent and tools", shapes: SHAPES },
-    ]);
+    // Fresh ids, the arrow following them; everything else as saved.
+    const [listed] = ndjson(r.stdout) as Array<{ shapes: SimpleShape[] }>;
+    const ids = listed!.shapes.map((s) => s.id);
+    expect(listed).toEqual({
+      id: saved.id,
+      name: "Agent and tools",
+      shapes: [
+        { ...SHAPES[0], id: ids[0] },
+        { ...SHAPES[1], id: ids[1] },
+        { ...SHAPES[2], id: ids[2] },
+        { ...SHAPES[3], id: ids[3], from: ids[0], to: ids[2] },
+      ],
+    });
+    expect(ids.filter((id) => SHAPES.some((s) => s.id === id))).toEqual([]);
     // A look is not a use: lastUsedAt is untouched.
     expect(await everything()).toEqual(before);
+  });
+
+  it("mints fresh ids on every run, so one Component pastes twice into a Diagram", async () => {
+    await seed("Agent and tools", SHAPES);
+    const copy = async (dy: number) => {
+      const r = await run(["diagram", "component", "list"]);
+      const [c] = ndjson(r.stdout) as Array<{ shapes: SimpleShape[] }>;
+      return c!.shapes.map((s) => ("y" in s ? { ...s, y: s.y + dy } : s));
+    };
+    const first = await copy(0);
+    // The Diagram the Component was saved from: its ids are the Component's.
+    const created = await create("Source", [[...SHAPES, ...first]]);
+    const second = await copy(300);
+
+    const added = await run([
+      "diagram",
+      "snapshot",
+      "add",
+      "--file",
+      file({ shapes: [...SHAPES, ...first, ...second] }),
+      created.id,
+    ]);
+
+    expect(added.stderr).toBe("");
+    expect(added.exitCode).toBe(0);
+    const got = ndjson(
+      (await run(["diagram", "get", created.id])).stdout
+    )[0] as {
+      head: { shapes: SimpleShape[] };
+    };
+    const arrows = got.head.shapes.filter((s) => s.type === "arrow");
+    expect(arrows).toHaveLength(3);
+    for (const [arrow, from] of [
+      [arrows[1], first],
+      [arrows[2], second],
+    ] as const) {
+      expect(arrow).toMatchObject({ from: from[0]!.id, to: from[2]!.id });
+    }
   });
 
   it("lists the most recently used first, and runs anywhere", async () => {
