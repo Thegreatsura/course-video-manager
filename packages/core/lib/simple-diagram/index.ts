@@ -16,6 +16,9 @@
 //       { "type": "icon", "id", "x", "y", "name" (Lucide), "color"? },
 //       { "type": "other", "id" } ] }
 //
+// At most MAX_SHAPES shapes, every number within ±MAX_COORDINATE, and no
+// arrow attached to one shape at both ends.
+//
 // Pure: no database, no tldraw runtime. A scene goes in and out as the JSON a
 // Diagram's head stores.
 
@@ -25,6 +28,8 @@ export {
   DEFAULTS,
   FILLS,
   HEADS,
+  MAX_COORDINATE,
+  MAX_SHAPES,
   SHAPE_SCHEMAS,
   SHAPE_TYPES,
   SIZES,
