@@ -324,8 +324,9 @@ sidecar builds the app's own `layerLive`, so handlers reach every service.
   dismisses them, and succeeded ones from the last 24 hours not dismissed,
   each with its events — see "Dismissal is stored" below), or a replay after `Last-Event-ID`, then every new event.
   One poller reads `job_event` for all subscribers (no LISTEN/NOTIFY on the
-  pooler), woken by the sidecar's own writes and by `/nudge`, re-reading a
-  window of ids for late commits (`sidecar/job-event-feed.ts`). The app's
+  pooler), woken by the sidecar's own writes and by `/nudge`. It asks again
+  for every id it skipped (a late commit), however far behind the newest,
+  and judges time only by the database's clock (`sidecar/job-event-feed.ts`). The app's
   `GET /api/jobs/events` passes it through untouched, and answers
   `sidecar-unavailable` when nothing listens on the socket. The wire format is
   `features/jobs/job-wire.ts`, imported by both ends. `scripts/check-background-jobs.ts`
