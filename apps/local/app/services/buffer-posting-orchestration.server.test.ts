@@ -8,6 +8,7 @@ import {
   BufferAuthError,
 } from "@/services/buffer-api-service.server";
 import { ObjectStoreService } from "@/services/object-store-service.server";
+import { SidecarContextTest } from "@/services/sidecar-context";
 import { bufferPostProgram } from "@/services/buffer-posting-orchestration.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import * as schema from "@/db/schema";
@@ -113,6 +114,7 @@ function makeTestLayer(fakes: {
   );
 
   return Layer.mergeAll(
+    SidecarContextTest,
     videoPostLayer,
     configLayer,
     fsLayer,

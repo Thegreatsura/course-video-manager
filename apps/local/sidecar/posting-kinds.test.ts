@@ -58,8 +58,10 @@ describe("the posting kinds' policy", () => {
       const kind = Object.hasOwn(JOB_KINDS, name)
         ? JOB_KINDS[name as keyof typeof JOB_KINDS]
         : undefined;
-      // Batch 4 moves the posts one PR at a time; a post still in the
-      // browser is not in the registry yet. One that is, is a posting kind.
+      expect({ name, registered: kind !== undefined }).toEqual({
+        name,
+        registered: true,
+      });
       if (!kind) continue;
       expect({ name, posting: isPostingKind(kind) }).toEqual({
         name,
@@ -70,9 +72,6 @@ describe("the posting kinds' policy", () => {
         maxAttempts: 1,
       });
     }
-    expect(
-      POSTING_KIND_NAMES.filter((name) => Object.hasOwn(JOB_KINDS, name))
-    ).toEqual(expect.arrayContaining(["youtube", "youtube-shorts"]));
   });
 
   it("no kind in the registry that posts allows more than 1 attempt", () => {

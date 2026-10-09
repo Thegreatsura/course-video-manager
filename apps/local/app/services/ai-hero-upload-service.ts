@@ -2,6 +2,7 @@ import { Config, ConfigProvider, Data, Effect, Schedule } from "effect";
 import { statSync } from "fs";
 import * as fs from "fs";
 import { getAiHeroAccessToken } from "@/services/ai-hero-auth-service";
+import { SidecarContext } from "@/services/sidecar-context";
 
 export class AiHeroUploadError extends Data.TaggedError("AiHeroUploadError")<{
   message: string;
@@ -520,6 +521,8 @@ export const postSkillsChangelogToAiHero = (opts: {
   onProgress?: (percentage: number) => void;
 }) =>
   Effect.gen(function* () {
+    // It POSTS: only the Sidecar runs it, once (decision 5).
+    yield* SidecarContext;
     const baseUrl = yield* Config.string("AI_HERO_BASE_URL");
     const accessToken = yield* getAiHeroAccessToken;
 
@@ -612,6 +615,8 @@ export const postToAiHero = (opts: {
   onProgress?: (percentage: number) => void;
 }) =>
   Effect.gen(function* () {
+    // It POSTS: only the Sidecar runs it, once (decision 5).
+    yield* SidecarContext;
     const baseUrl = yield* Config.string("AI_HERO_BASE_URL");
     const accessToken = yield* getAiHeroAccessToken;
 
@@ -701,4 +706,42 @@ export const postToAiHero = (opts: {
     yield* Effect.logInfo(`AI Hero post published. Slug: ${finalSlug}`);
 
     return { slug: finalSlug };
+  }).pipe(Effect.withConfigProvider(ConfigProvider.fromEnv()));
+
+/**
+ * READ-ONLY: the AI Hero post with `slug`, or `null` when AI Hero has none.
+ * The sidecar asks this after an AI Hero post was cut off, to tell the
+ * author whether it went out before they retry.
+ */
+export const findAiHeroPost = (slug: string) =>
+  Effect.gen(function* () {
+    const baseUrl = yield* Config.string("AI_HERO_BASE_URL");
+    const accessToken = yield* getAiHeroAccessToken;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const res = await fetch(
+          `${baseUrl}/api/posts?slugOrId=${encodeURIComponent(slug)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (res.status === 404) return null;
+        if (!res.ok) {
+          throw new Error(
+            `AI Hero answered ${res.status}: ${await res.text()}`
+          );
+        }
+        const post = (await res.json()) as {
+          slug?: string;
+          fields?: { state?: string; slug?: string };
+        };
+        return {
+          slug: post.fields?.slug ?? post.slug ?? slug,
+          state: post.fields?.state ?? null,
+        };
+      },
+      catch: (e) =>
+        new AiHeroUploadError({
+          message: e instanceof Error ? e.message : String(e),
+          code: "lookup_failed",
+        }),
+    });
   }).pipe(Effect.withConfigProvider(ConfigProvider.fromEnv()));

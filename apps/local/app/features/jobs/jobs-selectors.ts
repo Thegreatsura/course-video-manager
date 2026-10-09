@@ -114,6 +114,35 @@ export const jobUploadEntry = (
   job: jobsReducer.JobView
 ): uploadReducer.UploadEntry | null => {
   switch (job.kind) {
+    case "buffer": {
+      const status = uploadStatusOf(job);
+      return {
+        ...baseEntryOf(job, status, uploadProgressOf(job, status)),
+        uploadType: "buffer",
+        bufferStage:
+          status === "success"
+            ? null
+            : job.stage === "creating-post"
+              ? "creating-post"
+              : "uploading-blob",
+      };
+    }
+    case "ai-hero": {
+      const status = uploadStatusOf(job);
+      return {
+        ...baseEntryOf(job, status, uploadProgressOf(job, status)),
+        uploadType: "ai-hero",
+        aiHeroSlug: stringOf(job.result?.slug),
+      };
+    }
+    case "skills-changelog": {
+      const status = uploadStatusOf(job);
+      return {
+        ...baseEntryOf(job, status, uploadProgressOf(job, status)),
+        uploadType: "skills-changelog",
+        skillsChangelogSlug: stringOf(job.result?.slug),
+      };
+    }
     case "youtube":
     case "youtube-shorts": {
       const status = uploadStatusOf(job);

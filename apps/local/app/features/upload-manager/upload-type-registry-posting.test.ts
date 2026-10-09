@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { uploadReducer } from "./upload-reducer";
 import { uploadTypeRegistry } from "./upload-type-registry";
 
@@ -158,48 +158,8 @@ describe("ai-hero registry entry", () => {
   });
 
   describe("initiate", () => {
-    it("should store abort controller in the map", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const entry: uploadReducer.AiHeroUploadEntry = {
-        ...makeBase(),
-        uploadType: "ai-hero",
-        aiHeroSlug: null,
-      };
-
-      aiHeroConfig.initiate!(
-        "upload-1",
-        entry,
-        { body: "content", description: "desc", slug: "my-slug" },
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortControllers.has("upload-1")).toBe(true);
-    });
-
-    it("should abort existing controller before starting new one", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const existingController = new AbortController();
-      const abortSpy = vi.spyOn(existingController, "abort");
-      abortControllers.set("upload-1", existingController);
-
-      const entry: uploadReducer.AiHeroUploadEntry = {
-        ...makeBase(),
-        uploadType: "ai-hero",
-        aiHeroSlug: null,
-      };
-
-      aiHeroConfig.initiate!(
-        "upload-1",
-        entry,
-        { body: "content", description: "desc", slug: "my-slug" },
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortSpy).toHaveBeenCalled();
+    it("has no browser driver: a ai-hero post is a posting Job the Sidecar runs once", () => {
+      expect(uploadTypeRegistry["ai-hero"].initiate).toBeNull();
     });
   });
 });
@@ -341,57 +301,8 @@ describe("skills-changelog registry entry", () => {
   });
 
   describe("initiate", () => {
-    const skillsChangelogParams = {
-      slug: "my-slug",
-      body: "content",
-      description: "desc",
-      newsletterSubject: "subject",
-      newsletterPreviewText: "preview",
-      newsletterCopy: "copy",
-    };
-
-    it("should store abort controller in the map", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const entry: uploadReducer.SkillsChangelogUploadEntry = {
-        ...makeBase(),
-        uploadType: "skills-changelog",
-        skillsChangelogSlug: null,
-      };
-
-      skillsChangelogConfig.initiate!(
-        "upload-1",
-        entry,
-        skillsChangelogParams,
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortControllers.has("upload-1")).toBe(true);
-    });
-
-    it("should abort existing controller before starting new one", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const existingController = new AbortController();
-      const abortSpy = vi.spyOn(existingController, "abort");
-      abortControllers.set("upload-1", existingController);
-
-      const entry: uploadReducer.SkillsChangelogUploadEntry = {
-        ...makeBase(),
-        uploadType: "skills-changelog",
-        skillsChangelogSlug: null,
-      };
-
-      skillsChangelogConfig.initiate!(
-        "upload-1",
-        entry,
-        skillsChangelogParams,
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortSpy).toHaveBeenCalled();
+    it("has no browser driver: a skills-changelog post is a posting Job the Sidecar runs once", () => {
+      expect(uploadTypeRegistry["skills-changelog"].initiate).toBeNull();
     });
   });
 });

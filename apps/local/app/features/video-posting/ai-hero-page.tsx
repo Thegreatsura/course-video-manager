@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
+import { findVideoJobRow } from "@/features/jobs/jobs-selectors";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -92,18 +93,18 @@ export function AiHeroPage({
   }, [title, setSlug]);
 
   // Upload context
-  const { uploads, startAiHeroUpload, startExportUpload } =
+  const { jobs, startAiHeroUpload, startExportUpload } =
     useContext(UploadContext);
 
-  // Check if there's an active AI Hero upload for this video
-  const activeAiHeroUpload = Object.values(uploads).find(
-    (u) =>
-      u.uploadType === "ai-hero" &&
-      u.videoId === videoId &&
-      (u.status === "uploading" ||
-        u.status === "retrying" ||
-        u.status === "waiting")
-  );
+  // This Video's ai-hero post: a posting Job the Sidecar runs.
+  const jobRow = findVideoJobRow(jobs, videoId, "ai-hero");
+  const activeAiHeroUpload =
+    jobRow &&
+    (jobRow.status === "uploading" ||
+      jobRow.status === "retrying" ||
+      jobRow.status === "waiting")
+      ? jobRow
+      : undefined;
 
   // Stored slug from successful upload
   const [storedSlug, setStoredSlug] = useState<string | null>(null);
@@ -118,21 +119,14 @@ export function AiHeroPage({
 
   // Watch for successful AI Hero uploads and store the slug
   useEffect(() => {
-    for (const upload of Object.values(uploads)) {
-      if (
-        upload.uploadType === "ai-hero" &&
-        upload.videoId === videoId &&
-        upload.status === "success" &&
-        upload.aiHeroSlug
-      ) {
-        localStorage.setItem(
-          AI_HERO_SLUG_STORAGE_KEY(videoId),
-          upload.aiHeroSlug
-        );
-        setStoredSlug(upload.aiHeroSlug);
-      }
+    if (jobRow?.status === "success" && jobRow.aiHeroSlug) {
+      localStorage.setItem(
+        AI_HERO_SLUG_STORAGE_KEY(videoId),
+        jobRow.aiHeroSlug
+      );
+      setStoredSlug(jobRow.aiHeroSlug);
     }
-  }, [uploads, videoId]);
+  }, [jobRow, videoId]);
 
   const isSeoDescriptionTooLong = seoDescription.length > 160;
 

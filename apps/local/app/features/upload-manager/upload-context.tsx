@@ -239,36 +239,18 @@ export function UploadProvider({
     [startJob]
   );
 
+  // A Buffer post is a posting Job: run once, after its render succeeds.
   const startSocialUpload = useCallback(
-    (videoId: string, title: string, caption: string, dependsOn?: string) => {
-      const uploadId = generateUploadId();
-
-      const params = { caption };
-      paramsMapRef.current.set(uploadId, { type: "buffer", params });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    (videoId: string, title: string, caption: string, dependsOn?: string) =>
+      startJob({
+        kind: "buffer",
         title,
-        uploadType: "buffer" as const,
-        dependsOn,
-      };
-      dispatch(action);
-
-      if (!dependsOn) {
-        initiateFromRegistry(
-          "buffer",
-          action,
-          params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      return uploadId;
-    },
-    []
+        params: { videoId, caption },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: dependsOn ?? null,
+      }),
+    [startJob]
   );
 
   // A Shorts post is a posting Job: run once, after its render succeeds.
@@ -285,6 +267,8 @@ export function UploadProvider({
     [startJob]
   );
 
+  // AI Hero and Skills Changelog posts are posting Jobs: run once, after
+  // their export succeeds.
   const startAiHeroUpload = useCallback(
     (
       videoId: string,
@@ -293,35 +277,16 @@ export function UploadProvider({
       description: string,
       slug: string,
       dependsOn?: string
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = { body, description, slug };
-      paramsMapRef.current.set(uploadId, { type: "ai-hero", params });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    ) =>
+      startJob({
+        kind: "ai-hero",
         title,
-        uploadType: "ai-hero" as const,
-        dependsOn,
-      };
-      dispatch(action);
-
-      if (!dependsOn) {
-        initiateFromRegistry(
-          "ai-hero",
-          action,
-          params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      return uploadId;
-    },
-    []
+        params: { videoId, title, body, description, slug },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: dependsOn ?? null,
+      }),
+    [startJob]
   );
 
   const startSkillsChangelogUpload = useCallback(
@@ -335,45 +300,25 @@ export function UploadProvider({
       newsletterPreviewText: string,
       newsletterCopy: string,
       dependsOn?: string
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = {
-        slug,
-        body,
-        description,
-        newsletterSubject,
-        newsletterPreviewText,
-        newsletterCopy,
-      };
-      paramsMapRef.current.set(uploadId, {
-        type: "skills-changelog",
-        params,
-      });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    ) =>
+      startJob({
+        kind: "skills-changelog",
         title,
-        uploadType: "skills-changelog" as const,
-        dependsOn,
-      };
-      dispatch(action);
-
-      if (!dependsOn) {
-        initiateFromRegistry(
-          "skills-changelog",
-          action,
-          params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      return uploadId;
-    },
-    []
+        params: {
+          videoId,
+          title,
+          slug,
+          body,
+          description,
+          newsletterSubject,
+          newsletterPreviewText,
+          newsletterCopy,
+        },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: dependsOn ?? null,
+      }),
+    [startJob]
   );
 
   const startExportUpload = useCallback(
