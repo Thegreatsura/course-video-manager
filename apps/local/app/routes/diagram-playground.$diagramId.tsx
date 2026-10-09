@@ -18,6 +18,7 @@ import { copyDiagramContents } from "@/features/diagrams/copy-scene-to-clipboard
 import { TimelinePanel } from "@/features/diagrams/timeline-panel";
 import { DiagramRail } from "@/features/diagrams/diagram-rail";
 import { useParams, useNavigate, useRevalidator } from "react-router";
+import { NO_TOASTS } from "@/lib/route-toasts";
 import type { Route } from "./+types/diagram-playground.$diagramId";
 import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playground-active.loader.server";
 import { CVM_SHAPE_UTILS } from "@/features/diagrams/cvm-shape-utils";
@@ -25,6 +26,8 @@ import { DiagramEditorBoundary } from "@/features/diagrams/unknown-shape-boundar
 import { CommandPalette } from "@/features/diagrams/palette/command-palette";
 import { HeadLoadStatus } from "@/features/diagrams/head-load-status";
 import { useDiagramPlaygroundReducer } from "@/features/diagrams/use-diagram-playground-reducer";
+
+export const handle = NO_TOASTS;
 
 export const loader = loadDiagramPlaygroundActive;
 
