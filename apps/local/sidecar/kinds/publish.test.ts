@@ -24,6 +24,7 @@ import {
 } from "@/test-utils/pglite";
 import type { JobContext } from "../job-kind";
 import { publishJobKind } from "./publish";
+import { PUBLISH_REFUSED_TAG } from "@/cli/commands/course-publish-wait";
 
 let testDb: TestDb;
 /** What each `publish` call was asked to do. */
@@ -282,6 +283,8 @@ describe("the publish Job kind", () => {
       expect((error as Error).message).toBe(
         "2 course warning(s) must be fixed; 1 video(s) failed to export"
       );
+      // The tag `--wait` falls back on when the publish-failed event is lost.
+      expect(error).toMatchObject({ _tag: PUBLISH_REFUSED_TAG });
     }).pipe(
       Effect.provide(
         layer(
@@ -292,6 +295,28 @@ describe("the publish Job kind", () => {
                 courseViewLintCount: 2,
                 failedExportVideoIds: ["video-a"],
               })
+            )
+          )
+        )
+      )
+    )
+  );
+
+  it.effect("a Publish refused for a taken name says so", () =>
+    Effect.gen(function* () {
+      const { ctx } = yield* startPublish;
+      const error = yield* publishJobKind.runRaw(PARAMS, ctx).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: PUBLISH_REFUSED_TAG });
+      expect((error as Error).message).toBe(
+        'version name "v1.0.0" is already used by another version of this course'
+      );
+    }).pipe(
+      Effect.provide(
+        layer(
+          fakePublish(
+            () => {},
+            Effect.fail(
+              new PublishValidationError({ versionNameTaken: "v1.0.0" })
             )
           )
         )

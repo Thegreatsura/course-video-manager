@@ -81,6 +81,24 @@ export class VersionCopyIncompleteError extends Data.TaggedError(
   }
 }
 
+/**
+ * Submit refused: another Version of this course already wears the publish
+ * name. Checked inside Submit's transaction, under the course lock, so two
+ * Publishes of one name queued before either ran cannot both land — the
+ * CLI's pre-enqueue check alone could not see the first one's name yet.
+ */
+export class VersionNameTakenError extends Data.TaggedError(
+  "VersionNameTakenError"
+)<{
+  repoId: string;
+  name: string;
+  existingVersionId: string;
+}> {
+  override get message() {
+    return `version name "${this.name}" is already used by another version of this course (${this.existingVersionId})`;
+  }
+}
+
 export class CourseNameTakenError extends Data.TaggedError(
   "CourseNameTakenError"
 )<{
