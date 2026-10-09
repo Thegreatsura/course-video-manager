@@ -12,15 +12,23 @@
  * performed: it buffers it and stops it there, so React (whose listeners may
  * already be attached but whose tree is not yet live) never half-handles it.
  * `replayEarlyClicks` runs from root Layout's effect, after hydration has
- * committed: it stops buffering and, a task later, dispatches each buffered
- * click again — the full pointer/mouse sequence, so `onPointerDown` triggers
- * (Radix menus, selects) fire as well as `onClick` ones.
+ * committed: it stops buffering and, a task later, dispatches the first
+ * buffered click again — the full pointer/mouse sequence, so `onPointerDown`
+ * triggers (Radix menus, selects) fire as well as `onClick` ones.
+ *
+ * Only the first: clicks after it are the user retrying a page that looked
+ * dead, and replayed back to back in one task they would all get past a
+ * button's own disable-while-busy guard — two clicks on "Post", two posts.
  */
 
 type EarlyClick = {
   target: Element;
   clientX: number;
   clientY: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
 };
 
 type EarlyClickBuffer = {
@@ -60,6 +68,10 @@ export function captureEarlyClicks(): void {
       target,
       clientX: event.clientX,
       clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
     });
   };
   window.__cvmEarlyClicks = { clicks, listener };
@@ -77,38 +89,41 @@ export function replayEarlyClicks(): void {
   // re-render (the course page's runs for seconds in dev), and a click
   // dispatched from inside the commit would be rendered on top of it. A task
   // later it lands where a real click would, once the thread is free.
-  setTimeout(() => dispatchClicks(buffer.clicks), 0);
+  const [first] = buffer.clicks;
+  if (first) setTimeout(() => dispatchClick(first), 0);
 }
 
-function dispatchClicks(clicks: EarlyClick[]): void {
-  for (const click of clicks) {
-    const target = click.target.isConnected
-      ? click.target
-      : document.elementFromPoint(click.clientX, click.clientY);
-    if (!target) continue;
-    const init = {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      clientX: click.clientX,
-      clientY: click.clientY,
-      button: 0,
-      view: window,
-    };
-    const pointer = {
-      ...init,
-      pointerId: 1,
-      pointerType: "mouse",
-      isPrimary: true,
-    };
-    target.dispatchEvent(
-      new PointerEvent("pointerdown", { ...pointer, buttons: 1 })
-    );
-    target.dispatchEvent(
-      new MouseEvent("mousedown", { ...init, buttons: 1, detail: 1 })
-    );
-    target.dispatchEvent(new PointerEvent("pointerup", pointer));
-    target.dispatchEvent(new MouseEvent("mouseup", { ...init, detail: 1 }));
-    target.dispatchEvent(new MouseEvent("click", { ...init, detail: 1 }));
-  }
+function dispatchClick(click: EarlyClick): void {
+  // Hydration replaced the element (a mismatch re-rendered it): drop the
+  // click rather than hand it to whatever now sits at its coordinates.
+  if (!click.target.isConnected) return;
+  const target = click.target;
+  const init = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: click.clientX,
+    clientY: click.clientY,
+    ctrlKey: click.ctrlKey,
+    metaKey: click.metaKey,
+    shiftKey: click.shiftKey,
+    altKey: click.altKey,
+    button: 0,
+    view: window,
+  };
+  const pointer = {
+    ...init,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  };
+  target.dispatchEvent(
+    new PointerEvent("pointerdown", { ...pointer, buttons: 1 })
+  );
+  target.dispatchEvent(
+    new MouseEvent("mousedown", { ...init, buttons: 1, detail: 1 })
+  );
+  target.dispatchEvent(new PointerEvent("pointerup", pointer));
+  target.dispatchEvent(new MouseEvent("mouseup", { ...init, detail: 1 }));
+  target.dispatchEvent(new MouseEvent("click", { ...init, detail: 1 }));
 }
