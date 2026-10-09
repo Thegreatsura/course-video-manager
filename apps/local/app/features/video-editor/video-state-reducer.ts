@@ -139,6 +139,11 @@ export namespace videoStateReducer {
         clipId: FrontendId;
       }
     | {
+        /** The timeline's Clips changed, e.g. a Stream Deck delete. */
+        type: "timeline-clips-changed";
+        clipIds: FrontendId[];
+      }
+    | {
         type: "play-from-chapter";
         chapterId: FrontendId;
       }
@@ -375,6 +380,12 @@ export const makeVideoEditorReducer =
           showLastFrameOfVideo: false,
           selectedClipsSet: new Set([action.clipId]),
         });
+      }
+      case "timeline-clips-changed": {
+        // A deleted Clip can't stay playing: the glass would hide its red dot.
+        const gone = state.currentClipId;
+        if (!gone || action.clipIds.includes(gone)) return state;
+        return { ...state, runningState: "paused", currentClipId: undefined };
       }
       case "play-from-chapter": {
         // Find the chapter's position in itemIds

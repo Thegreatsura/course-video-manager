@@ -41,6 +41,33 @@ describe("SessionMarks", () => {
     expect(styleOf(html, 1)).toContain("transparent");
   });
 
+  it("offers a click only on a dot whose Clip is on the timeline to play", () => {
+    const html = renderToStaticMarkup(
+      <SessionMarks
+        marks={[
+          "landed",
+          "pending",
+          "orphaned",
+          "deleted-pending",
+          "deleted-landed",
+        ]}
+        clipIds={["a", "b", "c", "d", "e"]}
+        onMarkClicked={() => {}}
+      />
+    );
+    const clickable = (i: number) => {
+      const dot = styleOf(html, i);
+      return dot.includes('role="button"') || dot.includes("cursor-pointer");
+    };
+    expect([0, 1, 2, 3, 4].map(clickable)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
   it("shows the folded count on a take too long to draw", () => {
     const html = render(repeat("landed", MAX_MARKS + 7));
     expect(html).toContain("+7");
