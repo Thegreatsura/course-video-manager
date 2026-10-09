@@ -24,9 +24,10 @@ const wireJob = (overrides: Partial<WireJob> = {}): WireJob => ({
 let nextEventId = 100;
 const wireEvent = (
   type: string,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
+  id = ++nextEventId
 ): WireJobEvent => ({
-  id: ++nextEventId,
+  id,
   jobId: JOB_ID,
   type,
   data,
@@ -250,6 +251,54 @@ describe("jobsReducer", () => {
     expect(tester.getEffects()).toEqual([
       { type: "load-stage-history", requestId: 1 },
     ]);
+  });
+
+  // LATE COMMITS (job-event-feed.ts): the cursor is the newest id visible
+  // then; a settlement with a lower id can commit, and stream, after it.
+  it("a Job the snapshot showed running toasts its late-committed settlement, below the cursor, once", () => {
+    const running = [wireEvent("queued", {}, 5), wireEvent("started", {}, 6)];
+    const tester = newTester()
+      .send(streamed(wireEvent("queued", {}, 5)))
+      .send({
+        type: "job-snapshot-received",
+        snapshot: { cursor: 300, jobs: [{ job: wireJob(), events: running }] },
+      })
+      .send(streamed(wireEvent("succeeded", {}, 7)))
+      .send(streamed(wireEvent("succeeded", {}, 7)));
+
+    expect(tester.getState().jobs[JOB_ID]?.status).toBe("succeeded");
+    // Its stages join the history, as any live success's do.
+    expect(tester.getEffects().map((e) => e.type)).toEqual([
+      "load-stage-history",
+      "show-job-succeeded-toast",
+      "load-stage-history",
+    ]);
+  });
+
+  it("a settlement the snapshot already announced is not announced again when the catch-up replays it", () => {
+    const running = [wireEvent("queued", {}, 5), wireEvent("started", {}, 6)];
+    const tester = newTester()
+      .send({
+        type: "job-snapshot-received",
+        snapshot: { cursor: 6, jobs: [{ job: wireJob(), events: running }] },
+      })
+      .send({
+        type: "job-snapshot-received",
+        snapshot: {
+          cursor: 300,
+          jobs: [
+            {
+              job: wireJob(),
+              events: [...running, wireEvent("succeeded", {}, 7)],
+            },
+          ],
+        },
+      })
+      .send(streamed(wireEvent("succeeded", {}, 7)));
+
+    expect(
+      tester.getEffects().filter((e) => e.type === "show-job-succeeded-toast")
+    ).toHaveLength(1);
   });
 
   it("a Job this tab followed that settled while the stream was down is announced when the snapshot shows it", () => {

@@ -21,6 +21,10 @@ import { Effect } from "effect";
 import { hashHead, hashScene } from "../lib/scene-hash.js";
 import { extractSceneText } from "../lib/extract-scene-text/index.js";
 import {
+  agentDiagramOperations,
+  type DiagramPrimitives,
+} from "./db-diagram-agent-operations.server.js";
+import {
   DiagramThumbnailStore,
   type DiagramThumbnailStoreApi,
 } from "./diagram-thumbnail-store.js";
@@ -404,6 +408,9 @@ const createDiagramOperations = (
           contentHash,
           preserved,
           searchText,
+          // The statement's own time, not the transaction's: snapshots
+          // stored in one transaction keep the order they were stored in.
+          createdAt: sql`clock_timestamp()`,
         })
         .returning()
     );
@@ -626,38 +633,6 @@ const createDiagramOperations = (
     return yield* restoreSnapshotToHead(diagramId, snapshotId);
   });
 
-  /**
-   * A new Diagram whose timeline is `scenes`, in order: each is kept as a
-   * Preserved Snapshot, then the FIRST is restored to the head. The head is
-   * never written any other way, so what an agent drew is always held by a
-   * snapshot. `cvm diagram create` is the caller; it refuses an empty list
-   * and two identical drawings before it gets here.
-   */
-  const createDiagramFromSnapshots = Effect.fn("createDiagramFromSnapshots")(
-    function* (opts: { name?: string; scenes: readonly unknown[] }) {
-      const [firstScene, ...rest] = opts.scenes;
-      if (firstScene === undefined) {
-        return yield* new UnknownDBServiceError({
-          cause: "createDiagramFromSnapshots needs at least one scene",
-        });
-      }
-
-      const created = yield* createDiagram({ name: opts.name });
-      const first = yield* storeSnapshot(created.id, firstScene, {
-        preserved: true,
-      });
-      const snapshots = [first];
-      for (const scene of rest) {
-        snapshots.push(
-          yield* storeSnapshot(created.id, scene, { preserved: true })
-        );
-      }
-
-      const diagram = yield* restoreSnapshotToHead(created.id, first.id);
-      return { diagram, snapshots };
-    }
-  );
-
   const createSnapshotForClip = Effect.fn("createSnapshotForClip")(function* (
     diagramId: string,
     clipId: string,
@@ -714,9 +689,21 @@ const createDiagramOperations = (
     setSnapshotArchived,
     restoreSnapshotToHead,
     restoreFromSearch,
-    createDiagramFromSnapshots,
+    ...agentDiagramOperations(
+      db,
+      (tx): DiagramPrimitives =>
+        createDiagramOperations(tx, thumbnails).primitives
+    ),
     createSnapshotForClip,
     updateClipDiagramPin,
+    /** What the agent writes are built from; bound to this `db`. */
+    primitives: {
+      createDiagram,
+      getDiagram,
+      storeSnapshot,
+      setSnapshotArchived,
+      restoreSnapshotToHead,
+    },
   };
 };
 
