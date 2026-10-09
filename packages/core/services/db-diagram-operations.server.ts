@@ -28,6 +28,7 @@ import {
   DiagramThumbnailStore,
   type DiagramThumbnailStoreApi,
 } from "./diagram-thumbnail-store.js";
+import { listDiagramSummariesIn } from "./db-diagram-summaries.server.js";
 import { lockDiagram } from "./lock-diagram.server.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 
@@ -692,6 +693,7 @@ const createDiagramOperations = (
   return {
     createDiagram,
     listDiagrams,
+    listDiagramSummaries: listDiagramSummariesIn(db),
     searchDiagrams,
     getDiagram,
     updateDiagram,

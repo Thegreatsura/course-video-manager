@@ -253,6 +253,8 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
       "snapshot add --file <path|-> <diagramId>",
       "render <snapshotId>",
       "get [--snapshot <snapshotId>] <diagramId>",
+      "list [--archived] [<query>]",
+      "component list",
       "update --name <name> <diagramId>",
       "delete <diagramId>",
       "restore <diagramId>",

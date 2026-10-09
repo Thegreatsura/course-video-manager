@@ -8,6 +8,7 @@ import { clipMockupRoutes } from "./routes/clip-mockup.js";
 import { clipRoutes } from "./routes/clip.js";
 import { courseRoutes } from "./routes/course.js";
 import { deliverableRoutes } from "./routes/deliverable.js";
+import { diagramComponentRoutes } from "./routes/diagram-component.js";
 import { diagramRoutes } from "./routes/diagram.js";
 import { learningGoalRoutes } from "./routes/learning-goal.js";
 import { lessonRoutes } from "./routes/lesson.js";
@@ -64,7 +65,8 @@ export const createApp = (runtime: RemoteRuntime) =>
     .route("/rpc/beat", beatRoutes(runtime))
     .route("/rpc/pitch", pitchRoutes(runtime))
     .route("/rpc/deliverable", deliverableRoutes(runtime))
-    .route("/rpc/diagram", diagramRoutes(runtime));
+    .route("/rpc/diagram", diagramRoutes(runtime))
+    .route("/rpc/diagram-component", diagramComponentRoutes(runtime));
 
 /**
  * The app type the CLI's client is built from. The CLI imports THIS AND ONLY
