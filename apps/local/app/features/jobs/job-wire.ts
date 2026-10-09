@@ -119,6 +119,34 @@ export const JOBS_DISMISS_HREF = "/api/jobs/dismiss";
 export const PUBLISH_INTERRUPTED_MESSAGE =
   "Interrupted, and never re-run on its own. If it got past Submit, its Pending Version is waiting on the publish page: Promote or Discard it there, then publish again";
 
+/**
+ * The tags a Publish Job fails with when the publish kind named the failure
+ * itself (`sidecar/kinds/publish.ts`): refused (`PublishRefusedError`), or a
+ * Commit failure the service already Discarded (`PublishRunError`). Neither
+ * leaves a Pending Version. Any other tag past Submit (Promote failing, say)
+ * may.
+ */
+const PUBLISH_NOTHING_PENDING_TAGS: readonly string[] = [
+  "PublishRefusedError",
+  "PublishRunError",
+];
+
+/**
+ * Whether a settled Publish Job may have left a Pending Version, for the
+ * author to Promote or Discard on the publish page: cut off at any point
+ * (its events may stop short of `submitted`), or failed past Submit for a
+ * reason the service did not Discard itself.
+ */
+export const mayLeavePendingVersion = (publish: {
+  readonly status: string;
+  readonly submitted: boolean;
+  readonly errorTag: string | null;
+}): boolean =>
+  publish.status === "interrupted" ||
+  (publish.status === "failed" &&
+    publish.submitted &&
+    !PUBLISH_NOTHING_PENDING_TAGS.includes(publish.errorTag ?? ""));
+
 /** Where an interrupted Publish is reconciled, by hand. */
 export const publishPageHref = (courseId: string) =>
   `/courses/${encodeURIComponent(courseId)}/publish`;

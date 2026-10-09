@@ -9,7 +9,6 @@ import {
   type Scope,
 } from "effect";
 import {
-  INTERRUPTED_POST_MESSAGE,
   JobOperationsService,
   type Job,
   type JobFailure,
@@ -19,7 +18,8 @@ import { formatFailureCause } from "@/services/format-failure-cause";
 import {
   isNeverReRun,
   isPostingKind,
-  neverReRunKindsOf,
+  interruptedFailureOf,
+  neverReRunMessagesOf,
   type JobContext,
 } from "./job-kind";
 import { makePostChecks } from "./post-checks";
@@ -133,20 +133,6 @@ export const toJobFailure = (cause: Cause.Cause<unknown>): JobFailure => {
         ? error.message
         : String(error);
   return { tag, message, cause: formatFailureCause(error) };
-};
-
-const INTERRUPTED: JobFailure = {
-  tag: "JobInterrupted",
-  message: "The sidecar stopped while this job was running",
-  cause: "interrupted: the sidecar was stopped, or lost the job's lease",
-};
-
-/** A post cut off by a stop: never re-run on its own (decision 5). */
-const INTERRUPTED_POST: JobFailure = {
-  tag: "JobInterrupted",
-  message: INTERRUPTED_POST_MESSAGE,
-  cause:
-    "interrupted: the sidecar was stopped, or lost the job's lease, mid-post",
 };
 
 const logCause = (what: string) =>
@@ -329,9 +315,7 @@ export const runSidecar = <R>(opts: {
                   jobId: job.id,
                   holder: identity.holder,
                   failure: interrupted
-                    ? posting
-                      ? INTERRUPTED_POST
-                      : INTERRUPTED
+                    ? interruptedFailureOf(kindOf(job.kind))
                     : toJobFailure(cause),
                   interrupted,
                   // Never put back: never re-run by a lost lease either.
@@ -465,7 +449,7 @@ export const runSidecar = <R>(opts: {
       const recover = Effect.suspend(() =>
         // The Jobs running in this sidecar right now, read at each sweep.
         ops.recoverExpiredJobs({
-          neverRetryKinds: neverReRunKindsOf(registry),
+          neverRetryKinds: neverReRunMessagesOf(registry),
           stillRunning: [...running.keys()],
         })
       ).pipe(

@@ -1,3 +1,4 @@
+import { PUBLISH_INTERRUPTED_MESSAGE } from "@/features/jobs/job-wire";
 import type { LaneName } from "./lanes";
 
 /**
@@ -59,6 +60,12 @@ export type RetryingJobPolicy = {
        * Discard (section 7.2), so it ends `interrupted` (`isNeverReRun`).
        */
       readonly neverRequeued: true;
+      /**
+       * What its row says once it ends `interrupted`, whichever way it was
+       * cut off (a stop, a lost lease, recovery after a crash): the never-
+       * re-run message, in this kind's own words.
+       */
+      readonly interruptedMessage: string;
     }
 );
 
@@ -122,7 +129,12 @@ export const UPLOAD_MANAGER_POLICIES = {
    * It is never put back after a stop either (`neverRequeued`): a run cut off
    * after Submit leaves a Pending Version for the author (section 7.2).
    */
-  publish: { lane: "publish", maxAttempts: 1, neverRequeued: true },
+  publish: {
+    lane: "publish",
+    maxAttempts: 1,
+    neverRequeued: true,
+    interruptedMessage: PUBLISH_INTERRUPTED_MESSAGE,
+  },
   autofill: { lane: "default", maxAttempts: 1 },
 } as const satisfies Record<string, JobPolicy>;
 

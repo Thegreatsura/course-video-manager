@@ -172,7 +172,10 @@ describe("a Publish Job in the sidecar", () => {
           status: "interrupted",
           attempt: 1,
           maxAttempts: 1,
-          error: { tag: "JobInterrupted" },
+          error: {
+            tag: "JobInterrupted",
+            message: expect.stringContaining("Promote or Discard"),
+          },
         });
         expect(yield* eventTypes(job.id)).not.toContain("requeued");
 
@@ -221,6 +224,11 @@ describe("a Publish Job in the sidecar", () => {
           runs: 0,
           status: "interrupted",
         });
+        // A Publish's own words, not a post's: it was never a post.
+        const message = (after?.error as { message?: string }).message ?? "";
+        expect(message).toContain("Promote or Discard");
+        expect(message).toContain("publish page");
+        expect(message).not.toContain("post was cut off");
       }).pipe(Effect.provide(layer()))
   );
 
