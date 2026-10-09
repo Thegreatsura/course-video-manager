@@ -99,6 +99,8 @@ describe("jobsReducer", () => {
         subject: { type: "video", id: "video-1" },
         attemptsSpent: 0,
         dependsOn: null,
+        checks: 0,
+        afterMs: 0,
       },
       {
         type: "show-job-succeeded-toast",
