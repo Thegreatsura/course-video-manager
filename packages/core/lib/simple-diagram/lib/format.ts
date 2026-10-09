@@ -36,6 +36,21 @@ export const DASHES = ["draw", "solid", "dashed", "dotted", "none"] as const;
 /** tldraw's own size names (`DefaultSizeStyle`), for text. */
 export const SIZES = ["s", "m", "l", "xl"] as const;
 
+/**
+ * The opacity steps tldraw's style panel offers
+ * (`tldrawSupportedOpacities` in tldraw 5.2.4's DefaultStylePanelContent).
+ * The only opacities Matt's Diagrams hold.
+ */
+export const OPACITIES = [0.1, 0.25, 0.5, 0.75, 1] as const;
+
+/**
+ * The bounds of a text's `scale`. tldraw takes any positive number (Matt's
+ * Diagrams hold 0.35 to 5.4, from dragging text bigger or smaller); these
+ * only stop a value that is plainly a mistake.
+ */
+export const MIN_SCALE = 0.01;
+export const MAX_SCALE = 100;
+
 /** Which ends of an arrow carry a head. */
 export const HEADS = ["end", "both", "none"] as const;
 
@@ -53,6 +68,7 @@ export type SimpleColor = (typeof COLORS)[number];
 export type SimpleFill = (typeof FILLS)[number];
 export type SimpleDash = (typeof DASHES)[number];
 export type SimpleSize = (typeof SIZES)[number];
+export type SimpleOpacity = (typeof OPACITIES)[number];
 export type SimpleHeads = (typeof HEADS)[number];
 export type SimpleShapeType = (typeof SHAPE_TYPES)[number];
 
@@ -72,6 +88,8 @@ export const DEFAULTS = {
   heads: "end",
   bend: 0,
   rotation: 0,
+  scale: 1,
+  opacity: 1,
   text: "",
   /** An icon's dash: the playground inserts icons solid, not draw. */
   iconDash: "solid",
@@ -111,6 +129,19 @@ const num = z
   .lte(MAX_COORDINATE, inRange);
 const positive = num.positive();
 
+const opacity = z
+  .number()
+  .refine((n) => (OPACITIES as readonly number[]).includes(n), {
+    message: `must be one of ${OPACITIES.join(", ")} (tldraw's opacity steps)`,
+  });
+
+const scaleRange = `must be a number from ${MIN_SCALE} to ${MAX_SCALE} (1 = unscaled)`;
+const scale = z
+  .number(scaleRange)
+  .finite(scaleRange)
+  .gte(MIN_SCALE, scaleRange)
+  .lte(MAX_SCALE, scaleRange);
+
 const Box = z.strictObject({
   type: z.literal("box"),
   id: Id,
@@ -121,6 +152,7 @@ const Box = z.strictObject({
   color: z.enum(COLORS).optional(),
   fill: z.enum(FILLS).optional(),
   dash: z.enum(DASHES).optional(),
+  opacity: opacity.optional(),
 });
 
 const Ellipse = Box.extend({ type: z.literal("ellipse") });
@@ -132,9 +164,12 @@ const Text = z.strictObject({
   y: num,
   text: z.string().min(1, "must not be empty"),
   size: z.enum(SIZES).optional(),
+  /** tldraw's text `scale`: multiplies the size. Any value in range. */
+  scale: scale.optional(),
   color: z.enum(COLORS).optional(),
   /** Degrees, clockwise. */
   rotation: num.optional(),
+  opacity: opacity.optional(),
 });
 
 const Arrow = z.strictObject({
@@ -151,6 +186,7 @@ const Arrow = z.strictObject({
   heads: z.enum(HEADS).optional(),
   color: z.enum(COLORS).optional(),
   dash: z.enum(DASHES).optional(),
+  opacity: opacity.optional(),
 });
 
 const Line = z.strictObject({
@@ -162,6 +198,7 @@ const Line = z.strictObject({
   y2: num,
   color: z.enum(COLORS).optional(),
   dash: z.enum(DASHES).optional(),
+  opacity: opacity.optional(),
 });
 
 const Icon = z.strictObject({
@@ -171,6 +208,7 @@ const Icon = z.strictObject({
   y: num,
   name: z.string().min(1, "must not be empty"),
   color: z.enum(COLORS).optional(),
+  opacity: opacity.optional(),
 });
 
 const Other = z.strictObject({

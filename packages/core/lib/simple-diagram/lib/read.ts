@@ -7,12 +7,16 @@ import {
   DASHES,
   DEFAULTS,
   FILLS,
+  MAX_SCALE,
+  MIN_SCALE,
+  OPACITIES,
   SIZES,
   type SimpleArrow,
   type SimpleColor,
   type SimpleDash,
   type SimpleDiagram,
   type SimpleFill,
+  type SimpleOpacity,
   type SimpleShape,
   type SimpleSize,
 } from "./format.js";
@@ -46,6 +50,25 @@ function point(value: unknown): { x: number; y: number } | undefined {
   return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
 }
 
+/**
+ * A shape's opacity, when it is one of tldraw's steps. A record without one
+ * is opaque; any other value is one the format cannot say.
+ */
+function opacityOf(record: ShapeRecord): SimpleOpacity | undefined {
+  const value = record.opacity ?? DEFAULTS.opacity;
+  return (OPACITIES as readonly unknown[]).includes(value)
+    ? (value as SimpleOpacity)
+    : undefined;
+}
+
+/** A text's scale, exactly as stored, when it is within the format's range. */
+function scaleOf(value: unknown): number | undefined {
+  const scale = value ?? DEFAULTS.scale;
+  return typeof scale === "number" && scale >= MIN_SCALE && scale <= MAX_SCALE
+    ? scale
+    : undefined;
+}
+
 /** Sets `key` only when it differs from the house-style default. */
 function unlessDefault<T>(value: T, fallback: T): T | undefined {
   return value === fallback ? undefined : value;
@@ -71,6 +94,9 @@ export function readShape(
   const other: SimpleShape = { type: "other", id };
   if (!onPage) return other;
   const p = record.props;
+  const opacity = opacityOf(record);
+  if (opacity === undefined) return other;
+  const opacityField = unlessDefault(opacity, DEFAULTS.opacity);
 
   switch (record.type) {
     case "geo": {
@@ -103,13 +129,15 @@ export function readShape(
         color: unlessDefault(color, DEFAULTS.color),
         fill: unlessDefault(fill, DEFAULTS.fill),
         dash: unlessDefault(dash, DEFAULTS.dash),
+        opacity: opacityField,
       });
     }
     case "text": {
       const color = oneOf<SimpleColor>(COLORS, p.color);
       const size = oneOf<SimpleSize>(SIZES, p.size);
+      const scale = scaleOf(p.scale);
       const text = fromRichText(p.richText);
-      if (!color || !size || text === "") return other;
+      if (!color || !size || scale === undefined || text === "") return other;
       return compact({
         type: "text",
         id,
@@ -117,8 +145,10 @@ export function readShape(
         y: record.y,
         text,
         size: unlessDefault(size, DEFAULTS.size),
+        scale: unlessDefault(scale, DEFAULTS.scale),
         color: unlessDefault(color, DEFAULTS.color),
         rotation: unlessDefault(radToDeg(record.rotation), DEFAULTS.rotation),
+        opacity: opacityField,
       });
     }
     case "arrow": {
@@ -161,6 +191,7 @@ export function readShape(
         heads: unlessDefault(heads, DEFAULTS.heads),
         color: unlessDefault(color, DEFAULTS.color),
         dash: unlessDefault(dash, DEFAULTS.dash),
+        opacity: opacityField,
       };
       return compact(arrow);
     }
@@ -191,6 +222,7 @@ export function readShape(
         y2: b.y,
         color: unlessDefault(color, DEFAULTS.color),
         dash: unlessDefault(dash, DEFAULTS.dash),
+        opacity: opacityField,
       });
     }
     case "cvm-icon": {
@@ -203,6 +235,7 @@ export function readShape(
         y: record.y,
         name: p.name,
         color: unlessDefault(color, DEFAULTS.color),
+        opacity: opacityField,
       });
     }
     default:

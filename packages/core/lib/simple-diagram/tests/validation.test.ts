@@ -1,5 +1,11 @@
 import { expect, describe, it } from "vitest";
-import { MAX_COORDINATE, MAX_SHAPES, parseSimpleDiagram } from "../index.js";
+import {
+  MAX_COORDINATE,
+  MAX_SCALE,
+  MAX_SHAPES,
+  MIN_SCALE,
+  parseSimpleDiagram,
+} from "../index.js";
 import { iconNames } from "./fixtures.js";
 
 function errorsFor(input: unknown): string[] {
@@ -154,6 +160,51 @@ describe("validation errors", () => {
       `shapes[0] ("b").h: must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`,
       `shapes[1] ("l").x1: must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`,
     ]);
+  });
+
+  it("an opacity off tldraw's steps, or a text scale that is not a sane number", () => {
+    expect(
+      errorsFor({
+        shapes: [
+          { type: "box", id: "b", x: 0, y: 0, w: 10, h: 10, opacity: 0.3 },
+          { type: "text", id: "t0", x: 0, y: 0, text: "a", scale: 0 },
+          {
+            type: "text",
+            id: "tbig",
+            x: 0,
+            y: 0,
+            text: "a",
+            scale: MAX_SCALE + 1,
+          },
+          { type: "text", id: "tstr", x: 0, y: 0, text: "a", scale: "2" },
+          { type: "line", id: "l", x1: 0, y1: 0, x2: 1, y2: 1, opacity: "0.5" },
+        ],
+      })
+    ).toEqual([
+      `shapes[0] ("b").opacity: must be one of 0.1, 0.25, 0.5, 0.75, 1 (tldraw's opacity steps)`,
+      `shapes[1] ("t0").scale: must be a number from ${MIN_SCALE} to ${MAX_SCALE} (1 = unscaled)`,
+      `shapes[2] ("tbig").scale: must be a number from ${MIN_SCALE} to ${MAX_SCALE} (1 = unscaled)`,
+      `shapes[3] ("tstr").scale: must be a number from ${MIN_SCALE} to ${MAX_SCALE} (1 = unscaled)`,
+      'shapes[4] ("l").opacity: Invalid input: expected number, received string',
+    ]);
+    expect(
+      parseSimpleDiagram(
+        {
+          shapes: [
+            {
+              type: "text",
+              id: "t",
+              x: 0,
+              y: 0,
+              text: "a",
+              scale: 0.6778877926536484,
+              opacity: 0.5,
+            },
+          ],
+        },
+        iconNames
+      ).ok
+    ).toBe(true);
   });
 
   it("a body that is not a Diagram", () => {

@@ -41,6 +41,7 @@ function full(shape: SimpleBox | SimpleEllipse) {
     color: shape.color ?? DEFAULTS.color,
     fill: shape.fill ?? DEFAULTS.fill,
     dash: shape.dash ?? DEFAULTS.dash,
+    opacity: shape.opacity ?? DEFAULTS.opacity,
   };
 }
 
@@ -48,8 +49,10 @@ function fullText(shape: SimpleText) {
   return {
     ...shape,
     size: shape.size ?? DEFAULTS.size,
+    scale: shape.scale ?? DEFAULTS.scale,
     color: shape.color ?? DEFAULTS.color,
     rotation: shape.rotation ?? DEFAULTS.rotation,
+    opacity: shape.opacity ?? DEFAULTS.opacity,
   };
 }
 
@@ -61,6 +64,7 @@ function fullArrow(shape: SimpleArrow) {
     heads: shape.heads ?? DEFAULTS.heads,
     color: shape.color ?? DEFAULTS.color,
     dash: shape.dash ?? DEFAULTS.dash,
+    opacity: shape.opacity ?? DEFAULTS.opacity,
   };
 }
 
@@ -69,11 +73,16 @@ function fullLine(shape: SimpleLine) {
     ...shape,
     color: shape.color ?? DEFAULTS.color,
     dash: shape.dash ?? DEFAULTS.dash,
+    opacity: shape.opacity ?? DEFAULTS.opacity,
   };
 }
 
 function fullIcon(shape: SimpleIcon) {
-  return { ...shape, color: shape.color ?? DEFAULTS.color };
+  return {
+    ...shape,
+    color: shape.color ?? DEFAULTS.color,
+    opacity: shape.opacity ?? DEFAULTS.opacity,
+  };
 }
 
 /** Keys of `next` whose value differs from `prev` (all of them with no `prev`). */
@@ -225,6 +234,7 @@ function writeShape(
       if (changed("color")) p.color = n.color;
       if (changed("fill")) p.fill = n.fill;
       if (changed("dash")) p.dash = n.dash;
+      if (changed("opacity")) record.opacity = n.opacity;
       return;
     }
     case "text": {
@@ -234,8 +244,10 @@ function writeShape(
       if (changed("y")) record.y = n.y;
       if (changed("text")) p.richText = toRichText(n.text);
       if (changed("size")) p.size = n.size;
+      if (changed("scale")) p.scale = n.scale;
       if (changed("color")) p.color = n.color;
       if (changed("rotation")) record.rotation = degToRad(n.rotation);
+      if (changed("opacity")) record.opacity = n.opacity;
       return;
     }
     case "arrow": {
@@ -251,6 +263,7 @@ function writeShape(
         p.labelColor = n.color;
       }
       if (changed("dash")) p.dash = n.dash;
+      if (changed("opacity")) record.opacity = n.opacity;
       if (changed("heads")) {
         p.arrowheadStart = n.heads === "both" ? "arrow" : "none";
         p.arrowheadEnd = n.heads === "none" ? "none" : "arrow";
@@ -280,6 +293,7 @@ function writeShape(
       const changed = changes(prev?.type === "line" ? fullLine(prev) : null, n);
       if (changed("color")) p.color = n.color;
       if (changed("dash")) p.dash = n.dash;
+      if (changed("opacity")) record.opacity = n.opacity;
       if ((["x1", "y1", "x2", "y2"] as const).some(changed)) {
         record.x = n.x1;
         record.y = n.y1;
@@ -298,6 +312,7 @@ function writeShape(
       if (changed("y")) record.y = n.y;
       if (changed("name")) p.name = n.name;
       if (changed("color")) p.color = n.color;
+      if (changed("opacity")) record.opacity = n.opacity;
       return;
     }
   }
