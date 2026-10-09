@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULTS,
+  OPACITIES,
   applySimpleDiagram,
   parseSimpleDiagram,
   readSimpleDiagram,
@@ -53,7 +54,9 @@ describe("round trip", () => {
           y: 0,
           text: "hi",
           size: "m",
+          scale: 1,
           rotation: 0,
+          opacity: 1,
         },
         {
           type: "arrow",
@@ -219,6 +222,105 @@ describe("shapes the format cannot express", () => {
         'other "ghost": the Diagram has no shape with this id — "other" only stands for a shape read from the Diagram',
       ],
     });
+  });
+});
+
+describe("text scale and opacity", () => {
+  /** One shape of every kind, at full opacity and scale 1. */
+  const plain = () =>
+    build({
+      shapes: [
+        { type: "box", id: "b", x: 0, y: 0, w: 10, h: 10 },
+        { type: "ellipse", id: "e", x: 0, y: 0, w: 10, h: 10 },
+        { type: "text", id: "t", x: 0, y: 0, text: "hi" },
+        { type: "arrow", id: "a", from: "b", to: "e" },
+        { type: "line", id: "l", x1: 0, y1: 0, x2: 1, y2: 1 },
+        { type: "icon", id: "i", x: 0, y: 0, name: "user" },
+      ],
+    });
+
+  it("write tldraw's own fields: the shape's opacity, the text's props.scale", () => {
+    const scene = build(FLOW);
+    expect(record(scene, "shape:description")).toMatchObject({
+      opacity: 0.5,
+      props: { scale: 0.6778877926536484, size: "m" },
+    });
+    expect(record(scene, "shape:heading").props.scale).toBe(2.4360630567746884);
+    expect(record(scene, "shape:server").opacity).toBe(0.75);
+    expect(record(scene, "shape:free").opacity).toBe(0.25);
+    expect(record(scene, "shape:slant").opacity).toBe(0.5);
+    expect(record(scene, "shape:bot").opacity).toBe(0.1);
+  });
+
+  it("read back every opacity step on every kind, exactly", () => {
+    for (const opacity of OPACITIES) {
+      const store = structuredClone(plain().store);
+      for (const id of ["b", "e", "t", "a", "l", "i"]) {
+        store[`shape:${id}`]!.opacity = opacity;
+      }
+      const shapes = readSimpleDiagram(store).shapes;
+      expect(shapes.map((s) => s.type)).not.toContain("other");
+      expect(shapes.map((s) => ("opacity" in s ? s.opacity : 1))).toEqual(
+        Array(6).fill(opacity)
+      );
+    }
+  });
+
+  it("read back any scale Matt dragged a text to, unrounded", () => {
+    for (const scale of [0.37346433439560717, 1.3420484433058988, 5.4]) {
+      const store = structuredClone(plain().store);
+      (store["shape:t"]!.props as Record<string, unknown>).scale = scale;
+      const text = readSimpleDiagram(store).shapes.find((s) => s.id === "t");
+      expect(text).toEqual({
+        type: "text",
+        id: "t",
+        x: 0,
+        y: 0,
+        text: "hi",
+        scale,
+      });
+      // ...and writing that read-back changes nothing.
+      const before = { store, schema: plain().schema };
+      expect(build(readSimpleDiagram(store), before).store).toEqual(store);
+    }
+  });
+
+  it("change on update only when asked, leaving the rest of the shape alone", () => {
+    const before = build(FLOW);
+    const shapes = readSimpleDiagram(before.store).shapes.map((s) =>
+      s.id === "description"
+        ? { ...s, scale: 0.5, opacity: 1 as const }
+        : s.id === "client"
+          ? { ...s, opacity: 0.25 as const }
+          : s
+    );
+    const after = build({ shapes }, before);
+    expect(after.store["shape:description"]).toEqual({
+      ...before.store["shape:description"],
+      opacity: 1,
+      props: { ...record(before, "shape:description").props, scale: 0.5 },
+    });
+    expect(after.store["shape:client"]).toEqual({
+      ...before.store["shape:client"],
+      opacity: 0.25,
+    });
+    // Full opacity is the default, so it reads back left out.
+    expect(readSimpleDiagram(after.store).shapes).toEqual(
+      shapes.map((s) =>
+        s.id === "description" ? { ...s, opacity: undefined } : s
+      )
+    );
+  });
+
+  it("an opacity between tldraw's steps, or a scale out of range, reads as other", () => {
+    const store = structuredClone(plain().store);
+    store["shape:b"]!.opacity = 0.3;
+    (store["shape:t"]!.props as Record<string, unknown>).scale = 0;
+    expect(
+      readSimpleDiagram(store)
+        .shapes.filter((s) => s.type === "other")
+        .map((s) => s.id)
+    ).toEqual(["b", "t"]);
   });
 });
 

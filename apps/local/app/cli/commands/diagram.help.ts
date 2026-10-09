@@ -49,12 +49,12 @@ snapshot must differ from the others. A drawing holds at most 500 shapes,
 and every number is within ±100000.
 
 SHAPES ("?" = optional; leave a field out to get Matt's default)
-  box      id, x, y, w, h, color?, fill?, dash?
-  ellipse  id, x, y, w, h, color?, fill?, dash?
-  text     id, x, y, text, size?, color?, rotation?
-  arrow    id, from? | x1?, y1?, to? | x2?, y2?, text?, bend?, heads?, color?, dash?
-  line     id, x1, y1, x2, y2, color?, dash?
-  icon     id, x, y, name, color?
+  box      id, x, y, w, h, color?, fill?, dash?, opacity?
+  ellipse  id, x, y, w, h, color?, fill?, dash?, opacity?
+  text     id, x, y, text, size?, scale?, color?, rotation?, opacity?
+  arrow    id, from? | x1?, y1?, to? | x2?, y2?, text?, bend?, heads?, color?, dash?, opacity?
+  line     id, x1, y1, x2, y2, color?, dash?, opacity?
+  icon     id, x, y, name, color?, opacity?
   other    id   (only from 'get'; 'snapshot add' keeps it, 'create' refuses it)
 
 WHAT THE FIELDS MEAN
@@ -64,8 +64,9 @@ WHAT THE FIELDS MEAN
   text       a text shape's words; "\\n" starts a new line. On an arrow, a
              label drawn on its middle.
   box text   a box or ellipse has NO text inside. Put a separate text shape
-             over it, as Matt does. Text at size m is about 13px wide per
-             character and 32px tall per line, so centre it by eye.
+             over it, as Matt does. Text at size m and scale 1 is about
+             13px wide per character and 32px tall per line (both times
+             its scale), so centre it by eye.
   from, to   an arrow end ATTACHED to another shape's id (box, ellipse, text
              or icon — not an arrow or line, and not the arrow's other end's
              shape). It meets that shape's outline
@@ -74,22 +75,28 @@ WHAT THE FIELDS MEAN
              end.
   bend       how far the arrow's middle bows sideways, in pixels (0 =
              straight; try 30 to 80; negative bows the other way).
-  heads      which ends carry an arrowhead.
+  heads        which ends carry an arrowhead.
   rotation   degrees, clockwise — for a hand-written aside, tilt it a few.
+  scale      a text's size multiplier, as tldraw's own: any number from
+             0.01 to 100 (default 1). Matt sizes text this way far more than
+             by size: about 0.5 to 0.75 for a description under a heading,
+             2 to 2.5 for a title. 'get' prints it exactly as stored.
   name       an icon's Lucide name, e.g. "database", "user", "bot",
              "search", "flag", "wrench", "code-xml". An unknown name is
              refused. Icons are 48x48.
   line       a straight two-point line: a divider or an underline.
 
 VALUES (default marked)
-  color   black (default), grey, light-violet, violet, blue, light-blue, yellow, orange, green, light-green, light-red, red, white
-  fill    none (default), semi, solid, pattern, fill, lined-fill
-  dash    draw (default), solid, dashed, dotted, none
-  size    s, m (default), l, xl
-  heads   end (default), both, none
+  color     black (default), grey, light-violet, violet, blue, light-blue, yellow, orange, green, light-green, light-red, red, white
+  fill      none (default), semi, solid, pattern, fill, lined-fill
+  dash      draw (default), solid, dashed, dotted, none
+  size      s, m (default), l, xl
+  heads     end (default), both, none
+  opacity   0.1, 0.25, 0.5, 0.75, 1 (default)
 
 Matt's style, already the defaults: the hand-drawn font, size m, the "draw"
-dash, black, no fill. Colour is for meaning — one lit box, not a rainbow.
+dash, black, no fill, fully opaque. Colour is for meaning — one lit box, not a
+rainbow. Opacity 0.5 fades a description under its heading.
 Keep it SMALL: about 10 shapes.
 
 EXAMPLE
@@ -104,7 +111,8 @@ EXAMPLE
       { "type": "arrow", "id": "result", "from": "tools", "to": "agent", "bend": 40 },
       { "type": "icon", "id": "bot", "x": 86, "y": -70, "name": "bot" },
       { "type": "line", "id": "rule", "x1": 0, "y1": 200, "x2": 640, "y2": 200, "dash": "dashed" },
-      { "type": "text", "id": "aside", "x": 440, "y": 220, "text": "runs until done", "size": "s", "rotation": -5 }
+      { "type": "text", "id": "aside", "x": 440, "y": 220, "text": "runs until done", "size": "s", "rotation": -5 },
+      { "type": "text", "id": "caption", "x": 0, "y": 240, "text": "The agent calls tools in a loop.", "scale": 0.7, "opacity": 0.5 }
     ]
   }
 
@@ -188,8 +196,8 @@ command prints where to look.
 The drawing is applied ONTO the head, matched by id, and the result is the
 new snapshot. Start from 'cvm diagram get' and change only what you mean to:
   - a shape you list keeps everything the format cannot say — an icon Matt
-    resized, a font, a text's wrapping width, a stroke size, an opacity, an
-    arrow end he dragged — and takes the fields you give it;
+    resized, a font, a text's wrapping width, a stroke size, an arrow end
+    he dragged — and takes the fields you give it;
   - a shape you leave out is removed;
   - a new id is drawn in Matt's defaults;
   - an "other" shape is kept as it is, listed or not; an "other" whose id the
