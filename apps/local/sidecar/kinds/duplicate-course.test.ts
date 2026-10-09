@@ -20,7 +20,10 @@ import {
   COURSE_ROWS_COPIED_EVENT,
   courseRowsCopiedOf,
 } from "@/features/jobs/duplicate-course-job";
-import { verifyPlannedFiles } from "@/services/course-duplicate-files";
+import {
+  copyPlannedFile,
+  verifyPlannedFiles,
+} from "@/services/course-duplicate-files";
 import type { JobContext } from "../job-kind";
 import { duplicateCourseJobKind } from "./duplicate-course";
 
@@ -146,10 +149,10 @@ const ctxFor = (jobId: string): JobContext => ({
 });
 
 const newCourseId = "00000000-0000-4000-8000-000000000001";
-const runJob = (jobId: string) =>
+const runJob = (jobId: string, courseId = newCourseId) =>
   run(
     duplicateCourseJobKind.runRaw(
-      { sourceCourseId, name: "Copy", newCourseId },
+      { sourceCourseId, name: "Copy", newCourseId: courseId },
       ctxFor(jobId)
     )
   );
@@ -189,6 +192,10 @@ describe("a duplicate-course Job", () => {
     expect(
       events.find((e) => e.type === COURSE_FILES_COPIED_EVENT)?.data
     ).toEqual({ files: 5, copied: 5, skipped: 0 });
+    const copy = await testDb.query.courses.findFirst({
+      where: (t, { eq }) => eq(t.id, newCourseId),
+    });
+    expect(copy?.archived).toBe(false);
   });
 
   it("resumed after a lost run, skips the rows and the files already in place", async () => {
@@ -262,5 +269,58 @@ describe("a duplicate-course Job", () => {
     expect(String(exit)).toContain("2 of 3 files did not reach the copy");
     expect(String(exit)).toContain("never-copied.png");
     expect(String(exit)).toContain("short.png");
+  });
+
+  it("two Jobs copying under one name at once make one Course", async () => {
+    const [a, b] = [await newJob(), await newJob()];
+
+    await Promise.all([
+      runJob(a),
+      runJob(b, "00000000-0000-4000-8000-000000000002"),
+    ]);
+
+    const copies = await testDb.query.courses.findMany({
+      where: (t, { eq }) => eq(t.name, "Copy"),
+    });
+    expect(copies).toHaveLength(1);
+  });
+
+  it("keeps the Course archived while its files fail to copy", async () => {
+    const unreadable = path.join(filesDir, sourceLineageId, "notes.md");
+    fs.chmodSync(unreadable, 0o000);
+    try {
+      const exit = await runJob(await newJob());
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const copy = await testDb.query.courses.findFirst({
+        where: (t, { eq }) => eq(t.id, newCourseId),
+      });
+      expect(copy?.archived).toBe(true);
+    } finally {
+      fs.chmodSync(unreadable, 0o644);
+    }
+  });
+
+  it("refuses a copy through a symlink out of the store before making any folder", async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "outside-"));
+    fs.symlinkSync(outside, path.join(filesDir, "escape"));
+    const from = path.join(filesDir, "from.png");
+    fs.writeFileSync(from, "12345");
+    try {
+      const exit = await run(
+        copyPlannedFile({
+          store: filesDir,
+          from,
+          to: path.join(filesDir, "escape", "made", "x.png"),
+          size: 5,
+        })
+      );
+
+      expect(String(exit)).toContain("PathOutsideBaseDirError");
+      expect(fs.existsSync(path.join(outside, "made"))).toBe(false);
+    } finally {
+      fs.rmSync(path.join(filesDir, "escape"));
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

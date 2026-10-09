@@ -20,8 +20,8 @@ import {
   rebaseLineagePath,
   rebaseLineagePathsDeep,
 } from "./thumbnail-path-rebase.js";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { Data, Effect } from "effect";
 import {
   copyClipMockupCommentValues,
   newIdsFor,
@@ -34,6 +34,15 @@ import {
   insertInChunks,
   type ClipWithChildren,
 } from "./copy-child-rows.js";
+
+/**
+ * Another Course, archived or not, already holds the name the copy asked for.
+ * Checked inside the copy's own transaction, under a lock on the name, so two
+ * copies racing for one name cannot both commit.
+ */
+export class CourseNameTakenError extends Data.TaggedError(
+  "CourseNameTakenError"
+)<{ readonly name: string; readonly message: string }> {}
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -75,6 +84,11 @@ export const makeDuplicateCourse = (db: Database) =>
      * whether this copy already committed.
      */
     newCourseId?: string;
+    /**
+     * Commit the Course archived: the `duplicate-course` Job keeps it out of
+     * sight until its files have copied, and only then un-archives it.
+     */
+    archived?: boolean;
   }) {
     // Fetch source course
     const sourceCourse = yield* makeDbCall(() =>
@@ -355,40 +369,59 @@ export const makeDuplicateCourse = (db: Database) =>
       }
     }
 
-    const { newCourse, newVersion } = yield* makeDbCall(() =>
-      db.transaction(async (tx) => {
-        const [newCourse] = await tx
-          .insert(courses)
-          .values({
-            id: newCourseId,
-            name: input.name,
-            memory: sourceCourse.memory,
-          })
-          .returning();
-        // A single fresh draft version
-        const [newVersion] = await tx
-          .insert(courseVersions)
-          .values({ id: newVersionId, repoId: newCourseId, name: "v1.0" })
-          .returning();
+    const nameTaken = new CourseNameTakenError({
+      name: input.name,
+      message: "A course with this name already exists",
+    });
+    const { newCourse, newVersion } = yield* Effect.tryPromise({
+      try: () =>
+        db.transaction(async (tx) => {
+          // Two copies under one name take turns here; the second then sees
+          // the first's committed Course and stops.
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtext(${`course-name:${input.name}`}))`
+          );
+          const [holder] = await tx
+            .select({ id: courses.id })
+            .from(courses)
+            .where(eq(courses.name, input.name))
+            .limit(1);
+          if (holder) throw nameTaken;
+          const [newCourse] = await tx
+            .insert(courses)
+            .values({
+              id: newCourseId,
+              name: input.name,
+              memory: sourceCourse.memory,
+              archived: input.archived ?? false,
+            })
+            .returning();
+          // A single fresh draft version
+          const [newVersion] = await tx
+            .insert(courseVersions)
+            .values({ id: newVersionId, repoId: newCourseId, name: "v1.0" })
+            .returning();
 
-        // Parents before children, so every foreign key already resolves.
-        await insertInChunks(tx, sections, sectionValues);
-        await insertInChunks(tx, learningGoals, goalValues);
-        await insertInChunks(tx, lessons, lessonValues);
-        await insertInChunks(tx, videos, videoValues);
-        await insertInChunks(tx, clips, clipValues);
-        await copyClipChildren(tx, sourceClips, clipIds);
-        await insertInChunks(tx, chapters, chapterValues);
-        await insertInChunks(tx, beats, beatValues);
-        await insertInChunks(tx, clipMockups, clipMockupValues);
-        await insertInChunks(tx, clipMockupChapters, clipMockupChapterValues);
-        await insertInChunks(tx, clipMockupComments, commentValues);
-        await insertInChunks(tx, thumbnails, thumbnailValues);
-        await insertInChunks(tx, beatLearningGoals, beatLinkValues);
+          // Parents before children, so every foreign key already resolves.
+          await insertInChunks(tx, sections, sectionValues);
+          await insertInChunks(tx, learningGoals, goalValues);
+          await insertInChunks(tx, lessons, lessonValues);
+          await insertInChunks(tx, videos, videoValues);
+          await insertInChunks(tx, clips, clipValues);
+          await copyClipChildren(tx, sourceClips, clipIds);
+          await insertInChunks(tx, chapters, chapterValues);
+          await insertInChunks(tx, beats, beatValues);
+          await insertInChunks(tx, clipMockups, clipMockupValues);
+          await insertInChunks(tx, clipMockupChapters, clipMockupChapterValues);
+          await insertInChunks(tx, clipMockupComments, commentValues);
+          await insertInChunks(tx, thumbnails, thumbnailValues);
+          await insertInChunks(tx, beatLearningGoals, beatLinkValues);
 
-        return { newCourse: newCourse!, newVersion: newVersion! };
-      })
-    );
+          return { newCourse: newCourse!, newVersion: newVersion! };
+        }),
+      catch: (e) =>
+        e === nameTaken ? nameTaken : new UnknownDBServiceError({ cause: e }),
+    });
 
     return {
       course: newCourse,

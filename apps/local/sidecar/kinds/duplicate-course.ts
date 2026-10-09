@@ -30,13 +30,17 @@ export class DuplicateRowsUnrecordedError extends Data.TaggedError(
  * (`POST /api/courses/<id>/duplicate`). Two halves:
  *
  * 1. The rows, in one transaction (`duplicateCourse`, PR #1963), under the
- *    Course id the route chose. What it produced — the Course and each Video
+ *    Course id the route chose. The transaction locks the name and checks it,
+ *    so two Jobs copying under one name make one Course. The Course commits
+ *    archived: it stays out of the Courses list until its files are in. What it produced — the Course and each Video
  *    paired with its source — is recorded as a `course-rows-copied` Job Event.
  *    A resumed run that finds that event skips the rows.
  * 2. The files: every Video's Clip Mockup frames and WAVs and its Video Files
  *    (`services/course-duplicate-files.ts`). A file already in place is
  *    skipped, each copy is checked against its source's size, and at the end
- *    every file is checked again; a missing one fails the Job by name.
+ *    every file is checked again; a missing one fails the Job by name. Only
+ *    then is the Course un-archived. A Job that fails for good leaves it
+ *    archived, so a copy short of its files never looks complete.
  *
  * 2 attempts (`COURSE_DUPLICATE_POLICY`): a run the Sidecar loses resumes.
  */
@@ -76,6 +80,7 @@ export const duplicateCourseJobKind = defineJobKind({
           sourceCourseId: params.sourceCourseId,
           name: params.name,
           newCourseId: params.newCourseId,
+          archived: true,
         });
         rows = {
           courseId: result.course.id,
@@ -112,6 +117,10 @@ export const duplicateCourseJobKind = defineJobKind({
         }
       }
       yield* verifyPlannedFiles(planned);
+      yield* courseOps.updateCourseArchiveStatus({
+        repoId: rows.courseId,
+        archived: false,
+      });
 
       const summary = {
         files: planned.length,
