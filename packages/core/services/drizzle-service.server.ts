@@ -9,6 +9,7 @@ import {
   judgeConnection,
 } from "../db/connection-guard.js";
 import { sqlStatementLogger } from "../db/sql-statement-log.js";
+import { countSqlStatement } from "../db/sql-statement-tally.js";
 import { Context, Effect, Layer } from "effect";
 
 export type DrizzleDB = NodePgDatabase<typeof schema>;
@@ -78,10 +79,16 @@ export class DrizzleService extends Effect.Service<DrizzleService>()(
       if (!verdict.allowed) {
         return yield* Effect.die(new Error(formatConnectionRefusal(verdict)));
       }
-      const logger = sqlStatementLogger();
+      const sqlLog = sqlStatementLogger();
       return drizzle(makeConnectionPool(url), {
         schema,
-        ...(logger ? { logger } : {}),
+        // Always on: the slow-request log's statement count rides on it.
+        logger: {
+          logQuery: (query, params) => {
+            countSqlStatement();
+            sqlLog?.logQuery(query, params);
+          },
+        },
       }) as DrizzleDB;
     }),
   }

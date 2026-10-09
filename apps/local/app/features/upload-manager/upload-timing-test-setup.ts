@@ -100,6 +100,7 @@ const newRow = (
         uploadType,
         autofillStage: options.parentUploadId ? "writing" : "selecting",
         courseId: "c",
+        kept: [],
       };
     case "render-vertical":
       return {

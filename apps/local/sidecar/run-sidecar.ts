@@ -13,6 +13,7 @@ import {
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { leaveSignalsToTheProcess } from "@/services/ffmpeg-child-registry";
 import { judgeServiceUrlOverrides } from "@/services/service-url-guard";
+import { sidecarSocketPath } from "@/services/sidecar-socket.server";
 import { sidecarLayer } from "./sidecar-layer";
 import { JOB_KINDS, type JobServices } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
@@ -93,9 +94,7 @@ const main = async (): Promise<void> => {
   }
 
   // Everything the run needs is read here, before any work starts.
-  const socket =
-    process.env.CVM_SIDECAR_SOCKET ||
-    path.join(CHECKOUT, ".data", "sidecar.sock");
+  const socket = sidecarSocketPath();
   const logDir =
     process.env.CVM_SIDECAR_LOG_DIR ||
     path.join(CHECKOUT, ".data", "logs", "jobs");

@@ -312,6 +312,7 @@ const autofillUploadEntries = (
       uploadType: "autofill",
       autofillStage: videoStatus === "success" ? null : "writing",
       courseId,
+      kept: video.kept,
     };
   });
   const stage =
@@ -336,6 +337,7 @@ const autofillUploadEntries = (
     uploadType: "autofill",
     autofillStage: status === "success" ? null : (stage ?? "selecting"),
     courseId,
+    kept: [],
   };
   return [parent, ...children];
 };

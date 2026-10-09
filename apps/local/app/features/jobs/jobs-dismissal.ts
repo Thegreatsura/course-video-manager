@@ -87,7 +87,14 @@ export const reduceDismissal = (
 
     case "idle-timeout-elapsed":
       // A failed or interrupted Job needs the author: only they dismiss it.
-      return dismissSettled(state, exec, (job) => job.status === "succeeded");
+      // So does an Autofill offering text for a field the author kept.
+      return dismissSettled(
+        state,
+        exec,
+        (job) =>
+          job.status === "succeeded" &&
+          !(job.videos ?? []).some((video) => video.kept.length > 0)
+      );
 
     case "dismiss-failed": {
       // Hidden here, but kept nowhere: it comes back with the next snapshot.

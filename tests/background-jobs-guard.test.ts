@@ -82,6 +82,43 @@ describe("scan", () => {
     ).toEqual([]);
   });
 
+  it("finds outbound network and AI calls in server and CLI code", () => {
+    expect(
+      guards(
+        scan(
+          "apps/local/app/services/new-thing.ts",
+          `import { generateText, ToolLoopAgent as Agent } from "ai";
+           import OpenAI from "openai";
+           import { v2 as cloudinary } from "cloudinary";
+           await fetch("https://api.example.com");
+           await generateText({ model });
+           new Agent({ model });
+           new OpenAI({ apiKey });
+           cloudinary.uploader.upload(file);
+           cloudinary.config({});`
+        )
+      )
+    ).toEqual(["network", "network", "network", "network", "network"]);
+  });
+
+  it("does not count the app calling itself, a local fetch, the Sidecar or .tsx routes", () => {
+    const outbound = `fetch("https://api.example.com");`;
+    expect(
+      scan(
+        "apps/local/app/services/client-thing.ts",
+        'fetch("/api/x"); fetch(`/api/${id}`);'
+      )
+    ).toEqual([]);
+    expect(
+      scan(
+        "apps/local/app/cli/helpers.ts",
+        `const run = ({ fetch }) => fetch(id);`
+      )
+    ).toEqual([]);
+    expect(scan("apps/local/sidecar/kinds/thing.ts", outbound)).toEqual([]);
+    expect(scan("apps/local/app/routes/videos.tsx", outbound)).toEqual([]);
+  });
+
   it("ignores comments, tests, the jobs feature and code outside the app", () => {
     const src = `createSSEResponse(p); consumeSSEStream(c); new EventSource("/x");`;
     expect(scan(ROUTE, `// createSSEResponse(program)`)).toEqual([]);
