@@ -18,6 +18,18 @@ export const action = makeAction({
       const preserved =
         typeof body.preserved === "boolean" ? body.preserved : undefined;
       const clipId = typeof body.clipId === "string" ? body.clipId : undefined;
+      // A canvas the server wouldn't take as the head, kept as it stands.
+      const scene =
+        body.scene &&
+        typeof body.scene === "object" &&
+        !Array.isArray(body.scene)
+          ? body.scene
+          : undefined;
+      if (scene && clipId) {
+        return yield* Effect.die(
+          data("A clip's snapshot is of the head, not a scene", { status: 400 })
+        );
+      }
       const thumbnailBase64 =
         typeof body.thumbnailPngBase64 === "string"
           ? body.thumbnailPngBase64
@@ -48,6 +60,7 @@ export const action = makeAction({
         snapshot = yield* diagramOps.createSnapshot(params.diagramId!, {
           preserved,
           thumbnailPng,
+          scene,
         });
       }
 

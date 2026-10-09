@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useEffectReducer } from "use-effect-reducer";
-import { useNavigate } from "react-router";
+import { useBlocker, useNavigate } from "react-router";
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
 import { diagramChannel } from "@/lib/diagram-protocol";
 import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
   isCanvasEditable,
+  mustKeepCanvasBeforeLeaving,
   type StoredHead,
 } from "./diagram-playground-reducer";
 import {
@@ -75,6 +76,13 @@ export function useDiagramPlaygroundReducer() {
   /** Callers of `requestRestore` waiting for the head to move. */
   const restoreWaiters = useRef(new Map<number, () => void>());
   const nextRestoreRequestId = useRef(0);
+  /**
+   * Read by the navigation blocker, which React Router may call before this
+   * render's effects run: set during render so it is never a render behind.
+   */
+  const mustKeepCanvasRef = useRef(false);
+  /** Whether the navigation the blocker last held was a replace. */
+  const heldReplace = useRef(false);
 
   // Saves only what differs from the head last loaded or saved, so opening a
   // diagram never writes it back. Every flow that leaves the current diagram
@@ -203,6 +211,49 @@ export function useDiagramPlaygroundReducer() {
           }
         })();
       },
+      "keep-canvas-as-snapshot": (_state, effect, dispatch) => {
+        const { diagramId } = effect;
+        void (async () => {
+          try {
+            const ed = editorRef.current;
+            if (!ed) throw new Error("No editor");
+            const thumbnailPngBase64 = await renderThumbnailPngBase64(
+              ed,
+              "current-page"
+            );
+            if (!thumbnailPngBase64) {
+              dispatch({
+                type: "keep-canvas-failed",
+                diagramId,
+                reason: "empty-canvas",
+              });
+              return;
+            }
+            const res = await fetch(`/api/diagrams/${diagramId}/snapshots`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                preserved: true,
+                thumbnailPngBase64,
+                scene: ed.store.getStoreSnapshot("document"),
+              }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            dispatch({ type: "canvas-kept", diagramId });
+          } catch {
+            dispatch({
+              type: "keep-canvas-failed",
+              diagramId,
+              reason: "request-failed",
+            });
+          }
+        })();
+      },
+      "continue-leaving": (_state, effect) => {
+        navigate(effect.destination.to, {
+          replace: effect.destination.replace,
+        });
+      },
       "create-diagram": (_state, _effect, dispatch) => {
         void (async () => {
           try {
@@ -282,6 +333,46 @@ export function useDiagramPlaygroundReducer() {
   }, [editable, state.editorMounted]);
 
   useEffect(() => () => autosaver.current?.dispose(), []);
+
+  // Every way out of the open diagram — another diagram, the index, another
+  // page — is held while its canvas holds edits the server refused. The
+  // blocker is released at once, since a held blocker didn't survive the
+  // snapshot's round trip in the browser; the reducer gets the destination,
+  // keeps the canvas, then sends the navigation on with `continue-leaving`.
+  const mustKeepCanvas = mustKeepCanvasBeforeLeaving(state);
+  mustKeepCanvasRef.current = mustKeepCanvas;
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation, historyAction }) => {
+      const hold =
+        mustKeepCanvasRef.current &&
+        currentLocation.pathname !== nextLocation.pathname;
+      if (hold) heldReplace.current = historyAction === "REPLACE";
+      return hold;
+    }
+  );
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    const { pathname, search, hash } = blocker.location;
+    dispatch({
+      type: "leave-requested",
+      destination: {
+        to: `${pathname}${search}${hash}`,
+        replace: heldReplace.current,
+      },
+    });
+    blocker.reset();
+  }, [blocker, dispatch]);
+
+  // Closing or reloading the tab can't wait for a snapshot: the browser asks.
+  useEffect(() => {
+    if (!mustKeepCanvas) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [mustKeepCanvas]);
 
   /** Wire a freshly mounted tldraw editor to the page. */
   const attachEditor = useCallback(
