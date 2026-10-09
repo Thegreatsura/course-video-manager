@@ -18,6 +18,8 @@ const mockup = (
   audioUrl: "/clip-mockups/cm_1/audio",
   imageMissing: false,
   audioMissing: false,
+  voiceStatus: "ready",
+  voiceError: null,
   ...overrides,
 });
 

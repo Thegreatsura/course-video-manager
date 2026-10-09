@@ -4,11 +4,13 @@ import {
   CLIP_MOCKUP_GAP_SECONDS,
   UNVOICED_HOLD_SECONDS,
   buildAnimaticTimeline,
+  formatAnimaticRunTime,
   adjacentSegmentStartFrame,
   segmentIndexAtFrame,
   type AnimaticClipMockup,
 } from "./animatic-timeline";
 import { AUTO_EDITED_END_PADDING_SECONDS } from "@/silence-detection-constants";
+import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
 
 /**
  * The clock the whole player runs on: the run time the page prints, the frame
@@ -31,6 +33,8 @@ const mockup = (
   audioUrl: `/api/clip-mockups/cm_${position}/audio`,
   imageMissing: false,
   audioMissing: false,
+  voiceStatus: "ready",
+  voiceError: null,
   ...overrides,
 });
 
@@ -91,8 +95,21 @@ describe("buildAnimaticTimeline", () => {
     );
   });
 
-  it("holds an unvoiced Clip Mockup instead of flashing it past in one frame", () => {
-    const timeline = buildAnimaticTimeline([mockup(1, null)]);
+  it("holds a Clip Mockup whose voice is pending for the CLI's word-count guess", () => {
+    const line = "One two three four five six seven eight.";
+    const timeline = buildAnimaticTimeline([
+      mockup(1, null, { line, voiceStatus: "pending" }),
+    ]);
+
+    expect(timeline.segments[0]!.speechInFrames).toBe(
+      Math.round(estimateSpokenSeconds(line) * ANIMATIC_FPS)
+    );
+  });
+
+  it("holds an unvoiced Clip Mockup with no words instead of flashing it past", () => {
+    const timeline = buildAnimaticTimeline([
+      mockup(1, null, { line: " ", voiceStatus: "failed" }),
+    ]);
 
     expect(timeline.segments[0]!.speechInFrames).toBe(
       Math.round(UNVOICED_HOLD_SECONDS * ANIMATIC_FPS)
@@ -158,5 +175,24 @@ describe("adjacentSegmentStartFrame", () => {
 
   it("has nowhere to go in an empty Animatic", () => {
     expect(adjacentSegmentStartFrame([], 0, 1)).toBeNull();
+  });
+});
+
+describe("formatAnimaticRunTime", () => {
+  it("prints the bare run time once every voice is measured", () => {
+    const timeline = buildAnimaticTimeline([mockup(1, 60)]);
+    expect(formatAnimaticRunTime(timeline)).toBe("1:00");
+  });
+
+  it("marks the run time a guess and counts the voices still to come", () => {
+    const timeline = buildAnimaticTimeline([
+      mockup(1, 60),
+      mockup(2, null, { voiceStatus: "pending" }),
+      mockup(3, null, { voiceStatus: "pending" }),
+      mockup(4, null, { voiceStatus: "failed", voiceError: "daemon down" }),
+    ]);
+    expect(formatAnimaticRunTime(timeline)).toMatch(
+      /^~1:0\d \(2 voices pending, 1 failed\)$/
+    );
   });
 });

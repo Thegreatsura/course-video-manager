@@ -109,11 +109,15 @@ const createClipMockupOperations = (db: Database) => {
   const listClipMockupDurationsByVideoIds = (videoIds: readonly string[]) =>
     videoIds.length === 0
       ? Effect.succeed(
-          [] as { videoId: string; durationSeconds: number | null }[]
+          [] as {
+            videoId: string;
+            line: string;
+            durationSeconds: number | null;
+          }[]
         )
       : makeDbCall(() =>
           db.query.clipMockups.findMany({
-            columns: { videoId: true, durationSeconds: true },
+            columns: { videoId: true, line: true, durationSeconds: true },
             where: and(
               inArray(clipMockups.videoId, [...videoIds]),
               eq(clipMockups.archived, false)

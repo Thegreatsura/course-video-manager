@@ -25,6 +25,8 @@ const mockup = (position: number, order: string): AnimaticClipMockup => ({
   audioUrl: `/api/clip-mockups/cm_${position}/audio`,
   imageMissing: false,
   audioMissing: false,
+  voiceStatus: "ready",
+  voiceError: null,
 });
 
 /**
