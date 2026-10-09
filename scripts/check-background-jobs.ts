@@ -15,7 +15,8 @@
 //    anywhere in apps/local/app outside `features/jobs/` (the Job Event
 //    subscription, which only listens and cancels nothing).
 // 3. `spawn` — starting a process with `@effect/platform`'s `Command.make(`,
-//    anywhere in apps/local/app. Each file that may is listed with why: the
+//    anywhere in apps/local/app or the workspace packages (packages/), which
+//    run inside the app server too. Each file that may is listed with why: the
 //    Sidecar's own spawners (unreachable from routes — the dependency-cruiser
 //    half of this guard, `apps/local/.dependency-cruiser.spawn.cjs`, which also
 //    holds `child_process` to its interactive entry points), and the app
@@ -72,7 +73,8 @@ const inRoutes = (file: string) =>
 const inBrowserScope = (file: string) =>
   file.startsWith("apps/local/app/") &&
   !file.startsWith("apps/local/app/features/jobs/");
-const inSpawnScope = (file: string) => file.startsWith("apps/local/app/");
+const inSpawnScope = (file: string) =>
+  file.startsWith("apps/local/app/") || file.startsWith("packages/");
 
 export const isInScope = (file: string): boolean =>
   /\.(ts|tsx)$/.test(file) &&
