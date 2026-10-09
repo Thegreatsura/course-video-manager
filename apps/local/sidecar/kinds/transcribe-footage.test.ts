@@ -29,6 +29,9 @@ let footage: string;
 let whisperCalls: number[];
 /** A chunk start Whisper never answers for (a run cut off mid-chunk). */
 let hangAt: number | null;
+/** How often the full audio was extracted, and silence detected. */
+let fullExtractions: number;
+let silenceDetections: number;
 
 beforeEach(() => {
   dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-footage-job-"));
@@ -36,6 +39,8 @@ beforeEach(() => {
   nodeFs.writeFileSync(footage, "the footage bytes");
   whisperCalls = [];
   hangAt = null;
+  fullExtractions = 0;
+  silenceDetections = 0;
 });
 
 afterEach(() => {
@@ -46,7 +51,11 @@ const ffmpegCommands = {
   getVideoDurationInSeconds: () => Effect.succeed(DURATION),
   getFPS: () => Effect.succeed(30),
   // No silence: the chunks are cut at the target length.
-  detectSilence: () => Effect.succeed(""),
+  detectSilence: () =>
+    Effect.sync(() => {
+      silenceDetections++;
+      return "";
+    }),
 } as unknown as FFmpegCommandsService;
 
 /** "ffmpeg": a sparse file, over 25MB for the whole file, tiny for a chunk. */
@@ -55,6 +64,7 @@ const extractAudio = (
   range: { startTime: number; duration: number } | undefined
 ) =>
   Effect.sync(() => {
+    if (!range) fullExtractions++;
     const out = nodePath.join(
       dir,
       `audio-${range ? range.startTime : "full"}-${Math.random()}.mp3`
@@ -143,7 +153,7 @@ describe("the transcribe-footage Job", () => {
     expect(nodeFs.existsSync(partialDirFor(footage))).toBe(false);
   });
 
-  it("resumes after a stop without sending a finished chunk to Whisper again", async () => {
+  it("resumes after a stop from the cached cut and chunks, redoing none of them", async () => {
     // Run 1: chunk 0 lands, chunk 1 is mid-Whisper when the Sidecar stops.
     hangAt = FOOTAGE_TARGET_CHUNK_SECONDS;
     const run1 = startRun();
@@ -151,12 +161,16 @@ describe("the transcribe-footage Job", () => {
     await Effect.runPromise(Fiber.interrupt(run1.fiber));
     expect(nodeFs.existsSync(`${footage}.transcript.json`)).toBe(false);
 
-    // Run 2, the same Job put back: chunk 0 comes from the cache.
+    // Run 2, the same Job put back: the cut and chunk 0 come from the cache.
     hangAt = null;
     whisperCalls = [];
+    fullExtractions = 0;
+    silenceDetections = 0;
     const run2 = startRun();
     await Effect.runPromise(Fiber.join(run2.fiber));
 
+    expect(fullExtractions).toBe(0);
+    expect(silenceDetections).toBe(0);
     expect(whisperCalls).toEqual([
       FOOTAGE_TARGET_CHUNK_SECONDS,
       FOOTAGE_TARGET_CHUNK_SECONDS * 2,

@@ -12,7 +12,7 @@ const UNSUCCESSFUL_FOR_GOOD = ["failed", "interrupted", "cancelled"];
 /** A Job in one of these may still run: a request for the same work joins it. */
 const LIVE: Array<"queued" | "running"> = ["queued", "running"];
 
-/** A live Job of the same kind and subject, as `coveredBy` is shown it. */
+/** A live Job of the same kind and subject, as `coveredBy` and `queuesBehind` are shown it. */
 export interface LiveJob {
   readonly params: unknown;
   readonly events: ReadonlyArray<{
@@ -57,6 +57,11 @@ export const createEnqueueJobOperations = (db: Database) => {
    * same kind and subject already covers adds nothing, and answers with that
    * Job. A transaction-scoped advisory lock on the kind and subject makes two
    * such requests at once take turns, so they cannot both add one.
+   *
+   * ONE AT A TIME, when the kind says so (`queuesBehind`): a request with no
+   * `dependsOn` that a live Job of the same kind and subject says to wait
+   * for is added waiting on the newest such Job, under the same lock, so
+   * the two never run side by side.
    */
   const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     /**
@@ -74,6 +79,8 @@ export const createEnqueueJobOperations = (db: Database) => {
     subject: { type: string; id: string } | null;
     /** Whether a live Job of this kind and subject already does this work. */
     coveredBy?: (live: LiveJob) => boolean;
+    /** Whether this Job must wait for a live Job of this kind and subject. */
+    queuesBehind?: (live: LiveJob) => boolean;
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
@@ -98,10 +105,11 @@ export const createEnqueueJobOperations = (db: Database) => {
               .where(eq(jobs.id, input.id ?? ""))
           );
           if (existing) {
-            if (
-              existing.kind !== input.kind ||
-              existing.dependsOn !== input.dependsOn
-            ) {
+            // A Job that queued behind another chose its own `dependsOn`.
+            const sameDependency =
+              existing.dependsOn === input.dependsOn ||
+              (input.queuesBehind !== undefined && input.dependsOn === null);
+            if (existing.kind !== input.kind || !sameDependency) {
               return yield* new JobIdTakenError({
                 jobId: existing.id,
                 message: `Job ${existing.id} is already a ${existing.kind} Job`,
@@ -111,8 +119,11 @@ export const createEnqueueJobOperations = (db: Database) => {
           }
         }
         const coveredBy = input.coveredBy;
+        const queuesBehind =
+          input.dependsOn === null ? input.queuesBehind : undefined;
         const subject = input.subject;
-        if (coveredBy && subject) {
+        let dependsOn = input.dependsOn;
+        if ((coveredBy || queuesBehind) && subject) {
           yield* makeDbCall(() =>
             tx.execute(
               sql`select pg_advisory_xact_lock(hashtext(${`${input.kind}:${subject.type}:${subject.id}`}))`
@@ -140,7 +151,9 @@ export const createEnqueueJobOperations = (db: Database) => {
                 .where(eq(jobEvents.jobId, job.id))
                 .orderBy(asc(jobEvents.id))
             );
-            if (coveredBy({ params: job.params, events })) return job;
+            const candidate = { params: job.params, events };
+            if (coveredBy?.(candidate)) return job;
+            if (queuesBehind?.(candidate)) dependsOn = job.id;
           }
         }
         const [job] = yield* makeDbCall(() =>
@@ -153,7 +166,7 @@ export const createEnqueueJobOperations = (db: Database) => {
               lane: input.lane,
               params: input.params ?? {},
               maxAttempts: input.maxAttempts,
-              dependsOn: input.dependsOn,
+              dependsOn,
               subjectType: input.subject?.type ?? null,
               subjectId: input.subject?.id ?? null,
               ...(failure

@@ -15,9 +15,10 @@ export interface UploadLocalImagesOptions<E> {
    */
   readonly recorded: ReadonlyArray<ImageUploaded>;
   /**
-   * Uploads an earlier Job recorded for the same Video, by file: used only
-   * for a file that is no longer on disk (it was uploaded, then removed), so
-   * a body that still names it gets its URL rather than a failure.
+   * Uploads an earlier Job recorded for the same Video, by file: a file here
+   * is not uploaded again. The caller keeps only a file that is gone (it was
+   * uploaded, then removed) or unchanged since its upload, so pressing Upload
+   * again after the tab closed mid-Job costs no second upload.
    */
   readonly recordedEarlier: ReadonlyMap<string, string>;
   /**
@@ -40,7 +41,7 @@ export class CloudinaryMarkdownService extends Effect.Service<CloudinaryMarkdown
        * it swapped in is removed (`features/image-upload/image-upload-job.ts`).
        *
        * Safe to run again: a reference already recorded is skipped, and a
-       * file already uploaded is not uploaded twice.
+       * file this Job or an earlier one uploaded is not uploaded twice.
        */
       const uploadLocalImages = <E>(
         body: string,
@@ -60,18 +61,16 @@ export class CloudinaryMarkdownService extends Effect.Service<CloudinaryMarkdown
               ? ref
               : path.resolve(baseDir, ref);
 
-            let url = urlByFile.get(filePath);
-            if (url === undefined && !fs.existsSync(filePath)) {
-              url = options.recordedEarlier.get(filePath);
-              if (url === undefined) {
+            let url =
+              urlByFile.get(filePath) ?? options.recordedEarlier.get(filePath);
+            if (url === undefined) {
+              if (!fs.existsSync(filePath)) {
                 return yield* new ImageUploadError({
                   cause: null,
                   message: `Image file not found: ${filePath} (referenced as ${ref})`,
                   filePath,
                 });
               }
-            }
-            if (url === undefined) {
               url = yield* cloudinary.upload(filePath);
               uploaded++;
             }
