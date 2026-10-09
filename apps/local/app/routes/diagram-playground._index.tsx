@@ -10,7 +10,10 @@ import { DiagramOperationsService } from "@/services/db-diagram-operations.serve
 import { makeLoader } from "@/services/route-action.server";
 import { newestSnapshotHashByDiagram } from "@/lib/filtered-newest-snapshot";
 import { data } from "react-router";
+import { NO_TOASTS } from "@/lib/route-toasts";
 import type { Route } from "./+types/diagram-playground._index";
+
+export const handle = NO_TOASTS;
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "Diagram Playground" }];

@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { uploadReducer, createInitialUploadState } from "./upload-reducer";
-import { showSuccessToast, showErrorToast } from "./upload-toasts";
+import { showErrorToast } from "./upload-toasts";
 import { uploadTypeRegistry } from "./upload-type-registry";
 import { planUploadReactions } from "./upload-transitions";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
@@ -454,7 +454,8 @@ export function UploadProvider({
     for (const reaction of reactions) {
       switch (reaction.type) {
         case "success-toast":
-          showSuccessToast(reaction.upload);
+          // Every kind runs as a Job now, and a Job's success toast is
+          // decided by the jobs reducer (`job-succeeded-toast.ts`).
           break;
         case "error-toast":
           showErrorToast(reaction.upload);

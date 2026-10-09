@@ -6,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLocation,
+  useMatches,
 } from "react-router";
 import {
   AlertTriangle,
@@ -18,6 +19,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { Toaster } from "@/components/ui/sonner";
+import { toastsAllowed } from "@/lib/route-toasts";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,6 +55,8 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  // A route opts out of toasts with `handle = NO_TOASTS` (see route-toasts).
+  const showToasts = toastsAllowed(useMatches());
   return (
     <html lang="en">
       <head>
@@ -65,7 +69,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
         <ScrollRestoration />
         <Scripts />
-        <Toaster />
+        {showToasts && <Toaster />}
       </body>
     </html>
   );

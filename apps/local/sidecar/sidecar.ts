@@ -147,6 +147,13 @@ export const runSidecar = <R>(opts: {
   readonly timing: SidecarTiming;
   /** Completed by whoever wants the sidecar to stop (a signal); the reason is logged. */
   readonly stop: Deferred.Deferred<string>;
+  /**
+   * Housekeeping run after each recovery sweep (at start, then every
+   * `recoverEveryMs`): run-sidecar passes the stuck-Clip sweep
+   * (`stuck-clip-sweep.ts`). Its failures are logged; it never stops the
+   * sidecar.
+   */
+  readonly afterRecovery?: Effect.Effect<void, unknown, R>;
   /** Starts the socket once the lease is held; it is closed first on the way out. */
   readonly serve: (
     handle: SidecarHandle
@@ -471,7 +478,12 @@ export const runSidecar = <R>(opts: {
             { discard: true }
           )
         ),
-        logCause("sidecar: the recovery sweep failed")
+        logCause("sidecar: the recovery sweep failed"),
+        Effect.zipRight(
+          (opts.afterRecovery ?? Effect.void).pipe(
+            logCause("sidecar: the after-recovery sweep failed")
+          )
+        )
       );
 
       const heartbeat = Effect.gen(function* () {
