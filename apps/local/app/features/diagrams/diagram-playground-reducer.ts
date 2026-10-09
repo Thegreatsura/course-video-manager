@@ -33,6 +33,31 @@ export interface CanvasHead {
   changedElsewhere: boolean;
   /** A reload in place: the new head keeps the camera where it is. */
   keepCamera: boolean;
+  /**
+   * The author answered "changed elsewhere" with "Keep my edits", and no head
+   * has loaded since. A save refused now means their choice didn't stick.
+   */
+  keptMyEdits: boolean;
+}
+
+/** How long an error stays in the status line if nothing succeeds first. */
+export const STATUS_ERROR_MS = 8000;
+
+/**
+ * The one error the page's status line shows. Toasts are off on this page
+ * (`handle = NO_TOASTS`), so every failure is reported here and nowhere else;
+ * a success is never shown, it only clears the error.
+ */
+export interface StatusError {
+  message: string;
+  /** Tells this error's timeout apart from a later error's. */
+  id: number;
+  /**
+   * An autosave's own failure. Autosaves run on every pause in drawing, so
+   * only an autosave error clears on the next autosave that lands; any other
+   * error waits for a success the author asked for.
+   */
+  fromAutosave: boolean;
 }
 
 /**
@@ -57,6 +82,10 @@ export namespace diagramPlaygroundReducer {
     recording: boolean;
     /** Bumped whenever the snapshot timeline may have changed on the server. */
     timelineVersion: number;
+    /** What the status line shows; `null` when nothing has gone wrong. */
+    error: StatusError | null;
+    /** Errors reported so far, so each gets its own `id`. */
+    errorCount: number;
   }
 
   export type Action =
@@ -148,7 +177,13 @@ export namespace diagramPlaygroundReducer {
      * The video editor says whether it is recording. It repeats this on every
      * heartbeat, so only a change is a recording starting or stopping.
      */
-    | { type: "recording-status-reported"; recording: boolean };
+    | { type: "recording-status-reported"; recording: boolean }
+    // The status line
+    /** Something on the page failed; `message` is what the author reads. */
+    | { type: "error-reported"; message: string }
+    /** Something the author asked for worked. Nothing is shown for it. */
+    | { type: "operation-succeeded" }
+    | { type: "error-timed-out"; id: number };
 
   export type Effect =
     /**
@@ -196,7 +231,8 @@ export namespace diagramPlaygroundReducer {
         snapshotId: string | null;
         diagramName: string | null;
       }
-    | { type: "show-error"; message: string }
+    /** Report `error-timed-out` for error `id` once `ms` have passed. */
+    | { type: "time-out-error"; id: number; ms: number }
     /** Turn tldraw's Focus Mode on (sidebar hidden) or off (sidebar shown). */
     | { type: "set-focus-mode"; isFocusMode: boolean };
 }
@@ -218,6 +254,8 @@ export const createInitialDiagramPlaygroundState = (opts: {
   isFocusMode: false,
   recording: false,
   timelineVersion: 0,
+  error: null,
+  errorCount: 0,
 });
 
 /** Anything but a loaded head is read-only, so no edit is made that can't be saved. */
@@ -230,11 +268,33 @@ const PRESERVE_ERRORS = {
   "request-failed": "Failed to preserve snapshot",
 } as const;
 
+const SAVE_FAILED = "Couldn't save your edits. The next change retries.";
+const KEPT_EDITS_REFUSED =
+  "Your edits weren't saved: this diagram changed elsewhere again.";
+
 export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
   exec
 ): State => {
+  /** Put `message` in the status line, and take it down after a while. */
+  const fail = (
+    from: State,
+    message: string,
+    opts: { fromAutosave?: boolean } = {}
+  ): State => {
+    const id = from.errorCount + 1;
+    exec({ type: "time-out-error", id, ms: STATUS_ERROR_MS });
+    return {
+      ...from,
+      error: { message, id, fromAutosave: opts.fromAutosave ?? false },
+      errorCount: id,
+    };
+  };
+  /** Something the author asked for worked: whatever failed before is moot. */
+  const succeed = (from: State): State =>
+    from.error ? { ...from, error: null } : from;
+
   const startLoad = (
     from: State,
     diagramId: string,
@@ -255,6 +315,7 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
         saving: false,
         changedElsewhere: false,
         keepCamera: opts.keepCamera ?? false,
+        keptMyEdits: false,
       },
       timelineVersion: from.timelineVersion + 1,
     };
@@ -280,6 +341,7 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
         saving: false,
         changedElsewhere: false,
         keepCamera: false,
+        keptMyEdits: false,
       },
     };
   };
@@ -346,19 +408,32 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
     }
     case "head-save-started":
       return updateHead(action.diagramId, { saving: true });
-    case "head-saved":
-      return updateHead(action.diagramId, {
+    case "head-saved": {
+      const saved = updateHead(action.diagramId, {
         saving: false,
         seen: action.stored,
         changedElsewhere: false,
       });
-    case "head-save-failed":
-      return updateHead(action.diagramId, { saving: false });
-    case "head-save-refused":
-      return updateHead(action.diagramId, {
+      return saved.error?.fromAutosave ? succeed(saved) : saved;
+    }
+    case "head-save-failed": {
+      if (isStale(action.diagramId)) return state;
+      const failed = updateHead(action.diagramId, { saving: false });
+      return fail(failed, SAVE_FAILED, { fromAutosave: true });
+    }
+    case "head-save-refused": {
+      if (!state.head || isStale(action.diagramId)) return state;
+      const { keptMyEdits } = state.head;
+      const refused = updateHead(action.diagramId, {
         saving: false,
         changedElsewhere: true,
+        keptMyEdits: false,
       });
+      // Otherwise the "changed elsewhere" prompt is the whole story.
+      return keptMyEdits
+        ? fail(refused, KEPT_EDITS_REFUSED, { fromAutosave: true })
+        : refused;
+    }
     case "load-changed-head-clicked":
       if (!state.head?.changedElsewhere) return state;
       // The author chose the stored head: their unsaved edits go.
@@ -366,7 +441,10 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
     case "keep-my-edits-clicked":
       if (!state.head?.changedElsewhere) return state;
       exec({ type: "overwrite-stored-head", diagramId: state.head.diagramId });
-      return updateHead(state.head.diagramId, { changedElsewhere: false });
+      return updateHead(state.head.diagramId, {
+        changedElsewhere: false,
+        keptMyEdits: true,
+      });
 
     case "restore-requested": {
       if (!state.head) {
@@ -405,11 +483,10 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
         action.stored,
         true
       );
-      return { ...shown, timelineVersion: state.timelineVersion + 1 };
+      return { ...succeed(shown), timelineVersion: state.timelineVersion + 1 };
     }
     case "restore-failed":
-      exec({ type: "show-error", message: "Failed to restore snapshot" });
-      return state;
+      return fail(state, "Failed to restore snapshot");
 
     case "preserve-clicked":
       if (state.preserving || !state.head) return state;
@@ -417,13 +494,15 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, preserving: true };
     case "snapshot-preserved":
       return {
-        ...state,
+        ...succeed(state),
         preserving: false,
         timelineVersion: state.timelineVersion + (action.created ? 1 : 0),
       };
     case "preserve-failed":
-      exec({ type: "show-error", message: PRESERVE_ERRORS[action.reason] });
-      return { ...state, preserving: false };
+      return fail(
+        { ...state, preserving: false },
+        PRESERVE_ERRORS[action.reason]
+      );
 
     case "create-clicked":
       if (state.creating) return state;
@@ -431,10 +510,9 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, creating: true };
     case "diagram-created":
       exec({ type: "go-to-diagram", diagramId: action.diagramId });
-      return { ...state, creating: false };
+      return { ...succeed(state), creating: false };
     case "create-failed":
-      exec({ type: "show-error", message: "Failed to create diagram" });
-      return { ...state, creating: false };
+      return fail({ ...state, creating: false }, "Failed to create diagram");
 
     case "clip-snapshot-requested":
       if (!state.editorMounted || isStale(action.diagramId)) {
@@ -491,5 +569,12 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       // the author can still toggle it by hand.
       exec({ type: "set-focus-mode", isFocusMode: action.recording });
       return { ...state, recording: action.recording };
+
+    case "error-reported":
+      return fail(state, action.message);
+    case "operation-succeeded":
+      return succeed(state);
+    case "error-timed-out":
+      return state.error?.id === action.id ? { ...state, error: null } : state;
   }
 };
