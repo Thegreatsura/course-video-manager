@@ -7,6 +7,7 @@ import { ClipOperationsService } from "./db-clip-operations.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import { DiagramThumbnailStore } from "./diagram-thumbnail-store.js";
+import { diagrams, diagramSnapshots } from "../db/schema.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -47,6 +48,11 @@ const scene1 = {
 };
 const scene2 = {
   store: { "shape:b": { id: "b", x: 2 } },
+  schema: { schemaVersion: 2 },
+};
+/** A drawing Postgres refuses to store: jsonb has no "\u0000". */
+const unstorable = {
+  store: { "shape:nul": { id: "nul", props: { text: "a\u0000b" } } },
   schema: { schemaVersion: 2 },
 };
 
@@ -424,6 +430,28 @@ describe("createDiagramFromSnapshots", () => {
       }).pipe(Effect.provide(testLayer))
   );
 
+  it.effect(
+    "leaves no Diagram and no snapshot behind when a later scene fails to store",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        yield* Effect.flip(
+          diagramOps.createDiagramFromSnapshots({
+            name: "Build-up",
+            scenes: [scene1, unstorable],
+          })
+        );
+
+        const left = yield* Effect.promise(() =>
+          Promise.all([
+            testDb.select().from(diagrams),
+            testDb.select().from(diagramSnapshots),
+          ])
+        );
+        expect(left).toEqual([[], []]);
+      }).pipe(Effect.provide(testLayer))
+  );
+
   it.effect("names an unnamed Diagram 'Untitled N'", () =>
     Effect.gen(function* () {
       const diagramOps = yield* DiagramOperationsService;
@@ -522,6 +550,26 @@ describe("addSnapshotToHead", () => {
       const listed = yield* diagramOps.listSnapshots(created.id);
       expect(listed.map((s) => s.scene)).toEqual([scene1]);
     }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "keeps neither snapshot when the new scene fails to store after the head was preserved",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const { diagram: created } =
+          yield* diagramOps.createDiagramFromSnapshots({ scenes: [scene1] });
+        yield* diagramOps.updateDiagramHead(created.id, handEdit);
+
+        yield* Effect.flip(
+          diagramOps.addSnapshotToHead(created.id, unstorable)
+        );
+
+        const listed = yield* diagramOps.listSnapshots(created.id);
+        expect(listed.map((s) => s.scene)).toEqual([scene1]);
+        const diagram = yield* diagramOps.getDiagram(created.id);
+        expect(diagram.headScene).toEqual(handEdit);
+      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect(

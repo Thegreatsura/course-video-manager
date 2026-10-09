@@ -38,8 +38,8 @@ import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
  * one it is given as a Preserved Snapshot and restores the first to the head;
  * `snapshot add` keeps one more and restores it to the head (an unheld head is
  * preserved first); neither writes the head itself. Both check the file, DRAW
- * every snapshot, and only then write — so the one failure an agent cannot fix
- * in its JSON (the app is not running) leaves nothing behind. `render` draws a
+ * every snapshot, and only then write, in one transaction — so a failure
+ * leaves nothing behind, and nothing after the write can fail. `render` draws a
  * snapshot that is already stored, never the head.
  */
 
@@ -104,17 +104,22 @@ const drawDraft = (appUrl: string, scene: unknown) =>
     return outputPath;
   });
 
-/** Name a draft PNG after the snapshot it shows: `<snapshotId>.png`. */
+/**
+ * Name a draft PNG after the snapshot it shows: `<snapshotId>.png`. It runs
+ * after the write has committed, so it never fails: if the rename does, the
+ * PNG stays at its draft path and that path is what the agent is given.
+ */
 const keepDraft = (
   fs: FileSystem.FileSystem,
   draft: string,
   snapshotId: string
-) =>
-  Effect.gen(function* () {
-    const image = nodePath.join(RENDER_DIR, `${snapshotId}.png`);
-    yield* fs.rename(draft, image).pipe(Effect.mapError(renderFailed));
-    return image;
-  });
+) => {
+  const image = nodePath.join(RENDER_DIR, `${snapshotId}.png`);
+  return fs.rename(draft, image).pipe(
+    Effect.as(image),
+    Effect.orElseSucceed(() => draft)
+  );
+};
 
 const problems = (errors: readonly string[], what: string) =>
   parseError(
