@@ -339,14 +339,16 @@ the run found.
 
 ## What not to press
 
-**Publish** on the publish page (`/courses/:id/publish`) ships a Bundle to
-Dropbox — its job is to leave the database. It is a Job the run's sidecar
-runs, and on a clone both Dropbox hosts are the discard port or your own
-loopback stub (`DROPBOX_API_URL`, `DROPBOX_CONTENT_URL`, above), so it can
-only fail closed or reach your stub. Press it only with a stub running and
-both variables confirmed in `/proc/<pid>/environ` of the server **and** the
-sidecar; without one it fails at the Commit and Discards its Pending Version,
-which is a fine failure path. Never press it on `--production`.
+**Publish only the Tiny Course; never Publish, Export or otherwise encode a
+real Course on a clone** — one real Publish took the machine to the edge of
+its memory. `$V tiny-course <run>` seeds a one-Video, 2.5-second Course and
+prints its id ([features/publish.md](features/publish.md)). Publish ships a
+Bundle to Dropbox; on a clone both its hosts are the discard port or your
+loopback stub (`DROPBOX_API_URL`,
+`DROPBOX_CONTENT_URL`, above). Press it only with a stub running and both
+confirmed in `/proc/<pid>/environ` of the server **and** the sidecar; without
+one it fails at the Commit and Discards its Pending Version, a fine failure
+path. Never press it on `--production`.
 
 **Autofill** on that same page calls Anthropic, and on a clone that call can
 only reach the discard port or your own loopback stub (`ANTHROPIC_BASE_URL`,
