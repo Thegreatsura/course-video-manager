@@ -332,6 +332,10 @@ export const serveSidecarSocket = (opts: {
           "cache-control": "no-cache",
           connection: "keep-alive",
         });
+        // Now, not with the first event: a reconnect with nothing to replay
+        // writes nothing until the next event, and the app's proxy, waiting
+        // 3 s for an answer, took the sidecar for down.
+        res.flushHeaders();
         const header = req.headers["last-event-id"];
         const lastEventId =
           typeof header === "string" && /^\d+$/.test(header)

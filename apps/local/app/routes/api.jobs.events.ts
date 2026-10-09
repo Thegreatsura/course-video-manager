@@ -52,7 +52,12 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(new TextEncoder().encode(`retry: ${RETRY_MS}\n\n`));
+      // No `id:`, so the browser's Last-Event-ID stays the last Job Event's.
+      controller.enqueue(
+        new TextEncoder().encode(
+          `retry: ${RETRY_MS}\nevent: ${JOB_STREAM_EVENTS.sidecarAvailable}\ndata: {}\n\n`
+        )
+      );
       upstream.on("data", (chunk: Buffer) =>
         controller.enqueue(new Uint8Array(chunk))
       );

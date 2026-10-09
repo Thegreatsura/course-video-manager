@@ -100,6 +100,7 @@ const startPublish = Effect.gen(function* () {
     maxAttempts: 1,
     emit: (type, data) =>
       ops.appendJobEvent({ jobId: job.id, type, data }).pipe(Effect.orDie),
+    enqueue: () => Effect.die("a Publish starts no other Job"),
   };
   return { job, ctx };
 });
