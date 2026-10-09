@@ -153,7 +153,10 @@ export function useDiagramPlaygroundReducer() {
         fetch(`/api/diagrams/${effect.diagramId}/restore-to-head`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ snapshotId: effect.snapshot.id }),
+          body: JSON.stringify({
+            snapshotId: effect.snapshot.id,
+            expectedHeadHash: effect.expectedHeadHash,
+          }),
         })
           .then(async (res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
