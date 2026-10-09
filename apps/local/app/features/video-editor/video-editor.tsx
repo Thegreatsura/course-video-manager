@@ -22,13 +22,7 @@ import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode"
 import { useTeleprompterConnected } from "./hooks/use-teleprompter-connected";
 import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
-import {
-  useCallback,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, type ReactNode, useEffect, useMemo } from "react";
 import { enableVideoEditorMode } from "@/lib/diagram-window";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { useFetcher, useSubmit } from "react-router";
@@ -47,9 +41,10 @@ import { type FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import {
   VideoEditorContext,
-  type SuggestionState,
   type UpdateClipDiagramPinFn,
 } from "./video-editor-context";
+import type { editorModalsReducer } from "./editor-modals-reducer";
+import { useEditorModalsReducer } from "./hooks/use-editor-modals-reducer";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { ClipOverlay } from "./overlay-preview";
 import { useOverlaysByClipId } from "./overlay-spill";
@@ -202,11 +197,20 @@ export const VideoEditor = (props: {
   const currentClipId = state.currentClipId;
 
   const exportToDavinciResolveFetcher = useFetcher();
-  const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
-  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
-  const [isRenameVideoModalOpen, setIsRenameVideoModalOpen] = useState(false);
-  const [isCopyVideoModalOpen, setIsCopyVideoModalOpen] = useState(false);
-  const [isCreateVideoModalOpen, setIsCreateVideoModalOpen] = useState(false);
+  const { state: modalsState, dispatch: modalDispatch } =
+    useEditorModalsReducer();
+  const onModalOpenChange = useMemo(() => {
+    const dismiss = (modal: editorModalsReducer.Modal) => (open: boolean) => {
+      if (!open) modalDispatch({ type: "modal-dismissed", modal });
+    };
+    return {
+      "add-video": dismiss("add-video"),
+      "paste-file": dismiss("paste-file"),
+      "rename-video": dismiss("rename-video"),
+      "copy-video": dismiss("copy-video"),
+      "create-video-from-selection": dismiss("create-video-from-selection"),
+    };
+  }, [modalDispatch]);
 
   const {
     openForMain: onOpenAutofillChaptersModal,
@@ -218,15 +222,6 @@ export const VideoEditor = (props: {
     clips,
     referenceCandidates: props.referenceCandidates,
     onAutofillChapters: props.onAutofillChapters,
-  });
-
-  // Suggestion state for sharing between SuggestionsPanel and ClipTimeline
-  const [suggestionState, setSuggestionState] = useState<SuggestionState>({
-    suggestionText: "",
-    isStreaming: false,
-    enabled: false,
-    error: null,
-    triggerSuggestion: () => {},
   });
 
   const {
@@ -484,19 +479,12 @@ export const VideoEditor = (props: {
       isChaptersCopied,
 
       exportToDavinciResolveFetcher,
-      isAddVideoModalOpen,
-      setIsAddVideoModalOpen,
-      onAddNoteFromClipboard: () => setIsPasteModalOpen(true),
-      isRenameVideoModalOpen,
-      setIsRenameVideoModalOpen,
-      isCopyVideoModalOpen,
-      setIsCopyVideoModalOpen,
-      isCreateVideoModalOpen,
-      setIsCreateVideoModalOpen,
 
-      // Suggestion state for inline display
-      suggestionState,
-      setSuggestionState,
+      // From editorModalsReducer
+      openModal: modalsState.openModal,
+      modalDispatch,
+      onModalOpenChange,
+      suggestionState: modalsState.suggestion,
 
       onOpenAutofillChaptersModal,
 
@@ -563,16 +551,9 @@ export const VideoEditor = (props: {
       isCopied,
       isChaptersCopied,
       exportToDavinciResolveFetcher,
-      isAddVideoModalOpen,
-      setIsAddVideoModalOpen,
-      isRenameVideoModalOpen,
-      setIsRenameVideoModalOpen,
-      isCopyVideoModalOpen,
-      setIsCopyVideoModalOpen,
-      isCreateVideoModalOpen,
-      setIsCreateVideoModalOpen,
-      suggestionState,
-      setSuggestionState,
+      modalsState,
+      modalDispatch,
+      onModalOpenChange,
       onAddIntroChapter,
       onOpenCreateChapterModal,
       onEditChapter,
@@ -594,8 +575,6 @@ export const VideoEditor = (props: {
     <EditorModals
       chapterNamingModal={chapterNamingModal}
       onCloseChapterNamingModal={() => setChapterNamingModal(null)}
-      isPasteModalOpen={isPasteModalOpen}
-      setIsPasteModalOpen={setIsPasteModalOpen}
       clipCount={clips.length}
       beatCount={props.beats.length}
       hasScript={props.hasScript}

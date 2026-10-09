@@ -403,9 +403,9 @@ const ClipMenuContent = (props: {
     VideoEditorContext,
     (ctx) => ctx.onAddEffectClipAt
   );
-  const setIsCreateVideoModalOpen = useContextSelector(
+  const modalDispatch = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.setIsCreateVideoModalOpen
+    (ctx) => ctx.modalDispatch
   );
   const onDatabase = clip.type === "on-database" ? clip : null;
   const shared = timelineItemMenuGroups({
@@ -415,7 +415,7 @@ const ClipMenuContent = (props: {
         ? props.onAddChapterBefore()
         : props.onAddChapterAfter(),
     onCreateVideoFromSelection: hasSelection
-      ? () => setIsCreateVideoModalOpen(true)
+      ? () => modalDispatch({ type: "create-video-from-selection-clicked" })
       : undefined,
     move: {
       onMove: (direction) => onMoveClip(clip.frontendId, direction),
