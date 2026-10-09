@@ -400,3 +400,37 @@ describe("createSnapshotForClip", () => {
     }).pipe(Effect.provide(testLayer))
   );
 });
+
+describe("createDiagramFromSnapshots", () => {
+  it.effect(
+    "keeps every scene as a Preserved Snapshot in order and restores the FIRST to the head",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const { diagram, snapshots } =
+          yield* diagramOps.createDiagramFromSnapshots({
+            name: "Build-up",
+            scenes: [scene1, scene2],
+          });
+
+        expect(diagram.name).toBe("Build-up");
+        expect(diagram.headScene).toEqual(scene1);
+        expect(snapshots.map((s) => [s.scene, s.preserved])).toEqual([
+          [scene1, true],
+          [scene2, true],
+        ]);
+        const listed = yield* diagramOps.listSnapshots(diagram.id);
+        expect(listed.map((s) => s.id)).toEqual(snapshots.map((s) => s.id));
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("names an unnamed Diagram 'Untitled N'", () =>
+    Effect.gen(function* () {
+      const diagramOps = yield* DiagramOperationsService;
+      const { diagram } = yield* diagramOps.createDiagramFromSnapshots({
+        scenes: [scene1],
+      });
+      expect(diagram.name).toBe("Untitled 1");
+    }).pipe(Effect.provide(testLayer))
+  );
+});

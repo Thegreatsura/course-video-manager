@@ -9,7 +9,9 @@ import {
   SHAPE_TYPES,
   SIZES,
 } from "@cvm/core/lib/simple-diagram/index";
-import { HELP } from "./diagram.help";
+import { ICON_NAMES } from "@cvm/lucide-icons";
+import { CREATE_HELP, HELP } from "./diagram.help";
+import { parseCreateInput } from "./diagram-input";
 
 // ===========================================================================
 // The help IS the format's documentation for agents, and the zod schema is
@@ -123,6 +125,48 @@ describe("cvm diagram --help documents the simple shape format exactly", () => {
       expect(explained, `"${field}" is explained`).toMatch(
         new RegExp(`(^|[\\s,])${field}([\\s,]|$)`, "m")
       );
+    }
+  });
+});
+
+/** The JSON object under the help's EXAMPLE heading. */
+const example = (): { name: string; shapes: unknown[] } => {
+  const lines = HELP.split("\n");
+  const start = lines.findIndex((line) => line === "EXAMPLE");
+  const end = lines.findIndex((line, i) => i > start && line === "  }");
+  return JSON.parse(lines.slice(start + 1, end + 1).join("\n"));
+};
+
+describe("cvm diagram --help documents what 'create' accepts", () => {
+  const icons = new Set<string>(ICON_NAMES);
+
+  it("documents one drawing AND a batch of snapshots", () => {
+    const format = block("FORMAT").join("\n");
+    expect(format).toContain('"shapes": [');
+    expect(format).toContain('"snapshots": [ { "shapes": [...] }');
+  });
+
+  it("gives an EXAMPLE that 'create' accepts as one snapshot", () => {
+    const parsed = parseCreateInput(example(), icons);
+    expect(parsed.ok && parsed.scenes).toHaveLength(1);
+  });
+
+  it("accepts the EXAMPLE's shapes as a batch, one snapshot per entry", () => {
+    const { name, shapes } = example();
+    const parsed = parseCreateInput(
+      { name, snapshots: [{ shapes: shapes.slice(0, 2) }, { shapes }] },
+      icons
+    );
+    expect(parsed.ok && parsed.scenes).toHaveLength(2);
+  });
+
+  it("documents the output 'create' prints: id, url and snapshots of {id, image}", () => {
+    const output = CREATE_HELP.slice(CREATE_HELP.indexOf("Output:"));
+    expect(output).toMatch(
+      /\{"id":"…","url":"[^"]+",\s+"snapshots":\[\{"id":"…","image":"[^"]+"\}/
+    );
+    for (const field of ["id", "url", "snapshots", "image"]) {
+      expect(output).toMatch(new RegExp(`^ {2,4}${field} `, "m"));
     }
   });
 });
