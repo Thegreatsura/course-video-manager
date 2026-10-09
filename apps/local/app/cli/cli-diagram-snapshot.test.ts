@@ -7,6 +7,7 @@ import {
   readSimpleDiagram,
   type Scene,
 } from "@cvm/core/lib/simple-diagram/index";
+import { hashScene } from "@/lib/scene-hash";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   DIAGRAM_RENDERS,
@@ -497,21 +498,58 @@ describe("cvm diagram snapshot update", () => {
     expect(row!.headScene).toEqual(target!.scene);
   });
 
-  it("undoes a bad update with a second one: 'previous' brings the old drawing back exactly", async () => {
+  /** Matt's polish (hidden styles, an `other` scribble) on the second snapshot. */
+  const polishedSecond = async () => {
     const diagram = await createdWithTwo();
+    const polished = await polishByHand(diagram.id);
     const [, target] = await snapshotsOf(diagram.id);
+    await db()
+      .update(schema.diagramSnapshots)
+      .set({ scene: polished, contentHash: hashScene(polished) })
+      .where(eq(schema.diagramSnapshots.id, target!.id));
+    return { diagram, target: (await snapshotsOf(diagram.id))[1]! };
+  };
 
-    const bad = await update(target!.id, NUDGED);
+  it("undoes a bad update with a second one: 'previous' brings the old drawing back exactly — 'other' and hidden styles included", async () => {
+    const { diagram, target } = await polishedSecond();
+    const shapes = readSimpleDiagram((target.scene as Scene).store).shapes;
+    expect(shapes).toContainEqual({ type: "other", id: "scribble" });
+
+    const bad = await update(target.id, {
+      shapes: shapes.map((s) =>
+        s.id === "label"
+          ? { ...s, x: 70, text: "Agent v2" }
+          : s.id === "agent"
+            ? { ...s, color: "red" }
+            : s
+      ),
+    });
     expect(bad.exitCode).toBe(0);
-    const { previous, headMoved } = ndjson(bad.stdout)[0] as Updated;
-    expect(headMoved).toBe(false);
+    const { previous } = ndjson(bad.stdout)[0] as Updated;
 
-    const undo = await update(target!.id, previous);
+    const undo = await update(target.id, previous);
 
     expect(undo.exitCode).toBe(0);
     const restored = (await snapshotsOf(diagram.id))[1]!;
-    expect(restored.id).toBe(target!.id);
-    expect(restored.scene).toEqual(target!.scene);
-    expect(restored.contentHash).toBe(target!.contentHash);
+    expect(restored.id).toBe(target.id);
+    expect(restored.scene).toEqual(target.scene);
+    expect(restored.contentHash).toBe(target.contentHash);
+  });
+
+  it("REFUSES an update 'previous' could not undo exactly (a removed hand-sized icon), exit 3, and writes and draws nothing", async () => {
+    const { diagram, target } = await polishedSecond();
+    const shapes = readSimpleDiagram((target.scene as Scene).store).shapes;
+    render.calls = [];
+
+    const r = await update(target.id, {
+      shapes: shapes.filter((s) => s.id !== "bot"),
+    });
+
+    expect(r.exitCode).toBe(3);
+    expect(failureOf(r).message).toContain(
+      'could not be undone exactly — "previous" would not bring back shape:bot'
+    );
+    expect((await snapshotsOf(diagram.id))[1]).toEqual(target);
+    expect(render.calls).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@ import {
   SCENE_SCHEMA,
   type Scene,
 } from "@cvm/core/lib/simple-diagram/index";
-import { hashScene } from "@/lib/scene-hash";
+import { canonicalize, hashScene } from "@/lib/scene-hash";
 
 /**
  * What `cvm diagram create --file` reads: ONE drawing,
@@ -182,4 +182,36 @@ export const parseSnapshotInput = (
   const nul = nulError(json, "snapshot");
   if (nul.length > 0) return { ok: false, errors: nul };
   return toScene(json, icons, "", asScene(head));
+};
+
+/**
+ * What `snapshot update`'s undo would NOT bring back exactly: the ids of the
+ * records that `previous` — the old drawing in the simple format, printed as
+ * the undo — applied onto `after` leaves different from `before`. Empty means
+ * the undo restores `before` byte for byte.
+ *
+ * The simple format cannot say everything, so some updates cannot be undone
+ * by it: a removed shape comes back in Matt's defaults, a removed or retyped
+ * `other` cannot come back at all, a rewritten text loses its formatting.
+ * `snapshot update` refuses those rather than lose Matt's work.
+ */
+export const unundoable = (
+  previous: unknown,
+  before: unknown,
+  after: unknown,
+  icons: ReadonlySet<string>
+): string[] => {
+  const undo = parseSnapshotInput(
+    JSON.parse(JSON.stringify(previous)),
+    icons,
+    after
+  );
+  if (!undo.ok) return ["the drawing"];
+  if (canonicalize(undo.scene) === canonicalize(before)) return [];
+  const was = (asScene(before)?.store ?? {}) as Record<string, unknown>;
+  const now = (undo.scene as Scene).store as Record<string, unknown>;
+  const lost = [...new Set([...Object.keys(was), ...Object.keys(now)])].filter(
+    (id) => canonicalize(was[id]) !== canonicalize(now[id])
+  );
+  return lost.length > 0 ? lost : ["the drawing"];
 };

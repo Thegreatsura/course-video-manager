@@ -38,7 +38,11 @@ import {
   UPDATE_HELP,
 } from "./diagram.help";
 import { SNAPSHOT_UPDATE_HELP } from "./diagram-snapshot-update.help";
-import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
+import {
+  parseCreateInput,
+  parseSnapshotInput,
+  unundoable,
+} from "./diagram-input";
 import { diagramReadCommands } from "./diagram-list";
 
 /**
@@ -255,6 +259,16 @@ const refusal = (
   }
 };
 
+/** An update whose `previous` could not undo it exactly: exit 3. */
+const notUndoable = (snapshotId: string, lost: string[]) => {
+  const shown = lost.slice(0, 5).join(", ");
+  const more = lost.length > 5 ? `, and ${lost.length - 5} more` : "";
+  return parseError(
+    `REFUSED: this update of snapshot ${snapshotId} could not be undone exactly — "previous" would not bring back ${shown}${more} as it is now (a removed shape comes back in Matt's defaults, a retyped "other" not at all, a rewritten text without its formatting). Nothing was written. Move shapes rather than delete them, leave every "other" as it is, or 'cvm diagram snapshot add' the fixed drawing instead.`,
+    ENTITY
+  );
+};
+
 const snapshotUpdateCmd = Command.make(
   "update",
   {
@@ -280,6 +294,10 @@ const snapshotUpdateCmd = Command.make(
       const input = parseSnapshotInput(json, ICONS, before.scene);
       if (!input.ok) return yield* problems(input.errors, "the snapshot");
 
+      const previous = { shapes: shapesOf(before.scene) };
+      const lost = unundoable(previous, before.scene, input.scene, ICONS);
+      if (lost.length > 0) return yield* notUndoable(snapshotId, lost);
+
       const fs = yield* renderDir;
       const draft = yield* drawDraft(resolveAppUrl(), input.scene);
       const result = yield* diagrams
@@ -299,7 +317,7 @@ const snapshotUpdateCmd = Command.make(
           image,
           changed: result.outcome === "updated",
           headMoved: result.outcome === "updated" && result.headMoved,
-          previous: { shapes: shapesOf(before.scene) },
+          previous,
         },
       ]);
     })
