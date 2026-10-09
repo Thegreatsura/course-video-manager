@@ -79,15 +79,16 @@ export function useThumbnailReducer(thumbnails: Thumbnail[]) {
         cutoutPosition: effect.cutoutImage ? effect.cutoutPosition : undefined,
       };
 
-      const url = effect.editingThumbnailId
-        ? `/api/thumbnails/${effect.editingThumbnailId}/update`
-        : "/api/thumbnails/create";
-
-      fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
+      fetch(
+        effect.editingThumbnailId
+          ? `/api/thumbnails/${effect.editingThumbnailId}/update`
+          : "/api/thumbnails/create",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      )
         .then(async (response) => {
           if (!response.ok) throw new Error("Failed to save thumbnail");
           const result = await response.json();

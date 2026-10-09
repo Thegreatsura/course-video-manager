@@ -30,6 +30,21 @@ export const startSqlStatementTally = (): SqlStatementTally => {
   };
 };
 
+/**
+ * The tally the current request opened, if any: what a route's Effect
+ * carries across the scheduler (see `tallyStatements` in `apps/local`).
+ */
+export const currentSqlStatementTally = (): SqlStatementTally | undefined => {
+  const store = current.getStore();
+  if (!store) return undefined;
+  return {
+    get count() {
+      return store.count;
+    },
+    run: (fn) => current.run(store, fn),
+  };
+};
+
 /** Counts one statement into the current tally; a no-op outside one. */
 export const countSqlStatement = (): void => {
   const store = current.getStore();
