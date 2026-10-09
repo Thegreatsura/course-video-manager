@@ -1,15 +1,25 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { TLStoreSnapshot } from "tldraw";
 import type { Snapshot } from "./snapshot-list";
+import { leaveMustWaitFor } from "./diagram-playground-selectors";
+import {
+  KEEP_CANVAS_FAILED,
+  KEPT_EDITS_REFUSED,
+  PRESERVE_ERRORS,
+  SAVE_BEFORE_LEAVING_FAILED,
+  SAVE_FAILED,
+} from "./diagram-playground-status-messages";
 
 import type {
   CanvasHead,
   LeaveDestination,
+  LeaveSaveOutcome,
   StatusError,
   StoredHead,
 } from "./diagram-playground-reducer.types";
 
 export * from "./diagram-playground-reducer.types";
+export * from "./diagram-playground-selectors";
 
 /** How long an error stays in the status line if nothing succeeds first. */
 export const STATUS_ERROR_MS = 8000;
@@ -28,8 +38,9 @@ export namespace diagramPlaygroundReducer {
     pendingRestore: Snapshot | null;
     preserving: boolean;
     /**
-     * A navigation away from the open diagram is held while its canvas, which
-     * the server won't take as the head, is kept as a preserved snapshot.
+     * A navigation away from the open diagram is held while its last edits
+     * are saved, or, if the server won't take them as the head, kept as a
+     * preserved snapshot.
      */
     leaving: LeaveDestination | null;
     creating: boolean;
@@ -104,8 +115,18 @@ export namespace diagramPlaygroundReducer {
         reason: "thumbnail-failed" | "empty-diagram" | "request-failed";
       }
     // Leaving the open diagram (another diagram, another page)
-    /** A navigation away from the open diagram is waiting on the page. */
-    | { type: "leave-requested"; destination: LeaveDestination }
+    /** A navigation away is waiting; only the editor knows of unsaved edits. */
+    | {
+        type: "leave-requested";
+        destination: LeaveDestination;
+        canvasHasUnsavedEdits: boolean;
+      }
+    /** The save asked for before leaving has settled. */
+    | {
+        type: "saved-before-leaving";
+        diagramId: string;
+        outcome: LeaveSaveOutcome;
+      }
     | { type: "canvas-kept"; diagramId: string }
     | {
         type: "keep-canvas-failed";
@@ -184,6 +205,8 @@ export namespace diagramPlaygroundReducer {
     /** The request was handed to the dialog; whoever asked can stop waiting. */
     | { type: "release-restore-request"; requestId: number }
     | { type: "preserve-snapshot"; diagramId: string }
+    /** Save the canvas's pending edits as the head now, and report back. */
+    | { type: "save-before-leaving"; diagramId: string }
     /**
      * Store the canvas as it stands — not the stored head — as one of
      * `diagramId`'s preserved snapshots.
@@ -233,31 +256,6 @@ export const createInitialDiagramPlaygroundState = (opts: {
   error: null,
   errorCount: 0,
 });
-
-/** Anything but a loaded head is read-only, so no edit is made that can't be saved. */
-export const isCanvasEditable = (state: State) =>
-  state.head?.status === "ready";
-
-/**
- * The canvas holds edits the server refused to save over a head changed
- * elsewhere. Leaving now would drop them, so they're kept as a snapshot first.
- */
-export const mustKeepCanvasBeforeLeaving = (state: State) =>
-  state.head?.status === "ready" &&
-  state.head.changedElsewhere &&
-  !state.head.keptAsSnapshot;
-
-const PRESERVE_ERRORS = {
-  "thumbnail-failed": "Failed to render thumbnail",
-  "empty-diagram": "Cannot preserve an empty diagram",
-  "request-failed": "Failed to preserve snapshot",
-} as const;
-
-const SAVE_FAILED = "Couldn't save your edits. The next change retries.";
-const KEEP_CANVAS_FAILED =
-  "Couldn't keep your edits as a snapshot, so this diagram stays open. Reload or keep your edits first.";
-const KEPT_EDITS_REFUSED =
-  "Your edits weren't saved: this diagram changed elsewhere again.";
 
 export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
   state,
@@ -498,17 +496,36 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
         PRESERVE_ERRORS[action.reason]
       );
 
-    case "leave-requested":
+    case "leave-requested": {
       if (state.leaving) return state;
-      if (!state.head || !mustKeepCanvasBeforeLeaving(state)) {
+      const waitFor = leaveMustWaitFor(state, action.canvasHasUnsavedEdits);
+      if (!state.head || !waitFor) {
         exec({ type: "continue-leaving", destination: action.destination });
         return state;
       }
       exec({
-        type: "keep-canvas-as-snapshot",
+        type:
+          waitFor === "save"
+            ? "save-before-leaving"
+            : "keep-canvas-as-snapshot",
         diagramId: state.head.diagramId,
       });
       return { ...state, leaving: action.destination };
+    }
+    case "saved-before-leaving": {
+      const destination = state.leaving;
+      if (!destination || isStale(action.diagramId)) return state;
+      if (action.outcome === "failed") {
+        return fail({ ...state, leaving: null }, SAVE_BEFORE_LEAVING_FAILED);
+      }
+      // Refused: the head changed elsewhere first, so keep the canvas, then go.
+      exec(
+        action.outcome === "refused"
+          ? { type: "keep-canvas-as-snapshot", diagramId: action.diagramId }
+          : { type: "continue-leaving", destination }
+      );
+      return action.outcome === "refused" ? state : { ...state, leaving: null };
+    }
     case "canvas-kept": {
       const destination = state.leaving;
       if (!destination || isStale(action.diagramId)) return state;

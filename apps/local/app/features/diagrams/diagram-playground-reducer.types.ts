@@ -50,6 +50,12 @@ export interface LeaveDestination {
 }
 
 /**
+ * How the save made before leaving settled. `saved` also covers a canvas that
+ * turned out to have nothing new to save.
+ */
+export type LeaveSaveOutcome = "saved" | "refused" | "failed";
+
+/**
  * The one error the page's status line shows. Toasts are off on this page
  * (`handle = NO_TOASTS`), so every failure is reported here and nowhere else;
  * a success is never shown, it only clears the error.
