@@ -1,4 +1,4 @@
-import { createContext, useCallback, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import {
   historyLookupOf,
@@ -131,6 +131,22 @@ export interface UploadContextType {
 }
 
 export const UploadContext = createContext<UploadContextType>(null!);
+
+/** Everything in {@link UploadContextType} but the live Jobs state. */
+export type UploadActions = Omit<UploadContextType, "jobs" | "etaHistory">;
+
+const UploadActionsContext = createContext<UploadActions>(null!);
+
+/**
+ * The ways to start and manage Jobs, without the Jobs state. Its value never
+ * changes, so a page that only starts Jobs does not re-render for every Job
+ * Event the tab hears — a page that replays dozens of them on load (every
+ * page) would otherwise re-render its whole tree once per event. Read
+ * {@link UploadContext} only when the Jobs themselves are drawn.
+ */
+export function useUploadActions(): UploadActions {
+  return useContext(UploadActionsContext);
+}
 
 export function UploadProvider({
   children,
@@ -395,34 +411,68 @@ export function UploadProvider({
     [startJob]
   );
 
+  const {
+    dismissJob,
+    subscribeToJobEvents,
+    subscribeToJobJoins,
+    retryJob,
+    dismissFinishedJobs,
+    clearFinishedJobs,
+  } = jobs;
+  const actions = useMemo<UploadActions>(
+    () => ({
+      dismissJob,
+      subscribeToJobEvents,
+      subscribeToJobJoins,
+      retryJob,
+      dismissFinishedJobs,
+      clearFinished: clearFinishedJobs,
+      clock,
+      startUpload,
+      startSocialUpload,
+      startYoutubeShortsUpload,
+      startAiHeroUpload,
+      startSkillsChangelogUpload,
+      startExportUpload,
+      startRenderVerticalUpload,
+      startBatchExportUpload,
+      startPublish,
+      startAutofill,
+      startClipTranscription,
+      startImageUpload,
+      removeLocalImages,
+    }),
+    [
+      dismissJob,
+      subscribeToJobEvents,
+      subscribeToJobJoins,
+      retryJob,
+      dismissFinishedJobs,
+      clearFinishedJobs,
+      clock,
+      startUpload,
+      startSocialUpload,
+      startYoutubeShortsUpload,
+      startAiHeroUpload,
+      startSkillsChangelogUpload,
+      startExportUpload,
+      startRenderVerticalUpload,
+      startBatchExportUpload,
+      startPublish,
+      startAutofill,
+      startClipTranscription,
+      startImageUpload,
+      removeLocalImages,
+    ]
+  );
+  const value = useMemo<UploadContextType>(
+    () => ({ ...actions, jobs: jobs.state, etaHistory }),
+    [actions, jobs.state, etaHistory]
+  );
+
   return (
-    <UploadContext.Provider
-      value={{
-        jobs: jobs.state,
-        dismissJob: jobs.dismissJob,
-        subscribeToJobEvents: jobs.subscribeToJobEvents,
-        subscribeToJobJoins: jobs.subscribeToJobJoins,
-        retryJob: jobs.retryJob,
-        dismissFinishedJobs: jobs.dismissFinishedJobs,
-        clearFinished: jobs.clearFinishedJobs,
-        etaHistory,
-        clock,
-        startUpload,
-        startSocialUpload,
-        startYoutubeShortsUpload,
-        startAiHeroUpload,
-        startSkillsChangelogUpload,
-        startExportUpload,
-        startRenderVerticalUpload,
-        startBatchExportUpload,
-        startPublish,
-        startAutofill,
-        startClipTranscription,
-        startImageUpload,
-        removeLocalImages,
-      }}
-    >
-      {children}
-    </UploadContext.Provider>
+    <UploadActionsContext.Provider value={actions}>
+      <UploadContext.Provider value={value}>{children}</UploadContext.Provider>
+    </UploadActionsContext.Provider>
   );
 }

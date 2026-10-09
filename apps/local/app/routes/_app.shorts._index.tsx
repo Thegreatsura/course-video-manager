@@ -6,7 +6,7 @@ import {
   ShortsPostingModal,
   type ShortsPostingMode,
 } from "@/features/video-posting/shorts-posting-modal";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { useUploadRevalidate } from "@/hooks/use-upload-revalidate";
 import {
@@ -23,7 +23,7 @@ import { makeLoader } from "@/services/route-action.server";
 import { Effect, Config } from "effect";
 import { FileSystem } from "@effect/platform";
 import { Clapperboard, Plus, VideoIcon } from "lucide-react";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { Link, useFetcher } from "react-router";
 import type { Route } from "./+types/_app.shorts._index";
 
@@ -101,7 +101,7 @@ export default function ShortsIndex(props: Route.ComponentProps) {
   } | null>(null);
   const revealFetcher = useFetcher();
   const dialogs = useVideoDialogs();
-  const { startExportUpload } = useContext(UploadContext);
+  const { startExportUpload } = useUploadActions();
 
   useFocusRevalidate({ enabled: true });
   const post = (
