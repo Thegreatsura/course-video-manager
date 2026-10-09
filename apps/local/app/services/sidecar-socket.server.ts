@@ -1,7 +1,7 @@
-import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { Data, Effect } from "effect";
+import { installLocationRepoRoot } from "./repo-env";
 
 /**
  * The app server's side of the Sidecar's Unix socket (`apps/local/sidecar/socket.ts`).
@@ -14,25 +14,22 @@ export class SidecarUnreachableError extends Data.TaggedError(
   "SidecarUnreachableError"
 )<{ readonly socket: string; readonly message: string }> {}
 
-/** The checkout root: the nearest directory above `from` with `pnpm-workspace.yaml`. */
-const findCheckoutRoot = (from: string): string => {
-  let dir = path.resolve(from);
-  while (true) {
-    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return path.resolve(from);
-    dir = parent;
-  }
-};
-
 /**
  * Where this checkout's sidecar listens: `CVM_SIDECAR_SOCKET` (verify-cvm sets
- * it to its run's socket), else `<checkout>/.data/sidecar.sock`, the default
- * `run-sidecar.ts` uses too.
+ * it to its run's socket), else `<checkout>/.data/sidecar.sock`.
+ *
+ * The ONE resolver: `run-sidecar.ts` listens where this says and the app and
+ * `cvm` connect where this says. The checkout is found from THIS MODULE, never
+ * the working directory — the globally-linked `cvm` runs from any folder, and
+ * a cwd walk sent its nudge to `<that folder>/.data/sidecar.sock`.
  */
 export const sidecarSocketPath = (): string =>
   process.env.CVM_SIDECAR_SOCKET ||
-  path.join(findCheckoutRoot(process.cwd()), ".data", "sidecar.sock");
+  path.join(
+    installLocationRepoRoot() ?? process.cwd(),
+    ".data",
+    "sidecar.sock"
+  );
 
 /** One request to the sidecar; resolves with the response, unread. */
 export const requestSidecar = (opts: {
