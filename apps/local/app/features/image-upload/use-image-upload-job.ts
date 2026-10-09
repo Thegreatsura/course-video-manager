@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef } from "react";
 import { useEffectReducer } from "use-effect-reducer";
+import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { UPLOAD_IMAGES_JOB_KIND, swapImageUploads } from "./image-upload-job";
 import {
@@ -10,10 +11,14 @@ import {
 export interface ImageUploadBody {
   /** The body as it is right now. */
   read: () => string;
-  /** Replace the body; called only when a swap changed it. */
-  write: (body: string) => void;
-  /** Called once the Job has settled and its URLs are in, with the body. */
-  onFinished?: (body: string) => void;
+  /**
+   * Put the swapped body in place and persist it. Resolve only once the save
+   * is confirmed; reject if it failed. No local file is removed unless this
+   * resolves.
+   */
+  save: (body: string) => Promise<void>;
+  /** Called once the swapped body is saved, with that body. */
+  onSaved?: (body: string) => void;
 }
 
 /**
@@ -36,19 +41,40 @@ export function useImageUploadJob(videoId: string, body: ImageUploadBody) {
         startImageUpload(effect.jobId, effect.videoId, effect.body);
       },
       "swap-into-body": (_state, effect, dispatch) => {
-        const current = bodyRef.current.read();
-        const swapped = swapImageUploads(current, effect.uploads);
-        if (swapped.body !== current) bodyRef.current.write(swapped.body);
-        bodyRef.current.onFinished?.(swapped.body);
-        dispatch({
-          type: "body-swapped",
-          videoId: effect.videoId,
-          swappedFilePaths: swapped.swappedFilePaths,
-          deleteLocalFiles: effect.deleteLocalFiles,
-        });
+        const swapped = swapImageUploads(
+          bodyRef.current.read(),
+          effect.uploads
+        );
+        // Promise.resolve().then: a save that throws before its promise is
+        // a failed save too.
+        Promise.resolve()
+          .then(() => bodyRef.current.save(swapped.body))
+          .then(
+            () =>
+              dispatch({
+                type: "body-saved",
+                videoId: effect.videoId,
+                savedBody: swapped.body,
+                swappedFilePaths: swapped.swappedFilePaths,
+                deleteLocalFiles: effect.deleteLocalFiles,
+              }),
+            () =>
+              dispatch({
+                type: "body-save-failed",
+                videoId: effect.videoId,
+                swappedFilePaths: swapped.swappedFilePaths,
+                deleteLocalFiles: effect.deleteLocalFiles,
+              })
+          );
       },
       "remove-local-images": (_state, effect) => {
         removeLocalImages(effect.videoId, effect.filePaths);
+      },
+      "report-saved": (_state, effect) => {
+        bodyRef.current.onSaved?.(effect.body);
+      },
+      "show-save-failed-toast": (_state, effect) => {
+        toast.error(effect.message);
       },
     }
   );
@@ -88,5 +114,5 @@ export function useImageUploadJob(videoId: string, body: ImageUploadBody) {
     [dispatch, videoId]
   );
 
-  return { isUploading: state.jobId !== null, upload };
+  return { isUploading: state.jobId !== null || state.saving, upload };
 }

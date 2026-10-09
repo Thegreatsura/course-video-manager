@@ -36,10 +36,11 @@ export function ImageUploadDropdown({
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const hasLocalImages = useMemo(() => localImageRefs(body).length > 0, [body]);
   // An `upload-images` Job: the URLs are swapped into the body as it is when
-  // the Job settles, and a local file goes only once its URL is in.
+  // the Job settles, and a local file goes only once that body is saved. The
+  // body is this tab's draft (local storage), so setting it is the save.
   const { isUploading, upload } = useImageUploadJob(videoId, {
     read: () => body,
-    write: onBodyChange,
+    save: async (next) => onBodyChange(next),
   });
   const handleUpload = (deleteLocalFiles: boolean) => {
     if (!body.trim()) return;

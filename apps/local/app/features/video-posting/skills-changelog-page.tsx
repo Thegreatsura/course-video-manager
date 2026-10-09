@@ -271,7 +271,7 @@ export function SkillsChangelogPage({
               videoId={videoId}
               fieldId="skills-changelog-body"
               value={body}
-              onApply={setBody}
+              onApply={async (value) => setBody(value)}
               context={writerContext}
               placeholder="Click to open writer..."
             />
@@ -366,7 +366,7 @@ export function SkillsChangelogPage({
                 videoId={videoId}
                 fieldId="newsletter-copy"
                 value={newsletterCopy}
-                onApply={setNewsletterCopy}
+                onApply={async (value) => setNewsletterCopy(value)}
                 context={writerContext}
                 placeholder="Click to open writer..."
               />

@@ -114,7 +114,10 @@ describe("image upload, as a Job", () => {
         deleteLocalFiles: true,
       },
     ]);
-    expect(t.getState()).toEqual(createInitialImageUploadState());
+    expect(t.getState()).toEqual({
+      ...createInitialImageUploadState(),
+      saving: true,
+    });
   });
 
   it("swaps in what was recorded when the Job fails part-way", () => {
@@ -153,6 +156,70 @@ describe("image upload, as a Job", () => {
     expect(t.getState().jobId).toBeNull();
   });
 
+  it("removes nothing until the swapped body's save is confirmed, and nothing if it fails", () => {
+    const settled = () =>
+      tester()
+        .send(pressed(true))
+        .send(uploaded("a.png"))
+        .send(heard("succeeded"))
+        .resetExec();
+    // Settled, swapped, saving: nothing is removed yet.
+    expect(settled().getEffects()).toEqual([]);
+    expect(settled().getState().saving).toBe(true);
+
+    const failed = settled().send({
+      type: "body-save-failed",
+      videoId: "video-1",
+      swappedFilePaths: ["/v/a.png"],
+      deleteLocalFiles: true,
+    });
+    expect(failed.getEffects().map((e) => e.type)).toEqual([
+      "show-save-failed-toast",
+    ]);
+    expect(failed.getState().saving).toBe(false);
+
+    // Apply again: the body already holds the URL, so nothing is uploaded,
+    // and the file goes once this save lands.
+    const swappedBody = "![a](https://c/a.png)";
+    failed.resetExec().send(pressed(true, swappedBody));
+    expect(failed.getEffects()).toEqual([
+      {
+        type: "swap-into-body",
+        videoId: "video-1",
+        uploads: [],
+        deleteLocalFiles: false,
+      },
+    ]);
+    failed.resetExec().send({
+      type: "body-saved",
+      videoId: "video-1",
+      savedBody: swappedBody,
+      swappedFilePaths: [],
+      deleteLocalFiles: false,
+    });
+    expect(failed.getEffects()[0]).toEqual({
+      type: "remove-local-images",
+      videoId: "video-1",
+      filePaths: ["/v/a.png"],
+    });
+
+    const saved = settled().send({
+      type: "body-saved",
+      videoId: "video-1",
+      savedBody: "![a](https://c/a.png)",
+      swappedFilePaths: ["/v/a.png"],
+      deleteLocalFiles: true,
+    });
+    expect(saved.getEffects()).toEqual([
+      {
+        type: "remove-local-images",
+        videoId: "video-1",
+        filePaths: ["/v/a.png"],
+      },
+      { type: "report-saved", body: "![a](https://c/a.png)" },
+    ]);
+  });
+
   it("removes only the files that went into the body, and only when asked", () => {
     // The author deleted b from the body while the Job ran.
     const edited = "Typed meanwhile.\n![a](a.png)";
@@ -162,34 +229,25 @@ describe("image upload, as a Job", () => {
     ]);
     expect(swapped.body).toBe("Typed meanwhile.\n![a](https://c/a.png)");
 
-    const asked = tester().send({
-      type: "body-swapped",
-      videoId: "video-1",
-      swappedFilePaths: swapped.swappedFilePaths,
-      deleteLocalFiles: true,
-    });
-    expect(asked.getEffects()).toEqual([
+    const saved = (deleteLocalFiles: boolean, swappedFilePaths: string[]) =>
+      tester()
+        .send({
+          type: "body-saved",
+          videoId: "video-1",
+          savedBody: swapped.body,
+          swappedFilePaths,
+          deleteLocalFiles,
+        })
+        .getEffects()
+        .filter((e) => e.type === "remove-local-images");
+    expect(saved(true, swapped.swappedFilePaths)).toEqual([
       {
         type: "remove-local-images",
         videoId: "video-1",
         filePaths: ["/v/a.png"],
       },
     ]);
-
-    const notAsked = tester().send({
-      type: "body-swapped",
-      videoId: "video-1",
-      swappedFilePaths: swapped.swappedFilePaths,
-      deleteLocalFiles: false,
-    });
-    expect(notAsked.getEffects()).toEqual([]);
-
-    const nothingSwapped = tester().send({
-      type: "body-swapped",
-      videoId: "video-1",
-      swappedFilePaths: [],
-      deleteLocalFiles: true,
-    });
-    expect(nothingSwapped.getEffects()).toEqual([]);
+    expect(saved(false, swapped.swappedFilePaths)).toEqual([]);
+    expect(saved(true, [])).toEqual([]);
   });
 });
