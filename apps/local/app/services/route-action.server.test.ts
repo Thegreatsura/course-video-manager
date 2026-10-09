@@ -1,21 +1,31 @@
 import { describe, it, expect, vi } from "vitest";
-import { Cause, Data, Effect, Layer, ManagedRuntime, Runtime } from "effect";
+import { Data, Effect, Layer, ManagedRuntime, Runtime } from "effect";
+import { createStaticHandler } from "react-router";
 import { makeAction, makeLoader } from "./route-action.server";
 
 /**
- * What `buildErrorPipeline` dies with: react-router's `data(message, init)`.
- * Naming the shape HERE is what keeps `as any` out of the 13 assertions below.
+ * What a failed route throws: react-router's `data(message, init)`, unwrapped.
+ * Naming the shape HERE is what keeps `as any` out of the assertions below.
  */
 interface ThrownRouteData {
   data: string;
   init: { status: number };
 }
 
+/**
+ * React Router reads a status only off a `data()` thrown as-is; wrapped in a
+ * `FiberFailure` it answers 500, so a wrapped throw fails here.
+ */
 function extractDieDefect(error: unknown): ThrownRouteData {
-  if (!Runtime.isFiberFailure(error)) throw error;
-  const cause = error[Runtime.FiberFailureCauseId];
-  const defects = [...Cause.defects(cause)];
-  return defects[0] as ThrownRouteData;
+  if (Runtime.isFiberFailure(error)) {
+    throw new Error(
+      "route threw a FiberFailure, which React Router answers 500",
+      {
+        cause: error,
+      }
+    );
+  }
+  return error as ThrownRouteData;
 }
 
 /**
@@ -62,6 +72,42 @@ class SomethingBrokeError extends Data.TaggedError("SomethingBrokeError")<{
 }> {}
 
 describe("makeAction", () => {
+  it("answers React Router with the mapped status, not 500", async () => {
+    class JobNotRetryableError extends Data.TaggedError(
+      "JobNotRetryableError"
+    )<{ message: string }> {}
+
+    const handler = createStaticHandler([
+      {
+        id: "retry",
+        path: "/retry",
+        action: makeAction(
+          {
+            errors: { JobNotRetryableError: 409 },
+            effect: () =>
+              Effect.fail(
+                new JobNotRetryableError({
+                  message: "went out: retrying would post it twice",
+                })
+              ),
+          },
+          makeTestRuntime()
+        ),
+      },
+    ]);
+
+    const context = await handler.query(
+      new Request("http://test.local/retry", { method: "POST" })
+    );
+
+    if (context instanceof Response) throw new Error("expected a context");
+    expect(context.statusCode).toBe(409);
+    expect(context.errors?.retry).toMatchObject({
+      status: 409,
+      data: "went out: retrying would post it twice",
+    });
+  });
+
   it("returns success value when effect succeeds", async () => {
     const runtime = makeTestRuntime();
 

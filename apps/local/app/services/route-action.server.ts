@@ -1,4 +1,4 @@
-import { Console, Effect, type ManagedRuntime } from "effect";
+import { Cause, Console, Effect, Exit, type ManagedRuntime } from "effect";
 import { data } from "react-router";
 import { type LayerLive, runtimeLive } from "./layer.server";
 
@@ -61,6 +61,25 @@ function buildErrorPipeline<A, E, R>(
   );
 }
 
+/**
+ * Run a route's Effect and answer React Router the way it understands.
+ *
+ * A route answers with a status only when the loader or action throws the
+ * `data(…, { status })` (or `Response`, or `redirect`) ITSELF. `runPromise`
+ * rejects with a `FiberFailure` wrapping the defect instead, which React
+ * Router treats as an unknown error and answers 500 — so a 409 "would post it
+ * twice" reached the browser as "Unexpected Server Error". Run to an `Exit` and
+ * throw what the Effect died (or failed) with, unwrapped.
+ */
+export async function runRouteEffect<A, R>(
+  runtime: ManagedRuntime.ManagedRuntime<R, unknown>,
+  effect: Effect.Effect<A, unknown, R>
+): Promise<A> {
+  const exit = await runtime.runPromiseExit(effect);
+  if (Exit.isSuccess(exit)) return exit.value;
+  throw Cause.squash(exit.cause);
+}
+
 interface MakeLoaderConfig<A, E, R> {
   errors?: { [K in ErrorTags<E>]?: number };
   effect: (ctx: {
@@ -87,7 +106,8 @@ export function makeLoader<A, E, R extends LayerLive>(
       request: args.request,
       params: args.params,
     });
-    return runtime.runPromise(
+    return runRouteEffect(
+      runtime,
       buildErrorPipeline(effect, errorMap, config.errors)
     );
   };
@@ -119,7 +139,8 @@ export function makeAction<A, E, R extends LayerLive>(
       payload,
     });
 
-    return runtime.runPromise(
+    return runRouteEffect(
+      runtime,
       buildErrorPipeline(effect, errorMap, config.errors)
     );
   };

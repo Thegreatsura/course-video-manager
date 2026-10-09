@@ -4,6 +4,7 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { runtimeLive } from "@/services/layer.server";
+import { runRouteEffect } from "@/services/route-action.server";
 import { data } from "react-router";
 
 export const action = async (args: Route.ActionArgs) => {
@@ -47,6 +48,6 @@ export const action = async (args: Route.ActionArgs) => {
     Effect.catchAll(() => {
       return Effect.die(data("Internal server error", { status: 500 }));
     }),
-    runtimeLive.runPromise
+    (effect) => runRouteEffect(runtimeLive, effect)
   );
 };
