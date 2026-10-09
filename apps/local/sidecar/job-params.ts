@@ -33,6 +33,10 @@ export const JOB_PARAMS = {
       default: () => true,
     }),
   }),
+  /** The Clips one transcribe request named; at least one. */
+  "transcribe-clips": Schema.Struct({
+    clipIds: Schema.NonEmptyArray(Schema.String),
+  }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */
     courseId: Schema.String,

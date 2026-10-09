@@ -118,6 +118,19 @@ export const UPLOAD_MANAGER_POLICIES = {
 } as const satisfies Record<string, JobPolicy>;
 
 /**
+ * **Clip transcription** (#12) was never an Upload Manager job: the editor
+ * awaited one `POST /clips/transcribe`, and a failure was final — no retry
+ * (`edit-effect-handlers.ts`). So: 1 attempt, nothing holding a second one
+ * back (the 20 Whisper permits stay in `VideoProcessingService`). Not
+ * `neverRequeued`: a transcription is safe to run again, so a deliberate stop
+ * puts it back (section 7.5's rule).
+ */
+export const CLIP_TRANSCRIPTION_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */

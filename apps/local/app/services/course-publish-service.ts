@@ -394,16 +394,26 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           });
         }
 
-        // Reclaim stale exports LAST, once every byte has gone past. GC deletes
-        // any Exported Video whose Export Hash is unreachable from current
-        // database state and cannot tell a file being streamed to Dropbox from
-        // an abandoned one — so it must never run while uploads are in flight.
-        // It has no correctness consumers, so the critical path is not its
-        // place.
-        if (unexportedVideos.length > 0) yield* garbageCollect(courseId);
-
         // Promote: the receipt landed, so the Pending Version is Published.
         yield* versionOps.promotePendingVersion(latestVersion.id);
+
+        // Reclaim stale exports LAST, once every byte has gone past and the
+        // Version is Published. GC deletes any Exported Video whose Export
+        // Hash is unreachable from current database state and cannot tell a
+        // file being streamed to Dropbox from an abandoned one — so it must
+        // never run while uploads are in flight. Nothing depends on it, so
+        // its failure is logged, never the Publish's: failing here would
+        // leave a published release reported as failed.
+        if (unexportedVideos.length > 0) {
+          yield* garbageCollect(courseId).pipe(
+            Effect.catchAllCause((cause) =>
+              Effect.logWarning(
+                "publish: garbage collection failed",
+                Cause.pretty(cause)
+              )
+            )
+          );
+        }
 
         onStageChange?.("complete");
 
