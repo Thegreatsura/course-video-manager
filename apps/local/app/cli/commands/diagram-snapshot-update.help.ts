@@ -30,8 +30,13 @@ UNDO. The output carries the drawing it replaced, in "previous". Save it, and
 'snapshot update' it back if the fix was wrong:
   cvm diagram snapshot update --file fix.json 9c41… | jq '.previous' > undo.json
   cvm diagram snapshot update --file undo.json 9c41…
-A shape the fix REMOVED comes back in Matt's defaults, and an "other" it
-removed cannot come back, so prefer moving shapes to deleting them.
+The undo is EXACT: it puts back the stored drawing byte for byte, every
+property the simple format cannot say included. An update that "previous"
+could not undo exactly is REFUSED before anything is written — removing a
+shape (it would come back in Matt's defaults), turning an "other" into
+another type (it could not come back at all), rewriting a formatted text.
+Move shapes rather than delete them, leave every "other" as it is, or
+'snapshot add' the fixed drawing instead.
 
 Output: ONE NDJSON line,
   {"snapshotId":"…","image":"/tmp/…/….png","changed":true,"headMoved":false,"previous":{"shapes":[…]}}
@@ -42,12 +47,12 @@ Output: ONE NDJSON line,
   previous    the drawing it held before, as a --file to undo with.
 
 Order: the snapshot is looked up, the file checked and applied onto it, the
-drawing drawn, then written. Nothing is written unless all succeed.
+undo checked, the drawing drawn, then written. Nothing is written unless all succeed.
 
 Exit codes:
   2  no snapshot with that id (_tag NotFoundError).
-  3  invalid input, as for 'snapshot add'; or REFUSED: the snapshot was
-     filmed, another snapshot of the Diagram already draws exactly this, or
+  3  invalid input, as for 'snapshot add'; or REFUSED: "previous" could
+     not undo it exactly, the snapshot was filmed, another snapshot of the Diagram already draws exactly this, or
      it changed while the command ran. Nothing is written.
   4  the PNG could not be drawn (_tag DiagramRenderError). Nothing is written.
   7  not the author's machine (_tag LocalOnlyCommandError). Stop.

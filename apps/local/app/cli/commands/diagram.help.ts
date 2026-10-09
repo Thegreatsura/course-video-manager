@@ -21,7 +21,8 @@ a Preserved Snapshot and the Diagram's current drawing (its head) — a Restore
 to Head. If Matt drew on the head by hand and no snapshot holds that drawing,
 it is preserved first, so nothing he did is lost. To FIX one drawing — an
 icon too close to a heading, a label touching its box — 'snapshot update' it
-in place instead of adding a near-copy; it refuses a filmed one.
+in place instead of adding a near-copy; it refuses a filmed one, and a fix
+its undo could not reverse exactly (a removed shape, say).
 
 Verbs:
   create --file <path|->                     WRITE. A new Diagram from a JSON file ("-" = STDIN)
@@ -48,7 +49,7 @@ head's shapes, and 'snapshot add' them: it applies them ONTO the head, so all
 he did by hand is kept. 'update' changes the NAME only. To fix a layout bug in
 one snapshot, 'get --snapshot' it, change those shapes, and 'snapshot update'
 it: same id, same place in the timeline, and it prints the drawing it
-replaced so a bad fix can be undone.
+replaced so a bad fix can be undone exactly.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
