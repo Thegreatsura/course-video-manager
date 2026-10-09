@@ -20,6 +20,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -138,6 +139,7 @@ describe("clipStateReducer", () => {
       // Archive, then pair with DB clip
       tester.send({ type: "clips-deleted", clipIds: [clipId] }).send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [fromPartial({ id: "db-1", text: "Hello world" })],
       });
 
@@ -321,6 +323,7 @@ describe("clipStateReducer", () => {
       // DB clips arrive after clear all — should appear as new unpaired clips
       tester.resetExec().send({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         clips: [
           fromPartial({ id: "db-1" as DatabaseId, text: "First clip" }),
           fromPartial({ id: "db-2" as DatabaseId, text: "Second clip" }),

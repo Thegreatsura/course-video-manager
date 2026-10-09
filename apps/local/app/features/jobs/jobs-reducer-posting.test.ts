@@ -99,7 +99,11 @@ describe("jobsReducer", () => {
       // The server refuses a dependsOn it has not seen: hold the post.
       expect(enqueued(tester.getEffects())).toEqual([EXPORT_ID]);
 
-      tester.send({ type: "enqueue-succeeded", id: EXPORT_ID });
+      tester.send({
+        type: "enqueue-succeeded",
+        id: EXPORT_ID,
+        answeredBy: EXPORT_ID,
+      });
       expect(enqueued(tester.getEffects())).toEqual([EXPORT_ID, JOB_ID]);
       expect(
         tester

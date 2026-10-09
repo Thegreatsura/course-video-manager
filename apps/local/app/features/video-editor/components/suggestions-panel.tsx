@@ -81,9 +81,7 @@ const SUGGESTIONS_ENABLED_KEY = "suggestions-enabled";
 const SUGGESTIONS_ENABLED_FILES_KEY = "suggestions-enabled-files-v2";
 
 export function SuggestionsPanel(props: SuggestionsPanelProps) {
-  const [enabled, setEnabled] = useLocalStorageBoolean(
-    SUGGESTIONS_ENABLED_KEY
-  );
+  const [enabled, setEnabled] = useLocalStorageBoolean(SUGGESTIONS_ENABLED_KEY);
 
   // The files enabled by default stand in until the author picks their own.
   // Stored per video, and shared with the Write page.

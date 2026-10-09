@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import type { ClipReducerAction, DatabaseId } from "./clip-state-reducer.types";
 
 /**
  * The `transcribe-clips` Job kind (`sidecar/kinds/transcribe-clips.ts`), as
@@ -67,10 +66,8 @@ export const liveJobCoversClips = (
 /**
  * One Clip's Transcription, as a `clip-settled` Job Event carries it: either
  * it landed (its new text, and whether it gave the Clip any Transcript
- * Words), or it failed. Both editor paths (a fresh recording's transcribe,
- * and a re-transcribe) turn it into the reducer's `clips-transcribed` event
- * with `toTranscribedClipEvent`, so neither can forget the words half or the
- * failed half.
+ * Words), or it failed. The clip reducer lands it on the Clip
+ * (`clip-state-reducer-transcription-jobs.ts`).
  */
 export const TranscribedClip = Schema.Union(
   Schema.Struct({
@@ -85,18 +82,3 @@ export const TranscribedClip = Schema.Union(
   })
 );
 export type TranscribedClip = typeof TranscribedClip.Type;
-
-export const toTranscribedClipEvent = (
-  clip: TranscribedClip
-): Extract<
-  ClipReducerAction,
-  { type: "clips-transcribed" }
->["clips"][number] =>
-  clip.transcriptionStatus === "done"
-    ? {
-        databaseId: clip.id as DatabaseId,
-        transcriptionStatus: "done",
-        text: clip.text,
-        hasTranscriptWords: clip.hasTranscriptWords,
-      }
-    : { databaseId: clip.id as DatabaseId, transcriptionStatus: "failed" };

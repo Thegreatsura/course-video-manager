@@ -17,6 +17,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -436,6 +437,7 @@ describe("clipStateReducer — browser link capture", () => {
     tester.send(
       fromPartial({
         type: "new-database-clips",
+        transcriptionJobId: "job-rec",
         outputPath: "/tmp/r.mkv",
         clips: [{ id: "db-1", diagramSnapshotId: null, pauseType: "none" }],
       })

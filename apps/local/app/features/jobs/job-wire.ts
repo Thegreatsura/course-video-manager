@@ -62,6 +62,9 @@ export const JobEventMessage = Schema.Struct({
 });
 export type JobEventMessage = typeof JobEventMessage.Type;
 
+/** `POST /api/jobs`'s answer: the Job that does the work. */
+export const EnqueueAnswer = Schema.Struct({ id: Schema.String });
+
 export const SidecarUnavailableMessage = Schema.Struct({
   message: Schema.String,
 });

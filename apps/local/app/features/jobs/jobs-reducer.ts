@@ -204,7 +204,15 @@ export namespace jobsReducer {
     /** Nothing has run for a while: the succeeded rows have been seen. */
     | { type: "idle-timeout-elapsed" }
     // The enqueue request's outcome
-    | { type: "enqueue-succeeded"; id: string }
+    | {
+        type: "enqueue-succeeded";
+        id: string;
+        /**
+         * The Job the server answered with: `id`, or a live Job that already
+         * does this work (a kind with one live Job per piece of work).
+         */
+        answeredBy: string;
+      }
     /** The server answered, and refused it. */
     | { type: "enqueue-failed"; id: string; message: string }
     /**
@@ -259,6 +267,15 @@ export namespace jobsReducer {
         hasLog: boolean;
       }
     | { type: "show-sidecar-not-running-toast"; title: string }
+    | {
+        /**
+         * Tell whoever asked for Job `id`: the server answered with the live
+         * Job `jobId` instead, which does the same work. `id` never exists.
+         */
+        type: "report-job-joined";
+        id: string;
+        jobId: string;
+      }
     | {
         /** Tell the Upload Manager: uploads may be waiting on this Job. */
         type: "report-job-settled";

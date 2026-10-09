@@ -145,6 +145,7 @@ describe("getSessionClipMarks over a real take", () => {
 
     tester.send({
       type: "new-database-clips",
+      transcriptionJobId: "job-rec",
       clips: [fromPartial({ id: "db-1", text: "Hello world" })],
     });
 
@@ -189,6 +190,7 @@ describe("getSessionClipMarks over a real take", () => {
     // Only one database clip arrives for the two the frontend heard.
     tester.send({
       type: "new-database-clips",
+      transcriptionJobId: "job-rec",
       clips: [fromPartial({ id: "db-1", text: "Hello world" })],
     });
 

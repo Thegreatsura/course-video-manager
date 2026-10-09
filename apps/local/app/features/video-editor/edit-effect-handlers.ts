@@ -14,7 +14,6 @@ import { VERSION_NOT_DRAFT_MESSAGE } from "@/services/version-not-draft-message"
 import type { EffectsMap } from "use-effect-reducer";
 import type React from "react";
 import { diagramChannel } from "@/lib/diagram-protocol";
-import { TRANSCRIBE_CLIPS_JOB_KIND } from "./transcribe-clips-response";
 
 export interface EditEffectHandlersDeps {
   videoId: string;
@@ -22,6 +21,12 @@ export interface EditEffectHandlersDeps {
   clipStateRef: React.RefObject<ClipReducerState>;
   revalidate: () => void;
   whiteNoiseAssetPath: string;
+  /** `UploadContext.startClipTranscription`: enqueue the Job under its id. */
+  startClipTranscription: (
+    jobId: string,
+    videoId: string,
+    clipIds: readonly DatabaseId[]
+  ) => void;
 }
 
 export function createEditEffectHandlers(
@@ -33,6 +38,7 @@ export function createEditEffectHandlers(
     clipStateRef,
     revalidate,
     whiteNoiseAssetPath,
+    startClipTranscription,
   } = deps;
 
   return {
@@ -58,39 +64,10 @@ export function createEditEffectHandlers(
         });
       });
     },
-    "transcribe-clips": (_state, effect, dispatch) => {
+    "transcribe-clips": (_state, effect) => {
       // The Sidecar runs it as a Job; its Job Events bring each Clip back
       // (`use-clip-transcription-jobs.ts`), even to a tab opened later.
-      const count = effect.clipIds.length;
-      fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: crypto.randomUUID(),
-          kind: TRANSCRIBE_CLIPS_JOB_KIND,
-          title: `Transcribe ${count} ${count === 1 ? "Clip" : "Clips"}`,
-          params: { clipIds: effect.clipIds },
-          subject: { type: "video", id: videoId },
-          attemptsSpent: 0,
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            throw new Error(
-              (await res.text()) || `HTTP ${res.status}: ${res.statusText}`
-            );
-          }
-        })
-        .catch((error) => {
-          dispatch({
-            type: "clips-transcription-failed",
-            clipIds: effect.clipIds,
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to transcribe clips",
-          });
-        });
+      startClipTranscription(effect.jobId, videoId, effect.clipIds);
     },
     "scroll-to-insertion-point": () => {
       const recordingPanel = document.querySelector("[data-session-recording]");
@@ -288,6 +265,7 @@ export function createEditEffectHandlers(
                 type: "new-database-clips",
                 clips: clips as DB.Clip[],
                 outputPath: effect.outputPath,
+                transcriptionJobId: crypto.randomUUID(),
               });
             }
           } catch (e) {

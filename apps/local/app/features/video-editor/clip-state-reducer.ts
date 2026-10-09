@@ -8,10 +8,14 @@ import type {
   ClipReducerAction,
   ClipReducerEffect,
   ClipReducerState,
-  DatabaseId,
   FrontendInsertionPoint,
 } from "./clip-state-reducer.types";
 import { archiveClips } from "./clip-state-reducer.helpers";
+import {
+  applyTranscriptionJobEvent,
+  followJoinedJob,
+  requestClipTranscription,
+} from "./clip-state-reducer-transcription-jobs";
 import { handleAddEffectClipAt } from "./clip-state-reducer-effect-clip-helpers";
 import {
   handleRecordingAction,
@@ -70,63 +74,17 @@ export const clipStateReducer: EffectReducer<
         insertionPoint: insertionPoint,
       };
     }
-    case "clips-retranscribing": {
-      const requested = new Set(action.clipIds);
-      const databaseIds: DatabaseId[] = [];
-      const items = state.items.map((item) => {
-        if (item.type !== "on-database" || !requested.has(item.frontendId)) {
-          return item;
-        }
-        databaseIds.push(item.databaseId);
-        return { ...item, transcriptionStatus: "transcribing" as const };
-      });
-      if (databaseIds.length === 0) return state;
-      exec({ type: "transcribe-clips", clipIds: databaseIds });
-      return { ...state, items };
-    }
-    case "clips-transcribed":
-      return applyTranscribedClips(state, action.clips);
-    case "transcription-job-started": {
-      const clipTranscriptionJobs = { ...state.clipTranscriptionJobs };
-      for (const id of action.clipIds) clipTranscriptionJobs[id] = action.jobId;
-      return { ...state, clipTranscriptionJobs };
-    }
-    case "transcription-job-failed": {
-      // The Job ended without settling these: each shows it failed and can be
-      // retried. A Clip a newer Job has taken on is that Job's.
-      const held = new Set(
-        Object.entries(state.clipTranscriptionJobs)
-          .filter(([, jobId]) => jobId === action.jobId)
-          .map(([clipId]) => clipId)
+    case "clips-retranscribing":
+      return requestClipTranscription(
+        state,
+        action.clipIds,
+        action.jobId,
+        exec
       );
-      if (held.size === 0) return state;
-      const clipTranscriptionJobs = { ...state.clipTranscriptionJobs };
-      for (const id of held) delete clipTranscriptionJobs[id as DatabaseId];
-      return {
-        ...state,
-        clipTranscriptionJobs,
-        items: state.items.map((item) =>
-          item.type === "on-database" &&
-          held.has(item.databaseId) &&
-          item.transcriptionStatus === "transcribing"
-            ? { ...item, transcriptionStatus: "failed" as const }
-            : item
-        ),
-      };
-    }
-    case "clips-transcription-failed": {
-      // The request itself failed, so no Clip in it got a Transcription. Not
-      // fatal to the editor: each Clip shows it failed and can be retried.
-      const failed = new Set(action.clipIds);
-      return {
-        ...state,
-        items: state.items.map((item) =>
-          item.type === "on-database" && failed.has(item.databaseId)
-            ? { ...item, transcriptionStatus: "failed" as const }
-            : item
-        ),
-      };
-    }
+    case "transcription-job-joined":
+      return followJoinedJob(state, action.requestedJobId, action.jobId);
+    case "job-event-heard":
+      return applyTranscriptionJobEvent(state, action.heard);
     case "set-insertion-point-after": {
       const item = state.items.find((c) => c.frontendId === action.clipId);
       if (!item) {
@@ -626,53 +584,4 @@ export const clipStateReducer: EffectReducer<
     }
   }
   return state;
-};
-
-type TranscribedClipEvent = Extract<
-  ClipReducerAction,
-  { type: "clips-transcribed" }
->["clips"][number];
-
-/**
- * Land each Clip's Transcription. A Clip that settled is no longer held by
- * its Job (`clipTranscriptionJobs`).
- */
-const applyTranscribedClips = (
-  state: ClipReducerState,
-  clips: TranscribedClipEvent[]
-): ClipReducerState => {
-  const withWords = new Set(state.clipIdsWithTranscriptWords);
-  const transcribed = new Map(clips.map((clip) => [clip.databaseId, clip]));
-  const clipTranscriptionJobs = { ...state.clipTranscriptionJobs };
-
-  const items = state.items.map((item) => {
-    const clip =
-      item.type === "on-database"
-        ? transcribed.get(item.databaseId)
-        : undefined;
-    if (item.type !== "on-database" || !clip) return item;
-    delete clipTranscriptionJobs[item.databaseId];
-
-    // A failed Transcription leaves the Clip's text and words as they
-    // were: only its status changes.
-    if (clip.transcriptionStatus === "failed") {
-      return { ...item, transcriptionStatus: "failed" as const };
-    }
-
-    // An empty text is a finished transcription too (nothing was said).
-    if (clip.hasTranscriptWords) withWords.add(item.databaseId);
-    else withWords.delete(item.databaseId);
-    return {
-      ...item,
-      text: clip.text,
-      transcriptionStatus: "done" as const,
-    };
-  });
-
-  return {
-    ...state,
-    items,
-    clipIdsWithTranscriptWords: withWords,
-    clipTranscriptionJobs,
-  };
 };

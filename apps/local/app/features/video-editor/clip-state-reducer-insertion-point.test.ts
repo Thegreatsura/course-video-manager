@@ -13,6 +13,7 @@ const createInitialState = (
   error: null,
   sessions: [],
   clipTranscriptionJobs: {},
+  jobEventCursor: 0,
   ...overrides,
 });
 
@@ -101,6 +102,7 @@ describe("clipStateReducer", () => {
       const stateWithDatabaseClips = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [
             fromPartial({
               id: "1",
@@ -197,6 +199,7 @@ describe("clipStateReducer", () => {
       const stateWithDatabaseClips = tester
         .send({
           type: "new-database-clips",
+          transcriptionJobId: "job-rec",
           clips: [
             fromPartial({ id: "1" }),
             fromPartial({ id: "2" }),
@@ -251,6 +254,7 @@ describe("clipStateReducer", () => {
         .send(
           fromPartial({
             type: "new-database-clips",
+            transcriptionJobId: "job-rec",
             clips: [
               fromPartial({ id: "1" }),
               fromPartial({ id: "2" }),

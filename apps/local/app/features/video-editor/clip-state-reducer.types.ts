@@ -4,6 +4,7 @@ import type { ClipZoomType } from "@/features/videos/clip-zoom";
 import type { TranscriptionStatus } from "@/features/videos/transcription-status";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
+import type { JobEventMessage } from "@/features/jobs/job-wire";
 
 /**
  * The schema is typed in terms of `DatabaseId`, so it is declared in
@@ -196,6 +197,9 @@ export type RecordingSession = {
   silenceLength: SilenceLength;
 };
 
+/** Which `transcribe-clips` Job a Clip belongs to, and whether it has started. */
+export type ClipTranscriptionJob = { jobId: string; started: boolean };
+
 export type ClipReducerState = {
   items: TimelineItem[];
   /**
@@ -217,11 +221,19 @@ export type ClipReducerState = {
    */
   sessions: RecordingSession[];
   /**
-   * The `transcribe-clips` Job each Clip's latest Transcription runs in, as
-   * its Job Events told this window (`transcription-job-started`). A Job that
-   * fails fails the Clips it still holds here.
+   * The `transcribe-clips` Job each Clip's latest Transcription belongs to:
+   * the one this window asked for (`started: false` until its `clips-started`
+   * event), or the latest one heard starting on it. Only that Job's result
+   * lands on the Clip, and a Job that fails fails only the Clips it holds.
    */
-  clipTranscriptionJobs: Record<DatabaseId, string>;
+  clipTranscriptionJobs: Record<DatabaseId, ClipTranscriptionJob>;
+  /**
+   * The newest Job Event id applied. Seeded with the one the loader read
+   * before the Clips (a Clip's row is written before its event, so anything
+   * at or below it is in the loaded Clips already); a Job Event at or below
+   * it is ignored, so a replayed one never turns a newer result back.
+   */
+  jobEventCursor: number;
   /**
    * Live browser link-capture state, fed by `browser-event` actions from the
    * Chrome extension. `browserFocus` + `browserUrl` fold to the single web page
@@ -276,6 +288,8 @@ export type ClipReducerAction =
       type: "new-database-clips";
       clips: DB.Clip[];
       outputPath?: string;
+      /** The id of the `transcribe-clips` Job the new Clips go into. */
+      transcriptionJobId: string;
     }
   | {
       type: "clips-deleted";
@@ -284,35 +298,22 @@ export type ClipReducerAction =
   | {
       type: "clips-retranscribing";
       clipIds: FrontendId[];
-    }
-  | {
-      type: "clips-transcribed";
-      clips: (
-        | {
-            databaseId: DatabaseId;
-            transcriptionStatus: "done";
-            text: string;
-            hasTranscriptWords: boolean;
-          }
-        | { databaseId: DatabaseId; transcriptionStatus: "failed" }
-      )[];
-    }
-  | {
-      /** The transcribe request as a whole failed: no Clip in it landed. */
-      type: "clips-transcription-failed";
-      clipIds: DatabaseId[];
-      message: string;
-    }
-  | {
-      /** A `transcribe-clips` Job took these Clips on. */
-      type: "transcription-job-started";
+      /** The id the `transcribe-clips` Job will have, made by the caller. */
       jobId: string;
-      clipIds: DatabaseId[];
     }
   | {
-      /** A `transcribe-clips` Job ended failed or interrupted. */
-      type: "transcription-job-failed";
+      /**
+       * The server answered this tab's request for Job `requestedJobId` with
+       * the live Job `jobId`, which already transcribes the same Clips.
+       */
+      type: "transcription-job-joined";
+      requestedJobId: string;
       jobId: string;
+    }
+  | {
+      /** The Job Event stream said something about this Video's Clip transcriptions. */
+      type: "job-event-heard";
+      heard: JobEventMessage;
     }
   | {
       type: "set-insertion-point-after";
@@ -423,6 +424,7 @@ export type ClipReducerAction =
 export type ClipReducerEffect =
   | {
       type: "transcribe-clips";
+      jobId: string;
       clipIds: DatabaseId[];
     }
   | {

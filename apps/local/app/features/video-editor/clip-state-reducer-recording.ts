@@ -1,4 +1,5 @@
 import type { PauseType } from "@/services/video-processing-service";
+import { holdForRequestedJob } from "./clip-state-reducer-transcription-jobs";
 import { resolveClipZoomType } from "@/features/videos/clip-zoom";
 import { DEFAULT_SILENCE_LENGTH } from "@/silence-detection-constants";
 import {
@@ -13,7 +14,6 @@ import type {
   ClipReducerExec,
   ClipReducerState,
   DatabaseId,
-  FrontendId,
   FrontendInsertionPoint,
   RecordingSession,
   TimelineItem,
@@ -369,7 +369,6 @@ const handleNewDatabaseClips = (
 
   const clipsToArchive = new Set<DatabaseId>();
   const databaseClipIdsToTranscribe = new Set<DatabaseId>();
-  const frontendClipIdsToTranscribe = new Set<FrontendId>();
   const snapshotsToCreate: PendingSnapshotEffect[] = [];
   const webLinksToPersist: PendingWebLinksEffect[] = [];
   const clipsToUpdateScene = new Map<
@@ -444,7 +443,6 @@ const handleNewDatabaseClips = (
           profile: frontendClip.profile,
           pauseType: frontendClip.pauseType,
         });
-        frontendClipIdsToTranscribe.add(frontendClip.frontendId);
         databaseClipIdsToTranscribe.add(databaseClip.id);
       } else if (frontendClip?.type === "optimistically-added") {
         const newDatabaseClip: ClipOnDatabase = {
@@ -468,7 +466,6 @@ const handleNewDatabaseClips = (
           profile: frontendClip.profile,
           pauseType: frontendClip.pauseType,
         });
-        frontendClipIdsToTranscribe.add(frontendClip.frontendId);
         databaseClipIdsToTranscribe.add(databaseClip.id);
       }
     } else {
@@ -496,7 +493,6 @@ const handleNewDatabaseClips = (
       newClipsState = result.items;
       newInsertionPoint = result.insertionPoint;
 
-      frontendClipIdsToTranscribe.add(newFrontendId);
       databaseClipIdsToTranscribe.add(databaseClip.id);
     }
   }
@@ -524,6 +520,7 @@ const handleNewDatabaseClips = (
   if (databaseClipIdsToTranscribe.size > 0) {
     exec({
       type: "transcribe-clips",
+      jobId: action.transcriptionJobId,
       clipIds: Array.from(databaseClipIdsToTranscribe),
     });
   }
@@ -531,19 +528,17 @@ const handleNewDatabaseClips = (
   emitSnapshotForClipEffects(snapshotsToCreate, exec);
   emitPersistWebLinksEffects(webLinksToPersist, exec);
 
-  return {
-    ...state,
-    // The transcribe-clips request goes out with this commit, so these Clips
-    // are transcribing from here until `clips-transcribed` or
-    // `clips-transcription-failed` reports back.
-    items: newClipsState.map((item) =>
-      item.type === "on-database" &&
-      frontendClipIdsToTranscribe.has(item.frontendId)
-        ? { ...item, transcriptionStatus: "transcribing" as const }
-        : item
-    ),
-    insertionPoint: newInsertionPoint,
-  };
+  // The transcribe-clips Job is asked for with this commit, so these Clips
+  // are transcribing, and belong to it, until its Job Events settle them.
+  return holdForRequestedJob(
+    {
+      ...state,
+      items: newClipsState,
+      insertionPoint: newInsertionPoint,
+    },
+    Array.from(databaseClipIdsToTranscribe),
+    action.transcriptionJobId
+  );
 };
 
 const handleClipAudioWindowClosed = (

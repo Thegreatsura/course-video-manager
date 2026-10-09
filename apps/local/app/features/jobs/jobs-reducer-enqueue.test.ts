@@ -138,3 +138,29 @@ describe("an enqueue whose answer never came", () => {
     expect(row(tester.getState())).toMatchObject({ status: "error" });
   });
 });
+
+describe("an enqueue the server answers with another Job", () => {
+  const LIVE_ID = "6b0c1f5e-0000-4000-8000-0000000000aa";
+
+  it("joins that live Job: the request is dropped, and whoever asked is told", () => {
+    const tester = newTester().send(requestPost());
+    tester
+      .resetExec()
+      .send({ type: "enqueue-succeeded", id: JOB_ID, answeredBy: LIVE_ID });
+
+    expect(tester.getState().jobs[JOB_ID]).toBeUndefined();
+    expect(tester.getEffects()).toEqual([
+      { type: "report-job-joined", id: JOB_ID, jobId: LIVE_ID },
+    ]);
+  });
+
+  it("an answer naming the Job asked for is no join", () => {
+    const tester = newTester().send(requestPost());
+    tester
+      .resetExec()
+      .send({ type: "enqueue-succeeded", id: JOB_ID, answeredBy: JOB_ID });
+
+    expect(tester.getState().jobs[JOB_ID]).toMatchObject({ enqueued: true });
+    expect(tester.getEffects()).toEqual([]);
+  });
+});
