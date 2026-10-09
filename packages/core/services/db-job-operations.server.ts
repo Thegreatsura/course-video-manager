@@ -21,7 +21,9 @@ import {
   createDismissJobOperations,
   notDismissed,
 } from "./db-job-dismiss.server.js";
-import { makeDbCall } from "./db-job-calls.server.js";
+import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
+import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
+export { dependencyFailedMessage } from "./db-job-calls.server.js";
 
 /**
  * Every statement against the background-job tables (`db/schema-jobs.ts`).
@@ -103,10 +105,6 @@ const leaseEnd = (leaseMs: number) =>
 export const INTERRUPTED_POST_MESSAGE =
   "Interrupted — check before retrying: the post was cut off, so it may or may not have gone out";
 
-/** The message the Upload Manager gives a Job whose dependency failed (upload-reducer.ts). */
-export const dependencyFailedMessage = (title: string) =>
-  `Dependency "${title}" failed`;
-
 export const createJobOperations = (db: Database) => {
   const insertEvent = (
     handle: Database,
@@ -124,11 +122,7 @@ export const createJobOperations = (db: Database) => {
     parent: Pick<Job, "id" | "title">
   ): Effect.Effect<void, UnknownDBServiceError> =>
     Effect.gen(function* () {
-      const failure: JobFailure = {
-        tag: "DependencyFailed",
-        message: dependencyFailedMessage(parent.title),
-        cause: dependencyFailedMessage(parent.title),
-      };
+      const failure = dependencyFailure(parent.title);
       const doomed = yield* makeDbCall(() =>
         tx
           .update(jobs)
@@ -220,54 +214,6 @@ export const createJobOperations = (db: Database) => {
     ).pipe(Effect.map((rows) => rows[0]));
 
   // -- Jobs ------------------------------------------------------------------
-
-  const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
-    /**
-     * The Job's id, when the caller chose it — the browser does, so it can
-     * name the Job (and wait on it) before the request returns. `null` takes
-     * a fresh one.
-     */
-    id: string | null;
-    kind: string;
-    title: string;
-    lane: string;
-    params: unknown;
-    maxAttempts: number;
-    dependsOn: string | null;
-    subject: { type: string; id: string } | null;
-  }) {
-    return yield* withDbTransaction(db, (tx) =>
-      Effect.gen(function* () {
-        const [job] = yield* makeDbCall(() =>
-          tx
-            .insert(jobs)
-            .values({
-              ...(input.id === null ? {} : { id: input.id }),
-              kind: input.kind,
-              title: input.title,
-              lane: input.lane,
-              params: input.params ?? {},
-              maxAttempts: input.maxAttempts,
-              dependsOn: input.dependsOn,
-              subjectType: input.subject?.type ?? null,
-              subjectId: input.subject?.id ?? null,
-            })
-            .returning()
-        );
-        if (!job) {
-          return yield* new UnknownDBServiceError({
-            cause: "No job was returned from the database",
-          });
-        }
-        yield* insertEvent(tx, job.id, "queued", {
-          kind: job.kind,
-          lane: job.lane,
-          dependsOn: job.dependsOn,
-        });
-        return job;
-      })
-    );
-  });
 
   /**
    * Claim the oldest queued Job in `lane` whose dependency (if any) has
@@ -664,7 +610,7 @@ export const createJobOperations = (db: Database) => {
   });
 
   return {
-    enqueueJob,
+    ...createEnqueueJobOperations(db),
     claimNextJob,
     heartbeatJobs,
     appendJobEvent,

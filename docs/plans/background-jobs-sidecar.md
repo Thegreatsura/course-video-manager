@@ -530,7 +530,10 @@ second time beside it. Only the run that settles a lost run calls
 jobs reducer holds a post's enqueue until its export's enqueue has
 succeeded (the column is a foreign key), and fails it locally with
 `Dependency "<title>" failed` if that enqueue fails. A queued Job with a
-dependency draws as "Waiting for export".
+dependency draws as "Waiting for export". A Job enqueued behind one that has
+already failed for good (the export failed before the post's enqueue landed)
+is added `failed` with the same message, rather than waiting for ever: the
+enqueue locks the parent's row, so the two cannot cross.
 
 **Moved:** YouTube upload (`kinds/youtube.ts`) and YouTube Shorts post
 (`kinds/youtube-shorts.ts`). Deleted: `api.videos.$videoId.upload.ts`,
