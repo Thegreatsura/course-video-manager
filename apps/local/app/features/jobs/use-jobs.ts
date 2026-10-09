@@ -77,7 +77,7 @@ function useJobEventStream(
     source.addEventListener(JOB_STREAM_EVENTS.jobEvent, (event) => {
       const message = decodeStreamData(JobEventMessage, event.data);
       if (!message) return;
-      const action = toJobsAction(message);
+      const action = toJobsAction(message, Date.now());
       if (action) dispatch(action);
       publish(message);
     });

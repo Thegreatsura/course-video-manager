@@ -11,6 +11,8 @@ import { announceVideoSettled } from "./job-video-toasts";
 import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
+import { recordClockSkew, timeJobEvent } from "./jobs-timing";
+import type { UploadTiming } from "@/features/upload-manager/upload-timing";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
@@ -123,6 +125,17 @@ export namespace jobsReducer {
     sidecar: SidecarStatus;
     /** Why the sidecar is `not-running`, as the proxy put it. */
     sidecarMessage: string | null;
+    /**
+     * When things happened to each Job's rows, by row id: what the ETA works
+     * from (`jobs-timing.ts`). Stamped with each Job Event's `at`, so a
+     * snapshot's replay gives a reopened tab the same timings.
+     */
+    timings: Record<string, UploadTiming>;
+    /**
+     * This tab's clock minus the database's, for the newest live Job Events
+     * (`clockOffsetOf`).
+     */
+    clockSkews: readonly number[];
   }
 
   /** A Job Event from the stream, as a fact about one Job. */
@@ -130,6 +143,10 @@ export namespace jobsReducer {
     type: T;
     job: WireJob;
     eventId: number;
+    /** The event's `at`, by the database's clock (ms since the epoch). */
+    at: number;
+    /** This tab's clock when a live event arrived; `null` in a replay. */
+    receivedAt: number | null;
   } & D;
 
   /** A Job Event this reducer understands (see `toJobsAction`). */
@@ -284,6 +301,8 @@ export const createInitialJobsState = (): jobsReducer.State => ({
   dismissed: {},
   sidecar: "unknown",
   sidecarMessage: null,
+  timings: {},
+  clockSkews: [],
 });
 
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
@@ -320,18 +339,25 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
   });
 };
 
-/** Fold one Job's events from a snapshot, oldest first. */
+/**
+ * Fold one Job's events from a snapshot, oldest first, timing its rows as
+ * the live stream would have.
+ */
 const foldSnapshotJob = (
   job: WireJob,
   events: readonly WireJobEvent[]
-): jobsReducer.JobView => {
+): { view: jobsReducer.JobView; timings: Record<string, UploadTiming> } => {
   let view: jobsReducer.JobView = viewOf(job, "queued");
+  let timings: Record<string, UploadTiming> = {};
   for (const event of events) {
     const action = toJobsAction({ job, event });
     if (!action) continue;
-    view = applyStreamAction(view, action) ?? view;
+    const next = applyStreamAction(view, action);
+    if (!next) continue;
+    timings = timeJobEvent(timings, view, next, action, { replayed: true });
+    view = next;
   }
-  return view;
+  return { view, timings };
 };
 
 export const jobsReducer: EffectReducer<
@@ -428,9 +454,12 @@ export const jobsReducer: EffectReducer<
 
     case "job-snapshot-received": {
       const jobs: Record<string, jobsReducer.JobView> = {};
+      let timings: Record<string, UploadTiming> = {};
       for (const { job, events } of action.snapshot.jobs) {
-        const view = foldSnapshotJob(job, events);
+        const folded = foldSnapshotJob(job, events);
+        const view = folded.view;
         jobs[job.id] = view;
+        timings = { ...timings, ...folded.timings };
         // A Job this tab was following settled while it was not listening:
         // that is still news, to the author and to anything waiting on it.
         const before = state.jobs[job.id];
@@ -442,7 +471,13 @@ export const jobsReducer: EffectReducer<
       for (const job of Object.values(state.jobs)) {
         if (job.status === "requested" && !jobs[job.id]) jobs[job.id] = job;
       }
-      return { ...state, jobs, sidecar: "running", sidecarMessage: null };
+      return {
+        ...state,
+        jobs,
+        timings,
+        sidecar: "running",
+        sidecarMessage: null,
+      };
     }
 
     case "sidecar-available":
@@ -496,6 +531,10 @@ export const jobsReducer: EffectReducer<
         sidecar: "running",
         sidecarMessage: null,
         jobs: { ...state.jobs, [after.id]: after },
+        timings: timeJobEvent(state.timings, before, after, action, {
+          replayed: false,
+        }),
+        clockSkews: recordClockSkew(state.clockSkews, action),
       };
     }
   }

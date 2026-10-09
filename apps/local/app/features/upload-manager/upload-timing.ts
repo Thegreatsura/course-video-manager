@@ -12,8 +12,7 @@ import {
  * step that moved the rows: the caller supplies it, nothing here reads a
  * clock.
  *
- * Nothing feeds this yet: the browser Upload Manager that did is gone, and a
- * Job row's timings come from its Job Events next (batch 8, PR 3).
+ * The jobs reducer feeds it, one Job Event at a time (`jobs-timing.ts`).
  */
 
 export interface ProgressSample {
@@ -26,6 +25,11 @@ export interface CompletedStage {
   key: string;
   durationMs: number;
   units: number | null;
+  /**
+   * Finished in a snapshot's replay: a tab that heard it live has already
+   * recorded it to the history, so it is not recorded again.
+   */
+  replayed?: true;
 }
 
 export interface UploadTiming {
@@ -80,6 +84,8 @@ export interface TimingStep {
   at: number | undefined;
   /** The row an export event named in this step: it has an encode to do. */
   exportWorkId?: string;
+  /** The step is a replay (see `CompletedStage.replayed`). */
+  replayed?: boolean;
 }
 
 const nextTiming = (
@@ -118,6 +124,7 @@ const nextTiming = (
               key: historyKey(entry, old.stage!),
               durationMs: at - old.stageStartedAt,
               units: stageUnits(previous.uploads[id] ?? entry, old.stage!),
+              ...(step.replayed ? { replayed: true as const } : {}),
             },
           ]
         : old.completed,

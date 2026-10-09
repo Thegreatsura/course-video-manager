@@ -48,15 +48,19 @@ const postCheckOf = (
 
 /**
  * One Job Event off the wire as a reducer action, or `null` for a type this
- * tab has no use for. `event.type` is what `db-job-operations` and the
+ * tab has no use for. `receivedAt` is this tab's clock when a live event
+ * arrived (`null` for a snapshot's replay): with the event's own `at`, the
+ * database's clock, it tells the reducer how far apart the two clocks are
+ * (`clockOffsetOf`). `event.type` is what `db-job-operations` and the
  * handlers write: `queued`, `started`, `stage`, `progress`, `retrying`,
  * `requeued`, `succeeded`, `failed`, `interrupted`, `dismissed`.
  */
 export const toJobsAction = (
-  message: JobEventMessage
+  message: JobEventMessage,
+  receivedAt: number | null = null
 ): jobsReducer.JobStreamAction | null => {
   const { job, event } = message;
-  const base = { job, eventId: event.id };
+  const base = { job, eventId: event.id, at: Date.parse(event.at), receivedAt };
   const data = event.data;
   switch (event.type) {
     case "queued":
