@@ -1,20 +1,8 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { Effect, Layer } from "effect";
-import nodeFs from "node:fs";
-import os from "node:os";
-import nodePath from "node:path";
+import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { buildProgram } from "@/cli/main";
-import { makeTestCliOutput } from "@/cli/output";
 import * as schema from "@/db/schema";
-import { FrameCaptureService } from "@/services/frame-capture-service";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
-import { APP_URL_ENV_KEY, LOCAL_MACHINE_ENV_KEY } from "./env";
-import {
-  buildWriteLayer,
-  ndjson,
-  type RunResult,
-} from "./cli-write-test-harness";
+import { LOCAL_MACHINE_ENV_KEY } from "./env";
+import { failureOf, ndjson, useDiagramCli } from "./cli-write-test-harness";
 
 // ===========================================================================
 // cvm diagram update / delete / restore: the Diagram's name and archive state,
@@ -22,50 +10,7 @@ import {
 // faked, as in cli-diagram-get.test.ts).
 // ===========================================================================
 
-const fakeRender = Layer.succeed(FrameCaptureService, {
-  renderDiagramToPng: (params: { outputPath: string }) =>
-    Effect.sync(() => {
-      nodeFs.writeFileSync(params.outputPath, "RENDERED-PNG");
-      return params.outputPath;
-    }),
-} as unknown as FrameCaptureService);
-
-let testDb: TestDb;
-let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
-let dir: string;
-const saved = {
-  local: process.env[LOCAL_MACHINE_ENV_KEY],
-  app: process.env[APP_URL_ENV_KEY],
-};
-
-const restoreEnv = (key: string, value: string | undefined) => {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-};
-
-beforeAll(async () => {
-  testDb = (await createTestDb()).testDb;
-  const layer = Layer.merge(buildWriteLayer(testDb), fakeRender);
-  run = async (argv) => {
-    const out = makeTestCliOutput();
-    const exitCode = await Effect.runPromise(
-      buildProgram(argv).pipe(Effect.provide(out.layer), Effect.provide(layer))
-    );
-    return { stdout: out.stdout(), stderr: out.stderr(), exitCode };
-  };
-  process.env[APP_URL_ENV_KEY] = "http://localhost:5299/";
-});
-
-afterAll(() => {
-  restoreEnv(LOCAL_MACHINE_ENV_KEY, saved.local);
-  restoreEnv(APP_URL_ENV_KEY, saved.app);
-});
-
-beforeEach(async () => {
-  process.env[LOCAL_MACHINE_ENV_KEY] = "true";
-  dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-diagram-update-"));
-  await testDb.delete(schema.diagrams);
-});
+const { db, run, file } = useDiagramCli();
 
 const STEP_1 = [
   { type: "box", id: "agent", x: 0, y: 0, w: 200, h: 100 },
@@ -79,14 +24,10 @@ const STEP_2 = [
 type Written = { id: string; name: string; archived: boolean; url: string };
 
 const create = async () => {
-  const path = nodePath.join(dir, "diagram.json");
-  nodeFs.writeFileSync(
-    path,
-    JSON.stringify({
-      name: "Agent loop",
-      snapshots: [{ shapes: STEP_1 }, { shapes: STEP_2 }],
-    })
-  );
+  const path = file({
+    name: "Agent loop",
+    snapshots: [{ shapes: STEP_1 }, { shapes: STEP_2 }],
+  });
   const r = await run(["diagram", "create", "--file", path]);
   expect(r.exitCode).toBe(0);
   return ndjson(r.stdout)[0] as { id: string };
@@ -94,7 +35,7 @@ const create = async () => {
 
 /** Every drawing the Diagram has: the head columns and every snapshot row. */
 const drawings = async (id: string) => {
-  const d = await testDb.query.diagrams.findFirst({
+  const d = await db().query.diagrams.findFirst({
     where: eq(schema.diagrams.id, id),
   });
   return {
@@ -102,14 +43,14 @@ const drawings = async (id: string) => {
       headScene: d!.headScene,
       searchText: d!.searchText,
     },
-    snapshots: await testDb.query.diagramSnapshots.findMany({
+    snapshots: await db().query.diagramSnapshots.findMany({
       where: eq(schema.diagramSnapshots.diagramId, id),
     }),
   };
 };
 
 const row = (id: string) =>
-  testDb.query.diagrams.findFirst({ where: eq(schema.diagrams.id, id) });
+  db().query.diagrams.findFirst({ where: eq(schema.diagrams.id, id) });
 
 const get = async (id: string) => {
   const r = await run(["diagram", "get", id]);
@@ -120,7 +61,7 @@ const get = async (id: string) => {
 /** What the playground lists: Playground Home, its list and its search. */
 const listed = async (id: string) =>
   (
-    await testDb.query.diagrams.findMany({
+    await db().query.diagrams.findMany({
       where: eq(schema.diagrams.archived, false),
     })
   ).some((d) => d.id === id);
@@ -197,7 +138,7 @@ describe("cvm diagram update / delete / restore", () => {
         "00000000-0000-0000-0000-000000000000",
       ]);
       expect(r.exitCode).toBe(2);
-      expect(JSON.parse(r.stderr.trim())._tag).toBe("NotFoundError");
+      expect(failureOf(r)._tag).toBe("NotFoundError");
     }
   );
 

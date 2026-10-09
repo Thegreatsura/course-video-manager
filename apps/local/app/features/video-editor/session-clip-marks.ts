@@ -16,19 +16,37 @@
  * what's on the glass is always this take's exposure, never last take's.
  */
 import { useMemo } from "react";
-import type { ClipMarks, ClipMarkState } from "@/lib/teleprompter-protocol";
-import type { RecordingSession, TimelineItem } from "./clip-state-reducer";
+import type {
+  ClipMarkIds,
+  ClipMarks,
+  ClipMarkState,
+} from "@/lib/teleprompter-protocol";
+import type {
+  FrontendId,
+  RecordingSession,
+  TimelineItem,
+} from "./clip-state-reducer";
+
+/** One mark, and the Clip it stands for, so a dot on the glass can name it. */
+export type SessionClipMark = { clipId: FrontendId; state: ClipMarkState };
 
 export function getSessionClipMarks(
   items: TimelineItem[],
   sessions: RecordingSession[]
 ): ClipMarks {
+  return getSessionClipMarksWithIds(items, sessions).map((mark) => mark.state);
+}
+
+export function getSessionClipMarksWithIds(
+  items: TimelineItem[],
+  sessions: RecordingSession[]
+): SessionClipMark[] {
   // The newest session is the one being filmed. Until there is one, there is
   // nothing to report.
   const currentSessionId = sessions.at(-1)?.id ?? null;
   if (currentSessionId === null) return [];
 
-  const marks: { insertionOrder: number; state: ClipMarkState }[] = [];
+  const marks: (SessionClipMark & { insertionOrder: number })[] = [];
 
   for (const item of items) {
     // A database clip keeps the `sessionId` of the optimistic clip it was
@@ -40,6 +58,7 @@ export function getSessionClipMarks(
       // Deleted wins over orphaned: a clip you chose to throw away not
       // arriving is not a failure, so it shouldn't read as one.
       marks.push({
+        clipId: item.frontendId,
         insertionOrder: item.insertionOrder,
         state: item.shouldArchive
           ? "deleted-pending"
@@ -50,6 +69,7 @@ export function getSessionClipMarks(
     } else if (item.type === "on-database") {
       if (item.sessionId !== currentSessionId) continue;
       marks.push({
+        clipId: item.frontendId,
         // Paired clips inherit their optimistic clip's insertion order, so this
         // stays comparable with the pending ones above and a mark fills in
         // where it already sat rather than jumping position.
@@ -61,12 +81,18 @@ export function getSessionClipMarks(
 
   return marks
     .sort((a, b) => a.insertionOrder - b.insertionOrder)
-    .map((mark) => mark.state);
+    .map(({ clipId, state }) => ({ clipId, state }));
 }
 
 export function useSessionClipMarks(
   items: TimelineItem[],
   sessions: RecordingSession[]
-): ClipMarks {
-  return useMemo(() => getSessionClipMarks(items, sessions), [items, sessions]);
+): { marks: ClipMarks; markClipIds: ClipMarkIds } {
+  return useMemo(() => {
+    const withIds = getSessionClipMarksWithIds(items, sessions);
+    return {
+      marks: withIds.map((mark) => mark.state),
+      markClipIds: withIds.map((mark) => mark.clipId),
+    };
+  }, [items, sessions]);
 }

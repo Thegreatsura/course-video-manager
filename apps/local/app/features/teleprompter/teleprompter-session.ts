@@ -19,6 +19,7 @@ import type {
   CaptureStatus,
   EditorTab,
   ClipMarks,
+  ClipMarkIds,
 } from "@/lib/teleprompter-protocol";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import type { TeleprompterBeat } from "./beats-view";
@@ -53,6 +54,16 @@ export namespace teleprompterSession {
      * clip reducer.
      */
     marks: ClipMarks;
+    /**
+     * The Clip each mark stands for, same order as `marks`, so a clicked dot
+     * can name its Clip. Empty from an editor too old to send them.
+     */
+    markClipIds: ClipMarkIds;
+    /**
+     * The Clip the editor's player is playing, as last pushed. `null` when it
+     * is paused, or there is nobody to ask. Its dot is drawn light blue.
+     */
+    playingClipId: string | null;
     /**
      * The newest transcribed clip in this recording session, as last pushed by
      * the editor. `null` when there is none, or nobody to ask.
@@ -97,6 +108,10 @@ export namespace teleprompterSession {
         /** Absent from an editor running older code; treated as no session. */
         marks?: ClipMarks;
         /** Absent from an editor running older code; treated as none. */
+        markClipIds?: ClipMarkIds;
+        /** Absent from an editor running older code; treated as paused. */
+        playingClipId?: string | null;
+        /** Absent from an editor running older code; treated as none. */
         latestTranscript?: string | null;
         /** Absent from an editor running older code; treated as unknown. */
         videoLengthSeconds?: number | null;
@@ -129,6 +144,8 @@ export namespace teleprompterSession {
     videoId: null,
     capture: "not-recording",
     marks: NO_MARKS,
+    markClipIds: [],
+    playingClipId: null,
     latestTranscript: null,
     videoLengthSeconds: null,
     content: EMPTY_CONTENT,
@@ -171,6 +188,8 @@ export namespace teleprompterSession {
           capture: action.capture,
           // A different video's leftovers aren't this video's problem.
           marks: videoChanged ? NO_MARKS : (action.marks ?? NO_MARKS),
+          markClipIds: videoChanged ? [] : (action.markClipIds ?? []),
+          playingClipId: action.playingClipId ?? null,
           latestTranscript: videoChanged
             ? null
             : (action.latestTranscript ?? null),
@@ -218,6 +237,8 @@ export namespace teleprompterSession {
           // row of dots reads as a live claim about clips nobody is reporting
           // on any more.
           marks: NO_MARKS,
+          markClipIds: [],
+          playingClipId: null,
           latestTranscript: null,
           videoLengthSeconds: null,
         };

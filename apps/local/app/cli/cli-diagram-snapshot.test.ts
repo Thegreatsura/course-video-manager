@@ -1,26 +1,18 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { Effect, Layer } from "effect";
+import { describe, it, expect } from "vitest";
 import nodeFs from "node:fs";
-import os from "node:os";
 import nodePath from "node:path";
 import { eq } from "drizzle-orm";
-import { buildProgram } from "@/cli/main";
-import { makeTestCliOutput } from "@/cli/output";
 import * as schema from "@/db/schema";
-import {
-  DiagramRenderError,
-  FrameCaptureService,
-} from "@/services/frame-capture-service";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
 import {
   readSimpleDiagram,
   type Scene,
 } from "@cvm/core/lib/simple-diagram/index";
-import { APP_URL_ENV_KEY, LOCAL_MACHINE_ENV_KEY } from "./env";
+import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
-  buildWriteLayer,
+  DIAGRAM_RENDERS,
+  failureOf,
   ndjson,
-  type RunResult,
+  useDiagramCli,
 } from "./cli-write-test-harness";
 
 // ===========================================================================
@@ -34,81 +26,7 @@ import {
 // records the scene and app origin it was handed.
 // ===========================================================================
 
-interface RenderCall {
-  appUrl: string;
-  scene: unknown;
-  outputPath: string;
-}
-
-let render: { fail: boolean; calls: RenderCall[] } = { fail: false, calls: [] };
-
-const fakeRender = Layer.succeed(FrameCaptureService, {
-  renderDiagramToPng: (params: RenderCall) =>
-    Effect.suspend(() => {
-      render.calls.push(params);
-      if (render.fail) {
-        return Effect.fail(
-          new DiagramRenderError({
-            cause: null,
-            message:
-              "could not render the Diagram: net::ERR_CONNECTION_REFUSED",
-          })
-        );
-      }
-      nodeFs.writeFileSync(params.outputPath, "RENDERED-PNG");
-      return Effect.succeed(params.outputPath);
-    }),
-} as unknown as FrameCaptureService);
-
-let testDb: TestDb;
-let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
-let dir: string;
-const saved = {
-  local: process.env[LOCAL_MACHINE_ENV_KEY],
-  app: process.env[APP_URL_ENV_KEY],
-};
-
-const restore = (key: string, value: string | undefined) => {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-};
-
-beforeAll(async () => {
-  testDb = (await createTestDb()).testDb;
-  const layer = Layer.merge(buildWriteLayer(testDb), fakeRender);
-  run = async (argv) => {
-    const out = makeTestCliOutput();
-    const exitCode = await Effect.runPromise(
-      buildProgram(argv).pipe(Effect.provide(out.layer), Effect.provide(layer))
-    );
-    return { stdout: out.stdout(), stderr: out.stderr(), exitCode };
-  };
-  process.env[APP_URL_ENV_KEY] = "http://localhost:5299/";
-});
-
-afterAll(() => {
-  restore(LOCAL_MACHINE_ENV_KEY, saved.local);
-  restore(APP_URL_ENV_KEY, saved.app);
-});
-
-beforeEach(async () => {
-  process.env[LOCAL_MACHINE_ENV_KEY] = "true";
-  dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-diagram-"));
-  render = { fail: false, calls: [] };
-  await testDb.delete(schema.diagrams);
-});
-
-const file = (body: unknown): string => {
-  const path = nodePath.join(dir, "diagram.json");
-  nodeFs.writeFileSync(
-    path,
-    typeof body === "string" ? body : JSON.stringify(body)
-  );
-  return path;
-};
-
-const failureOf = (r: RunResult) =>
-  JSON.parse(r.stderr.trim()) as { _tag: string; message: string };
+const { render, db, dir, run, file } = useDiagramCli();
 
 const DRAFT = {
   name: "Agent loop",
@@ -128,11 +46,9 @@ type Created = {
   snapshots: Array<{ id: string; image: string }>;
 };
 
-const RENDERS = nodePath.join(os.tmpdir(), "cvm-diagram-renders");
-
 /** The Diagram's snapshots, oldest first. */
 const snapshotsOf = (diagramId: string) =>
-  testDb.query.diagramSnapshots.findMany({
+  db().query.diagramSnapshots.findMany({
     where: (s, { eq }) => eq(s.diagramId, diagramId),
     orderBy: (s, { asc }) => [asc(s.createdAt)],
   });
@@ -157,7 +73,7 @@ const created = async () => {
 
 /** Matt's hand edit in the playground: the head autosaved, held by no snapshot. */
 const editByHand = async (diagramId: string) => {
-  const row = await testDb.query.diagrams.findFirst({
+  const row = await db().query.diagrams.findFirst({
     where: (d, { eq }) => eq(d.id, diagramId),
   });
   const scene = row!.headScene as Scene;
@@ -172,7 +88,7 @@ const editByHand = async (diagramId: string) => {
       },
     },
   };
-  await testDb
+  await db()
     .update(schema.diagrams)
     .set({ headScene: handDrawn })
     .where(eqId(diagramId));
@@ -186,7 +102,7 @@ const eqId = (id: string) => eq(schema.diagrams.id, id);
  * say, on shapes it can, plus a hand-drawn scribble it reads as `other`.
  */
 const polishByHand = async (diagramId: string) => {
-  const row = await testDb.query.diagrams.findFirst({
+  const row = await db().query.diagrams.findFirst({
     where: (d, { eq }) => eq(d.id, diagramId),
   });
   const scene = structuredClone(row!.headScene as Scene);
@@ -211,7 +127,7 @@ const polishByHand = async (diagramId: string) => {
     index: "a9",
     props: { segments: [], color: "black", size: "m", isComplete: true },
   } as Scene["store"][string];
-  await testDb
+  await db()
     .update(schema.diagrams)
     .set({ headScene: scene })
     .where(eqId(diagramId));
@@ -251,11 +167,13 @@ describe("cvm diagram snapshot add", () => {
     });
     expect(line!.snapshotId).toBe(snapshots[2]!.id);
 
-    const [row] = await testDb.query.diagrams.findMany();
+    const [row] = await db().query.diagrams.findMany();
     expect(row!.headScene).toEqual(snapshots[2]!.scene);
 
     expect(render.calls.at(-1)!.scene).toEqual(snapshots[2]!.scene);
-    expect(line!.image).toBe(nodePath.join(RENDERS, `${line!.snapshotId}.png`));
+    expect(line!.image).toBe(
+      nodePath.join(DIAGRAM_RENDERS, `${line!.snapshotId}.png`)
+    );
     expect(nodeFs.readFileSync(line!.image, "utf8")).toBe("RENDERED-PNG");
     nodeFs.rmSync(line!.image);
   });
@@ -425,7 +343,7 @@ describe("cvm diagram snapshot add", () => {
 
     expect(r.exitCode).toBe(4);
     expect(await snapshotsOf(diagram.id)).toHaveLength(1);
-    const [row] = await testDb.query.diagrams.findMany();
+    const [row] = await db().query.diagrams.findMany();
     expect(row!.headScene).toEqual(handDrawn);
   });
 
@@ -436,7 +354,7 @@ describe("cvm diagram snapshot add", () => {
       "snapshot",
       "add",
       "--file",
-      nodePath.join(dir, "missing.json"),
+      nodePath.join(dir(), "missing.json"),
       "x",
     ]);
     expect(r.exitCode).toBe(7);
@@ -454,7 +372,7 @@ describe("cvm diagram render", () => {
 
     expect(r.stderr).toBe("");
     expect(r.exitCode).toBe(0);
-    const image = nodePath.join(RENDERS, `${stored!.id}.png`);
+    const image = nodePath.join(DIAGRAM_RENDERS, `${stored!.id}.png`);
     expect(ndjson(r.stdout)).toEqual([{ snapshotId: stored!.id, image }]);
     expect(render.calls).toHaveLength(1);
     expect(render.calls[0]!.scene).toEqual(stored!.scene);

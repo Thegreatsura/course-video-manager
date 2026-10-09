@@ -28,8 +28,11 @@ export interface WriterModalProps {
    */
   context: WriterContext | null;
   label?: string;
-  /** Receives the final (image-uploaded) document to persist. */
-  onApply: (finalValue: string) => void;
+  /**
+   * Persist the final (image-uploaded) document. Resolve only once the save
+   * is confirmed, reject if it failed; the modal closes only after it resolves.
+   */
+  onApply: (finalValue: string) => Promise<void>;
   /** When set, the modal's Repo Files tab shows an "add from clipboard" button. */
   onAddFileFromClipboard?: () => void;
   /** Other fields on the same page, offered as toggleable AI context. */
@@ -101,14 +104,13 @@ export function WriterModal({
     if (!open) initedRef.current = false;
   }, [open, context, value, modes, videoId, fieldId]);
 
-  const handleApply = useCallback(
+  const handleApplied = useCallback(
     (finalValue: string) => {
-      onApply(finalValue);
       workingValueRef.current = finalValue;
       setIsDirty(false);
       onOpenChange(false);
     },
-    [onApply, onOpenChange]
+    [onOpenChange]
   );
 
   const handleCancel = useCallback(() => {
@@ -182,7 +184,8 @@ export function WriterModal({
               ctxTab={ctxTab}
               onCtxTabChange={handleCtxTabChange}
               onCancel={handleRequestClose}
-              onApply={handleApply}
+              onApply={onApply}
+              onApplied={handleApplied}
               onAddFileFromClipboard={onAddFileFromClipboard}
               pageFields={pageFields}
             />

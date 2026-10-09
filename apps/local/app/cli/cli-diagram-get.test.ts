@@ -1,21 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { Effect, Layer } from "effect";
-import nodeFs from "node:fs";
-import os from "node:os";
-import nodePath from "node:path";
+import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { buildProgram } from "@/cli/main";
-import { makeTestCliOutput } from "@/cli/output";
 import * as schema from "@/db/schema";
-import { FrameCaptureService } from "@/services/frame-capture-service";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
 import type { Scene } from "@cvm/core/lib/simple-diagram/index";
-import { APP_URL_ENV_KEY, LOCAL_MACHINE_ENV_KEY } from "./env";
-import {
-  buildWriteLayer,
-  ndjson,
-  type RunResult,
-} from "./cli-write-test-harness";
+import { LOCAL_MACHINE_ENV_KEY } from "./env";
+import { failureOf, ndjson, useDiagramCli } from "./cli-write-test-harness";
 
 // ===========================================================================
 // cvm diagram get: READ the head and the snapshot list in the simple format.
@@ -23,56 +11,7 @@ import {
 // cli-diagram-snapshot.test.ts), so the round trip is create -> get.
 // ===========================================================================
 
-const fakeRender = Layer.succeed(FrameCaptureService, {
-  renderDiagramToPng: (params: { outputPath: string }) =>
-    Effect.sync(() => {
-      nodeFs.writeFileSync(params.outputPath, "RENDERED-PNG");
-      return params.outputPath;
-    }),
-} as unknown as FrameCaptureService);
-
-let testDb: TestDb;
-let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
-let dir: string;
-const saved = {
-  local: process.env[LOCAL_MACHINE_ENV_KEY],
-  app: process.env[APP_URL_ENV_KEY],
-};
-
-const restore = (key: string, value: string | undefined) => {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-};
-
-beforeAll(async () => {
-  testDb = (await createTestDb()).testDb;
-  const layer = Layer.merge(buildWriteLayer(testDb), fakeRender);
-  run = async (argv) => {
-    const out = makeTestCliOutput();
-    const exitCode = await Effect.runPromise(
-      buildProgram(argv).pipe(Effect.provide(out.layer), Effect.provide(layer))
-    );
-    return { stdout: out.stdout(), stderr: out.stderr(), exitCode };
-  };
-  process.env[APP_URL_ENV_KEY] = "http://localhost:5299/";
-});
-
-afterAll(() => {
-  restore(LOCAL_MACHINE_ENV_KEY, saved.local);
-  restore(APP_URL_ENV_KEY, saved.app);
-});
-
-beforeEach(async () => {
-  process.env[LOCAL_MACHINE_ENV_KEY] = "true";
-  dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-diagram-get-"));
-  await testDb.delete(schema.diagrams);
-});
-
-const file = (body: unknown): string => {
-  const path = nodePath.join(dir, "diagram.json");
-  nodeFs.writeFileSync(path, JSON.stringify(body));
-  return path;
-};
+const { db, run, file } = useDiagramCli();
 
 const STEP_1 = [
   { type: "box", id: "agent", x: 0, y: 0, w: 200, h: 100 },
@@ -117,17 +56,17 @@ const create = async () => {
 };
 
 const writes = async () => ({
-  diagrams: await testDb.query.diagrams.findMany(),
-  snapshots: await testDb.query.diagramSnapshots.findMany(),
+  diagrams: await db().query.diagrams.findMany(),
+  snapshots: await db().query.diagramSnapshots.findMany(),
 });
 
 /** A clip on a fresh video, pinning `snapshotId`. */
 const pin = async (snapshotId: string, archived = false) => {
-  const [video] = await testDb
+  const [video] = await db()
     .insert(schema.videos)
     .values({ title: "v.mp4", originalFootagePath: "f.mp4" })
     .returning();
-  const [clip] = await testDb
+  const [clip] = await db()
     .insert(schema.clips)
     .values({
       videoId: video!.id,
@@ -193,12 +132,12 @@ describe("cvm diagram get", () => {
 
   it("reads a hand-drawn shape in the head as `other`", async () => {
     const created = await create();
-    const row = await testDb.query.diagrams.findFirst({
+    const row = await db().query.diagrams.findFirst({
       where: (d, { eq }) => eq(d.id, created.id),
     });
     const scene = row!.headScene as Scene;
     const label = scene.store["shape:label"] as Record<string, unknown>;
-    await testDb
+    await db()
       .update(schema.diagrams)
       .set({
         headScene: {
@@ -245,7 +184,7 @@ describe("cvm diagram get", () => {
 
     for (const r of [missing, foreign]) {
       expect(r.exitCode).toBe(2);
-      expect(JSON.parse(r.stderr.trim())._tag).toBe("NotFoundError");
+      expect(failureOf(r)._tag).toBe("NotFoundError");
     }
   });
 
