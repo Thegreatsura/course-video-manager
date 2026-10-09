@@ -21,7 +21,10 @@ import {
   AnimaticCommentsProvider,
   type AnimaticComment,
 } from "@/features/animatic/animatic-comments";
-import type { AnimaticClipMockup } from "@/features/animatic/animatic-timeline";
+import {
+  clipMockupSpeechSeconds,
+  type AnimaticClipMockup,
+} from "@/features/animatic/animatic-timeline";
 import {
   sectionRunTime,
   type AnimaticSectionLesson,
@@ -96,6 +99,8 @@ export const loader = makeLoader({
               line: row.line,
               position: index + 1,
               durationSeconds: row.durationSeconds,
+              voiceStatus: row.voiceStatus,
+              voiceError: row.voiceError,
               order: row.order,
               imageUrl: clipMockupFrameUrl(row.id),
               audioUrl: clipMockupAudioUrl(row.id),
@@ -112,7 +117,7 @@ export const loader = makeLoader({
         sectionRunTime: sectionRunTime({
           lessons: sectionLessons,
           currentVideoId: videoId,
-          currentDurationsSeconds: rows.map((row) => row.durationSeconds),
+          currentDurationsSeconds: rows.map(clipMockupSpeechSeconds),
         }),
         video: {
           id: video.id,
@@ -172,10 +177,10 @@ const loadSectionLessons = (videoId: string) =>
     const videoIds = section.lessons.flatMap((l) => l.videos.map((v) => v.id));
     const durationRows =
       yield* clipMockupOps.listClipMockupDurationsByVideoIds(videoIds);
-    const durationsByVideo = new Map<string, (number | null)[]>();
+    const durationsByVideo = new Map<string, number[]>();
     for (const row of durationRows) {
       const list = durationsByVideo.get(row.videoId) ?? [];
-      list.push(row.durationSeconds);
+      list.push(clipMockupSpeechSeconds(row));
       durationsByVideo.set(row.videoId, list);
     }
 

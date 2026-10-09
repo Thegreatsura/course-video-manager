@@ -1,10 +1,23 @@
 import type { AnimaticClipMockup } from "./animatic-timeline";
 
-/** The Clip Mockups whose frame or speech is not on disk, listed above the rows. */
+/**
+ * A file the row names is not on disk. A voice that is not `ready` names no
+ * file yet — that is the voice's own mark, not a broken file.
+ */
+export const isFileMissing = (m: AnimaticClipMockup): boolean =>
+  m.imageMissing || (m.voiceStatus === "ready" && m.audioMissing);
+
+/**
+ * The Clip Mockups that cannot play in full, listed above the rows: a frame or
+ * speech file missing from disk, or a voice the Sidecar gave up on. A pending
+ * voice is not listed — it is on its way, and its row says so.
+ */
 export const AnimaticBrokenFiles = (props: {
   mockups: readonly AnimaticClipMockup[];
 }) => {
-  const broken = props.mockups.filter((m) => m.imageMissing || m.audioMissing);
+  const broken = props.mockups.filter(
+    (m) => isFileMissing(m) || m.voiceStatus === "failed"
+  );
   if (broken.length === 0) return null;
 
   return (
@@ -19,7 +32,11 @@ export const AnimaticBrokenFiles = (props: {
             #{m.position}:{" "}
             {[
               m.imageMissing ? "frame file missing" : null,
-              m.audioMissing ? "speech file missing" : null,
+              m.voiceStatus === "failed"
+                ? `voice failed${m.voiceError ? ` (${m.voiceError})` : ""}`
+                : m.audioMissing
+                  ? "speech file missing"
+                  : null,
             ]
               .filter(Boolean)
               .join(", ")}

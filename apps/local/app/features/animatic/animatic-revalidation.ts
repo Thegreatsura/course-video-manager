@@ -41,6 +41,8 @@ export function animaticMockupsSignature(
       mockup.position,
       mockup.line,
       mockup.durationSeconds,
+      mockup.voiceStatus,
+      mockup.voiceError,
       mockup.order,
       mockup.imageUrl,
       mockup.audioUrl,

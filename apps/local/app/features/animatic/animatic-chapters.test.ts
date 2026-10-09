@@ -30,6 +30,8 @@ const mockup = (
   audioUrl: `/api/clip-mockups/cm_${position}/audio`,
   imageMissing: false,
   audioMissing: false,
+  voiceStatus: "ready",
+  voiceError: null,
 });
 
 const chapter = (id: string, name: string, order: string): AnimaticChapter => ({
