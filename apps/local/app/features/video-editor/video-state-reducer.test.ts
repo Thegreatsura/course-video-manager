@@ -19,6 +19,39 @@ const createInitialState = (
 });
 
 describe("videoStateReducer", () => {
+  it("a dot clicked on the teleprompter plays its Clip, and pauses it when clicked again", () => {
+    const clip1 = "clip-1" as FrontendId;
+    const clip2 = "clip-2" as FrontendId;
+    const reducer = makeVideoEditorReducer([clip1, clip2], [clip1, clip2]);
+    const tester = new ReducerTester(
+      reducer,
+      createInitialState({ currentClipId: clip1, currentTimeInClip: 3 })
+    );
+
+    const playing = tester
+      .send({ type: "click-teleprompter-mark", clipId: clip2 })
+      .getState();
+    expect(playing).toMatchObject({
+      currentClipId: clip2,
+      runningState: "playing",
+      currentTimeInClip: 0,
+    });
+
+    const paused = tester
+      .send({ type: "click-teleprompter-mark", clipId: clip2 })
+      .getState();
+    expect(paused).toMatchObject({
+      currentClipId: clip2,
+      runningState: "paused",
+    });
+
+    // A mark whose Clip has left the timeline does nothing.
+    const gone = "clip-gone" as FrontendId;
+    expect(
+      tester.send({ type: "click-teleprompter-mark", clipId: gone }).getState()
+    ).toBe(paused);
+  });
+
   describe("shift-click multi-select", () => {
     it("should select range from section header to clip when shift-clicking", () => {
       const sectionId = "section-1" as FrontendId;
