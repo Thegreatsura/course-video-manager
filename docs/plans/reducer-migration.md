@@ -106,7 +106,7 @@ allowlist entries are gone (17 → 16 `use-state`, 12 → 11 `effect-sets-state`
   read-only with no PATCH until Retry, and switching diagrams saves the one
   being left before loading the next.
 
-## Batch 2 — Modal bags: sidebar and video editor (score 345)
+## Batch 2 — Modal bags: sidebar and video editor (score 345) — Done
 
 `components/app-sidebar.tsx` has five booleans: `isAddCourseOpen`,
 `isAddVideoOpen`, `isSpacedeskOpen`, `sheetOpen` and `isCreatingDiagram`.
@@ -118,6 +118,37 @@ came from doing work in an effect. Keep creating a diagram as an effect the
 reducer declares from `create-diagram-clicked`.
 
 - Delete: no component test renders either file today. Add none.
+
+**Done.** `components/app-sidebar-reducer.ts` holds the sidebar's
+`openModal` (`add-course | add-video | spacedesk`), the mobile sheet and the
+in-flight Diagram create; `create-diagram-clicked` declares `create-diagram`,
+and the outcome comes back as `diagram-created` (which declares
+`open-diagram`) or `diagram-create-failed` (which declares `show-error`). The
+effect runner is `components/use-app-sidebar-reducer.ts`, and the
+close-the-sheet-on-navigation effect is now a bridge that dispatches
+`location-changed`. `features/video-editor/editor-modals-reducer.ts` holds the
+editor's `openModal` (`add-video | paste-file | rename-video | copy-video |
+create-video-from-selection`) and the Suggestions panel's `suggestion`;
+closing the paste dialog declares `refresh-video-files`, which used to be an
+inline `revalidator.revalidate()` in `EditorModals`. Its runner is
+`hooks/use-editor-modals-reducer.ts`. The context swaps eight `is…`/`setIs…`
+pairs and `setSuggestionState` for `openModal`, `modalDispatch` and a stable
+`onModalOpenChange` per dialog: stable because `SpacedeskModal` and
+`AddVideoModal` close themselves from effects that list `onOpenChange`. Neither
+file has a `useState` left, so both `use-state` entries are gone (16 → 14).
+
+- Tests: `apps/local` went from 3993 to 3999 (+6 reducer scenarios: four for
+  the sidebar, including the in-flight double click that #1697 moved out of an
+  effect, and two for the editor). No component test rendered either file, so
+  none could be deleted.
+- The sheet stays a separate boolean rather than joining `openModal`: a dialog
+  opened from inside the mobile sheet stacks on top of it today, and folding
+  the two together would have closed the sheet.
+- `modal-dismissed` names its dialog and is ignored unless that dialog is the
+  open one, so a late close never shuts a different dialog, as separate
+  booleans never could. Opening a second dialog now closes the first, but a
+  modal dialog blocks the menus that open the others, so nobody could reach
+  that before either.
 
 ## Batch 3 — Writer context panel, five routes and one hook (score 178)
 

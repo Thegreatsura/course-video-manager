@@ -15,10 +15,7 @@ import {
   type CourseMenuIntent,
 } from "@/features/course-view/course-menu";
 import { cn } from "@/lib/utils";
-import {
-  openPlayground,
-  openPlaygroundWithDiagram,
-} from "@/lib/diagram-window";
+import { openPlayground } from "@/lib/diagram-window";
 import {
   Archive,
   CalendarDays,
@@ -33,8 +30,11 @@ import {
   Plus,
   VideoIcon,
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import { toast } from "@/components/ui/toast";
+import { useEffect, useMemo } from "react";
+import type { appSidebarReducer } from "./app-sidebar-reducer";
+import { useAppSidebarReducer } from "./use-app-sidebar-reducer";
+
+type AppSidebarModal = appSidebarReducer.Modal;
 import {
   Link,
   useFetcher,
@@ -97,33 +97,25 @@ export function AppSidebar({ variant }: AppSidebarProps) {
   const createPitchFetcher = useFetcher();
   const createShortFetcher = useFetcher();
 
-  const [isAddCourseOpen, setIsAddCourseOpen] = useState(false);
-  const [isAddVideoOpen, setIsAddVideoOpen] = useState(false);
-  const [isSpacedeskOpen, setIsSpacedeskOpen] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [isCreatingDiagram, setIsCreatingDiagram] = useState(false);
+  const { state, dispatch } = useAppSidebarReducer();
 
+  // Bridge: navigating anywhere closes the mobile sheet.
   useEffect(() => {
-    setSheetOpen(false);
-  }, [location.pathname, location.search]);
+    dispatch({ type: "location-changed" });
+  }, [location.pathname, location.search, dispatch]);
 
-  const handleCreateDiagram = async () => {
-    if (isCreatingDiagram) return;
-    setIsCreatingDiagram(true);
-    try {
-      const res = await fetch("/api/diagrams/create", { method: "POST" });
-      if (!res.ok) {
-        toast.error("Failed to create diagram");
-        return;
-      }
-      const { id } = (await res.json()) as { id: string };
-      openPlaygroundWithDiagram(id);
-    } catch {
-      toast.error("Failed to create diagram");
-    } finally {
-      setIsCreatingDiagram(false);
-    }
-  };
+  // Stable per dialog: SpacedeskModal closes itself from an effect that lists
+  // its onOpenChange as a dependency.
+  const dismiss = useMemo(() => {
+    const onOpenChange = (modal: AppSidebarModal) => (open: boolean) => {
+      if (!open) dispatch({ type: "modal-dismissed", modal });
+    };
+    return {
+      "add-course": onOpenChange("add-course"),
+      "add-video": onOpenChange("add-video"),
+      spacedesk: onOpenChange("spacedesk"),
+    };
+  }, [dispatch]);
 
   const onPitchesPath = location.pathname.startsWith("/pitches");
   const onShortsPath = location.pathname.startsWith("/shorts");
@@ -152,7 +144,7 @@ export function AppSidebar({ variant }: AppSidebarProps) {
             variant="ghost"
             size="icon"
             className="h-6 w-6"
-            onClick={() => setIsAddCourseOpen(true)}
+            onClick={() => dispatch({ type: "add-course-clicked" })}
             aria-label="Add course"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -213,8 +205,8 @@ export function AppSidebar({ variant }: AppSidebarProps) {
         icon={<PenTool className="w-4 h-4 text-muted-foreground" />}
         label="Diagrams"
         onClick={() => openPlayground()}
-        onAdd={handleCreateDiagram}
-        addDisabled={isCreatingDiagram}
+        onAdd={() => dispatch({ type: "create-diagram-clicked" })}
+        addDisabled={state.creatingDiagram}
       />
 
       <EntityCard
@@ -240,13 +232,13 @@ export function AppSidebar({ variant }: AppSidebarProps) {
         label="Videos"
         href="/videos"
         active={onVideosPath}
-        onAdd={() => setIsAddVideoOpen(true)}
+        onAdd={() => dispatch({ type: "add-video-clicked" })}
       />
 
       <EntityCard
         icon={<MonitorSmartphone className="w-4 h-4 text-muted-foreground" />}
         label="Space Desk"
-        onClick={() => setIsSpacedeskOpen(true)}
+        onClick={() => dispatch({ type: "spacedesk-clicked" })}
       />
 
       <EntityCard
@@ -278,13 +270,18 @@ export function AppSidebar({ variant }: AppSidebarProps) {
         <Button
           className="fixed bottom-4 left-4 z-40 rounded-full shadow-lg size-12"
           size="icon"
-          onClick={() => setSheetOpen(true)}
+          onClick={() => dispatch({ type: "menu-button-clicked" })}
           aria-label="Open navigation"
         >
           <Menu className="size-5" />
         </Button>
 
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <Sheet
+          open={state.sheetOpen}
+          onOpenChange={(open) => {
+            if (!open) dispatch({ type: "sheet-dismissed" });
+          }}
+        >
           <SheetContent side="left" className="p-0 flex flex-col">
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation</SheetTitle>
@@ -295,16 +292,16 @@ export function AppSidebar({ variant }: AppSidebarProps) {
       </div>
 
       <AddCourseModal
-        isOpen={isAddCourseOpen}
-        onOpenChange={setIsAddCourseOpen}
+        isOpen={state.openModal === "add-course"}
+        onOpenChange={dismiss["add-course"]}
       />
       <AddStandaloneVideoModal
-        open={isAddVideoOpen}
-        onOpenChange={setIsAddVideoOpen}
+        open={state.openModal === "add-video"}
+        onOpenChange={dismiss["add-video"]}
       />
       <SpacedeskModal
-        open={isSpacedeskOpen}
-        onOpenChange={setIsSpacedeskOpen}
+        open={state.openModal === "spacedesk"}
+        onOpenChange={dismiss["spacedesk"]}
       />
     </>
   );

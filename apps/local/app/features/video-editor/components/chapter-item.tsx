@@ -142,9 +142,9 @@ const ChapterMenuContent = (props: {
     VideoEditorContext,
     (ctx) => ctx.onMoveClip
   );
-  const setIsCreateVideoModalOpen = useContextSelector(
+  const modalDispatch = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.setIsCreateVideoModalOpen
+    (ctx) => ctx.modalDispatch
   );
 
   return (
@@ -164,7 +164,7 @@ const ChapterMenuContent = (props: {
             ? props.onAddChapterBefore()
             : props.onAddChapterAfter(),
         onCreateVideoFromSelection: hasSelection
-          ? () => setIsCreateVideoModalOpen(true)
+          ? () => modalDispatch({ type: "create-video-from-selection-clicked" })
           : undefined,
         move: {
           onMove: (direction) => onMoveClip(chapter.frontendId, direction),

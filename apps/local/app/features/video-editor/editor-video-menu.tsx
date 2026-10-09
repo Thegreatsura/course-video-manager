@@ -81,13 +81,9 @@ export function useEditorVideoActions(): {
     VideoEditorContext,
     (ctx) => ctx.copyYoutubeChaptersToClipboard
   );
-  const setIsRenameVideoModalOpen = useContextSelector(
+  const modalDispatch = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.setIsRenameVideoModalOpen
-  );
-  const setIsCopyVideoModalOpen = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.setIsCopyVideoModalOpen
+    (ctx) => ctx.modalDispatch
   );
   const { startExportUpload, startRenderVerticalUpload } =
     useContext(UploadContext);
@@ -104,8 +100,8 @@ export function useEditorVideoActions(): {
   }, [videoId]);
 
   const common: VideoMenuActions = {
-    rename: () => setIsRenameVideoModalOpen(true),
-    duplicate: () => setIsCopyVideoModalOpen(true),
+    rename: () => modalDispatch({ type: "rename-video-clicked" }),
+    duplicate: () => modalDispatch({ type: "copy-video-clicked" }),
     export: () => startExportUpload(videoId, videoTitle),
     copyTranscript: {
       onSelect: () =>
