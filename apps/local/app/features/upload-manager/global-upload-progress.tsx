@@ -7,7 +7,7 @@ import { formatRemaining } from "./upload-eta";
 import type { uploadReducer } from "./upload-reducer";
 import { postRetryOf, visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
-import { jobLogHref } from "@/features/jobs/job-wire";
+import { jobLogHref, publishPageHref } from "@/features/jobs/job-wire";
 import { SidecarDownBanner } from "@/features/jobs/sidecar-down-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,14 @@ export function GlobalUploadProgress() {
       retry,
       onRetry: () => retryJob(job.id),
     };
+  };
+  /** An interrupted Publish: where its Pending Version is reconciled. */
+  const publishRecoveryHref = (uploadId: string): string | null => {
+    const job = jobs.jobs[jobIdOfRow(uploadId)];
+    if (!job || job.kind !== "publish" || job.status !== "interrupted") {
+      return null;
+    }
+    return job.subjectId ? publishPageHref(job.subjectId) : null;
   };
   const hasUploads = uploadEntries.length + jobEntries.length > 0;
 
@@ -259,6 +267,9 @@ export function GlobalUploadProgress() {
                           : null
                       }
                       post={postControls(upload.uploadId)}
+                      publishRecoveryHref={publishRecoveryHref(upload.uploadId)}
+                      // Its link goes to another page: the dialog closes.
+                      onFollowLink={() => setIsModalOpen(false)}
                     />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow

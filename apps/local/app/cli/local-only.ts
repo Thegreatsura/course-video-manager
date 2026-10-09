@@ -8,7 +8,7 @@ import { LocalOnlyCommandError } from "./errors";
  * `cvm` reaches the domain data over HTTP from anywhere, but a few commands
  * need the AUTHOR'S MACHINE rather than the data: `cvm file` (the Video Files
  * directory), `cvm course readiness` (the finished videos directory) and
- * `cvm course publish` (both, plus ffmpeg). On a Remote Box they can never
+ * `cvm course publish` (this machine's Sidecar runs it, with ffmpeg). On a Remote Box they can never
  * work. They are refused rather than ported — see the ADR.
  *
  * TWO PROPERTIES MAKE THIS WORTH HAVING, and both are about what an agent does
@@ -28,8 +28,8 @@ export const NEEDS_VIDEO_FILES_DIRECTORY =
   "it reads and writes the Video Files directory on this machine's disk";
 export const NEEDS_FINISHED_VIDEOS_DIRECTORY =
   "it reads the finished videos directory on this machine's disk to work out which Videos are exported";
-export const NEEDS_FINISHED_VIDEOS_AND_FFMPEG =
-  "it renders Videos with ffmpeg and reads the finished videos directory on this machine's disk";
+export const NEEDS_THE_SIDECAR =
+  "it queues a Publish for this machine's Sidecar, which renders Videos with ffmpeg and reads the finished videos directory on this machine's disk";
 export const NEEDS_CLIP_MOCKUP_DIRECTORY =
   "it reads and writes the Clip Mockup directory on this machine's disk, where a Video's Animatic frames are kept, and captures frames with a headless browser installed on this machine";
 export const NEEDS_FOOTAGE_ON_DISK =

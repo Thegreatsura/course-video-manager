@@ -5,6 +5,7 @@ import { AutofillService } from "./autofill-service";
 import { CoursePublishService } from "./course-publish-service";
 import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import type { SidecarContext } from "./sidecar-context";
+import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
 // The runtime guard of docs/plans/background-jobs-sidecar.md, section 3.7:
 // work that has moved into a Job needs `SidecarContext`, which the app
@@ -26,6 +27,28 @@ describe("SidecarContext", () => {
       service.batchExport("a-version", true)
     );
     type Missing = Exclude<Effect.Effect.Context<typeof batch>, LayerLive>;
+    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a Publish needs the Sidecar: layerLive cannot run it", () => {
+    const publish = Effect.flatMap(CoursePublishService, (service) =>
+      service.publish({
+        courseId: "a-course",
+        versionName: "v1.0.0",
+        versionDescription: "first cut",
+        includeTodoLessons: true,
+        placeholderFloor: ANNOUNCE_NOTHING,
+      })
+    );
+    type Missing = Exclude<Effect.Effect.Context<typeof publish>, LayerLive>;
+    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a Video export needs the Sidecar: layerLive cannot run it", () => {
+    const exported = Effect.flatMap(CoursePublishService, (service) =>
+      service.exportVideo("a-video")
+    );
+    type Missing = Exclude<Effect.Effect.Context<typeof exported>, LayerLive>;
     expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
   });
 

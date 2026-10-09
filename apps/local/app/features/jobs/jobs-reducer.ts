@@ -6,6 +6,7 @@ import {
   type WireJobEvent,
 } from "./job-wire";
 import { toJobsAction } from "./job-event-actions";
+import { applyStreamAction, viewOf } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
@@ -82,6 +83,15 @@ export namespace jobsReducer {
     stage: string | null;
     percent: number | null;
     errorMessage: string | null;
+    /**
+     * A Publish's Video carries on into Dropbox once its bytes exist: waiting
+     * for a slot in the upload pool, then moving bytes. `null` until then,
+     * and always for a Batch export or an Autofill.
+     */
+    uploadStage: "queued-for-upload" | "uploading" | null;
+    uploadedBytes: number;
+    /** Its size on disk, once the upload pool picks it up. */
+    totalBytes: number | null;
   }
 
   /** A `post-check` Job Event: did the interrupted post go out? */
@@ -131,6 +141,8 @@ export namespace jobsReducer {
     | StreamFact<"job-failed", { message: string; tag: string | null }>
     | StreamFact<"job-interrupted", { message: string; tag: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
+    /** A Publish's Promote landed: the Versions it made, and its Lesson counts. */
+    | StreamFact<"job-published", { result: Record<string, unknown> }>
     | StreamFact<
         "job-post-checked",
         { check: PostCheckView; attempt: number | null }
@@ -152,7 +164,13 @@ export namespace jobsReducer {
       >
     | StreamFact<"batch-video-succeeded", { videoId: string }>
     | StreamFact<"batch-video-failed", { videoId: string; message: string }>
-    | StreamFact<"batch-video-handed-off", { videoId: string }>;
+    | StreamFact<"batch-video-handed-off", { videoId: string }>
+    // A Publish's Videos, on into Dropbox
+    | StreamFact<"batch-video-upload-queued", { videoId: string }>
+    | StreamFact<
+        "batch-video-upload-progressed",
+        { videoId: string; uploadedBytes: number; totalBytes: number }
+      >;
 
   export type Action =
     // Gestures and requests from this tab
@@ -253,200 +271,6 @@ export const createInitialJobsState = (): jobsReducer.State => ({
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
 export const batchVideoRowId = (jobId: string, videoId: string) =>
   `${jobId}/${videoId}`;
-
-const viewOf = (
-  job: WireJob,
-  status: jobsReducer.JobStatus
-): jobsReducer.JobView => ({
-  id: job.id,
-  kind: job.kind,
-  title: job.title,
-  subjectType: job.subjectType,
-  subjectId: job.subjectId,
-  status,
-  attempt: job.attempt,
-  stage: null,
-  percent: null,
-  errorMessage: null,
-  errorTag: null,
-  dependsOn: null,
-  enqueued: true,
-  result: null,
-  postCheck: null,
-  lastEventId: 0,
-  videos: null,
-});
-
-/** Apply `change` to one of a batch's Videos; unknown Videos are ignored. */
-const updateVideo = (
-  job: jobsReducer.JobView,
-  videoId: string,
-  change: Partial<jobsReducer.BatchVideoView>
-): jobsReducer.JobView => ({
-  ...job,
-  videos:
-    job.videos?.map((video) =>
-      video.id === videoId ? { ...video, ...change } : video
-    ) ?? null,
-});
-
-/**
- * A batch announces the Videos it will export. A batch put back by a
- * stopping sidecar announces again, without the ones it already finished:
- * those keep their rows.
- */
-const announceVideos = (
-  job: jobsReducer.JobView,
-  announced: readonly { id: string; title: string }[]
-): jobsReducer.JobView => {
-  const known = new Map((job.videos ?? []).map((v) => [v.id, v]));
-  for (const { id, title } of announced) {
-    const before = known.get(id);
-    if (before?.status === "succeeded" || before?.status === "handed-off") {
-      continue;
-    }
-    known.set(id, {
-      id,
-      title,
-      status: "queued",
-      stage: null,
-      percent: null,
-      errorMessage: null,
-    });
-  }
-  return { ...job, videos: [...known.values()] };
-};
-
-/**
- * Apply one Job Event to what is known of its Job: the whole state machine,
- * shared by the live stream and the snapshot's replay. `undefined` when the
- * event was already applied.
- */
-const applyStreamAction = (
-  known: jobsReducer.JobView | undefined,
-  action: jobsReducer.JobStreamAction
-): jobsReducer.JobView | undefined => {
-  if (known && action.eventId <= known.lastEventId) return undefined;
-  const job: jobsReducer.JobView = {
-    ...(known ?? viewOf(action.job, "queued")),
-    // The sidecar's word on the title wins over what this tab asked for.
-    title: action.job.title,
-    lastEventId: action.eventId,
-  };
-  switch (action.type) {
-    case "job-queued":
-      if (action.attempt === null) {
-        return {
-          ...job,
-          status: "queued",
-          dependsOn: action.dependsOn,
-          // An enqueue that went unanswered is answered now.
-          errorMessage: known?.status === "requested" ? null : job.errorMessage,
-        };
-      }
-      // The author's Retry: a fresh run of a finished Job.
-      return {
-        ...job,
-        status: "queued",
-        attempt: action.attempt,
-        dependsOn: action.dependsOn,
-        stage: null,
-        percent: null,
-        errorMessage: null,
-        errorTag: null,
-        result: null,
-        postCheck: null,
-      };
-    case "job-started":
-      return {
-        ...job,
-        status: "running",
-        attempt: action.attempt,
-        stage: null,
-        percent: null,
-      };
-    case "job-stage-entered":
-      return { ...job, stage: action.stage, percent: 0 };
-    case "job-progressed":
-      return { ...job, stage: action.stage, percent: action.percent };
-    case "job-retrying":
-      return {
-        ...job,
-        status: "retrying",
-        attempt: action.nextAttempt,
-        errorMessage: action.message,
-        stage: null,
-        percent: null,
-      };
-    case "job-requeued":
-      return {
-        ...job,
-        status: "queued",
-        attempt: action.attempt,
-        stage: null,
-        percent: null,
-      };
-    case "job-succeeded":
-      return {
-        ...job,
-        status: "succeeded",
-        errorMessage: null,
-        errorTag: null,
-      };
-    case "job-failed":
-      return {
-        ...job,
-        status: "failed",
-        errorMessage: action.message,
-        errorTag: action.tag,
-      };
-    case "job-interrupted":
-      return {
-        ...job,
-        status: "interrupted",
-        errorMessage: action.message,
-        errorTag: action.tag,
-      };
-    case "job-posted":
-      return { ...job, result: action.result };
-    case "job-post-checked":
-      // A check of the run before a Retry says nothing about this one.
-      if (action.attempt !== null && action.attempt !== job.attempt) {
-        return job;
-      }
-      return { ...job, postCheck: action.check };
-    case "job-dismissed":
-      return job;
-    case "batch-videos-announced":
-      return announceVideos(job, action.videos);
-    case "batch-video-stage-entered":
-      return updateVideo(job, action.videoId, {
-        status: "running",
-        stage: action.stage,
-        percent: 0,
-      });
-    case "batch-video-progressed":
-      return updateVideo(job, action.videoId, {
-        status: "running",
-        stage: action.stage,
-        percent: action.percent,
-      });
-    case "batch-video-succeeded":
-      return updateVideo(job, action.videoId, {
-        status: "succeeded",
-        stage: null,
-        percent: null,
-        errorMessage: null,
-      });
-    case "batch-video-failed":
-      return updateVideo(job, action.videoId, {
-        status: "failed",
-        errorMessage: action.message,
-      });
-    case "batch-video-handed-off":
-      return updateVideo(job, action.videoId, { status: "handed-off" });
-  }
-};
 
 type Exec = Parameters<
   EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
@@ -641,6 +465,9 @@ export const jobsReducer: EffectReducer<
     case "job-interrupted":
     case "job-posted":
     case "job-post-checked":
+    case "job-published":
+    case "batch-video-upload-queued":
+    case "batch-video-upload-progressed":
     case "batch-videos-announced":
     case "batch-video-stage-entered":
     case "batch-video-progressed":
@@ -653,7 +480,7 @@ export const jobsReducer: EffectReducer<
       if (!(before && isFinishedJob(before)) && isFinishedJob(after)) {
         announceSettled(exec, after);
       }
-      announceVideoSettled(exec, after, action);
+      announceVideoSettled(exec, after, action, before);
       return {
         ...state,
         // An event is proof the sidecar is up.

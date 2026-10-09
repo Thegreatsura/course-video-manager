@@ -339,11 +339,14 @@ the run found.
 
 ## What not to press
 
-**Submit** on the publish page (`/courses/:id/publish`) stays off limits
-**even on a clone**, because its job is to leave the database: it ships a
-Bundle to Dropbox. A clone run's credentials are duds, so it should fail
-closed — but nobody has proved every leg does. Observe it, screenshot it, read
-its counts — press nothing.
+**Publish** on the publish page (`/courses/:id/publish`) ships a Bundle to
+Dropbox — its job is to leave the database. It is a Job the run's sidecar
+runs, and on a clone both Dropbox hosts are the discard port or your own
+loopback stub (`DROPBOX_API_URL`, `DROPBOX_CONTENT_URL`, above), so it can
+only fail closed or reach your stub. Press it only with a stub running and
+both variables confirmed in `/proc/<pid>/environ` of the server **and** the
+sidecar; without one it fails at the Commit and Discards its Pending Version,
+which is a fine failure path. Never press it on `--production`.
 
 **Autofill** on that same page calls Anthropic, and on a clone that call can
 only reach the discard port or your own loopback stub (`ANTHROPIC_BASE_URL`,

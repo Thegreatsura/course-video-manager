@@ -208,8 +208,7 @@ export default function Component(props: Route.ComponentProps) {
   } = props.loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
-  const { uploads, jobs, startPublish, startAutofill } =
-    useContext(UploadContext);
+  const { jobs, startPublish, startAutofill } = useContext(UploadContext);
 
   // The version name is never free-typed: it is a lowercase-'v' semver computed
   // from the previous published version by a patch/minor/major bump, so the UI
@@ -240,12 +239,12 @@ export default function Component(props: Route.ComponentProps) {
   );
   const [publishStarted, setPublishStarted] = useState(false);
 
-  const isLive = (status: string) =>
-    status === "uploading" || status === "waiting" || status === "retrying";
-
-  const hasActivePublish = Object.values(uploads).some(
-    (u) => u.uploadType === "publish" && isLive(u.status)
-  );
+  // This Course's Publish, a Job the Sidecar runs: one started in this tab,
+  // or one still running when the tab was reopened, holds the button and
+  // hides the Promote / Discard banner — its Pending Version is in flight,
+  // not stranded. Once it is interrupted, the banner is the way out.
+  const publishJob = latestJobFor(jobs, "publish", course.id);
+  const hasActivePublish = !!publishJob && !isFinishedJob(publishJob);
   // This Course's Autofill, a Job the Sidecar runs: one started in this tab,
   // or one still running when the tab was reopened, holds the button.
   const autofillJob = latestJobFor(jobs, "autofill", course.id);
@@ -266,6 +265,20 @@ export default function Component(props: Route.ComponentProps) {
     autofillWasActive.current = false;
     revalidator.revalidate();
   }, [hasActiveAutofill, revalidator]);
+
+  // The same when this Course's Publish settles while the page is open: a
+  // Publish that was interrupted may have left a Pending Version, and the
+  // banner that offers Promote / Discard reads it from the loader.
+  const publishWasActive = useRef(false);
+  useEffect(() => {
+    if (hasActivePublish) {
+      publishWasActive.current = true;
+      return;
+    }
+    if (!publishWasActive.current) return;
+    publishWasActive.current = false;
+    revalidator.revalidate();
+  }, [hasActivePublish, revalidator]);
 
   // The warnings and the publish button reflect whichever toggle position is
   // currently selected — flipping the toggle switches them instantly, with no
@@ -344,9 +357,11 @@ export default function Component(props: Route.ComponentProps) {
 
         <h1 className="text-2xl font-bold mb-2">Publish {course.name}</h1>
 
-        {/* Reconcile-on-load banner (#1404). Suppressed while a publish from
-            this client is live — its Pending Version is in flight, not
-            stranded, and the publish process will Promote or Discard itself. */}
+        {/* Reconcile-on-load banner (#1404). Suppressed while this Course's
+            Publish Job is live — its Pending Version is in flight, not
+            stranded, and the Publish will Promote or Discard itself. An
+            interrupted Publish is never re-run on its own (plan §7.2): this
+            banner is where its Pending Version is reconciled, by hand. */}
         {!hasActivePublish && (
           <PendingRecoveryBanner recovery={pendingRecovery} />
         )}
