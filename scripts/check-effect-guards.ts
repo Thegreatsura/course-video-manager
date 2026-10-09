@@ -82,6 +82,10 @@ const RUN_BOUNDARIES: ReadonlyArray<readonly [RegExp, string]> = [
     "bridges Drizzle's async transaction callback",
   ],
   [/^apps\/remote\/(rpc|auth)\.ts$/, "the remote app's request handlers"],
+  [
+    /^apps\/local\/scripts\/verify-api\.ts$/,
+    "verify-cvm's local apps/remote: its entry point mints the run's token",
+  ],
 ];
 
 export const isRunBoundary = (file: string): boolean =>

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { resolveDatabaseUrl } from "@cvm/core/db/database-url";
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { join } from "node:path";
+import { verifyCloneFromEnv, verifyCloneRequested } from "./verify-clone";
 import {
   installLocationRepoRoot,
   readEnvValue,
@@ -85,11 +86,18 @@ export const LOCAL_MACHINE_ENV_KEY = "CVM_LOCAL_MACHINE";
  * worktrees have been made with the main checkout's `.env` copied in, and the
  * local-only commands would then run unmerged code against production. They
  * run from the main checkout only.
+ *
+ * The one exception is verify-clone mode (`verify-clone.ts`): `verify.sh cvm`
+ * runs a worktree's `cvm` against its run's test clone, with the API on
+ * loopback and DATABASE_URL naming that clone. Only then does a worktree pass,
+ * and only for as long as every one of those checks holds.
  */
 export const isLocalMachine = (): boolean => {
   const value = resolveEnvKey(LOCAL_MACHINE_ENV_KEY)?.trim().toLowerCase();
   const declared = value === "1" || value === "true" || value === "yes";
-  return declared && !isInsideGitWorktree();
+  if (!declared) return false;
+  if (!isInsideGitWorktree()) return true;
+  return verifyCloneRequested() && verifyCloneFromEnv().ok;
 };
 
 /**
@@ -110,6 +118,21 @@ export const resolveAppUrl = (): string =>
   );
 
 export const ensureApiConfig = (): EnsureApiConfigResult => {
+  // Verify-clone mode never falls through to whatever else is configured: a
+  // run asked to stay on its clone and can't, so it sends nothing at all.
+  if (verifyCloneRequested()) {
+    const verdict = verifyCloneFromEnv();
+    if (!verdict.ok) {
+      return {
+        ok: false,
+        error: {
+          _tag: "ConfigurationError",
+          message: `refusing verify-clone mode: ${verdict.reason}. cvm sent no request. Run it as \`verify.sh cvm <run> …\`, which points it at the run's own API and clone.`,
+        },
+      };
+    }
+  }
+
   const baseUrl = resolveEnvKey(API_URL_ENV_KEY);
   const token = resolveEnvKey(API_TOKEN_ENV_KEY);
 

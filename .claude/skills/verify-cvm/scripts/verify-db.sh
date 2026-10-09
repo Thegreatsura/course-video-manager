@@ -188,8 +188,8 @@ psql_ro() {
 }
 
 # --- read-back --------------------------------------------------------------
-# The `cvm` CLI reads through the deployed apps/remote, which is PRODUCTION —
-# it cannot see a test clone. Read a write back here instead. Read-only: the
+# Plain `cvm` reads through the deployed apps/remote, which is PRODUCTION —
+# it cannot see a test clone (`verify.sh cvm` can). Read a write back here. Read-only: the
 # writes belong to the browser, the read-back only proves they landed.
 cmd_sql() {
   local dir; dir="$(run_dir)"

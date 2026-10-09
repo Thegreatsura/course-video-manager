@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 import { isLocalMachine, LOCAL_MACHINE_ENV_KEY } from "./env";
 import { LocalOnlyCommandError } from "./errors";
+import {
+  VERIFY_CLONE_ENV_KEY,
+  verifyCloneFromEnv,
+  verifyCloneRequested,
+} from "./verify-clone";
 
 /**
  * The machine gate for the verbs that need one.
@@ -55,7 +60,16 @@ export const requireLocalMachine = (
           new LocalOnlyCommandError({
             command,
             reason,
-            message: `${command} needs the author's machine: ${reason}. This box is not it, so the command can never succeed here — stop rather than retry, and use a verb that reads the data instead. (If this IS the author's machine, run it from the main checkout — never a git worktree — with ${LOCAL_MACHINE_ENV_KEY}=true in the repo-root .env.)`,
+            message: `${command} needs the author's machine: ${reason}. This box is not it, so the command can never succeed here — stop rather than retry, and use a verb that reads the data instead. (If this IS the author's machine, run it from the main checkout — never a git worktree — with ${LOCAL_MACHINE_ENV_KEY}=true in the repo-root .env. To check a cvm change from a worktree, run it on a verify-cvm clone: verify.sh cvm <run> …${verifyCloneNote()})`,
           })
         )
   );
+
+/** Why verify-clone mode, when it was asked for, did not open the gate. */
+const verifyCloneNote = (): string => {
+  if (!verifyCloneRequested()) return "";
+  const verdict = verifyCloneFromEnv();
+  return verdict.ok
+    ? ""
+    : `; ${VERIFY_CLONE_ENV_KEY} is set but refused: ${verdict.reason}`;
+};
