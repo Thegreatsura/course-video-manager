@@ -461,7 +461,7 @@ describe("keeping the Active Diagram in step with its stored head", () => {
   });
 });
 
-describe("leaving a diagram whose edits can't be saved", () => {
+describe("leaving a diagram whose last edits aren't stored yet", () => {
   /** `d1` open, its last autosave refused: the "changed elsewhere" prompt is up. */
   const refusedD1 = () =>
     openPage()
@@ -471,9 +471,10 @@ describe("leaving a diagram whose edits can't be saved", () => {
       .resetExec();
 
   const toD2 = { to: "/diagram-playground/d2", replace: false };
-  const leave = (destination = toD2) => ({
+  const leave = (destination = toD2, canvasHasUnsavedEdits = true) => ({
     type: "leave-requested" as const,
     destination,
+    canvasHasUnsavedEdits,
   });
 
   it("only a canvas holding edits the server refused has to be kept before leaving", () => {
@@ -558,11 +559,75 @@ describe("leaving a diagram whose edits can't be saved", () => {
   it("a leave asked for once the prompt has gone needs nothing kept", () => {
     const tester = refusedD1()
       .send({ type: "keep-my-edits-clicked" })
+      .send({
+        type: "head-saved",
+        diagramId: "d1",
+        stored: storedHead("mine", T1),
+      })
       .resetExec()
-      .send(leave());
+      .send(leave(toD2, false));
 
     expect(tester.getEffects()).toEqual([
       { type: "continue-leaving", destination: toD2 },
+    ]);
+  });
+
+  it("leaving within the autosave debounce saves the last edit first, and goes only once it has landed", () => {
+    const tester = openPage()
+      .send(loaded("d1", scene("d1")))
+      .resetExec()
+      .send(leave());
+
+    expect(tester.getState().leaving).toEqual(toD2);
+    expect(tester.getEffects()).toEqual([
+      { type: "save-before-leaving", diagramId: "d1" },
+    ]);
+
+    // The flush was refused: the head changed elsewhere in the meantime, so
+    // the canvas is kept as a snapshot before the navigation goes on.
+    tester
+      .resetExec()
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" })
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "refused",
+      });
+    expect(tester.getEffects()).toEqual([
+      { type: "keep-canvas-as-snapshot", diagramId: "d1" },
+    ]);
+
+    // A save that lands goes straight on; one that fails stays and says so.
+    const saved = openPage()
+      .send(loaded("d1", scene("d1")))
+      .send(leave())
+      .resetExec()
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "saved",
+      });
+    expect(saved.getState().leaving).toBeNull();
+    expect(saved.getEffects()).toEqual([
+      { type: "continue-leaving", destination: toD2 },
+    ]);
+
+    const failed = openPage()
+      .send(loaded("d1", scene("d1")))
+      .send(leave())
+      .resetExec()
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "failed",
+      });
+    expect(failed.getState().leaving).toBeNull();
+    expect(failed.getState().error?.message).toBe(
+      "Couldn't save your last edit, so this diagram stays open. Try again."
+    );
+    expect(failed.getEffects()).toEqual([
+      { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
     ]);
   });
 });

@@ -7,7 +7,7 @@ import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
   isCanvasEditable,
-  mustKeepCanvasBeforeLeaving,
+  leaveMustWaitFor,
   type StoredHead,
 } from "./diagram-playground-reducer";
 import {
@@ -80,13 +80,14 @@ export function useDiagramPlaygroundReducer() {
    * Read by the navigation blocker, which React Router may call before this
    * render's effects run: set during render so it is never a render behind.
    */
-  const mustKeepCanvasRef = useRef(false);
+  const stateRef = useRef<diagramPlaygroundReducer.State | null>(null);
   /** Whether the navigation the blocker last held was a replace. */
   const heldReplace = useRef(false);
 
   // Saves only what differs from the head last loaded or saved, so opening a
-  // diagram never writes it back. Every flow that leaves the current diagram
-  // must call this first, or up to 500ms of debounced edits is silently lost.
+  // diagram never writes it back. Anything that reads the open diagram's
+  // stored head calls this first; leaving the diagram goes through the
+  // navigation blocker below instead.
   const flushPendingSave = useCallback(async () => {
     await autosaver.current?.flush();
   }, []);
@@ -249,6 +250,16 @@ export function useDiagramPlaygroundReducer() {
           }
         })();
       },
+      "save-before-leaving": (_state, effect, dispatch) => {
+        void (async () => {
+          const outcome = (await autosaver.current?.flush()) ?? "saved";
+          dispatch({
+            type: "saved-before-leaving",
+            diagramId: effect.diagramId,
+            outcome,
+          });
+        })();
+      },
       "continue-leaving": (_state, effect) => {
         navigate(effect.destination.to, {
           replace: effect.destination.replace,
@@ -334,18 +345,27 @@ export function useDiagramPlaygroundReducer() {
 
   useEffect(() => () => autosaver.current?.dispose(), []);
 
+  /** What leaving the open diagram now would have to wait for, if anything. */
+  const leaveWaitsFor = () =>
+    stateRef.current
+      ? leaveMustWaitFor(
+          stateRef.current,
+          autosaver.current?.hasUnsavedEdits() ?? false
+        )
+      : null;
+
   // Every way out of the open diagram — another diagram, the index, another
-  // page — is held while its canvas holds edits the server refused. The
-  // blocker is released at once, since a held blocker didn't survive the
-  // snapshot's round trip in the browser; the reducer gets the destination,
-  // keeps the canvas, then sends the navigation on with `continue-leaving`.
-  const mustKeepCanvas = mustKeepCanvasBeforeLeaving(state);
-  mustKeepCanvasRef.current = mustKeepCanvas;
+  // page — is held while its last edits aren't stored: still in the autosave
+  // debounce, or refused by the server. The blocker is released at once,
+  // since a held blocker didn't survive the round trip in the browser; the
+  // reducer gets the destination, saves the edits (or keeps the canvas as a
+  // snapshot), then sends the navigation on with `continue-leaving`.
+  stateRef.current = state;
   const blocker = useBlocker(
     ({ currentLocation, nextLocation, historyAction }) => {
       const hold =
-        mustKeepCanvasRef.current &&
-        currentLocation.pathname !== nextLocation.pathname;
+        currentLocation.pathname !== nextLocation.pathname &&
+        leaveWaitsFor() !== null;
       if (hold) heldReplace.current = historyAction === "REPLACE";
       return hold;
     }
@@ -359,20 +379,24 @@ export function useDiagramPlaygroundReducer() {
         to: `${pathname}${search}${hash}`,
         replace: heldReplace.current,
       },
+      canvasHasUnsavedEdits: autosaver.current?.hasUnsavedEdits() ?? false,
     });
     blocker.reset();
   }, [blocker, dispatch]);
 
-  // Closing or reloading the tab can't wait for a snapshot: the browser asks.
+  // Closing or reloading the tab can't wait for a save or a snapshot: while
+  // either is owed, the browser asks.
+  const headReady = state.head?.status === "ready";
   useEffect(() => {
-    if (!mustKeepCanvas) return;
+    if (!headReady) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (leaveWaitsFor() === null) return;
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [mustKeepCanvas]);
+  }, [headReady]);
 
   /** Wire a freshly mounted tldraw editor to the page. */
   const attachEditor = useCallback(

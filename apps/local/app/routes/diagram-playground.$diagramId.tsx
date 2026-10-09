@@ -271,14 +271,14 @@ export default function DiagramPlaygroundActive({
     [flushPendingSave, openDiagramId, status]
   );
 
-  const handleNavigateHome = useCallback(async () => {
-    await flushPendingSave();
+  // Leaving waits on the navigation blocker for any edit not yet saved.
+  const handleNavigateHome = useCallback(() => {
     diagramChannel.sendToParent({
       type: "activeDiagramChanged",
       diagramId: null,
     });
     navigate("/diagram-playground");
-  }, [flushPendingSave, navigate]);
+  }, [navigate]);
 
   const { isFocusMode } = state;
   const timelineVisible = diagramId && !isFocusMode;
