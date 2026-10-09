@@ -157,6 +157,16 @@ cmd_snap() {
 # output goes to <run>/sidecar.log and each Job's log to <run>/logs/jobs/.
 SIDECAR_ENV=()
 
+# Some hosts (WSL with no systemd login session) export
+# XDG_RUNTIME_DIR=/run/user/<uid> without creating it; the sidecar's mkdir of
+# the socket's parent then dies on EACCES. A runtime dir that is not a
+# writable directory is no runtime dir: unset it (this process and its
+# children only), so the socket falls back to /tmp. Runs at source time.
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && ! { [ -d "$XDG_RUNTIME_DIR" ] && [ -w "$XDG_RUNTIME_DIR" ]; }; then
+  log "env: XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR is not a writable directory — unset for this run (sidecar socket goes to /tmp)"
+  unset XDG_RUNTIME_DIR
+fi
+
 sidecar_socket_for() { printf '%s/cvm-sidecar-%s.sock\n' "${XDG_RUNTIME_DIR:-/tmp}" "$1"; }
 run_sidecar_socket() { cat "$1/sidecar.socket" 2>/dev/null || true; }
 run_sidecar_pid()    { cat "$1/sidecar.pid" 2>/dev/null || true; }

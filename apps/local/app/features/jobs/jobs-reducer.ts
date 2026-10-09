@@ -104,6 +104,16 @@ export namespace jobsReducer {
     uploadedBytes: number;
     /** Its size on disk, once the upload pool picks it up. */
     totalBytes: number | null;
+    /**
+     * An Autofill's Video: the fields the author changed while it ran, which
+     * kept their text, and what the Autofill offers instead. Empty otherwise.
+     */
+    kept: AutofillKeptView[];
+  }
+
+  export interface AutofillKeptView {
+    field: string;
+    proposal: string;
   }
 
   /** A `post-check` Job Event: did the interrupted post go out? */
@@ -213,7 +223,10 @@ export namespace jobsReducer {
         "batch-video-progressed",
         { videoId: string; stage: string; percent: number }
       >
-    | StreamFact<"batch-video-succeeded", { videoId: string }>
+    | StreamFact<
+        "batch-video-succeeded",
+        { videoId: string; kept: AutofillKeptView[] }
+      >
     | StreamFact<"batch-video-failed", { videoId: string; message: string }>
     | StreamFact<"batch-video-handed-off", { videoId: string }>
     // A Publish's Videos, on into Dropbox
