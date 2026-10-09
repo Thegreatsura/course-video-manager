@@ -94,8 +94,9 @@ const graphql = (opts: {
     const token = Redacted.value(opts.token);
 
     const response = yield* Effect.tryPromise({
-      try: async (): Promise<RawResponse> => {
+      try: async (signal): Promise<RawResponse> => {
         const res = await fetch(opts.url, {
+          signal,
           method: "POST",
           headers: {
             "Content-Type": "application/json",

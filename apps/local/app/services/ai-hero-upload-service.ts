@@ -22,8 +22,9 @@ const createMultipartUpload = (opts: {
   filename: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(`${opts.baseUrl}/api/uploads/multipart/create`, {
+        signal,
         method: "POST",
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
@@ -64,7 +65,7 @@ const getPartUrl = (opts: {
   partNumber: number;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const params = new URLSearchParams({
         key: opts.key,
         uploadId: opts.uploadId,
@@ -73,6 +74,7 @@ const getPartUrl = (opts: {
       const res = await fetch(
         `${opts.baseUrl}/api/uploads/multipart/part-url?${params}`,
         {
+          signal,
           headers: {
             Authorization: `Bearer ${opts.accessToken}`,
           },
@@ -103,8 +105,9 @@ const uploadPart = (opts: {
   retries?: number;
 }): Effect.Effect<string, AiHeroUploadError> =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(opts.signedUrl, {
+        signal,
         method: "PUT",
         headers: {
           "Content-Type": "application/octet-stream",
@@ -153,10 +156,11 @@ const completeMultipartUpload = (opts: {
   parts: Array<{ partNumber: number; etag: string }>;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(
         `${opts.baseUrl}/api/uploads/multipart/complete`,
         {
+          signal,
           method: "POST",
           headers: {
             Authorization: `Bearer ${opts.accessToken}`,
@@ -293,8 +297,9 @@ const createPost = (opts: {
   title: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(`${opts.baseUrl}/api/posts`, {
+        signal,
         method: "POST",
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
@@ -332,8 +337,9 @@ const triggerVideoProcessing = (opts: {
   postId: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(`${opts.baseUrl}/api/uploads/new`, {
+        signal,
         method: "POST",
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
@@ -378,10 +384,11 @@ const updatePost = (opts: {
   description: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(
         `${opts.baseUrl}/api/posts?id=${encodeURIComponent(opts.postId)}&action=save`,
         {
+          signal,
           method: "PUT",
           headers: {
             Authorization: `Bearer ${opts.accessToken}`,
@@ -421,10 +428,11 @@ const publishPost = (opts: {
   postId: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(
         `${opts.baseUrl}/api/posts?id=${encodeURIComponent(opts.postId)}&action=publish`,
         {
+          signal,
           method: "PUT",
           headers: {
             Authorization: `Bearer ${opts.accessToken}`,
@@ -462,8 +470,9 @@ const createSkillsChangelog = (opts: {
   newsletterCopy: string;
 }) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const res = await fetch(`${opts.baseUrl}/api/skills/changelog`, {
+        signal,
         method: "POST",
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
@@ -718,10 +727,10 @@ export const findAiHeroPost = (slug: string) =>
     const baseUrl = yield* Config.string("AI_HERO_BASE_URL");
     const accessToken = yield* getAiHeroAccessToken;
     return yield* Effect.tryPromise({
-      try: async () => {
+      try: async (signal) => {
         const res = await fetch(
           `${baseUrl}/api/posts?slugOrId=${encodeURIComponent(slug)}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+          { signal, headers: { Authorization: `Bearer ${accessToken}` } }
         );
         if (res.status === 404) return null;
         if (!res.ok) {
