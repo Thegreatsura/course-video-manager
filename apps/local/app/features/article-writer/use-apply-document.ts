@@ -1,48 +1,36 @@
 "use client";
 
-import { useCallback, useState, type RefObject } from "react";
-import { toast, toastError } from "@/components/ui/toast";
+import { useCallback, type RefObject } from "react";
+import { toast } from "@/components/ui/toast";
+import { useImageUploadJob } from "@/features/image-upload/use-image-upload-job";
 import { hasUnresolvedScreenshots } from "./choose-screenshot-mutations";
 
+/**
+ * Apply: the document's local images go to Cloudinary as an `upload-images`
+ * Job, then the URLs are swapped into the document as it is when the Job
+ * settles — edits made while it ran survive — and the result is applied.
+ * Local files are removed only once their URLs are in the document.
+ */
 export function useApplyDocument(
   videoId: string,
   documentRef: RefObject<string | undefined>,
   updateDocument: (content: string) => void,
   onApply?: (finalDocument: string) => void
 ) {
-  const [isApplying, setIsApplying] = useState(false);
+  const { isUploading, upload } = useImageUploadJob(videoId, {
+    read: () => documentRef.current ?? "",
+    write: updateDocument,
+    onFinished: (finalDocument) => onApply?.(finalDocument),
+  });
 
-  const handleApply = useCallback(async () => {
+  const handleApply = useCallback(() => {
     const doc = documentRef.current ?? "";
     if (hasUnresolvedScreenshots(doc)) {
       toast.error("Resolve all screenshot placeholders before applying");
       return;
     }
-    let finalDoc = doc;
-    if (doc.trim()) {
-      setIsApplying(true);
-      try {
-        const res = await fetch(`/api/videos/${videoId}/upload-images`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: doc, deleteLocalFiles: true }),
-        });
-        if (!res.ok) {
-          throw new Error((await res.text()) || "Failed to upload images");
-        }
-        const { body: uploaded } = await res.json();
-        if (uploaded) {
-          finalDoc = uploaded;
-          if (uploaded !== doc) updateDocument(uploaded);
-        }
-      } catch (err) {
-        toastError(err, "Failed to upload images");
-      } finally {
-        setIsApplying(false);
-      }
-    }
-    onApply?.(finalDoc);
-  }, [videoId, documentRef, updateDocument, onApply]);
+    upload(true);
+  }, [documentRef, upload]);
 
-  return { isApplying, handleApply };
+  return { isApplying: isUploading, handleApply };
 }

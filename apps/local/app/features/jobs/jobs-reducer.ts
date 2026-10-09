@@ -8,13 +8,16 @@ import {
 import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
-import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
+import {
+  isSilentSettlement,
+  succeededToastOf,
+  type SucceededToast,
+} from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
 import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
-import { isUntoastedJobKind } from "./transcribe-footage-job";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -362,10 +365,7 @@ const loadStageHistory = (
 
 /** The toast for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
-  // A Batch export toasts each Video as it finishes (as the browser did), and
-  // nothing for the batch itself; only its failure is news.
-  if (job.kind === "batch-export" && job.status === "succeeded") return;
-  if (isUntoastedJobKind(job.kind)) return;
+  if (isSilentSettlement(job)) return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",
