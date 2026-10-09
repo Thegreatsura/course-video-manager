@@ -1,4 +1,5 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { AutofillService } from "@/services/autofill-service";
 import { defineJobKind } from "../job-kind";
 import { makeOrderedEvents } from "../ordered-events";
@@ -50,13 +51,7 @@ export class AutofillRunError extends Data.TaggedError("AutofillRunError")<{
  */
 export const autofillJobKind = defineJobKind({
   ...UPLOAD_MANAGER_POLICIES.autofill,
-  params: Schema.Struct({
-    /** For the success toast's "Back to Publish"; the run reads only the Version. */
-    courseId: Schema.String,
-    versionId: Schema.String,
-    // Required, as the route had it: it decides which Videos the run acts on.
-    includeTodoLessons: Schema.Boolean,
-  }),
+  params: JOB_PARAMS["autofill"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const autofill = yield* AutofillService;

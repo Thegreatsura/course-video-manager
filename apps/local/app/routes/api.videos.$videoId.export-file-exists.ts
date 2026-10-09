@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { makeLoader } from "@/services/route-action.server";
 
 export const loader = makeLoader({
@@ -7,7 +7,7 @@ export const loader = makeLoader({
     const videoId = params.videoId!;
 
     return Effect.gen(function* () {
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
       const exists = yield* publishService.isExported(videoId);
       return Response.json({ exists });
     }).pipe(

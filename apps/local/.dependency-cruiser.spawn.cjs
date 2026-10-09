@@ -1,0 +1,82 @@
+// @ts-check
+// THE SPAWN GUARD (docs/plans/background-jobs-sidecar.md, section 3.7, guard 1).
+//
+// Background work — an encode, an Overlay render, a Publish — runs in the
+// Sidecar, never in a request a browser tab keeps alive. Two rules hold that
+// at the module graph; the runtime half is `SidecarContext`, which the work
+// asks for and only the Sidecar's layer provides.
+//
+// 1. Nothing a route can reach may reach the Sidecar's spawners: the ffmpeg
+//    encode runner and the encodes built on it, the Overlay renderer
+//    (Remotion's `bin.mjs`), the vertical Short, and the Sidecar's own layer
+//    and Job handlers. A route enqueues a Job instead.
+//
+// 2. `child_process` is imported only by the app server's INTERACTIVE entry
+//    points, each named below with why it stays: a person is waiting on it,
+//    it takes a moment, and it is not background work. Anything else that
+//    needs to start a process is either one of these, or a Job.
+//
+// `@effect/platform`'s `Command` is the other way to start a process, and
+// dependency-cruiser cannot see which export a module uses: that half is
+// `scripts/check-background-jobs.ts` (the `spawn` guard), with the same
+// entry points on its allowlist.
+
+/** Only the Sidecar may reach these. */
+const SIDECAR_SPAWNERS = [
+  "^app/services/ffmpeg-run\\.ts$",
+  "^app/services/ffmpeg-encode-commands\\.ts$",
+  "^app/services/video-export-service\\.ts$",
+  "^app/services/overlay-content-renderer\\.ts$",
+  "^app/services/overlay-renderer-bin\\.ts$",
+  "^app/services/render-vertical-video-service\\.ts$",
+  "^app/services/course-publish-service\\.ts$",
+  "^sidecar/sidecar-layer\\.ts$",
+  "^sidecar/job-kinds\\.ts$",
+  "^sidecar/kinds/",
+].join("|");
+
+/**
+ * The app server's interactive entry points to `child_process`. Each is
+ * something the author clicks and waits on for a moment.
+ */
+const INTERACTIVE_CHILD_PROCESS = [
+  // "Send feedback": `gh issue create`, while the dialog waits.
+  "^app/routes/api\\.feedback\\.ts$",
+  // "Reveal in Explorer": `wslpath` and `explorer.exe` on one file.
+  "^app/routes/api\\.videos\\.\\$videoId\\.reveal\\.ts$",
+  // "Open folder" / "Open in VS Code".
+  "^app/services/open-folder-service\\.ts$",
+  // Starts the Clip Mockup daemon (ADR 0031): a long-lived process of its
+  // own that the CLI restarts on demand — not a Job, and not run by a request.
+  "^app/services/clip-mockup-daemon/client\\.ts$",
+].join("|");
+
+/** @type {import('dependency-cruiser').IConfiguration} */
+module.exports = {
+  forbidden: [
+    {
+      name: "spawn-runner-reachable-from-routes",
+      comment:
+        "A route reaches a Sidecar-only spawner (an encode, an Overlay render, a Publish). Enqueue a Job instead: docs/plans/background-jobs-sidecar.md.",
+      severity: "error",
+      from: { path: "^app/routes/" },
+      to: { path: SIDECAR_SPAWNERS, reachable: true },
+    },
+    {
+      name: "child-process-outside-interactive-entry-points",
+      comment:
+        "Only the named interactive entry points in .dependency-cruiser.spawn.cjs start processes on the app server. Background work is a Job: docs/plans/background-jobs-sidecar.md.",
+      severity: "error",
+      from: { path: "^app/", pathNot: INTERACTIVE_CHILD_PROCESS },
+      to: { path: "^(node:)?child_process$" },
+    },
+  ],
+  options: {
+    doNotFollow: { path: "node_modules" },
+    exclude: { path: "\\.(test|spec)\\.tsx?$|/test-utils/" },
+    tsConfig: { fileName: "tsconfig.json" },
+    enhancedResolveOptions: {
+      extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
+    },
+  },
+};

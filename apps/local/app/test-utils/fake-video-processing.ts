@@ -1,10 +1,8 @@
 import { Effect, Layer } from "effect";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  VideoProcessingService,
-  type PauseType,
-} from "@/services/video-processing-service";
+import { type PauseType } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { expectedExportDurationInSeconds } from "@/services/export-duration-check";
 
 /**
@@ -39,7 +37,7 @@ export const soundExportDurationProbe = (): Effect.Effect<number> =>
   Effect.succeed(SOUND_FAKE_EXPORT_DURATION_IN_SECONDS);
 
 /**
- * A VideoProcessingService fake with CONTROLLABLE COMPLETION: an encode can be
+ * A VideoExportService fake with CONTROLLABLE COMPLETION: an encode can be
  * held open until the test releases it by name.
  *
  * This is the only way to prove that export and upload genuinely overlap —
@@ -108,7 +106,7 @@ export const createControllableVideoProcessing = (opts: {
 
   const encodingCount = () => started.size - finished.size;
 
-  const layer = Layer.succeed(VideoProcessingService, {
+  const layer = Layer.succeed(VideoExportService, {
     exportVideoClips: (exportOpts: {
       videoId: string;
       clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;

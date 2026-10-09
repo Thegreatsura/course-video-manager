@@ -3,6 +3,7 @@ import { assertUnder } from "@/services/assert-under";
 import { Config, Effect } from "effect";
 import type { FileSystem } from "@effect/platform";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
+import type { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import type { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { makeFfmpegLogger } from "./ffmpeg-video-logger";
 import {
@@ -18,17 +19,19 @@ import { removeBestEffort } from "@/services/remove-best-effort";
  * concat-and-normalize export, and the Definition Card compositing that
  * follows it.
  *
- * They are a factory over the three collaborators they need, rather than
- * methods written inline on `VideoProcessingService`, so the export pipeline
- * can be read end to end in one place — the rest of that service is OBS,
- * transcription and DaVinci Resolve, which have nothing to do with it.
+ * They are a factory over the collaborators they need, built by
+ * `VideoExportService` — the Sidecar's alone, since every pass is an encode
+ * (docs/plans/background-jobs-sidecar.md, the spawn guard).
  */
 export const makeVideoExportPasses = (deps: {
+  /** The encodes: Sidecar-only (`ffmpeg-encode-commands.ts`). */
+  ffmpegEncode: FFmpegEncodeService;
+  /** A probe: how long the file came out. */
   ffmpegCommands: FFmpegCommandsService;
   effectFs: FileSystem.FileSystem;
   videoEditorLogger: VideoEditorLoggerService;
 }) => {
-  const { ffmpegCommands, effectFs, videoEditorLogger } = deps;
+  const { ffmpegEncode, ffmpegCommands, effectFs, videoEditorLogger } = deps;
 
   const exportVideoClips = Effect.fn("exportVideoClips")(function* (opts: {
     videoId: string;
@@ -70,7 +73,7 @@ export const makeVideoExportPasses = (deps: {
     // otherwise).
     opts.onStageChange?.("concatenating-clips");
     const concatenatedPath =
-      yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
+      yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
         opts.clips,
         VIDEO_FORMAT_DIMENSIONS[opts.format],
         {
@@ -82,7 +85,7 @@ export const makeVideoExportPasses = (deps: {
 
     // Normalize audio
     opts.onStageChange?.("normalizing-audio");
-    const normalizedPath = yield* ffmpegCommands.normalizeAudio(
+    const normalizedPath = yield* ffmpegEncode.normalizeAudio(
       concatenatedPath,
       {
         onProgress: (percent) =>
@@ -156,7 +159,7 @@ export const makeVideoExportPasses = (deps: {
         )
       );
 
-      yield* ffmpegCommands
+      yield* ffmpegEncode
         .compositeOverlaysAtOffsets(videoPath, opts.overlays, compositedPath, {
           totalDurationSeconds: opts.totalDurationSeconds,
           onProgress: opts.onProgress,

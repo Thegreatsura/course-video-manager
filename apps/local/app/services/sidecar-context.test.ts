@@ -3,34 +3,92 @@ import { Effect } from "effect";
 import type { LayerLive } from "./layer.server";
 import { AutofillService } from "./autofill-service";
 import { CoursePublishService } from "./course-publish-service";
+import type { CoursePublishReadService } from "./course-publish-reads";
+import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
+import { runFfmpegWithProgress } from "./ffmpeg-run";
+import { OverlayContentRendererService } from "./overlay-content-renderer";
+import type { OverlayRenderCacheService } from "./overlay-render-cache.server";
 import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import type { SidecarContext } from "./sidecar-context";
+import type { VideoExportService } from "./video-export-service";
 import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
 // The runtime guard of docs/plans/background-jobs-sidecar.md, section 3.7:
-// work that has moved into a Job needs `SidecarContext`, which the app
-// server's `layerLive` does not provide. `makeAction` / `makeLoader` and
-// `runtimeLive` accept only what `LayerLive` provides, so a route that reaches
-// this work fails to compile. These are type checks: `pnpm typecheck` fails
-// them, not the test run.
+// work that has moved into a Job needs `SidecarContext`, which only the
+// Sidecar's layer (`sidecar/sidecar-layer.ts`) provides, and the services
+// that do it are not in the app server's `layerLive` at all. `makeAction` /
+// `makeLoader` and `runtimeLive` accept only what `LayerLive` provides, so a
+// route that reaches this work fails to compile. These are type checks:
+// `pnpm typecheck` fails them, not the test run.
+
+/** Whether `E` asks for the Sidecar. */
+type NeedsSidecar<E extends Effect.Effect<unknown, unknown, unknown>> = Extract<
+  Effect.Effect.Context<E>,
+  SidecarContext
+>;
+
 describe("SidecarContext", () => {
-  it("a vertical render needs the Sidecar: layerLive cannot run it", () => {
+  it("layerLive has none of the Sidecar's services, and has the read side of Publish", () => {
+    expectTypeOf<
+      Extract<
+        LayerLive,
+        | CoursePublishService
+        | RenderVerticalVideoService
+        | FFmpegEncodeService
+        | VideoExportService
+        | OverlayRenderCacheService
+      >
+    >().toEqualTypeOf<never>();
+    expectTypeOf<
+      Extract<LayerLive, CoursePublishReadService>
+    >().toEqualTypeOf<CoursePublishReadService>();
+  });
+
+  it("an ffmpeg encode needs the Sidecar", () => {
+    const encode = runFfmpegWithProgress({
+      args: [],
+      totalDurationSeconds: 1,
+      onProgress: undefined,
+      onLog: () => {},
+      errorPrefix: "",
+    });
+    expectTypeOf<NeedsSidecar<typeof encode>>().toEqualTypeOf<SidecarContext>();
+    const composite = Effect.flatMap(FFmpegEncodeService, (ffmpeg) =>
+      ffmpeg.compositeOverlay("a.mp4", "b.mov", "c.mp4", () => {})
+    );
+    expectTypeOf<
+      NeedsSidecar<typeof composite>
+    >().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("an Overlay render needs the Sidecar", () => {
+    const render = Effect.flatMap(OverlayContentRendererService, (renderer) =>
+      renderer.renderOverlayContent(
+        {} as Parameters<typeof renderer.renderOverlayContent>[0],
+        "out.mov"
+      )
+    );
+    expectTypeOf<NeedsSidecar<typeof render>>().toEqualTypeOf<SidecarContext>();
+  });
+
+  it("a vertical render needs the Sidecar", () => {
     const render = Effect.flatMap(RenderVerticalVideoService, (service) =>
       service.renderVerticalVideo({ videoId: "a-video" })
     );
-    type Missing = Exclude<Effect.Effect.Context<typeof render>, LayerLive>;
-    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+    expectTypeOf<NeedsSidecar<typeof render>>().toEqualTypeOf<SidecarContext>();
   });
 
-  it("a Batch export needs the Sidecar: layerLive cannot run it", () => {
+  it("a Batch export, a Video export and a Publish need the Sidecar", () => {
     const batch = Effect.flatMap(CoursePublishService, (service) =>
       service.batchExport("a-version", true)
     );
-    type Missing = Exclude<Effect.Effect.Context<typeof batch>, LayerLive>;
-    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
-  });
-
-  it("a Publish needs the Sidecar: layerLive cannot run it", () => {
+    expectTypeOf<NeedsSidecar<typeof batch>>().toEqualTypeOf<SidecarContext>();
+    const exported = Effect.flatMap(CoursePublishService, (service) =>
+      service.exportVideo("a-video")
+    );
+    expectTypeOf<
+      NeedsSidecar<typeof exported>
+    >().toEqualTypeOf<SidecarContext>();
     const publish = Effect.flatMap(CoursePublishService, (service) =>
       service.publish({
         courseId: "a-course",
@@ -40,16 +98,9 @@ describe("SidecarContext", () => {
         placeholderFloor: ANNOUNCE_NOTHING,
       })
     );
-    type Missing = Exclude<Effect.Effect.Context<typeof publish>, LayerLive>;
-    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
-  });
-
-  it("a Video export needs the Sidecar: layerLive cannot run it", () => {
-    const exported = Effect.flatMap(CoursePublishService, (service) =>
-      service.exportVideo("a-video")
-    );
-    type Missing = Exclude<Effect.Effect.Context<typeof exported>, LayerLive>;
-    expectTypeOf<Missing>().toEqualTypeOf<SidecarContext>();
+    expectTypeOf<
+      NeedsSidecar<typeof publish>
+    >().toEqualTypeOf<SidecarContext>();
   });
 
   it("a Course Autofill needs the Sidecar: layerLive cannot run it", () => {

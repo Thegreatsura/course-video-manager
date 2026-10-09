@@ -1,7 +1,8 @@
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
-import type { LayerLive } from "@/services/layer.server";
-import { isPostingKind, type EnqueueJob, type JobKind } from "./job-kind";
+import type { SidecarServices } from "./sidecar-layer";
+import type { EnqueueJob, JobKind } from "./job-kind";
+import { enqueueJob, type JobKindSpecs } from "./job-specs";
 import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
@@ -13,7 +14,6 @@ import { bufferJobKind } from "./kinds/buffer";
 import { skillsChangelogJobKind } from "./kinds/skills-changelog";
 import { youtubeJobKind } from "./kinds/youtube";
 import { youtubeShortsJobKind } from "./kinds/youtube-shorts";
-import type { SidecarContext } from "@/services/sidecar-context";
 
 /**
  * Every kind of background job the sidecar can run. A new kind is a handler
@@ -39,82 +39,26 @@ export type JobKindName = keyof typeof JOB_KINDS;
 
 /**
  * Every service a handler in `JOB_KINDS` may ask for: the app server's own
- * (`layerLive`), which the sidecar builds once for itself, and the
- * `SidecarContext` only the sidecar provides — the proof work that has moved
- * into a Job asks for, so no route can run it in-process.
+ * (`layerLive`), the work only the Sidecar does (`sidecar-layer.ts`: the
+ * encodes, the Overlay renderer, the export and Publish), and the
+ * `SidecarContext` that proves it.
  */
-export type JobServices = LayerLive | SidecarContext;
+export type JobServices = SidecarServices;
 
 export type JobKindRegistry<R = JobServices> = Readonly<
   Record<string, JobKind<R>>
 >;
 
-export class UnknownJobKindError extends Data.TaggedError(
-  "UnknownJobKindError"
-)<{ readonly kind: string; readonly message: string }> {}
-
-export class NoAttemptsLeftError extends Data.TaggedError(
-  "NoAttemptsLeftError"
-)<{ readonly kind: string; readonly message: string }> {}
-
-/**
- * The one way to start background work: a row in the job table, with the
- * kind's own lane and attempt count. The params are checked against the
- * kind's schema here, so a bad request fails at the caller, not in the
- * sidecar later.
- */
-export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
-  /** The id the caller chose for it (the browser does), or `null` for a fresh one. */
-  id: string | null;
-  kind: string;
-  title: string;
-  params: unknown;
-  dependsOn: string | null;
-  subject: { type: string; id: string } | null;
-  /**
-   * Attempts this work already spent before it became a Job: a Batch export
-   * child the browser retries hands its export to the sidecar with the
-   * attempts it had left, so it runs as many times in all as it did when the
-   * browser retried it (docs/plans/background-jobs-sidecar.md, section 7.1).
-   * 0 for new work.
-   */
-  attemptsSpent: number;
-  /**
-   * `JOB_KINDS`, except in a test that brings kinds of its own. Enqueueing
-   * never runs a kind, so any kind's requirements will do.
-   */
-  registry: JobKindRegistry<unknown>;
-}) {
-  const registry = input.registry;
-  const kind = Object.hasOwn(registry, input.kind)
-    ? registry[input.kind]
-    : undefined;
-  if (!kind) {
-    return yield* new UnknownJobKindError({
-      kind: input.kind,
-      message: `no such job kind: ${input.kind}`,
-    });
-  }
-  yield* kind.decodeParams(input.params);
-  const maxAttempts = kind.maxAttempts - input.attemptsSpent;
-  if (input.attemptsSpent < 0 || maxAttempts < 1) {
-    return yield* new NoAttemptsLeftError({
-      kind: input.kind,
-      message: `a ${input.kind} Job runs at most ${kind.maxAttempts} times; ${input.attemptsSpent} were already spent`,
-    });
-  }
-  const ops = yield* JobOperationsService;
-  return yield* ops.enqueueJob({
-    id: input.id,
-    kind: input.kind,
-    title: input.title,
-    lane: kind.lane,
-    params: input.params ?? {},
-    maxAttempts,
-    dependsOn: input.dependsOn,
-    subject: input.subject,
-  });
-});
+// The one way in, and the author's Retry, live with the kinds' specs so the
+// app server can reach them without importing a single handler.
+export {
+  enqueueJob,
+  retryJob,
+  UnknownJobKindError,
+  NoAttemptsLeftError,
+  JobNotFoundError,
+  JobNotRetryableError,
+} from "./job-specs";
 
 /**
  * How a handler starts another Job (`ctx.enqueue`): `enqueueJob` over the
@@ -123,7 +67,7 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
  */
 export const enqueueThrough =
   (opts: {
-    readonly registry: JobKindRegistry<unknown>;
+    readonly registry: JobKindSpecs;
     readonly ops: JobOperationsService;
     readonly then: Effect.Effect<void>;
   }): EnqueueJob =>
@@ -132,77 +76,3 @@ export const enqueueThrough =
       Effect.provideService(JobOperationsService, opts.ops),
       Effect.tap(() => opts.then)
     );
-
-export class JobNotFoundError extends Data.TaggedError("JobNotFoundError")<{
-  readonly jobId: string;
-  readonly message: string;
-}> {}
-
-export class JobNotRetryableError extends Data.TaggedError(
-  "JobNotRetryableError"
-)<{ readonly jobId: string; readonly message: string }> {}
-
-/**
- * The author's Retry. Only a POST waits for one (decision 5): every other
- * kind retries on its own while it has attempts, and is not run again by
- * hand. Runs the post once more — the same row, `attempt + 1` — and only if
- * the run the author saw (`attempt`) failed or was interrupted without
- * going out.
- */
-export const retryJob = Effect.fn("retryJob")(function* (input: {
-  jobId: string;
-  /** The run the author retried: a Retry of any other run is refused. */
-  attempt: number;
-  registry: JobKindRegistry<unknown>;
-}) {
-  const ops = yield* JobOperationsService;
-  const job = yield* ops.getJob(input.jobId);
-  if (!job) {
-    return yield* new JobNotFoundError({
-      jobId: input.jobId,
-      message: `no job ${input.jobId}`,
-    });
-  }
-  const kind = Object.hasOwn(input.registry, job.kind)
-    ? input.registry[job.kind]
-    : undefined;
-  if (!isPostingKind(kind)) {
-    return yield* new JobNotRetryableError({
-      jobId: job.id,
-      message: `a ${job.kind} Job retries on its own; only a post waits for the author's Retry`,
-    });
-  }
-  const retried = yield* ops.retryJob({
-    jobId: job.id,
-    attempt: input.attempt,
-  });
-  switch (retried.outcome) {
-    case "queued":
-      return retried.job;
-    case "not-found":
-      return yield* new JobNotFoundError({
-        jobId: job.id,
-        message: `no job ${job.id}`,
-      });
-    case "not-retryable":
-      return yield* new JobNotRetryableError({
-        jobId: job.id,
-        message: `"${job.title}" is ${retried.job.status}: only a failed or interrupted post can be retried`,
-      });
-    case "stale":
-      return yield* new JobNotRetryableError({
-        jobId: job.id,
-        message: `"${job.title}" has run again since (run ${retried.job.attempt}); look at that run before retrying`,
-      });
-    case "went-out":
-      return yield* new JobNotRetryableError({
-        jobId: job.id,
-        message: `"${job.title}" went out: retrying would post it twice`,
-      });
-    case "dependency-not-succeeded":
-      return yield* new JobNotRetryableError({
-        jobId: job.id,
-        message: `"${job.title}" waits on "${retried.dependency}", which did not succeed: start it again from its page`,
-      });
-  }
-});

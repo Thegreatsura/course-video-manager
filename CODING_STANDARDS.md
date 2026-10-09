@@ -150,21 +150,34 @@ Build a client through `DrizzleService`, `scriptPgClient()`/`scriptDrizzle()` (o
 ### Background work runs in the sidecar
 
 Work the author starts and walks away from — an export, a render, a post, a
-Publish — is a **Job**: enqueue it with `enqueueJob` (`apps/local/sidecar/job-kinds.ts`)
+Publish — is a **Job**: enqueue it with `enqueueJob` (`apps/local/sidecar/job-specs.ts`)
 and let the **Sidecar** run it; a handler that starts another Job asks
 `ctx.enqueue`, the same path (`sidecar/job-context.test.ts`). The browser starts one through the Upload
 Manager's `startJob` (`features/jobs/use-jobs.ts`, `POST /api/jobs`) and
 follows it through `jobs-reducer.ts`. Do not stream it from a request that a browser
 tab keeps alive: closing the tab cancels the work, and its failure dies as a
-toast. A new kind is a handler under `apps/local/sidecar/kinds/` and one line
-in `JOB_KINDS`; its lane and attempt count are copied from the job it replaces
+toast. A new kind is its params in `sidecar/job-params.ts`, a handler under
+`apps/local/sidecar/kinds/`, one line in `JOB_KINDS` and one in
+`JOB_KIND_SPECS` (what a route enqueues against, with no handler in reach); its lane and attempt count are copied from the job it replaces
 (`retry-policy.ts`), never invented — except a kind that **posts** to an
 outside service (YouTube, Buffer, AI Hero): define it with
 `definePostingJobKind`, which fixes it at one attempt, never re-queued, and
 makes you say how to check whether a cut-off post went out
 (`sidecar/posting-kinds.test.ts` fails otherwise). Work that has moved into a Job asks for
 `SidecarContext` (`app/services/sidecar-context.ts`), which only the sidecar
-provides, so a route that reaches it does not compile. `scripts/check-background-jobs.ts` holds
+provides, so a route that reaches it does not compile.
+
+**Spawning a process is the Sidecar's.** The encodes (`ffmpeg-run.ts`,
+`ffmpeg-encode-commands.ts`), the Overlay renderer and the services built on
+them live only in the Sidecar's layer (`sidecar/sidecar-layer.ts`), never in
+`layerLive`, and `apps/local/.dependency-cruiser.spawn.cjs` fails
+`lint:boundaries` if a route can reach one. On the app server a process starts
+only from a named interactive entry point — a probe, a frame, "Reveal in
+Explorer", "Send feedback": something a person waits on for a moment.
+`child_process` is held to those files by the same config, and
+`@effect/platform`'s `Command.make` by the `spawn` guard of
+`scripts/check-background-jobs.ts`, each with its reason. A new long process
+is a Job. `scripts/check-background-jobs.ts` also holds
 the streaming routes and the browser loops that drive them to a shrink-only
 allowlist. Interactive streams (the Article Writer, a modal the author watches)
 stay, by name. The plan and the order the jobs move in:

@@ -4,10 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { FFmpegError } from "@/services/ffmpeg-run";
-import {
-  VideoProcessingService,
-  type PauseType,
-} from "@/services/video-processing-service";
+import { type PauseType } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { createControllableVideoProcessing } from "@/test-utils/fake-video-processing";
 import {
   fakeDropbox,
@@ -111,7 +109,7 @@ describe("CoursePublishService — export/upload pipelining", () => {
     // still be the failed-export one rather than whatever the commit made of it.
     // Resolved after setup, before the publish that first calls the mock.
     let doomedVideoId = "";
-    const partiallyFailingProcessing = Layer.succeed(VideoProcessingService, {
+    const partiallyFailingProcessing = Layer.succeed(VideoExportService, {
       exportVideoClips: (opts: {
         videoId: string;
         clips?: ReadonlyArray<{ duration: number; pauseType?: PauseType }>;

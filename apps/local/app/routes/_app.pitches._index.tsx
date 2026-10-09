@@ -18,7 +18,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { usePitchMenu } from "@/features/pitches/pitch-menu";
 import { cn } from "@/lib/utils";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { makeLoader } from "@/services/route-action.server";
 import { formatDuration } from "@/lib/format-duration";
@@ -90,7 +90,7 @@ export const loader = async (args: Route.LoaderArgs) => {
     effect: () =>
       Effect.gen(function* () {
         const db = yield* PitchOperationsService;
-        const publishService = yield* CoursePublishService;
+        const publishService = yield* CoursePublishReadService;
 
         const pitchesRaw = yield* db.listPitchesWithVideos({
           state: stateFilter,

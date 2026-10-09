@@ -663,10 +663,43 @@ Commit `recurs(1)`, Dropbox HTTP `recurs(5)`, an export `recurs(2)`).
 
 No migration.
 
-Left for later: the spawn guard's dependency-cruiser rule and
-`FfmpegRun` / `OverlayContentRenderer` behind `SidecarContext` (the next
-PR of batch 6); the `publish` entry type and `UPDATE_PUBLISH_STAGE` /
-`PUBLISH_COMPLETE` go with `upload-reducer.ts` in batch 8.
+**Second PR: the spawn guard (section 3.7, guards 1 and 2).** Batch 6 moved
+the last background job that spawned from the app server, so the guard is on:
+
+- **The Sidecar's own layer** (`sidecar/sidecar-layer.ts`) holds everything
+  that spawns for background work: `FFmpegEncodeService`
+  (`ffmpeg-encode-commands.ts`: concat, normalize, Overlay composite — split
+  out of `FFmpegCommandsService`), `VideoExportService` (the export passes,
+  split out of `VideoProcessingService`), `OverlayRenderCacheService` (the
+  Remotion renderer), `CoursePublishService` (export, Batch export, Publish)
+  and `RenderVerticalVideoService`. `layerLive` has none of them; routes
+  read export addresses and the publish gate through `CoursePublishReadService`
+  (`course-publish-reads.ts`). Both builds share one `FfmpegPermitsService`, so
+  the 6 GPU / 12 CPU limits are still one per process.
+- **Runtime:** `runFfmpegWithProgress`, `compositeOverlay` and
+  `renderOverlayContent` ask for `SidecarContext` (`sidecar-context.test.ts`
+  pins it, and that `layerLive` has none of the Sidecar's services).
+- **Module graph** (`apps/local/.dependency-cruiser.spawn.cjs`, run by
+  `lint:boundaries`): nothing reachable from `app/routes/` may reach a
+  Sidecar spawner, the Sidecar's layer or a Job handler. Routes enqueue and
+  retry against `JOB_KIND_SPECS` (`job-specs.ts`: each kind's lane, attempts
+  and params from `job-params.ts`, no handler), which `job-specs.test.ts`
+  holds to `JOB_KINDS`. `child_process` is imported only by the named
+  interactive entry points: `api.feedback.ts` (`gh issue create`),
+  `api.videos.$videoId.reveal.ts` and `open-folder-service.ts` (Explorer,
+  VS Code), and the Clip Mockup daemon's client (ADR 0031).
+- **`@effect/platform`'s `Command.make`** (which dependency-cruiser cannot
+  see): the `spawn` guard in `scripts/check-background-jobs.ts`, a
+  shrink-only allowlist with a reason per file. The Sidecar's four spawners
+  are on it as Sidecar-only; the app server keeps `ffmpeg-commands.ts`
+  (probes, silence detection, one frame for a screenshot),
+  `video-processing-service.ts` (a recording's first/last frame, the DaVinci
+  Resolve script, Whisper audio — clip transcription moves in batch 7) and
+  `footage-transcription.ts` (`cvm footage transcribe` only).
+
+Left for later: the `publish` entry type and `UPDATE_PUBLISH_STAGE` /
+`PUBLISH_COMPLETE` go with `upload-reducer.ts` in batch 8; clip transcription
+(#12) is batch 7.
 
 ## Dismissal is stored
 

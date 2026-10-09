@@ -24,7 +24,7 @@
     "start:stream-deck-forwarder": "tsx stream-deck-forwarder/run-stream-deck-forwarder.ts",
     "start:sidecar": "./scripts/keep-running.sh tsx sidecar/run-sidecar.ts",
     "typecheck": "react-router typegen && tsc",
-    "lint:boundaries": "depcruise app/packages",
+    "lint:boundaries": "depcruise app/packages && depcruise app sidecar --config .dependency-cruiser.spawn.cjs",
     "db:baseline": "tsx scripts/baseline-migrations.ts",
     "db:verify-features": "tsx scripts/verify-schema-features.ts",
     "db:backfill-search-text": "tsx scripts/backfill-search-text.ts",

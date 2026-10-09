@@ -35,7 +35,7 @@ import { VersionOperationsService } from "@/services/db-version-operations.serve
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
-import { VideoProcessingService } from "@/services/video-processing-service";
+import { VideoExportService } from "@/services/video-export-service";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { computeExportHash, type ExportClip } from "@/services/export-hash";
 import { SOUND_FAKE_EXPORT_DURATION_IN_SECONDS } from "@/test-utils/fake-video-processing";
@@ -116,7 +116,7 @@ export type FakeCompositeRun = {
 export const COMPOSITED_BYTES_MARKER = "+overlays";
 
 export const setupPublishableCourse = async (opts?: {
-  mockVideoProcessing?: Layer.Layer<VideoProcessingService>;
+  mockVideoProcessing?: Layer.Layer<VideoExportService>;
   videoCount?: number;
   config?: Record<string, string>;
   /**
@@ -314,9 +314,9 @@ export const setupPublishableCourse = async (opts?: {
     failWith: opts?.failCardRenderWith,
   });
 
-  const defaultMockVideoProcessing = Layer.succeed(VideoProcessingService, {
+  const defaultMockVideoProcessing = Layer.succeed(VideoExportService, {
     exportVideoClips: (
-      exportOpts: Parameters<VideoProcessingService["exportVideoClips"]>[0]
+      exportOpts: Parameters<VideoExportService["exportVideoClips"]>[0]
     ) =>
       Effect.sync(() => {
         const videoId: string = exportOpts.videoId;

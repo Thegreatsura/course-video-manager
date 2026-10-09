@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { RenderVerticalVideoService } from "@/services/render-vertical-video-service";
 import { defineJobKind } from "../job-kind";
 import { makeOrderedEvents } from "../ordered-events";
@@ -16,7 +17,7 @@ import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
  */
 export const renderVerticalJobKind = defineJobKind({
   ...UPLOAD_MANAGER_POLICIES["render-vertical"],
-  params: Schema.Struct({ videoId: Schema.String }),
+  params: JOB_PARAMS["render-vertical"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const render = yield* RenderVerticalVideoService;

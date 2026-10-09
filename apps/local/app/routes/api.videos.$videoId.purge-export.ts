@@ -2,14 +2,14 @@ import { Config, Effect } from "effect";
 import { assertUnderEffect } from "@/services/assert-under";
 import { FileSystem } from "@effect/platform";
 import { data } from "react-router";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { makeAction } from "@/services/route-action.server";
 
 export const action = makeAction({
   effect: ({ params }) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
       const exportPath = yield* publishService.resolveExportPath(
         params.videoId!
       );

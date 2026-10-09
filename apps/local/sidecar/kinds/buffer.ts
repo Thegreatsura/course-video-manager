@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { bufferPostProgram } from "@/services/buffer-posting-orchestration.server";
 import { definePostingJobKind, type PostCheck } from "../job-kind";
@@ -14,10 +15,7 @@ import { PostNotStartedError } from "./youtube";
  * no Retry: fix the key, then post again.
  */
 export const bufferJobKind = definePostingJobKind({
-  params: Schema.Struct({
-    videoId: Schema.String,
-    caption: Schema.Trim.pipe(Schema.nonEmptyString()),
-  }),
+  params: JOB_PARAMS["buffer"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const reports = yield* reportPost(ctx);

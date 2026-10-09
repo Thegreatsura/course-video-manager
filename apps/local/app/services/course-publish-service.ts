@@ -1,31 +1,19 @@
 import { Cause, Config, Deferred, Effect, Exit, Schedule } from "effect";
 import { SidecarContext } from "./sidecar-context";
+import { makeCoursePublishReads } from "./course-publish-reads";
 import { dropboxAppCredentials } from "./dropbox-auth-service";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { VideoProcessingService } from "./video-processing-service";
+import { VideoExportService } from "./video-export-service";
+import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { OverlayRenderCacheService } from "./overlay-render-cache.server";
-import {
-  computeExportHash,
-  type ExportOverlay,
-  resolveExportPath as resolveExportPathPure,
-  toExportClips,
-} from "./export-hash";
 import { garbageCollect } from "./export-hash.server";
 import {
   exportVideoToItsAddress,
   type ExportStage,
 } from "./course-publish-export-video";
-import {
-  ANNOUNCE_NOTHING,
-  type PlaceholderFloor,
-} from "@/packages/course-json";
-import {
-  validatePublishability as validatePublishabilityCore,
-  validateVersionPublishability as validateVersionPublishabilityCore,
-  type VersionTree,
-} from "./course-publish-readiness";
+import { type PlaceholderFloor } from "@/packages/course-json";
 import { findShippingVideos as findShippingVideosCore } from "./course-publish-video-roster";
 import {
   ExportError,
@@ -39,22 +27,7 @@ import {
   type PublishStage,
 } from "./course-publish-export-events";
 
-export type VideoForExport = {
-  id: string;
-  format: string;
-  lesson?: {
-    section: { repoVersion: { repo: { id: string } } };
-  } | null;
-  clips: Array<{
-    videoFilename: string;
-    sourceStartTime: number;
-    sourceEndTime: number;
-    pauseType: string;
-    zoomType: string;
-    order: string;
-    overlays: ExportOverlay[];
-  }>;
-};
+export type { VideoForExport } from "./course-publish-reads";
 
 export type PublishOptions = {
   courseId: string;
@@ -79,50 +52,23 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
   "CoursePublishService",
   {
     effect: Effect.gen(function* () {
-      const videoOps = yield* VideoOperationsService;
       const versionOps = yield* VersionOperationsService;
-      const effectFs = yield* FileSystem.FileSystem;
+      // The read side — where an export lives, whether it is there, and the
+      // publish gate — is the app server's too (`CoursePublishReadService`);
+      // this service adds the work only the Sidecar may run.
+      const reads = yield* makeCoursePublishReads;
+      const { validatePublishability } = reads;
       const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
         "FINISHED_VIDEOS_DIRECTORY"
       );
-
-      const resolveExportPath = Effect.fn("resolveExportPath")(function* (
-        videoOrId: string | VideoForExport
-      ) {
-        const video =
-          typeof videoOrId === "string"
-            ? yield* videoOps.getVideoWithClipsById(videoOrId)
-            : videoOrId;
-        if (video.clips.length === 0) return null;
-
-        const hash = computeExportHash(
-          toExportClips(video.clips),
-          video.format
-        );
-        if (!hash) return null;
-
-        const namespace = video.lesson?.section.repoVersion.repo.id ?? video.id;
-        return resolveExportPathPure(
-          FINISHED_VIDEOS_DIRECTORY,
-          namespace,
-          hash
-        );
-      });
-
-      const isExported = Effect.fn("isExported")(function* (
-        videoOrId: string | VideoForExport
-      ) {
-        const exportPath = yield* resolveExportPath(videoOrId);
-        if (!exportPath) return false;
-        return yield* effectFs.exists(exportPath);
-      });
 
       // The export step itself lives in ./course-publish-export-video so it
       // can be read — and grown — on its own. Its deps are closed over here so
       // callers of this service don't inherit them.
       const exportContext = yield* Effect.context<
         | VideoOperationsService
-        | VideoProcessingService
+        | VideoExportService
+        | VideoEditorLoggerService
         | OverlayRenderCacheService
         | FileSystem.FileSystem
       >();
@@ -208,39 +154,6 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
 
         // GC once after all exports
         yield* garbageCollect(courseId);
-      });
-
-      // The publish validation gate. The computation itself lives in
-      // ./course-publish-readiness so it can also be read on its own — by the
-      // `cvm course readiness` CLI verb — without dragging in the export stack.
-      // Its deps are closed over here so callers of this service method don't
-      // inherit them.
-      const readinessContext = yield* Effect.context<
-        VersionOperationsService | FileSystem.FileSystem
-      >();
-      const validatePublishability = Effect.fn("validatePublishability")(
-        function* (
-          versionId: string,
-          placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
-        ) {
-          return yield* validatePublishabilityCore(
-            versionId,
-            placeholderFloor
-          ).pipe(Effect.provide(readinessContext));
-        }
-      );
-
-      // Same gate over a tree the caller already read (the publish page loader).
-      const validatePublishabilityOfTree = Effect.fn(
-        "validatePublishabilityOfTree"
-      )(function* (
-        version: VersionTree,
-        placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
-      ) {
-        return yield* validateVersionPublishabilityCore(
-          version,
-          placeholderFloor
-        ).pipe(Effect.provide(readinessContext));
       });
 
       const publishUnlocked = Effect.fn("publishUnlocked")(function* (
@@ -508,12 +421,9 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
       });
 
       return {
+        ...reads,
         exportVideo,
         batchExport,
-        isExported,
-        resolveExportPath,
-        validatePublishability,
-        validatePublishabilityOfTree,
         publish,
       };
     }),

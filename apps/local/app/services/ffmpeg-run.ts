@@ -1,88 +1,29 @@
 import { Command } from "@effect/platform";
-import { Data, Effect, Ref, Stream } from "effect";
+import { Effect, Ref, Stream } from "effect";
 import { registerFfmpegChild } from "./ffmpeg-child-registry";
 import { createFfmpegProgressParser } from "./ffmpeg-progress";
 import { appendBoundedTail, withStderrTail } from "./ffmpeg-log-capture";
+import { SidecarContext } from "./sidecar-context";
+import { FFmpegError, type FfmpegLogInfo } from "./ffmpeg-error";
 
 /**
- * How every ffmpeg process in this app is started, and the three things every
- * caller of one owes: bitexact output, a durable log, and a child that dies
- * when the fiber that owns it does.
+ * How every long ffmpeg ENCODE in this app is started, and the three things
+ * every caller of one owes: bitexact output, a durable log, and a child that
+ * dies when the fiber that owns it does.
  *
- * It is a module of its own rather than a private helper inside
- * `ffmpeg-commands.ts` because it is the invariant, and the commands are the
- * variations on it.
+ * An encode is background work: it runs in the **Sidecar**, never in a request
+ * (docs/plans/background-jobs-sidecar.md, the spawn guard). So this runner
+ * asks for `SidecarContext`, and no module a route can reach may import it
+ * (`.dependency-cruiser.cjs`, `spawn-runner-reachable-from-routes`).
  */
 
-/** Emitted once a command has run (success or failure) so a caller that
- * knows the domain object (a videoId) can tee it into a durable, agent- and
- * human-readable log — see VideoEditorLoggerService's "cli-output" event. */
-export type FfmpegLogInfo = { command: string[]; stderrTail: string };
-
-/**
- * Written before every output file in the export pipeline, so that an export's
- * bytes are a function of its inputs and nothing else.
- *
- * Without these, ffmpeg stamps the running library versions into the file — an
- * `encoder=Lavf60.16.100` format tag and an `encoder=Lavc60.31.102 h264_nvenc`
- * stream tag. Neither changes a frame, but both change the SHA256 that the
- * published manifest carries and that AI Hero uses to decide whether a Video is
- * new. Upgrading ffmpeg would otherwise re-ingest the whole catalogue into Mux.
- *
- * They must go on every pass, not just the last: the stream tag is written by
- * the pass that encodes the stream and survives the later stream-copy.
- *
- * Reproducibility here is per-machine — same ffmpeg build, same driver, same
- * GPU. These flags remove the part that was gratuitously variable.
- */
-export const BITEXACT_ARGS = [
-  "-fflags",
-  "+bitexact",
-  "-flags:v",
-  "+bitexact",
-  "-flags:a",
-  "+bitexact",
-];
-
-/**
- * How a landscape/course Video's picture is encoded — one answer, shared by
- * every pass in that export path.
- *
- * A course export is written twice when it carries Definition Cards: the
- * concat-and-scale pass makes the file, and the Overlay compositing pass
- * re-encodes it. If those two passes disagreed about the encoder, a Video with
- * an Overlay would ship with different characteristics from every Video
- * without one, and the second write would be a CPU re-encode of a
- * GPU-encoded 40-minute file. They read this constant so they cannot.
- *
- * The vertical Shorts pipeline deliberately does NOT use it. Its subtitle
- * burn-in is libx264 at CRF 18, and its bytes must not move.
- */
-export const LANDSCAPE_VIDEO_ENCODE_ARGS = [
-  "-c:v",
-  "h264_nvenc",
-  "-preset",
-  "slow",
-  "-rc:v",
-  "vbr",
-  "-cq:v",
-  "19",
-  "-b:v",
-  "15387k",
-  "-maxrate",
-  "20000k",
-  "-bufsize",
-  "30000k",
-  "-fps_mode",
-  "cfr",
-  "-r",
-  "60",
-];
-
-export class FFmpegError extends Data.TaggedError("FFmpegError")<{
-  cause: unknown;
-  message: string;
-}> {}
+// Kept importable from here for the export's tests and passes.
+export {
+  BITEXACT_ARGS,
+  LANDSCAPE_VIDEO_ENCODE_ARGS,
+  FFmpegError,
+  type FfmpegLogInfo,
+} from "./ffmpeg-error";
 
 /**
  * Run a long-lived ffmpeg encode with real progress reporting.
@@ -127,6 +68,8 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
     onLog: (info: FfmpegLogInfo) => void;
     errorPrefix: string;
   }) {
+    // An encode is a Job's: only the Sidecar provides this.
+    yield* SidecarContext;
     const commandLine = ["ffmpeg", ...opts.args];
     const toError = (cause: unknown, detail: string, stderrTail: string) =>
       new FFmpegError({

@@ -33,7 +33,7 @@ import {
 } from "@/services/course-publish-lesson-statuses";
 import { useLocalStorageOneOf } from "@/hooks/use-local-storage";
 import { selectAutofillCandidates } from "@/services/autofill-candidates";
-import { CoursePublishService } from "@/services/course-publish-service";
+import { CoursePublishReadService } from "@/services/course-publish-reads";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { classifyPendingRecovery } from "@/services/pending-recovery.server";
@@ -56,7 +56,7 @@ export const loader = makeLoader({
     Effect.gen(function* () {
       const courseOps = yield* CourseOperationsService;
       const versionOps = yield* VersionOperationsService;
-      const publishService = yield* CoursePublishService;
+      const publishService = yield* CoursePublishReadService;
 
       const [course, allVersions] = yield* Effect.all(
         [

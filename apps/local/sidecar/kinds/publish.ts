@@ -1,11 +1,8 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import type { PublishDetailEvent } from "@/services/course-publish-export-events";
-import {
-  ANNOUNCE_NOTHING_BAND,
-  PLACEHOLDER_FLOOR_BANDS,
-  placeholderFloorFromBand,
-} from "@/packages/course-json";
+import { placeholderFloorFromBand } from "@/packages/course-json";
 import { defineJobKind } from "../job-kind";
 import { makeOrderedEvents } from "../ordered-events";
 import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
@@ -141,21 +138,7 @@ const reportInOrder = (events: {
  */
 export const publishJobKind = defineJobKind({
   ...UPLOAD_MANAGER_POLICIES.publish,
-  params: Schema.Struct({
-    courseId: Schema.String,
-    name: Schema.String,
-    // Required, like name: a Published Version always carries a description.
-    description: Schema.String,
-    includeTodoLessons: Schema.optionalWith(Schema.Boolean, {
-      default: () => true,
-    }),
-    // The Placeholder Floor as a band, as the CLI spells it. Absent means
-    // announce nothing.
-    placeholders: Schema.optionalWith(
-      Schema.Literal(...PLACEHOLDER_FLOOR_BANDS),
-      { default: () => ANNOUNCE_NOTHING_BAND }
-    ),
-  }),
+  params: JOB_PARAMS["publish"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const publishService = yield* CoursePublishService;

@@ -3,7 +3,7 @@ import { assertUnder } from "@/services/assert-under";
 import { Cause, Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { VideoProcessingService } from "./video-processing-service";
+import { VideoExportService } from "./video-export-service";
 import {
   computeExportHash,
   resolveExportPath as resolveExportPathPure,
@@ -59,7 +59,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
     const { videoId, onStage, onProgress } = opts;
     const FINISHED_VIDEOS_DIRECTORY = opts.finishedVideosDirectory;
     const videoOps = yield* VideoOperationsService;
-    const videoProcessing = yield* VideoProcessingService;
+    const videoExport = yield* VideoExportService;
     const overlayRenderCache = yield* OverlayRenderCacheService;
     const videoEditorLogger = yield* VideoEditorLoggerService;
     const effectFs = yield* FileSystem.FileSystem;
@@ -174,7 +174,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
           targetPath,
           // An export that cannot be probed at all is no more trustworthy
           // than one measured short, and is refused the same way.
-          videoProcessing
+          videoExport
             .getVideoDurationInSeconds(targetPath)
             .pipe(Effect.orElseSucceed(() => Number.NaN))
         );
@@ -200,7 +200,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
       // Export via ffmpeg → writes to {videoId}.mp4
       stage = "concatenating-clips";
-      const rendered = yield* videoProcessing.exportVideoClips({
+      const rendered = yield* videoExport.exportVideoClips({
         videoId,
         format: resolveVideoFormat(video.format),
         clips: renderClips,
@@ -268,7 +268,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
           );
 
           stage = "composite-overlays";
-          yield* videoProcessing.compositeOverlaysOntoExport({
+          yield* videoExport.compositeOverlaysOntoExport({
             videoId,
             videoPath: videoIdPath,
             overlays: renderedOverlays,

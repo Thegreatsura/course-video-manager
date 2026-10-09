@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { makeAction } from "@/services/route-action.server";
 import { nudgeSidecar } from "@/services/sidecar-socket.server";
-import { JOB_KINDS, retryJob } from "../../sidecar/job-kinds";
+import { JOB_KIND_SPECS, retryJob } from "../../sidecar/job-specs";
 
 /**
  * The author's **Retry** on a post that failed, or was interrupted ("check
@@ -24,7 +24,7 @@ export const action = makeAction({
       const job = yield* retryJob({
         jobId: params.jobId ?? "",
         attempt: request.attempt,
-        registry: JOB_KINDS,
+        registry: JOB_KIND_SPECS,
       });
       yield* nudgeSidecar();
       return { id: job.id, attempt: job.attempt };

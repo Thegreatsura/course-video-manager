@@ -1,4 +1,5 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
+import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { getValidAccessToken } from "@/services/youtube-auth-service";
@@ -27,13 +28,7 @@ export const studioUrl = (youtubeVideoId: string) =>
  * Retry runs it again. The browser's 3 attempts are gone on purpose.
  */
 export const youtubeJobKind = definePostingJobKind({
-  params: Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    description: Schema.Trim.pipe(Schema.nonEmptyString()),
-    privacyStatus: Schema.Literal("public", "unlisted"),
-    thumbnailId: Schema.String,
-  }),
+  params: JOB_PARAMS["youtube"],
   run: (params, ctx) =>
     Effect.gen(function* () {
       const thumbnail = yield* Effect.gen(function* () {

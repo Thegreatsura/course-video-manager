@@ -6,6 +6,7 @@ import { tmpdir } from "os";
 import crypto from "node:crypto";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoProcessingService } from "./video-processing-service";
+import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { makeFfmpegLogger } from "./ffmpeg-video-logger";
@@ -36,6 +37,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
       const videoOps = yield* VideoOperationsService;
       const videoProcessing = yield* VideoProcessingService;
       const ffmpegCommands = yield* FFmpegCommandsService;
+      const ffmpegEncode = yield* FFmpegEncodeService;
       const effectFs = yield* FileSystem.FileSystem;
       const videoEditorLogger = yield* VideoEditorLoggerService;
 
@@ -117,7 +119,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // since the composite step will write the final .mp4)
             enterStage("concatenating-clips");
             const rawConcatenatedPath =
-              yield* ffmpegCommands.createAndConcatenateVideoClipsSinglePass(
+              yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
                 video.clips.map((clip) => ({
                   inputVideo: clip.videoFilename,
                   startTime: clip.sourceStartTime,
@@ -130,7 +132,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
                 VIDEO_FORMAT_DIMENSIONS.short,
                 { onLog: logCliOutput("concat") }
               );
-            const concatenatedPath = yield* ffmpegCommands.normalizeAudio(
+            const concatenatedPath = yield* ffmpegEncode.normalizeAudio(
               rawConcatenatedPath,
               { onLog: logCliOutput("normalize-audio") }
             );
@@ -204,7 +206,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
               recursive: true,
             });
 
-            yield* ffmpegCommands.compositeOverlay(
+            yield* ffmpegEncode.compositeOverlay(
               concatenatedPath,
               overlayPath,
               outputPath,
@@ -226,6 +228,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
       NodeContext.layer,
       VideoProcessingService.Default,
       FFmpegCommandsService.Default,
+      FFmpegEncodeService.Default,
       VideoEditorLoggerService.Default,
     ],
   }

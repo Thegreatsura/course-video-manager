@@ -22,5 +22,42 @@
       "count": 2,
       "reason": "Waits for OBS's virtual camera while the editor is open: part of a live Recording Session, not background work. Stays."
     }
+  ],
+  "spawn": [
+    {
+      "file": "apps/local/app/services/ffmpeg-run.ts",
+      "count": 1,
+      "reason": "Sidecar only: the ffmpeg encode runner. It asks for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
+    },
+    {
+      "file": "apps/local/app/services/ffmpeg-encode-commands.ts",
+      "count": 2,
+      "reason": "Sidecar only: the export and vertical-Short encodes. They ask for SidecarContext, and no module a route reaches may import them (apps/local/.dependency-cruiser.spawn.cjs)."
+    },
+    {
+      "file": "apps/local/app/services/overlay-content-renderer.ts",
+      "count": 1,
+      "reason": "Sidecar only: the Overlay renderer (Remotion's bin.mjs). It asks for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
+    },
+    {
+      "file": "apps/local/app/services/render-vertical-video-service.ts",
+      "count": 1,
+      "reason": "Sidecar only: the vertical Short's subtitle render. It asks for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
+    },
+    {
+      "file": "apps/local/app/services/ffmpeg-commands.ts",
+      "count": 4,
+      "reason": "Interactive, on the app server: ffprobe for a duration or frame rate, silence detection, and one frame for a screenshot. A person waits on each for a moment; none is background work. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
+    },
+    {
+      "file": "apps/local/app/services/video-processing-service.ts",
+      "count": 5,
+      "reason": "Interactive, on the app server: the first/last frame of a recording, the DaVinci Resolve script, and the audio a transcription uploads to Whisper (a clip's; the vertical Short's, in the Sidecar). Clip transcription (#12) moves to the Sidecar in batch 7 of docs/plans/background-jobs-sidecar.md."
+    },
+    {
+      "file": "apps/local/app/services/footage-transcription.ts",
+      "count": 2,
+      "reason": "Footage transcription (#16): run by `cvm footage transcribe` on the author's machine, never by a request."
+    }
   ]
 }

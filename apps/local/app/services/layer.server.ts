@@ -11,8 +11,7 @@ import { CloudinaryService } from "./cloudinary-service";
 import { CloudinaryMarkdownService } from "./cloudinary-markdown-service";
 import { CourseWriteService } from "@/services/course-write-service";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
-import { OverlayRenderCacheService } from "./overlay-render-cache.server";
-import { CoursePublishService } from "./course-publish-service";
+import { CoursePublishReadService } from "./course-publish-reads";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -30,7 +29,6 @@ import { DeliverableOperationsService } from "@/services/db-deliverable-operatio
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { LinkAuthOperationsService } from "@/services/db-link-auth-operations.server";
 import { ApiTokenOperationsService } from "@/services/db-api-token-operations.server";
-import { RenderVerticalVideoService } from "./render-vertical-video-service";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { BufferApiService } from "./buffer-api-service.server";
 import { ObjectStoreService } from "./object-store-service.server";
@@ -77,7 +75,6 @@ const coreLayer = Layer.mergeAll(
   CloudinaryMarkdownLayer,
   CourseWriteService.Default,
   FFmpegCommandsService.Default,
-  OverlayRenderCacheService.Default,
   NodeContext.layer
 ).pipe(
   Layer.provideMerge(
@@ -89,7 +86,11 @@ const coreLayer = Layer.mergeAll(
   Layer.provide(DiagramThumbnailStoreLive)
 );
 
-const publishLayer = CoursePublishService.Default.pipe(
+// The read side of Publish — export addresses and the publish gate. The
+// export and the Publish themselves, the vertical render and the Overlay
+// renderer are the Sidecar's alone (`sidecar/sidecar-layer.ts`): nothing in
+// this layer spawns an encode, so no route can reach one.
+const publishReadLayer = CoursePublishReadService.Default.pipe(
   Layer.provide(coreLayer)
 );
 
@@ -99,19 +100,14 @@ const autofillLayer = AutofillService.DefaultWithoutDependencies.pipe(
   Layer.provide(coreLayer)
 );
 
-const renderVerticalLayer = RenderVerticalVideoService.Default.pipe(
-  Layer.provide(coreLayer)
-);
-
 // Before any service is built: a base-URL override in .env that names a host
 // other than the service's own (or loopback) would send it the real token.
 assertServiceUrlOverrides(process.env);
 
 export const layerLive = Layer.mergeAll(
   coreLayer,
-  publishLayer,
-  autofillLayer,
-  renderVerticalLayer
+  publishReadLayer,
+  autofillLayer
 );
 
 /**

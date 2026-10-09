@@ -18,6 +18,7 @@ import {
   type OverlayContent,
 } from "@/services/overlay-render-cache";
 import { OverlayRenderCacheService } from "@/services/overlay-render-cache.server";
+import { SidecarContextTest } from "@/services/sidecar-context";
 
 const cacheDirs: string[] = [];
 
@@ -77,6 +78,8 @@ const renderCard = (
           Layer.provide(Layer.mergeAll(NodeContext.layer, rendererLayer))
         )
       ),
+      // A render runs only in the Sidecar; the test stands in for it.
+      Effect.provide(SidecarContextTest),
       Effect.provide(
         Layer.setConfigProvider(
           ConfigProvider.fromMap(
