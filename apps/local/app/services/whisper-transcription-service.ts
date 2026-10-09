@@ -7,11 +7,22 @@ import path from "node:path";
 import { tmpdir } from "os";
 import OpenAI from "openai";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
-import { transcribeFootage } from "./footage-transcription";
+import {
+  transcribeFootage,
+  type TranscribeFootageOptions,
+} from "./footage-transcription";
 import { SidecarContext } from "./sidecar-context";
 import { removeBestEffort } from "@/services/remove-best-effort";
 
 const TRANSCRIPTION_PERMITS = 20;
+
+/**
+ * How `extractAudio` encodes: a Clip's range at 384kbps as recorded, or a whole
+ * Footage file (or a chunk of one) mono at 64kbps, small enough that most
+ * files fit Whisper's 25MB upload in one pass.
+ */
+const CLIP_AUDIO = ["-b:a", "384k"] as const;
+const FOOTAGE_AUDIO = ["-ac", "1", "-b:a", "64k"] as const;
 
 const transcribeClipsSchema = Schema.Array(
   Schema.Struct({
@@ -77,13 +88,14 @@ class CouldNotExtractAudioError extends Data.TaggedError(
  * transcribes it, at most 20 calls at once (the permits are this service's,
  * shared by every caller in the process).
  *
- * Sidecar only (docs/plans/background-jobs-sidecar.md, batch 7): a Clip
- * transcription (the `transcribe-clips` Job) and the vertical Short's
- * subtitles (the `render-vertical` Job) ask for `SidecarContext`, only the
- * Sidecar's layer (`sidecar/sidecar-layer.ts`) builds this service, and no
- * module a route can reach may import it (`.dependency-cruiser.spawn.cjs`).
- * The one other caller is `cvm footage transcribe`, which builds it in its own
- * CLI layer on the author's machine: never a request.
+ * Sidecar only (docs/plans/background-jobs-sidecar.md, batches 7 and 9): a
+ * Clip transcription (the `transcribe-clips` Job), the vertical Short's
+ * subtitles (the `render-vertical` Job) and a Footage transcription (the
+ * `transcribe-footage` Job, which `cvm footage transcribe` enqueues) ask for
+ * `SidecarContext`, only the Sidecar's layer (`sidecar/sidecar-layer.ts`)
+ * builds this service, and no module a route can reach may import it
+ * (`.dependency-cruiser.spawn.cjs`). One Sidecar, one service, so all three
+ * share the same Whisper permits.
  */
 export class WhisperTranscriptionService extends Effect.Service<WhisperTranscriptionService>()(
   "WhisperTranscriptionService",
@@ -101,7 +113,8 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
       /** ffmpeg writes `inputVideo`'s audio (or a range of it) as an mp3. */
       const extractAudio = Effect.fn("extractAudio")(function* (
         inputVideo: string,
-        range: { startTime: number; duration: number } | undefined
+        range: { startTime: number; duration: number } | undefined,
+        encoding: ReadonlyArray<string> = CLIP_AUDIO
       ) {
         const outputDir = path.join(tmpdir(), "whisper-audio");
         yield* effectFs.makeDirectory(outputDir, { recursive: true });
@@ -123,8 +136,7 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
             "-vn",
             "-c:a",
             "libmp3lame",
-            "-b:a",
-            "384k",
+            ...encoding,
             outputFile
           )
         ).pipe(
@@ -243,14 +255,31 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
 
       /**
        * Transcribe a whole raw FOOTAGE file (see GLOSSARY.md "Footage"): a file on
-       * disk that is not — and never becomes — a database row. The ffmpeg +
+       * disk that is not — and never becomes — a database row. The
        * silence-chunking orchestration lives in {@link transcribeFootage}; it
-       * reuses THIS service's {@link transcribeAudioFile} per chunk, so faking
-       * WhisperTranscriptionService still fakes all of footage transcription.
-       * Run by `cvm footage transcribe` only. No diarization, ever.
+       * reuses THIS service's {@link extractAudio} and {@link transcribeAudioFile}
+       * per chunk, so faking WhisperTranscriptionService still fakes all of
+       * footage transcription. Run by the `transcribe-footage` Job only. No
+       * diarization, ever.
        */
-      const transcribeFootageFile = (inputVideo: string) =>
-        transcribeFootage({ ffmpegCommands, transcribeAudioFile }, inputVideo);
+      const transcribeFootageFile = (
+        inputVideo: string,
+        options?: TranscribeFootageOptions
+      ) =>
+        SidecarContext.pipe(
+          Effect.zipRight(
+            transcribeFootage(
+              {
+                ffmpegCommands,
+                extractAudio: (video, range) =>
+                  extractAudio(video, range, FOOTAGE_AUDIO),
+                transcribeAudioFile,
+              },
+              inputVideo,
+              options
+            )
+          )
+        );
 
       return {
         transcribeClips,

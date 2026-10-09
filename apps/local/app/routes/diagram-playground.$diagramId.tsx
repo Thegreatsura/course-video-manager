@@ -7,7 +7,6 @@ import {
   diagramChannel,
   type ParentToChildMessage,
 } from "@/lib/diagram-protocol";
-import { RestoreSnapshotDialog } from "@/features/diagrams/restore-snapshot-dialog";
 import { usePreserveSnapshotShortcut } from "@/features/diagrams/preserve-snapshot-shortcut";
 import { useSnapshotStepShortcut } from "@/features/diagrams/use-snapshot-step-shortcut";
 import { useRecentreDiagramShortcut } from "@/features/diagrams/use-recentre-diagram-shortcut";
@@ -271,14 +270,14 @@ export default function DiagramPlaygroundActive({
     [flushPendingSave, openDiagramId, status]
   );
 
-  const handleNavigateHome = useCallback(async () => {
-    await flushPendingSave();
+  // Leaving waits on the navigation blocker for any edit not yet saved.
+  const handleNavigateHome = useCallback(() => {
     diagramChannel.sendToParent({
       type: "activeDiagramChanged",
       diagramId: null,
     });
     navigate("/diagram-playground");
-  }, [flushPendingSave, navigate]);
+  }, [navigate]);
 
   const { isFocusMode } = state;
   const timelineVisible = diagramId && !isFocusMode;
@@ -372,13 +371,6 @@ export default function DiagramPlaygroundActive({
             </div>
           </div>
         )}
-        <RestoreSnapshotDialog
-          pendingRestore={state.pendingRestore}
-          onDismiss={() => dispatch({ type: "restore-dismissed" })}
-          onConfirm={(snapshot) =>
-            dispatch({ type: "restore-confirmed", snapshot })
-          }
-        />
       </div>
     </PlaygroundStatusProvider>
   );

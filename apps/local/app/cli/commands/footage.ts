@@ -1,15 +1,26 @@
 import { Args, Command, Options } from "@effect/cli";
 import { FileSystem } from "@effect/platform";
-import { Config, ConfigProvider, Effect, Option } from "effect";
+import { NodeContext } from "@effect/platform-node";
+import {
+  Config,
+  ConfigProvider,
+  Effect,
+  Layer,
+  Logger,
+  LogLevel,
+  Option,
+} from "effect";
 import { homedir } from "node:os";
 import path from "node:path";
-import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
+import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
+import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import { DrizzleService } from "@/services/drizzle-service.server";
+import { nudgeSidecar } from "@/services/sidecar-socket.server";
 import {
-  computeFileContentHash,
   readFootageTranscript,
   sidecarPathFor,
-  writeFootageTranscript,
 } from "@/services/footage-cache";
+import { TRANSCRIBE_FOOTAGE_JOB_KIND } from "@/features/jobs/transcribe-footage-job";
 import {
   detail,
   emitNdjson,
@@ -17,8 +28,11 @@ import {
   notFound,
   parseError,
 } from "@/cli/helpers";
+import { CliOutput } from "@/cli/output";
 import { loadRepoEnv } from "@/services/repo-env";
 import { NEEDS_FOOTAGE_ON_DISK, requireLocalMachine } from "@/cli/local-only";
+import { enqueueJob, JOB_KIND_SPECS } from "../../../sidecar/job-specs";
+import { waitForFootageTranscription } from "./footage-transcribe-wait";
 import {
   HELP,
   LIST_HELP,
@@ -105,66 +119,97 @@ const listCmd = Command.make("list", { dir: dirOption }, ({ dir }) =>
 // ---------------------------------------------------------------------------
 
 /**
- * The heavy service graph `footage transcribe` runs its Whisper/ffmpeg work
- * inside, built LOCALLY here rather than merged into the shared cliRuntime —
- * exactly like `course publish` (see course-publish.ts): WhisperTranscriptionService
- * reads OPENAI_API_KEY at BUILD time, and no read command should have to satisfy
- * that key. It is only reached on the branch below where the service was not
- * already provided — which is what lets a test inject a fake WhisperTranscriptionService
- * and never touch real ffmpeg or OpenAI.
+ * What `footage transcribe` runs inside: enough to write the Job row and follow
+ * it. The work itself — ffmpeg and Whisper — is the Sidecar's
+ * (`sidecar/kinds/transcribe-footage.ts`), so neither it nor OPENAI_API_KEY is
+ * built here. Only reached when no JobOperationsService is provided already,
+ * which is what lets a test hand it one on its own database.
  */
-const footageProcessingLayer = WhisperTranscriptionService.Default;
+const footageJobLayer = Layer.mergeAll(
+  JobOperationsService.Default,
+  NodeContext.layer
+).pipe(
+  Layer.provideMerge(
+    DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbeLive))
+  )
+);
+
+const noWaitOption = Options.boolean("no-wait").pipe(
+  Options.withDescription(
+    "enqueue the transcription Job and print its id, without waiting for it"
+  )
+);
 
 const transcribeCmd = Command.make(
   "transcribe",
-  { path: pathArg },
-  ({ path: sourcePath }) =>
+  { path: pathArg, noWait: noWaitOption },
+  ({ path: givenPath, noWait }) =>
     Effect.gen(function* () {
       yield* requireLocalFootage;
       const fs = yield* FileSystem.FileSystem;
 
-      if (!(yield* fs.exists(sourcePath))) {
+      if (!(yield* fs.exists(givenPath))) {
         return yield* parseError(
-          `no such footage file: ${sourcePath}`,
+          `no such footage file: ${givenPath}`,
           "footage"
         );
       }
+      // The Sidecar runs in its own directory: it is handed the absolute path.
+      const sourcePath = path.resolve(givenPath);
 
-      // Use an ambiently-provided WhisperTranscriptionService if there is one (a test
-      // fake); otherwise build the real one here. loadRepoEnv MUST run OUTSIDE
-      // the provided effect: Effect.provide builds footageProcessingLayer before
-      // the inner effect starts, and the layer reads OPENAI_API_KEY at build time.
-      const provided = yield* Effect.serviceOption(WhisperTranscriptionService);
-      const transcript = yield* Option.match(provided, {
-        onSome: (svc) => svc.transcribeFootageFile(sourcePath),
+      const run = Effect.gen(function* () {
+        // The one way in: a `transcribe-footage` Job, which joins a live one
+        // for the same file rather than paying Whisper twice.
+        const job = yield* enqueueJob({
+          id: null,
+          kind: TRANSCRIBE_FOOTAGE_JOB_KIND,
+          title: `Transcribe ${path.basename(sourcePath)}`,
+          params: { path: sourcePath },
+          dependsOn: null,
+          subject: { type: "footage", id: sourcePath },
+          attemptsSpent: 0,
+          registry: JOB_KIND_SPECS,
+        });
+        // Best effort, and silent: a sidecar that is down finds the Job when
+        // it starts, and the CLI's STDERR is its error contract.
+        yield* nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None));
+
+        if (noWait) {
+          return yield* emitObject({
+            jobId: job.id,
+            status: "queued",
+            path: sourcePath,
+            sidecar: sidecarPathFor(sourcePath),
+            log: `.data/logs/jobs/${job.id}.jsonl`,
+          });
+        }
+
+        const out = yield* CliOutput;
+        const summary = yield* waitForFootageTranscription({
+          jobId: job.id,
+          path: sourcePath,
+          pollMs: 1_000,
+          onWaiting: (line) => out.stderr(JSON.stringify(line) + "\n"),
+        });
+        yield* emitObject({ ...summary });
+      });
+
+      // A JobOperationsService already provided (a test's) is used as is;
+      // otherwise loadRepoEnv runs BEFORE footageJobLayer is built, because
+      // DrizzleService reads DATABASE_URL from process.env.
+      const provided = yield* Effect.serviceOption(JobOperationsService);
+      return yield* Option.match(provided, {
+        onSome: (ops) =>
+          run.pipe(Effect.provideService(JobOperationsService, ops)),
         onNone: () =>
           Effect.sync(() => loadRepoEnv()).pipe(
             Effect.zipRight(
-              Effect.gen(function* () {
-                const svc = yield* WhisperTranscriptionService;
-                return yield* svc.transcribeFootageFile(sourcePath);
-              }).pipe(
-                Effect.provide(footageProcessingLayer),
+              run.pipe(
+                Effect.provide(footageJobLayer),
                 Effect.withConfigProvider(ConfigProvider.fromEnv())
               )
             )
           ),
-      });
-
-      const sourceHash = yield* computeFileContentHash(sourcePath);
-      const sidecar = yield* writeFootageTranscript({
-        sourcePath,
-        sourceHash,
-        transcript,
-      });
-
-      yield* emitObject({
-        path: sidecar.sourcePath,
-        sidecar: sidecarPathFor(sourcePath),
-        sourceHash: sidecar.sourceHash,
-        transcribedAt: sidecar.transcribedAt,
-        words: sidecar.words.length,
-        segments: sidecar.segments.length,
       });
     })
 ).pipe(Command.withDescription(detail(TRANSCRIBE_HELP)));

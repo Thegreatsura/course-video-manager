@@ -153,6 +153,49 @@ export const CLIP_TRANSCRIPTION_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Footage transcription** (#16) was never an Upload Manager job either:
+ * `cvm footage transcribe` ran it in-process, and a failure was final — no
+ * retry. So: 1 attempt, in the `default` lane like a Clip transcription; the
+ * two share the Sidecar's one `WhisperTranscriptionService` and so its 20
+ * Whisper permits (the limit stays in the service, as section 6 decided). Not
+ * `neverRequeued`: a stop puts it back, and it resumes from its chunk cache.
+ */
+export const FOOTAGE_TRANSCRIPTION_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
+ * **Image upload** to Cloudinary was never an Upload Manager job either: the
+ * Article Writer's Apply and the Skills Changelog's "Upload Images" awaited
+ * one `POST /api/videos/<id>/upload-images`, and a failure was final — no
+ * retry. So: 1 attempt, both for the upload and for removing the local files
+ * afterwards. Not `neverRequeued`: both are safe to run again (an image
+ * already recorded is not uploaded twice, and a file already gone is the goal
+ * reached), so a deliberate stop puts them back (section 7.5's rule).
+ */
+export const IMAGE_UPLOAD_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
+ * **Course duplicate** was never an Upload Manager job: the modal awaited one
+ * `POST /api/courses/<id>/duplicate`, and a failure was final. It gets 2
+ * attempts, not the browser's 1 (the chief of staff's call, batch 10), so a run
+ * the Sidecar loses mid-copy is resumed rather than leaving the copy without
+ * its frames, WAVs and Thumbnails. Both halves are safe to run again: the row
+ * copy is one transaction, recorded as a Job Event, and skipped once recorded;
+ * a file already in place at its size is skipped
+ * (`services/course-duplicate-files.ts`). Not `neverRequeued`: a stop puts it
+ * back too.
+ */
+export const COURSE_DUPLICATE_POLICY = {
+  lane: "default",
+  maxAttempts: 2,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */

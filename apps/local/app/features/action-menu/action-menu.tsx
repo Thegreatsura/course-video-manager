@@ -34,7 +34,6 @@ import { CheckIcon } from "lucide-react";
 import { Fragment } from "react";
 import {
   layoutActionMenu,
-  type ActionLeaf,
   type ActionMenuGroups,
   type LaidOutLeaf,
   type LaidOutPicker,
@@ -97,15 +96,7 @@ export function EntityMenuContent({
   entity,
   ...props
 }: MenuContentProps & { entity: EntityRef | null }) {
-  const findPlace = useFindLessonPlace();
-  return (
-    <MenuContent
-      {...props}
-      appendToCopy={copyEntityLinkActions(
-        entity && withLessonPlace(entity, findPlace)
-      )}
-    />
-  );
+  return <MenuContent {...props} copyLink={{ entity }} />;
 }
 
 /**
@@ -114,8 +105,11 @@ export function EntityMenuContent({
  * is listed in action-menus.test.ts's NOT_ENTITY_MENUS with the reason.
  */
 export function ActionMenuContent(props: MenuContentProps) {
-  return <MenuContent {...props} appendToCopy={[]} />;
+  return <MenuContent {...props} copyLink={null} />;
 }
+
+/** Copy Link's entity, or `null` for a menu with no Copy Link. */
+type CopyLink = { entity: EntityRef | null } | null;
 
 function MenuContent({
   menu,
@@ -123,47 +117,70 @@ function MenuContent({
   align,
   className,
   onCloseAutoFocus,
-  appendToCopy,
-}: MenuContentProps & { appendToCopy: readonly ActionLeaf[] }) {
+  copyLink,
+}: MenuContentProps & { copyLink: CopyLink }) {
   const P = PARTS[menu];
-  const laidOut = layoutActionMenu(groups, appendToCopy);
   const contentProps =
     menu === "dropdown"
       ? { align, className, onCloseAutoFocus }
       : { className, onCloseAutoFocus };
 
+  // The items are their own component so they are laid out only while the
+  // menu is open: Radix mounts a closed menu's content not at all. A page
+  // carries one closed menu per row, and re-renders every row together.
   return (
     <P.Content {...contentProps}>
-      {laidOut.map(({ group, items }, i) => (
-        <Fragment key={group}>
-          {i > 0 && <P.Separator />}
-          <P.Group>
-            {items.map((item) =>
-              item.kind === "picker" ? (
-                <Picker key={item.key} picker={item} menu={menu} />
-              ) : item.kind === "submenu" ? (
-                <P.Sub key={item.key}>
-                  <P.SubTrigger
-                    data-variant={item.destructive ? "destructive" : "default"}
-                  >
-                    <item.icon />
-                    {item.label}
-                  </P.SubTrigger>
-                  <P.SubContent>
-                    {item.items.map((leaf) => (
-                      <Leaf key={leaf.key} leaf={leaf} menu={menu} />
-                    ))}
-                  </P.SubContent>
-                </P.Sub>
-              ) : (
-                <Leaf key={item.key} leaf={item} menu={menu} />
-              )
-            )}
-          </P.Group>
-        </Fragment>
-      ))}
+      <MenuItems menu={menu} groups={groups} copyLink={copyLink} />
     </P.Content>
   );
+}
+
+function MenuItems({
+  menu,
+  groups,
+  copyLink,
+}: {
+  menu: MenuDoor;
+  groups: ActionMenuGroups;
+  copyLink: CopyLink;
+}) {
+  const P = PARTS[menu];
+  const findPlace = useFindLessonPlace();
+  const appendToCopy = copyLink
+    ? copyEntityLinkActions(
+        copyLink.entity && withLessonPlace(copyLink.entity, findPlace)
+      )
+    : [];
+  const laidOut = layoutActionMenu(groups, appendToCopy);
+
+  return laidOut.map(({ group, items }, i) => (
+    <Fragment key={group}>
+      {i > 0 && <P.Separator />}
+      <P.Group>
+        {items.map((item) =>
+          item.kind === "picker" ? (
+            <Picker key={item.key} picker={item} menu={menu} />
+          ) : item.kind === "submenu" ? (
+            <P.Sub key={item.key}>
+              <P.SubTrigger
+                data-variant={item.destructive ? "destructive" : "default"}
+              >
+                <item.icon />
+                {item.label}
+              </P.SubTrigger>
+              <P.SubContent>
+                {item.items.map((leaf) => (
+                  <Leaf key={leaf.key} leaf={leaf} menu={menu} />
+                ))}
+              </P.SubContent>
+            </P.Sub>
+          ) : (
+            <Leaf key={item.key} leaf={item} menu={menu} />
+          )
+        )}
+      </P.Group>
+    </Fragment>
+  ));
 }
 
 function Leaf({ leaf, menu }: { leaf: LaidOutLeaf; menu: MenuDoor }) {

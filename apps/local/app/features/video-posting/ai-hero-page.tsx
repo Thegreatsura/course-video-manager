@@ -287,7 +287,7 @@ export function AiHeroPage({
               videoId={videoId}
               fieldId="ai-hero-body"
               value={body}
-              onApply={setBody}
+              onApply={async (value) => setBody(value)}
               context={writerContext}
               placeholder="Click to open writer..."
             />

@@ -174,7 +174,12 @@ export const toJobsAction = (
         : null;
     case "video-succeeded":
       return typeof data.videoId === "string"
-        ? { ...base, type: "batch-video-succeeded", videoId: data.videoId }
+        ? {
+            ...base,
+            type: "batch-video-succeeded",
+            videoId: data.videoId,
+            kept: keptOf(data.kept),
+          }
         : null;
     case "video-failed":
       return typeof data.videoId === "string"
@@ -220,3 +225,13 @@ export const toJobsAction = (
       return null;
   }
 };
+
+/** A Course Autofill's offered text for the fields the author kept. */
+const keptOf = (value: unknown): jobsReducer.AutofillKeptView[] =>
+  Array.isArray(value)
+    ? value.flatMap((entry) =>
+        typeof entry?.field === "string" && typeof entry?.proposal === "string"
+          ? [{ field: entry.field, proposal: entry.proposal }]
+          : []
+      )
+    : [];

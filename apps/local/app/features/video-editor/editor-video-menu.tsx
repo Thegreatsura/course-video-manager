@@ -1,5 +1,5 @@
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import type { VideoMenuActions } from "@/features/video-menu/video-menu";
 import {
   createContext,
@@ -85,8 +85,7 @@ export function useEditorVideoActions(): {
     VideoEditorContext,
     (ctx) => ctx.modalDispatch
   );
-  const { startExportUpload, startRenderVerticalUpload } =
-    useContext(UploadContext);
+  const { startExportUpload, startRenderVerticalUpload } = useUploadActions();
   const retranscribeAllClips = useRetranscribeAllClips();
   const revealVideoFetcher = useFetcher();
 

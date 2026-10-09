@@ -263,10 +263,12 @@ export const emitGet = <A, E, R, R2 = never>(params: {
   ) => Effect.Effect<StaleIdExplanation | undefined, never, R2>;
 }): Effect.Effect<void, E | NotFoundError, R | R2 | CliOutput> =>
   Effect.gen(function* () {
-    const { entity, ids, fetch, includeMemory, explainMissing } = params;
+    const { entity, ids, includeMemory, explainMissing } = params;
     const rows = yield* Effect.all(
       ids.map((id) =>
-        fetch(id).pipe(Effect.map((row) => ({ id, row: row ?? undefined })))
+        params
+          .fetch(id)
+          .pipe(Effect.map((row) => ({ id, row: row ?? undefined })))
       ),
       { concurrency: "unbounded" }
     );

@@ -20,6 +20,10 @@ import {
 import type { Route } from "./+types/root";
 import { Toaster } from "@/components/ui/sonner";
 import { toastsAllowed } from "@/lib/route-toasts";
+import {
+  captureEarlyClicksScript,
+  replayEarlyClicks,
+} from "@/lib/early-clicks";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,7 +39,11 @@ import { UploadProvider } from "@/features/upload-manager/upload-context";
 import { GlobalUploadProgress } from "@/features/upload-manager/global-upload-progress";
 import { FeedbackModal } from "@/components/feedback-modal";
 import { Loader2, MessageSquarePlus } from "lucide-react";
+import { slowRequestMiddleware } from "@/services/slow-request-log.server";
 import "./app.css";
+
+// Every request, page or resource route, is timed here, once.
+export const middleware: Route.MiddlewareFunction[] = [slowRequestMiddleware];
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -57,11 +65,23 @@ export const links: Route.LinksFunction = () => [
 export function Layout({ children }: { children: React.ReactNode }) {
   // A route opts out of toasts with `handle = NO_TOASTS` (see route-toasts).
   const showToasts = toastsAllowed(useMatches());
+  // Hydration has committed, so every handler is attached: hand the clicks
+  // that landed on the server-rendered page to them (lib/early-clicks.ts).
+  // Layout, not App, so an error page gets its clicks back too.
+  useEffect(replayEarlyClicks, []);
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* Buffers clicks that land before React hydrates; the effect above
+            replays them (lib/early-clicks.ts). The client's copy of the
+            source can differ from the server's (dev transforms), and only the
+            server's runs. */}
+        <script
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: captureEarlyClicksScript }}
+        />
         <Meta />
         <Links />
       </head>

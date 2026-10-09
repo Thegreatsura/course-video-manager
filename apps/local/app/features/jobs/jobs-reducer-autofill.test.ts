@@ -102,6 +102,29 @@ describe("a Course Autofill Job", () => {
     expect(tester.getEffects()).toEqual([]);
   });
 
+  it("offers the text of a field the author changed mid-run on that Video's row", () => {
+    const tester = newTester()
+      .send(announced())
+      .send(
+        autofill("video-succeeded", {
+          videoId: "video-a",
+          fields: [],
+          kept: [{ field: "description", proposal: "The Autofill's take" }],
+        })
+      );
+    const row = visibleJobRows(tester.getState()).find(
+      (r) => r.uploadId === `${JOB_ID}/video-a`
+    );
+    expect(row?.uploadType === "autofill" && row.kept).toEqual([
+      { field: "description", proposal: "The Autofill's take" },
+    ]);
+    expect(tester.getEffects()).toEqual([]);
+
+    // The offer waits for the author: idling never hides it.
+    tester.send(autofill("succeeded")).send({ type: "idle-timeout-elapsed" });
+    expect(visibleJobRows(tester.getState())).toHaveLength(3);
+  });
+
   it("toasts a Video that failed by name, with the run's log, and carries on", () => {
     const tester = newTester()
       .send(announced())

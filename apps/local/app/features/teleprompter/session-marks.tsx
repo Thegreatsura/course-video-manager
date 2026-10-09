@@ -20,6 +20,11 @@
  * indicator above it, so the two read as one instrument rather than two things
  * that happen to be near each other.
  *
+ * One more colour, over both axes: light blue for the Clip the Video Editor is
+ * playing right now. Clicking a landed dot plays its Clip in the editor, or
+ * pauses it if it is the one playing, so a take can be checked from the glass.
+ * Every other dot has no Clip on the timeline to play, so it is not clickable.
+ *
  * Colours are the editor's own vocabulary from `recording-session-panel.tsx`
  * (amber = orphaned, red = archived): you should not have to learn a second
  * vocabulary while filming.
@@ -34,7 +39,7 @@ import type { ClipMarks, ClipMarkState } from "@/lib/teleprompter-protocol";
 import { TYPE } from "./teleprompter-settings";
 
 /** Under the capture dot: top-4 (1rem) + size-14 (3.5rem) + a gap. */
-const ANCHOR = "pointer-events-none absolute left-4 top-20 z-40 select-none";
+const ANCHOR = "absolute left-4 top-20 z-40 select-none";
 
 const PER_ROW = 3;
 /**
@@ -47,6 +52,8 @@ export const MAX_MARKS = PER_ROW * 12;
 const OK = "#fff";
 const ORPHANED = "var(--color-amber-400)";
 const DELETED = "var(--color-red-500)";
+/** Being played in the Video Editor right now. */
+const PLAYING = "var(--color-sky-300)";
 
 const MARK: Record<ClipMarkState, { colour: string; filled: boolean }> = {
   // Heard, not yet confirmed. Appears the moment the capture indicator turns
@@ -76,16 +83,20 @@ const MARK: Record<ClipMarkState, { colour: string; filled: boolean }> = {
  * If even the unlanded marks overflow, something has gone badly wrong and the
  * newest win; the count carries the rest.
  */
-export function fitMarks(marks: ClipMarks): {
-  shown: ClipMarks;
+export function fitMarks<T extends ClipMarkState | { state: ClipMarkState }>(
+  marks: T[]
+): {
+  shown: T[];
   folded: number;
 } {
   if (marks.length <= MAX_MARKS) return { shown: marks, folded: 0 };
 
-  const isLanded = (state: ClipMarkState) =>
-    state === "landed" || state === "deleted-landed";
+  const isLanded = (mark: T) => {
+    const state = typeof mark === "string" ? mark : mark.state;
+    return state === "landed" || state === "deleted-landed";
+  };
 
-  const kept: ClipMarks = [];
+  const kept: T[] = [];
   let budget = MAX_MARKS;
 
   // Newest first, so the oldest landed marks are the ones that fall off.
@@ -109,12 +120,24 @@ export function fitMarks(marks: ClipMarks): {
   return { shown: kept, folded: marks.length - kept.length };
 }
 
-export function SessionMarks(props: { marks: ClipMarks }) {
+export function SessionMarks(props: {
+  marks: ClipMarks;
+  /** The Clip each mark stands for, same order as `marks`. */
+  clipIds?: string[];
+  /** The Clip the editor is playing, drawn light blue. */
+  playingClipId?: string | null;
+  onMarkClicked?: (clipId: string) => void;
+}) {
   // No session, nothing on the glass. The empty state is the point, so it isn't
   // drawn as an empty container.
   if (props.marks.length === 0) return null;
 
-  const { shown, folded } = fitMarks(props.marks);
+  const { shown, folded } = fitMarks(
+    props.marks.map((state, i) => ({
+      state,
+      clipId: props.clipIds?.[i] ?? null,
+    }))
+  );
 
   return (
     <div className={ANCHOR} data-testid="session-marks">
@@ -128,13 +151,31 @@ export function SessionMarks(props: { marks: ClipMarks }) {
         className="grid w-14 gap-1.5"
         style={{ gridTemplateColumns: `repeat(${PER_ROW}, 1fr)` }}
       >
-        {shown.map((state, i) => {
-          const mark = MARK[state];
+        {shown.map(({ state, clipId }, i) => {
+          const playing = clipId !== null && clipId === props.playingClipId;
+          const mark = playing
+            ? { colour: PLAYING, filled: true }
+            : MARK[state];
+          // Only a landed Clip is on the timeline to play: a pending one has
+          // no database Clip yet, an orphaned one never will, and a deleted
+          // one is archived. Those dots are not offered as buttons at all.
+          const onClick =
+            clipId !== null && state === "landed" && props.onMarkClicked
+              ? () => props.onMarkClicked!(clipId)
+              : undefined;
           return (
             <div
               key={i}
               data-mark={state}
-              className="aspect-square w-full rounded-full"
+              data-playing={playing || undefined}
+              role={onClick ? "button" : undefined}
+              aria-label={
+                onClick ? (playing ? "Pause clip" : "Play clip") : undefined
+              }
+              onClick={onClick}
+              className={`aspect-square w-full rounded-full ${
+                onClick ? "cursor-pointer" : ""
+              }`}
               style={{
                 // A hollow dot is a ring rather than a dimmed circle: through
                 // beam-splitter glass "dim" and "solid" are hard to tell apart

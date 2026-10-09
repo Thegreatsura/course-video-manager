@@ -36,8 +36,11 @@ interface WritableFieldPropsBase {
   value: string;
   /** Persist an inline edit made directly in the field's Monaco editor. */
   onChange?: (newValue: string) => void;
-  /** Persist the value applied from the fullscreen writer modal. */
-  onApply: (newValue: string) => void;
+  /**
+   * Persist the value applied from the fullscreen writer modal. Resolve only
+   * once the save is confirmed; reject if it failed.
+   */
+  onApply: (newValue: string) => Promise<void>;
   context: WriterContext;
   modes?: Mode[];
   label?: string;

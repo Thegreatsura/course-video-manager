@@ -35,6 +35,12 @@ export type HeadSaveResult =
   | { outcome: "refused" }
   | { outcome: "failed" };
 
+/**
+ * What a flush left behind: the canvas's edits stored (or nothing to store),
+ * refused over a head changed elsewhere, or not saved this time.
+ */
+export type FlushOutcome = HeadSaveResult["outcome"];
+
 export function createHeadAutosaver(opts: {
   store: TLStore;
   /**
@@ -69,12 +75,12 @@ export function createHeadAutosaver(opts: {
     timer = null;
   };
 
-  const saveOnce = async (overwrite: boolean) => {
-    if (!head) return;
-    if (head.refused && !overwrite) return;
+  const saveOnce = async (overwrite: boolean): Promise<FlushOutcome> => {
+    if (!head) return "saved";
+    if (head.refused && !overwrite) return "refused";
     const document = store.getStoreSnapshot("document");
     const serialized = JSON.stringify(document);
-    if (serialized === head.serialized) return;
+    if (serialized === head.serialized) return "saved";
     const target = head;
     const result = await opts.save(
       target.diagramId,
@@ -88,10 +94,12 @@ export function createHeadAutosaver(opts: {
     } else if (result.outcome === "refused") {
       target.refused = true;
     }
+    return result.outcome;
   };
 
   /**
-   * Save now if the canvas has changed; resolves once the save has landed.
+   * Save now if the canvas has changed; resolves once the save has landed,
+   * with whether the canvas's edits are now stored.
    * `overwrite` saves over whatever head is stored, even one it hasn't seen.
    */
   const flush = (flushOpts: { overwrite?: boolean } = {}) => {

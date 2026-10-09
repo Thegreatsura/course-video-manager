@@ -21,6 +21,22 @@
 //    half of this guard, `apps/local/.dependency-cruiser.spawn.cjs`, which also
 //    holds `child_process` to its interactive entry points), and the app
 //    server's interactive calls a person waits on for a moment.
+// 4. `network` — an outbound call: every use of the global `fetch` (called,
+//    aliased, destructured or read off `globalThis`; only `fetch("/…")`, the
+//    app calling itself, is exempt), the AI SDK's `generateText`,
+//    `streamText`, `generateObject`, `streamObject` and `ToolLoopAgent`
+//    (named or through a namespace), a provider model's `doGenerate` and
+//    `doStream`, the OpenAI and Anthropic clients, Effect's `HttpClient`, and the Cloudinary SDK's
+//    `uploader` and `api`. A use is counted by value, not by call, so passing
+//    one on does not hide it, and a file may not bind a `fetch` of its own.
+//    In scope: all of apps/local but the Sidecar and the dev scripts (`.tsx`
+//    included: a route's loader runs on the server), the workspace packages
+//    and apps/remote. Each file that may is listed with why: quick, the author
+//    watches, a live Recording Session, or the posting path. A slow call the
+//    author walks away from is a Job. The import half is
+//    `apps/local/.dependency-cruiser.network.cjs`: only the files on this list
+//    (and a few named entry points that call nothing) import a client package,
+//    and `app/` cannot reach the unscanned Sidecar or scripts.
 //
 // Each file is parsed with oxc-parser, so a comment or a string cannot fool
 // it. Test code is out of scope. Hits are matched against
@@ -36,12 +52,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseSync, type Node } from "oxc-parser";
+import { findNetworkUses, isNode } from "./check-background-jobs-network.ts";
 
-export type Guard = "sse-route" | "browser-driver" | "spawn";
+export type Guard = "sse-route" | "browser-driver" | "spawn" | "network";
 export const GUARDS: readonly Guard[] = [
   "sse-route",
   "browser-driver",
   "spawn",
+  "network",
 ];
 
 export interface Hit {
@@ -76,19 +94,30 @@ const inBrowserScope = (file: string) =>
 const inSpawnScope = (file: string) =>
   file.startsWith("apps/local/app/") || file.startsWith("packages/");
 
+// Everything the app server, the CLI or the browser can load, `.tsx` too: a
+// `.tsx` route's loader runs on the server, and a module in `features/` is one
+// import away from a service. Out: the Sidecar, where slow calls belong, and
+// the dev scripts. `apps/local/.dependency-cruiser.network.cjs` stops `app/`
+// importing either, so neither can hold a wrapper for it.
+const inNetworkScope = (file: string) =>
+  (file.startsWith("apps/local/") &&
+    !file.startsWith("apps/local/sidecar/") &&
+    !file.startsWith("apps/local/scripts/") &&
+    file !== "apps/local/playground.ts") ||
+  file.startsWith("packages/") ||
+  file.startsWith("apps/remote/");
+
 export const isInScope = (file: string): boolean =>
   /\.(ts|tsx)$/.test(file) &&
   !file.endsWith(".d.ts") &&
   !isTestFile(file) &&
-  (inRoutes(file) || inBrowserScope(file) || inSpawnScope(file));
+  (inRoutes(file) ||
+    inBrowserScope(file) ||
+    inSpawnScope(file) ||
+    inNetworkScope(file));
 
 // ---------------------------------------------------------------------------
 // AST helpers
-
-const isNode = (value: unknown): value is Node =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as { type?: unknown }).type === "string";
 
 function walk(node: unknown, visit: (node: Node) => void): void {
   if (Array.isArray(node)) {
@@ -140,7 +169,7 @@ const isEventStreamLiteral = (node: Node): boolean =>
 export function scan(file: string, source: string): Hit[] {
   if (!isInScope(file)) return [];
   if (
-    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted|Command/.test(
+    !/createSSEResponse|text\/event-stream|consumeSSEStream|EventSource|unmounted|Command|fetch|\bai\b|openai|anthropic-ai|cloudinary|doGenerate|doStream|HttpClient/.test(
       source
     )
   ) {
@@ -226,6 +255,9 @@ export function scan(file: string, source: string): Hit[] {
       if (isUnmountedLoop(node)) hit("browser-driver", node);
     }
   });
+  if (inNetworkScope(file)) {
+    for (const node of findNetworkUses(program)) hit("network", node);
+  }
 
   return hits;
 }
@@ -236,6 +268,7 @@ export function scan(file: string, source: string): Hit[] {
 const ADVICE: Record<Guard, string> = {
   "sse-route": `A job the author walks away from is a Job: add a kind under apps/local/sidecar/kinds/ and enqueue it, rather than stream it from a request. See ${DOC}.`,
   "browser-driver": `A browser tab must not keep background work alive: enqueue a Job and follow its Job Events. See ${DOC}.`,
+  network: `A slow network or AI call the author walks away from is a Job: enqueue one. A quick call, one the author watches, a live Recording Session's or the posting path's goes on the allowlist with why. See ${DOC}.`,
   spawn: `Starting a process is the Sidecar's job, or one of the app server's named interactive entry points: enqueue a Job, or (if a person waits on it for a moment) add the file to the allowlist with why. See ${DOC}.`,
 };
 

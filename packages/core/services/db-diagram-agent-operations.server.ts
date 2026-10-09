@@ -1,11 +1,15 @@
 import type { Database } from "./drizzle-service.server.js";
 import { diagrams, diagramSnapshots } from "../db/schema.js";
-import type { NotFoundError } from "./db-service-errors.js";
-import { UnknownDBServiceError } from "./db-service-errors.js";
+import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { hashScene } from "../lib/scene-hash.js";
+import { hashHead, hashScene } from "../lib/scene-hash.js";
+import {
+  isHeadCaptured,
+  isVisibleInTimeline,
+} from "../lib/timeline-visibility.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
+import { lockDiagram } from "./lock-diagram.server.js";
 
 type Diagram = typeof diagrams.$inferSelect;
 type DiagramSnapshot = typeof diagramSnapshots.$inferSelect;
@@ -17,7 +21,6 @@ type DbError = UnknownDBServiceError;
  */
 export interface DiagramPrimitives {
   createDiagram: (opts?: { name?: string }) => Effect.Effect<Diagram, DbError>;
-  getDiagram: (id: string) => Effect.Effect<Diagram, NotFoundError | DbError>;
   storeSnapshot: (
     diagramId: string,
     scene: unknown,
@@ -42,7 +45,7 @@ const hasShapes = (scene: unknown): boolean => {
 };
 
 /**
- * What `cvm diagram` writes. DiagramSnapshots are immutable: an agent never
+ * What `cvm diagram` and the Playground's restore write. DiagramSnapshots are immutable: an agent never
  * writes a Diagram's head, it ADDS Preserved Snapshots and moves the head to
  * one with `restoreSnapshotToHead` — a Restore to Head.
  *
@@ -67,7 +70,16 @@ export const agentDiagramOperations = (
       writesIn(tx, primitivesFor(tx)).addSnapshotToHead(diagramId, scene)
     );
 
-  return { createDiagramFromSnapshots, addSnapshotToHead };
+  const restoreToHead = (
+    diagramId: string,
+    snapshotId: string,
+    opts: { expectedHeadHash: string | null | undefined }
+  ) =>
+    withDbTransaction(db, (tx) =>
+      writesIn(tx, primitivesFor(tx)).restoreToHead(diagramId, snapshotId, opts)
+    );
+
+  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
 };
 
 /** The agent writes, every statement on `db` — the transaction above. */
@@ -75,7 +87,6 @@ const writesIn = (
   db: Database,
   {
     createDiagram,
-    getDiagram,
     storeSnapshot,
     setSnapshotArchived,
     restoreSnapshotToHead,
@@ -130,35 +141,49 @@ const writesIn = (
       : snapshot;
   });
 
+  /** The snapshots the Diagram's timeline shows — what the Playground lists. */
+  const timelineSnapshots = Effect.fn("timelineSnapshots")(function* (
+    diagramId: string
+  ) {
+    const rows = yield* Effect.tryPromise({
+      try: () =>
+        db.query.diagramSnapshots.findMany({
+          where: and(
+            eq(diagramSnapshots.diagramId, diagramId),
+            eq(diagramSnapshots.archived, false)
+          ),
+          columns: { contentHash: true, preserved: true },
+          with: { clips: { columns: { archived: true } } },
+        }),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+    return rows.filter((s) => isVisibleInTimeline(s, s.clips));
+  });
+
   /**
    * Add `scene` to a Diagram as a Preserved Snapshot and make it the head, by
    * the Restore to Head rules: when no snapshot in the timeline holds the
    * current head (Matt drew on it by hand since), that drawing is preserved
-   * FIRST, so nothing is lost. A head with no shapes on it holds nothing worth
-   * keeping. `cvm diagram snapshot add` is the caller.
+   * FIRST, so nothing is lost. "Held" is the Playground's own rule
+   * (`isHeadCaptured`): a snapshot the timeline hides holds nothing. A head
+   * with no shapes on it holds nothing worth keeping. `cvm diagram snapshot
+   * add` is the caller.
    */
   const addSnapshotToHead = Effect.fn("addSnapshotToHead")(function* (
     diagramId: string,
     scene: unknown
   ) {
-    const current = yield* getDiagram(diagramId);
+    const current = yield* lockDiagram(db, diagramId, "addSnapshotToHead");
 
     let preservedHead: DiagramSnapshot | null = null;
-    if (hasShapes(current.headScene)) {
-      const held = yield* Effect.tryPromise({
-        try: () =>
-          db.query.diagramSnapshots.findFirst({
-            where: and(
-              eq(diagramSnapshots.diagramId, diagramId),
-              eq(diagramSnapshots.contentHash, hashScene(current.headScene)),
-              eq(diagramSnapshots.archived, false)
-            ),
-          }),
-        catch: (e) => new UnknownDBServiceError({ cause: e }),
-      });
-      if (!held) {
-        preservedHead = yield* keepInTimeline(diagramId, current.headScene);
-      }
+    if (
+      hasShapes(current.headScene) &&
+      !isHeadCaptured(
+        yield* timelineSnapshots(diagramId),
+        hashScene(current.headScene)
+      )
+    ) {
+      preservedHead = yield* keepInTimeline(diagramId, current.headScene);
     }
 
     const snapshot = yield* keepInTimeline(diagramId, scene);
@@ -166,5 +191,30 @@ const writesIn = (
     return { diagram, snapshot, preservedHead };
   });
 
-  return { createDiagramFromSnapshots, addSnapshotToHead };
+  /**
+   * The Playground's Restore to Head. `expectedHeadHash` is the head the tab
+   * last saw (`hashHead`; `null` for an empty one): the tab has already kept
+   * that one if the timeline lacked it. A head it never saw — moved by
+   * another tab or the CLI since — is preserved here first, under the row
+   * lock, unless the timeline already holds it. So a restore never destroys a
+   * head the client hasn't seen.
+   */
+  const restoreToHead = Effect.fn("restoreToHead")(function* (
+    diagramId: string,
+    snapshotId: string,
+    opts: { expectedHeadHash: string | null | undefined }
+  ) {
+    const current = yield* lockDiagram(db, diagramId, "restoreToHead");
+    const currentHash = hashHead(current.headScene);
+    if (
+      currentHash !== opts.expectedHeadHash &&
+      hasShapes(current.headScene) &&
+      !isHeadCaptured(yield* timelineSnapshots(diagramId), currentHash)
+    ) {
+      yield* keepInTimeline(diagramId, current.headScene);
+    }
+    return yield* restoreSnapshotToHead(diagramId, snapshotId);
+  });
+
+  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
 };

@@ -15,7 +15,7 @@
     {
       "file": "apps/local/app/features/video-editor/edit-effect-handlers.ts",
       "count": 1,
-      "reason": "OBS clip ingestion (#13), tied to a live Recording Session: not in this migration (the plan's question 6)."
+      "reason": "OBS clip ingestion (#13), tied to a live Recording Session: not in this migration (the plan's question 6, Matt's decision 4). Stays."
     },
     {
       "file": "apps/local/app/features/video-editor/obs-connector.tsx",
@@ -47,22 +47,124 @@
     {
       "file": "apps/local/app/services/ffmpeg-commands.ts",
       "count": 4,
-      "reason": "Interactive, on the app server: ffprobe for a duration or frame rate, silence detection, and one frame for a screenshot. A person waits on each for a moment; none is background work. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
+      "reason": "Shared by the app server and the Sidecar. On the app server: silence detection and an ffprobe frame rate for OBS clip ingestion (append-from-obs), which runs during the live Recording Session, not as background work; the frame rate for Export to DaVinci Resolve; and one frame for the Article Writer's screenshot. In the Sidecar the same calls serve exports, the vertical Short and Footage transcription. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
     },
     {
       "file": "apps/local/app/services/video-processing-service.ts",
       "count": 3,
-      "reason": "Interactive, on the app server: the first/last frame of a recording and the DaVinci Resolve script. A person waits on each for a moment. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
+      "reason": "Interactive, on the app server: a Clip's first or last frame for a thumbnail, and the DaVinci Resolve script behind Export to DaVinci Resolve. Each is one request the author's page waits on. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
     },
     {
       "file": "apps/local/app/services/whisper-transcription-service.ts",
       "count": 1,
-      "reason": "Sidecar only (and `cvm footage transcribe`): ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job) or a vertical Short (the render-vertical Job). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
+      "reason": "Sidecar only: ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job), a vertical Short (the render-vertical Job) or a Footage file (the transcribe-footage Job, which `cvm footage transcribe` enqueues). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
+    }
+  ],
+  "network": [
+    {
+      "file": "apps/local/app/routes/api.auth.dropbox.callback.ts",
+      "count": 1,
+      "reason": "Interactive: the Dropbox OAuth callback trades its code for a token once, while the author's browser waits on the redirect."
     },
     {
-      "file": "apps/local/app/services/footage-transcription.ts",
+      "file": "apps/local/app/routes/api.auth.google.callback.ts",
+      "count": 1,
+      "reason": "Interactive: the Google OAuth callback trades its code for a token once, while the author's browser waits on the redirect."
+    },
+    {
+      "file": "apps/local/app/routes/api.feedback.ts",
+      "count": 1,
+      "reason": "Interactive: \"Send feedback\" asks Haiku for an issue title once, while the dialog waits."
+    },
+    {
+      "file": "apps/local/app/routes/api.links.fetch-title.ts",
+      "count": 1,
+      "reason": "Quick: one GET for a page title, with a 5s timeout, while the link form waits."
+    },
+    {
+      "file": "apps/local/app/routes/api.videos.$videoId.generate.ts",
+      "count": 1,
+      "reason": "The author watches: one Haiku call for a Video's text, while the button waits."
+    },
+    {
+      "file": "apps/local/app/routes/videos.$videoId.suggest-next-clip.ts",
+      "count": 1,
+      "reason": "The author watches: a conversation streamed to the editor (suggest the next Clip), not background work."
+    },
+    {
+      "file": "apps/local/app/services/ai-hero-auth-service.ts",
+      "count": 3,
+      "reason": "Interactive: AI Hero's device login (code, poll, userinfo) while the author signs in; the token it holds is read by the posting path."
+    },
+    {
+      "file": "apps/local/app/services/ai-hero-shortlink-service.ts",
+      "count": 1,
+      "reason": "Quick: one find-or-create per shortlink, for a handful of URLs on the post page; idempotent, so a re-run duplicates nothing."
+    },
+    {
+      "file": "apps/local/app/services/ai-hero-upload-service.ts",
+      "count": 10,
+      "reason": "The posting path: AI Hero and Skills Changelog posts, which ask for SidecarContext and run only as posting Jobs, plus the read-only post check (findAiHeroPost)."
+    },
+    {
+      "file": "apps/local/app/services/background-removal-service.ts",
+      "count": 1,
+      "reason": "Interactive: one remove.bg call (1-3s) while the thumbnail editor waits."
+    },
+    {
+      "file": "apps/local/app/services/buffer-api-service.server.ts",
+      "count": 1,
+      "reason": "The posting path: Buffer's API, reached only through buffer-posting-orchestration.server.ts, which asks for SidecarContext."
+    },
+    {
+      "file": "apps/local/app/services/cloudinary-service.ts",
+      "count": 1,
+      "reason": "Sidecar only in practice: the upload-images Job (sidecar/kinds/upload-images.ts) is the one caller of an upload; the app layer builds the client but no route uploads."
+    },
+    {
+      "file": "apps/local/app/services/document-writing-agent.ts",
+      "count": 1,
+      "reason": "The author watches: the Article Writer's document conversation, streamed to the person writing."
+    },
+    {
+      "file": "apps/local/app/services/dropbox-http-client.ts",
+      "count": 1,
+      "reason": "The Publish Job's Dropbox calls (Sidecar), plus one read-only course.json read by the Publish page loader when a Version is Pending."
+    },
+    {
+      "file": "apps/local/app/services/oauth-token-refresh.ts",
+      "count": 1,
+      "reason": "Quick: one token refresh POST before a YouTube or Dropbox call."
+    },
+    {
+      "file": "apps/local/app/services/text-generation-service.ts",
       "count": 2,
-      "reason": "Footage transcription (#16): run by `cvm footage transcribe` on the author's machine, never by a request."
+      "reason": "The author watches: a Video's description Autofill (one call) and the chapter Autofill stream; the Course Autofill Job calls the same service from the Sidecar."
+    },
+    {
+      "file": "apps/local/app/services/text-writing-agent.ts",
+      "count": 1,
+      "reason": "The author watches: the Article Writer's completions conversation, streamed to the person writing."
+    },
+    {
+      "file": "apps/local/app/services/whisper-transcription-service.ts",
+      "count": 1,
+      "reason": "Sidecar only: the Whisper client for the transcribe-clips, render-vertical and transcribe-footage Jobs. It asks for SidecarContext."
+    },
+    {
+      "file": "apps/local/app/services/youtube-upload-service.ts",
+      "count": 4,
+      "reason": "The posting path: the YouTube upload and its thumbnail ask for SidecarContext and run only as posting Jobs, plus the read-only post check."
+    },
+    {
+      "file": "apps/local/app/features/jobs/use-jobs.ts",
+      "count": 3,
+      "reason": "Browser: the Upload Manager's Retry, Dismiss and stage history, each a call to the app's own route by the href job-wire.ts names (/api/jobs/\u2026). Not outbound."
+    },
+    {
+      "file": "apps/local/app/lib/post-confirmed.ts",
+      "count": 1,
+      "reason": "Browser: POSTs a form to the route action it is handed (a path on the app itself), and resolves only on a confirmed save. Not outbound."
     }
   ]
 }

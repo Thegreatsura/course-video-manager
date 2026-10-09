@@ -1,5 +1,5 @@
 import { expect, describe, it } from "vitest";
-import { parseSimpleDiagram } from "../index.js";
+import { MAX_COORDINATE, MAX_SHAPES, parseSimpleDiagram } from "../index.js";
 import { iconNames } from "./fixtures.js";
 
 function errorsFor(input: unknown): string[] {
@@ -109,6 +109,51 @@ describe("validation errors", () => {
         ],
       })
     ).toHaveLength(3);
+  });
+
+  it("an arrow attached to the same shape at both ends", () => {
+    expect(
+      errorsFor({
+        shapes: [
+          { type: "box", id: "b", x: 0, y: 0, w: 1, h: 1 },
+          { type: "arrow", id: "loop", from: "b", to: "b" },
+        ],
+      })
+    ).toEqual([
+      'arrow "loop": "from" and "to" are both "b" — an arrow joins two different shapes',
+    ]);
+  });
+
+  it("more shapes than a Diagram can hold", () => {
+    const shapes = Array.from({ length: MAX_SHAPES + 1 }, (_, n) => ({
+      type: "box",
+      id: `b${n}`,
+      x: n,
+      y: 0,
+      w: 10,
+      h: 10,
+    }));
+    expect(errorsFor({ shapes })).toEqual([
+      `diagram.shapes: ${MAX_SHAPES + 1} shapes — a Diagram holds at most ${MAX_SHAPES} (Matt's are about 10)`,
+    ]);
+    expect(parseSimpleDiagram({ shapes: shapes.slice(1) }, iconNames).ok).toBe(
+      true
+    );
+  });
+
+  it("a coordinate or size far off the canvas", () => {
+    expect(
+      errorsFor({
+        shapes: [
+          { type: "box", id: "b", x: 1e9, y: 0, w: 10, h: MAX_COORDINATE + 1 },
+          { type: "line", id: "l", x1: -1e9, y1: 0, x2: 1, y2: 1 },
+        ],
+      })
+    ).toEqual([
+      `shapes[0] ("b").x: must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`,
+      `shapes[0] ("b").h: must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`,
+      `shapes[1] ("l").x1: must be between -${MAX_COORDINATE} and ${MAX_COORDINATE}`,
+    ]);
   });
 
   it("a body that is not a Diagram", () => {

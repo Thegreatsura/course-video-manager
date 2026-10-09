@@ -20,8 +20,8 @@ import {
   rebaseLineagePath,
   rebaseLineagePathsDeep,
 } from "./thumbnail-path-rebase.js";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { Data, Effect } from "effect";
 import {
   copyClipMockupCommentValues,
   newIdsFor,
@@ -32,7 +32,17 @@ import {
   copyClipChildren,
   copyLearningGoalValues,
   insertInChunks,
+  type ClipWithChildren,
 } from "./copy-child-rows.js";
+
+/**
+ * Another Course, archived or not, already holds the name the copy asked for.
+ * Checked inside the copy's own transaction, under a lock on the name, so two
+ * copies racing for one name cannot both commit.
+ */
+export class CourseNameTakenError extends Data.TaggedError(
+  "CourseNameTakenError"
+)<{ readonly name: string; readonly message: string }> {}
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -46,7 +56,9 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
  * fresh draft version, then every non-archived section (and its Learning
  * Goals) → lesson → video and each video's clips (with their Web Links,
  * Transcript Words and Overlays), chapters, beats (with their Learning Goal
- * links), clip mockups, clip mockup chapters and thumbnails. Split out of
+ * links), clip mockups, clip mockup chapters and thumbnails — all in ONE
+ * transaction, one batched insert per table, so a failure part-way leaves no
+ * half-copied Course behind to block a retry under the same name. Split out of
  * `db-course-operations.server.ts` to keep that module under the file-token
  * cap.
  *
@@ -66,6 +78,17 @@ export const makeDuplicateCourse = (db: Database) =>
   Effect.fn("duplicateCourse")(function* (input: {
     sourceCourseId: string;
     name: string;
+    /**
+     * The new Course's id, when the caller has already chosen it: a
+     * `duplicate-course` Job names it up front, so a resumed run can tell
+     * whether this copy already committed.
+     */
+    newCourseId?: string;
+    /**
+     * Commit the Course archived: the `duplicate-course` Job keeps it out of
+     * sight until its files have copied, and only then un-archives it.
+     */
+    archived?: boolean;
   }) {
     // Fetch source course
     const sourceCourse = yield* makeDbCall(() =>
@@ -94,40 +117,6 @@ export const makeDuplicateCourse = (db: Database) =>
         type: "duplicateCourse",
         params: { sourceCourseId: input.sourceCourseId },
         message: "Source course has no versions",
-      });
-    }
-
-    // Create new course with copied memory
-    const [newCourse] = yield* makeDbCall(() =>
-      db
-        .insert(courses)
-        .values({
-          name: input.name,
-          memory: sourceCourse.memory,
-        })
-        .returning()
-    );
-
-    if (!newCourse) {
-      return yield* new UnknownDBServiceError({
-        cause: "No course returned from insert",
-      });
-    }
-
-    // Create a single fresh draft version
-    const [newVersion] = yield* makeDbCall(() =>
-      db
-        .insert(courseVersions)
-        .values({
-          repoId: newCourse.id,
-          name: "v1.0",
-        })
-        .returning()
-    );
-
-    if (!newVersion) {
-      return yield* new UnknownDBServiceError({
-        cause: "No version returned from insert",
       });
     }
 
@@ -191,121 +180,116 @@ export const makeDuplicateCourse = (db: Database) =>
       newVideoId: string;
     }> = [];
 
-    // Same shape as Submit's copy: Goal ids made up front, Beat links last.
+    // Every id is made up front, so each table goes in as one batched insert
+    // rather than one round trip per row — and the whole copy is one
+    // transaction: a failure part-way leaves no half-copied Course holding
+    // the name, so the author can simply try again.
     const goalIds = newIdsFor(
       sourceSections.flatMap((section) => section.learningGoals)
     );
+    const sectionValues: (typeof sections.$inferInsert)[] = [];
+    const goalValues: (typeof learningGoals.$inferInsert)[] = [];
+    const lessonValues: (typeof lessons.$inferInsert)[] = [];
+    const videoValues: (typeof videos.$inferInsert)[] = [];
+    const clipValues: (typeof clips.$inferInsert)[] = [];
+    const sourceClips: ClipWithChildren[] = [];
+    const clipIds = new Map<string, string>();
+    const chapterValues: (typeof chapters.$inferInsert)[] = [];
+    const beatValues: (typeof beats.$inferInsert)[] = [];
     const beatLinkValues: (typeof beatLearningGoals.$inferInsert)[] = [];
+    const clipMockupValues: (typeof clipMockups.$inferInsert)[] = [];
+    const clipMockupChapterValues: (typeof clipMockupChapters.$inferInsert)[] =
+      [];
+    const commentValues: (typeof clipMockupComments.$inferInsert)[] = [];
+    const thumbnailValues: (typeof thumbnails.$inferInsert)[] = [];
+
+    const newCourseId = input.newCourseId ?? crypto.randomUUID();
+    const newVersionId = crypto.randomUUID();
 
     for (const sourceSection of sourceSections) {
-      const [newSection] = yield* makeDbCall(() =>
-        db
-          .insert(sections)
-          .values({
-            repoVersionId: newVersion.id,
-            previousVersionSectionId: null,
-            title: sourceSection.title,
-            order: sourceSection.order,
-            description: sourceSection.description,
-          })
-          .returning()
+      const newSectionId = crypto.randomUUID();
+      sectionValues.push({
+        id: newSectionId,
+        repoVersionId: newVersionId,
+        previousVersionSectionId: null,
+        title: sourceSection.title,
+        order: sourceSection.order,
+        description: sourceSection.description,
+      });
+      goalValues.push(
+        ...copyLearningGoalValues(
+          sourceSection.learningGoals,
+          newSectionId,
+          goalIds
+        )
       );
-
-      if (!newSection) continue;
-
-      const goalValues = copyLearningGoalValues(
-        sourceSection.learningGoals,
-        newSection.id,
-        goalIds
-      );
-      if (goalValues.length > 0) {
-        yield* makeDbCall(() => db.insert(learningGoals).values(goalValues));
-      }
 
       for (const sourceLesson of sourceSection.lessons) {
-        const [newLesson] = yield* makeDbCall(() =>
-          db
-            .insert(lessons)
-            .values({
-              sectionId: newSection.id,
-              previousVersionLessonId: null,
-              order: sourceLesson.order,
-              title: sourceLesson.title,
-              description: sourceLesson.description,
-              icon: sourceLesson.icon,
-              priority: sourceLesson.priority,
-              dependencies: sourceLesson.dependencies,
-              authoringStatus: sourceLesson.authoringStatus,
-            })
-            .returning()
-        );
-
-        if (!newLesson) continue;
+        const newLessonId = crypto.randomUUID();
+        lessonValues.push({
+          id: newLessonId,
+          sectionId: newSectionId,
+          previousVersionLessonId: null,
+          order: sourceLesson.order,
+          title: sourceLesson.title,
+          description: sourceLesson.description,
+          icon: sourceLesson.icon,
+          priority: sourceLesson.priority,
+          dependencies: sourceLesson.dependencies,
+          authoringStatus: sourceLesson.authoringStatus,
+        });
 
         for (const sourceVideo of sourceLesson.videos) {
-          const [newVideo] = yield* makeDbCall(() =>
-            db
-              .insert(videos)
-              .values({
-                lessonId: newLesson.id,
-                title: sourceVideo.title,
-                originalFootagePath: sourceVideo.originalFootagePath,
-                body: sourceVideo.body,
-                description: sourceVideo.description,
-                script: sourceVideo.script,
-                format: sourceVideo.format,
-              })
-              .returning()
-          );
-
-          if (!newVideo) continue;
-
+          const newVideoId = crypto.randomUUID();
+          const newLineageId = crypto.randomUUID();
+          videoValues.push({
+            id: newVideoId,
+            lineageId: newLineageId,
+            lessonId: newLessonId,
+            title: sourceVideo.title,
+            originalFootagePath: sourceVideo.originalFootagePath,
+            body: sourceVideo.body,
+            description: sourceVideo.description,
+            script: sourceVideo.script,
+            format: sourceVideo.format,
+          });
           videoLineageMappings.push({
             sourceLineageId: sourceVideo.lineageId,
-            newLineageId: newVideo.lineageId,
-            newVideoId: newVideo.id,
+            newLineageId,
+            newVideoId,
           });
 
-          const clipIds = newIdsFor(sourceVideo.clips);
-          if (sourceVideo.clips.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(clips).values(
-                sourceVideo.clips.map((clip) => ({
-                  id: clipIds.get(clip.id)!,
-                  videoId: newVideo.id,
-                  videoFilename: clip.videoFilename,
-                  sourceStartTime: clip.sourceStartTime,
-                  sourceEndTime: clip.sourceEndTime,
-                  order: clip.order,
-                  archived: false,
-                  text: clip.text,
-                  transcribedAt: clip.transcribedAt,
-                  transcriptionStatus: clip.transcriptionStatus,
-                  scene: clip.scene,
-                  profile: clip.profile,
-                  pauseType: clip.pauseType,
-                  zoomType: clip.zoomType,
-                  diagramSnapshotId: clip.diagramSnapshotId,
-                }))
-              )
-            );
-            yield* makeDbCall(() =>
-              copyClipChildren(db, sourceVideo.clips, clipIds)
-            );
+          for (const clip of sourceVideo.clips) {
+            const id = crypto.randomUUID();
+            clipIds.set(clip.id, id);
+            sourceClips.push(clip);
+            clipValues.push({
+              id,
+              videoId: newVideoId,
+              videoFilename: clip.videoFilename,
+              sourceStartTime: clip.sourceStartTime,
+              sourceEndTime: clip.sourceEndTime,
+              order: clip.order,
+              archived: false,
+              text: clip.text,
+              transcribedAt: clip.transcribedAt,
+              transcriptionStatus: clip.transcriptionStatus,
+              scene: clip.scene,
+              profile: clip.profile,
+              pauseType: clip.pauseType,
+              zoomType: clip.zoomType,
+              diagramSnapshotId: clip.diagramSnapshotId,
+            });
           }
 
-          if (sourceVideo.chapters.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(chapters).values(
-                sourceVideo.chapters.map((section) => ({
-                  videoId: newVideo.id,
-                  name: section.name,
-                  order: section.order,
-                  archived: false,
-                }))
-              )
-            );
-          }
+          chapterValues.push(
+            ...sourceVideo.chapters.map((chapter) => ({
+              videoId: newVideoId,
+              name: chapter.name,
+              order: chapter.order,
+              archived: false,
+            }))
+          );
 
           const beatIds = newIdsFor(sourceVideo.beats);
           beatLinkValues.push(
@@ -315,102 +299,131 @@ export const makeDuplicateCourse = (db: Database) =>
               (goalId) => goalIds.get(goalId)
             )
           );
-          if (sourceVideo.beats.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(beats).values(
-                sourceVideo.beats.map((beat) => ({
-                  id: beatIds.get(beat.id)!,
-                  videoId: newVideo.id,
-                  kind: beat.kind,
-                  title: beat.title,
-                  description: beat.description,
-                  order: beat.order,
-                }))
-              )
-            );
-          }
+          beatValues.push(
+            ...sourceVideo.beats.map((beat) => ({
+              id: beatIds.get(beat.id)!,
+              videoId: newVideoId,
+              kind: beat.kind,
+              title: beat.title,
+              description: beat.description,
+              order: beat.order,
+            }))
+          );
 
           // Clip Mockups copy the way Beats do — verbatim `order`, archived
-          // rows already filtered out by the read above.
+          // rows already filtered out by the read above. Their Chapters share
+          // the Clip Mockups' order space, so verbatim `order` keeps the two
+          // interleaved as the source has them.
           const clipMockupIds = newIdsFor(sourceVideo.clipMockups);
           const clipMockupChapterIds = newIdsFor(
             sourceVideo.clipMockupChapters
           );
-          if (sourceVideo.clipMockups.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(clipMockups).values(
-                sourceVideo.clipMockups.map((clipMockup) => ({
-                  id: clipMockupIds.get(clipMockup.id)!,
-                  videoId: newVideo.id,
-                  line: clipMockup.line,
-                  imagePath: clipMockup.imagePath,
-                  audioPath: clipMockup.audioPath,
-                  durationSeconds: clipMockup.durationSeconds,
-                  voiceStatus: clipMockup.voiceStatus,
-                  voiceError: clipMockup.voiceError,
-                  order: clipMockup.order,
-                }))
-              )
-            );
-          }
-
-          // Clip Mockup Chapters share the Clip Mockups' order space, so
-          // verbatim `order` keeps the two interleaved as the source has them.
-          if (sourceVideo.clipMockupChapters.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(clipMockupChapters).values(
-                sourceVideo.clipMockupChapters.map((chapter) => ({
-                  id: clipMockupChapterIds.get(chapter.id)!,
-                  videoId: newVideo.id,
-                  name: chapter.name,
-                  order: chapter.order,
-                }))
-              )
-            );
-          }
-
-          const commentValues = copyClipMockupCommentValues(
-            sourceVideo.clipMockupComments,
-            newVideo.id,
-            clipMockupIds,
-            clipMockupChapterIds
+          clipMockupValues.push(
+            ...sourceVideo.clipMockups.map((clipMockup) => ({
+              id: clipMockupIds.get(clipMockup.id)!,
+              videoId: newVideoId,
+              line: clipMockup.line,
+              imagePath: clipMockup.imagePath,
+              audioPath: clipMockup.audioPath,
+              durationSeconds: clipMockup.durationSeconds,
+              voiceStatus: clipMockup.voiceStatus,
+              voiceError: clipMockup.voiceError,
+              order: clipMockup.order,
+            }))
           );
-          if (commentValues.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(clipMockupComments).values(commentValues)
-            );
-          }
+          clipMockupChapterValues.push(
+            ...sourceVideo.clipMockupChapters.map((chapter) => ({
+              id: clipMockupChapterIds.get(chapter.id)!,
+              videoId: newVideoId,
+              name: chapter.name,
+              order: chapter.order,
+            }))
+          );
+          commentValues.push(
+            ...copyClipMockupCommentValues(
+              sourceVideo.clipMockupComments,
+              newVideoId,
+              clipMockupIds,
+              clipMockupChapterIds
+            )
+          );
 
-          if (sourceVideo.thumbnails.length > 0) {
-            yield* makeDbCall(() =>
-              db.insert(thumbnails).values(
-                sourceVideo.thumbnails.map((thumbnail) => ({
-                  videoId: newVideo.id,
-                  layers: rebaseLineagePathsDeep(
-                    thumbnail.layers,
-                    sourceVideo.lineageId,
-                    newVideo.lineageId
-                  ),
-                  filePath:
-                    thumbnail.filePath === null
-                      ? null
-                      : rebaseLineagePath(
-                          thumbnail.filePath,
-                          sourceVideo.lineageId,
-                          newVideo.lineageId
-                        ),
-                  selectedForUpload: thumbnail.selectedForUpload,
-                }))
-              )
-            );
-          }
+          thumbnailValues.push(
+            ...sourceVideo.thumbnails.map((thumbnail) => ({
+              videoId: newVideoId,
+              layers: rebaseLineagePathsDeep(
+                thumbnail.layers,
+                sourceVideo.lineageId,
+                newLineageId
+              ),
+              filePath:
+                thumbnail.filePath === null
+                  ? null
+                  : rebaseLineagePath(
+                      thumbnail.filePath,
+                      sourceVideo.lineageId,
+                      newLineageId
+                    ),
+              selectedForUpload: thumbnail.selectedForUpload,
+            }))
+          );
         }
       }
     }
 
-    yield* makeDbCall(() =>
-      insertInChunks(db, beatLearningGoals, beatLinkValues)
-    );
+    const nameTaken = new CourseNameTakenError({
+      name: input.name,
+      message: "A course with this name already exists",
+    });
+    const { newCourse, newVersion } = yield* Effect.tryPromise({
+      try: () =>
+        db.transaction(async (tx) => {
+          // Two copies under one name take turns here; the second then sees
+          // the first's committed Course and stops.
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtext(${`course-name:${input.name}`}))`
+          );
+          const [holder] = await tx
+            .select({ id: courses.id })
+            .from(courses)
+            .where(eq(courses.name, input.name))
+            .limit(1);
+          if (holder) throw nameTaken;
+          const [newCourse] = await tx
+            .insert(courses)
+            .values({
+              id: newCourseId,
+              name: input.name,
+              memory: sourceCourse.memory,
+              archived: input.archived ?? false,
+            })
+            .returning();
+          // A single fresh draft version
+          const [newVersion] = await tx
+            .insert(courseVersions)
+            .values({ id: newVersionId, repoId: newCourseId, name: "v1.0" })
+            .returning();
+
+          // Parents before children, so every foreign key already resolves.
+          await insertInChunks(tx, sections, sectionValues);
+          await insertInChunks(tx, learningGoals, goalValues);
+          await insertInChunks(tx, lessons, lessonValues);
+          await insertInChunks(tx, videos, videoValues);
+          await insertInChunks(tx, clips, clipValues);
+          await copyClipChildren(tx, sourceClips, clipIds);
+          await insertInChunks(tx, chapters, chapterValues);
+          await insertInChunks(tx, beats, beatValues);
+          await insertInChunks(tx, clipMockups, clipMockupValues);
+          await insertInChunks(tx, clipMockupChapters, clipMockupChapterValues);
+          await insertInChunks(tx, clipMockupComments, commentValues);
+          await insertInChunks(tx, thumbnails, thumbnailValues);
+          await insertInChunks(tx, beatLearningGoals, beatLinkValues);
+
+          return { newCourse: newCourse!, newVersion: newVersion! };
+        }),
+      catch: (e) =>
+        e === nameTaken ? nameTaken : new UnknownDBServiceError({ cause: e }),
+    });
 
     return {
       course: newCourse,

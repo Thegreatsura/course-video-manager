@@ -37,6 +37,30 @@ export const JOB_PARAMS = {
   "transcribe-clips": Schema.Struct({
     clipIds: Schema.NonEmptyArray(Schema.String),
   }),
+  /** A body whose local images go to Cloudinary; the body itself is never written back. */
+  "upload-images": Schema.Struct({
+    videoId: Schema.String,
+    body: Schema.String,
+  }),
+  /** Local image files the tab swapped Cloudinary URLs in for; at least one. */
+  "remove-local-images": Schema.Struct({
+    videoId: Schema.String,
+    filePaths: Schema.NonEmptyArray(Schema.String),
+  }),
+  /** One Footage file, by its absolute path (Footage has no row). */
+  "transcribe-footage": Schema.Struct({
+    path: Schema.String.pipe(
+      Schema.filter((p) => p.startsWith("/"), {
+        message: () => "a footage path must be absolute",
+      })
+    ),
+  }),
+  /** A Course copied under a new name; the route chose the new Course's id. */
+  "duplicate-course": Schema.Struct({
+    sourceCourseId: Schema.String,
+    name: Schema.Trim.pipe(Schema.nonEmptyString()),
+    newCourseId: Schema.UUID,
+  }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */
     courseId: Schema.String,

@@ -18,10 +18,7 @@ import {
   readClipMockupFile,
   writeClipMockupFile,
 } from "@/services/clip-mockup-files";
-import {
-  copyClipMockupAssetsForVideo,
-  copyClipMockupAssetsForVideos,
-} from "@/services/clip-mockup-copy-forward.server";
+import { copyClipMockupAssetsForVideo } from "@/services/clip-mockup-copy-forward.server";
 import { makeTempClipMockupDir } from "@/cli/cli-write-test-harness";
 
 // ===========================================================================
@@ -239,39 +236,6 @@ describe("duplicating a Video carries its Animatic's files across", () => {
       clipMockupFileExists(newVideo.lineageId, "frame-archived.png")
     );
     expect(present).toBe(false);
-  });
-
-  it("does the same for every Video in a duplicated Course", async () => {
-    const source = await seed();
-
-    // Exactly what `POST /api/courses/:courseId/duplicate` does.
-    const duplicate = await run(
-      Effect.gen(function* () {
-        const courseOps = yield* CourseOperationsService;
-        const videoOps = yield* VideoOperationsService;
-        const sourceVideo = yield* videoOps.getVideoRowById(source.id);
-        const lesson = yield* videoOps.getVideoDeepById(source.id);
-
-        const result = yield* courseOps.duplicateCourse({
-          sourceCourseId: lesson.lesson!.section.repoVersion.repo.id,
-          name: "test-course (copy)",
-        });
-        yield* copyClipMockupAssetsForVideos(result.videoLineageMappings);
-        return { sourceVideo, mappings: result.videoLineageMappings };
-      })
-    );
-
-    expect(duplicate.mappings).toHaveLength(1);
-    const copy = duplicate.mappings[0]!;
-    expect(copy.newLineageId).not.toBe(duplicate.sourceVideo.lineageId);
-
-    expect(await animaticReport(copy.newLineageId, copy.newVideoId)).toEqual([
-      { line: "First line", imageMissing: false, audioMissing: false },
-      { line: "Second line", imageMissing: false, audioMissing: false },
-    ]);
-    expect(
-      await run(clipMockupFileExists(copy.newLineageId, "frame-archived.png"))
-    ).toBe(false);
   });
 
   it("leaves the SOURCE Video's Animatic exactly as it found it", async () => {

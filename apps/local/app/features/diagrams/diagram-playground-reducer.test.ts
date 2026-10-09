@@ -1,65 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { TLStoreSnapshot } from "tldraw";
-import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
-  createInitialDiagramPlaygroundState,
-  diagramPlaygroundReducer,
   isCanvasEditable,
+  mustKeepCanvasBeforeLeaving,
   STATUS_ERROR_MS,
   type StoredHead,
 } from "./diagram-playground-reducer";
-import type { Snapshot } from "./snapshot-list";
-
-const scene = (name: string) => ({ name }) as unknown as TLStoreSnapshot;
-
-const T0 = "2026-10-09T10:00:00.000Z";
-const T1 = "2026-10-09T10:00:05.000Z";
-const T2 = "2026-10-09T10:00:10.000Z";
-
-const storedHead = (hash: string | null, updatedAt: string): StoredHead => ({
-  hash,
-  updatedAt,
-});
-
-/** `diagramId`'s head arrived from the server, as last written at T0. */
-const loaded = (
-  diagramId: string,
-  headScene: TLStoreSnapshot | null,
-  stored = storedHead(`head-${diagramId}`, T0)
-) => ({
-  type: "head-loaded" as const,
-  diagramId,
-  scene: headScene,
-  stored,
-});
-
-const shown = (
-  diagramId: string,
-  headScene: TLStoreSnapshot | null,
-  opts: { stored?: StoredHead; centreCamera?: boolean } = {}
-) => ({
-  type: "show-head" as const,
-  diagramId,
-  scene: headScene,
-  stored: opts.stored ?? storedHead(`head-${diagramId}`, T0),
-  centreCamera: opts.centreCamera ?? true,
-});
-
-const snapshot = (id: string): Snapshot => ({
-  id,
-  diagramId: "d1",
-  scene: scene(id),
-  contentHash: `hash-${id}`,
-  preserved: true,
-  createdAt: "2026-10-07T00:00:00.000Z",
-});
-
-/** The Active Diagram page, its editor just mounted on `d1`. */
-const openPage = () =>
-  new ReducerTester(
-    diagramPlaygroundReducer,
-    createInitialDiagramPlaygroundState({ windowFocused: true })
-  ).send({ type: "editor-mounted", diagramId: "d1", isFocusMode: false });
+import {
+  loaded,
+  openPage,
+  scene,
+  shown,
+  storedHead,
+  T0,
+  T1,
+  T2,
+} from "./diagram-playground-reducer-test-helpers";
 
 describe("diagramPlaygroundReducer", () => {
   it("opening a diagram shows its head without ever saving it", () => {
@@ -123,79 +78,6 @@ describe("diagramPlaygroundReducer", () => {
       status: "loading",
     });
     expect(tester.getEffects()).toEqual([]);
-  });
-
-  it("restoring over a canvas the timeline hasn't captured asks first, then shows the restored head", () => {
-    const tester = openPage()
-      .send(loaded("d1", scene("d1")))
-      .resetExec()
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s1"),
-        headIsCaptured: false,
-        canvasIsEmpty: false,
-        requestId: 7,
-      });
-
-    expect(tester.getState().pendingRestore).toEqual(snapshot("s1"));
-
-    tester
-      .send({ type: "restore-dismissed" })
-      .send({ type: "restore-confirmed", snapshot: snapshot("s1") })
-      .send({
-        type: "restore-succeeded",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        stored: storedHead("hash-s1", T1),
-      });
-
-    expect(tester.getState().pendingRestore).toBeNull();
-    expect(tester.getEffects()).toEqual([
-      { type: "release-restore-request", requestId: 7 },
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        requestId: null,
-      },
-      shown("d1", scene("s1"), { stored: storedHead("hash-s1", T1) }),
-    ]);
-  });
-
-  it("restores straight away when the head is already on the timeline or the canvas is empty", () => {
-    const tester = openPage()
-      .send(loaded("d1", scene("d1")))
-      .resetExec()
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s1"),
-        headIsCaptured: true,
-        canvasIsEmpty: false,
-        requestId: 1,
-      })
-      .send({
-        type: "restore-requested",
-        snapshot: snapshot("s2"),
-        headIsCaptured: false,
-        canvasIsEmpty: true,
-        requestId: 2,
-      });
-
-    expect(tester.getState().pendingRestore).toBeNull();
-    expect(tester.getEffects()).toEqual([
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s1"),
-        requestId: 1,
-      },
-      {
-        type: "restore-snapshot",
-        diagramId: "d1",
-        snapshot: snapshot("s2"),
-        requestId: 2,
-      },
-    ]);
   });
 
   it("preserving ignores repeat clicks until it finishes, and a failure can be retried", () => {
@@ -484,85 +366,173 @@ describe("keeping the Active Diagram in step with its stored head", () => {
   });
 });
 
-describe("the status line", () => {
-  const opened = () =>
+describe("leaving a diagram whose last edits aren't stored yet", () => {
+  /** `d1` open, its last autosave refused: the "changed elsewhere" prompt is up. */
+  const refusedD1 = () =>
     openPage()
       .send(loaded("d1", scene("d1")))
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" })
       .resetExec();
 
-  it("shows a reported error, and takes it down after its timeout", () => {
-    const tester = opened().send({
-      type: "error-reported",
-      message: "Couldn't delete that component",
+  const toD2 = { to: "/diagram-playground/d2", replace: false };
+  const leave = (destination = toD2, canvasHasUnsavedEdits = true) => ({
+    type: "leave-requested" as const,
+    destination,
+    canvasHasUnsavedEdits,
+  });
+
+  it("only a canvas holding edits the server refused has to be kept before leaving", () => {
+    const tester = openPage();
+    expect(mustKeepCanvasBeforeLeaving(tester.getState())).toBe(false);
+
+    tester.send(loaded("d1", scene("d1")));
+    expect(mustKeepCanvasBeforeLeaving(tester.getState())).toBe(false);
+
+    expect(mustKeepCanvasBeforeLeaving(refusedD1().getState())).toBe(true);
+  });
+
+  it("switching away while the prompt is up keeps the canvas as a preserved snapshot first, then goes", () => {
+    const tester = refusedD1()
+      .send(leave())
+      // The author clicks again while the canvas is being kept.
+      .send(leave({ to: "/diagram-playground", replace: false }));
+
+    expect(tester.getState().leaving).toEqual(toD2);
+    expect(tester.getEffects()).toEqual([
+      { type: "keep-canvas-as-snapshot", diagramId: "d1" },
+    ]);
+
+    tester.resetExec().send({ type: "canvas-kept", diagramId: "d1" });
+
+    // Kept: the navigation now goes through without being held again.
+    expect(tester.getState().leaving).toBeNull();
+    expect(mustKeepCanvasBeforeLeaving(tester.getState())).toBe(false);
+
+    tester.send({ type: "diagram-opened", diagramId: "d2" });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "continue-leaving", destination: toD2 },
+      { type: "load-head", diagramId: "d2", saveOpenHeadFirst: true },
+    ]);
+  });
+
+  it("a save refused after the canvas was kept has to be kept again", () => {
+    const tester = refusedD1()
+      .send(leave())
+      .send({ type: "canvas-kept", diagramId: "d1" })
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" });
+
+    expect(mustKeepCanvasBeforeLeaving(tester.getState())).toBe(true);
+  });
+
+  it("if the canvas can't be kept, the author stays on the diagram and the status line says why", () => {
+    const tester = refusedD1().send(leave()).resetExec().send({
+      type: "keep-canvas-failed",
+      diagramId: "d1",
+      reason: "request-failed",
     });
 
-    expect(tester.getState().error).toEqual({
-      message: "Couldn't delete that component",
-      id: 1,
-      fromAutosave: false,
+    expect(tester.getState().leaving).toBeNull();
+    expect(tester.getState().head).toMatchObject({
+      diagramId: "d1",
+      changedElsewhere: true,
     });
+    expect(mustKeepCanvasBeforeLeaving(tester.getState())).toBe(true);
+    expect(tester.getState().error?.message).toBe(
+      "Couldn't keep your edits as a snapshot, so this diagram stays open. Reload or keep your edits first."
+    );
     expect(tester.getEffects()).toEqual([
       { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
     ]);
-
-    tester.send({ type: "error-timed-out", id: 1 });
-
-    expect(tester.getState().error).toBeNull();
   });
 
-  it("a newer error outlives the older one's timeout", () => {
-    const tester = opened()
-      .send({ type: "error-reported", message: "first" })
-      .send({ type: "error-reported", message: "second" })
-      .send({ type: "error-timed-out", id: 1 });
-
-    expect(tester.getState().error?.message).toBe("second");
-
-    tester.send({ type: "error-timed-out", id: 2 });
+  it("an empty canvas has nothing to keep, so the author leaves", () => {
+    const tester = refusedD1().send(leave()).resetExec().send({
+      type: "keep-canvas-failed",
+      diagramId: "d1",
+      reason: "empty-canvas",
+    });
 
     expect(tester.getState().error).toBeNull();
+    expect(tester.getEffects()).toEqual([
+      { type: "continue-leaving", destination: toD2 },
+    ]);
   });
 
-  it("the next success clears the error and shows nothing of its own", () => {
-    const tester = opened()
-      .send({ type: "error-reported", message: "Failed to copy diagram" })
-      .send({ type: "operation-succeeded" });
-
-    expect(tester.getState().error).toBeNull();
-    // A success on a clean status line leaves it clean.
-    tester.send({ type: "operation-succeeded" });
-    expect(tester.getState().error).toBeNull();
-  });
-
-  it("a background autosave doesn't clear an error the author hasn't seen off", () => {
-    const tester = opened()
-      .send({
-        type: "error-reported",
-        message: "Couldn't delete that component",
-      })
-      .send({ type: "head-save-started", diagramId: "d1" })
+  it("a leave asked for once the prompt has gone needs nothing kept", () => {
+    const tester = refusedD1()
+      .send({ type: "keep-my-edits-clicked" })
       .send({
         type: "head-saved",
         diagramId: "d1",
         stored: storedHead("mine", T1),
-      });
+      })
+      .resetExec()
+      .send(leave(toD2, false));
 
-    expect(tester.getState().error?.message).toBe(
-      "Couldn't delete that component"
-    );
+    expect(tester.getEffects()).toEqual([
+      { type: "continue-leaving", destination: toD2 },
+    ]);
   });
 
-  it("failures the page runs itself go to the status line too", () => {
-    const tester = opened()
-      .send({ type: "create-clicked" })
-      .send({ type: "create-failed" });
+  it("leaving within the autosave debounce saves the last edit first, and goes only once it has landed", () => {
+    const tester = openPage()
+      .send(loaded("d1", scene("d1")))
+      .resetExec()
+      .send(leave());
 
-    expect(tester.getState().error?.message).toBe("Failed to create diagram");
+    expect(tester.getState().leaving).toEqual(toD2);
+    expect(tester.getEffects()).toEqual([
+      { type: "save-before-leaving", diagramId: "d1" },
+    ]);
 
+    // The flush was refused: the head changed elsewhere in the meantime, so
+    // the canvas is kept as a snapshot before the navigation goes on.
     tester
-      .send({ type: "create-clicked" })
-      .send({ type: "diagram-created", diagramId: "d2" });
+      .resetExec()
+      .send({ type: "head-save-started", diagramId: "d1" })
+      .send({ type: "head-save-refused", diagramId: "d1" })
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "refused",
+      });
+    expect(tester.getEffects()).toEqual([
+      { type: "keep-canvas-as-snapshot", diagramId: "d1" },
+    ]);
 
-    expect(tester.getState().error).toBeNull();
+    // A save that lands goes straight on; one that fails stays and says so.
+    const saved = openPage()
+      .send(loaded("d1", scene("d1")))
+      .send(leave())
+      .resetExec()
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "saved",
+      });
+    expect(saved.getState().leaving).toBeNull();
+    expect(saved.getEffects()).toEqual([
+      { type: "continue-leaving", destination: toD2 },
+    ]);
+
+    const failed = openPage()
+      .send(loaded("d1", scene("d1")))
+      .send(leave())
+      .resetExec()
+      .send({
+        type: "saved-before-leaving",
+        diagramId: "d1",
+        outcome: "failed",
+      });
+    expect(failed.getState().leaving).toBeNull();
+    expect(failed.getState().error?.message).toBe(
+      "Couldn't save your last edit, so this diagram stays open. Try again."
+    );
+    expect(failed.getEffects()).toEqual([
+      { type: "time-out-error", id: 1, ms: STATUS_ERROR_MS },
+    ]);
   });
 });

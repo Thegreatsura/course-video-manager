@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { LinkIcon, Loader2Icon, SendIcon, SparklesIcon } from "lucide-react";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { isDefaultShortTitle } from "@/lib/short-title";
 import type { PostedPlatforms } from "@/lib/short-status";
 import { findConvertibleAiHeroUrls, replaceUrls } from "./convert-short-links";
@@ -78,7 +78,7 @@ export function ShortsPostingModal({
     startYoutubeShortsUpload,
     startSocialUpload,
     startRenderVerticalUpload,
-  } = useContext(UploadContext);
+  } = useUploadActions();
 
   const [postState, setPostState] = useState<PostState>("idle");
 

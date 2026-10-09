@@ -19,6 +19,9 @@ export const diagramService = (client: RpcClient) =>
     getDiagram: rpcMethod((json) =>
       client.rpc.diagram.getDiagram.$post({ json })
     ),
+    updateDiagram: rpcMethod((json) =>
+      client.rpc.diagram.updateDiagram.$post({ json })
+    ),
     getDiagramSnapshot: rpcMethod((json) =>
       client.rpc.diagram.getDiagramSnapshot.$post({ json })
     ),

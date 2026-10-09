@@ -1,6 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { beforeAll, beforeEach } from "vitest";
 import { Effect } from "effect";
+import { eq } from "drizzle-orm";
+import { generateKeyBetween } from "fractional-indexing";
+import { chapters as chaptersTable, videos as videosTable } from "@/db/schema";
 import {
   AutofillService,
   type AutofillVideoResult,
@@ -384,5 +387,82 @@ describe("AutofillService — progress and the Draft Version", () => {
       readVideo(testDb, seeded.videoIds["01-frozen/Explainer"]!)
     );
     expect(video?.description).toBeNull();
+  });
+});
+
+describe("AutofillService — the author's edits win", () => {
+  it("keeps a description the author wrote while the Autofill ran, and offers its own", async () => {
+    let videoId = "";
+    const fake = createFakeTextGeneration({
+      meanwhile: async (field) => {
+        if (field !== "description") return;
+        await testDb
+          .update(videosTable)
+          .set({ description: "Typed while it ran" })
+          .where(eq(videosTable.id, videoId));
+      },
+    });
+    const seeded = await seedCourseVersion(testDb, [
+      {
+        path: "01-racing",
+        videos: [{ description: null, openingChapter: "Intro" }],
+      },
+    ]);
+    videoId = seeded.videoIds["01-racing/Explainer"]!;
+
+    const result = await Effect.runPromise(
+      Effect.flatMap(AutofillService, (autofill) =>
+        autofill.autofillCourseVersion({
+          versionId: seeded.versionId,
+          includeTodoLessons: true,
+        })
+      ).pipe(Effect.provide(makeAutofillTestLayer(testDb, fake)))
+    );
+
+    const video = await Effect.runPromise(readVideo(testDb, videoId));
+    expect(video?.description).toBe("Typed while it ran");
+    expect(result.results[0]).toMatchObject({
+      fields: [],
+      kept: [
+        {
+          field: "description",
+          proposal: "Autofilled description for Lesson body",
+        },
+      ],
+    });
+  });
+
+  it("keeps Chapters the author placed while the Autofill ran", async () => {
+    let videoId = "";
+    const fake = createFakeTextGeneration({
+      meanwhile: async (field) => {
+        if (field !== "chapters") return;
+        const [firstClip] = await testDb.query.clips.findMany({
+          where: (table, { eq }) => eq(table.videoId, videoId),
+          orderBy: (table, { asc }) => asc(table.order),
+        });
+        await testDb.insert(chaptersTable).values({
+          videoId,
+          name: "Placed while it ran",
+          order: generateKeyBetween(null, firstClip!.order),
+        });
+      },
+    });
+    const seeded = await seedCourseVersion(testDb, [
+      { path: "01-racing", videos: [{ description: "Already written" }] },
+    ]);
+    videoId = seeded.videoIds["01-racing/Explainer"]!;
+
+    await Effect.runPromise(
+      Effect.flatMap(AutofillService, (autofill) =>
+        autofill.autofillCourseVersion({
+          versionId: seeded.versionId,
+          includeTodoLessons: true,
+        })
+      ).pipe(Effect.provide(makeAutofillTestLayer(testDb, fake)))
+    );
+
+    const chapters = await Effect.runPromise(readChapters(testDb, videoId));
+    expect(chapters.map((c) => c.name)).toEqual(["Placed while it ran"]);
   });
 });

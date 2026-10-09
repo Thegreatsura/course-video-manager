@@ -298,6 +298,10 @@ export const deleteVideoFile = (lineageId: string, relativePath: string) =>
  * also what puts a duplicated Thumbnail's PNG under the path
  * `rebaseThumbnailPaths` rewrote it to.
  *
+ * The single-Video copy (`api.videos.$videoId.copy.ts`) uses this. A Course
+ * duplicate copies its Videos' files one by one, resumably and checked, in
+ * the `duplicate-course` Job (`course-duplicate-files.ts`).
+ *
  * Lives here rather than in `@cvm/core` for the reason the module header
  * gives: core is deployed to a box with no disk, so the file half of every
  * duplicate belongs at the call site in `apps/local`.

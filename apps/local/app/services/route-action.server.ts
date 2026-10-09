@@ -1,6 +1,7 @@
 import { Cause, Console, Effect, Exit, type ManagedRuntime } from "effect";
 import { data } from "react-router";
 import { type LayerLive, runtimeLive } from "./layer.server";
+import { withRequestTally } from "./slow-request-log.server";
 
 type ErrorTags<E> = E extends { readonly _tag: infer T extends string }
   ? T
@@ -110,7 +111,7 @@ export function makeLoader<A, E, R extends LayerLive>(
     });
     return runRouteEffect(
       runtime,
-      buildErrorPipeline(effect, errorMap, config.errors)
+      withRequestTally(buildErrorPipeline(effect, errorMap, config.errors))
     );
   };
 }
@@ -150,7 +151,7 @@ export function makeAction<A, E, R extends LayerLive>(
 
     return runRouteEffect(
       runtime,
-      buildErrorPipeline(effect, errorMap, config.errors)
+      withRequestTally(buildErrorPipeline(effect, errorMap, config.errors))
     );
   };
 }

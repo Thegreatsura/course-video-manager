@@ -5,11 +5,17 @@ import type { EnqueueJob, JobKind } from "./job-kind";
 import { enqueueJob, type JobKindSpecs } from "./job-specs";
 import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
+import { duplicateCourseJobKind } from "./kinds/duplicate-course";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
 import { publishJobKind } from "./kinds/publish";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
 import { transcribeClipsJobKind } from "./kinds/transcribe-clips";
+import { transcribeFootageJobKind } from "./kinds/transcribe-footage";
+import {
+  removeLocalImagesJobKind,
+  uploadImagesJobKind,
+} from "./kinds/upload-images";
 import { aiHeroJobKind } from "./kinds/ai-hero";
 import { bufferJobKind } from "./kinds/buffer";
 import { skillsChangelogJobKind } from "./kinds/skills-changelog";
@@ -27,6 +33,10 @@ export const JOB_KINDS = {
   "batch-export": batchExportJobKind,
   autofill: autofillJobKind,
   "transcribe-clips": transcribeClipsJobKind,
+  "transcribe-footage": transcribeFootageJobKind,
+  "upload-images": uploadImagesJobKind,
+  "remove-local-images": removeLocalImagesJobKind,
+  "duplicate-course": duplicateCourseJobKind,
   // The `publish` lane, one at a time; never run again on its own.
   publish: publishJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.

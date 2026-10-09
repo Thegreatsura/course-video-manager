@@ -6,7 +6,7 @@ import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import { LessonPlaceProvider } from "@/features/entity-links/lesson-place-context";
 import type { FindLessonPlace } from "@/features/entity-links/entity-deep-link";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { getBackButtonUrl } from "@/features/video-editor/video-editor-selectors";
@@ -28,7 +28,7 @@ import {
   HistoryIcon,
   PlayIcon,
 } from "lucide-react";
-import { useCallback, useContext, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Link,
   Outlet,
@@ -227,7 +227,7 @@ export default function VideoLayout({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const submit = useSubmit();
   const revealFetcher = useFetcher();
-  const { startExportUpload } = useContext(UploadContext);
+  const { startExportUpload } = useUploadActions();
   const dialogs = useVideoDialogs();
   const video = { id: videoId, title: videoTitle };
   const videoGroups = videoMenuGroups({

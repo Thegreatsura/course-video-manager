@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useEffectReducer } from "use-effect-reducer";
-import { useNavigate } from "react-router";
+import { useBlocker, useNavigate } from "react-router";
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
 import { diagramChannel } from "@/lib/diagram-protocol";
 import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
   isCanvasEditable,
+  leaveMustWaitFor,
   type StoredHead,
 } from "./diagram-playground-reducer";
 import {
@@ -75,16 +76,23 @@ export function useDiagramPlaygroundReducer() {
   /** Callers of `requestRestore` waiting for the head to move. */
   const restoreWaiters = useRef(new Map<number, () => void>());
   const nextRestoreRequestId = useRef(0);
+  /**
+   * Read by the navigation blocker, which React Router may call before this
+   * render's effects run: set during render so it is never a render behind.
+   */
+  const stateRef = useRef<diagramPlaygroundReducer.State | null>(null);
+  /** Whether the navigation the blocker last held was a replace. */
+  const heldReplace = useRef(false);
 
   // Saves only what differs from the head last loaded or saved, so opening a
-  // diagram never writes it back. Every flow that leaves the current diagram
-  // must call this first, or up to 500ms of debounced edits is silently lost.
+  // diagram never writes it back. Anything that reads the open diagram's
+  // stored head calls this first; leaving the diagram goes through the
+  // navigation blocker below instead.
   const flushPendingSave = useCallback(async () => {
     await autosaver.current?.flush();
   }, []);
 
-  const releaseRestoreRequest = (requestId: number | null) => {
-    if (requestId === null) return;
+  const releaseRestoreRequest = (requestId: number) => {
     restoreWaiters.current.get(requestId)?.();
     restoreWaiters.current.delete(requestId);
   };
@@ -145,7 +153,10 @@ export function useDiagramPlaygroundReducer() {
         fetch(`/api/diagrams/${effect.diagramId}/restore-to-head`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ snapshotId: effect.snapshot.id }),
+          body: JSON.stringify({
+            snapshotId: effect.snapshot.id,
+            expectedHeadHash: effect.expectedHeadHash,
+          }),
         })
           .then(async (res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -202,6 +213,59 @@ export function useDiagramPlaygroundReducer() {
             dispatch({ type: "preserve-failed", reason: "request-failed" });
           }
         })();
+      },
+      "keep-canvas-as-snapshot": (_state, effect, dispatch) => {
+        const { diagramId } = effect;
+        void (async () => {
+          try {
+            const ed = editorRef.current;
+            if (!ed) throw new Error("No editor");
+            const thumbnailPngBase64 = await renderThumbnailPngBase64(
+              ed,
+              "current-page"
+            );
+            if (!thumbnailPngBase64) {
+              dispatch({
+                type: "keep-canvas-failed",
+                diagramId,
+                reason: "empty-canvas",
+              });
+              return;
+            }
+            const res = await fetch(`/api/diagrams/${diagramId}/snapshots`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                preserved: true,
+                thumbnailPngBase64,
+                scene: ed.store.getStoreSnapshot("document"),
+              }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            dispatch({ type: "canvas-kept", diagramId });
+          } catch {
+            dispatch({
+              type: "keep-canvas-failed",
+              diagramId,
+              reason: "request-failed",
+            });
+          }
+        })();
+      },
+      "save-before-leaving": (_state, effect, dispatch) => {
+        void (async () => {
+          const outcome = (await autosaver.current?.flush()) ?? "saved";
+          dispatch({
+            type: "saved-before-leaving",
+            diagramId: effect.diagramId,
+            outcome,
+          });
+        })();
+      },
+      "continue-leaving": (_state, effect) => {
+        navigate(effect.destination.to, {
+          replace: effect.destination.replace,
+        });
       },
       "create-diagram": (_state, _effect, dispatch) => {
         void (async () => {
@@ -283,6 +347,59 @@ export function useDiagramPlaygroundReducer() {
 
   useEffect(() => () => autosaver.current?.dispose(), []);
 
+  /** What leaving the open diagram now would have to wait for, if anything. */
+  const leaveWaitsFor = () =>
+    stateRef.current
+      ? leaveMustWaitFor(
+          stateRef.current,
+          autosaver.current?.hasUnsavedEdits() ?? false
+        )
+      : null;
+
+  // Every way out of the open diagram — another diagram, the index, another
+  // page — is held while its last edits aren't stored: still in the autosave
+  // debounce, or refused by the server. The blocker is released at once,
+  // since a held blocker didn't survive the round trip in the browser; the
+  // reducer gets the destination, saves the edits (or keeps the canvas as a
+  // snapshot), then sends the navigation on with `continue-leaving`.
+  stateRef.current = state;
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation, historyAction }) => {
+      const hold =
+        currentLocation.pathname !== nextLocation.pathname &&
+        leaveWaitsFor() !== null;
+      if (hold) heldReplace.current = historyAction === "REPLACE";
+      return hold;
+    }
+  );
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    const { pathname, search, hash } = blocker.location;
+    dispatch({
+      type: "leave-requested",
+      destination: {
+        to: `${pathname}${search}${hash}`,
+        replace: heldReplace.current,
+      },
+      canvasHasUnsavedEdits: autosaver.current?.hasUnsavedEdits() ?? false,
+    });
+    blocker.reset();
+  }, [blocker, dispatch]);
+
+  // Closing or reloading the tab can't wait for a save or a snapshot: while
+  // either is owed, the browser asks.
+  const headReady = state.head?.status === "ready";
+  useEffect(() => {
+    if (!headReady) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (leaveWaitsFor() === null) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [headReady]);
+
   /** Wire a freshly mounted tldraw editor to the page. */
   const attachEditor = useCallback(
     (editor: Editor) => {
@@ -334,21 +451,19 @@ export function useDiagramPlaygroundReducer() {
   );
 
   /**
-   * Asks to restore `snapshot`. Resolves once the head has moved, or at once
-   * if the confirmation dialog takes over — so a Snapshot Step can wait for
-   * one restore before aiming the next.
+   * Asks to restore `snapshot`, given the `timeline` it was picked from.
+   * Resolves once the head has moved, or the restore has given up — so a
+   * Snapshot Step can wait for one restore before aiming the next.
    */
   const requestRestore = useCallback(
-    (snapshot: Snapshot, headIsCaptured: boolean) => {
-      const ed = editorRef.current;
+    (snapshot: Snapshot, timeline: readonly { contentHash: string }[]) => {
       const requestId = nextRestoreRequestId.current++;
       return new Promise<void>((resolve) => {
         restoreWaiters.current.set(requestId, resolve);
         dispatch({
           type: "restore-requested",
           snapshot,
-          headIsCaptured,
-          canvasIsEmpty: ed ? ed.getCurrentPageShapeIds().size === 0 : false,
+          timeline,
           requestId,
         });
       });

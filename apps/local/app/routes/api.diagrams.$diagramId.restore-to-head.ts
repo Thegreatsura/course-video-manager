@@ -23,10 +23,18 @@ export const action = makeAction({
         );
       }
 
+      // The head the page last saw; one it hasn't seen is preserved first.
+      const expected = body.expectedHeadHash;
+      const expectedHeadHash =
+        typeof expected === "string" || expected === null
+          ? expected
+          : undefined;
+
       const diagramOps = yield* DiagramOperationsService;
-      const diagram = yield* diagramOps.restoreSnapshotToHead(
+      const diagram = yield* diagramOps.restoreToHead(
         params.diagramId!,
-        snapshotId
+        snapshotId,
+        { expectedHeadHash }
       );
 
       return data({

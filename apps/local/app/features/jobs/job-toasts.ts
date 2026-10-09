@@ -19,6 +19,7 @@ const FAILED: Record<string, string> = {
   /** One Video of a Course Autofill: nothing of it was written. */
   "autofill-video": "autofill failed",
   publish: "publish failed",
+  "duplicate-course": "duplicate failed",
   /** One Video of a Publish: its export or its upload. */
   "publish-video": "failed in the Publish",
 };

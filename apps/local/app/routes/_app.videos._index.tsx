@@ -4,7 +4,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import { useVideoDialogs } from "@/features/video-menu/video-dialogs";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { formatDuration } from "@/lib/format-duration";
 import { CoursePublishReadService } from "@/services/course-publish-reads";
@@ -12,7 +12,7 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
 import { Archive, Plus, VideoIcon, VideoOffIcon } from "lucide-react";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import type { Route } from "./+types/_app.videos._index";
 
@@ -55,7 +55,7 @@ export default function Component(props: Route.ComponentProps) {
   const [isAddVideoOpen, setIsAddVideoOpen] = useState(false);
   const navigate = useNavigate();
   const revealVideoFetcher = useFetcher();
-  const { startExportUpload } = useContext(UploadContext);
+  const { startExportUpload } = useUploadActions();
   const dialogs = useVideoDialogs();
 
   useFocusRevalidate({ enabled: true });

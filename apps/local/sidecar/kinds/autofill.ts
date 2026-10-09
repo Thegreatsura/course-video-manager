@@ -14,7 +14,11 @@ import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 export const AUTOFILL_EVENTS = {
   /** Every **Autofill Candidate**, before any work starts: `{ videos: [{ id, title }] }`. */
   videos: "videos",
-  /** A Video's fields landed, in one transaction: `{ videoId }`. */
+  /**
+   * A Video's fields landed, in one transaction: `{ videoId, fields, kept }`.
+   * `kept` names each field the author changed while the run worked, with the
+   * Autofill's text offered instead of written (`AutofillKept`).
+   */
   videoSucceeded: "video-succeeded",
   /** Nothing of the Video was written: `{ videoId, message }`. */
   videoFailed: "video-failed",
@@ -80,6 +84,7 @@ export const autofillJobKind = defineJobKind({
               events.emit(AUTOFILL_EVENTS.videoSucceeded, {
                 videoId: video.videoId,
                 fields: video.fields,
+                kept: video.kept,
               });
             } else {
               events.emit(AUTOFILL_EVENTS.videoFailed, {

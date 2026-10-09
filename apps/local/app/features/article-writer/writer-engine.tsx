@@ -75,8 +75,13 @@ export interface WriterEngineProps {
   ctxTab?: string;
   onCtxTabChange?: (tab: string) => void;
   onCancel?: () => void;
-  /** Receives the final (image-uploaded) document to persist. */
-  onApply?: (finalDocument: string) => void;
+  /**
+   * Persist the final (image-uploaded) document. Resolve only once the save
+   * is confirmed, reject if it failed: local images go only after it resolves.
+   */
+  onApply: (finalDocument: string) => Promise<void>;
+  /** The applied document is saved: the host closes the writer here. */
+  onApplied?: (finalDocument: string) => void;
   /** When set, the modal's Repo Files tab shows an "add from clipboard" button. */
   onAddFileFromClipboard?: () => void;
   /** Other fields on the same page, offered as toggleable AI context. */
@@ -97,6 +102,7 @@ export function WriterEngine({
   onCtxTabChange,
   onCancel,
   onApply,
+  onApplied,
   onAddFileFromClipboard,
   pageFields,
 }: WriterEngineProps) {
@@ -384,7 +390,8 @@ export function WriterEngine({
     videoId,
     documentRef,
     updateDocument,
-    onApply
+    onApply,
+    onApplied
   );
 
   const toolbarProps: WriteToolbarProps = useMemo(

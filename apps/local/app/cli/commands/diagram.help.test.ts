@@ -5,6 +5,8 @@ import {
   DEFAULTS,
   FILLS,
   HEADS,
+  MAX_COORDINATE,
+  MAX_SHAPES,
   SHAPE_SCHEMAS,
   SHAPE_TYPES,
   SIZES,
@@ -12,7 +14,10 @@ import {
 import { ICON_NAMES } from "@cvm/lucide-icons";
 import {
   CREATE_HELP,
+  DELETE_HELP,
   GET_HELP,
+  RESTORE_HELP,
+  UPDATE_HELP,
   HELP,
   RENDER_HELP,
   SNAPSHOT_ADD_HELP,
@@ -198,9 +203,16 @@ describe("cvm diagram get --help documents what 'get' prints", () => {
   it("documents the head and every snapshot field", () => {
     const output = GET_HELP.slice(GET_HELP.indexOf("Output:"));
     expect(output).toMatch(
-      /\{"id":"…","name":"…","url":"…","head":\{"shapes":\[…\]\},\s+"snapshots":\[\{"id":"…","preserved":true,"clipIds":\[…\],"diagramText":"…","createdAt":"…"\}/
+      /\{"id":"…","name":"…","archived":false,"url":"…","head":\{"shapes":\[…\]\},\s+"snapshots":\[\{"id":"…","preserved":true,"clipIds":\[…\],"diagramText":"…","createdAt":"…"\}/
     );
-    for (const field of ["id", "name", "url", "head", "snapshots"]) {
+    for (const field of [
+      "id",
+      "name",
+      "archived",
+      "url",
+      "head",
+      "snapshots",
+    ]) {
       expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
     }
     for (const field of ["preserved", "clipIds", "diagramText", "createdAt"]) {
@@ -211,6 +223,15 @@ describe("cvm diagram get --help documents what 'get' prints", () => {
   it("documents --snapshot's output and the 'other' shape", () => {
     expect(GET_HELP).toContain('{"snapshotId":"…","shapes":[…]}');
     expect(GET_HELP).toContain('{"type":"other","id":"…"}');
+  });
+
+  it("says the head can be passed back whole: 'snapshot add' keeps every 'other'", () => {
+    expect(GET_HELP).toContain("pass the head back whole");
+    expect(SNAPSHOT_ADD_HELP).toContain("ONTO the head");
+    expect(SNAPSHOT_ADD_HELP).toContain('"other" shape is kept as it is');
+    expect(
+      block("SHAPES").find((line) => line.trimStart().startsWith("other"))
+    ).toContain("'snapshot add' keeps it");
   });
 
   it("puts the --snapshot flag before the id", () => {
@@ -228,16 +249,24 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
       "snapshot add --file <path|-> <diagramId>",
       "render <snapshotId>",
       "get [--snapshot <snapshotId>] <diagramId>",
+      "update --name <name> <diagramId>",
+      "delete <diagramId>",
+      "restore <diagramId>",
     ]);
   });
 
   it("gives an EXAMPLE whose shapes 'snapshot add' accepts as one drawing", () => {
     const { shapes } = example();
-    expect(parseSnapshotInput({ shapes }, icons).ok).toBe(true);
+    expect(parseSnapshotInput({ shapes }, icons, null).ok).toBe(true);
   });
 
   it("refuses the whole EXAMPLE to 'snapshot add': a snapshot has no name", () => {
-    expect(parseSnapshotInput(example(), icons).ok).toBe(false);
+    expect(parseSnapshotInput(example(), icons, null).ok).toBe(false);
+  });
+
+  it("states the limits the format enforces", () => {
+    expect(HELP).toContain(`at most ${MAX_SHAPES} shapes`);
+    expect(HELP).toContain(`within ±${MAX_COORDINATE}`);
   });
 
   it.each([
@@ -253,5 +282,39 @@ describe("cvm diagram --help documents 'snapshot add' and 'render'", () => {
 
   it("says render draws a SNAPSHOT, never the head", () => {
     expect(RENDER_HELP).toContain("never the head");
+  });
+});
+
+describe("cvm diagram --help documents 'update', 'delete' and 'restore'", () => {
+  it.each([
+    ["update", UPDATE_HELP],
+    ["delete", DELETE_HELP],
+    ["restore", RESTORE_HELP],
+  ])(
+    "documents the output '%s' prints: {id, name, archived, url}",
+    (_, help) => {
+      const output = help.slice(help.indexOf("Output:"));
+      expect(output).toContain(
+        '{"id":"…","name":"…","archived":false,"url":"…"}'
+      );
+      for (const field of ["id", "name", "archived", "url"]) {
+        expect(output).toMatch(new RegExp(`^ {2}${field} `, "m"));
+      }
+    }
+  );
+
+  it("puts --name before the id", () => {
+    expect(UPDATE_HELP).toContain(
+      "cvm diagram update --name <name> <diagramId>"
+    );
+    expect(HELP).toContain(
+      'cvm diagram update --name "Agent loop" <diagramId>'
+    );
+  });
+
+  it("says update changes the name only, and delete is an archive", () => {
+    expect(UPDATE_HELP).toContain("never changes the\nhead or any snapshot");
+    expect(DELETE_HELP).toContain("an ARCHIVE");
+    expect(HELP).toContain("'update' changes the NAME only");
   });
 });

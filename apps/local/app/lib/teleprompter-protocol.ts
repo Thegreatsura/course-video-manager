@@ -27,7 +27,11 @@
  * editor mounted missed the mount push, so it asks once, and keeps asking only
  * while it believes nobody is on the other end.
  *
- * Nothing else flows back the other way: the teleprompter never reports position.
+ * One thing flows back the other way: a dot clicked on the glass
+ * (`clipMarkClicked`). It is a fact, not a command: the editor decides whether
+ * that plays or pauses the Clip, and the glass learns the outcome the same way
+ * it learns everything else, from the next `editorState` (`playingClipId`).
+ * The teleprompter never reports reading position.
  */
 import { z } from "zod";
 import { createPopupChannel } from "./popup-channel";
@@ -103,6 +107,15 @@ export type ClipMarkState = z.infer<typeof ClipMarkState>;
 export const ClipMarks = z.array(ClipMarkState);
 export type ClipMarks = z.infer<typeof ClipMarks>;
 
+/**
+ * The Clip each mark stands for, in the same order as `marks`, so a dot on the
+ * glass can name its Clip. A sibling of `marks` rather than a field on each
+ * mark, because changing the shape of `marks` would make a popup left open
+ * across a deploy fail to parse every `editorState` and go blank.
+ */
+export const ClipMarkIds = z.array(z.string());
+export type ClipMarkIds = z.infer<typeof ClipMarkIds>;
+
 export const TeleprompterParentToChild = z.discriminatedUnion("type", [
   /**
    * What the editor has open, what capture is doing, and which tab it's showing.
@@ -115,6 +128,13 @@ export const TeleprompterParentToChild = z.discriminatedUnion("type", [
     capture: CaptureStatus,
     tab: EditorTab,
     marks: ClipMarks.optional(),
+    /** See `ClipMarkIds`. Optional for the same stale-popup reason as `marks`. */
+    markClipIds: ClipMarkIds.optional(),
+    /**
+     * The Clip the editor's player is playing right now, or `null` when it is
+     * paused. Optional for the same stale-popup reason as `marks`.
+     */
+    playingClipId: z.string().nullable().optional(),
     /**
      * The transcript of the newest transcribed clip in the current recording
      * session, deleted ones included, so a fluffed take can be read back on
@@ -161,6 +181,11 @@ export const TeleprompterChildToParent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ping") }),
   /** "I just arrived, or I think you left — send me your state once." */
   z.object({ type: z.literal("hello") }),
+  /**
+   * A dot was clicked on the glass. The editor plays that Clip, or pauses it if
+   * it is the one already playing.
+   */
+  z.object({ type: z.literal("clipMarkClicked"), clipId: z.string() }),
 ]);
 
 export type TeleprompterParentToChildMessage = z.infer<

@@ -7,6 +7,9 @@ import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
   CLIP_TRANSCRIPTION_POLICY,
+  COURSE_DUPLICATE_POLICY,
+  FOOTAGE_TRANSCRIPTION_POLICY,
+  IMAGE_UPLOAD_POLICY,
   POSTING_JOB_POLICY,
   RETRYING_JOB_POLICY,
   UPLOAD_MANAGER_POLICIES,
@@ -35,6 +38,12 @@ export interface JobKindSpec {
    * Absent for a kind where two of the same Job are fine.
    */
   readonly coveredBy?: (params: unknown, live: LiveJob) => boolean;
+  /**
+   * Whether a request for `params` must wait for a live Job of this kind,
+   * for the same subject: then it is added depending on that Job, so the
+   * two never run side by side.
+   */
+  readonly queuesBehind?: (params: unknown, live: LiveJob) => boolean;
 }
 
 export type JobKindSpecs = Readonly<Record<string, JobKindSpec>>;
@@ -67,6 +76,31 @@ export const JOB_KIND_SPECS = {
         live
       ),
   },
+  // A second `cvm footage transcribe` of a file already being transcribed
+  // follows the first Job rather than paying Whisper for it twice.
+  "transcribe-footage": {
+    ...spec(FOOTAGE_TRANSCRIPTION_POLICY, JOB_PARAMS["transcribe-footage"]),
+    coveredBy: (params, live) =>
+      (live.params as { path?: unknown } | null)?.path ===
+      (params as { path: string }).path,
+  },
+  // Upload pressed again (the tab closed before the first Job settled) waits
+  // for the live Job for the same body, then reuses every URL it recorded
+  // rather than uploading each image a second time.
+  "upload-images": {
+    ...spec(IMAGE_UPLOAD_POLICY, JOB_PARAMS["upload-images"]),
+    queuesBehind: (params, live) =>
+      (live.params as { body?: unknown } | null)?.body ===
+      (params as { body: string }).body,
+  },
+  "remove-local-images": spec(
+    IMAGE_UPLOAD_POLICY,
+    JOB_PARAMS["remove-local-images"]
+  ),
+  "duplicate-course": spec(
+    COURSE_DUPLICATE_POLICY,
+    JOB_PARAMS["duplicate-course"]
+  ),
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),
   "youtube-shorts": spec(POSTING_JOB_POLICY, JOB_PARAMS["youtube-shorts"]),
@@ -141,6 +175,9 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     subject: input.subject,
     ...(kind.coveredBy
       ? { coveredBy: (live: LiveJob) => kind.coveredBy!(params, live) }
+      : {}),
+    ...(kind.queuesBehind
+      ? { queuesBehind: (live: LiveJob) => kind.queuesBehind!(params, live) }
       : {}),
   });
 });

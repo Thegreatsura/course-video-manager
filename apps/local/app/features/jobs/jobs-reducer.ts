@@ -8,13 +8,16 @@ import {
 import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
-import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
+import {
+  isSilentSettlement,
+  succeededToastOf,
+  type SucceededToast,
+} from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
 import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
-import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -101,6 +104,16 @@ export namespace jobsReducer {
     uploadedBytes: number;
     /** Its size on disk, once the upload pool picks it up. */
     totalBytes: number | null;
+    /**
+     * An Autofill's Video: the fields the author changed while it ran, which
+     * kept their text, and what the Autofill offers instead. Empty otherwise.
+     */
+    kept: AutofillKeptView[];
+  }
+
+  export interface AutofillKeptView {
+    field: string;
+    proposal: string;
   }
 
   /** A `post-check` Job Event: did the interrupted post go out? */
@@ -210,7 +223,10 @@ export namespace jobsReducer {
         "batch-video-progressed",
         { videoId: string; stage: string; percent: number }
       >
-    | StreamFact<"batch-video-succeeded", { videoId: string }>
+    | StreamFact<
+        "batch-video-succeeded",
+        { videoId: string; kept: AutofillKeptView[] }
+      >
     | StreamFact<"batch-video-failed", { videoId: string; message: string }>
     | StreamFact<"batch-video-handed-off", { videoId: string }>
     // A Publish's Videos, on into Dropbox
@@ -362,11 +378,7 @@ const loadStageHistory = (
 
 /** The toast for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
-  // A Batch export toasts each Video as it finishes (as the browser did), and
-  // nothing for the batch itself; only its failure is news.
-  if (job.kind === "batch-export" && job.status === "succeeded") return;
-  // A Clip transcription shows on its Clips in the editor, never as a toast.
-  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) return;
+  if (isSilentSettlement(job)) return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",

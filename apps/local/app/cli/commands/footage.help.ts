@@ -27,7 +27,8 @@ Transcription is whole-file and speaker-agnostic: mono 64kbps audio, Whisper
 Whisper's 25MB upload is split into ~27-minute chunks cut at detected silence
 (never mid-word) and merged back onto one timeline. The cache is keyed by a
 content hash of the source, so replacing/re-recording a file re-transcribes it
-rather than serving stale words.
+rather than serving stale words. The transcription itself is a Job the Sidecar
+runs ('pnpm dev' / 'pnpm start' starts it), so it survives a restart.
 
 LOCAL-ONLY. Footage lives on the author's disk, so every verb here needs that
 machine; on any other box it is refused before doing anything (_tag
@@ -35,7 +36,7 @@ machine; on any other box it is refused before doing anything (_tag
 
 Verbs:
   list       [--dir <path>]              List video files in a directory
-  transcribe <path>                      Transcribe a file, caching the result
+  transcribe <path> [--no-wait]          Transcribe a file, caching the result
   transcript <path>                      Read the cached transcript (never runs
                                          Whisper; not-found if never transcribed)`;
 
@@ -72,15 +73,34 @@ timeline.
 The cache is keyed by a CONTENT HASH of the source file. Re-recording or
 replacing the file at the same path changes the hash, so the next transcribe
 re-does the work instead of serving the previous file's words; an unchanged file
-overwrites its own sidecar. This is SYNCHRONOUS — a long file blocks until done.
+overwrites its own sidecar.
+
+A JOB THE SIDECAR RUNS
+  The command ENQUEUES a 'transcribe-footage' Job and, by default, waits for it:
+  the Sidecar ('pnpm dev' / 'pnpm start' on the author's machine) runs it, with
+  the same Whisper permits as Clip transcription, and logs it at
+  .data/logs/jobs/<jobId>.jsonl. A long file blocks until done. If the Sidecar
+  is not running, the Job waits in the queue until it is (one line on STDERR
+  says so). Transcribing a file that is already being transcribed follows that
+  Job instead of starting a second one.
+  Each finished chunk is kept beside the file ("<path>.transcript.partial/")
+  until the transcript is written, so a Sidecar restart mid-run resumes rather
+  than re-sending finished chunks to Whisper. A run cut off for good (its Sidecar
+  died) ends FootageTranscriptionInterruptedError (exit 4): run the command again
+  and it resumes from those chunks.
 
 Echoes one JSON object: { path, sidecar, sourceHash, transcribedAt, words,
 segments } (words/segments are counts). Read the transcript itself back with
-'footage transcript'.
+'footage transcript'. A Whisper or ffmpeg failure ends with its own tagged error
+on STDERR (exit 4); a missing file is a ParseError (exit 3).
+
+--no-wait returns as soon as the Job is queued, echoing { jobId, status:
+"queued", path, sidecar, log }; read the result later with 'footage transcript'.
 
 Examples:
   cvm footage transcribe /mnt/d/raw-footage/take.mkv
-  cvm footage transcribe ./rec.mp4 | jq '{words, segments}'`;
+  cvm footage transcribe ./rec.mp4 | jq '{words, segments}'
+  cvm footage transcribe --no-wait /mnt/d/raw-footage/take.mkv`;
 
 export const TRANSCRIPT_HELP = `Read a footage file's cached transcript. NEVER transcribes — this only reads the
 sidecar written by 'footage transcribe'.

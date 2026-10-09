@@ -1,4 +1,4 @@
-import { createContext, useCallback, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import {
   historyLookupOf,
@@ -8,6 +8,10 @@ import { useJobs, type SubscribeToJobJoins } from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
+import {
+  REMOVE_LOCAL_IMAGES_JOB_KIND,
+  UPLOAD_IMAGES_JOB_KIND,
+} from "@/features/image-upload/image-upload-job";
 
 export interface UploadContextType {
   /** Background Jobs the Sidecar runs (a Video export), as this tab sees them. */
@@ -115,9 +119,34 @@ export interface UploadContextType {
     videoId: string,
     clipIds: readonly string[]
   ) => void;
+  /**
+   * Upload a body's local images to Cloudinary: an `upload-images` Job the
+   * Sidecar runs, under the id the caller made. It draws no row, and toasts
+   * only a failure; its Job Events come back to the caller
+   * (`features/image-upload/use-image-upload-job.ts`).
+   */
+  startImageUpload: (jobId: string, videoId: string, body: string) => void;
+  /** Remove local image files whose Cloudinary URLs went into a body. */
+  removeLocalImages: (videoId: string, filePaths: readonly string[]) => void;
 }
 
 export const UploadContext = createContext<UploadContextType>(null!);
+
+/** Everything in {@link UploadContextType} but the live Jobs state. */
+export type UploadActions = Omit<UploadContextType, "jobs" | "etaHistory">;
+
+const UploadActionsContext = createContext<UploadActions>(null!);
+
+/**
+ * The ways to start and manage Jobs, without the Jobs state. Its value never
+ * changes, so a page that only starts Jobs does not re-render for every Job
+ * Event the tab hears — a page that replays dozens of them on load (every
+ * page) would otherwise re-render its whole tree once per event. Read
+ * {@link UploadContext} only when the Jobs themselves are drawn.
+ */
+export function useUploadActions(): UploadActions {
+  return useContext(UploadActionsContext);
+}
 
 export function UploadProvider({
   children,
@@ -351,32 +380,99 @@ export function UploadProvider({
     [startJob]
   );
 
+  // Uploading a body's images is a Job too, so closing the tab mid-upload
+  // loses nothing: every upload is recorded before anything acts on it.
+  const startImageUpload = useCallback(
+    (jobId: string, videoId: string, body: string) => {
+      startJob({
+        id: jobId,
+        kind: UPLOAD_IMAGES_JOB_KIND,
+        title: "Upload images to Cloudinary",
+        params: { videoId, body },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: null,
+      });
+    },
+    [startJob]
+  );
+
+  const removeLocalImages = useCallback(
+    (videoId: string, filePaths: readonly string[]) => {
+      startJob({
+        kind: REMOVE_LOCAL_IMAGES_JOB_KIND,
+        title: "Remove uploaded local images",
+        params: { videoId, filePaths: [...filePaths] },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: null,
+      });
+    },
+    [startJob]
+  );
+
+  const {
+    dismissJob,
+    subscribeToJobEvents,
+    subscribeToJobJoins,
+    retryJob,
+    dismissFinishedJobs,
+    clearFinishedJobs,
+  } = jobs;
+  const actions = useMemo<UploadActions>(
+    () => ({
+      dismissJob,
+      subscribeToJobEvents,
+      subscribeToJobJoins,
+      retryJob,
+      dismissFinishedJobs,
+      clearFinished: clearFinishedJobs,
+      clock,
+      startUpload,
+      startSocialUpload,
+      startYoutubeShortsUpload,
+      startAiHeroUpload,
+      startSkillsChangelogUpload,
+      startExportUpload,
+      startRenderVerticalUpload,
+      startBatchExportUpload,
+      startPublish,
+      startAutofill,
+      startClipTranscription,
+      startImageUpload,
+      removeLocalImages,
+    }),
+    [
+      dismissJob,
+      subscribeToJobEvents,
+      subscribeToJobJoins,
+      retryJob,
+      dismissFinishedJobs,
+      clearFinishedJobs,
+      clock,
+      startUpload,
+      startSocialUpload,
+      startYoutubeShortsUpload,
+      startAiHeroUpload,
+      startSkillsChangelogUpload,
+      startExportUpload,
+      startRenderVerticalUpload,
+      startBatchExportUpload,
+      startPublish,
+      startAutofill,
+      startClipTranscription,
+      startImageUpload,
+      removeLocalImages,
+    ]
+  );
+  const value = useMemo<UploadContextType>(
+    () => ({ ...actions, jobs: jobs.state, etaHistory }),
+    [actions, jobs.state, etaHistory]
+  );
+
   return (
-    <UploadContext.Provider
-      value={{
-        jobs: jobs.state,
-        dismissJob: jobs.dismissJob,
-        subscribeToJobEvents: jobs.subscribeToJobEvents,
-        subscribeToJobJoins: jobs.subscribeToJobJoins,
-        retryJob: jobs.retryJob,
-        dismissFinishedJobs: jobs.dismissFinishedJobs,
-        clearFinished: jobs.clearFinishedJobs,
-        etaHistory,
-        clock,
-        startUpload,
-        startSocialUpload,
-        startYoutubeShortsUpload,
-        startAiHeroUpload,
-        startSkillsChangelogUpload,
-        startExportUpload,
-        startRenderVerticalUpload,
-        startBatchExportUpload,
-        startPublish,
-        startAutofill,
-        startClipTranscription,
-      }}
-    >
-      {children}
-    </UploadContext.Provider>
+    <UploadActionsContext.Provider value={actions}>
+      <UploadContext.Provider value={value}>{children}</UploadContext.Provider>
+    </UploadActionsContext.Provider>
   );
 }

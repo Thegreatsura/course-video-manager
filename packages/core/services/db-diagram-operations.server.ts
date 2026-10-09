@@ -28,6 +28,8 @@ import {
   DiagramThumbnailStore,
   type DiagramThumbnailStoreApi,
 } from "./diagram-thumbnail-store.js";
+import { lockDiagram } from "./lock-diagram.server.js";
+import { withDbTransaction } from "./with-db-transaction.server.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -35,6 +37,44 @@ const makeDbCall = <T>(fn: () => Promise<T>) => {
     catch: (e) => new UnknownDBServiceError({ cause: e }),
   });
 };
+
+/** `restoreFromSearch`'s body; `db` must be its transaction. */
+const restoreFromSearchIn = (
+  db: Database,
+  { storeSnapshot, restoreSnapshotToHead }: DiagramPrimitives
+) =>
+  Effect.fn("restoreFromSearch")(function* (
+    diagramId: string,
+    snapshotId: string
+  ) {
+    const diagram = yield* lockDiagram(db, diagramId, "restoreFromSearch");
+
+    const snapshot = yield* makeDbCall(() =>
+      db.query.diagramSnapshots.findFirst({
+        where: and(
+          eq(diagramSnapshots.id, snapshotId),
+          eq(diagramSnapshots.diagramId, diagramId)
+        ),
+      })
+    );
+
+    if (!snapshot) {
+      return yield* new NotFoundError({
+        type: "restoreFromSearch",
+        params: { diagramId, snapshotId },
+      });
+    }
+
+    if (hashHead(diagram.headScene) === snapshot.contentHash) {
+      return diagram;
+    }
+
+    if (diagram.headScene != null) {
+      yield* storeSnapshot(diagramId, diagram.headScene, { preserved: true });
+    }
+
+    return yield* restoreSnapshotToHead(diagramId, snapshotId);
+  });
 
 const createDiagramOperations = (
   db: Database,
@@ -424,9 +464,14 @@ const createDiagramOperations = (
     return snapshot;
   });
 
+  /**
+   * Keep the Diagram's head as a snapshot — or, given `scene`, that drawing
+   * instead: a canvas the head refused, kept so leaving it loses nothing. The
+   * head is never moved.
+   */
   const createSnapshot = Effect.fn("createSnapshot")(function* (
     diagramId: string,
-    opts: { preserved?: boolean; thumbnailPng?: Buffer }
+    opts: { preserved?: boolean; thumbnailPng?: Buffer; scene?: unknown }
   ) {
     const diagram = yield* makeDbCall(() =>
       db.query.diagrams.findFirst({
@@ -441,14 +486,15 @@ const createDiagramOperations = (
       });
     }
 
-    if (diagram.headScene == null) {
+    const scene = opts.scene ?? diagram.headScene;
+    if (scene == null) {
       return yield* new NotFoundError({
         type: "createSnapshot",
         params: { diagramId, reason: "headScene is null" },
       });
     }
 
-    return yield* storeSnapshot(diagramId, diagram.headScene, opts);
+    return yield* storeSnapshot(diagramId, scene, opts);
   });
 
   const listSnapshots = Effect.fn("listSnapshots")(function* (
@@ -587,51 +633,20 @@ const createDiagramOperations = (
     return diagram;
   });
 
-  const restoreFromSearch = Effect.fn("restoreFromSearch")(function* (
-    diagramId: string,
-    snapshotId: string
-  ) {
-    const snapshot = yield* makeDbCall(() =>
-      db.query.diagramSnapshots.findFirst({
-        where: and(
-          eq(diagramSnapshots.id, snapshotId),
-          eq(diagramSnapshots.diagramId, diagramId)
-        ),
-      })
+  /** These operations bound to a transaction; typed to break the cycle. */
+  const primitivesFor = (tx: Database): DiagramPrimitives =>
+    createDiagramOperations(tx, thumbnails).primitives;
+
+  /**
+   * Load a snapshot found by search onto the head, preserving the outgoing
+   * head first. One transaction, with the Diagram row locked (`lockDiagram`)
+   * BEFORE the head is read, so an autosave can't land between the read and
+   * the write and be silently replaced.
+   */
+  const restoreFromSearch = (diagramId: string, snapshotId: string) =>
+    withDbTransaction(db, (tx) =>
+      restoreFromSearchIn(tx, primitivesFor(tx))(diagramId, snapshotId)
     );
-
-    if (!snapshot) {
-      return yield* new NotFoundError({
-        type: "restoreFromSearch",
-        params: { diagramId, snapshotId },
-      });
-    }
-
-    const diagram = yield* makeDbCall(() =>
-      db.query.diagrams.findFirst({
-        where: eq(diagrams.id, diagramId),
-      })
-    );
-
-    if (!diagram) {
-      return yield* new NotFoundError({
-        type: "restoreFromSearch",
-        params: { diagramId },
-      });
-    }
-
-    const headHash =
-      diagram.headScene == null ? null : hashScene(diagram.headScene);
-    if (headHash === snapshot.contentHash) {
-      return diagram;
-    }
-
-    if (diagram.headScene != null) {
-      yield* createSnapshot(diagramId, { preserved: true });
-    }
-
-    return yield* restoreSnapshotToHead(diagramId, snapshotId);
-  });
 
   const createSnapshotForClip = Effect.fn("createSnapshotForClip")(function* (
     diagramId: string,
@@ -689,17 +704,12 @@ const createDiagramOperations = (
     setSnapshotArchived,
     restoreSnapshotToHead,
     restoreFromSearch,
-    ...agentDiagramOperations(
-      db,
-      (tx): DiagramPrimitives =>
-        createDiagramOperations(tx, thumbnails).primitives
-    ),
+    ...agentDiagramOperations(db, primitivesFor),
     createSnapshotForClip,
     updateClipDiagramPin,
     /** What the agent writes are built from; bound to this `db`. */
     primitives: {
       createDiagram,
-      getDiagram,
       storeSnapshot,
       setSnapshotArchived,
       restoreSnapshotToHead,
