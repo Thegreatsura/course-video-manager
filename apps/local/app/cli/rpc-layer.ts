@@ -9,6 +9,7 @@ import { CourseWriteService } from "@/services/course-write-service";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
 import { diagramService } from "./rpc-layer.diagram";
+import { clipService } from "./rpc-layer.clip";
 import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
@@ -220,59 +221,6 @@ const videoService = (client: RpcClient) =>
       client.rpc.video.unarchiveVideo.$post({ json })
     ),
   }) satisfies RemoteService<VideoOperationsService>;
-
-const clipService = (client: RpcClient) =>
-  ({
-    _tag: "ClipOperationsService",
-    getClipsByIds: rpcMethod((json) =>
-      client.rpc.clip.getClipsByIds.$post({ json })
-    ),
-    listTimelineOrder: rpcMethod((json) =>
-      client.rpc.clip.listTimelineOrder.$post({ json })
-    ),
-    createClip: rpcMethod((json) => client.rpc.clip.createClip.$post({ json })),
-    updateClip: rpcMethod((json) => client.rpc.clip.updateClip.$post({ json })),
-    retimeClip: rpcMethod((json) => client.rpc.clip.retimeClip.$post({ json })),
-    setClipZoom: rpcMethod((json) =>
-      client.rpc.clip.setClipZoom.$post({ json })
-    ),
-    moveClipToPosition: rpcMethod((json) =>
-      client.rpc.clip.moveClipToPosition.$post({ json })
-    ),
-    archiveClip: rpcMethod((json) =>
-      client.rpc.clip.archiveClip.$post({ json })
-    ),
-    restoreClip: rpcMethod((json) =>
-      client.rpc.clip.restoreClip.$post({ json })
-    ),
-    listTranscriptWords: rpcMethod((json) =>
-      client.rpc.clip.listTranscriptWords.$post({ json })
-    ),
-    replaceTranscriptWords: rpcMethod((json) =>
-      client.rpc.clip.replaceTranscriptWords.$post({ json })
-    ),
-    // Chapters live on this same service (ClipOperationsService merges the
-    // chapter ops in), so `cvm chapter`'s verbs are RPC methods here too, backed
-    // by the /rpc/chapter route group.
-    getChaptersByIds: rpcMethod((json) =>
-      client.rpc.chapter.getChaptersByIds.$post({ json })
-    ),
-    listChaptersByVideoId: rpcMethod((json) =>
-      client.rpc.chapter.listChaptersByVideoId.$post({ json })
-    ),
-    createChapterAtItem: rpcMethod((json) =>
-      client.rpc.chapter.createChapterAtItem.$post({ json })
-    ),
-    updateChapter: rpcMethod((json) =>
-      client.rpc.chapter.updateChapter.$post({ json })
-    ),
-    moveChapterToPosition: rpcMethod((json) =>
-      client.rpc.chapter.moveChapterToPosition.$post({ json })
-    ),
-    archiveChapter: rpcMethod((json) =>
-      client.rpc.chapter.archiveChapter.$post({ json })
-    ),
-  }) satisfies RemoteService<ClipOperationsService>;
 
 const overlayService = (client: RpcClient) =>
   ({
