@@ -11,19 +11,22 @@ An agent DRAFTS a Diagram here in the simple shape format — a short list of
 boxes, ellipses, text, arrows, lines and icons in Matt's house style — and
 Matt finishes it by hand.
 
-A Diagram is the folder; its drawings are SNAPSHOTS, and a snapshot never
-changes. 'create' keeps each drawing you give it as a Preserved Snapshot, in
+A Diagram is the folder; its drawings are SNAPSHOTS, and a FILMED snapshot
+(one a Clip pins) never changes. 'create' keeps each drawing you give it as a Preserved Snapshot, in
 order, and opens the Diagram on the FIRST. A batch is a build-up: the steps
 Matt walks through on camera, one snapshot each.
 
 To CHANGE a Diagram, never edit it: 'snapshot add' a new drawing. It becomes
 a Preserved Snapshot and the Diagram's current drawing (its head) — a Restore
 to Head. If Matt drew on the head by hand and no snapshot holds that drawing,
-it is preserved first, so nothing he did is lost.
+it is preserved first, so nothing he did is lost. To FIX one drawing — an
+icon too close to a heading, a label touching its box — 'snapshot update' it
+in place instead of adding a near-copy; it refuses a filmed one.
 
 Verbs:
   create --file <path|->                     WRITE. A new Diagram from a JSON file ("-" = STDIN)
   snapshot add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
+  snapshot update --file <path|-> <snapshotId>  WRITE. Redraw one unfilmed snapshot in place
   render <snapshotId>                        READ. Draw a stored snapshot to a PNG
   get [--snapshot <snapshotId>] <diagramId>  READ. The head and the snapshots, as JSON
   list [--archived] [<query>]                READ. Every Diagram, or those matching a search
@@ -42,8 +45,10 @@ and 'create' again until the pictures are right, then hand Matt the url. Once
 he has the url, change it with 'snapshot add', never a second 'create'. To
 see what Matt has drawn since, 'get' it first, change what you need in the
 head's shapes, and 'snapshot add' them: it applies them ONTO the head, so all
-he did by hand is kept. 'update' changes the NAME only; nothing changes a
-drawing in place.
+he did by hand is kept. 'update' changes the NAME only. To fix a layout bug in
+one snapshot, 'get --snapshot' it, change those shapes, and 'snapshot update'
+it: same id, same place in the timeline, and it prints the drawing it
+replaced so a bad fix can be undone.
 
 FORMAT. One JSON object — ONE drawing:
   { "name"?: "Auth flow", "shapes": [ ...shapes ] }
@@ -62,7 +67,7 @@ SHAPES ("?" = optional; leave a field out to get Matt's default)
   arrow    id, from? | x1?, y1?, to? | x2?, y2?, text?, bend?, heads?, color?, dash?, opacity?
   line     id, x1, y1, x2, y2, color?, dash?, opacity?
   icon     id, x, y, name, color?, opacity?
-  other    id   (only from 'get'; 'snapshot add' keeps it, 'create' refuses it)
+  other    id   (only from 'get'; 'snapshot add' keeps it, so does 'update'; 'create' refuses it)
 
 WHAT THE FIELDS MEAN
   x, y       the top-left corner, in canvas pixels; y grows DOWN. A Diagram
@@ -126,7 +131,7 @@ EXAMPLE
 LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
 (CVM_APP_URL, default http://localhost:5173). Elsewhere 'create', 'snapshot
-add' and 'render' are refused before doing anything: _tag
+add', 'snapshot update' and 'render' are refused before doing anything: _tag
 "LocalOnlyCommandError", exit 7. Stop; do not retry. 'get', 'list',
 'component list', 'update', 'delete' and 'restore' draw nothing and run
 anywhere.
@@ -135,6 +140,7 @@ Examples:
   cvm diagram create --file agent-loop.json
   cat agent-loop.json | cvm diagram create --file -
   cvm diagram snapshot add --file agent-loop-v2.json <diagramId>
+  cvm diagram snapshot update --file fixed.json <snapshotId>
   cvm diagram render <snapshotId>
   cvm diagram get <diagramId>
   cvm diagram get --snapshot <snapshotId> <diagramId>
@@ -184,16 +190,17 @@ Examples:
   cvm diagram create --file agent-loop.json | jq -r '.snapshots[].image'
   echo '{"shapes":[{"type":"box","id":"a","x":0,"y":0,"w":200,"h":100}]}' | cvm diagram create --file -`;
 
-export const SNAPSHOT_HELP = `A Diagram's snapshots: its drawings, each one immutable.
+export const SNAPSHOT_HELP = `A Diagram's snapshots: its drawings. A filmed one never changes.
 
 Verbs:
-  add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
+  add --file <path|-> <diagramId>       WRITE. One more drawing, made the head
+  update --file <path|-> <snapshotId>   WRITE. Redraw one unfilmed snapshot in place
 
-See 'cvm diagram snapshot add --help'.`;
+See 'cvm diagram snapshot add --help' and 'cvm diagram snapshot update --help'.`;
 
 export const SNAPSHOT_ADD_HELP = `WRITE. Add ONE drawing to an existing Diagram as a Preserved Snapshot and make
-it the Diagram's head (a Restore to Head). This is how a Diagram changes: a
-snapshot is never edited, a new one is added. It is drawn as a PNG, and the
+it the Diagram's head (a Restore to Head). This is how a Diagram moves on: a
+new step is added. (To fix one drawing in place, see 'snapshot update'.) It is drawn as a PNG, and the
 command prints where to look.
 
   cvm diagram snapshot add --file <path|-> <diagramId>
@@ -311,7 +318,8 @@ const WRITE_OUTPUT = `Output: ONE NDJSON line,
   url       where Matt opens it in the Diagram Playground.`;
 
 export const UPDATE_HELP = `WRITE. Rename a Diagram. This is ALL 'update' does: it never changes the
-head or any snapshot — to change the drawing, 'snapshot add' a new one. It is
+head or any snapshot — to change the drawing, 'snapshot add' a new one, or
+'snapshot update' one that was not filmed. It is
 the same rename as editing the name in the Diagram Playground.
 
   cvm diagram update --name <name> <diagramId>

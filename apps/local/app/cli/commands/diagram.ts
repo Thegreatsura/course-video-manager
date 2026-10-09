@@ -11,6 +11,7 @@ import {
   type Scene,
 } from "@cvm/core/lib/simple-diagram/index";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
+import type { UpdateSnapshotResult } from "@/services/db-diagram-agent-operations.server";
 import {
   DiagramRenderError,
   FrameCaptureService,
@@ -36,6 +37,7 @@ import {
   SNAPSHOT_HELP,
   UPDATE_HELP,
 } from "./diagram.help";
+import { SNAPSHOT_UPDATE_HELP } from "./diagram-snapshot-update.help";
 import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
 import { diagramReadCommands } from "./diagram-list";
 
@@ -43,12 +45,14 @@ import { diagramReadCommands } from "./diagram-list";
  * `cvm diagram`: an agent drafts a Diagram in the simple shape format
  * (`@cvm/core/lib/simple-diagram`) and Matt finishes it in the playground.
  *
- * A Diagram's drawings are immutable DiagramSnapshots: `create` keeps each
- * one it is given as a Preserved Snapshot and restores the first to the head;
+ * A Diagram's drawings are DiagramSnapshots: `create` keeps each one it is
+ * given as a Preserved Snapshot and restores the first to the head;
  * `snapshot add` keeps one more and restores it to the head (an unheld head is
- * preserved first); neither writes the head itself. Both check the file, DRAW
- * every snapshot, and only then write, in one transaction — so a failure
- * leaves nothing behind, and nothing after the write can fail. `render` draws a
+ * preserved first); neither writes the head itself. `snapshot update` redraws
+ * one snapshot in place — never one a Clip has filmed — and prints the drawing
+ * it replaced. All three check the file, DRAW every snapshot, and only then
+ * write, in one transaction — so a failure leaves nothing behind, and nothing
+ * after the write can fail. `render` draws a
  * snapshot that is already stored, never the head. `get` only reads: the head
  * and the snapshots, in the simple format. `update` renames the Diagram, and
  * `delete` / `restore` archive and un-archive it, through the same
@@ -223,9 +227,87 @@ const snapshotAddCmd = Command.make(
     })
 ).pipe(Command.withDescription(detail(SNAPSHOT_ADD_HELP)));
 
+/** Why `updateSnapshot` refused, as the exit-3 error an agent reads. */
+const refusal = (
+  snapshotId: string,
+  result: Exclude<UpdateSnapshotResult, { outcome: "updated" | "unchanged" }>
+) => {
+  switch (result.outcome) {
+    case "filmed": {
+      const n = result.clipIds.length;
+      const shown = result.clipIds.slice(0, 3).join(", ");
+      const clips = `${n} Clip${n === 1 ? " pins" : "s pin"} it (${shown}${n > 3 ? `, and ${n - 3} more` : ""})`;
+      return parseError(
+        `REFUSED: snapshot ${snapshotId} was FILMED — ${clips}, and a filmed snapshot never changes, so going back to a Clip shows what was on camera. Nothing was written. 'cvm diagram snapshot add' the fixed drawing to the Diagram instead.`,
+        ENTITY
+      );
+    }
+    case "duplicate":
+      return parseError(
+        `snapshot ${result.otherSnapshotId}${result.otherArchived ? " (archived)" : ""} already draws exactly this — every snapshot of a Diagram must differ. Nothing was written.`,
+        ENTITY
+      );
+    case "changed-since-read":
+      return parseError(
+        `snapshot ${snapshotId} changed while this ran. Nothing was written; run it again.`,
+        ENTITY
+      );
+  }
+};
+
+const snapshotUpdateCmd = Command.make(
+  "update",
+  {
+    snapshotId: Args.text({ name: "snapshotId" }),
+    file: Options.text("file").pipe(
+      Options.withDescription(
+        'The new drawing as simple-format JSON, { "shapes": [...] }, applied onto the snapshot (see `cvm diagram --help`). "-" reads STDIN.'
+      )
+    ),
+  },
+  ({ snapshotId, file }) =>
+    Effect.gen(function* () {
+      yield* requireLocalMachine("cvm diagram", NEEDS_THE_APP_AND_A_BROWSER);
+
+      const json = yield* readDiagramFile(file);
+
+      const diagrams = yield* DiagramOperationsService;
+      const missing = () => notFound("diagram snapshot", snapshotId);
+      const before = yield* diagrams
+        .getDiagramSnapshot(snapshotId)
+        .pipe(Effect.catchTag("NotFoundError", missing));
+
+      const input = parseSnapshotInput(json, ICONS, before.scene);
+      if (!input.ok) return yield* problems(input.errors, "the snapshot");
+
+      const fs = yield* renderDir;
+      const draft = yield* drawDraft(resolveAppUrl(), input.scene);
+      const result = yield* diagrams
+        .updateSnapshot(snapshotId, input.scene, {
+          expectedContentHash: before.contentHash,
+        })
+        .pipe(Effect.catchTag("NotFoundError", missing));
+      if (result.outcome !== "updated" && result.outcome !== "unchanged") {
+        yield* fs.remove(draft).pipe(Effect.ignore);
+        return yield* refusal(snapshotId, result);
+      }
+      const image = yield* keepDraft(fs, draft, snapshotId);
+
+      yield* emitNdjson([
+        {
+          snapshotId,
+          image,
+          changed: result.outcome === "updated",
+          headMoved: result.outcome === "updated" && result.headMoved,
+          previous: { shapes: shapesOf(before.scene) },
+        },
+      ]);
+    })
+).pipe(Command.withDescription(detail(SNAPSHOT_UPDATE_HELP)));
+
 const snapshotCmd = Command.make("snapshot").pipe(
   Command.withDescription(detail(SNAPSHOT_HELP)),
-  Command.withSubcommands([snapshotAddCmd])
+  Command.withSubcommands([snapshotAddCmd, snapshotUpdateCmd])
 );
 
 const renderCmd = Command.make(

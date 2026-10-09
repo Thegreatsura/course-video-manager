@@ -4,6 +4,7 @@ import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { hashHead, hashScene } from "../lib/scene-hash.js";
+import { extractSceneText } from "../lib/extract-scene-text/index.js";
 import {
   isHeadCaptured,
   isVisibleInTimeline,
@@ -45,9 +46,11 @@ const hasShapes = (scene: unknown): boolean => {
 };
 
 /**
- * What `cvm diagram` and the Playground's restore write. DiagramSnapshots are immutable: an agent never
+ * What `cvm diagram` and the Playground's restore write. An agent never
  * writes a Diagram's head, it ADDS Preserved Snapshots and moves the head to
- * one with `restoreSnapshotToHead` — a Restore to Head.
+ * one with `restoreSnapshotToHead` — a Restore to Head. The one write that
+ * changes a DiagramSnapshot in place is `updateSnapshot`, and it refuses one a
+ * Clip has filmed.
  *
  * Each write is ONE transaction: `primitivesFor(tx)` binds the primitives to
  * it, so a scene that fails to store leaves nothing behind — no half-made
@@ -79,8 +82,43 @@ export const agentDiagramOperations = (
       writesIn(tx, primitivesFor(tx)).restoreToHead(diagramId, snapshotId, opts)
     );
 
-  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
+  const updateSnapshot = (
+    snapshotId: string,
+    scene: unknown,
+    opts: { expectedContentHash: string }
+  ) =>
+    withDbTransaction(db, (tx) =>
+      writesIn(tx, primitivesFor(tx)).updateSnapshot(snapshotId, scene, opts)
+    );
+
+  return {
+    createDiagramFromSnapshots,
+    addSnapshotToHead,
+    restoreToHead,
+    updateSnapshot,
+  };
 };
+
+/**
+ * What `updateSnapshot` did. Every outcome but `updated` wrote nothing.
+ * `previousScene` is the drawing the snapshot held before, so a bad update
+ * can be undone by another.
+ */
+export type UpdateSnapshotResult =
+  | {
+      outcome: "updated";
+      snapshot: DiagramSnapshot;
+      previousScene: unknown;
+      /** The head showed the old drawing, so it now shows the new one. */
+      headMoved: boolean;
+    }
+  | { outcome: "unchanged"; snapshot: DiagramSnapshot }
+  /** A Clip that is not archived pins it: it was filmed, so it never changes. */
+  | { outcome: "filmed"; clipIds: string[] }
+  /** Another snapshot of the Diagram already draws exactly this. */
+  | { outcome: "duplicate"; otherSnapshotId: string; otherArchived: boolean }
+  /** It no longer holds the drawing the caller read and changed. */
+  | { outcome: "changed-since-read" };
 
 /** The agent writes, every statement on `db` — the transaction above. */
 const writesIn = (
@@ -216,5 +254,108 @@ const writesIn = (
     return yield* restoreSnapshotToHead(diagramId, snapshotId);
   });
 
-  return { createDiagramFromSnapshots, addSnapshotToHead, restoreToHead };
+  /** The snapshot with the Clips that pin it; `null` when there is none. */
+  const snapshotWithClips = (snapshotId: string) =>
+    Effect.tryPromise({
+      try: () =>
+        db.query.diagramSnapshots.findFirst({
+          where: eq(diagramSnapshots.id, snapshotId),
+          with: { clips: { columns: { id: true, archived: true } } },
+        }),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+
+  /**
+   * Redraw one DiagramSnapshot IN PLACE: its id, its Diagram, its place in the
+   * timeline and its Preserved mark stay; its drawing, content hash and
+   * Diagram Text change. `cvm diagram snapshot update` is the caller, for a
+   * layout fix that should not leave a duplicate drawing behind.
+   *
+   * Refused, writing nothing, when a Clip that is not archived pins it (it was
+   * filmed — the same rule as `filmed` in `cvm diagram list`), when another
+   * snapshot of the Diagram already draws `scene`, or when it no longer holds
+   * the drawing the caller read (`expectedContentHash`). The Diagram row is
+   * locked first, as every head write does, so an autosave cannot land
+   * between the head check and the move: a head that showed the old drawing
+   * is moved to the new one, so no head is left that no snapshot holds.
+   */
+  const updateSnapshot = Effect.fn("updateSnapshot")(function* (
+    snapshotId: string,
+    scene: unknown,
+    opts: { expectedContentHash: string }
+  ) {
+    const missing = new NotFoundError({
+      type: "updateSnapshot",
+      params: { snapshotId },
+    });
+    const before = yield* snapshotWithClips(snapshotId);
+    if (!before) return yield* missing;
+    const current = yield* lockDiagram(db, before.diagramId, "updateSnapshot");
+    const snapshot = yield* snapshotWithClips(snapshotId);
+    if (!snapshot) return yield* missing;
+
+    const clipIds = snapshot.clips.filter((c) => !c.archived).map((c) => c.id);
+    if (clipIds.length > 0) {
+      return { outcome: "filmed", clipIds } satisfies UpdateSnapshotResult;
+    }
+    if (snapshot.contentHash !== opts.expectedContentHash) {
+      return {
+        outcome: "changed-since-read",
+      } satisfies UpdateSnapshotResult;
+    }
+    const { clips: _clips, ...row } = snapshot;
+    const contentHash = hashScene(scene);
+    if (contentHash === snapshot.contentHash) {
+      return {
+        outcome: "unchanged",
+        snapshot: row,
+      } satisfies UpdateSnapshotResult;
+    }
+
+    const twin = yield* Effect.tryPromise({
+      try: () =>
+        db.query.diagramSnapshots.findFirst({
+          where: and(
+            eq(diagramSnapshots.diagramId, snapshot.diagramId),
+            eq(diagramSnapshots.contentHash, contentHash)
+          ),
+        }),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+    if (twin) {
+      return {
+        outcome: "duplicate",
+        otherSnapshotId: twin.id,
+        otherArchived: twin.archived,
+      } satisfies UpdateSnapshotResult;
+    }
+
+    const [updated] = yield* Effect.tryPromise({
+      try: () =>
+        db
+          .update(diagramSnapshots)
+          .set({ scene, contentHash, searchText: extractSceneText(scene) })
+          .where(eq(diagramSnapshots.id, snapshotId))
+          .returning(),
+      catch: (e) => new UnknownDBServiceError({ cause: e }),
+    });
+    if (!updated) return yield* missing;
+
+    const headMoved = hashHead(current.headScene) === snapshot.contentHash;
+    if (headMoved) yield* restoreSnapshotToHead(snapshot.diagramId, snapshotId);
+
+    return {
+      outcome: "updated",
+      snapshot: updated,
+      previousScene: snapshot.scene,
+      headMoved,
+    } satisfies UpdateSnapshotResult;
+  });
+
+  return {
+    createDiagramFromSnapshots,
+    addSnapshotToHead,
+    restoreToHead,
+    updateSnapshot,
+  };
 };

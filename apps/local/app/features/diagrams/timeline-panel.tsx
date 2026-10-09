@@ -22,7 +22,11 @@ export function TimelinePanel({
    * whether the head it overwrites must be kept first.
    */
   onRestoreRequest: (snapshot: Snapshot, timeline: Snapshot[]) => void;
-  refreshKey: number;
+  /**
+   * Refetch the timeline when this changes: the page's own writes bump it,
+   * and so does a snapshot that changed on the server (`timelineHash`).
+   */
+  refreshKey: string;
 }) {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -108,6 +112,8 @@ export function TimelinePanel({
           className="group flex h-14 items-center gap-2 overflow-hidden rounded border border-zinc-700 bg-zinc-800 pr-2 text-left hover:bg-zinc-700/60 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400"
         >
           <DiagramThumbnail
+            // A snapshot redrawn in place keeps its id; its picture is new.
+            key={snapshot.contentHash}
             diagramId={snapshot.diagramId}
             contentHash={snapshot.contentHash}
             scene={snapshot.scene}

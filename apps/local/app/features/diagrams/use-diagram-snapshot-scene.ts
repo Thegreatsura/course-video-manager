@@ -11,8 +11,17 @@ const EMPTY: SnapshotMeta = { scene: null, diagramId: null, contentHash: null };
 const metaCache = new Map<string, SnapshotMeta>();
 const inflight = new Map<string, Promise<SnapshotMeta>>();
 
-export const fetchMeta = (snapshotId: string): Promise<SnapshotMeta> => {
-  const cached = metaCache.get(snapshotId);
+/**
+ * A snapshot's drawing and Diagram, cached by id. A snapshot no Clip has
+ * filmed can be redrawn in place (`cvm diagram snapshot update`), so its
+ * drawing may be stale here: `fresh` skips the cache and refills it. Its
+ * Diagram never changes.
+ */
+export const fetchMeta = (
+  snapshotId: string,
+  opts: { fresh?: boolean } = {}
+): Promise<SnapshotMeta> => {
+  const cached = opts.fresh ? undefined : metaCache.get(snapshotId);
   if (cached !== undefined) return Promise.resolve(cached);
 
   const existing = inflight.get(snapshotId);
@@ -59,7 +68,9 @@ export const useDiagramSnapshotMeta = (snapshotId: string | null) => {
       return;
     }
     let cancelled = false;
-    fetchMeta(snapshotId).then((m) => {
+    // Shown from the cache at once, then refetched: the drawing may have been
+    // redrawn since it was cached (a snapshot is pinned again by content).
+    fetchMeta(snapshotId, { fresh: true }).then((m) => {
       if (!cancelled) setMeta(m);
     });
     return () => {

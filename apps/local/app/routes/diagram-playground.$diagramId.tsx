@@ -348,7 +348,7 @@ export default function DiagramPlaygroundActive({
                   <TimelinePanel
                     diagramId={diagramId}
                     onRestoreRequest={requestRestore}
-                    refreshKey={state.timelineVersion}
+                    refreshKey={`${state.timelineVersion}:${activeHead?.timelineHash ?? ""}`}
                   />
                 </div>
               </div>
