@@ -12,6 +12,7 @@ import {
 } from "@cvm/core/db/connection-guard";
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { leaveSignalsToTheProcess } from "@/services/ffmpeg-child-registry";
+import { judgeServiceUrlOverrides } from "@/services/service-url-guard";
 import { layerLive } from "@/services/layer.server";
 import { SidecarContextLive } from "@/services/sidecar-context";
 import { JOB_KINDS, type JobServices } from "./job-kinds";
@@ -50,6 +51,10 @@ const gitSha = (): string => {
 
 /** Why the sidecar must not start here, or `undefined` when it may. */
 const refusal = (): string | undefined => {
+  const urls = judgeServiceUrlOverrides(process.env);
+  if (urls.length > 0) {
+    return `a service URL override would send production credentials to another host:\n${urls.map((r) => `  - ${r.message}`).join("\n")}`;
+  }
   const url = resolveDatabaseUrl();
   if (!url) return "DATABASE_URL is not set, so there is no job table to read.";
   // The same rule every database client goes through (DrizzleService enforces
