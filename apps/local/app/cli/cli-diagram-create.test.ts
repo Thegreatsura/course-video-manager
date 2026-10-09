@@ -1,25 +1,16 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { Effect, Layer } from "effect";
+import { describe, it, expect } from "vitest";
 import nodeFs from "node:fs";
-import os from "node:os";
 import nodePath from "node:path";
-import { buildProgram } from "@/cli/main";
-import { makeTestCliOutput } from "@/cli/output";
-import * as schema from "@/db/schema";
-import {
-  DiagramRenderError,
-  FrameCaptureService,
-} from "@/services/frame-capture-service";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
 import {
   readSimpleDiagram,
   type Scene,
 } from "@cvm/core/lib/simple-diagram/index";
-import { APP_URL_ENV_KEY, LOCAL_MACHINE_ENV_KEY } from "./env";
+import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
-  buildWriteLayer,
+  DIAGRAM_RENDERS,
+  failureOf,
   ndjson,
-  type RunResult,
+  useDiagramCli,
 } from "./cli-write-test-harness";
 
 // ===========================================================================
@@ -31,81 +22,7 @@ import {
 // records the scene and app origin it was handed.
 // ===========================================================================
 
-interface RenderCall {
-  appUrl: string;
-  scene: unknown;
-  outputPath: string;
-}
-
-let render: { fail: boolean; calls: RenderCall[] } = { fail: false, calls: [] };
-
-const fakeRender = Layer.succeed(FrameCaptureService, {
-  renderDiagramToPng: (params: RenderCall) =>
-    Effect.suspend(() => {
-      render.calls.push(params);
-      if (render.fail) {
-        return Effect.fail(
-          new DiagramRenderError({
-            cause: null,
-            message:
-              "could not render the Diagram: net::ERR_CONNECTION_REFUSED",
-          })
-        );
-      }
-      nodeFs.writeFileSync(params.outputPath, "RENDERED-PNG");
-      return Effect.succeed(params.outputPath);
-    }),
-} as unknown as FrameCaptureService);
-
-let testDb: TestDb;
-let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
-let dir: string;
-const saved = {
-  local: process.env[LOCAL_MACHINE_ENV_KEY],
-  app: process.env[APP_URL_ENV_KEY],
-};
-
-const restore = (key: string, value: string | undefined) => {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-};
-
-beforeAll(async () => {
-  testDb = (await createTestDb()).testDb;
-  const layer = Layer.merge(buildWriteLayer(testDb), fakeRender);
-  run = async (argv) => {
-    const out = makeTestCliOutput();
-    const exitCode = await Effect.runPromise(
-      buildProgram(argv).pipe(Effect.provide(out.layer), Effect.provide(layer))
-    );
-    return { stdout: out.stdout(), stderr: out.stderr(), exitCode };
-  };
-  process.env[APP_URL_ENV_KEY] = "http://localhost:5299/";
-});
-
-afterAll(() => {
-  restore(LOCAL_MACHINE_ENV_KEY, saved.local);
-  restore(APP_URL_ENV_KEY, saved.app);
-});
-
-beforeEach(async () => {
-  process.env[LOCAL_MACHINE_ENV_KEY] = "true";
-  dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-diagram-"));
-  render = { fail: false, calls: [] };
-  await testDb.delete(schema.diagrams);
-});
-
-const file = (body: unknown): string => {
-  const path = nodePath.join(dir, "diagram.json");
-  nodeFs.writeFileSync(
-    path,
-    typeof body === "string" ? body : JSON.stringify(body)
-  );
-  return path;
-};
-
-const failureOf = (r: RunResult) =>
-  JSON.parse(r.stderr.trim()) as { _tag: string; message: string };
+const { render, db, dir, run, file } = useDiagramCli();
 
 const DRAFT = {
   name: "Agent loop",
@@ -125,11 +42,9 @@ type Created = {
   snapshots: Array<{ id: string; image: string }>;
 };
 
-const RENDERS = nodePath.join(os.tmpdir(), "cvm-diagram-renders");
-
 /** The Diagram's snapshots, oldest first. */
 const snapshotsOf = (diagramId: string) =>
-  testDb.query.diagramSnapshots.findMany({
+  db().query.diagramSnapshots.findMany({
     where: (s, { eq }) => eq(s.diagramId, diagramId),
     orderBy: (s, { asc }) => [asc(s.createdAt)],
   });
@@ -154,7 +69,7 @@ describe("cvm diagram create", () => {
     expect(rest).toEqual([]);
     expect(Object.keys(line!).sort()).toEqual(["id", "snapshots", "url"]);
 
-    const rows = await testDb.query.diagrams.findMany();
+    const rows = await db().query.diagrams.findMany();
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
     expect(line!.id).toBe(row.id);
@@ -181,7 +96,7 @@ describe("cvm diagram create", () => {
     expect(line!.snapshots).toEqual([
       {
         id: snapshot!.id,
-        image: nodePath.join(RENDERS, `${snapshot!.id}.png`),
+        image: nodePath.join(DIAGRAM_RENDERS, `${snapshot!.id}.png`),
       },
     ]);
     expect(nodeFs.readFileSync(line!.snapshots[0]!.image, "utf8")).toBe(
@@ -201,7 +116,7 @@ describe("cvm diagram create", () => {
     expect(r.stderr).toBe("");
     expect(r.exitCode).toBe(0);
     const [line] = ndjson(r.stdout) as Created[];
-    const [row, ...more] = await testDb.query.diagrams.findMany();
+    const [row, ...more] = await db().query.diagrams.findMany();
     expect(more).toEqual([]);
     expect(row!.name).toBe("Agent loop");
 
@@ -220,7 +135,7 @@ describe("cvm diagram create", () => {
       snapshots.map((s) => s.scene)
     );
     for (const { id, image } of line!.snapshots) {
-      expect(image).toBe(nodePath.join(RENDERS, `${id}.png`));
+      expect(image).toBe(nodePath.join(DIAGRAM_RENDERS, `${id}.png`));
       expect(nodeFs.existsSync(image)).toBe(true);
       nodeFs.rmSync(image);
     }
@@ -254,7 +169,7 @@ describe("cvm diagram create", () => {
     expect(message).toContain(
       "snapshots[3]: draws exactly what snapshots[0] draws"
     );
-    expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(await db().query.diagrams.findMany()).toEqual([]);
     expect(render.calls).toEqual([]);
   });
 
@@ -268,17 +183,17 @@ describe("cvm diagram create", () => {
 
     expect(r.exitCode).toBe(3);
     expect(failureOf(r).message).toContain("at least one");
-    expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(await db().query.diagrams.findMany()).toEqual([]);
   });
 
   it("draws the very scene it stores, through the app at CVM_APP_URL", async () => {
     await run(["diagram", "create", "--file", file(DRAFT)]);
 
-    const [snapshot] = await testDb.query.diagramSnapshots.findMany();
+    const [snapshot] = await db().query.diagramSnapshots.findMany();
     expect(render.calls).toHaveLength(1);
     expect(render.calls[0]!.appUrl).toBe("http://localhost:5299");
     expect(render.calls[0]!.scene).toEqual(snapshot!.scene);
-    expect(render.calls[0]!.outputPath.startsWith(RENDERS)).toBe(true);
+    expect(render.calls[0]!.outputPath.startsWith(DIAGRAM_RENDERS)).toBe(true);
   });
 
   it("names a Diagram with no name 'Untitled N', like the playground", async () => {
@@ -286,7 +201,7 @@ describe("cvm diagram create", () => {
     const r = await run(["diagram", "create", "--file", file(unnamed)]);
 
     expect(r.exitCode).toBe(0);
-    const [row] = await testDb.query.diagrams.findMany();
+    const [row] = await db().query.diagrams.findMany();
     expect(row!.name).toBe("Untitled 1");
   });
 
@@ -314,7 +229,7 @@ describe("cvm diagram create", () => {
     expect(failure.message).toContain('unknown icon "not-an-icon"');
     expect(failure.message).toContain('points at "ghost"');
     expect(failure.message).toContain('unknown field "colour"');
-    expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(await db().query.diagrams.findMany()).toEqual([]);
     expect(render.calls).toEqual([]);
   });
 
@@ -335,7 +250,7 @@ describe("cvm diagram create", () => {
 
     expect(r.exitCode).toBe(3);
     expect(failureOf(r).message).toContain('other "kept"');
-    expect(await testDb.query.diagrams.findMany()).toEqual([]);
+    expect(await db().query.diagrams.findMany()).toEqual([]);
   });
 
   it("writes nothing when the PNG cannot be drawn (exit 4, DiagramRenderError), so a retry never duplicates", async () => {
@@ -346,8 +261,8 @@ describe("cvm diagram create", () => {
     expect(r.exitCode).toBe(4);
     expect(r.stdout).toBe("");
     expect(failureOf(r)._tag).toBe("DiagramRenderError");
-    expect(await testDb.query.diagrams.findMany()).toEqual([]);
-    expect(await testDb.query.diagramSnapshots.findMany()).toEqual([]);
+    expect(await db().query.diagrams.findMany()).toEqual([]);
+    expect(await db().query.diagramSnapshots.findMany()).toEqual([]);
   });
 
   it("is local-only: refused with exit 7 before the file is even read", async () => {
@@ -357,7 +272,7 @@ describe("cvm diagram create", () => {
       "diagram",
       "create",
       "--file",
-      nodePath.join(dir, "missing.json"),
+      nodePath.join(dir(), "missing.json"),
     ]);
 
     expect(r.exitCode).toBe(7);
