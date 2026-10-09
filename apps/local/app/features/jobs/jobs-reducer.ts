@@ -2,16 +2,17 @@ import type { EffectReducer } from "use-effect-reducer";
 import {
   isPostingJobKind,
   type JobSnapshotMessage,
+  type JobStageHistoryMessage,
   type WireJob,
-  type WireJobEvent,
 } from "./job-wire";
 import { toJobsAction } from "./job-event-actions";
-import { applyStreamAction, viewOf } from "./jobs-fold";
+import { applyStreamAction } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
 import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
-import { recordClockSkew, timeJobEvent } from "./jobs-timing";
+import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
+import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
@@ -145,11 +146,17 @@ export namespace jobsReducer {
     snapshotCursor: number;
     /**
      * Jobs this tab first heard of from the catch-up, or part-way through:
-     * not in the snapshot, and not from a `queued` event newer than it. A tab
-     * that watched them has already recorded their stages, and their events
-     * arrive late: they feed neither the stage history nor the clock offset.
+     * not in the snapshot, and not from a `queued` event newer than it. Their
+     * events arrive late, so they do not move the clock offset.
      */
     joinedLate: Record<string, true>;
+    /**
+     * How long each stage has taken in the newest succeeded Jobs, read from
+     * `job_event` (`job-stage-history.ts`): the ETA's prior.
+     */
+    stageHistory: HistoryData;
+    /** The newest `load-stage-history` asked for: an older answer is stale. */
+    stageHistoryRequest: number;
   }
 
   /** A Job Event from the stream, as a fact about one Job. */
@@ -256,6 +263,13 @@ export namespace jobsReducer {
     | { type: "sidecar-unavailable"; message: string }
     /** The proxy reached the sidecar: it runs, whatever the stream sends next. */
     | { type: "sidecar-available" }
+    // The stage history's load
+    | {
+        type: "stage-history-loaded";
+        requestId: number;
+        history: JobStageHistoryMessage;
+      }
+    | { type: "stage-history-load-failed"; requestId: number }
     | JobStreamAction;
 
   export interface EnqueueJobEffect {
@@ -275,6 +289,8 @@ export namespace jobsReducer {
 
   export type Effect =
     | EnqueueJobEffect
+    /** Read the stage history (`GET /api/jobs/stage-history`). */
+    | { type: "load-stage-history"; requestId: number }
     /** The server refuses a Retry of any run but `attempt`. */
     | { type: "retry-job"; id: string; attempt: number }
     /** Record the author's Dismiss on the server, so no tab sees them again. */
@@ -319,6 +335,8 @@ export const createInitialJobsState = (): jobsReducer.State => ({
   clockSkews: [],
   snapshotCursor: 0,
   joinedLate: {},
+  stageHistory: {},
+  stageHistoryRequest: 0,
 });
 
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
@@ -328,6 +346,16 @@ export const batchVideoRowId = (jobId: string, videoId: string) =>
 type Exec = Parameters<
   EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
 >[2];
+
+/** Ask for the stage history again: what is in hand may be out of date. */
+const loadStageHistory = (
+  state: jobsReducer.State,
+  exec: Exec
+): jobsReducer.State => {
+  const requestId = state.stageHistoryRequest + 1;
+  exec({ type: "load-stage-history", requestId });
+  return { ...state, stageHistoryRequest: requestId };
+};
 
 /** The toast for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
@@ -353,27 +381,6 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
     message: job.errorMessage ?? "The job failed",
     hasLog: true,
   });
-};
-
-/**
- * Fold one Job's events from a snapshot, oldest first, timing its rows as
- * the live stream would have.
- */
-const foldSnapshotJob = (
-  job: WireJob,
-  events: readonly WireJobEvent[]
-): { view: jobsReducer.JobView; timings: Record<string, UploadTiming> } => {
-  let view: jobsReducer.JobView = viewOf(job, "queued");
-  let timings: Record<string, UploadTiming> = {};
-  for (const event of events) {
-    const action = toJobsAction({ job, event });
-    if (!action) continue;
-    const next = applyStreamAction(view, action);
-    if (!next) continue;
-    timings = timeJobEvent(timings, view, next, action, { replayed: true });
-    view = next;
-  }
-  return { view, timings };
 };
 
 export const jobsReducer: EffectReducer<
@@ -472,7 +479,7 @@ export const jobsReducer: EffectReducer<
       const jobs: Record<string, jobsReducer.JobView> = {};
       let timings: Record<string, UploadTiming> = {};
       for (const { job, events } of action.snapshot.jobs) {
-        const folded = foldSnapshotJob(job, events);
+        const folded = foldJobEvents(job, events);
         const view = folded.view;
         jobs[job.id] = view;
         timings = { ...timings, ...folded.timings };
@@ -487,16 +494,28 @@ export const jobsReducer: EffectReducer<
       for (const job of Object.values(state.jobs)) {
         if (job.status === "requested" && !jobs[job.id]) jobs[job.id] = job;
       }
-      return {
-        ...state,
-        jobs,
-        timings,
-        snapshotCursor: action.snapshot.cursor,
-        joinedLate: {},
-        sidecar: "running",
-        sidecarMessage: null,
-      };
+      // The Jobs that finished while no tab listened are in the history.
+      return loadStageHistory(
+        {
+          ...state,
+          jobs,
+          timings,
+          snapshotCursor: action.snapshot.cursor,
+          joinedLate: {},
+          sidecar: "running",
+          sidecarMessage: null,
+        },
+        exec
+      );
     }
+
+    case "stage-history-loaded":
+      if (action.requestId !== state.stageHistoryRequest) return state;
+      return { ...state, stageHistory: stageHistoryFrom(action.history) };
+
+    // The history in hand stays: it is only out of date by a run or two.
+    case "stage-history-load-failed":
+      return state;
 
     case "sidecar-available":
       return { ...state, sidecar: "running", sidecarMessage: null };
@@ -539,23 +558,27 @@ export const jobsReducer: EffectReducer<
       const before = state.jobs[action.job.id];
       const after = applyStreamAction(before, action);
       if (!after) return state;
-      if (!(before && isFinishedJob(before)) && isFinishedJob(after)) {
-        announceSettled(exec, after);
-      }
-      announceVideoSettled(exec, after, action, before);
       const caughtUp = action.eventId <= state.snapshotCursor;
+      const settled =
+        !(before && isFinishedJob(before)) && isFinishedJob(after);
+      // Only a settlement heard live is news. The catch-up replays one that
+      // happened before this tab's snapshot, often for a Job already
+      // finished, or dismissed (so the snapshot left it out): another tab, or
+      // nobody, saw it then.
+      if (!caughtUp) {
+        if (settled) announceSettled(exec, after);
+        announceVideoSettled(exec, after, action, before);
+      }
       const late =
         state.joinedLate[after.id] === true ||
         (before === undefined && (caughtUp || action.type !== "job-queued"));
-      return {
+      const next: jobsReducer.State = {
         ...state,
         // An event is proof the sidecar is up.
         sidecar: "running",
         sidecarMessage: null,
         jobs: { ...state.jobs, [after.id]: after },
-        timings: timeJobEvent(state.timings, before, after, action, {
-          replayed: late,
-        }),
+        timings: timeJobEvent(state.timings, before, after, action),
         clockSkews:
           late || caughtUp
             ? state.clockSkews
@@ -565,6 +588,11 @@ export const jobsReducer: EffectReducer<
             ? { ...state.joinedLate, [after.id]: true }
             : state.joinedLate,
       };
+      // A Job that succeeded since the snapshot adds its stages to the
+      // history: the snapshot's own load already had the older ones.
+      return settled && !caughtUp && after.status === "succeeded"
+        ? loadStageHistory(next, exec)
+        : next;
     }
   }
 };

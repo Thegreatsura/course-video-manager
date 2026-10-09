@@ -56,6 +56,20 @@ export const JobSnapshotMessage = Schema.Struct({
 });
 export type JobSnapshotMessage = typeof JobSnapshotMessage.Type;
 
+/**
+ * `GET /api/jobs/stage-history`: the newest succeeded Jobs of each kind, oldest
+ * finish first, each with its Job Events minus repeated progress. The ETA's
+ * stage history is folded from these (`job-stage-history.ts`).
+ */
+export const JobStageHistoryMessage = Schema.Struct({
+  jobs: Schema.Array(
+    Schema.Struct({ job: WireJob, events: Schema.Array(WireJobEvent) })
+  ),
+});
+export type JobStageHistoryMessage = typeof JobStageHistoryMessage.Type;
+
+export const JOBS_STAGE_HISTORY_HREF = "/api/jobs/stage-history";
+
 export const JobEventMessage = Schema.Struct({
   job: WireJob,
   event: WireJobEvent,

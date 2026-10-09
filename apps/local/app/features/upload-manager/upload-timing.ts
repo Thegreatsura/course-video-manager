@@ -25,12 +25,6 @@ export interface CompletedStage {
   key: string;
   durationMs: number;
   units: number | null;
-  /**
-   * Finished in a replay (a snapshot, or a Job this tab joined part-way):
-   * a tab that heard it live has already recorded it to the history, so it
-   * is not recorded again.
-   */
-  replayed?: true;
 }
 
 export interface UploadTiming {
@@ -85,8 +79,6 @@ export interface TimingStep {
   at: number | undefined;
   /** The row an export event named in this step: it has an encode to do. */
   exportWorkId?: string;
-  /** The step is a replay (see `CompletedStage.replayed`). */
-  replayed?: boolean;
 }
 
 const nextTiming = (
@@ -125,7 +117,6 @@ const nextTiming = (
               key: historyKey(entry, old.stage!),
               durationMs: at - old.stageStartedAt,
               units: stageUnits(previous.uploads[id] ?? entry, old.stage!),
-              ...(step.replayed ? { replayed: true as const } : {}),
             },
           ]
         : old.completed,
