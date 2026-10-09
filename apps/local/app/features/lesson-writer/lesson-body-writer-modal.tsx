@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
+import { postConfirmed } from "@/lib/post-confirmed";
 import { WriterModal } from "@/features/article-writer/writer-modal";
 import { toWriterContext } from "@/features/article-writer/use-writer-context";
 import type { Mode } from "@/features/article-writer/types";
@@ -31,7 +32,7 @@ export function LessonBodyWriterModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const dataFetcher = useFetcher<LessonWriterData>();
-  const saveFetcher = useFetcher();
+  const { revalidate } = useRevalidator();
 
   useEffect(() => {
     if (open && dataFetcher.state === "idle" && !dataFetcher.data) {
@@ -45,11 +46,13 @@ export function LessonBodyWriterModal({
     [dataFetcher.data]
   );
 
-  const persistBody = (newValue: string) => {
-    saveFetcher.submit(
-      { intent: "updateBody", body: newValue },
-      { method: "post", action: `/api/videos/${videoId}/lesson-writer` }
-    );
+  // Resolves only on a confirmed save: local images are removed after it.
+  const persistBody = async (newValue: string) => {
+    await postConfirmed(`/api/videos/${videoId}/lesson-writer`, {
+      intent: "updateBody",
+      body: newValue,
+    });
+    void revalidate();
   };
 
   return (

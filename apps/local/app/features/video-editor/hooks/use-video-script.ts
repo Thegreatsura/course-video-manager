@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
+import { postConfirmed } from "@/lib/post-confirmed";
 import { pushTeleprompterScript } from "@/lib/teleprompter-window";
 import { toWriterContext } from "@/features/article-writer/use-writer-context";
 import type { WriterContext } from "@/features/article-writer/writer-engine";
@@ -52,6 +53,21 @@ export function useVideoScript(videoId: string, enabled = true) {
     [saveFetcher, videoId]
   );
 
+  // The writer's Apply: resolves only on a confirmed save, because local
+  // images are removed after it (`useImageUploadJob`).
+  const { revalidate } = useRevalidator();
+  const applyScript = useCallback(
+    async (newValue: string) => {
+      await postConfirmed(`/api/videos/${videoId}/script`, {
+        intent: "updateScript",
+        script: newValue,
+      });
+      pushTeleprompterScript(videoId, newValue);
+      void revalidate();
+    },
+    [videoId, revalidate]
+  );
+
   const script = saveFetcher.formData
     ? String(saveFetcher.formData.get("script") ?? "")
     : (dataFetcher.data?.script ?? "");
@@ -62,5 +78,6 @@ export function useVideoScript(videoId: string, enabled = true) {
     script,
     context,
     persistScript,
+    applyScript,
   };
 }

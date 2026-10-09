@@ -1,6 +1,7 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { JobEventMessage } from "@/features/jobs/job-wire";
 import {
+  filesSafeToRemove,
   imageUploadsOf,
   localImageRefs,
   type ImageUploaded,
@@ -10,10 +11,12 @@ import {
  * One body's "upload its local images" (the Article Writer's Apply, the
  * Skills Changelog's "Upload Images"), as an `upload-images` Job the Sidecar
  * runs. This surface asks for the Job, hears its `image-uploaded` events,
- * and once it settles swaps the URLs into the body AS IT IS THEN
- * (`swap-into-body`), so the author's edits made meanwhile survive. Only
- * files whose URL actually went into the body are then removed, and only
- * when the author asked for that.
+ * and once it settles swaps the URLs into the body AS IT IS THEN and saves
+ * it (`swap-into-body`), so the author's edits made meanwhile survive.
+ *
+ * A file is removed only on `body-saved`, the save's confirmation, and only
+ * if the saved body names it in no form and the author asked for that. A
+ * save that fails removes nothing; its files wait for a later save.
  */
 export namespace imageUploadReducer {
   export interface State {
@@ -23,6 +26,13 @@ export namespace imageUploadReducer {
     deleteLocalFiles: boolean;
     /** Its images uploaded so far, each reference once. */
     uploads: ImageUploaded[];
+    /** The swapped body is being saved: no new upload until it lands. */
+    saving: boolean;
+    /**
+     * Files the author asked to remove, swapped into a body whose save
+     * failed: removable once a later save lands without them.
+     */
+    unsavedRemovals: string[];
   }
 
   export type Action =
@@ -39,7 +49,16 @@ export namespace imageUploadReducer {
     /** The jobs reducer failed the Job before the Sidecar heard of it. */
     | { type: "job-enqueue-failed"; jobId: string }
     | {
-        type: "body-swapped";
+        /** The swapped body's save is confirmed. */
+        type: "body-saved";
+        videoId: string;
+        /** The body exactly as saved. */
+        savedBody: string;
+        swappedFilePaths: string[];
+        deleteLocalFiles: boolean;
+      }
+    | {
+        type: "body-save-failed";
         videoId: string;
         swappedFilePaths: string[];
         deleteLocalFiles: boolean;
@@ -53,13 +72,16 @@ export namespace imageUploadReducer {
         body: string;
       }
     | {
-        /** Swap `uploads` into the current body, then report what went in. */
+        /** Swap `uploads` into the current body, save it, report the save. */
         type: "swap-into-body";
         videoId: string;
         uploads: ImageUploaded[];
         deleteLocalFiles: boolean;
       }
-    | { type: "remove-local-images"; videoId: string; filePaths: string[] };
+    | { type: "remove-local-images"; videoId: string; filePaths: string[] }
+    /** Tell the surface its body is saved (the writer closes on this). */
+    | { type: "report-saved"; body: string }
+    | { type: "show-save-failed-toast"; message: string };
 }
 
 export const createInitialImageUploadState = (): imageUploadReducer.State => ({
@@ -67,6 +89,8 @@ export const createInitialImageUploadState = (): imageUploadReducer.State => ({
   videoId: null,
   deleteLocalFiles: false,
   uploads: [],
+  saving: false,
+  unsavedRemovals: [],
 });
 
 /** The Job's own end: whatever it recorded is swapped in, success or not. */
@@ -90,7 +114,11 @@ const settle = (
     uploads: state.uploads,
     deleteLocalFiles: state.deleteLocalFiles,
   });
-  return createInitialImageUploadState();
+  return {
+    ...createInitialImageUploadState(),
+    saving: true,
+    unsavedRemovals: state.unsavedRemovals,
+  };
 };
 
 export const imageUploadReducer: EffectReducer<
@@ -100,8 +128,8 @@ export const imageUploadReducer: EffectReducer<
 > = (state, action, exec) => {
   switch (action.type) {
     case "upload-pressed": {
-      // A second press while one runs is the same request.
-      if (state.jobId !== null) return state;
+      // A second press while one runs, or saves, is the same request.
+      if (state.jobId !== null || state.saving) return state;
       // Nothing local to upload: nothing to wait for.
       if (localImageRefs(action.body).length === 0) {
         exec({
@@ -110,7 +138,7 @@ export const imageUploadReducer: EffectReducer<
           uploads: [],
           deleteLocalFiles: false,
         });
-        return state;
+        return { ...state, saving: true };
       }
       exec({
         type: "start-upload-job",
@@ -123,6 +151,8 @@ export const imageUploadReducer: EffectReducer<
         videoId: action.videoId,
         deleteLocalFiles: action.deleteLocalFiles,
         uploads: [],
+        saving: false,
+        unsavedRemovals: state.unsavedRemovals,
       };
     }
     case "job-event-heard": {
@@ -137,14 +167,33 @@ export const imageUploadReducer: EffectReducer<
     }
     case "job-enqueue-failed":
       return state.jobId === action.jobId ? settle(state, exec) : state;
-    case "body-swapped":
-      if (action.deleteLocalFiles && action.swappedFilePaths.length > 0) {
+    case "body-saved": {
+      const asked = new Set(state.unsavedRemovals);
+      if (action.deleteLocalFiles) {
+        for (const filePath of action.swappedFilePaths) asked.add(filePath);
+      }
+      const filePaths = filesSafeToRemove(action.savedBody, [...asked]);
+      if (filePaths.length > 0) {
         exec({
           type: "remove-local-images",
           videoId: action.videoId,
-          filePaths: action.swappedFilePaths,
+          filePaths,
         });
       }
-      return state;
+      exec({ type: "report-saved", body: action.savedBody });
+      return { ...state, saving: false, unsavedRemovals: [] };
+    }
+    case "body-save-failed":
+      exec({
+        type: "show-save-failed-toast",
+        message: "Couldn't save the body. Its local images were kept.",
+      });
+      return {
+        ...state,
+        saving: false,
+        unsavedRemovals: action.deleteLocalFiles
+          ? [...new Set([...state.unsavedRemovals, ...action.swappedFilePaths])]
+          : state.unsavedRemovals,
+      };
   }
 };

@@ -101,7 +101,8 @@ export const uploadImagesJobKind = defineJobKind({
 });
 
 /**
- * Remove local image files the tab has swapped Cloudinary URLs in for. A
+ * Remove local image files the tab has swapped Cloudinary URLs in for, once
+ * the body holding those URLs is confirmed saved and names them no more. A
  * file is removed only if an `upload-images` Job recorded it for this Video,
  * and only inside the Video's folder (`removeUnderBestEffort`); any other is
  * left alone with a warning. A file already gone is the goal reached, so a

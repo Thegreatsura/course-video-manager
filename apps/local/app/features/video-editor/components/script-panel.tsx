@@ -12,7 +12,8 @@ import { useVideoScript } from "../hooks/use-video-script";
  * manual editing surface for now.
  */
 export function ScriptPanel({ videoId }: { videoId: string }) {
-  const { loaded, script, context, persistScript } = useVideoScript(videoId);
+  const { loaded, script, context, persistScript, applyScript } =
+    useVideoScript(videoId);
 
   if (!loaded || !context) {
     return (
@@ -29,7 +30,7 @@ export function ScriptPanel({ videoId }: { videoId: string }) {
         fieldId="video-script"
         value={script}
         onChange={persistScript}
-        onApply={persistScript}
+        onApply={applyScript}
         context={context}
         modes={[]}
         placeholder="Write the teleprompter script for this video…"
