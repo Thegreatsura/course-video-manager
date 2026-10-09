@@ -378,14 +378,14 @@ export const createJobOperations = (db: Database) => {
   /**
    * Every running Job whose lease has run out — its sidecar died, or was
    * stopped without settling it — is settled as an interrupted attempt by the
-   * retry rule. A Job of a kind in `neverRetryKinds` (posting) ends
-   * `interrupted` whatever its attempts. Safe to call at any time and from
-   * any process.
+   * retry rule. A Job of a kind in `neverRetryKinds` (a post, a Publish)
+   * ends `interrupted` whatever its attempts, with that kind's own message
+   * (`kind → message`). Safe to call at any time and from any process.
    * Never one in `stillRunning`, the caller's own live runs: a late
    * heartbeat can lapse a lease while the post goes on.
    */
   const recoverExpiredJobs = Effect.fn("recoverExpiredJobs")(function* (input: {
-    neverRetryKinds: readonly string[];
+    neverRetryKinds: { readonly [kind: string]: string };
     stillRunning: readonly string[];
   }) {
     return yield* withDbTransaction(db, (tx) =>
@@ -408,12 +408,18 @@ export const createJobOperations = (db: Database) => {
         );
         const recovered: { jobId: string; outcome: FailureOutcome }[] = [];
         for (const job of expired) {
-          const mayRetry = !input.neverRetryKinds.includes(job.kind);
+          const neverRetryMessage = Object.hasOwn(
+            input.neverRetryKinds,
+            job.kind
+          )
+            ? input.neverRetryKinds[job.kind]
+            : undefined;
+          const mayRetry = neverRetryMessage === undefined;
           const failure: JobFailure = {
             tag: "JobInterrupted",
-            message: mayRetry
-              ? "The sidecar running this job stopped before it finished"
-              : INTERRUPTED_POST_MESSAGE,
+            message:
+              neverRetryMessage ??
+              "The sidecar running this job stopped before it finished",
             cause: `lease held by ${job.holder ?? "nobody"} expired at ${job.leaseUntil?.toISOString() ?? "?"}`,
           };
           recovered.push({

@@ -15,7 +15,11 @@ import {
   isFinishedJob,
   type jobsReducer,
 } from "./jobs-reducer";
-import { isPostingJobKind } from "./job-wire";
+import {
+  isPostingJobKind,
+  mayLeavePendingVersion,
+  publishPageHref,
+} from "./job-wire";
 
 /** The Jobs the author has not dismissed, oldest first by when this tab met them. */
 export const visibleJobs = (state: jobsReducer.State): jobsReducer.JobView[] =>
@@ -504,4 +508,17 @@ export const postRetryOf = (job: jobsReducer.JobView): PostRetry | null => {
     type: "retry",
     confirm: !NOTHING_SENT.includes(job.errorTag ?? ""),
   };
+};
+
+/**
+ * Where a settled Publish's Pending Version is Promoted or Discarded, by hand
+ * (plan section 7.2), or `null` when it cannot have left one: still running,
+ * succeeded, failed before Submit, or failed in a way the service already
+ * Discarded.
+ */
+export const publishRecoveryHrefOf = (
+  job: jobsReducer.JobView
+): string | null => {
+  if (job.kind !== "publish" || !job.subjectId) return null;
+  return mayLeavePendingVersion(job) ? publishPageHref(job.subjectId) : null;
 };

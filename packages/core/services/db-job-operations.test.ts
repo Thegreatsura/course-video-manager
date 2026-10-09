@@ -5,6 +5,7 @@ import { inArray, sql } from "drizzle-orm";
 import { jobs } from "../db/schema.js";
 import {
   JobOperationsService,
+  INTERRUPTED_POST_MESSAGE,
   dependencyFailedMessage,
   POSTED_EVENT,
   POST_CHECK_EVENT,
@@ -35,6 +36,7 @@ const LEASE = 30_000;
 
 const enqueue = (
   overrides: Partial<{
+    kind: string;
     title: string;
     lane: string;
     maxAttempts: number;
@@ -44,7 +46,7 @@ const enqueue = (
   Effect.flatMap(JobOperationsService, (ops) =>
     ops.enqueueJob({
       id: null,
-      kind: "noop",
+      kind: overrides.kind ?? "noop",
       title: overrides.title ?? "A job",
       lane: overrides.lane ?? "default",
       params: {},
@@ -256,7 +258,7 @@ describe("recoverExpiredJobs", () => {
         yield* lapse;
 
         const recovered = yield* ops.recoverExpiredJobs({
-          neverRetryKinds: [],
+          neverRetryKinds: {},
           stillRunning: [],
         });
 
@@ -278,6 +280,35 @@ describe("recoverExpiredJobs", () => {
 });
 
 describe("a kind that must never run again on its own (a post)", () => {
+  it.effect(
+    "recovery ends each never-retry kind with that kind's own words",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const post = yield* enqueue({ kind: "post", title: "a post" });
+        const publish = yield* enqueue({ kind: "publish", title: "a Publish" });
+        for (const holder of ["dead-1", "dead-2"]) {
+          yield* ops.claimNextJob({ lane: "default", holder, leaseMs: 1 });
+        }
+        yield* lapse;
+        yield* ops.recoverExpiredJobs({
+          neverRetryKinds: {
+            post: "the post may have gone out",
+            publish: "Promote or Discard it on the publish page",
+          },
+          stillRunning: [],
+        });
+        expect(yield* ops.getJob(post.id)).toMatchObject({
+          status: "interrupted",
+          error: { message: "the post may have gone out" },
+        });
+        expect(yield* ops.getJob(publish.id)).toMatchObject({
+          status: "interrupted",
+          error: { message: "Promote or Discard it on the publish page" },
+        });
+      }).pipe(Effect.provide(testLayer))
+  );
+
   it.effect(
     "ends a failed attempt for good, and recovery ends a lost one interrupted, whatever the row's attempts say",
     () =>
@@ -307,14 +338,13 @@ describe("a kind that must never run again on its own (a post)", () => {
         });
         yield* lapse;
         const recovered = yield* ops.recoverExpiredJobs({
-          neverRetryKinds: ["noop"],
+          neverRetryKinds: { noop: INTERRUPTED_POST_MESSAGE },
           stillRunning: [],
         });
         expect(recovered).toEqual([{ jobId: lost.id, outcome: "interrupted" }]);
         expect(yield* ops.getJob(lost.id)).toMatchObject({
           status: "interrupted",
           attempt: 1,
-          error: { message: expect.stringContaining("check before retrying") },
         });
       }).pipe(Effect.provide(testLayer))
   );
@@ -427,7 +457,7 @@ describe("a kind that must never run again on its own (a post)", () => {
         });
         yield* lapse;
         yield* ops.recoverExpiredJobs({
-          neverRetryKinds: ["noop"],
+          neverRetryKinds: { noop: INTERRUPTED_POST_MESSAGE },
           stillRunning: [],
         });
         const look = () =>

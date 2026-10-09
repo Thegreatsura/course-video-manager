@@ -63,6 +63,11 @@ export namespace jobsReducer {
     result: Record<string, unknown> | null;
     /** What the sidecar found when it looked for a cut-off post. */
     postCheck: PostCheckView | null;
+    /**
+     * A Publish got past Submit this attempt (`submitted`): a failure from
+     * here may leave a Pending Version (`mayLeavePendingVersion`).
+     */
+    submitted: boolean;
     /** The newest Job Event applied: an older or repeated one is ignored. */
     lastEventId: number;
     /**
@@ -141,6 +146,8 @@ export namespace jobsReducer {
     | StreamFact<"job-failed", { message: string; tag: string | null }>
     | StreamFact<"job-interrupted", { message: string; tag: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
+    /** A Publish's Submit landed: a Pending Version exists until Promote. */
+    | StreamFact<"job-submitted">
     /** A Publish's Promote landed: the Versions it made, and its Lesson counts. */
     | StreamFact<"job-published", { result: Record<string, unknown> }>
     | StreamFact<
@@ -382,6 +389,7 @@ export const jobsReducer: EffectReducer<
             enqueued: false,
             result: null,
             postCheck: null,
+            submitted: false,
             lastEventId: 0,
             videos: null,
           },
@@ -465,6 +473,7 @@ export const jobsReducer: EffectReducer<
     case "job-interrupted":
     case "job-posted":
     case "job-post-checked":
+    case "job-submitted":
     case "job-published":
     case "batch-video-upload-queued":
     case "batch-video-upload-progressed":

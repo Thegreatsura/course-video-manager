@@ -16,6 +16,13 @@ import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 export const PUBLISH_EVENTS = {
   /** The publish lifecycle stage (`PublishStage`): `{ stage }`. */
   stage: "stage",
+  /**
+   * Submit landed: `{ pendingVersionId }`. From here a failure the service
+   * did not Discard itself (Promote failing, say) leaves a Pending Version,
+   * so the row and `--wait` point at Promote or Discard
+   * (`leavesPendingVersion` in `job-wire.ts`).
+   */
+  submitted: "submitted",
   /** Every Video this Publish ships, before either pool starts: `{ videos: [{ id, title }] }`. */
   videos: "videos",
   /** An export stage of one Video: `{ videoId, stage }`. */
@@ -147,7 +154,8 @@ const reportInOrder = (events: {
  *   `PublishCommitFailedError` (`sync_failed`, `missing_assets`) — has
  *   already Discarded the Pending Version (issue #1401). Any other failure
  *   after Submit (Promote itself failing, say) leaves it Pending, for the
- *   publish page's Promote or Discard.
+ *   publish page's Promote or Discard: the `submitted` event says Submit
+ *   happened, so the row and `--wait` can point there.
  * - Never run again on its own (`neverRequeued`), not even after a
  *   deliberate stop. A run cut off after Submit leaves a Pending Version; the
  *   publish page reads its `course.json` receipt and offers Promote or
@@ -172,6 +180,8 @@ export const publishJobKind = defineJobKind({
           placeholderFloor: placeholderFloorFromBand(params.placeholders),
           onStageChange: (stage) =>
             events.emit(PUBLISH_EVENTS.stage, { stage }),
+          onSubmitted: (submitted) =>
+            events.emit(PUBLISH_EVENTS.submitted, submitted),
           onDetailEvent: reports.onDetailEvent,
         })
         .pipe(

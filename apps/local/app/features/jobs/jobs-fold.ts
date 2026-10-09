@@ -26,6 +26,7 @@ export const viewOf = (
   enqueued: true,
   result: null,
   postCheck: null,
+  submitted: false,
   lastEventId: 0,
   videos: null,
 });
@@ -129,6 +130,7 @@ export const applyStreamAction = (
         errorTag: null,
         result: null,
         postCheck: null,
+        submitted: false,
       };
     case "job-started":
       return {
@@ -137,6 +139,7 @@ export const applyStreamAction = (
         attempt: action.attempt,
         stage: null,
         percent: null,
+        submitted: false,
       };
     case "job-stage-entered":
       return { ...job, stage: action.stage, percent: 0 };
@@ -182,6 +185,8 @@ export const applyStreamAction = (
           job.kind === "publish" ? PUBLISH_INTERRUPTED_MESSAGE : action.message,
         errorTag: action.tag,
       };
+    case "job-submitted":
+      return { ...job, submitted: true };
     case "job-posted":
     case "job-published":
       return { ...job, result: action.result };

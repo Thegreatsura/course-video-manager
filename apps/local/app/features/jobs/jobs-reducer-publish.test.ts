@@ -5,7 +5,11 @@ import {
   jobsReducer,
   toJobsAction,
 } from "./jobs-reducer";
-import { jobUploadEntries, latestJobFor } from "./jobs-selectors";
+import {
+  jobUploadEntries,
+  latestJobFor,
+  publishRecoveryHrefOf,
+} from "./jobs-selectors";
 import { PUBLISH_INTERRUPTED_MESSAGE, type WireJob } from "./job-wire";
 
 const JOB_ID = "6b0c1f5e-0000-4000-8000-0000000000bf";
@@ -274,6 +278,97 @@ describe("a Publish Job", () => {
     ).toMatchObject({ id: JOB_ID, status: "running" });
     expect(rowsOf(tester.getState())[1]).toMatchObject({
       videoUploadStage: "queued-for-upload",
+    });
+  });
+
+  describe("points at Promote / Discard only when a Pending Version may be left", () => {
+    const recoveryHref = (tester: ReturnType<typeof newTester>) => {
+      const job = tester.getState().jobs[JOB_ID];
+      return job ? publishRecoveryHrefOf(job) : null;
+    };
+
+    it("a Publish that fails after Submit (its Promote failed) points at the publish page", () => {
+      const tester = newTester()
+        .send(publish("started", { attempt: 1 }))
+        .send(publish("stage", { stage: "freezing" }))
+        .send(publish("submitted", { pendingVersionId: "version-1" }))
+        .send(announced())
+        .send(
+          publish("failed", {
+            error: {
+              tag: "VersionNotPendingError",
+              message: "version-1 is not pending",
+            },
+          })
+        );
+      expect(recoveryHref(tester)).toBe("/courses/course-1/publish");
+    });
+
+    it("a reopened tab folds Submit from the snapshot and still points there", () => {
+      const at = "2026-10-09T12:00:00.000Z";
+      const tester = newTester().send({
+        type: "job-snapshot-received",
+        snapshot: {
+          cursor: 999,
+          jobs: [
+            {
+              job: publishJob,
+              events: [
+                { id: 1, jobId: JOB_ID, type: "started", data: {}, at },
+                { id: 2, jobId: JOB_ID, type: "submitted", data: {}, at },
+                {
+                  id: 3,
+                  jobId: JOB_ID,
+                  type: "failed",
+                  data: { error: { tag: "DatabaseError", message: "x" } },
+                  at,
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(recoveryHref(tester)).toBe("/courses/course-1/publish");
+    });
+
+    it("a Publish that fails before Submit leaves nothing Pending: no link", () => {
+      const tester = newTester()
+        .send(publish("started", { attempt: 1 }))
+        .send(publish("stage", { stage: "validating" }))
+        .send(
+          publish("failed", {
+            error: { tag: "DatabaseError", message: "connection lost" },
+          })
+        );
+      expect(recoveryHref(tester)).toBeNull();
+    });
+
+    it("a failure the Publish already Discarded (export or Commit) offers no link", () => {
+      for (const tag of ["PublishRunError", "PublishRefusedError"]) {
+        const tester = newTester()
+          .send(publish("started", { attempt: 1 }))
+          .send(publish("submitted", { pendingVersionId: "version-1" }))
+          .send(
+            publish("failed", {
+              error: { tag, message: "Publish discarded: …" },
+            })
+          );
+        expect(recoveryHref(tester)).toBeNull();
+      }
+    });
+
+    it("a Publish still running offers no link, even past Submit", () => {
+      const tester = newTester()
+        .send(publish("started", { attempt: 1 }))
+        .send(publish("submitted", { pendingVersionId: "version-1" }));
+      expect(recoveryHref(tester)).toBeNull();
+    });
+
+    it("an interrupted Publish points there as before, Submit seen or not", () => {
+      const tester = newTester()
+        .send(publish("started", { attempt: 1 }))
+        .send(publish("interrupted", { error: { tag: "JobInterrupted" } }));
+      expect(recoveryHref(tester)).toBe("/courses/course-1/publish");
     });
   });
 });
