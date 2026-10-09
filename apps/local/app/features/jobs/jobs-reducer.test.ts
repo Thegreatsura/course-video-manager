@@ -108,6 +108,11 @@ describe("jobsReducer", () => {
         kind: "export",
         title: "Intro to Generics",
         subjectId: "video-1",
+        toast: {
+          shape: "generic",
+          did: "exported successfully",
+          revealVideoId: "video-1",
+        },
       },
       {
         type: "report-job-settled",
@@ -528,6 +533,12 @@ describe("jobsReducer", () => {
           kind: "export",
           title: "S1/L1/Intro",
           subjectId: "video-a",
+          // A Batch export's Video toasts as an export of its own: Open.
+          toast: {
+            shape: "generic",
+            did: "exported successfully",
+            revealVideoId: "video-a",
+          },
         },
       ]);
     });
