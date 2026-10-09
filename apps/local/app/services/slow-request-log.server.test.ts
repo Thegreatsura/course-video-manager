@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { countSqlStatement } from "@cvm/core/db/sql-statement-tally";
-import { runRouteEffect } from "./route-action.server";
+import { makeLoader, runRouteEffect } from "./route-action.server";
 import {
   logSlowRequest,
+  makeSlowRequestMiddleware,
   SLOW_REQUEST_PREFIX,
   tallyStatements,
 } from "./slow-request-log.server";
@@ -68,5 +69,33 @@ describe("logSlowRequest", () => {
         outcome: "ok",
       }
     );
+  });
+
+  it("times every request at the root middleware, counting what its loader's Effect sent", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const lines: string[] = [];
+    const middleware = makeSlowRequestMiddleware({
+      thresholdMs: 2_000,
+      now: clock(0, 2_500),
+      write: (line) => lines.push(line),
+    });
+    const loader = makeLoader(
+      { effect: () => Effect.all([statementAfter(5), statementAfter(10)]) },
+      runtime as never
+    );
+    const request = new Request("http://localhost/api/links/fetch-title");
+    await middleware({ request, params: {}, context: {} } as never, () =>
+      loader({ request, params: {} }).then(() => new Response("ok"))
+    );
+    await runtime.dispose();
+
+    expect(lines).toHaveLength(1);
+    expect(
+      JSON.parse(lines[0]!.slice(SLOW_REQUEST_PREFIX.length + 1))
+    ).toMatchObject({
+      route: "/api/links/fetch-title",
+      dbStatements: 2,
+      outcome: "ok",
+    });
   });
 });

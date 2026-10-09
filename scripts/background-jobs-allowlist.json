@@ -155,6 +155,16 @@
       "file": "apps/local/app/services/youtube-upload-service.ts",
       "count": 4,
       "reason": "The posting path: the YouTube upload and its thumbnail ask for SidecarContext and run only as posting Jobs, plus the read-only post check."
+    },
+    {
+      "file": "apps/local/app/features/jobs/use-jobs.ts",
+      "count": 3,
+      "reason": "Browser: the Upload Manager's Retry, Dismiss and stage history, each a call to the app's own route by the href job-wire.ts names (/api/jobs/\u2026). Not outbound."
+    },
+    {
+      "file": "apps/local/app/lib/post-confirmed.ts",
+      "count": 1,
+      "reason": "Browser: POSTs a form to the route action it is handed (a path on the app itself), and resolves only on a confirmed save. Not outbound."
     }
   ]
 }

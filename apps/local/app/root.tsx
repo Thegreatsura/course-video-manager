@@ -35,7 +35,11 @@ import { UploadProvider } from "@/features/upload-manager/upload-context";
 import { GlobalUploadProgress } from "@/features/upload-manager/global-upload-progress";
 import { FeedbackModal } from "@/components/feedback-modal";
 import { Loader2, MessageSquarePlus } from "lucide-react";
+import { slowRequestMiddleware } from "@/services/slow-request-log.server";
 import "./app.css";
+
+// Every request, page or resource route, is timed here, once.
+export const middleware: Route.MiddlewareFunction[] = [slowRequestMiddleware];
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },

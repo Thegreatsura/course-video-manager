@@ -12,6 +12,7 @@ import {
 
 const ROUTE = "apps/local/app/routes/api.videos.$videoId.thing.ts";
 const CLIENT = "apps/local/app/features/upload-manager/sse-thing-client.ts";
+const SERVICE = "apps/local/app/services/thing.ts";
 
 const guards = (hits: Hit[]) => hits.map((h) => h.guard);
 
@@ -42,7 +43,6 @@ describe("scan", () => {
   });
 
   it("finds a process started with @effect/platform's Command, under any name", () => {
-    const SERVICE = "apps/local/app/services/thing.ts";
     expect(
       guards(
         scan(
@@ -101,22 +101,68 @@ describe("scan", () => {
     ).toEqual(["network", "network", "network", "network", "network"]);
   });
 
-  it("does not count the app calling itself, a local fetch, the Sidecar or .tsx routes", () => {
-    const outbound = `fetch("https://api.example.com");`;
+  it("does not count the app calling itself, a property named fetch or the Sidecar", () => {
     expect(
       scan(
-        "apps/local/app/services/client-thing.ts",
-        'fetch("/api/x"); fetch(`/api/${id}`);'
+        "apps/local/app/features/client-thing.tsx",
+        'fetch("/api/x"); fetch(`/api/${id}`); fetch(a ? "/x" : `/y/${b}`);' +
+          `app.fetch(req); const o = { fetch: (id) => id }; o.fetch(1);`
       )
     ).toEqual([]);
     expect(
-      scan(
-        "apps/local/app/cli/helpers.ts",
-        `const run = ({ fetch }) => fetch(id);`
-      )
+      scan("apps/local/sidecar/kinds/thing.ts", `fetch("https://a.com");`)
     ).toEqual([]);
-    expect(scan("apps/local/sidecar/kinds/thing.ts", outbound)).toEqual([]);
-    expect(scan("apps/local/app/routes/videos.tsx", outbound)).toEqual([]);
+  });
+
+  // Each way the review of batch 10 got a call past the guard.
+  it.each([
+    [
+      "a wrapper in features/",
+      "apps/local/app/features/net/http.ts",
+      `export const f = () => fetch("https://a.com");`,
+    ],
+    [
+      "a .tsx loader",
+      "apps/local/app/routes/courses.$id.tsx",
+      `export const loader = () => fetch("https://a.com");`,
+    ],
+    [
+      "an aliased fetch",
+      SERVICE,
+      `const get = fetch;\nexport const f = () => get("https://a.com");`,
+    ],
+    [
+      "fetch off globalThis",
+      SERVICE,
+      `const { fetch: get } = globalThis; const g = globalThis["fetch"];`,
+    ],
+    [
+      "a fetch bound elsewhere in the file",
+      SERVICE,
+      `const helper = (fetch: any) => fetch;\nexport const f = () => fetch("https://a.com");`,
+    ],
+    [
+      "a namespace import of ai",
+      SERVICE,
+      `import * as ai from "ai";\nexport const f = () => ai.generateText({} as any);`,
+    ],
+    [
+      "an aliased Cloudinary uploader",
+      SERVICE,
+      `import { v2 as cloudinary } from "cloudinary";\nconst up = cloudinary.uploader;`,
+    ],
+    [
+      "a provider model called directly",
+      SERVICE,
+      `import { anthropic } from "@ai-sdk/anthropic";\nanthropic("m").doGenerate({});`,
+    ],
+    [
+      "Effect's HTTP client",
+      SERVICE,
+      `import { HttpClient } from "@effect/platform";\nexport const c = HttpClient.HttpClient;`,
+    ],
+  ])("counts %s", (_, file, source) => {
+    expect(guards(scan(file, source))).toContain("network");
   });
 
   it("ignores comments, tests, the jobs feature and code outside the app", () => {
@@ -178,31 +224,39 @@ describe("ADR 0032 names every allowed entry point", () => {
     (entries ?? []).map((e) => e.file)
   );
 
-  const spawnConfig = createRequire(import.meta.url)(
-    path.join(root, "apps/local/.dependency-cruiser.spawn.cjs")
-  ) as {
-    forbidden: { name: string; from: { pathNot?: string } }[];
-  };
-  const childProcessEntryPoints = (
-    spawnConfig.forbidden.find(
-      (rule) => rule.name === "child-process-outside-interactive-entry-points"
-    )?.from.pathNot ?? ""
-  )
-    .split("|")
-    .filter((pattern) => pattern !== "^sidecar/")
-    // "^app/routes/api\\.feedback\\.ts$" → "apps/local/app/routes/api.feedback.ts"
-    .map((pattern) =>
-      path.posix.join(
-        "apps/local",
-        pattern.replace(/^\^|\$$/g, "").replace(/\\/g, "")
-      )
-    );
+  type Config = { forbidden: { name: string; from: { pathNot?: string } }[] };
+  const entryPoints = (config: string, rule: string) =>
+    (
+      (
+        createRequire(import.meta.url)(path.join(root, config)) as Config
+      ).forbidden.find((r) => r.name === rule)?.from.pathNot ?? ""
+    )
+      .split("|")
+      .filter((pattern) => pattern !== "^sidecar/")
+      // "^app/routes/api\\.feedback\\.ts$" → "apps/local/app/routes/api.feedback.ts"
+      .map((pattern) =>
+        path.posix.join(
+          "apps/local",
+          pattern.replace(/^\^|\$$/g, "").replace(/\\/g, "")
+        )
+      );
+  const childProcessEntryPoints = entryPoints(
+    "apps/local/.dependency-cruiser.spawn.cjs",
+    "child-process-outside-interactive-entry-points"
+  );
+  const networkEntryPoints = entryPoints(
+    "apps/local/.dependency-cruiser.network.cjs",
+    "network-client-outside-entry-points"
+  );
 
   it("reads both lists", () => {
     expect(allowlisted.length).toBeGreaterThan(0);
     expect(section7.length).toBeGreaterThan(0);
     expect(childProcessEntryPoints).toContain(
       "apps/local/app/routes/api.feedback.ts"
+    );
+    expect(networkEntryPoints).toContain(
+      "apps/local/app/services/writer-stream-errors.ts"
     );
   });
 
@@ -212,6 +266,13 @@ describe("ADR 0032 names every allowed entry point", () => {
 
   it.each(childProcessEntryPoints)(
     "names %s, from .dependency-cruiser.spawn.cjs",
+    (file) => {
+      expect(named(file)).toBe(true);
+    }
+  );
+
+  it.each(networkEntryPoints)(
+    "names %s, from .dependency-cruiser.network.cjs",
     (file) => {
       expect(named(file)).toBe(true);
     }

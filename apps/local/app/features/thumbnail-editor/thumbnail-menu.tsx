@@ -8,7 +8,7 @@ const imageUrl = (thumbnailId: string) =>
 
 async function copyImage(thumbnailId: string) {
   try {
-    const res = await fetch(imageUrl(thumbnailId));
+    const res = await fetch(`/api/thumbnails/${thumbnailId}/image`);
     const blob = await res.blob();
     await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
     toast("Thumbnail image copied to clipboard");

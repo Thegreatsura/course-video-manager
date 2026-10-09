@@ -1,8 +1,10 @@
 import {
+  currentSqlStatementTally,
   startSqlStatementTally,
   type SqlStatementTally,
 } from "@cvm/core/db/sql-statement-tally";
 import { Effect, FiberRef } from "effect";
+import type { MiddlewareFunction } from "react-router";
 
 /**
  * The slow-request log: one line in the server log for every route request
@@ -11,6 +13,10 @@ import { Effect, FiberRef } from "effect";
  * guard can tell from fast ones, get found and moved into a Job.
  *
  *   [cvm-slow-request] {"route":"/api/courses/abc/duplicate","method":"POST","ms":3412,"dbStatements":820,"outcome":"ok"}
+ *
+ * It runs once, as the root route's middleware (`slowRequestMiddleware`, in
+ * `root.tsx`), so every request is timed: a page, a loader's data, a resource
+ * route, whether or not it was built with `makeLoader` or `makeAction`.
  *
  * Long-lived streams are not requests that finished slowly, so they are left
  * out: any `text/event-stream` answer (SSE), the Job Event stream and the
@@ -37,6 +43,14 @@ export const tallyStatements = <A, E, R>(
         inner.scheduleTask(() => tally.run(task), priority, fiber),
     })
   );
+
+/** `tallyStatements` with the tally the request's middleware opened. */
+export const withRequestTally = <A, E, R>(
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> => {
+  const tally = currentSqlStatementTally();
+  return tally ? tallyStatements(tally, effect) : effect;
+};
 
 const isEventStream = (value: unknown): boolean =>
   value instanceof Response &&
@@ -86,3 +100,11 @@ export async function logSlowRequest<A>(
     }
   }
 }
+
+/** Times every request the app answers: the root route's middleware. */
+export const makeSlowRequestMiddleware =
+  (options: SlowRequestLogOptions = {}): MiddlewareFunction<Response> =>
+  ({ request }, next) =>
+    logSlowRequest(request, () => next(), options);
+
+export const slowRequestMiddleware = makeSlowRequestMiddleware();
