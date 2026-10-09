@@ -5,6 +5,7 @@ import { inArray, sql } from "drizzle-orm";
 import { jobs } from "../db/schema.js";
 import {
   JobOperationsService,
+  dependencyFailedMessage,
   POSTED_EVENT,
   POST_CHECK_EVENT,
 } from "./db-job-operations.server.js";
@@ -116,6 +117,37 @@ describe("claimNextJob", () => {
       });
       expect(next?.id).toBe(child.id);
     }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "fails a Job at once, naming its dependency, when that one has already failed for good",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        // "Export + post": the export fails before the post's enqueue lands.
+        const parent = yield* enqueue({ title: "the export", maxAttempts: 1 });
+        yield* ops.claimNextJob({
+          lane: "default",
+          holder: "h",
+          leaseMs: LEASE,
+        });
+        yield* ops.failJobAttempt({
+          jobId: parent.id,
+          holder: "h",
+          failure,
+          interrupted: false,
+          mayRetry: true,
+        });
+
+        const child = yield* enqueue({ title: "post", dependsOn: parent.id });
+        expect(child).toMatchObject({
+          status: "failed",
+          error: { message: dependencyFailedMessage("the export") },
+        });
+        expect((yield* ops.listJobEvents(child.id)).map((e) => e.type)).toEqual(
+          ["queued", "failed"]
+        );
+      }).pipe(Effect.provide(testLayer))
   );
 });
 
