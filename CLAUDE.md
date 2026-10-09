@@ -36,6 +36,18 @@ the process is there and in no test, build artifact or table.
 per line into that log, and also keeps every Job's lines in
 `.data/logs/jobs/<job id>.jsonl` — read that file for why a Job failed.
 
+**Slow requests.** Every `makeLoader`/`makeAction` request that takes over 2s
+prints one `[cvm-slow-request]` line into the same log, and into `server.log`
+on a verify-cvm run:
+`{"route":"/api/courses/…/duplicate","method":"POST","ms":3412,"dbStatements":820,"outcome":"ok"}`.
+`route` is the URL path, `dbStatements` is how many SQL statements that request
+sent, and `outcome` is `threw` for an error or a thrown redirect. A high
+`dbStatements` means a row-by-row DB loop, which no static guard can see, so
+the route is a candidate for a Job (ADR 0032). List them with
+`grep -h cvm-slow-request .data/logs/dev-*.log`. SSE answers, the Job Event
+stream and the teleprompter poll are left out. The threshold is in
+`apps/local/app/services/slow-request-log.server.ts`.
+
 ### Repository layout
 
 A Turborepo monorepo. Two apps: `apps/local` is today's application, and `apps/remote` is the deployed RPC API (a Hono app on Vercel — see [apps/remote/README.md](./apps/remote/README.md)). Three workspace packages under `packages/`:

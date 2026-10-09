@@ -1,6 +1,8 @@
 import { Cause, Console, Effect, Exit, type ManagedRuntime } from "effect";
+import type { SqlStatementTally } from "@cvm/core/db/sql-statement-tally";
 import { data } from "react-router";
 import { type LayerLive, runtimeLive } from "./layer.server";
+import { logSlowRequest, tallyStatements } from "./slow-request-log.server";
 
 type ErrorTags<E> = E extends { readonly _tag: infer T extends string }
   ? T
@@ -103,16 +105,20 @@ export function makeLoader<A, E, R extends LayerLive>(
     ...config.errors,
   };
 
-  return (args) => {
-    const effect = config.effect({
-      request: args.request,
-      params: args.params,
+  return (args) =>
+    logSlowRequest(args.request, (tally) => {
+      const effect = config.effect({
+        request: args.request,
+        params: args.params,
+      });
+      return runRouteEffect(
+        runtime,
+        tallyStatements(
+          tally,
+          buildErrorPipeline(effect, errorMap, config.errors)
+        )
+      );
     });
-    return runRouteEffect(
-      runtime,
-      buildErrorPipeline(effect, errorMap, config.errors)
-    );
-  };
 }
 
 export function makeAction<A, E, R extends LayerLive>(
@@ -127,7 +133,13 @@ export function makeAction<A, E, R extends LayerLive>(
     ...config.errors,
   };
 
-  return async (args) => {
+  return (args) =>
+    logSlowRequest(args.request, (tally) => runAction(args, tally));
+
+  async function runAction(
+    args: { request: Request; params: Record<string, string | undefined> },
+    tally: SqlStatementTally
+  ): Promise<A> {
     let payload: unknown;
     try {
       if (config.input === "json") {
@@ -150,7 +162,10 @@ export function makeAction<A, E, R extends LayerLive>(
 
     return runRouteEffect(
       runtime,
-      buildErrorPipeline(effect, errorMap, config.errors)
+      tallyStatements(
+        tally,
+        buildErrorPipeline(effect, errorMap, config.errors)
+      )
     );
-  };
+  }
 }
