@@ -235,6 +235,28 @@ describe("makeAction", () => {
       }
     });
 
+    it("answers 400 to a body that is not JSON", async () => {
+      const action = makeAction(
+        { input: "json", effect: () => Effect.succeed({ ok: true }) },
+        makeTestRuntime()
+      );
+
+      try {
+        await action({
+          request: new Request("http://test.local/action", {
+            method: "POST",
+            body: "",
+          }),
+          params: {},
+        });
+        expect.unreachable("should have thrown");
+      } catch (error) {
+        const defect = extractDieDefect(error);
+        expect(defect.init.status).toBe(400);
+        expect(defect.data).toBe("Invalid request");
+      }
+    });
+
     it("maps an error tag with no configured status to 500", async () => {
       const runtime = makeTestRuntime();
 

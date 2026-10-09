@@ -127,11 +127,17 @@ export function makeAction<A, E, R extends LayerLive>(
 
   return async (args) => {
     let payload: unknown;
-    if (config.input === "json") {
-      payload = await args.request.json();
-    } else if (config.input === "formData") {
-      const formData = await args.request.formData();
-      payload = Object.fromEntries(formData);
+    try {
+      if (config.input === "json") {
+        payload = await args.request.json();
+      } else if (config.input === "formData") {
+        const formData = await args.request.formData();
+        payload = Object.fromEntries(formData);
+      }
+    } catch {
+      // A body that is not the JSON or form it claims to be is the caller's
+      // mistake, as a body that fails its Schema is (ParseError → 400).
+      throw data(statusMessage(400), { status: 400 });
     }
 
     const effect: Effect.Effect<A, E, R> = config.effect({
