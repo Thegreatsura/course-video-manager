@@ -15,6 +15,7 @@ import {
   type CaptureStatus,
   type EditorTab,
   type ClipMarks,
+  type ClipMarkIds,
   type TeleprompterCommand,
   type TeleprompterChildToParentMessage,
 } from "./teleprompter-protocol";
@@ -25,6 +26,10 @@ export type TeleprompterEditorState = {
   tab: EditorTab;
   /** This session's clips, for the marks display on the glass. */
   marks?: ClipMarks;
+  /** The Clip each mark stands for, in the same order as `marks`. */
+  markClipIds?: ClipMarkIds;
+  /** The Clip the editor is playing, or `null` when paused. */
+  playingClipId?: string | null;
   /** The newest transcribed clip in this session, for the glass's corner. */
   latestTranscript?: string | null;
   /** The Video's length so far in seconds, for beside the mic on the glass. */
@@ -33,7 +38,8 @@ export type TeleprompterEditorState = {
 
 /**
  * Called by the Video Editor. Answers the popup's heartbeat with a bare pong,
- * and its handshake with the current state.
+ * its handshake with the current state, and a dot clicked on the glass by
+ * calling `onClipMarkClicked`.
  *
  * `getState` is read at message time rather than captured so a fast-changing
  * capture status doesn't require re-subscribing (and therefore doesn't churn
@@ -43,7 +49,8 @@ export type TeleprompterEditorState = {
  * a poll.
  */
 export function enableTeleprompterEditorMode(
-  getState: () => TeleprompterEditorState
+  getState: () => TeleprompterEditorState,
+  onClipMarkClicked: (clipId: string) => void
 ): () => void {
   if (typeof window === "undefined") return () => {};
   const unsub = teleprompterChannel.subscribeParent(
@@ -51,6 +58,7 @@ export function enableTeleprompterEditorMode(
       if (msg.type === "ping")
         teleprompterChannel.sendToChild({ type: "pong" });
       else if (msg.type === "hello") pushTeleprompterState(getState());
+      else if (msg.type === "clipMarkClicked") onClipMarkClicked(msg.clipId);
     }
   );
   return () => {
