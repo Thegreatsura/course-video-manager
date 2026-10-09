@@ -23,6 +23,7 @@ const createState = (
   insertionOrder: 0,
   error: null,
   sessions: [],
+  clipTranscriptionJobs: {},
   ...overrides,
 });
 

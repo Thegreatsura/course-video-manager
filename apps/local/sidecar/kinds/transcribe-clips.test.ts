@@ -158,10 +158,15 @@ describe("the transcribe-clips Job kind", () => {
         `word-of-${name}`,
       ]);
     }
+    // First the Clips it took on, so a tab can fail them if the Job dies.
+    expect(events[0]).toEqual({
+      type: CLIP_TRANSCRIPTION_EVENTS.clipsStarted,
+      data: { clipIds: [a, b] },
+    });
     expect(
-      [...events].sort((x, y) =>
-        String(x.data.id).localeCompare(String(y.data.id))
-      )
+      events
+        .filter((e) => e.type === CLIP_TRANSCRIPTION_EVENTS.clipSettled)
+        .sort((x, y) => String(x.data.id).localeCompare(String(y.data.id)))
     ).toEqual(
       [
         {
