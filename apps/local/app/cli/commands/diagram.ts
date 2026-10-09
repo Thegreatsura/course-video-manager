@@ -199,14 +199,17 @@ const snapshotAddCmd = Command.make(
       yield* requireLocalMachine("cvm diagram", NEEDS_THE_APP_AND_A_BROWSER);
 
       const json = yield* readDiagramFile(file);
-      const input = parseSnapshotInput(json, ICONS);
-      if (!input.ok) return yield* problems(input.errors, "the snapshot");
 
       const diagrams = yield* DiagramOperationsService;
       const missing = () => notFound(ENTITY, diagramId);
-      yield* diagrams
+      const diagram = yield* diagrams
         .getDiagram(diagramId)
         .pipe(Effect.catchTag("NotFoundError", missing));
+
+      // Applied onto the head as read here. Should the head change before the
+      // write, addSnapshotToHead still preserves that newer head first.
+      const input = parseSnapshotInput(json, ICONS, diagram.headScene);
+      if (!input.ok) return yield* problems(input.errors, "the snapshot");
 
       const fs = yield* renderDir;
       const draft = yield* drawDraft(resolveAppUrl(), input.scene);
