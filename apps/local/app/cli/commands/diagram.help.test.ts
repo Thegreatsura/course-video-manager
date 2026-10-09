@@ -166,6 +166,23 @@ describe("cvm diagram --help documents what 'create' accepts", () => {
     expect(parsed.ok && parsed.scenes).toHaveLength(2);
   });
 
+  it("refuses a NUL character anywhere, naming where, before any write", () => {
+    const { name, shapes } = example();
+    const nul = [{ ...(shapes[0] as object), text: "a\u0000b" }];
+    const parsed = parseCreateInput(
+      { name, snapshots: [{ shapes }, { shapes: nul }] },
+      icons
+    );
+    expect(parsed).toEqual({
+      ok: false,
+      errors: [
+        expect.stringMatching(
+          /^diagram\.snapshots\[1\]\.shapes\[0\]\.text: contains a NUL/
+        ),
+      ],
+    });
+  });
+
   it("documents the output 'create' prints: id, url and snapshots of {id, image}", () => {
     const output = CREATE_HELP.slice(CREATE_HELP.indexOf("Output:"));
     expect(output).toMatch(

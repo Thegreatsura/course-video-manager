@@ -5,6 +5,7 @@ import { UnknownDBServiceError } from "./db-service-errors.js";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { hashScene } from "../lib/scene-hash.js";
+import { withDbTransaction } from "./with-db-transaction.server.js";
 
 type Diagram = typeof diagrams.$inferSelect;
 type DiagramSnapshot = typeof diagramSnapshots.$inferSelect;
@@ -44,8 +45,33 @@ const hasShapes = (scene: unknown): boolean => {
  * What `cvm diagram` writes. DiagramSnapshots are immutable: an agent never
  * writes a Diagram's head, it ADDS Preserved Snapshots and moves the head to
  * one with `restoreSnapshotToHead` — a Restore to Head.
+ *
+ * Each write is ONE transaction: `primitivesFor(tx)` binds the primitives to
+ * it, so a scene that fails to store leaves nothing behind — no half-made
+ * Diagram for a re-run to duplicate.
  */
 export const agentDiagramOperations = (
+  db: Database,
+  primitivesFor: (db: Database) => DiagramPrimitives
+) => {
+  const createDiagramFromSnapshots = (opts: {
+    name?: string;
+    scenes: readonly unknown[];
+  }) =>
+    withDbTransaction(db, (tx) =>
+      writesIn(tx, primitivesFor(tx)).createDiagramFromSnapshots(opts)
+    );
+
+  const addSnapshotToHead = (diagramId: string, scene: unknown) =>
+    withDbTransaction(db, (tx) =>
+      writesIn(tx, primitivesFor(tx)).addSnapshotToHead(diagramId, scene)
+    );
+
+  return { createDiagramFromSnapshots, addSnapshotToHead };
+};
+
+/** The agent writes, every statement on `db` — the transaction above. */
+const writesIn = (
   db: Database,
   {
     createDiagram,

@@ -150,6 +150,8 @@ export namespace jobsReducer {
      * events arrive late, so they do not move the clock offset.
      */
     joinedLate: Record<string, true>;
+    /** Jobs not in the snapshot, first heard of at or below its cursor. */
+    fromCatchUp: Record<string, true>;
     /**
      * How long each stage has taken in the newest succeeded Jobs, read from
      * `job_event` (`job-stage-history.ts`): the ETA's prior.
@@ -335,6 +337,7 @@ export const createInitialJobsState = (): jobsReducer.State => ({
   clockSkews: [],
   snapshotCursor: 0,
   joinedLate: {},
+  fromCatchUp: {},
   stageHistory: {},
   stageHistoryRequest: 0,
 });
@@ -502,6 +505,7 @@ export const jobsReducer: EffectReducer<
           timings,
           snapshotCursor: action.snapshot.cursor,
           joinedLate: {},
+          fromCatchUp: {},
           sidecar: "running",
           sidecarMessage: null,
         },
@@ -561,11 +565,14 @@ export const jobsReducer: EffectReducer<
       const caughtUp = action.eventId <= state.snapshotCursor;
       const settled =
         !(before && isFinishedJob(before)) && isFinishedJob(after);
-      // Only a settlement heard live is news. The catch-up replays one that
-      // happened before this tab's snapshot, often for a Job already
-      // finished, or dismissed (so the snapshot left it out): another tab, or
-      // nobody, saw it then.
-      if (!caughtUp) {
+      // Only a settlement heard live is news. The catch-up replays Jobs the
+      // snapshot left out (finished, dismissed): not news. A Job this tab
+      // knew unfinished settling is, even below the cursor (the newest id
+      // visible then): a late commit (`job-event-feed.ts`) streams it after.
+      const fromCatchUp =
+        caughtUp &&
+        (before === undefined || state.fromCatchUp[after.id] === true);
+      if (!fromCatchUp) {
         if (settled) announceSettled(exec, after);
         announceVideoSettled(exec, after, action, before);
       }
@@ -587,10 +594,14 @@ export const jobsReducer: EffectReducer<
           late && !state.joinedLate[after.id]
             ? { ...state.joinedLate, [after.id]: true }
             : state.joinedLate,
+        fromCatchUp:
+          fromCatchUp && !state.fromCatchUp[after.id]
+            ? { ...state.fromCatchUp, [after.id]: true }
+            : state.fromCatchUp,
       };
       // A Job that succeeded since the snapshot adds its stages to the
       // history: the snapshot's own load already had the older ones.
-      return settled && !caughtUp && after.status === "succeeded"
+      return settled && !fromCatchUp && after.status === "succeeded"
         ? loadStageHistory(next, exec)
         : next;
     }
