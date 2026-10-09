@@ -99,18 +99,19 @@ export function getClipMockupPath(
  * `audioPath` the row stores. An agent that wants to look at a frame reads
  * `imageFile`; it never has to know where the store is or what a lineageId
  * is. Additive on purpose: the relative fields stay exactly as they were.
+ * `audioFile` is null exactly when `audioPath` is — the voice is not made yet.
  */
 export function withClipMockupFiles<
-  Row extends { readonly imagePath: string; readonly audioPath: string },
+  Row extends { readonly imagePath: string; readonly audioPath: string | null },
 >(
   lineageId: string,
   row: Row
-): Row & { readonly imageFile: string; readonly audioFile: string } {
+): Row & { readonly imageFile: string; readonly audioFile: string | null } {
   const dir = path.resolve(getClipMockupPath(lineageId));
   return {
     ...row,
     imageFile: path.join(dir, row.imagePath),
-    audioFile: path.join(dir, row.audioPath),
+    audioFile: row.audioPath === null ? null : path.join(dir, row.audioPath),
   };
 }
 

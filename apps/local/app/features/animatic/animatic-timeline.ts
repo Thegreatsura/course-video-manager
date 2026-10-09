@@ -52,10 +52,11 @@ export const CLIP_MOCKUP_PREMOUNT_IN_FRAMES = ANIMATIC_FPS / 2;
 /**
  * How long a Clip Mockup with no measured speech is held for.
  *
- * `durationSeconds` is NOT NULL on the row (#1670), so nothing the loader
- * builds can reach this — it is the floor for a caller that hands over a row
- * it could not measure, and it stops such a row flashing past at one frame
- * while the author reads the "speech missing" report.
+ * `durationSeconds` is NULL on a Clip Mockup whose voice is not `ready`
+ * (migration 0030). Every write still voices the line before saving, so today
+ * only a caller that hands over a row it could not measure reaches this; it
+ * stops such a row flashing past at one frame while the author reads the
+ * "speech missing" report.
  */
 export const UNVOICED_HOLD_SECONDS = 2;
 
