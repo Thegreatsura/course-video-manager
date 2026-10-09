@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1-5 are done (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8). Matt's decisions are in section 6;
+**Status:** Batches 1-5 are done, and batch 6's Publish (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8; batch 6, Publish: section 7.9). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -179,7 +179,7 @@ Each batch is one PR. Each can be merged on its own, and each leaves the app wor
 | 3     | Batch export (#7) as N `export` jobs with a parent, plus the vertical Shorts render (#8).                                                                                                                                                                                                                                             | Kill the sidecar mid-render; it re-queues on restart.                                                    |
 | 4     | Posting: YouTube upload, Shorts, Buffer, AI Hero, Skills Changelog (#1-#5). `depends_on` moves to the server. Non-idempotent: an interrupted post asks before running again.                                                                                                                                                          | Chain "upload → AI Hero post" survives a reload.                                                         |
 | 5 ✅  | **Done.** Course Autofill (#10), in the default lane: no `ai` lane (section 7.8).                                                                                                                                                                                                                                                     | —                                                                                                        |
-| 6     | **Publish (#9).** The `publish` lane replaces the semaphore. Recovery runs Promote/Discard automatically on startup. `cvm course publish` enqueues and tails events (a `--wait` flag).                                                                                                                                                | A restart mid-Publish recovers without a human.                                                          |
+| 6 ✅  | **Publish (#9).** The `publish` lane replaces the semaphore. An interrupted Publish is never re-run; Promote/Discard stay by hand (section 7.2, 7.9). `cvm course publish` enqueues and follows it (`--wait`).                                                                                                                        | A restart mid-Publish ends `interrupted`, never re-run; the publish page offers Promote/Discard.         |
 | 7     | Transcription (#12): the sweeper picks up `queued` clips, so the browser no longer drives them.                                                                                                                                                                                                                                       | No clip stays stuck in `transcribing` after a restart.                                                   |
 | 8     | **Delete** `upload-reducer.ts`, the `sse-*-client.ts` files, `planUploadReactions` and the localStorage ETA history. Allowlist at 0 except the listed interactive streams. Write ADR 0032.                                                                                                                                            | `check` is green with the guard at 0.                                                                    |
 
@@ -611,6 +611,60 @@ a clone's Autofill reaches only a local stub of the Messages API.
 Left for later: `upload-reducer.ts`'s autofill entry type and
 `UPDATE_AUTOFILL_STAGE` (the type is how the Job draws; batch 8 deletes the
 reducer); an ETA for the Autofill rows (section 7.5's left-out ETA).
+
+### 7.9 What batch 6 built (Publish)
+
+**Publish (#9) is a kind** (`apps/local/sidecar/kinds/publish.ts`):
+`CoursePublishService.publish` unchanged — validate, Submit, export and upload
+overlapped, the `course.json` receipt, Promote, and its own retries (the
+Commit `recurs(1)`, Dropbox HTTP `recurs(5)`, an export `recurs(2)`).
+`publish` and `exportVideo` now ask for `SidecarContext`. Deleted:
+`api.courses.$courseId.publish-sse.ts`, `sse-publish-client.ts`,
+`upload-type-registry-pending.test.ts` and both allowlist entries.
+
+- **The `publish` lane (1) replaces `courseVersionMutationSemaphore`**, which
+  is gone from the service. The CLI no longer runs a Publish in-process, so
+  every Publish goes through the one lane.
+- **1 attempt, and never re-run on its own.** Every browser failure was
+  `UPLOAD_FATAL_ERROR` (section 7.1). A new policy flag, `neverRequeued`
+  (`retry-policy.ts`, `isRequeuedOnStop` in `job-kind.ts`), stops a
+  deliberate stop from putting it back (section 7.5's rule): a Publish cut off
+  by a signal or a crash ends `interrupted`. Section 3.2's automatic
+  Promote/Discard is not built (section 7.2): the publish page's banner reads
+  the receipt and offers them by hand, as before. `publish-kind.test.ts` is
+  the guard.
+- **The rows** are the browser's: a parent row for the Course and one child
+  row per shipping Video (encode, then "queued for upload", then bytes), from
+  the kind's Job Events (`videos`, `video-stage`, `video-progress`,
+  `video-upload-queued`, `video-upload-progress`, `video-succeeded`,
+  `video-failed`, `published`). A Video copied from the last Bundle now
+  draws as done — the browser had no handler for `upload-video-reused`, so
+  its row sat at "queued for upload".
+- **An interrupted Publish** says so on its row and in its toast
+  ("Interrupted, and never re-run on its own…"), with **Promote or Discard on
+  the publish page** and **View log**. The page holds its button, and hides
+  its Promote/Discard banner, only while this Course's Publish Job is live;
+  it revalidates when the Job settles, so the banner appears.
+- **A failure** toasts the route's words plus the real cause's first line (a
+  Commit failure used to say only "the Dropbox commit failed"), with **View
+  log**. The old "Publish status may be unknown, refresh" suffix is gone: the
+  sidecar knows.
+- **`cvm course publish`** enqueues the same Job and prints
+  `{ jobId, status: "queued", … }`; `--wait` follows it, prints one JSON line
+  per step on STDERR, and ends as the in-process command did: the same
+  result object, `PublishValidationError` (exit 3) or
+  `PublishCommitFailedError` (exit 4) rebuilt from a `publish-failed` Job
+  Event, or `PublishInterruptedError` / `PublishJobFailedError` (exit 4).
+- **verify-cvm:** `DROPBOX_API_URL` and `DROPBOX_CONTENT_URL` join the
+  loopback-or-discard rule (#1901), so a clone's Publish reaches only a local
+  Dropbox stub.
+
+No migration.
+
+Left for later: the spawn guard's dependency-cruiser rule and
+`FfmpegRun` / `OverlayContentRenderer` behind `SidecarContext` (the next
+PR of batch 6); the `publish` entry type and `UPDATE_PUBLISH_STAGE` /
+`PUBLISH_COMPLETE` go with `upload-reducer.ts` in batch 8.
 
 ## Dismissal is stored
 

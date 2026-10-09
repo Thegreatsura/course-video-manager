@@ -262,6 +262,8 @@ export function GlobalUploadProgress() {
                       }
                       post={postControls(upload.uploadId)}
                       publishRecoveryHref={publishRecoveryHref(upload.uploadId)}
+                      // Its link goes to another page: the dialog closes.
+                      onFollowLink={() => setIsModalOpen(false)}
                     />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow

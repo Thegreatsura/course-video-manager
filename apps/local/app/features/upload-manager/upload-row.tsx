@@ -44,6 +44,7 @@ export function UploadRow({
   logHref,
   post = null,
   publishRecoveryHref = null,
+  onFollowLink = () => {},
 }: {
   upload: uploadReducer.UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
@@ -54,6 +55,8 @@ export function UploadRow({
    * Promoted or Discarded by hand. `null` otherwise.
    */
   publishRecoveryHref?: string | null;
+  /** Called when a link in the row takes the author to another page. */
+  onFollowLink?: () => void;
   /** Where a background Job's log is read, for a failed row; `null` otherwise. */
   logHref: string | null;
   /** A child task, indented under the parent job that spawned it. */
@@ -76,6 +79,7 @@ export function UploadRow({
           logHref={logHref}
           post={post}
           publishRecoveryHref={publishRecoveryHref}
+          onFollowLink={onFollowLink}
         />
       </div>
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
@@ -185,12 +189,14 @@ function UploadStatusDetail({
   logHref,
   post,
   publishRecoveryHref,
+  onFollowLink,
 }: {
   upload: uploadReducer.UploadEntry;
   eta?: UploadEta;
   logHref: string | null;
   post: PostRowControls | null;
   publishRecoveryHref: string | null;
+  onFollowLink: () => void;
 }) {
   switch (upload.status) {
     case "waiting":
@@ -223,6 +229,7 @@ function UploadStatusDetail({
             message={upload.errorMessage}
             logHref={logHref}
             recoveryHref={publishRecoveryHref}
+            onFollowLink={onFollowLink}
           />
         );
       }
@@ -277,10 +284,12 @@ function InterruptedPublishDetail({
   message,
   logHref,
   recoveryHref,
+  onFollowLink,
 }: {
   message: string | null;
   logHref: string | null;
   recoveryHref: string;
+  onFollowLink: () => void;
 }) {
   return (
     <div className="mt-0.5 space-y-1">
@@ -289,7 +298,10 @@ function InterruptedPublishDetail({
         <Link
           to={recoveryHref}
           className="text-xs font-medium text-foreground underline underline-offset-2 whitespace-nowrap"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFollowLink();
+          }}
         >
           Promote or Discard on the publish page
         </Link>
