@@ -31,6 +31,13 @@ export interface JobEventFeed {
   >;
 }
 
+/**
+ * How long before a resync an event may have been written and still be
+ * published by it: the late commits and the snapshot's edge that `lookback`
+ * is for are a matter of seconds.
+ */
+const SNAPSHOT_EDGE_MS = 60_000;
+
 export const makeJobEventFeed = (opts: {
   readonly pollMs: number;
   /** How many ids back each poll looks again, for late commits. */
@@ -48,6 +55,13 @@ export const makeJobEventFeed = (opts: {
     // listened are in that subscriber's snapshot, so the poller starts over
     // from the newest (less `lookback`, which also covers the snapshot's edge).
     let resync = true;
+    // When the last resync happened. The window it re-reads holds old events
+    // too — the newest 50 may be yesterday's — and those are already in the
+    // new subscriber's snapshot, or left out of it on purpose (dismissed, or
+    // succeeded too long ago). Publishing them again brought yesterday's
+    // uploads back as rows and toasts in the morning's first tab, so an event
+    // written well before the resync is marked seen, never published.
+    let resyncedAt = 0;
     const published = new Set<number>();
 
     const poll = Effect.gen(function* () {
@@ -55,6 +69,7 @@ export const makeJobEventFeed = (opts: {
         resync = false;
         cursor = yield* ops.latestJobEventId();
         published.clear();
+        resyncedAt = Date.now();
       }
       while (subscribers > 0) {
         const rows = yield* ops.listJobEventsAfter({
@@ -69,7 +84,10 @@ export const makeJobEventFeed = (opts: {
         for (const id of published) {
           if (id <= cursor - opts.lookback) published.delete(id);
         }
-        if (fresh.length > 0) yield* PubSub.publish(pubsub, fresh);
+        const news = fresh.filter(
+          (r) => r.event.at.getTime() >= resyncedAt - SNAPSHOT_EDGE_MS
+        );
+        if (news.length > 0) yield* PubSub.publish(pubsub, news);
         // A full page of news means there is more behind it; anything less is all.
         if (fresh.length === 0 || rows.length < opts.pageSize) return;
       }
