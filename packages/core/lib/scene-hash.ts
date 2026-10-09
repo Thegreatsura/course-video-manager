@@ -17,3 +17,11 @@ export function canonicalize(scene: unknown): string {
 export function hashScene(scene: unknown): string {
   return crypto.createHash("sha256").update(canonicalize(scene)).digest("hex");
 }
+
+/**
+ * The content hash of a Diagram's stored head, or `null` for a Diagram that
+ * has never been drawn on. Two heads with the same hash hold the same drawing.
+ */
+export function hashHead(headScene: unknown): string | null {
+  return headScene == null ? null : hashScene(headScene);
+}

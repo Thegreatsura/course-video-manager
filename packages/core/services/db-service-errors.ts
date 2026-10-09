@@ -13,6 +13,22 @@ export class UnknownDBServiceError extends Data.TaggedError(
   cause: unknown;
 }> {}
 
+/**
+ * A head write that named the head it expected to replace found a different
+ * one stored: the Diagram changed somewhere the writer hasn't seen.
+ */
+export class DiagramHeadMovedError extends Data.TaggedError(
+  "DiagramHeadMovedError"
+)<{
+  diagramId: string;
+  expectedHash: string | null;
+  storedHash: string | null;
+}> {
+  override get message() {
+    return "This diagram changed elsewhere since it was loaded";
+  }
+}
+
 export class NotLatestVersionError extends Data.TaggedError(
   "NotLatestVersionError"
 )<{

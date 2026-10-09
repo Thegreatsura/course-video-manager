@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect";
 import { DiagramOperationsService } from "./db-diagram-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import { DiagramThumbnailStore } from "./diagram-thumbnail-store.js";
+import { hashHead } from "../lib/scene-hash.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -280,6 +281,40 @@ describe("updateDiagramHead", () => {
       const cleared = yield* diagramOps.updateDiagramHead(created.id, null);
       expect(cleared.headScene).toBeNull();
     }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "with an expected hash, writes only over the head the writer saw",
+    () =>
+      Effect.gen(function* () {
+        const diagramOps = yield* DiagramOperationsService;
+        const created = yield* diagramOps.createDiagram();
+        const mine = { store: { "shape:a": { id: "shape:a" } } };
+        const theirs = { store: { "shape:b": { id: "shape:b" } } };
+        const later = { store: { "shape:c": { id: "shape:c" } } };
+
+        // An empty head is expected as null.
+        yield* diagramOps.updateDiagramHead(created.id, mine, {
+          expectedHash: null,
+        });
+        // Someone else writes, unconditionally.
+        yield* diagramOps.updateDiagramHead(created.id, theirs);
+
+        const refused = yield* diagramOps
+          .updateDiagramHead(created.id, later, {
+            expectedHash: hashHead(mine),
+          })
+          .pipe(Effect.flip);
+        expect(refused._tag).toBe("DiagramHeadMovedError");
+        expect((yield* diagramOps.getDiagram(created.id)).headScene).toEqual(
+          theirs
+        );
+
+        const stored = yield* diagramOps.updateDiagramHead(created.id, later, {
+          expectedHash: hashHead(theirs),
+        });
+        expect(stored.headScene).toEqual(later);
+      }).pipe(Effect.provide(testLayer))
   );
 });
 

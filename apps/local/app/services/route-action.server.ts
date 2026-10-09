@@ -12,6 +12,8 @@ interface MakeActionConfig<A, E, R> {
   effect: (ctx: {
     params: Record<string, string | undefined>;
     payload: unknown;
+    /** For headers; the body has already been read into `payload`. */
+    request: Request;
   }) => Effect.Effect<A, E, R>;
 }
 
@@ -143,6 +145,7 @@ export function makeAction<A, E, R extends LayerLive>(
     const effect: Effect.Effect<A, E, R> = config.effect({
       params: args.params,
       payload,
+      request: args.request,
     });
 
     return runRouteEffect(
