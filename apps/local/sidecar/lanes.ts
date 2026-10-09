@@ -16,7 +16,7 @@
  *
  * Every OTHER limit is on a resource inside a job, and stays where it is, in
  * the service, because the sidecar builds each service layer once per process
- * just as the app server does: ffmpeg's GPU 6 / CPU 12 permits
+ * just as the app server does: ffmpeg's 2 encode slots / 12 CPU permits
  * (`FfmpegPermitsService`, `ffmpeg-permits.ts`), `MAX_CONCURRENT_EXPORTS` 6
  * (`course-publish-export-events.ts:79`), Autofill's 6 Videos
  * (`autofill-service.ts:54`), Dropbox's upload pool (`dropbox-upload-config.ts:17`,

@@ -76,6 +76,10 @@ export type PublishStage =
   | "cloning"
   | "complete";
 
+// Videos in flight at once, not encodes: however many Videos are in flight,
+// across every Job in the Sidecar, only `FfmpegPermitsService`'s encode slots
+// (default 2) run ffmpeg at a time — `runFfmpegWithProgress` takes one per
+// pass. The rest wait their turn, and their Job's log says so.
 export const MAX_CONCURRENT_EXPORTS = 6;
 
 export const extractErrorMessage = (e: unknown, fallback: string): string =>
