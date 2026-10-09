@@ -1,18 +1,21 @@
 import { useContext, useEffect, useMemo, useRef } from "react";
 import { useRevalidator } from "react-router";
 import { UploadContext } from "@/features/upload-manager/upload-context";
-import type { uploadReducer } from "@/features/upload-manager/upload-reducer";
+import type {
+  UploadStatus,
+  UploadType,
+} from "@/features/upload-manager/upload-entry";
 import { jobUploadEntries } from "@/features/jobs/jobs-selectors";
 
 type UploadSnapshot = Record<
   string,
-  { status: uploadReducer.UploadStatus; uploadType: uploadReducer.UploadType }
+  { status: UploadStatus; uploadType: UploadType }
 >;
 
 export function hasNewSuccessForTypes(
   prev: UploadSnapshot,
   current: UploadSnapshot,
-  types: Set<uploadReducer.UploadType>
+  types: Set<UploadType>
 ): boolean {
   for (const [id, upload] of Object.entries(current)) {
     const prevUpload = prev[id];
@@ -25,20 +28,20 @@ export function hasNewSuccessForTypes(
   return false;
 }
 
-export function useUploadRevalidate(uploadTypes: uploadReducer.UploadType[]) {
-  const { uploads: browserUploads, jobs } = useContext(UploadContext);
-  // A background Job's rows (an export, a render, each Video of a Batch
-  // export) count like an upload's.
+export function useUploadRevalidate(uploadTypes: UploadType[]) {
+  const { jobs } = useContext(UploadContext);
+  // Every row a background Job draws (an export, a render, each Video of a
+  // Batch export).
   const uploads = useMemo(() => {
-    const all: UploadSnapshot = { ...browserUploads };
+    const all: UploadSnapshot = {};
     for (const job of Object.values(jobs.jobs)) {
       for (const entry of jobUploadEntries(job)) all[entry.uploadId] = entry;
     }
     return all;
-  }, [browserUploads, jobs.jobs]);
+  }, [jobs.jobs]);
   const revalidator = useRevalidator();
   const previousRef = useRef(uploads);
-  const typesRef = useRef(new Set<uploadReducer.UploadType>(uploadTypes));
+  const typesRef = useRef(new Set<UploadType>(uploadTypes));
 
   useEffect(() => {
     if (hasNewSuccessForTypes(previousRef.current, uploads, typesRef.current)) {

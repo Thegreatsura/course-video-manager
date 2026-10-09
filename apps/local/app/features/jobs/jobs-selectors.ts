@@ -1,4 +1,16 @@
-import type { uploadReducer } from "@/features/upload-manager/upload-reducer";
+import type {
+  AutofillStage,
+  AutofillUploadEntry,
+  BaseUploadEntry,
+  ExportStage,
+  ExportUploadEntry,
+  PublishStage,
+  PublishUploadEntry,
+  RenderVerticalStage,
+  UploadEntry,
+  UploadStatus,
+  UploadType,
+} from "@/features/upload-manager/upload-entry";
 import {
   AUTOFILL_STAGE_BANDS,
   AUTOFILL_WORK_BAND,
@@ -29,9 +41,7 @@ export const visibleJobs = (state: jobsReducer.State): jobsReducer.JobView[] =>
  * Every Upload Manager row the visible Jobs draw, minus the ones dismissed:
  * one per Job, or one per Video for a Batch export.
  */
-export const visibleJobRows = (
-  state: jobsReducer.State
-): uploadReducer.UploadEntry[] =>
+export const visibleJobRows = (state: jobsReducer.State): UploadEntry[] =>
   visibleJobs(state)
     .flatMap(jobUploadEntries)
     .filter((row) => !state.dismissed[row.uploadId]);
@@ -40,35 +50,31 @@ export const visibleJobRows = (
  * The newest visible row a Video's Jobs of `uploadType` draw: what a posting
  * page shows as "its" upload (a YouTube upload, an AI Hero post).
  */
-export const findVideoJobRow = <T extends uploadReducer.UploadType>(
+export const findVideoJobRow = <T extends UploadType>(
   state: jobsReducer.State,
   videoId: string,
   uploadType: T
-): Extract<uploadReducer.UploadEntry, { uploadType: T }> | undefined =>
+): Extract<UploadEntry, { uploadType: T }> | undefined =>
   visibleJobRows(state)
     .filter(
-      (row): row is Extract<uploadReducer.UploadEntry, { uploadType: T }> =>
+      (row): row is Extract<UploadEntry, { uploadType: T }> =>
         row.videoId === videoId && row.uploadType === uploadType
     )
     .at(-1);
 
 const EXPORT_STAGES: readonly string[] = Object.keys(EXPORT_STAGE_BANDS);
 
-const isExportStage = (stage: string): stage is uploadReducer.ExportStage =>
+const isExportStage = (stage: string): stage is ExportStage =>
   EXPORT_STAGES.includes(stage);
 
 const RENDER_VERTICAL_STAGES: readonly string[] = Object.keys(
   RENDER_VERTICAL_STAGE_BANDS
 );
 
-const isRenderVerticalStage = (
-  stage: string
-): stage is uploadReducer.RenderVerticalStage =>
+const isRenderVerticalStage = (stage: string): stage is RenderVerticalStage =>
   RENDER_VERTICAL_STAGES.includes(stage);
 
-const uploadStatusOf = (
-  job: jobsReducer.JobView
-): uploadReducer.UploadStatus => {
+const uploadStatusOf = (job: jobsReducer.JobView): UploadStatus => {
   switch (job.status) {
     case "requested":
       // Unanswered, being asked again: in progress, never failed.
@@ -94,9 +100,9 @@ const uploadStatusOf = (
 /** The fields every Job's row shares, whatever its kind. */
 const baseEntryOf = (
   job: jobsReducer.JobView,
-  status: uploadReducer.UploadStatus,
+  status: UploadStatus,
   progress: number
-): uploadReducer.BaseUploadEntry => ({
+): BaseUploadEntry => ({
   uploadId: job.id,
   videoId: job.subjectId ?? "",
   title: job.title,
@@ -113,10 +119,8 @@ const stringOf = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
 /** An upload's bar: its percent while it runs, full once it is done. */
-const uploadProgressOf = (
-  job: jobsReducer.JobView,
-  status: uploadReducer.UploadStatus
-) => (status === "success" ? 100 : (job.percent ?? 0));
+const uploadProgressOf = (job: jobsReducer.JobView, status: UploadStatus) =>
+  status === "success" ? 100 : (job.percent ?? 0);
 
 /**
  * A server Job as a row of the Global Upload Progress, which draws Upload
@@ -125,7 +129,7 @@ const uploadProgressOf = (
  */
 export const jobUploadEntry = (
   job: jobsReducer.JobView
-): uploadReducer.UploadEntry | null => {
+): UploadEntry | null => {
   switch (job.kind) {
     case "buffer": {
       const status = uploadStatusOf(job);
@@ -213,7 +217,7 @@ export const jobUploadEntry = (
 const batchVideoStatusOf = (
   job: jobsReducer.JobView,
   video: jobsReducer.BatchVideoView
-): uploadReducer.UploadStatus => {
+): UploadStatus => {
   switch (video.status) {
     case "succeeded":
       return "success";
@@ -244,7 +248,7 @@ export const latestJobFor = (
 
 const AUTOFILL_STAGES: readonly string[] = Object.keys(AUTOFILL_STAGE_BANDS);
 
-const isAutofillStage = (stage: string): stage is uploadReducer.AutofillStage =>
+const isAutofillStage = (stage: string): stage is AutofillStage =>
   AUTOFILL_STAGES.includes(stage);
 
 /**
@@ -255,32 +259,30 @@ const isAutofillStage = (stage: string): stage is uploadReducer.AutofillStage =>
  */
 const autofillUploadEntries = (
   job: jobsReducer.JobView
-): uploadReducer.AutofillUploadEntry[] => {
+): AutofillUploadEntry[] => {
   const status = uploadStatusOf(job);
   const courseId = job.subjectId ?? "";
-  const children = (job.videos ?? []).map(
-    (video): uploadReducer.AutofillUploadEntry => {
-      const videoStatus = batchVideoStatusOf(job, video);
-      return {
-        uploadId: batchVideoRowId(job.id, video.id),
-        videoId: video.id,
-        title: video.title,
-        progress:
-          videoStatus === "success" ? 100 : AUTOFILL_STAGE_BANDS.writing.start,
-        status: videoStatus,
-        errorMessage:
-          video.errorMessage ??
-          (videoStatus === "error" ? job.errorMessage : null),
-        retryCount: 0,
-        terminal: videoStatus === "error",
-        dependsOn: null,
-        parentUploadId: job.id,
-        uploadType: "autofill",
-        autofillStage: videoStatus === "success" ? null : "writing",
-        courseId,
-      };
-    }
-  );
+  const children = (job.videos ?? []).map((video): AutofillUploadEntry => {
+    const videoStatus = batchVideoStatusOf(job, video);
+    return {
+      uploadId: batchVideoRowId(job.id, video.id),
+      videoId: video.id,
+      title: video.title,
+      progress:
+        videoStatus === "success" ? 100 : AUTOFILL_STAGE_BANDS.writing.start,
+      status: videoStatus,
+      errorMessage:
+        video.errorMessage ??
+        (videoStatus === "error" ? job.errorMessage : null),
+      retryCount: 0,
+      terminal: videoStatus === "error",
+      dependsOn: null,
+      parentUploadId: job.id,
+      uploadType: "autofill",
+      autofillStage: videoStatus === "success" ? null : "writing",
+      courseId,
+    };
+  });
   const stage =
     job.stage !== null && isAutofillStage(job.stage) ? job.stage : null;
   // A Video that has settled, either way, is work done.
@@ -295,7 +297,7 @@ const autofillUploadEntries = (
         : stage === null
           ? 0
           : AUTOFILL_STAGE_BANDS[stage].start;
-  const parent: uploadReducer.AutofillUploadEntry = {
+  const parent: AutofillUploadEntry = {
     ...baseEntryOf(job, status, progress),
     // The parent names a Course, not a Video.
     videoId: "",
@@ -309,18 +311,18 @@ const autofillUploadEntries = (
 
 const PUBLISH_STAGES: readonly string[] = Object.keys(PUBLISH_STAGE_BANDS);
 
-const isPublishStage = (stage: string): stage is uploadReducer.PublishStage =>
+const isPublishStage = (stage: string): stage is PublishStage =>
   PUBLISH_STAGES.includes(stage);
 
 /** One shipping Video of a Publish: its encode, then its upload. */
 const publishVideoEntry = (
   job: jobsReducer.JobView,
   video: jobsReducer.BatchVideoView
-): uploadReducer.ExportUploadEntry => {
+): ExportUploadEntry => {
   const status = batchVideoStatusOf(job, video);
   const stage =
     video.stage !== null && isExportStage(video.stage) ? video.stage : null;
-  const entry: uploadReducer.ExportUploadEntry = {
+  const entry: ExportUploadEntry = {
     uploadId: batchVideoRowId(job.id, video.id),
     videoId: video.id,
     title: video.title,
@@ -370,14 +372,12 @@ const publishVideoEntry = (
  * then the byte-weighted mean of them (`withDerivedParentProgress`), and one
  * child row per shipping Video, which encodes and then uploads.
  */
-const publishUploadEntries = (
-  job: jobsReducer.JobView
-): uploadReducer.UploadEntry[] => {
+const publishUploadEntries = (job: jobsReducer.JobView): UploadEntry[] => {
   const status = uploadStatusOf(job);
   const stage =
     job.stage !== null && isPublishStage(job.stage) ? job.stage : null;
   const newDraftVersionId = stringOf(job.result?.newDraftVersionId);
-  const parent: uploadReducer.PublishUploadEntry = {
+  const parent: PublishUploadEntry = {
     ...baseEntryOf(
       job,
       status,
@@ -412,51 +412,46 @@ const publishUploadEntries = (
  * drawn by its own export Job instead. An Autofill and a Publish draw a
  * parent row and a child row per Video. Every other kind draws one row.
  */
-export const jobUploadEntries = (
-  job: jobsReducer.JobView
-): uploadReducer.UploadEntry[] => {
+export const jobUploadEntries = (job: jobsReducer.JobView): UploadEntry[] => {
   if (job.kind === "autofill") return autofillUploadEntries(job);
   if (job.kind === "publish") return publishUploadEntries(job);
   if (job.kind !== "batch-export") {
     const entry = jobUploadEntry(job);
     return entry ? [entry] : [];
   }
-  return (job.videos ?? []).flatMap(
-    (video): uploadReducer.ExportUploadEntry[] => {
-      if (video.status === "handed-off") return [];
-      const status = batchVideoStatusOf(job, video);
-      const stage =
-        video.stage !== null && isExportStage(video.stage) ? video.stage : null;
-      const progress =
-        status === "success"
-          ? 100
-          : stage === null
-            ? 0
-            : fillBand(EXPORT_STAGE_BANDS[stage], video.percent ?? 0);
-      return [
-        {
-          uploadId: batchVideoRowId(job.id, video.id),
-          videoId: video.id,
-          title: video.title,
-          progress,
-          status,
-          errorMessage:
-            video.errorMessage ??
-            (status === "error" ? job.errorMessage : null),
-          retryCount: 0,
-          terminal: false,
-          dependsOn: null,
-          parentUploadId: null,
-          uploadType: "export",
-          exportStage: status === "uploading" ? (stage ?? "queued") : stage,
-          isBatchEntry: true,
-          videoUploadStage: null,
-          uploadedBytes: 0,
-          totalBytes: null,
-        },
-      ];
-    }
-  );
+  return (job.videos ?? []).flatMap((video): ExportUploadEntry[] => {
+    if (video.status === "handed-off") return [];
+    const status = batchVideoStatusOf(job, video);
+    const stage =
+      video.stage !== null && isExportStage(video.stage) ? video.stage : null;
+    const progress =
+      status === "success"
+        ? 100
+        : stage === null
+          ? 0
+          : fillBand(EXPORT_STAGE_BANDS[stage], video.percent ?? 0);
+    return [
+      {
+        uploadId: batchVideoRowId(job.id, video.id),
+        videoId: video.id,
+        title: video.title,
+        progress,
+        status,
+        errorMessage:
+          video.errorMessage ?? (status === "error" ? job.errorMessage : null),
+        retryCount: 0,
+        terminal: false,
+        dependsOn: null,
+        parentUploadId: null,
+        uploadType: "export",
+        exportStage: status === "uploading" ? (stage ?? "queued") : stage,
+        isBatchEntry: true,
+        videoUploadStage: null,
+        uploadedBytes: 0,
+        totalBytes: null,
+      },
+    ];
+  });
 };
 
 /**

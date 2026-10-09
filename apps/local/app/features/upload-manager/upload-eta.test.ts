@@ -1,46 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { createInitialUploadState, uploadReducer } from "./upload-reducer";
 import { createHistoryStore, type HistoryData } from "./upload-history";
 import { etaLabel, formatRemaining, jobEta } from "./upload-eta";
+import type { TimedRows } from "./upload-timing";
+import {
+  exportProgress,
+  exportStage,
+  progress,
+  renderStage,
+  replay,
+  start,
+  succeed,
+  videoUploadProgress,
+  type RowStep,
+} from "./upload-timing-test-setup";
 
-const run = (steps: Array<[number, uploadReducer.Action]>) =>
-  steps.reduce(
-    (state, [at, action]) => uploadReducer(state, { ...action, at }),
-    createInitialUploadState()
-  );
+const run = replay;
 
 const runs = (durationMs: number, count = 3, units: number | null = null) =>
   Array.from({ length: count }, () => ({ durationMs, units }));
 
 /** The ETA of job `u1` at `now`, given the stage history `past`. */
-const etaOf = (
-  state: uploadReducer.State,
-  now: number,
-  past: HistoryData = {}
-) =>
+const etaOf = (state: TimedRows, now: number, past: HistoryData = {}) =>
   jobEta(state.uploads.u1!, state.timings.u1, {
     timings: state.timings,
     history: createHistoryStore(past).lookup,
     now,
   });
 
-const youtube: uploadReducer.Action = {
-  type: "START_UPLOAD",
-  uploadId: "u1",
-  videoId: "v1",
-  title: "Video",
-};
-const progress = (value: number): uploadReducer.Action => ({
-  type: "UPDATE_PROGRESS",
-  uploadId: "u1",
-  progress: value,
-});
+const youtube = start("u1", "youtube");
+const progressTo = (value: number) => progress("u1", value);
 
 describe("jobEta from the live rate", () => {
   it("is estimating until it has seen enough time", () => {
     const state = run([
       [0, youtube],
-      [2_000, progress(10)],
+      [2_000, progressTo(10)],
     ]);
     expect(etaOf(state, 2_000)).toEqual({ kind: "estimating" });
   });
@@ -48,7 +42,7 @@ describe("jobEta from the live rate", () => {
   it("is estimating until it has seen enough progress", () => {
     const state = run([
       [0, youtube],
-      [5_000, progress(1)],
+      [5_000, progressTo(1)],
     ]);
     expect(etaOf(state, 5_000)).toEqual({ kind: "estimating" });
   });
@@ -57,8 +51,8 @@ describe("jobEta from the live rate", () => {
     // 1% a second, 10% done: 90s to go.
     const state = run([
       [0, youtube],
-      [5_000, progress(5)],
-      [10_000, progress(10)],
+      [5_000, progressTo(5)],
+      [10_000, progressTo(10)],
     ]);
     expect(etaOf(state, 10_000)).toEqual({
       kind: "remaining",
@@ -70,18 +64,18 @@ describe("jobEta from the live rate", () => {
   it("counts down between progress events", () => {
     const state = run([
       [0, youtube],
-      [10_000, progress(10)],
+      [10_000, progressTo(10)],
     ]);
     expect(etaOf(state, 15_000)).toMatchObject({ ms: 85_000 });
   });
 
   it("does not jump on one burst of progress", () => {
     const steady = run(
-      Array.from({ length: 21 }, (_, i): [number, uploadReducer.Action] =>
-        i === 0 ? [0, youtube] : [i * 1_000, progress(i)]
+      Array.from({ length: 21 }, (_, i): RowStep =>
+        i === 0 ? [0, youtube] : [i * 1_000, progressTo(i)]
       )
     );
-    const burst = uploadReducer(steady, { ...progress(26), at: 21_000 });
+    const burst = run([[21_000, progressTo(26)]], steady);
     const before = etaOf(steady, 20_000);
     const after = etaOf(burst, 21_000);
     if (before.kind !== "remaining" || after.kind !== "remaining") {
@@ -96,7 +90,7 @@ describe("jobEta from the live rate", () => {
   it("goes back to estimating rather than below zero when overdue", () => {
     const state = run([
       [0, youtube],
-      [10_000, progress(50)],
+      [10_000, progressTo(50)],
     ]);
     expect(etaOf(state, 10_000)).toMatchObject({ ms: 10_000 });
     expect(etaOf(state, 25_000)).toEqual({ kind: "estimating" });
@@ -105,7 +99,7 @@ describe("jobEta from the live rate", () => {
   it("has nothing to say about a finished or failed job", () => {
     const done = run([
       [0, youtube],
-      [1_000, { type: "UPLOAD_SUCCESS", uploadId: "u1" }],
+      [1_000, succeed("u1")],
     ]);
     expect(etaOf(done, 2_000)).toEqual({ kind: "none" });
   });
@@ -114,24 +108,8 @@ describe("jobEta from the live rate", () => {
 describe("jobEta from history", () => {
   it("estimates a stage that streams no percentage from its past runs", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "u1",
-          videoId: "v1",
-          title: "V",
-          uploadType: "render-vertical",
-        },
-      ],
-      [
-        0,
-        {
-          type: "UPDATE_RENDER_VERTICAL_STAGE",
-          uploadId: "u1",
-          stage: "compositing",
-        },
-      ],
+      [0, start("u1", "render-vertical")],
+      [0, renderStage("u1", "compositing")],
     ]);
     expect(
       etaOf(state, 20_000, { "render-vertical:compositing": runs(60_000) })
@@ -143,41 +121,14 @@ describe("jobEta from history", () => {
   });
 
   it("says nothing for such a stage without history", () => {
-    const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "u1",
-          videoId: "v1",
-          title: "V",
-          uploadType: "render-vertical",
-        },
-      ],
-    ]);
+    const state = run([[0, start("u1", "render-vertical")]]);
     expect(etaOf(state, 5_000)).toEqual({ kind: "none" });
   });
 
   it("adds the stages still to come to the whole job", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "u1",
-          videoId: "v1",
-          title: "V",
-          uploadType: "render-vertical",
-        },
-      ],
-      [
-        0,
-        {
-          type: "UPDATE_RENDER_VERTICAL_STAGE",
-          uploadId: "u1",
-          stage: "transcribing",
-        },
-      ],
+      [0, start("u1", "render-vertical")],
+      [0, renderStage("u1", "transcribing")],
     ]);
     const past = {
       "render-vertical:transcribing": runs(30_000),
@@ -193,33 +144,9 @@ describe("jobEta from history", () => {
 
   it("estimates only the current stage when a later one has no history", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "u1",
-          videoId: "v1",
-          title: "V",
-          uploadType: "export",
-        },
-      ],
-      [
-        0,
-        {
-          type: "UPDATE_EXPORT_STAGE",
-          uploadId: "u1",
-          stage: "concatenating-clips",
-        },
-      ],
-      [
-        5_000,
-        {
-          type: "UPDATE_EXPORT_PROGRESS",
-          uploadId: "u1",
-          stage: "concatenating-clips",
-          percent: 10,
-        },
-      ],
+      [0, start("u1", "export")],
+      [0, exportStage("u1", "concatenating-clips")],
+      [5_000, exportProgress("u1", "concatenating-clips", 10)],
     ]);
     expect(etaOf(state, 5_000)).toMatchObject({ scope: "stage", ms: 45_000 });
   });
@@ -229,11 +156,11 @@ describe("jobEta from history", () => {
     // Live says 1%/s. History says the job takes 200s.
     const early = run([
       [0, youtube],
-      [3_000, progress(3)],
+      [3_000, progressTo(3)],
     ]);
     const late = run([
       [0, youtube],
-      [30_000, progress(30)],
+      [30_000, progressTo(30)],
     ]);
     const earlyEta = etaOf(early, 3_000, past);
     const lateEta = etaOf(late, 30_000, past);
@@ -248,38 +175,9 @@ describe("jobEta from history", () => {
 
   it("scales an upload by its size when past uploads recorded theirs", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "p",
-          videoId: "c",
-          title: "C",
-          uploadType: "publish",
-          courseId: "c",
-        },
-      ],
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "u1",
-          videoId: "v1",
-          title: "V",
-          uploadType: "export",
-          isBatchEntry: true,
-          parentUploadId: "p",
-        },
-      ],
-      [
-        0,
-        {
-          type: "UPDATE_VIDEO_UPLOAD_PROGRESS",
-          uploadId: "u1",
-          uploadedBytes: 0,
-          totalBytes: 1_000,
-        },
-      ],
+      [0, start("p", "publish")],
+      [0, start("u1", "export", { isBatchEntry: true, parentUploadId: "p" })],
+      [0, videoUploadProgress("u1", 0, 1_000)],
     ]);
     // 10ms a byte: a 1,000-byte Video is a 10s upload.
     expect(

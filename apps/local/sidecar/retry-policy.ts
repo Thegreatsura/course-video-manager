@@ -7,15 +7,15 @@ import type { LaneName } from "./lanes";
  * (docs/plans/background-jobs-sidecar.md, section 6). The sidecar adds no
  * policy of its own.
  *
- * Today, in the browser (as found on 2026-10-08; section 7.1 of the plan):
+ * Copied from the browser Upload Manager (deleted in batch 8), as found on
+ * 2026-10-08 (section 7.1 of the plan):
  *
- * - A job's failure (`UPLOAD_ERROR`) counts an attempt; while fewer than 3
- *   have run and the entry is not `terminal`, it goes to `retrying`
- *   (`upload-reducer.ts`, `UPLOAD_ERROR`), and `planUploadReactions` re-runs
- *   it AT ONCE with the params it started with. No delay, no backoff, and
- *   every error is retryable. So: 3 attempts.
- * - A Publish and an Autofill report every failure as `UPLOAD_FATAL_ERROR`,
- *   which sets `terminal` — and so do the per-Video rows each fans out into.
+ * - A job's failure counted an attempt; while fewer than 3 had run and the
+ *   entry was not `terminal`, it went to `retrying` and the browser re-ran it
+ *   AT ONCE with the params it started with. No delay, no backoff, and every
+ *   error was retryable. So: 3 attempts.
+ * - A Publish and an Autofill reported every failure as fatal, which set
+ *   `terminal` — and so did the per-Video rows each fans out into.
  *   So: 1 attempt.
  * - EXCEPT posting (YouTube, Shorts, Buffer, AI Hero, Skills Changelog):
  *   Matt's decision 5 gives each exactly 1 attempt and no re-queue — see
@@ -102,8 +102,8 @@ export const POSTING_JOB_POLICY = {
 /**
  * Every Upload Manager job type, and the policy it brings with it to the
  * sidecar. The five posting types are the exception decision 5 makes: the
- * browser gave each of them 3 attempts (`UPLOAD_ERROR`,
- * `upload-type-registry.ts`); the sidecar gives each exactly 1.
+ * browser Upload Manager (deleted in batch 8) gave each of them 3 attempts;
+ * the sidecar gives each exactly 1.
  */
 export const UPLOAD_MANAGER_POLICIES = {
   export: { lane: "default", maxAttempts: 3 },

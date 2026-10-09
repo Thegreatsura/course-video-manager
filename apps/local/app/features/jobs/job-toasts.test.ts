@@ -23,9 +23,7 @@ const show = (decided: SucceededToast, title = "Test Video") => {
   showJobSucceededToast({
     type: "show-job-succeeded-toast",
     jobId: "job-1",
-    kind: "irrelevant",
     title,
-    subjectId: null,
     toast: decided,
   });
   const call = vi.mocked(toast.success).mock.calls[0]!;
