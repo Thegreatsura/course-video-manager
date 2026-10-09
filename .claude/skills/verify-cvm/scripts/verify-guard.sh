@@ -25,11 +25,6 @@ counters() {
 # changes the set or a fingerprint and is reported as a normal write.
 API_TOKEN_TABLE='course-video-manager_api_token'
 
-# --- the sidecar background --------------------------------------------------
-# The tables only the run's sidecar writes on its own (apps/local/sidecar/):
-# its lease, renewed every few seconds, and the Jobs it claims and settles.
-SIDECAR_TABLES_RE='^course-video-manager_(job|job_event|sidecar_lease)\|'
-
 # token_rows <run dir> — "id|fingerprint|last_used_at" per token, sorted by id;
 # empty when the table does not exist (test clones carry no credential tables).
 token_rows() {
@@ -61,6 +56,8 @@ cmd_guard_baseline() {
   if [ "$(run_mode "$dir")" = test-clone ]; then
     ledger_installed "$dir" ||
       die "this run's clone has no write ledger (launched by an older verify.sh?) — cleanup and launch again"
+    ledger_attributes "$dir" ||
+      die "this run's write ledger does not record who wrote (launched by an older verify.sh) — cleanup and launch again"
     ledger_snapshot "$dir" > "$dir/guard-snapshot.txt"
     local uncovered; uncovered="$(ledger_uncovered "$dir")"
     [ -z "$uncovered" ] || log "warn tables outside the write ledger (their writes will read UNKNOWN): $(printf '%s' "$uncovered" | paste -sd' ')"
@@ -134,9 +131,12 @@ cmd_guard_check() {
   echo "$ledger"
 }
 
-# Test clone: the trigger ledger is the verdict. Exact, committed rows only.
+# Test clone: the trigger ledger is the verdict. Exact, committed rows only,
+# split by the connection that wrote them — never by table: the server writes
+# job and job_event rows too (an Export it enqueues, a Job it dismisses), so a
+# table-based split once hid those and called the run clean.
 guard_check_clone() {
-  local dir="$1" ledger="$2" in_flight uncovered moved verdict
+  local dir="$1" ledger="$2" in_flight uncovered rows server sidecar other verdict
   [ -f "$dir/guard-snapshot.txt" ] || die "no clone baseline — call 'verify.sh guard baseline' again"
   # First: the window closes here. A write still in flight gets a few seconds
   # to commit — the click that just happened, usually — before it reads PENDING.
@@ -147,36 +147,40 @@ guard_check_clone() {
     sleep 0.5
   done
   uncovered="$(ledger_uncovered "$dir")"
-  moved="$(ledger_writes "$dir" "$(cat "$dir/guard-snapshot.txt")")"
-  printf '%s\n' "$moved" > "$dir/guard-writes.txt"
-  # The run's sidecar renews its lease every few seconds and writes every Job
-  # it runs: real writes, and this run's, but background to the click being
-  # verified. They get their own section rather than drown the table.
-  local background
-  background="$(printf '%s\n' "$moved" | grep -E "$SIDECAR_TABLES_RE" || true)"
-  moved="$(printf '%s\n' "$moved" | grep -vE "$SIDECAR_TABLES_RE" | grep . || true)"
+  rows="$(ledger_writes "$dir" "$(cat "$dir/guard-snapshot.txt")")"
+  printf '%s\n' "$rows" > "$dir/guard-writes.txt"
+  # "table|ins|upd|del|trn" per writer; other keeps its writer column.
+  server="$(printf '%s\n' "$rows" | sed -n 's/^server|//p')"
+  sidecar="$(printf '%s\n' "$rows" | sed -n 's/^sidecar|//p')"
+  other="$(printf '%s\n' "$rows" | sed -n 's/^other:\(.*\)$/\1/p')"
   {
     echo "Source: the clone's write-ledger triggers — every committed insert, update,"
-    echo "delete and truncate, recorded in the writing transaction itself. Nothing"
-    echo "else writes to this clone, so every row below is this run's."
+    echo "delete and truncate, recorded in the writing transaction itself, with the"
+    echo "connection that wrote it. Nothing else writes to this clone, so every row"
+    echo "below is this run's."
     echo
-    if [ -n "$background" ]; then
-      echo "Background (this run's sidecar — its lease and its Jobs):"
+    if [ -n "$server" ]; then
+      echo "**Writes committed by this run's server.**"
       echo
-      echo "| Table | Inserted | Updated | Deleted | Truncated |"
-      echo "| --- | --- | --- | --- | --- |"
-      printf '%s\n' "$background" | awk -F'|' '{ printf "| %s | %d | %d | %d | %d |\n", $1, $2, $3, $4, $5 }'
-      echo
-    fi
-    if [ -n "$moved" ]; then
-      echo "**Writes landed during this run.**"
-      echo
-      echo "| Table | Inserted | Updated | Deleted | Truncated |"
-      echo "| --- | --- | --- | --- | --- |"
-      printf '%s\n' "$moved" | awk -F'|' '{ printf "| %s | %d | %d | %d | %d |\n", $1, $2, $3, $4, $5 }'
+      ledger_table "$server"
       echo
       echo "Writes are allowed — check they are the ones you meant. Run"
       echo "'verify.sh guard forensics <table>' to name the rows."
+      echo
+    fi
+    if [ -n "$other" ]; then
+      echo "**Writes committed by other connections** (not the server or the sidecar —"
+      echo "a seed or script of your own; named by the session's application_name):"
+      echo
+      echo "| Connection | Table | Inserted | Updated | Deleted | Truncated |"
+      echo "| --- | --- | --- | --- | --- | --- |"
+      printf '%s\n' "$other" | awk -F'|' '{ printf "| %s | %s | %d | %d | %d | %d |\n", $1, $2, $3, $4, $5, $6 }'
+      echo
+    fi
+    if [ -n "$sidecar" ]; then
+      echo "Background, committed by this run's sidecar (its lease and the Jobs it runs):"
+      echo
+      ledger_table "$sidecar"
       echo
     fi
     if [ "$in_flight" != 0 ]; then
@@ -189,26 +193,69 @@ guard_check_clone() {
       echo "invisible here): $(printf '%s' "$uncovered" | paste -sd' ')"
       echo
     fi
-    if [ -z "$moved" ] && [ "$in_flight" = 0 ] && [ -z "$uncovered" ]; then
-      echo "No table took an insert, update, delete or truncate during the window${background:+, beyond the sidecar background above}."
-      echo "Nothing was modified."
+    if [ -z "$server" ] && [ -z "$other" ] && [ "$in_flight" = 0 ] && [ -z "$uncovered" ]; then
+      if [ -n "$sidecar" ]; then
+        echo "This run's server committed no write; only the sidecar's background above."
+      else
+        echo "No table took an insert, update, delete or truncate during the window."
+        echo "Nothing was modified."
+      fi
       echo
     fi
   } >> "$ledger"
   verdict="$(statement_section "$dir" "$ledger")"
-  [ "$verdict" = writes ] && [ -z "$moved" ] &&
-    echo "The server sent write statements but none committed a row: rolled back, rejected, or matched nothing." >> "$ledger"
+  [ "$verdict" = writes ] && uncommitted_section "$dir" "$server" >> "$ledger"
 
   if [ "$in_flight" != 0 ]; then
     log "guard: PENDING — $in_flight uncommitted write(s) in flight; check again — see $ledger"
   elif [ -n "$uncovered" ]; then
     log "guard: UNKNOWN — tables outside the ledger: $(printf '%s' "$uncovered" | paste -sd' ') — see $ledger"
-  elif [ -n "$moved" ]; then
-    log "guard: writes landed in this run's test clone (allowed) — see $ledger"
+  elif [ -n "$server" ] || [ -n "$other" ]; then
+    log "guard: writes landed in this run's test clone (allowed) — server: $(ledger_tables "$server"); other connections: $(printf '%s\n' "$other" | cut -d'|' -f2 | ledger_tables); sidecar: $(ledger_tables "$sidecar") — see $ledger"
+  elif [ -n "$sidecar" ]; then
+    log "guard: no write from this run's server — only the sidecar's background (committed): $(ledger_tables "$sidecar") — see $ledger"
   else
     log "guard: clean — no writes"
   fi
-  [ -z "$moved" ] || printf '%s\n' "$moved" >&2
+  [ -z "$rows" ] || printf '%s\n' "$rows" >&2
+}
+
+# ledger_table "<table|ins|upd|del|trn lines>" — as a Markdown table.
+ledger_table() {
+  echo "| Table | Inserted | Updated | Deleted | Truncated |"
+  echo "| --- | --- | --- | --- | --- |"
+  printf '%s\n' "$1" | awk -F'|' '{ printf "| %s | %d | %d | %d | %d |\n", $1, $2, $3, $4, $5 }'
+}
+
+# ledger_tables [lines] — the table names (first field), comma-separated, or "none".
+ledger_tables() {
+  { if [ "$#" -gt 0 ]; then printf '%s\n' "$1"; else cat; fi; } |
+    cut -d'|' -f1 | grep . | sort -u | paste -sd, | sed 's/,/, /g' | grep . || echo none
+}
+
+# uncommitted_section <run dir> <server's committed rows> — the tables the
+# server sent write statements to but committed no row in: rolled back,
+# rejected, or matched nothing. Per table, so one committed table never hides
+# another that did not commit.
+uncommitted_section() {
+  local dir="$1" server="$2" committed t n lines=""
+  committed="$(printf '%s\n' "$server" | cut -d'|' -f1 | grep . || true)"
+  while IFS='|' read -r n t; do
+    [ -n "$t" ] || continue
+    if [ "$t" = "?" ]; then
+      [ -n "$committed" ] && continue
+      lines="$lines    $n write statement(s) whose table the Ledger cannot read, and the server committed no row anywhere"$'\n'
+    elif ! grep -qxF "$t" <<< "$committed"; then
+      lines="$lines    $t: $n write statement(s), no row committed"$'\n'
+    fi
+  done < <(grep . "$dir/guard-write-statements.txt" 2>/dev/null | sql_write_tables | sort | uniq -c |
+             awk '{ print $1 "|" $2 }')
+  [ -n "$lines" ] || return 0
+  echo "**Sent but not committed** — the server sent these write statements, but no row of"
+  echo "the table was committed by the server: rolled back, rejected, or matched nothing."
+  echo
+  printf '%s' "$lines"
+  echo
 }
 
 # Production: this run's own statements are the verdict (the server's
