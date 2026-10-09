@@ -8,7 +8,8 @@ import { CourseOperationsService } from "@/services/db-course-operations.server"
 import { CourseWriteService } from "@/services/course-write-service";
 import { DeliverableOperationsService } from "@/services/db-deliverable-operations.server";
 import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
-import { diagramService } from "./rpc-layer.diagram";
+import { DiagramComponentOperationsService } from "@/services/db-diagram-component-operations.server";
+import { diagramComponentService, diagramService } from "./rpc-layer.diagram";
 import { clipService } from "./rpc-layer.clip";
 import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
 import { LessonSectionOperationsService } from "@/services/db-lesson-section-operations.server";
@@ -449,6 +450,7 @@ export type RemoteServices =
   | PitchOperationsService
   | DeliverableOperationsService
   | DiagramOperationsService
+  | DiagramComponentOperationsService
   | CourseWriteService;
 
 /**
@@ -498,6 +500,11 @@ export const makeRemoteLayer = (
     remoteLayer(PitchOperationsService, pitchService, client),
     remoteLayer(DeliverableOperationsService, deliverableService, client),
     remoteLayer(DiagramOperationsService, diagramService, client),
+    remoteLayer(
+      DiagramComponentOperationsService,
+      diagramComponentService,
+      client
+    ),
     remoteLayer(CourseWriteService, courseWriteService, client)
   );
 };

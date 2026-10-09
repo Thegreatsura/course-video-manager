@@ -8,6 +8,7 @@ import {
   truncateAllTables,
   type TestDb,
 } from "@/test-utils/pglite";
+import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   makeTempClipMockupDir,
@@ -22,7 +23,6 @@ import {
   clipMockupsJson,
   fakeSpeech,
   makeClipMockupRun,
-  FAKE_DURATION_SECONDS,
 } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
@@ -91,6 +91,8 @@ describe("cvm clip-mockup", () => {
     imagePath: string;
     audioPath: string | null;
     durationSeconds: number | null;
+    durationEstimated: boolean;
+    voiceStatus: string;
     order: string;
     archived: boolean;
     createdAt: string;
@@ -170,15 +172,15 @@ describe("cvm clip-mockup", () => {
     expect(row.videoId).toBe(s.standaloneActiveId);
     expect(row.line).toBe("Here's the problem.");
     expect(row.archived).toBe(false);
-    // The line was spoken as it was added, so the row already knows how long
-    // this moment of the Animatic runs.
-    expect(row.durationSeconds).toBe(FAKE_DURATION_SECONDS);
+    // The line is voiced later, by the Sidecar, but the row already says
+    // about how long this moment of the Animatic runs — and that it guessed.
+    expect(row.durationSeconds).toBe(estimateSpokenSeconds(row.line));
+    expect(row.durationEstimated).toBe(true);
+    expect(row.voiceStatus).toBe("pending");
 
     const dir = frameDir(s.standaloneActiveLineageId);
-    // The frame and its speech, side by side in the Video's own directory.
-    expect(nodeFs.readdirSync(dir).sort()).toEqual(
-      [row.imagePath, row.audioPath].sort()
-    );
+    // The frame, in the Video's own directory; its WAV comes later.
+    expect(nodeFs.readdirSync(dir)).toEqual([row.imagePath]);
     expect(nodeFs.readFileSync(nodePath.join(dir, row.imagePath), "utf8")).toBe(
       "FIRST-FRAME"
     );

@@ -37,6 +37,7 @@ import {
   UPDATE_HELP,
 } from "./diagram.help";
 import { parseCreateInput, parseSnapshotInput } from "./diagram-input";
+import { diagramReadCommands } from "./diagram-list";
 
 /**
  * `cvm diagram`: an agent drafts a Diagram in the simple shape format
@@ -383,6 +384,7 @@ export const diagramCommand = Command.make("diagram").pipe(
     snapshotCmd,
     renderCmd,
     getCmd,
+    ...diagramReadCommands,
     updateCmd,
     deleteCmd,
     restoreCmd,

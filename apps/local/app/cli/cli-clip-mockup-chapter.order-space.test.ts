@@ -7,6 +7,7 @@ import {
   truncateAllTables,
   type TestDb,
 } from "@/test-utils/pglite";
+import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   makeTempClipMockupDir,
@@ -18,7 +19,6 @@ import {
 } from "./cli-write-test-harness";
 import {
   addArgv,
-  FAKE_DURATION_SECONDS,
   fakeSpeech,
   makeClipMockupRun,
 } from "./cli-clip-mockup-test-harness";
@@ -378,6 +378,9 @@ describe("one order space shared with Clip Mockups", () => {
           "createdAt",
           "imageFile",
           "audioFile",
+          // Last again: a pending voice's durationSeconds is a guess from
+          // its words, and this says so.
+          "durationEstimated",
         ]);
       }
     });
@@ -398,7 +401,14 @@ describe("one order space shared with Clip Mockups", () => {
       expect(rows.every((row) => typeof row.durationSeconds === "number")).toBe(
         true
       );
-      expect(runTime).toBe(3 * FAKE_DURATION_SECONDS);
+      // Each voice is still pending here, so each is the guess from its words.
+      expect(runTime).toBeCloseTo(
+        rows.reduce(
+          (total, row) => total + estimateSpokenSeconds(row.line!),
+          0
+        ),
+        5
+      );
     });
   });
 });

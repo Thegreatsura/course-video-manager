@@ -7,6 +7,7 @@ import { RenderVerticalVideoService } from "@/services/render-vertical-video-ser
 import { SidecarContextLive } from "@/services/sidecar-context";
 import { VideoExportService } from "@/services/video-export-service";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
+import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
 
 /**
  * The work only the **Sidecar** does: the encodes (`FFmpegEncodeService`,
@@ -31,7 +32,9 @@ const encodeLayer = Layer.mergeAll(
 export const sidecarLayer = Layer.mergeAll(
   CoursePublishService.Default,
   RenderVerticalVideoService.Default,
-  WhisperTranscriptionService.Default
+  WhisperTranscriptionService.Default,
+  // Records a Clip Mockup's voice once the `clip-mockup-voice` Job made it.
+  ClipMockupVoiceOperationsService.Default
 ).pipe(
   Layer.provideMerge(encodeLayer),
   Layer.provideMerge(layerLive),

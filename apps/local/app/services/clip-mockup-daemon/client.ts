@@ -133,10 +133,11 @@ const findOrStartDaemon = Effect.gen(function* () {
 });
 
 /**
- * `findOrStartDaemon`, once per `cvm` process. `add` captures and voices at
- * the same time, and without this both halves found no daemon and both
- * started one. A success is kept for the life of the process, which is one
- * command; a failure is not, so a later call tries again.
+ * `findOrStartDaemon`, once per process. `add` captures and voices at the
+ * same time, and without this both halves found no daemon and both started
+ * one. A success is kept until a request to it fails (`requestDaemon`): the
+ * Sidecar lives far longer than the daemon, which stops after five idle
+ * minutes. A failure is not kept, so a later call tries again.
  */
 let found: DaemonPaths | undefined;
 const starting = Effect.unsafeMakeSemaphore(1);
@@ -151,13 +152,30 @@ const ensureDaemon = starting.withPermits(1)(
 );
 
 /**
+ * One request to this checkout's daemon. A daemon that is no longer there —
+ * it stopped after its idle minutes, or died — is forgotten, found or
+ * started again, and asked once more.
+ */
+const requestDaemon = (method: "GET" | "POST", path: string, body: unknown) =>
+  ensureDaemon.pipe(
+    Effect.flatMap((paths) => request(paths.socket, method, path, body)),
+    Effect.catchTag("DaemonUnavailable", () =>
+      Effect.suspend(() => {
+        found = undefined;
+        return ensureDaemon.pipe(
+          Effect.flatMap((paths) => request(paths.socket, method, path, body))
+        );
+      })
+    )
+  );
+
+/**
  * Capture every page as a 1920x1080 PNG at its `outputPath`. All of them, or
  * a `FrameCaptureError` naming the first page that failed.
  */
 export const captureFramesInDaemon = (items: CaptureRequest["items"]) =>
   Effect.gen(function* () {
-    const paths = yield* ensureDaemon;
-    const text = yield* request(paths.socket, "POST", "/capture", { items });
+    const text = yield* requestDaemon("POST", "/capture", { items });
     const answer = yield* decode(CaptureResponse, text);
     if (!answer.ok) {
       return yield* new FrameCaptureError({
@@ -184,8 +202,7 @@ export const captureFramesInDaemon = (items: CaptureRequest["items"]) =>
  */
 export const speakLinesInDaemon = (items: SpeakRequest["items"]) =>
   Effect.gen(function* () {
-    const paths = yield* ensureDaemon;
-    const text = yield* request(paths.socket, "POST", "/speak", { items });
+    const text = yield* requestDaemon("POST", "/speak", { items });
     const answer = yield* decode(SpeakResponse, text);
     if (!answer.ok) {
       return yield* new SpeechSynthesisError({
@@ -207,13 +224,7 @@ export const speakLinesInDaemon = (items: SpeakRequest["items"]) =>
  */
 export const renderDiagramInDaemon = (params: RenderDiagramRequest) =>
   Effect.gen(function* () {
-    const paths = yield* ensureDaemon;
-    const text = yield* request(
-      paths.socket,
-      "POST",
-      "/render-diagram",
-      params
-    );
+    const text = yield* requestDaemon("POST", "/render-diagram", params);
     const answer = yield* decode(RenderDiagramResponse, text);
     if (!answer.ok) {
       return yield* new DiagramRenderError({

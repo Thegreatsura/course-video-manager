@@ -14,14 +14,15 @@ import { parseError } from "@/cli/helpers";
  * THE `--clip-mockups-json` FILE: the only way `cvm clip-mockup add` and
  * `update` take their input.
  *
- * Batch-only on purpose. Voicing a line and capturing a frame are the slow
- * part of a Clip Mockup, and both are cheapest done many at a time in the
- * Clip Mockup daemon; a Video's worth of moments in one file is also the only
- * way to say what ORDER they go in, because the file order is the Animatic
- * order. A file with one entry is still a file.
+ * Batch-only on purpose. Capturing a frame is the slow part a command waits
+ * for, and is cheapest done many at a time in the Clip Mockup daemon — as is
+ * voicing the lines, which a whole file queues as ONE `clip-mockup-voice` Job
+ * (`clip-mockup.voice.ts`). A Video's worth of moments in one file is also the
+ * only way to say what ORDER they go in, because the file order is the
+ * Animatic order. A file with one entry is still a file.
  *
  * Everything in the file is checked before any work starts — a frame is not
- * captured and a line is not voiced for a file with a typo in entry 40.
+ * captured and a voice is not queued for a file with a typo in entry 40.
  */
 
 const ENTITY = "clipMockup";

@@ -138,6 +138,26 @@ const createDiagramComponentOperations = (
   });
 
   /**
+   * Every Component WITH its shapes, for `cvm diagram component list`. A read,
+   * not a use: unlike `takeComponentForInsert` it never bumps `lastUsedAt`, so
+   * an agent looking does not reorder Matt's library.
+   */
+  const listComponentFragments = Effect.fn("listComponentFragments")(
+    function* () {
+      return yield* makeDbCall(() =>
+        db
+          .select({
+            id: diagramComponents.id,
+            name: diagramComponents.name,
+            sceneFragment: diagramComponents.sceneFragment,
+          })
+          .from(diagramComponents)
+          .orderBy(desc(diagramComponents.lastUsedAt))
+      );
+    }
+  );
+
+  /**
    * Named `takeComponentForInsert` rather than `getComponent` because the name
    * carries the recency write: reading a fragment for insertion IS what "use"
    * means, and only insertion bumps `lastUsedAt`.
@@ -219,6 +239,7 @@ const createDiagramComponentOperations = (
   return {
     createComponent,
     listComponents,
+    listComponentFragments,
     takeComponentForInsert,
     renameComponent,
     deleteComponent,

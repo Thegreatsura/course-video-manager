@@ -22,6 +22,7 @@ import {
   neverReRunMessagesOf,
   type JobContext,
 } from "./job-kind";
+import { makeKindCleanup } from "./kind-cleanup";
 import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import {
@@ -242,26 +243,8 @@ export const runSidecar = <R>(opts: {
 
       const enqueue = enqueueThrough({ registry, ops, then: nudge });
 
-      /**
-       * A run of `job` was lost — not stopped on purpose — and has been
-       * settled as a failed attempt: let its kind clean up after it.
-       */
-      const afterLostRun = (job: {
-        id: string;
-        kind: string;
-        title: string;
-      }) => {
-        const kind = kindOf(job.kind);
-        if (!kind || !("afterLostRun" in kind) || !kind.afterLostRun) {
-          return Effect.void;
-        }
-        return kind
-          .afterLostRun({ id: job.id, title: job.title }, { enqueue })
-          .pipe(
-            Effect.annotateLogs({ jobId: job.id, kind: job.kind }),
-            logCause("job: its kind could not clean up after a lost run")
-          );
-      };
+      const { afterLostRun, afterFinalFailure, afterRecovered, endedForGood } =
+        makeKindCleanup({ kindOf, enqueue });
 
       const settle = (job: Job, exit: Exit.Exit<void, unknown>) =>
         Exit.match(exit, {
@@ -308,6 +291,9 @@ export const runSidecar = <R>(opts: {
                 )
               );
             }
+            const failure = interrupted
+              ? interruptedFailureOf(kindOf(job.kind))
+              : toJobFailure(cause);
             return (
               interrupted
                 ? Effect.logWarning(
@@ -321,9 +307,7 @@ export const runSidecar = <R>(opts: {
                 ops.failJobAttempt({
                   jobId: job.id,
                   holder: identity.holder,
-                  failure: interrupted
-                    ? interruptedFailureOf(kindOf(job.kind))
-                    : toJobFailure(cause),
+                  failure,
                   interrupted,
                   // Never put back: never re-run by a lost lease either.
                   mayRetry: !posting && !(neverReRun && interrupted),
@@ -340,6 +324,11 @@ export const runSidecar = <R>(opts: {
                   Effect.zipRight(
                     interrupted && !stopping && outcome !== "not-held"
                       ? afterLostRun(job)
+                      : Effect.void
+                  ),
+                  Effect.zipRight(
+                    endedForGood(outcome)
+                      ? afterFinalFailure(job, failure.message)
                       : Effect.void
                   )
                 )
@@ -469,7 +458,7 @@ export const runSidecar = <R>(opts: {
                 Effect.zipRight(
                   ops.getJob(r.jobId).pipe(
                     Effect.flatMap((job) =>
-                      job ? afterLostRun(job) : Effect.void
+                      job ? afterRecovered(job, r.outcome) : Effect.void
                     ),
                     logCause("sidecar: could not read a recovered job")
                   )

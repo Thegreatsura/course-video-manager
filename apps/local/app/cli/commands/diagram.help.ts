@@ -26,9 +26,16 @@ Verbs:
   snapshot add --file <path|-> <diagramId>   WRITE. One more drawing, made the head
   render <snapshotId>                        READ. Draw a stored snapshot to a PNG
   get [--snapshot <snapshotId>] <diagramId>  READ. The head and the snapshots, as JSON
+  list [--archived] [<query>]                READ. Every Diagram, or those matching a search
+  component list                             READ. Every Component, with its shapes
   update --name <name> <diagramId>           WRITE. Rename the Diagram; its drawings stay
   delete <diagramId>                         WRITE. Archive the Diagram (undo: 'restore')
   restore <diagramId>                        WRITE. Bring an archived Diagram back
+
+LOOK FIRST. 'list' shows Matt's Diagrams ("filmed" ones he used on camera)
+and 'component list' his saved Components, both readable as this format:
+'get --snapshot' a filmed one, or copy a Component's shapes, to match his
+style before you draw.
 
 THE LOOP. Write the JSON, 'create' it, READ EVERY PNG it prints, fix the JSON
 and 'create' again until the pictures are right, then hand Matt the url. Once
@@ -112,8 +119,9 @@ LOCAL-ONLY. The PNGs are drawn by the Clip Mockup daemon's headless browser on
 the author's machine, through the running Course Video Manager app
 (CVM_APP_URL, default http://localhost:5173). Elsewhere 'create', 'snapshot
 add' and 'render' are refused before doing anything: _tag
-"LocalOnlyCommandError", exit 7. Stop; do not retry. 'get', 'update',
-'delete' and 'restore' draw nothing and run anywhere.
+"LocalOnlyCommandError", exit 7. Stop; do not retry. 'get', 'list',
+'component list', 'update', 'delete' and 'restore' draw nothing and run
+anywhere.
 
 Examples:
   cvm diagram create --file agent-loop.json
@@ -122,6 +130,8 @@ Examples:
   cvm diagram render <snapshotId>
   cvm diagram get <diagramId>
   cvm diagram get --snapshot <snapshotId> <diagramId>
+  cvm diagram list agent
+  cvm diagram component list
   cvm diagram update --name "Agent loop" <diagramId>
   cvm diagram delete <diagramId>
   cvm diagram restore <diagramId>`;

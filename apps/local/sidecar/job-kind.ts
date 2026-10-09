@@ -48,6 +48,13 @@ export interface LostJob {
   readonly title: string;
 }
 
+/** How a Job ended for good, as `afterFinalFailure` is told of it. */
+export interface FinalFailure {
+  readonly jobId: string;
+  /** The one line its row in the Jobs list shows. */
+  readonly message: string;
+}
+
 /** What `afterLostRun` can do: start other Jobs. */
 export interface LostRunContext {
   readonly enqueue: EnqueueJob;
@@ -94,6 +101,18 @@ export type RetryingJobKindDefinition<P, I, R> = RetryingJobPolicy & {
     job: LostJob,
     ctx: LostRunContext
   ) => Effect.Effect<void, unknown, R>;
+  /**
+   * Called once the Job has ENDED FOR GOOD — `failed` or `interrupted`, no
+   * attempt left — whichever way its last attempt went: it failed, it died
+   * of a defect, its run was lost (its sidecar killed, its lease expired), or
+   * it could not start. The one place a kind cleans up after a Job that will
+   * never succeed. Never after an attempt that is retried, nor after a
+   * deliberate stop, which puts the Job back. Optional.
+   */
+  readonly afterFinalFailure?: (
+    params: P,
+    failure: FinalFailure
+  ) => Effect.Effect<void, unknown, R>;
 };
 
 /**
@@ -131,6 +150,11 @@ export type RetryingJobKind<R = never> = RetryingJobPolicy &
     readonly afterLostRun?: (
       job: LostJob,
       ctx: LostRunContext
+    ) => Effect.Effect<void, unknown, R>;
+    /** `afterFinalFailure`, with the Job's params still raw. */
+    readonly afterFinalFailureRaw?: (
+      raw: unknown,
+      failure: FinalFailure
     ) => Effect.Effect<void, unknown, R>;
   };
 
@@ -246,6 +270,14 @@ export const defineJobKind = <P, I, R = never>(
       Effect.flatMap(decode(raw), (params) => definition.run(params, ctx)),
     ...(definition.afterLostRun
       ? { afterLostRun: definition.afterLostRun }
+      : {}),
+    ...(definition.afterFinalFailure
+      ? {
+          afterFinalFailureRaw: (raw: unknown, failure: FinalFailure) =>
+            Effect.flatMap(decode(raw), (params) =>
+              definition.afterFinalFailure!(params, failure)
+            ),
+        }
       : {}),
   };
 };

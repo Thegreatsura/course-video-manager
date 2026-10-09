@@ -60,9 +60,11 @@ const overrides = (ctx: {
   // CHECK clip_transcription_status_valid; one non-default value per row, so
   // a copy that drops the status (back to "done") fails.
   "clip.transcriptionStatus": (i) => (i % 2 === 0 ? "failed" : "queued"),
-  // CHECK clip_mockup_voice_status_valid; one non-default value per row, so
-  // a copy that drops the status (back to "ready") fails.
-  "clip_mockup.voiceStatus": (i) => (i % 2 === 0 ? "failed" : "pending"),
+  // CHECK clip_mockup_voice_status_valid. Only a READY voice is carried as
+  // it is, WAV and all (and a ready one has no error): any other comes over
+  // `pending`, for the Sidecar's sweep to queue (`copiedVoice`).
+  "clip_mockup.voiceStatus": () => "ready",
+  "clip_mockup.voiceError": () => null,
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // A Learning Goal belongs to the Video's Section, which every copy shares.

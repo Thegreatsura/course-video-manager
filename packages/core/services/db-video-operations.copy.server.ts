@@ -19,6 +19,7 @@ import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, asc, eq } from "drizzle-orm";
 import { generateNKeysBetween } from "fractional-indexing";
 import { Effect } from "effect";
+import { copiedVoice } from "../features/clip-mockups/voice-status.js";
 import { sortByOrder } from "../lib/sort-by-order.js";
 import type { Database } from "./drizzle-service.server.js";
 import {
@@ -309,10 +310,7 @@ export const copyVideoImpl = (
                 videoId: newVideo.id,
                 line: item.clipMockup.line,
                 imagePath: item.clipMockup.imagePath,
-                audioPath: item.clipMockup.audioPath,
-                durationSeconds: item.clipMockup.durationSeconds,
-                voiceStatus: item.clipMockup.voiceStatus,
-                voiceError: item.clipMockup.voiceError,
+                ...copiedVoice(item.clipMockup),
                 order,
               });
             } else {

@@ -247,8 +247,10 @@ describe("duplicateCourse — schema-drift guard", () => {
       imagePath: "frame-001.png",
       audioPath: "speech-001.wav",
       durationSeconds: 2.75,
-      voiceStatus: "failed",
-      voiceError: "Coverage voice error",
+      // Only a READY voice is carried as it is, WAV and all; any other comes
+      // over `pending`, for the Sidecar's sweep to queue (`copiedVoice`).
+      voiceStatus: "ready",
+      voiceError: null,
       order: "m",
     });
     const [coverageChapter] = await testDb
