@@ -28,9 +28,6 @@ const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
 export function GlobalUploadProgress() {
   const {
-    uploads,
-    dismissUpload,
-    timings,
     etaHistory,
     clock,
     jobs,
@@ -41,10 +38,8 @@ export function GlobalUploadProgress() {
   } = useContext(UploadContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const uploadEntries = Object.values(uploads);
-  // Background Jobs the Sidecar runs, drawn as rows beside the browser's own.
-  const jobEntries = visibleJobRows(jobs);
-  const isJob = (uploadId: string) => jobIdOfRow(uploadId) in jobs.jobs;
+  // Every row is a background Job the Sidecar runs.
+  const allEntries = visibleJobRows(jobs);
   /** A failed or cut-off post's check and Retry (posts never retry alone). */
   const postControls = (uploadId: string): PostRowControls | null => {
     const job = jobs.jobs[jobIdOfRow(uploadId)];
@@ -62,12 +57,11 @@ export function GlobalUploadProgress() {
     const job = jobs.jobs[jobIdOfRow(uploadId)];
     return job ? publishRecoveryHrefOf(job) : null;
   };
-  const hasUploads = uploadEntries.length + jobEntries.length > 0;
+  const hasUploads = allEntries.length > 0;
 
   // A child task is already counted inside its parent's bar, so only the
   // top-level jobs speak for the badge counts and the floating indicator.
   // A Job's child rows (an Autofill's Videos) nest under it the same way.
-  const allEntries = [...jobEntries, ...uploadEntries];
   const rootEntries: UploadEntry[] = allEntries.filter(
     (u) => !u.parentUploadId
   );
@@ -91,12 +85,14 @@ export function GlobalUploadProgress() {
     const interval = setInterval(() => setNow(clock()), 1000);
     return () => clearInterval(interval);
   }, [isActive, clock]);
-  const etas = estimateUploads(uploads, {
-    timings,
+  // No Job row has an ETA yet: its timings come from its Job Events next.
+  const etaRows: Record<string, UploadEntry> = {};
+  const etas = estimateUploads(etaRows, {
+    timings: {},
     history: etaHistory,
     now,
   });
-  const allDoneMs = allDoneEta(uploads, etas);
+  const allDoneMs = allDoneEta(etaRows, etas);
 
   const completedCount = rootEntries.filter(
     (u) => u.status === "success"
@@ -114,28 +110,23 @@ export function GlobalUploadProgress() {
   const strokeDashoffset =
     CIRCLE_CIRCUMFERENCE - (aggregateProgress / 100) * CIRCLE_CIRCUMFERENCE;
 
-  // 5 seconds after everything finishes, this tab's own uploads go, and so do
-  // the succeeded Jobs (for good). A failed Job waits for the author.
+  // 5 seconds after everything finishes, the succeeded Jobs go (for good).
+  // A failed Job waits for the author. Any render restarts the wait (the rows
+  // are a new array each time), as it always has.
   useEffect(() => {
     if (!hasUploads || isActive) return;
 
-    const timer = setTimeout(() => {
-      for (const upload of uploadEntries) {
-        dismissUpload(upload.uploadId);
-      }
-      dismissFinishedJobs();
-    }, 5000);
+    const timer = setTimeout(() => dismissFinishedJobs(), 5000);
 
     return () => clearTimeout(timer);
-  }, [hasUploads, isActive, uploadEntries, dismissUpload, dismissFinishedJobs]);
+  }, [hasUploads, isActive, allEntries, dismissFinishedJobs]);
 
   const handleDismiss = useCallback(
     (e: React.MouseEvent, uploadId: string) => {
       e.stopPropagation();
-      if (jobIdOfRow(uploadId) in jobs.jobs) dismissJob(uploadId);
-      else dismissUpload(uploadId);
+      dismissJob(uploadId);
     },
-    [dismissUpload, dismissJob, jobs.jobs]
+    [dismissJob]
   );
 
   const sidecarDown = (
@@ -262,11 +253,7 @@ export function GlobalUploadProgress() {
                       upload={upload}
                       onDismiss={handleDismiss}
                       eta={etas[upload.uploadId]}
-                      logHref={
-                        isJob(upload.uploadId)
-                          ? jobLogHref(jobIdOfRow(upload.uploadId))
-                          : null
-                      }
+                      logHref={jobLogHref(jobIdOfRow(upload.uploadId))}
                       post={postControls(upload.uploadId)}
                       publishRecoveryHref={publishRecoveryHref(upload.uploadId)}
                       // Its link goes to another page: the dialog closes.

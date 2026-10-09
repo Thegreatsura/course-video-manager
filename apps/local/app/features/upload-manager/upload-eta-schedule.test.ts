@@ -1,20 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { createInitialUploadState, uploadReducer } from "./upload-reducer";
 import { createHistoryStore, type HistoryData } from "./upload-history";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
+import type { TimedRows } from "./upload-timing";
+import {
+  autofillStage,
+  exportStage,
+  publishStage,
+  replay,
+  start,
+  type RowStep,
+} from "./upload-timing-test-setup";
 
-type Step = [number, uploadReducer.Action];
+type Step = RowStep;
 
-const run = (steps: Step[]) =>
-  steps.reduce(
-    (state, [at, action]) => uploadReducer(state, { ...action, at }),
-    createInitialUploadState()
-  );
+const run = (steps: Step[]) => replay(steps);
 
 const runs = (durationMs: number) =>
   Array.from({ length: 3 }, () => ({ durationMs, units: null }));
 
-const estimate = (state: uploadReducer.State, now: number, past: HistoryData) =>
+const estimate = (state: TimedRows, now: number, past: HistoryData) =>
   estimateUploads(state.uploads, {
     timings: state.timings,
     history: createHistoryStore(past).lookup,
@@ -28,43 +32,17 @@ const msOf = (eta: unknown) =>
 
 /** A Publish fanned out into `count` Videos, each with an encode to do. */
 const publishOf = (count: number, { exported = false } = {}): Step[] => {
-  const steps: Step[] = [
-    [
-      0,
-      {
-        type: "START_UPLOAD",
-        uploadId: "p",
-        videoId: "c",
-        title: "C",
-        uploadType: "publish",
-        courseId: "c",
-      },
-    ],
-  ];
+  const steps: Step[] = [[0, start("p", "publish")]];
   for (let i = 1; i <= count; i++) {
     steps.push([
       0,
-      {
-        type: "START_UPLOAD",
-        uploadId: `v${i}`,
-        videoId: `v${i}`,
-        title: `V${i}`,
-        uploadType: "export",
-        isBatchEntry: true,
-        parentUploadId: "p",
-      },
+      start(`v${i}`, "export", { isBatchEntry: true, parentUploadId: "p" }),
     ]);
   }
-  steps.push([
-    0,
-    { type: "UPDATE_PUBLISH_STAGE", uploadId: "p", stage: "uploading" },
-  ]);
+  steps.push([0, publishStage("p", "uploading")]);
   if (!exported) {
     for (let i = 1; i <= count; i++) {
-      steps.push([
-        0,
-        { type: "UPDATE_EXPORT_STAGE", uploadId: `v${i}`, stage: "queued" },
-      ]);
+      steps.push([0, exportStage(`v${i}`, "queued")]);
     }
   }
   return steps;
@@ -106,22 +84,8 @@ describe("a Publish's estimate", () => {
   it("credits work a child has already done", () => {
     const state = run([
       ...publishOf(1),
-      [
-        0,
-        {
-          type: "UPDATE_EXPORT_STAGE",
-          uploadId: "v1",
-          stage: "concatenating-clips",
-        },
-      ],
-      [
-        40_000,
-        {
-          type: "UPDATE_EXPORT_STAGE",
-          uploadId: "v1",
-          stage: "normalizing-audio",
-        },
-      ],
+      [0, exportStage("v1", "concatenating-clips")],
+      [40_000, exportStage("v1", "normalizing-audio")],
     ]);
     // 10s of normalizing, then a 20s upload.
     expect(msOf(estimate(state, 40_000, publishHistory).v1)).toBe(30_000);
@@ -144,18 +108,8 @@ describe("a Publish's estimate", () => {
 
   it("estimates only its current stage before its Videos are known", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "p",
-          videoId: "c",
-          title: "C",
-          uploadType: "publish",
-          courseId: "c",
-        },
-      ],
-      [0, { type: "UPDATE_PUBLISH_STAGE", uploadId: "p", stage: "validating" }],
+      [0, start("p", "publish")],
+      [0, publishStage("p", "validating")],
     ]);
     expect(
       estimate(state, 1_000, { "publish:validating": runs(5_000) }).p
@@ -169,28 +123,11 @@ describe("a Publish's estimate", () => {
 
 describe("an Autofill's estimate", () => {
   const autofillOf = (count: number): Step[] => [
-    [
-      0,
-      {
-        type: "START_UPLOAD",
-        uploadId: "a",
-        videoId: "c",
-        title: "C",
-        uploadType: "autofill",
-        courseId: "c",
-      },
-    ],
-    [0, { type: "UPDATE_AUTOFILL_STAGE", uploadId: "a", stage: "writing" }],
+    [0, start("a", "autofill")],
+    [0, autofillStage("a", "writing")],
     ...Array.from({ length: count }, (_, i): Step => [
       0,
-      {
-        type: "START_UPLOAD",
-        uploadId: `w${i + 1}`,
-        videoId: `w${i + 1}`,
-        title: "W",
-        uploadType: "autofill",
-        parentUploadId: "a",
-      },
+      start(`w${i + 1}`, "autofill", { parentUploadId: "a" }),
     ]),
   ];
 
@@ -208,14 +145,7 @@ describe("Export All", () => {
   it("queues its Videos behind the six-way encode pool", () => {
     const steps: Step[] = Array.from({ length: 7 }, (_, i): Step => [
       0,
-      {
-        type: "START_UPLOAD",
-        uploadId: `e${i + 1}`,
-        videoId: `e${i + 1}`,
-        title: "E",
-        uploadType: "export",
-        isBatchEntry: true,
-      },
+      start(`e${i + 1}`, "export", { isBatchEntry: true }),
     ]);
     const state = run(steps);
     const etas = estimate(state, 0, publishHistory);
@@ -228,26 +158,8 @@ describe("Export All", () => {
 describe("allDoneEta", () => {
   it("is unknown while any top-level job has no whole-job estimate", () => {
     const state = run([
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "e1",
-          videoId: "e1",
-          title: "E",
-          uploadType: "export",
-        },
-      ],
-      [
-        0,
-        {
-          type: "START_UPLOAD",
-          uploadId: "r1",
-          videoId: "r1",
-          title: "R",
-          uploadType: "render-vertical",
-        },
-      ],
+      [0, start("e1", "export")],
+      [0, start("r1", "render-vertical")],
     ]);
     expect(allDoneEta(state.uploads, estimate(state, 0, publishHistory))).toBe(
       null

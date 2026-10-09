@@ -24,8 +24,6 @@ const WORKSPACE_ROOT = path.resolve("../..");
 
 const ISOLATED_TEST_FILES = [
   "app/services/cloudinary-markdown-service.test.ts",
-  "app/features/upload-manager/consume-sse-stream.test.ts",
-  "app/features/upload-manager/upload-toasts.test.ts",
   "app/features/video-editor/use-audio-boost.test.ts",
 ];
 

@@ -16,7 +16,7 @@ import type {
  * change jumps to `start`, then any real percentage the stage streams fills
  * `width` of that band. A stage with `width: 0` reports no measurable progress
  * and simply parks the bar at `start`. 100 is reserved for completion
- * (UPLOAD_SUCCESS).
+ * (the Job's success).
  *
  * A Publish is the exception: its bar is derived from its per-Video children
  * rather than banded, because export and upload overlap and its stages no
@@ -55,12 +55,12 @@ export const PUBLISH_STAGE_BANDS: Record<PublishStage, StageBand> = {
   exporting: { start: 10, width: 0 },
   uploading: { start: 10, width: 0 },
   // The Promote has landed and the `complete` event is one step behind this
-  // one. 100 stays reserved for that event's UPLOAD_SUCCESS.
+  // one. 100 stays reserved for that event: the Job's success.
   complete: { start: 99, width: 0 },
 };
 
 // The span of a Publish's bar owned by its per-Video tasks. 100 is reserved
-// for the commit receipt landing (UPLOAD_SUCCESS).
+// for the commit receipt landing (the Job's success).
 export const PUBLISH_WORK_BAND: StageBand = { start: 10, width: 89 };
 
 // A per-Video task under a Publish does two things in sequence — encode, then
@@ -110,18 +110,6 @@ export const isSettled = (upload: UploadEntry) =>
 /** Where in the bar `percent` (0–100, within the stage) lands. */
 export const fillBand = (band: StageBand, percent: number) =>
   band.start + Math.floor((percent / 100) * band.width);
-
-/**
- * The band a raw `UPDATE_PROGRESS` percentage belongs to. `null` when the job
- * streams a real percentage for its whole life rather than per stage, in which
- * case the percentage already *is* the bar position.
- */
-export const streamedProgressBand = (upload: UploadEntry): StageBand | null => {
-  if (upload.uploadType === "buffer" && upload.bufferStage) {
-    return BUFFER_STAGE_BANDS[upload.bufferStage];
-  }
-  return null;
-};
 
 /**
  * A Publish's bar, once it has per-Video children, is the byte-weighted mean

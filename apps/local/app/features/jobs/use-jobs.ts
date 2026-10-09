@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import {
   createInitialJobsState,
@@ -25,11 +25,6 @@ import {
 import { createJobEventHub, snapshotJobEvents } from "./job-event-hub";
 
 type Dispatch = (action: jobsReducer.Action) => void;
-
-export type JobSettledReport = Extract<
-  jobsReducer.Effect,
-  { type: "report-job-settled" }
->;
 
 /** A request this tab made that the server answered with another, live Job. */
 export type JobJoinedReport = Extract<
@@ -106,12 +101,8 @@ function useJobEventStream(
  * This tab's view of the background Jobs, and the one way it starts one.
  * `subscribeToJobEvents` lets a page hear Job Events itself (the editor hears
  * its Clip transcriptions).
- * `onJobSettled` hears every Job that settles, so the Upload Manager can start
- * (or fail) the uploads waiting on it.
  */
-export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
-  const onJobSettledRef = useRef(onJobSettled);
-  onJobSettledRef.current = onJobSettled;
+export function useJobs() {
   const [joinListeners] = useState(() => new Set<JobJoinListener>());
 
   const [state, dispatch] = useEffectReducer<
@@ -226,7 +217,6 @@ export function useJobs(onJobSettled: (report: JobSettledReport) => void) {
     "show-job-failed-toast": (_state, effect) => showJobFailedToast(effect),
     "show-sidecar-not-running-toast": (_state, effect) =>
       showSidecarNotRunningToast(effect),
-    "report-job-settled": (_state, effect) => onJobSettledRef.current(effect),
     "report-job-joined": (_state, effect) => {
       for (const listener of joinListeners) listener(effect);
     },

@@ -88,12 +88,6 @@ const failRequested = (
     message,
     hasLog: false,
   });
-  exec({
-    type: "report-job-settled",
-    jobId: job.id,
-    title: job.title,
-    outcome: "failed",
-  });
   const { [id]: waiting = [], ...held } = state.held;
   let next: jobsReducer.State = {
     ...state,

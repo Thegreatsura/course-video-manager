@@ -23,8 +23,7 @@ export { toJobsAction, isFinishedJob, jobIdOfRow };
  * sidecar decides all of that — so closing it loses nothing either.
  *
  * Toasts are decisions here, on a Job settling, rather than a diff of two
- * snapshots (the Upload Manager's `planUploadReactions`). So is telling the
- * Upload Manager that a Job its own uploads wait on has settled.
+ * snapshots.
  */
 export namespace jobsReducer {
   /**
@@ -254,9 +253,7 @@ export namespace jobsReducer {
     | {
         type: "show-job-succeeded-toast";
         jobId: string;
-        kind: string;
         title: string;
-        subjectId: string | null;
         /** Everything the toast says and links to, decided here. */
         toast: SucceededToast;
       }
@@ -278,13 +275,6 @@ export namespace jobsReducer {
         type: "report-job-joined";
         id: string;
         jobId: string;
-      }
-    | {
-        /** Tell the Upload Manager: uploads may be waiting on this Job. */
-        type: "report-job-settled";
-        jobId: string;
-        title: string;
-        outcome: "succeeded" | "failed";
       };
 }
 
@@ -304,35 +294,19 @@ type Exec = Parameters<
   EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
 >[2];
 
-/** The toast and the Upload Manager's report for a Job that just settled. */
+/** The toast for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
   // A Batch export toasts each Video as it finishes (as the browser did), and
   // nothing for the batch itself; only its failure is news.
   if (job.kind === "batch-export" && job.status === "succeeded") return;
   // A Clip transcription shows on its Clips in the editor, never as a toast.
-  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) {
-    exec({
-      type: "report-job-settled",
-      jobId: job.id,
-      title: job.title,
-      outcome: job.status === "succeeded" ? "succeeded" : "failed",
-    });
-    return;
-  }
+  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",
       jobId: job.id,
-      kind: job.kind,
       title: job.title,
-      subjectId: job.subjectId,
       toast: succeededToastOf(job),
-    });
-    exec({
-      type: "report-job-settled",
-      jobId: job.id,
-      title: job.title,
-      outcome: "succeeded",
     });
     return;
   }
@@ -343,12 +317,6 @@ const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
     title: job.title,
     message: job.errorMessage ?? "The job failed",
     hasLog: true,
-  });
-  exec({
-    type: "report-job-settled",
-    jobId: job.id,
-    title: job.title,
-    outcome: "failed",
   });
 };
 

@@ -1,4 +1,4 @@
-import type { uploadReducer } from "./upload-reducer";
+import type { UploadEntry } from "./upload-entry";
 import {
   historyKey,
   isWaitStage,
@@ -7,10 +7,13 @@ import {
 } from "./upload-eta-stages";
 
 /**
- * What the reducer remembers about *when* things happened to each job, so the
- * ETA selector has something to work from. Every timestamp comes from the
- * action's `at`, stamped by the provider's injected clock — the reducer never
- * reads a clock itself.
+ * What is remembered about *when* things happened to each job's row, so the
+ * ETA selector has something to work from. Every timestamp is the `at` of the
+ * step that moved the rows: the caller supplies it, nothing here reads a
+ * clock.
+ *
+ * Nothing feeds this yet: the browser Upload Manager that did is gone, and a
+ * Job row's timings come from its Job Events next (batch 8, PR 3).
  */
 
 export interface ProgressSample {
@@ -65,26 +68,33 @@ const startStage = (
   endedAt: stage === null ? at : null,
 });
 
-const isExportWork = (action: uploadReducer.Action) =>
-  action.type === "UPDATE_EXPORT_STAGE" ||
-  action.type === "UPDATE_EXPORT_PROGRESS";
+/** The rows as they were, with the timings they had. */
+export interface TimedRows {
+  uploads: Record<string, UploadEntry>;
+  timings: Record<string, UploadTiming>;
+}
+
+/** One step that moved the rows. */
+export interface TimingStep {
+  /** When it happened. Without one, nothing is recorded. */
+  at: number | undefined;
+  /** The row an export event named in this step: it has an encode to do. */
+  exportWorkId?: string;
+}
 
 const nextTiming = (
-  previous: uploadReducer.State,
-  uploads: uploadReducer.State["uploads"],
+  previous: TimedRows,
+  uploads: Record<string, UploadEntry>,
   id: string,
-  action: uploadReducer.Action,
+  step: TimingStep,
   at: number
 ): UploadTiming => {
   const entry = uploads[id]!;
   const old = previous.timings[id];
   const stage = timingStage(entry, uploads);
-  const restarted =
-    (action.type === "START_UPLOAD" || action.type === "RETRY") &&
-    action.uploadId === id;
 
   let timing: UploadTiming;
-  if (!old || restarted) {
+  if (!old) {
     timing = {
       ...startStage(stage, entry.progress, at),
       completed: [],
@@ -92,8 +102,8 @@ const nextTiming = (
     };
   } else if (stage !== old.stage) {
     // Only a stage that ended in the job moving on counts as a duration. A
-    // stage cut short by a failure or a retry says nothing about how long
-    // that stage takes.
+    // stage cut short by a failure says nothing about how long that stage
+    // takes.
     const finishedCleanly =
       old.stage !== null &&
       !isWaitStage(old.stage) &&
@@ -124,34 +134,30 @@ const nextTiming = (
     timing = old;
   }
 
-  if (
-    isExportWork(action) &&
-    "uploadId" in action &&
-    action.uploadId === id &&
-    !timing.needsExport
-  ) {
+  if (step.exportWorkId === id && !timing.needsExport) {
     timing = { ...timing, needsExport: true };
   }
   return timing;
 };
 
 /**
- * The timings after an action. Without an `at` there is no clock reading to
- * record against, so the timings only lose the jobs that are gone.
+ * The timings after a step moved the rows from `previous.uploads` to
+ * `uploads`. Without an `at` there is no clock reading to record against, so
+ * the timings only lose the rows that are gone.
  */
 export const trackTimings = (
-  previous: uploadReducer.State,
-  uploads: uploadReducer.State["uploads"],
-  action: uploadReducer.Action
-): uploadReducer.State["timings"] => {
-  const at = action.at;
+  previous: TimedRows,
+  uploads: Record<string, UploadEntry>,
+  step: TimingStep
+): Record<string, UploadTiming> => {
+  const at = step.at;
   let changed = Object.keys(previous.timings).some((id) => !uploads[id]);
-  const next: uploadReducer.State["timings"] = {};
+  const next: Record<string, UploadTiming> = {};
   for (const id of Object.keys(uploads)) {
     const timing =
       at === undefined
         ? previous.timings[id]
-        : nextTiming(previous, uploads, id, action, at);
+        : nextTiming(previous, uploads, id, step, at);
     if (!timing) continue;
     if (timing !== previous.timings[id]) changed = true;
     next[id] = timing;

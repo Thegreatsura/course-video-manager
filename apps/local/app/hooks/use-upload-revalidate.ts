@@ -29,16 +29,16 @@ export function hasNewSuccessForTypes(
 }
 
 export function useUploadRevalidate(uploadTypes: UploadType[]) {
-  const { uploads: browserUploads, jobs } = useContext(UploadContext);
-  // A background Job's rows (an export, a render, each Video of a Batch
-  // export) count like an upload's.
+  const { jobs } = useContext(UploadContext);
+  // Every row a background Job draws (an export, a render, each Video of a
+  // Batch export).
   const uploads = useMemo(() => {
-    const all: UploadSnapshot = { ...browserUploads };
+    const all: UploadSnapshot = {};
     for (const job of Object.values(jobs.jobs)) {
       for (const entry of jobUploadEntries(job)) all[entry.uploadId] = entry;
     }
     return all;
-  }, [browserUploads, jobs.jobs]);
+  }, [jobs.jobs]);
   const revalidator = useRevalidator();
   const previousRef = useRef(uploads);
   const typesRef = useRef(new Set<UploadType>(uploadTypes));

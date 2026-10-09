@@ -152,9 +152,7 @@ describe("a Publish Job", () => {
     expect(tester.getEffects()).toContainEqual({
       type: "show-job-succeeded-toast",
       jobId: JOB_ID,
-      kind: "publish",
       title: "Generics",
-      subjectId: "course-1",
       toast: {
         shape: "publish",
         courseId: "course-1",
@@ -207,12 +205,6 @@ describe("a Publish Job", () => {
         title: "Generics",
         message,
         hasLog: true,
-      },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Generics",
-        outcome: "failed",
       },
     ]);
     const [parent, a, b] = rowsOf(tester.getState());

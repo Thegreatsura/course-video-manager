@@ -134,9 +134,7 @@ describe("a Course Autofill Job", () => {
     expect(tester.getEffects()).toContainEqual({
       type: "show-job-succeeded-toast",
       jobId: JOB_ID,
-      kind: "autofill",
       title: "Autofill Generics",
-      subjectId: "course-1",
       // "<title> finished", with "Back to Publish".
       toast: { shape: "autofill", courseId: "course-1" },
     });
@@ -167,12 +165,6 @@ describe("a Course Autofill Job", () => {
         message:
           "Only a Draft Version can be autofilled — reload the publish page",
         hasLog: true,
-      },
-      {
-        type: "report-job-settled",
-        jobId: JOB_ID,
-        title: "Autofill Generics",
-        outcome: "failed",
       },
     ]);
     expect(rows(tester.getState())[0]).toMatchObject({ status: "error" });

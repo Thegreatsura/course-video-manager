@@ -1,15 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
-import { uploadReducer, createInitialUploadState } from "./upload-reducer";
-import { showErrorToast } from "./upload-toasts";
-import { uploadTypeRegistry } from "./upload-type-registry";
-import { planUploadReactions } from "./upload-transitions";
+import { createContext, useCallback, useState } from "react";
 import type { PlaceholderFloorBand } from "@/packages/course-json/client";
 import {
   HISTORY_STORAGE_KEY,
@@ -19,18 +8,12 @@ import {
   type UploadHistoryStore,
 } from "./upload-history";
 import { useLocalStorage } from "@/hooks/use-local-storage";
-import type { CompletedStage } from "./upload-timing";
-import {
-  useJobs,
-  type JobSettledReport,
-  type SubscribeToJobJoins,
-} from "@/features/jobs/use-jobs";
+import { useJobs, type SubscribeToJobJoins } from "@/features/jobs/use-jobs";
 import type { jobsReducer } from "@/features/jobs/jobs-reducer";
 import type { SubscribeToJobEvents } from "@/features/jobs/job-event-hub";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 
 export interface UploadContextType {
-  uploads: uploadReducer.State["uploads"];
   /** Background Jobs the Sidecar runs (a Video export), as this tab sees them. */
   jobs: jobsReducer.State;
   dismissJob: (jobId: string) => void;
@@ -46,12 +29,11 @@ export interface UploadContextType {
   /** Hide every succeeded Job: the Global Upload Progress's idle timer. */
   dismissFinishedJobs: () => void;
   /**
-   * "Clear finished": dismiss every settled row, Jobs and this tab's own
-   * uploads alike. A Job's dismissal is kept on the server.
+   * "Clear finished": dismiss every settled Job's rows. The dismissal is kept
+   * on the server.
    */
   clearFinished: () => void;
   /** Inputs to the ETA: see `estimateUploads`. */
-  timings: uploadReducer.State["timings"];
   etaHistory: HistoryLookup;
   clock: () => number;
   startUpload: (
@@ -137,7 +119,6 @@ export interface UploadContextType {
     videoId: string,
     clipIds: readonly string[]
   ) => void;
-  dismissUpload: (uploadId: string) => void;
 }
 
 export const UploadContext = createContext<UploadContextType>(null!);
@@ -148,18 +129,11 @@ export function UploadProvider({
   history,
 }: {
   children: React.ReactNode;
-  /** Stamps every action, so the reducer and the ETA never read a clock. */
+  /** "Now" for the ETA, so the ETA never reads a clock itself. */
   clock?: () => number;
   /** Where finished stage durations are kept. Defaults to localStorage. */
   history?: UploadHistoryStore;
 }) {
-  const [state, dispatchUnstamped] = useReducer(
-    uploadReducer,
-    undefined,
-    createInitialUploadState
-  );
-  const clockRef = useRef(clock);
-  clockRef.current = clock;
   const [storedHistory, setStoredHistory] =
     useLocalStorage(HISTORY_STORAGE_KEY);
   const [historyStore] = useState(
@@ -169,50 +143,11 @@ export function UploadProvider({
         setStoredHistory(JSON.stringify(data))
       )
   );
-  const dispatch = useCallback(
-    (action: uploadReducer.Action) =>
-      dispatchUnstamped({ ...action, at: clockRef.current() }),
-    []
-  );
 
-  // Every stage a job finishes goes into the history, exactly once.
-  const persistedStagesRef = useRef(new WeakSet<CompletedStage>());
-  useEffect(() => {
-    for (const timing of Object.values(state.timings)) {
-      for (const stage of timing.completed) {
-        if (persistedStagesRef.current.has(stage)) continue;
-        persistedStagesRef.current.add(stage);
-        historyStore.record(stage.key, {
-          durationMs: stage.durationMs,
-          units: stage.units,
-        });
-      }
-    }
-  }, [state.timings, historyStore]);
-
-  // The background Jobs. One that settles may release uploads waiting on it.
-  const onJobSettled = useCallback(
-    (report: JobSettledReport) =>
-      dispatch(
-        report.outcome === "succeeded"
-          ? { type: "server-job-succeeded", jobId: report.jobId }
-          : {
-              type: "server-job-failed",
-              jobId: report.jobId,
-              title: report.title,
-            }
-      ),
-    [dispatch]
-  );
-  const jobs = useJobs(onJobSettled);
+  // Every kind of background work is a Job the Sidecar runs: the tab only
+  // enqueues it and draws its Job Events.
+  const jobs = useJobs();
   const { startJob } = jobs;
-
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const previousUploadsRef = useRef<uploadReducer.State["uploads"]>({});
-
-  const paramsMapRef = useRef<
-    Map<string, { type: uploadReducer.UploadType; params: unknown }>
-  >(new Map());
 
   // A YouTube upload is a posting Job: the Sidecar runs it once, and only
   // after the Job it waits on (its export) has succeeded.
@@ -426,84 +361,16 @@ export function UploadProvider({
     [startJob]
   );
 
-  const clearFinishedJobs = jobs.clearFinishedJobs;
-  const clearFinished = useCallback(() => {
-    clearFinishedJobs();
-    dispatch({ type: "press-clear-finished" });
-  }, [clearFinishedJobs, dispatch]);
-
-  const dismissUpload = useCallback((uploadId: string) => {
-    const abortController = abortControllersRef.current.get(uploadId);
-    if (abortController) {
-      abortController.abort();
-      abortControllersRef.current.delete(uploadId);
-    }
-    paramsMapRef.current.delete(uploadId);
-    dispatch({ type: "DISMISS", uploadId });
-  }, []);
-
-  // Single effect: watch for status transitions to fire toasts and handle auto-retry
-  useEffect(() => {
-    const current = state.uploads;
-    const reactions = planUploadReactions(
-      previousUploadsRef.current,
-      current,
-      paramsMapRef.current
-    );
-
-    for (const reaction of reactions) {
-      switch (reaction.type) {
-        case "success-toast":
-          // Every kind runs as a Job now, and a Job's success toast is
-          // decided by the jobs reducer (`job-succeeded-toast.ts`).
-          break;
-        case "error-toast":
-          showErrorToast(reaction.upload);
-          break;
-        case "initiate": {
-          const initiate =
-            uploadTypeRegistry[reaction.upload.uploadType].initiate;
-          // A kind that runs as a Job has no browser driver to re-run.
-          if (!initiate) break;
-          if (reaction.retry) {
-            dispatch({ type: "RETRY", uploadId: reaction.uploadId });
-          }
-          initiate(
-            reaction.uploadId,
-            reaction.upload,
-            reaction.params,
-            dispatch,
-            abortControllersRef.current
-          );
-          break;
-        }
-      }
-    }
-
-    previousUploadsRef.current = current;
-  }, [state.uploads]);
-
-  // Clean up abort controllers on unmount
-  useEffect(() => {
-    return () => {
-      for (const controller of abortControllersRef.current.values()) {
-        controller.abort();
-      }
-    };
-  }, []);
-
   return (
     <UploadContext.Provider
       value={{
-        uploads: state.uploads,
         jobs: jobs.state,
         dismissJob: jobs.dismissJob,
         subscribeToJobEvents: jobs.subscribeToJobEvents,
         subscribeToJobJoins: jobs.subscribeToJobJoins,
         retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
-        clearFinished,
-        timings: state.timings,
+        clearFinished: jobs.clearFinishedJobs,
         etaHistory: historyStore.lookup,
         clock,
         startUpload,
@@ -517,7 +384,6 @@ export function UploadProvider({
         startPublish,
         startAutofill,
         startClipTranscription,
-        dismissUpload,
       }}
     >
       {children}

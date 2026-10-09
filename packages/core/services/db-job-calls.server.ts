@@ -9,7 +9,10 @@ export const makeDbCall = <T>(fn: () => Promise<T>) =>
     catch: (e) => new UnknownDBServiceError({ cause: e }),
   });
 
-/** The message the Upload Manager gives a Job whose dependency failed (upload-reducer.ts). */
+/**
+ * The message a Job whose dependency failed carries: copied from the browser
+ * Upload Manager (deleted in batch 8).
+ */
 export const dependencyFailedMessage = (title: string) =>
   `Dependency "${title}" failed`;
 
