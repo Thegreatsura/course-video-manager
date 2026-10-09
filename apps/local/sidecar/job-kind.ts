@@ -75,7 +75,7 @@ export interface PostCheck {
  * params look like, and the work. `run` reuses today's services; only the
  * driver moves into the sidecar.
  */
-export interface RetryingJobKindDefinition<P, I, R> extends RetryingJobPolicy {
+export type RetryingJobKindDefinition<P, I, R> = RetryingJobPolicy & {
   readonly params: Schema.Schema<P, I>;
   /** `R`: the services the work needs, which the sidecar's layer provides. */
   readonly run: (params: P, ctx: JobContext) => Effect.Effect<void, unknown, R>;
@@ -90,7 +90,7 @@ export interface RetryingJobKindDefinition<P, I, R> extends RetryingJobPolicy {
     job: LostJob,
     ctx: LostRunContext
   ) => Effect.Effect<void, unknown, R>;
-}
+};
 
 /**
  * A kind that posts to an outside service. Its policy is fixed
@@ -122,13 +122,13 @@ interface JobKindBase<R> {
   ) => Effect.Effect<void, unknown, R>;
 }
 
-export interface RetryingJobKind<R = never>
-  extends RetryingJobPolicy, JobKindBase<R> {
-  readonly afterLostRun?: (
-    job: LostJob,
-    ctx: LostRunContext
-  ) => Effect.Effect<void, unknown, R>;
-}
+export type RetryingJobKind<R = never> = RetryingJobPolicy &
+  JobKindBase<R> & {
+    readonly afterLostRun?: (
+      job: LostJob,
+      ctx: LostRunContext
+    ) => Effect.Effect<void, unknown, R>;
+  };
 
 export interface PostingJobKind<R = never> extends JobKindBase<R> {
   readonly lane: typeof POSTING_JOB_POLICY.lane;
@@ -143,14 +143,27 @@ export interface PostingJobKind<R = never> extends JobKindBase<R> {
 export type JobKind<R = never> = RetryingJobKind<R> | PostingJobKind<R>;
 
 /**
- * Whether a deliberate stop may put a running Job of this kind back in the
- * queue (section 7.5). Never for a post (decision 5), nor for a kind marked
- * `neverRequeued` (a Publish, section 7.2): those end `interrupted`.
+ * Whether a kind is never run again on its own, by anything — not put back by
+ * a deliberate stop (section 7.5), not retried by recovery after a crash, not
+ * retried after a lost lease. A post (decision 5) and a kind marked
+ * `neverRequeued` (a Publish, section 7.2): those end `interrupted` and wait
+ * for a person.
  */
-export const isRequeuedOnStop = (
+export const isNeverReRun = (
   kind:
     { readonly posting?: boolean; readonly neverRequeued?: boolean } | undefined
-): boolean => kind?.posting !== true && kind?.neverRequeued !== true;
+): boolean => kind?.posting === true || kind?.neverRequeued === true;
+
+/** The kinds in `registry` that are never run again on its own. */
+export const neverReRunKindsOf = (
+  registry: Readonly<
+    Record<
+      string,
+      { readonly posting?: boolean; readonly neverRequeued?: boolean }
+    >
+  >
+): string[] =>
+  Object.keys(registry).filter((name) => isNeverReRun(registry[name]));
 
 /** Whether a kind posts: 1 attempt, never re-queued, Retry by hand only. */
 export const isPostingKind = (
@@ -163,8 +176,9 @@ export const defineJobKind = <P, I, R = never>(
   const decode = Schema.decodeUnknown(definition.params);
   return {
     lane: definition.lane,
-    maxAttempts: definition.maxAttempts,
-    ...(definition.neverRequeued ? { neverRequeued: true as const } : {}),
+    ...(definition.neverRequeued
+      ? { maxAttempts: 1 as const, neverRequeued: true as const }
+      : { maxAttempts: definition.maxAttempts }),
     decodeParams: decode,
     runRaw: (raw, ctx) =>
       Effect.flatMap(decode(raw), (params) => definition.run(params, ctx)),

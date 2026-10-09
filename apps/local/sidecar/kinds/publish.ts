@@ -49,6 +49,19 @@ export class PublishRunError extends Data.TaggedError("PublishRunError")<{
   readonly cause: unknown;
 }> {}
 
+/**
+ * A Publish the service REFUSED (a `PublishValidationError`): its own tag, so
+ * the Job's failure says "refused" even when the `publish-failed` event write
+ * was lost, and `cvm course publish --wait` still exits 3. The tag is
+ * `PUBLISH_REFUSED_TAG` in `course-publish-wait.ts`.
+ */
+export class PublishRefusedError extends Data.TaggedError(
+  "PublishRefusedError"
+)<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
 const firstLine = (text: string | undefined) =>
   (text ?? "").split("\n").find((line) => line.trim() !== "") ?? "";
 
@@ -129,8 +142,12 @@ const reportInOrder = (events: {
  * - The `publish` lane runs one at a time: it replaces the service's
  *   `courseVersionMutationSemaphore`.
  * - 1 attempt: the browser reported every Publish failure as
- *   `UPLOAD_FATAL_ERROR`. A failed export or Commit has already Discarded the
- *   Pending Version inside the service (issue #1401).
+ *   `UPLOAD_FATAL_ERROR`. Only a failure the service names — a
+ *   `PublishValidationError` from a failed export, or a
+ *   `PublishCommitFailedError` (`sync_failed`, `missing_assets`) — has
+ *   already Discarded the Pending Version (issue #1401). Any other failure
+ *   after Submit (Promote itself failing, say) leaves it Pending, for the
+ *   publish page's Promote or Discard.
  * - Never run again on its own (`neverRequeued`), not even after a
  *   deliberate stop. A run cut off after Submit leaves a Pending Version; the
  *   publish page reads its `course.json` receipt and offers Promote or
@@ -180,7 +197,12 @@ export const publishJobKind = defineJobKind({
                   `${cause.failedExportVideoIds.length} video(s) failed to export`
                 );
               }
-              return new PublishRunError({
+              if (cause.versionNameTaken) {
+                parts.push(
+                  `version name "${cause.versionNameTaken}" is already used by another version of this course`
+                );
+              }
+              return new PublishRefusedError({
                 message: parts.join("; ") || "Publish validation failed",
                 cause,
               });

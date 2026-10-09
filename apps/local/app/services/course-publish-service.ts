@@ -204,13 +204,24 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
         // invalidate work already done.
         onStageChange?.("freezing");
         onStageChange?.("cloning");
-        const { version: newDraft } = yield* versionOps.freezeAndCloneVersion({
-          sourceVersionId: latestVersion.id,
-          repoId: courseId,
-          newVersionName: "",
-          sourceName: versionName,
-          sourceDescription: versionDescription,
-        });
+        const { version: newDraft } = yield* versionOps
+          .freezeAndCloneVersion({
+            sourceVersionId: latestVersion.id,
+            repoId: courseId,
+            newVersionName: "",
+            sourceName: versionName,
+            sourceDescription: versionDescription,
+          })
+          .pipe(
+            // A name another Version already wears (a second Publish of the
+            // same name queued before the first ran) is bad input, not a
+            // fault: the same validation error, so exit 3 and the same toast.
+            Effect.catchTag("VersionNameTakenError", (cause) =>
+              Effect.fail(
+                new PublishValidationError({ versionNameTaken: cause.name })
+              )
+            )
+          );
 
         // Re-walk with titles so both halves are observable per Video — the
         // export step emits the same events the standalone batchExport does,
@@ -383,16 +394,26 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           });
         }
 
-        // Reclaim stale exports LAST, once every byte has gone past. GC deletes
-        // any Exported Video whose Export Hash is unreachable from current
-        // database state and cannot tell a file being streamed to Dropbox from
-        // an abandoned one — so it must never run while uploads are in flight.
-        // It has no correctness consumers, so the critical path is not its
-        // place.
-        if (unexportedVideos.length > 0) yield* garbageCollect(courseId);
-
         // Promote: the receipt landed, so the Pending Version is Published.
         yield* versionOps.promotePendingVersion(latestVersion.id);
+
+        // Reclaim stale exports LAST, once every byte has gone past and the
+        // Version is Published. GC deletes any Exported Video whose Export
+        // Hash is unreachable from current database state and cannot tell a
+        // file being streamed to Dropbox from an abandoned one — so it must
+        // never run while uploads are in flight. Nothing depends on it, so
+        // its failure is logged, never the Publish's: failing here would
+        // leave a published release reported as failed.
+        if (unexportedVideos.length > 0) {
+          yield* garbageCollect(courseId).pipe(
+            Effect.catchAllCause((cause) =>
+              Effect.logWarning(
+                "publish: garbage collection failed",
+                Cause.pretty(cause)
+              )
+            )
+          );
+        }
 
         onStageChange?.("complete");
 

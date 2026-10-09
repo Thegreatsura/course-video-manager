@@ -36,6 +36,26 @@ export class PublishInterruptedError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+/**
+ * The Publish Job succeeded but its `published` Job Event is missing (the
+ * sidecar's event write failed, and `ctx.emit` swallows that). The release is
+ * out; only its ids were lost. Never reported as success with empty ids.
+ */
+export class PublishResultLostError extends Data.TaggedError(
+  "PublishResultLostError"
+)<{
+  readonly jobId: string;
+  readonly message: string;
+}> {}
+
+/**
+ * The tag a Publish Job fails with when the service REFUSED it (a
+ * `PublishValidationError`), as opposed to failing it (`PublishRunError`).
+ * The Job's own failure is written by the sidecar's settle, not as a Job
+ * Event, so it survives when the `publish-failed` event write did not.
+ */
+export const PUBLISH_REFUSED_TAG = "PublishRefusedError";
+
 export interface PublishedResult {
   readonly publishedVersionId: string;
   readonly newDraftVersionId: string;
@@ -113,6 +133,11 @@ const rebuildFailure = (
       rest as ConstructorParameters<typeof PublishCommitFailedError>[0]
     );
   }
+  // The `publish-failed` event is a best-effort write; without it, the Job's
+  // own failure tag still says whether the Publish was refused (exit 3).
+  if (errorTagOf(jobError) === PUBLISH_REFUSED_TAG) {
+    return new PublishValidationError({});
+  }
   return new PublishJobFailedError({
     jobId,
     message: errorMessageOf(jobError),
@@ -150,9 +175,19 @@ export const waitForPublishJob = Effect.fn("waitForPublishJob")(
         case "succeeded": {
           const published = events.findLast((e) => e.type === "published");
           const data = (published?.data ?? {}) as Record<string, unknown>;
+          if (
+            typeof data.publishedVersionId !== "string" ||
+            typeof data.newDraftVersionId !== "string"
+          ) {
+            return yield* new PublishResultLostError({
+              jobId: job.id,
+              message:
+                "The Publish Job succeeded, but its result (the published and new Draft version ids) was never recorded. The release is out: see it on the web publish page (/courses/<courseId>/publish); `cvm course get <courseId>` gives the new draftVersionId. Do NOT publish again.",
+            });
+          }
           return {
-            publishedVersionId: String(data.publishedVersionId ?? ""),
-            newDraftVersionId: String(data.newDraftVersionId ?? ""),
+            publishedVersionId: data.publishedVersionId,
+            newDraftVersionId: data.newDraftVersionId,
             lessons: data.lessons ?? null,
           } satisfies PublishedResult;
         }

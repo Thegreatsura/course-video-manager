@@ -11,10 +11,13 @@
 //    (Remotion's `bin.mjs`), the vertical Short, and the Sidecar's own layer
 //    and Job handlers. A route enqueues a Job instead.
 //
-// 2. `child_process` is imported only by the app server's INTERACTIVE entry
-//    points, each named below with why it stays: a person is waiting on it,
-//    it takes a moment, and it is not background work. Anything else that
-//    needs to start a process is either one of these, or a Job.
+// 2. Outside the Sidecar (`sidecar/`), `child_process` is imported only by
+//    the INTERACTIVE entry points, each named below with why it stays: a
+//    person is waiting on it, it takes a moment, and it is not background
+//    work. Anything else that needs to start a process is either one of
+//    these, or a Job. The rule covers every module the graph reaches, not
+//    just `app/`: the workspace packages (`packages/`, seen here as
+//    `../../packages/…`) run inside the app server too.
 //
 // `@effect/platform`'s `Command` is the other way to start a process, and
 // dependency-cruiser cannot see which export a module uses: that half is
@@ -49,7 +52,14 @@ const INTERACTIVE_CHILD_PROCESS = [
   // Starts the Clip Mockup daemon (ADR 0031): a long-lived process of its
   // own that the CLI restarts on demand — not a Job, and not run by a request.
   "^app/services/clip-mockup-daemon/client\\.ts$",
+  // `GitWorktreeProbeLive` (packages/core): one synchronous `git rev-parse`,
+  // memoized per process, when `DrizzleService` first connects, so a worktree
+  // never writes to a remote database. Milliseconds, once — not a Job.
+  "^\\.\\./\\.\\./packages/core/git-worktree\\.ts$",
 ].join("|");
+
+/** The Sidecar starts its own processes: that is what it is for. */
+const SIDECAR = "^sidecar/";
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
@@ -67,7 +77,7 @@ module.exports = {
       comment:
         "Only the named interactive entry points in .dependency-cruiser.spawn.cjs start processes on the app server. Background work is a Job: docs/plans/background-jobs-sidecar.md.",
       severity: "error",
-      from: { path: "^app/", pathNot: INTERACTIVE_CHILD_PROCESS },
+      from: { pathNot: `${INTERACTIVE_CHILD_PROCESS}|${SIDECAR}` },
       to: { path: "^(node:)?child_process$" },
     },
   ],
