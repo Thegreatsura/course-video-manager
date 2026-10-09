@@ -40,19 +40,27 @@ import type { LaneName } from "./lanes";
 /**
  * A kind that retries: copied from the Upload Manager, attempts as listed.
  */
-export interface RetryingJobPolicy {
+export type RetryingJobPolicy = {
   readonly lane: LaneName;
-  readonly maxAttempts: number;
   readonly posting?: false;
-  /**
-   * `true` for a kind that must never run again on its own, not even after a
-   * deliberate stop (section 7.5 puts every other kind back at the same
-   * attempt). A Publish cut off halfway leaves a Pending Version that only
-   * the author may Promote or Discard (section 7.2), so a stop ends it
-   * `interrupted`, as a crash does.
-   */
-  readonly neverRequeued?: true;
-}
+} & (
+  | { readonly maxAttempts: number; readonly neverRequeued?: undefined }
+  | {
+      /**
+       * A kind that must never run again on its own has exactly one attempt:
+       * the type will not hold a second one for recovery to spend.
+       */
+      readonly maxAttempts: 1;
+      /**
+       * `true` for a kind that must never run again on its own — not put back
+       * by a deliberate stop (section 7.5 puts every other kind back at the
+       * same attempt), not re-run by recovery after a crash. A Publish cut off
+       * halfway leaves a Pending Version that only the author may Promote or
+       * Discard (section 7.2), so it ends `interrupted` (`isNeverReRun`).
+       */
+      readonly neverRequeued: true;
+    }
+);
 
 /**
  * A kind that POSTS to an outside service (YouTube, Buffer, AI Hero). Matt's

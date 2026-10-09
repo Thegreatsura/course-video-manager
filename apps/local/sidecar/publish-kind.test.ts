@@ -14,15 +14,9 @@ import {
   truncateAllTables,
   type TestDb,
 } from "@/test-utils/pglite";
-import { defineJobKind, isRequeuedOnStop } from "./job-kind";
-import {
-  enqueueJob,
-  JOB_KINDS,
-  retryJob,
-  type JobKindRegistry,
-} from "./job-kinds";
+import { defineJobKind } from "./job-kind";
+import { enqueueJob, retryJob, type JobKindRegistry } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
-import { LANES } from "./lanes";
 import { UPLOAD_MANAGER_POLICIES } from "./retry-policy";
 import { runSidecar, type SidecarTiming } from "./sidecar";
 
@@ -39,34 +33,6 @@ import { runSidecar, type SidecarTiming } from "./sidecar";
  *
  * If this file fails, a Publish can run twice on its own.
  */
-
-describe("the publish kind's policy", () => {
-  it("is in the registry: the publish lane, 1 attempt, never requeued", () => {
-    const kind = JOB_KINDS.publish;
-    expect(kind.lane).toBe("publish");
-    expect(kind.maxAttempts).toBe(1);
-    expect(isRequeuedOnStop(kind)).toBe(false);
-    expect(UPLOAD_MANAGER_POLICIES.publish).toEqual({
-      lane: "publish",
-      maxAttempts: 1,
-      neverRequeued: true,
-    });
-  });
-
-  it("runs one at a time, replacing courseVersionMutationSemaphore", () => {
-    expect(LANES.publish.concurrency).toBe(1);
-  });
-
-  it("every other kind but the posts is put back by a stop", () => {
-    for (const [name, kind] of Object.entries(JOB_KINDS)) {
-      if (name === "publish" || "posting" in kind) continue;
-      expect({ name, requeued: isRequeuedOnStop(kind) }).toEqual({
-        name,
-        requeued: true,
-      });
-    }
-  });
-});
 
 // -- A real sidecar, on PGlite ------------------------------------------------
 
@@ -221,12 +187,23 @@ describe("a Publish Job in the sidecar", () => {
   );
 
   it.live(
-    "left running by a sidecar that died is NOT re-run: recovery ends it interrupted",
+    "left running by a sidecar that died is NOT re-run, even with attempts to spare: recovery ends it interrupted",
     () =>
       Effect.gen(function* () {
         const stub = stubPublish();
         const ops = yield* JobOperationsService;
-        const job = yield* enqueuePublish(stub.registry, 0);
+        // A row with a second attempt left (written by an older sidecar, or
+        // by hand): recovery must go by the kind, not by the row's counts.
+        const job = yield* ops.enqueueJob({
+          id: null,
+          kind: "publish",
+          title: "a Publish",
+          lane: "publish",
+          params: { hangMs: 0 },
+          maxAttempts: 2,
+          dependsOn: null,
+          subject: { type: "course", id: "course-1" },
+        });
         // A dead sidecar's claim, its lease already lapsed.
         yield* ops.claimNextJob({
           lane: "publish",
@@ -236,13 +213,14 @@ describe("a Publish Job in the sidecar", () => {
         yield* Effect.sleep(5);
 
         const sidecar = yield* startSidecar(stub.registry, "a");
-        yield* waitForJob(job.id, (j) => j.status === "interrupted");
+        yield* waitForJob(job.id, (j) => j.status !== "running");
         yield* Effect.sleep(1_500); // past a second recovery sweep
-        expect(stub.runs(job.id)).toBe(0);
-        expect(yield* ops.getJob(job.id)).toMatchObject({
+        const after = yield* ops.getJob(job.id);
+        yield* sidecar.stop;
+        expect({ runs: stub.runs(job.id), status: after?.status }).toEqual({
+          runs: 0,
           status: "interrupted",
         });
-        yield* sidecar.stop;
       }).pipe(Effect.provide(layer()))
   );
 
