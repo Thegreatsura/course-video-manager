@@ -11,6 +11,7 @@ import {
   landscapeCpuFallbackArgs,
 } from "./ffmpeg-error";
 import { runFfmpegWithProgress } from "./ffmpeg-run";
+import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { SidecarContextTest } from "./sidecar-context";
 
 // What ffmpeg printed in the real failure (Publish Job 859b8689): the CUDA
@@ -120,6 +121,7 @@ exit 0
           Layer.mergeAll(
             NodeContext.layer,
             SidecarContextTest,
+            FfmpegPermitsService.Default,
             Logger.replace(Logger.defaultLogger, logger)
           )
         )

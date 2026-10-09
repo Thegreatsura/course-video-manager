@@ -36,7 +36,13 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
   {
     effect: Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const { gpuSemaphore, cpuSemaphore } = yield* FfmpegPermitsService;
+      // Built once per process; every encode below draws its slot from it —
+      // `runFfmpegWithProgress` takes one itself, `compositeOverlay` by hand.
+      const permits = yield* FfmpegPermitsService;
+      const runEncode = (opts: Parameters<typeof runFfmpegWithProgress>[0]) =>
+        runFfmpegWithProgress(opts).pipe(
+          Effect.provideService(FfmpegPermitsService, permits)
+        );
 
       const createAndConcatenateVideoClipsSinglePass = Effect.fn(
         "createAndConcatenateVideoClipsSinglePass"
@@ -144,15 +150,13 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           outputFile,
         ];
 
-        yield* gpuSemaphore.withPermits(1)(
-          runFfmpegWithProgress({
-            args,
-            totalDurationSeconds: expectedOutputDuration,
-            onProgress: extras.onProgress,
-            onLog: extras.onLog,
-            errorPrefix: "Failed to create concatenated video",
-          })
-        );
+        yield* runEncode({
+          args,
+          totalDurationSeconds: expectedOutputDuration,
+          onProgress: extras.onProgress,
+          onLog: extras.onLog,
+          errorPrefix: "Failed to create concatenated video",
+        });
 
         return outputFile;
       });
@@ -224,16 +228,14 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           outputFile,
         ];
 
-        yield* cpuSemaphore.withPermits(1)(
-          runFfmpegWithProgress({
-            args,
-            // Video is stream-copied, so the output duration is the input's.
-            totalDurationSeconds: videoDuration,
-            onProgress: extras.onProgress,
-            onLog: extras.onLog,
-            errorPrefix: "Failed to normalize audio",
-          })
-        );
+        yield* runEncode({
+          args,
+          // Video is stream-copied, so the output duration is the input's.
+          totalDurationSeconds: videoDuration,
+          onProgress: extras.onProgress,
+          onLog: extras.onLog,
+          errorPrefix: "Failed to normalize audio",
+        });
 
         return outputFile;
       });
@@ -282,7 +284,7 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
         // step of a Short's render (libx264 "slow"). Only stderr is piped:
         // stdout carries no progress data here, so inheriting it is exempt
         // from the drain-or-block hazard documented on runFfmpegWithProgress.
-        yield* gpuSemaphore.withPermits(1)(
+        yield* permits.withEncodeSlot("Failed to composite overlay")(
           Effect.scoped(
             Effect.gen(function* () {
               const child = yield* Command.start(
@@ -402,15 +404,13 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           });
         }
 
-        yield* gpuSemaphore.withPermits(1)(
-          runFfmpegWithProgress({
-            args,
-            totalDurationSeconds: extras.totalDurationSeconds,
-            onProgress: extras.onProgress,
-            onLog: extras.onLog,
-            errorPrefix: "Failed to composite overlays",
-          })
-        );
+        yield* runEncode({
+          args,
+          totalDurationSeconds: extras.totalDurationSeconds,
+          onProgress: extras.onProgress,
+          onLog: extras.onLog,
+          errorPrefix: "Failed to composite overlays",
+        });
 
         return outputPath;
       });

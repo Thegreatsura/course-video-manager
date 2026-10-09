@@ -105,12 +105,12 @@ OFFLINE_SERVICES_ENV=(
   "CLOUDINARY_URL=cloudinary://$OFFLINE:$OFFLINE@$OFFLINE?upload_prefix=$(loopback_or_discard "${CLOUDINARY_UPLOAD_PREFIX:-}")"
 )
 
-# A clone run's encodes, capped. Matt's machine runs 6 GPU and 12 CPU ffmpeg
-# processes at once and 4 Dropbox uploads; a run gets one of each, so an
+# A clone run's encodes, capped. Matt's machine runs 2 heavy encodes and 12 quick
+# ffmpeg calls at once and 4 Dropbox uploads; a run gets one of each, so an
 # encode Job on a real Course, pressed by mistake, cannot take the machine's
 # memory with it. Publish the Tiny Course (`tiny-course <run>`) all the same.
 CLONE_ENCODE_CAPS_ENV=(
-  "FFMPEG_GPU_PERMITS=1" "FFMPEG_CPU_PERMITS=1" "DROPBOX_UPLOAD_CONCURRENCY=1"
+  "FFMPEG_ENCODE_PERMITS=1" "FFMPEG_CPU_PERMITS=1" "DROPBOX_UPLOAD_CONCURRENCY=1"
 )
 
 # --- stale clones -----------------------------------------------------------

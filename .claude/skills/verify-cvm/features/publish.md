@@ -27,7 +27,7 @@ Clip of 2.5 seconds cut from footage it generates into the run's `scratch/` —
 and prints its id. It writes as `cvm-verify-tiny-course` in the Ledger, so
 seed before `guard baseline`; each call seeds a fresh one. Its Publish takes
 about three seconds. A real Course's Publish encodes every Video it ships;
-a clone run caps that at one ffmpeg (`FFMPEG_GPU_PERMITS`,
+a clone run caps that at one ffmpeg (`FFMPEG_ENCODE_PERMITS`,
 `FFMPEG_CPU_PERMITS`) and one upload (`DROPBOX_UPLOAD_CONCURRENCY`) at a time,
 which makes it slower, not safe. It Submits the Draft, renders
 Videos and commits a Bundle to Dropbox. It is a Job the run's sidecar runs

@@ -4,6 +4,7 @@ import { registerFfmpegChild } from "./ffmpeg-child-registry";
 import { createFfmpegProgressParser } from "./ffmpeg-progress";
 import { appendBoundedTail, withStderrTail } from "./ffmpeg-log-capture";
 import { SidecarContext } from "./sidecar-context";
+import { FfmpegPermitsService } from "./ffmpeg-permits";
 import {
   FFmpegError,
   landscapeCpuFallbackArgs,
@@ -65,6 +66,13 @@ export {
  * could not open — no CUDA context, no capable device — is run once more,
  * whole, on libx264 (`landscapeCpuFallbackArgs`), with a WARN in the Job's
  * log. Every caller gets it by construction; none decides for itself.
+ *
+ * And it is where the process-wide limit on heavy encodes is kept: every run
+ * takes one of `FfmpegPermitsService`'s encode slots (default 2) for its whole
+ * length, fallback included, and logs when it has to wait for one. A Publish,
+ * a Batch export and a Short running side by side share those slots, so no
+ * mix of Jobs can stack more encodes than that on the machine's memory
+ * (Publish Job 859b8689: six 100-input concats at once ran it out of RAM).
  */
 export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
   function* (opts: {
@@ -80,36 +88,46 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
   }) {
     // An encode is a Job's: only the Sidecar provides this.
     yield* SidecarContext;
+    const { withEncodeSlot } = yield* FfmpegPermitsService;
     const toError = (cause: unknown, detail: string, stderrTail: string) =>
       new FFmpegError({
         cause,
         message: withStderrTail(`${opts.errorPrefix}${detail}`, stderrTail),
       });
 
-    const first = yield* runOnce(opts.args);
-    if (first.code === 0) return;
+    // The slot is held across the fallback too: the libx264 re-run is the
+    // hungrier of the two, and must not start outside the limit.
+    yield* withEncodeSlot(opts.errorPrefix)(
+      Effect.gen(function* () {
+        const first = yield* runOnce(opts.args);
+        if (first.code === 0) return;
 
-    const fallbackArgs = landscapeCpuFallbackArgs(opts.args, first.stderrTail);
-    if (!fallbackArgs) {
-      return yield* toError(
-        null,
-        `, exit code: ${first.code}`,
-        first.stderrTail
-      );
-    }
+        const fallbackArgs = landscapeCpuFallbackArgs(
+          opts.args,
+          first.stderrTail
+        );
+        if (!fallbackArgs) {
+          return yield* toError(
+            null,
+            `, exit code: ${first.code}`,
+            first.stderrTail
+          );
+        }
 
-    yield* Effect.logWarning(
-      "ffmpeg: h264_nvenc could not open (no usable GPU); running this pass again on libx264",
-      { errorPrefix: opts.errorPrefix, exitCode: first.code }
+        yield* Effect.logWarning(
+          "ffmpeg: h264_nvenc could not open (no usable GPU); running this pass again on libx264",
+          { errorPrefix: opts.errorPrefix, exitCode: first.code }
+        );
+        const fallback = yield* runOnce(fallbackArgs);
+        if (fallback.code !== 0) {
+          return yield* toError(
+            null,
+            `, exit code: ${fallback.code} (on the libx264 fallback, after h264_nvenc could not open)`,
+            fallback.stderrTail
+          );
+        }
+      })
     );
-    const fallback = yield* runOnce(fallbackArgs);
-    if (fallback.code !== 0) {
-      return yield* toError(
-        null,
-        `, exit code: ${fallback.code} (on the libx264 fallback, after h264_nvenc could not open)`,
-        fallback.stderrTail
-      );
-    }
 
     /** One ffmpeg run: its exit code and the tail of its stderr. */
     function runOnce(args: readonly string[]) {
