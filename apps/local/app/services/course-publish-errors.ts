@@ -5,6 +5,8 @@ export class PublishValidationError extends Data.TaggedError(
 )<{
   courseViewLintCount?: number;
   failedExportVideoIds?: string[];
+  /** The first failed Video's error — what the author needs to act on. */
+  exportFailureMessage?: string;
   missingVideoIds?: string[];
   unfrozenCourseVersionId?: string;
   /** Submit found another Version of the course already wearing this name. */

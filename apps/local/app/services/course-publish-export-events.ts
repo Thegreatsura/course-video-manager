@@ -1,4 +1,4 @@
-import { Effect, Schedule } from "effect";
+import { Data, Effect, Schedule } from "effect";
 
 // One Video's encode, stage by stage. `queued` is a position in the pool
 // rather than work, so only the two working stages carry a percentage.
@@ -100,6 +100,15 @@ export const extractErrorMessage = (e: unknown, fallback: string): string =>
 // downstream pool (the Dropbox upload pool) start on that one Video while its
 // siblings are still encoding. It runs inside the fan-out, so it is reached as
 // soon as that Video settles rather than when the loop as a whole finishes.
+//
+// `afterAFailure` says what a Video that fails does to its siblings. A Batch
+// export's Videos stand alone, so it `"keep-going"`s, retrying each Video
+// twice. A Publish ships every Video or none, so one that will not export
+// dooms the run: it `"stop"`s on the first failure, without a retry,
+// interrupting the encodes still running (their ffmpeg children die with
+// their scopes) and never starting the queued ones. Before this, a failed
+// Publish sat on for as long as the retries and every other Video took to
+// encode (Publish Job 859b8689: twelve minutes, until the sidecar stopped).
 export const runObservedExportLoop = <A, E, R>(input: {
   unexportedVideos: Array<{ id: string; title: string }>;
   exportVideo: (
@@ -112,7 +121,8 @@ export const runObservedExportLoop = <A, E, R>(input: {
     videoId: string;
     exported: boolean;
   }) => Effect.Effect<void>;
-}): Effect.Effect<{ failedVideoIds: string[] }, never, R> =>
+  afterAFailure: "keep-going" | "stop";
+}): Effect.Effect<ObservedExportResult, never, R> =>
   Effect.gen(function* () {
     const { unexportedVideos, exportVideo, onDetailEvent, onVideoSettled } =
       input;
@@ -138,7 +148,7 @@ export const runObservedExportLoop = <A, E, R>(input: {
         () => onVideoSettled?.({ videoId, exported }) ?? Effect.void
       );
 
-    const failedVideoIds: string[] = [];
+    const failures: ExportFailure[] = [];
     yield* Effect.forEach(
       unexportedVideos,
       (video) =>
@@ -157,7 +167,10 @@ export const runObservedExportLoop = <A, E, R>(input: {
             });
           }
         ).pipe(
-          Effect.retry(Schedule.recurs(2)),
+          // A Batch export retries a Video twice. A Publish does not: its
+          // first failed Video already dooms the run, and a re-run of the
+          // Publish skips every Video that did land at its address.
+          Effect.retry(Schedule.recurs(input.afterAFailure === "stop" ? 0 : 2)),
           Effect.tap(() => {
             onDetailEvent?.({
               event: "complete",
@@ -168,22 +181,42 @@ export const runObservedExportLoop = <A, E, R>(input: {
             onSuccess: () => settle(video.id, true),
             onFailure: (e) =>
               Effect.sync(() => {
+                const message = extractErrorMessage(
+                  e,
+                  "Export failed unexpectedly"
+                );
                 onDetailEvent?.({
                   event: "error",
-                  data: {
-                    videoId: video.id,
-                    message: extractErrorMessage(
-                      e,
-                      "Export failed unexpectedly"
-                    ),
-                  },
+                  data: { videoId: video.id, message },
                 });
-                failedVideoIds.push(video.id);
+                failures.push({ videoId: video.id, message });
               }).pipe(Effect.andThen(settle(video.id, false))),
-          })
+          }),
+          // Outside the match, so it fails the fan-out rather than being
+          // matched away: Effect.forEach then interrupts every sibling.
+          Effect.andThen(() =>
+            input.afterAFailure === "stop" &&
+            failures.some((f) => f.videoId === video.id)
+              ? Effect.fail(new ExportLoopStopped())
+              : Effect.void
+          )
         ),
       { concurrency: MAX_CONCURRENT_EXPORTS }
-    );
+    ).pipe(Effect.catchTag("ExportLoopStopped", () => Effect.void));
 
-    return { failedVideoIds };
+    return {
+      failedVideoIds: failures.map((f) => f.videoId),
+      failures,
+    };
   });
+
+export type ExportFailure = { videoId: string; message: string };
+
+export type ObservedExportResult = {
+  failedVideoIds: string[];
+  /** Why each failed Video failed, in the order they failed. */
+  failures: ExportFailure[];
+};
+
+/** Private signal: a `"stop"` loop has seen its first failed Video. */
+class ExportLoopStopped extends Data.TaggedError("ExportLoopStopped") {}
