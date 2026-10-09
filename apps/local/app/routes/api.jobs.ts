@@ -25,7 +25,11 @@ const EnqueueJobRequest = Schema.Struct({
 
 export const action = makeAction({
   input: "json",
-  errors: { UnknownJobKindError: 400, NoAttemptsLeftError: 400 },
+  errors: {
+    UnknownJobKindError: 400,
+    NoAttemptsLeftError: 400,
+    JobIdTakenError: 409,
+  },
   effect: ({ payload }) =>
     Effect.gen(function* () {
       const request = yield* Schema.decodeUnknown(EnqueueJobRequest)(payload);
