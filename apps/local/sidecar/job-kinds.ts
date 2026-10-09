@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LayerLive } from "@/services/layer.server";
-import { isPostingKind, type JobKind } from "./job-kind";
+import { isPostingKind, type EnqueueJob, type JobKind } from "./job-kind";
 import { autofillJobKind } from "./kinds/autofill";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
@@ -115,6 +115,23 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     subject: input.subject,
   });
 });
+
+/**
+ * How a handler starts another Job (`ctx.enqueue`): `enqueueJob` over the
+ * sidecar's registry and database, then `then` (the sidecar's nudge, so a
+ * lane picks it up now rather than at the next poll).
+ */
+export const enqueueThrough =
+  (opts: {
+    readonly registry: JobKindRegistry<unknown>;
+    readonly ops: JobOperationsService;
+    readonly then: Effect.Effect<void>;
+  }): EnqueueJob =>
+  (request) =>
+    enqueueJob({ id: null, ...request, registry: opts.registry }).pipe(
+      Effect.provideService(JobOperationsService, opts.ops),
+      Effect.tap(() => opts.then)
+    );
 
 export class JobNotFoundError extends Data.TaggedError("JobNotFoundError")<{
   readonly jobId: string;

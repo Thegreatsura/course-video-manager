@@ -51,6 +51,7 @@ const recordingContext = () => {
     jobId: "job-1",
     attempt: 1,
     maxAttempts: 3,
+    enqueue: () => Effect.die("this kind starts no other Job"),
     emit: (type, data) =>
       Effect.sync(() => {
         events.push({ type, data });
