@@ -316,9 +316,11 @@ that changes nothing, "html" beside "image", a missing source file, a position
 outside its list, and two entries for the same Clip Mockup. An unknown or
 archived id is a not-found (exit 2). All the edits land together, or none do.
 
-A Clip Mockup whose voice FAILED (or is still pending) is queued again by any
-entry that names it — even one that only swaps its picture, or repeats its
-"say" unchanged. Returns AT ONCE: no voice is waited for.
+A Clip Mockup whose voice FAILED is queued again by any entry that names it —
+even one that only swaps its picture, or repeats its "say" unchanged. One
+still pending is queued again only if no Job already queued or running will
+voice its line: a new picture alone queues nothing. Returns AT ONCE: no voice
+is waited for.
 
 Prints every updated row as NDJSON, in file order, with imageFile and
 audioFile (absolute paths) beside imagePath and audioPath, and its voice

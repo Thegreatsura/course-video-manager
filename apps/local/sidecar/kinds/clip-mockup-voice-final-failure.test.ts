@@ -116,7 +116,7 @@ const pendingOnLastAttempt = (line: string) =>
       id: null,
       kind: "clip-mockup-voice",
       title: line,
-      params: { clipMockupIds: [row!.id] },
+      params: { clipMockupIds: [row!.id], lines: { [row!.id]: line } },
       dependsOn: null,
       subject: { type: "video", id: "video-1" },
       attemptsSpent: clipMockupVoiceJobKind.maxAttempts - 1,

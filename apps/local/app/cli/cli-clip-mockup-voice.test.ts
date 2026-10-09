@@ -10,6 +10,7 @@ import {
   type TestDb,
 } from "@/test-utils/pglite";
 import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
+import { CLIP_MOCKUP_VOICING_EVENT } from "@cvm/core/features/clip-mockups/voice-status";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   makeTempClipMockupDir,
@@ -117,9 +118,16 @@ describe("cvm clip-mockup: voice", () => {
   const list = async (): Promise<Mockup[]> =>
     rows(await run(["clip-mockup", "list", "--video", s.standaloneActiveId]));
 
-  /** What the Sidecar's Job leaves on a row once the voice is made. */
-  const voiceReady = (id: string, durationSeconds: number) =>
+  /** The Sidecar finishing every voice Job queued so far. */
+  const finishVoiceJobs = (status: "succeeded" | "failed") =>
     testDb
+      .update(schema.jobs)
+      .set({ status, finishedAt: new Date() })
+      .where(eq(schema.jobs.kind, "clip-mockup-voice"));
+
+  /** What the Sidecar's Job leaves on a row once the voice is made. */
+  const voiceReady = async (id: string, durationSeconds: number) => {
+    await testDb
       .update(schema.clipMockups)
       .set({
         voiceStatus: "ready",
@@ -127,12 +135,16 @@ describe("cvm clip-mockup: voice", () => {
         durationSeconds,
       })
       .where(eq(schema.clipMockups.id, id));
+    await finishVoiceJobs("succeeded");
+  };
 
-  const voiceFailed = (id: string) =>
-    testDb
+  const voiceFailed = async (id: string) => {
+    await testDb
       .update(schema.clipMockups)
       .set({ voiceStatus: "failed", voiceError: "the GPU would not load" })
       .where(eq(schema.clipMockups.id, id));
+    await finishVoiceJobs("failed");
+  };
 
   // -----------------------------------------------------------------------
   // add
@@ -244,6 +256,28 @@ describe("cvm clip-mockup: voice", () => {
       audioPath: "speech-x.wav",
       durationSeconds: 3,
     });
+    expect(await voiceJobs(testDb)).toHaveLength(1);
+  });
+
+  it("update with only an image on a voice being made queues no second Job", async () => {
+    const [created] = await add("Being voiced right now.");
+    // The Sidecar has started the Job, and is voicing this very line.
+    const [job] = await testDb.query.jobs.findMany({
+      where: (t, { eq }) => eq(t.kind, "clip-mockup-voice"),
+    });
+    await testDb
+      .update(schema.jobs)
+      .set({ status: "running", holder: "sidecar" })
+      .where(eq(schema.jobs.id, job!.id));
+    await testDb.insert(schema.jobEvents).values({
+      jobId: job!.id,
+      type: CLIP_MOCKUP_VOICING_EVENT,
+      data: { lines: { [created!.id]: "Being voiced right now." } },
+    });
+
+    const [row] = await update([{ id: created!.id, image: sourceImage() }]);
+
+    expect(row).toMatchObject({ voiceStatus: "pending" });
     expect(await voiceJobs(testDb)).toHaveLength(1);
   });
 

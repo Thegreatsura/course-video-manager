@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
 import { writeClipMockupFile } from "@/services/clip-mockup-files";
 import { resolveClipMockupSpeeches } from "@/services/resolve-clip-mockup-speech";
+import { CLIP_MOCKUP_VOICING_EVENT } from "@cvm/core/features/clip-mockups/voice-status";
 import { defineJobKind } from "../job-kind";
 import { JOB_PARAMS } from "../job-params";
 import { CLIP_MOCKUP_VOICE_POLICY } from "../retry-policy";
@@ -32,49 +33,67 @@ import { CLIP_MOCKUP_VOICE_POLICY } from "../retry-policy";
  * one queues it again. No toast when it succeeds: a Clip Mockup shows its
  * own voice, as a Clip shows its own transcription.
  */
+/**
+ * ONE VOICE RUN AT A TIME in this Sidecar, from reading its rows to marking
+ * them: a second Job for the same Clip Mockup waits here, then reads them
+ * afresh and finds them voiced. So two Jobs never voice the same row at
+ * once. The daemon voices one line at a time on one GPU anyway; like
+ * ffmpeg's permits, the limit lives with the work, not in a lane.
+ */
+const voicing = Effect.unsafeMakeSemaphore(1);
+
 export const clipMockupVoiceJobKind = defineJobKind({
   ...CLIP_MOCKUP_VOICE_POLICY,
   params: JOB_PARAMS["clip-mockup-voice"],
   run: (params, ctx) =>
-    Effect.gen(function* () {
-      const voice = yield* ClipMockupVoiceOperationsService;
-      const rows = yield* voice.listClipMockupsToVoice(params.clipMockupIds);
-      const todo = rows.filter((r) => !r.archived && r.voiceStatus !== "ready");
-      if (todo.length === 0) {
-        yield* Effect.logInfo(
-          "clip-mockup-voice: every Clip Mockup is already voiced, archived or gone"
+    voicing.withPermits(1)(
+      Effect.gen(function* () {
+        const voice = yield* ClipMockupVoiceOperationsService;
+        const rows = yield* voice.listClipMockupsToVoice(params.clipMockupIds);
+        const todo = rows.filter(
+          (r) => !r.archived && r.voiceStatus !== "ready"
         );
-        return;
-      }
-      yield* Effect.logInfo("clip-mockup-voice: started", {
-        clipMockupIds: todo.map((r) => r.id),
-        attempt: ctx.attempt,
-        maxAttempts: ctx.maxAttempts,
-      });
-
-      const { speeches: voiced, files } = yield* resolveClipMockupSpeeches(
-        todo.map((r) => ({ lineageId: r.lineageId, line: r.line }))
-      );
-      // Every WAV before any row says `ready`: a row whose audioPath points
-      // at nothing is the one state nobody can see or fix.
-      for (const file of files) {
-        yield* writeClipMockupFile(file.lineageId, file.audioPath, file.wav);
-      }
-
-      let marked = 0;
-      for (const [i, row] of todo.entries()) {
-        const landed = yield* voice.markVoiceReady({
-          id: row.id,
-          line: row.line,
-          speech: voiced[i]!,
+        if (todo.length === 0) {
+          yield* Effect.logInfo(
+            "clip-mockup-voice: every Clip Mockup is already voiced, archived or gone"
+          );
+          return;
+        }
+        yield* Effect.logInfo("clip-mockup-voice: started", {
+          clipMockupIds: todo.map((r) => r.id),
+          attempt: ctx.attempt,
+          maxAttempts: ctx.maxAttempts,
         });
-        if (landed) marked++;
-      }
-      yield* Effect.logInfo("clip-mockup-voice: done", {
-        ready: marked,
-        changedMeanwhile: todo.length - marked,
-      });
-    }),
+        // The words this run voices: a request for the same words is covered
+        // by this Job and queues none (`voice-job-cover.ts`).
+        yield* ctx.emit(CLIP_MOCKUP_VOICING_EVENT, {
+          lines: Object.fromEntries(todo.map((r) => [r.id, r.line])),
+        });
+
+        const { speeches: voiced, files } = yield* resolveClipMockupSpeeches(
+          todo.map((r) => ({ lineageId: r.lineageId, line: r.line }))
+        );
+        // Every WAV before any row says `ready`: a row whose audioPath points
+        // at nothing is the one state nobody can see or fix.
+        for (const file of files) {
+          yield* writeClipMockupFile(file.lineageId, file.audioPath, file.wav);
+        }
+
+        let marked = 0;
+        for (const [i, row] of todo.entries()) {
+          const landed = yield* voice.markVoiceReady({
+            id: row.id,
+            line: row.line,
+            speech: voiced[i]!,
+          });
+          if (landed) marked++;
+        }
+        yield* Effect.logInfo("clip-mockup-voice: done", {
+          ready: marked,
+          changedMeanwhile: todo.length - marked,
+        });
+      })
+    ),
   afterFinalFailure: (params, failure) =>
     Effect.gen(function* () {
       const voice = yield* ClipMockupVoiceOperationsService;

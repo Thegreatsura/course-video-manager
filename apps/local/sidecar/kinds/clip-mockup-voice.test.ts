@@ -137,7 +137,10 @@ const ctxAt = (attempt: number): JobContext => ({
 const runJob = (ids: string[], speech: SpeechFake, attempt = 1) =>
   Effect.runPromise(
     Effect.exit(
-      clipMockupVoiceJobKind.runRaw({ clipMockupIds: ids }, ctxAt(attempt))
+      clipMockupVoiceJobKind.runRaw(
+        { clipMockupIds: ids, lines: {} },
+        ctxAt(attempt)
+      )
     ).pipe(
       Effect.provide(Layer.mergeAll(dbLayer, speech.layer, NodeContext.layer))
     ) as Effect.Effect<Exit.Exit<void, unknown>>

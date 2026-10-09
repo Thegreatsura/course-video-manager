@@ -67,6 +67,8 @@ export const JOB_PARAMS = {
    */
   "clip-mockup-voice": Schema.Struct({
     clipMockupIds: Schema.NonEmptyArray(Schema.String),
+    /** Each one's line as it was queued: the dedupe key (`voice-job-cover.ts`). */
+    lines: Schema.Record({ key: Schema.String, value: Schema.String }),
   }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */

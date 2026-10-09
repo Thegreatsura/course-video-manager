@@ -24,3 +24,10 @@ export type ClipMockupVoiceStatus = (typeof CLIP_MOCKUP_VOICE_STATUSES)[number];
 
 /** The kind of the Job that makes a Clip Mockup's voice (`sidecar/kinds/clip-mockup-voice.ts`). */
 export const CLIP_MOCKUP_VOICE_JOB_KIND = "clip-mockup-voice";
+
+/**
+ * The Job Event a `clip-mockup-voice` run appends once it has read its rows:
+ * `{ lines: { [clipMockupId]: line } }`, the words it is voicing now. A
+ * request for the same words is covered by it (`voice-job-cover.ts`).
+ */
+export const CLIP_MOCKUP_VOICING_EVENT = "voicing";

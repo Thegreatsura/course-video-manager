@@ -55,37 +55,46 @@ const withJobOperations = <A, E>(
   );
 
 /**
- * Queue the voice of every Clip Mockup named, as one Job, and nudge the
- * Sidecar so it starts now. Nothing to voice queues nothing. A Sidecar that
- * is down finds the Job when it starts.
+ * Queue the voice of every Clip Mockup named — one Job per Video, keyed by
+ * each row's line — and nudge the Sidecar so it starts now. A row whose line
+ * a live Job will already voice queues nothing (`coveredBy`,
+ * `voice-job-cover.ts`), so a picture-only `update` of a pending row adds no
+ * Job. Nothing to voice queues nothing. A Sidecar that is down finds the Job
+ * when it starts.
  */
 export const queueClipMockupVoices = (
-  rows: ReadonlyArray<{ readonly id: string; readonly videoId: string }>
+  rows: ReadonlyArray<{
+    readonly id: string;
+    readonly videoId: string;
+    readonly line: string;
+  }>
 ) =>
   rows.length === 0
-    ? Effect.succeed(null)
+    ? Effect.succeed([])
     : withJobOperations(
         Effect.gen(function* () {
-          const videoIds = new Set(rows.map((r) => r.videoId));
-          const job = yield* enqueueJob({
-            id: null,
-            kind: CLIP_MOCKUP_VOICE_JOB_KIND,
-            title:
-              rows.length === 1
-                ? "Voice 1 Clip Mockup"
-                : `Voice ${rows.length} Clip Mockups`,
-            params: { clipMockupIds: rows.map((r) => r.id) },
-            dependsOn: null,
-            subject:
-              videoIds.size === 1
-                ? { type: "video", id: rows[0]!.videoId }
-                : null,
-            attemptsSpent: 0,
-            registry: JOB_KIND_SPECS,
-          });
+          const byVideo = Map.groupBy(rows, (r) => r.videoId);
+          const queued = yield* Effect.forEach(byVideo, ([videoId, group]) =>
+            enqueueJob({
+              id: null,
+              kind: CLIP_MOCKUP_VOICE_JOB_KIND,
+              title:
+                group.length === 1
+                  ? "Voice 1 Clip Mockup"
+                  : `Voice ${group.length} Clip Mockups`,
+              params: {
+                clipMockupIds: group.map((r) => r.id),
+                lines: Object.fromEntries(group.map((r) => [r.id, r.line])),
+              },
+              dependsOn: null,
+              subject: { type: "video", id: videoId },
+              attemptsSpent: 0,
+              registry: JOB_KIND_SPECS,
+            })
+          );
           // Best effort, and silent: STDERR is the CLI's error contract.
           yield* nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None));
-          return job;
+          return queued;
         })
       );
 
