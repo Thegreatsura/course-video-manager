@@ -270,6 +270,11 @@ index before you decide a feature is verified — a proof that drives one
 convenient page is incomplete when the map lists three more entry points into
 the same behaviour.
 
+## Checking a `cvm` command
+
+**To check a `cvm` command, use `$V cvm <run> <args…>`; never mock the gates.**
+See [`checking-cvm.md`](checking-cvm.md).
+
 ## The Write Ledger
 
 Open the window before you drive, close it after:
@@ -409,10 +414,8 @@ Everything lands in the evidence directory `launch` printed (`$V dir <run>`). Wh
   change is a failure. Check the Ledger, and read the row back where the change
   was meant to persist: `$V sql <run> 'select … from "course-video-manager_video"
 where …'` (or the query on stdin). It reads this run's clone, read-only, and
-  logs the query and result to `sql.log` in the run directory. **Do not use
-  `cvm` to read a clone's rows** — it reads production through the deployed
-  `apps/remote`. That makes it the right tool for the opposite proof: a `cvm`
-  lookup that does NOT find your new row shows the write stayed in the clone.
+  logs the query and result to `sql.log` in the run directory. Plain `cvm`
+  reads production: not finding your row there proves it stayed in the clone.
 - **The console.** `$AB errors` and `$AB console` catch the hydration failure a
   screenshot renders straight through.
 
@@ -426,7 +429,7 @@ $V cleanup <run>     # this run
 $V cleanup --all     # every live run this worktree launched
 ```
 
-It stops the run's sidecar first (SIGTERM, so it puts back any Job it was
+It stops the run's API and sidecar (SIGTERM, so it puts back any Job it was
 running and lets go of its lease) and removes its socket, then kills the pid this run recorded — never a process matched by name, which
 would take Matt's server and every sibling run with it — closes this run's
 browser session, **drops the run's clone**, and leaves the rest alone. `--all`
