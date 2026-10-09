@@ -1,5 +1,9 @@
 import { Effect, Schema, type ParseResult } from "effect";
 import {
+  INTERRUPTED_POST_MESSAGE,
+  type JobFailure,
+} from "@cvm/core/services/db-job-operations.server";
+import {
   POSTING_JOB_POLICY,
   type JobPolicy,
   type RetryingJobPolicy,
@@ -154,16 +158,70 @@ export const isNeverReRun = (
     { readonly posting?: boolean; readonly neverRequeued?: boolean } | undefined
 ): boolean => kind?.posting === true || kind?.neverRequeued === true;
 
-/** The kinds in `registry` that are never run again on its own. */
-export const neverReRunKindsOf = (
-  registry: Readonly<
-    Record<
-      string,
-      { readonly posting?: boolean; readonly neverRequeued?: boolean }
-    >
-  >
-): string[] =>
-  Object.keys(registry).filter((name) => isNeverReRun(registry[name]));
+type NeverReRunFields = {
+  readonly posting?: boolean;
+  readonly neverRequeued?: boolean;
+  readonly interruptedMessage?: string;
+};
+
+/**
+ * What a kind that is never run again on its own says once it ends
+ * `interrupted`, in its own words: a post may have gone out; a Publish may
+ * have left a Pending Version to Promote or Discard. `null` for every other
+ * kind.
+ */
+export const neverReRunMessageOf = (
+  kind: NeverReRunFields | undefined
+): string | null => {
+  if (kind?.posting === true) return INTERRUPTED_POST_MESSAGE;
+  // The type requires a message; a missing one must still never re-run it.
+  if (kind?.neverRequeued === true) {
+    return (
+      kind.interruptedMessage ?? "Interrupted, and never re-run on its own"
+    );
+  }
+  return null;
+};
+
+const INTERRUPTED: JobFailure = {
+  tag: "JobInterrupted",
+  message: "The sidecar stopped while this job was running",
+  cause: "interrupted: the sidecar was stopped, or lost the job's lease",
+};
+
+/**
+ * How a run cut off by a stop or a lost lease ends. A kind that is never
+ * re-run on its own (a post, decision 5; a Publish, section 7.2) says so in
+ * its own words.
+ */
+export const interruptedFailureOf = (
+  kind: NeverReRunFields | undefined
+): JobFailure => {
+  const message = neverReRunMessageOf(kind);
+  return message === null
+    ? INTERRUPTED
+    : {
+        ...INTERRUPTED,
+        message,
+        cause:
+          "interrupted: the sidecar was stopped, or lost the job's lease, and this kind is never re-run on its own",
+      };
+};
+
+/**
+ * The kinds in `registry` that are never run again on its own, each with its
+ * never-re-run message: what recovery after a crash writes on the row.
+ */
+export const neverReRunMessagesOf = (
+  registry: Readonly<Record<string, NeverReRunFields>>
+): Record<string, string> => {
+  const messages: Record<string, string> = {};
+  for (const name of Object.keys(registry)) {
+    const message = neverReRunMessageOf(registry[name]);
+    if (message !== null) messages[name] = message;
+  }
+  return messages;
+};
 
 /** Whether a kind posts: 1 attempt, never re-queued, Retry by hand only. */
 export const isPostingKind = (
@@ -177,7 +235,11 @@ export const defineJobKind = <P, I, R = never>(
   return {
     lane: definition.lane,
     ...(definition.neverRequeued
-      ? { maxAttempts: 1 as const, neverRequeued: true as const }
+      ? {
+          maxAttempts: 1 as const,
+          neverRequeued: true as const,
+          interruptedMessage: definition.interruptedMessage,
+        }
       : { maxAttempts: definition.maxAttempts }),
     decodeParams: decode,
     runRaw: (raw, ctx) =>

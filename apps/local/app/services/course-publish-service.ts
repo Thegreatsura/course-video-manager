@@ -42,6 +42,9 @@ export type PublishOptions = {
   placeholderFloor: PlaceholderFloor;
   // The coarse publish lifecycle stage (validating → … → complete).
   onStageChange?: (stage: PublishStage) => void;
+  // Submit landed: from here until Promote, a failure the service does not
+  // Discard itself leaves this Pending Version for the author.
+  onSubmitted?: (submitted: { pendingVersionId: string }) => void;
   // Per-video export events (same names/payloads as batchExport: `videos`,
   // `stage`, `complete`, `error` keyed by videoId) plus the Dropbox commit's
   // `progress` percentage — pure observability.
@@ -166,6 +169,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
           includeTodoLessons,
           placeholderFloor,
           onStageChange,
+          onSubmitted,
           onDetailEvent,
         } = options;
         onStageChange?.("validating");
@@ -222,6 +226,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
               )
             )
           );
+        onSubmitted?.({ pendingVersionId: latestVersion.id });
 
         // Re-walk with titles so both halves are observable per Video — the
         // export step emits the same events the standalone batchExport does,
