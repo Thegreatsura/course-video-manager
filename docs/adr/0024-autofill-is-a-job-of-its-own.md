@@ -31,7 +31,7 @@ The real cost of this feature is that a human review step is removed on purpose.
 - **A stage inside `publishUnlocked`.** Rejected: unreachable behind its own blocking lint, and it would let a model rate limit fail a Publish and strand a Pending Version.
 - **Relaxing `canPublish` so a missing description or chapters no longer blocks.** Rejected: the readiness gate keeps giving one honest answer. A Video whose Autofill failed must not ship without chapters.
 - **A separate, always-visible Autofill button beside Publish.** Rejected: two controls where one action is available at a time. The label always describes what the button would do — including the disabled "Publish" when the Autofill can do no more but blockers remain.
-- **A durable background worker.** Deferred, not rejected. The run's state lives in client memory like every other upload type, so it stops if the tab closes. "Away from keyboard" here means no decisions, not no browser. A real job queue is the intended next step.
+- **A durable background worker.** Deferred, not rejected. The run's state lives in client memory like every other upload type, so it stops if the tab closes. "Away from keyboard" here means no decisions, not no browser. A real job queue is the intended next step. _Superseded by [ADR 0032](0032-background-work-runs-in-the-sidecar.md): the Autofill is now a Job the Sidecar runs, and it no longer stops with the tab._
 - **A `cvm course autofill` verb.** Deferred: the Autofill is UI-only for now, which keeps this build small.
 
 ## Consequences

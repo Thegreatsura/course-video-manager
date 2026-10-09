@@ -67,11 +67,11 @@ The rules:
    A handler may return a cleanup function. `exec.stop` and `exec.replace`
    cancel effects that run for a long time.
 5. **The reducer never reads the clock, randomness or the DOM.** Put the value
-   on the event instead. The upload manager adds `at: clock()` to every action
-   (`features/upload-manager/upload-context.tsx`), so the reducer and the ETA
-   are deterministic.
+   on the event instead. The jobs bridge stamps every Job Event with
+   `receivedAt: Date.now()` (`features/jobs/use-jobs.ts`, `toJobsAction`), so
+   the jobs reducer and the ETA are deterministic.
 6. **Derived values are selectors**, pure functions of state such as
-   `features/upload-manager/upload-selectors.ts` and
+   `features/jobs/jobs-selectors.ts` and
    `video-editor-selectors-*.ts`. Do not copy them into state, and do not
    compute them inside a component.
 7. **A `useEffect` in a component only bridges to the outside world.** It
@@ -100,11 +100,17 @@ session listener that fires on every pointer move, dispatches only when the
 value it reports has changed.
 
 A reducer that never needs effects can use plain `useReducer` (the
-teleprompter's `teleprompterSession.reducer`, the palette's `navReducer`). The
-upload manager is the one older variant: a plain `useReducer`, with
-`planUploadReactions` comparing the previous and current snapshots to decide
-which toasts to show and which jobs to restart. Leave it as it is, but don't
-copy it. New code that needs effects declares them with `exec`.
+teleprompter's `teleprompterSession.reducer`, the palette's `navReducer`). New
+code that needs effects declares them with `exec`.
+
+**A toast is a reducer decision, carried on its effect.** The reducer works
+out everything the toast needs and puts it on the effect; the handler only
+draws it and never reads state. The jobs reducer builds a settled Job's toast
+(`features/jobs/job-succeeded-toast.ts`) and declares
+`show-job-succeeded-toast` with it, and the handler is
+`(_state, effect) => showJobSucceededToast(effect)` (`use-jobs.ts`). Whether to
+toast at all is a decision too: a Job Event replayed from before this tab's
+snapshot updates the row but never toasts.
 
 ## Worked example: the thumbnail editor
 
