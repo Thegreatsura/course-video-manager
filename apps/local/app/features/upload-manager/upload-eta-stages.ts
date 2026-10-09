@@ -2,6 +2,7 @@ import type { UploadEntry } from "./upload-entry";
 import {
   AUTOFILL_WORK_BAND,
   BUFFER_STAGE_BANDS,
+  DUPLICATE_COURSE_STAGE_BANDS,
   PUBLISH_VIDEO_UPLOAD_BANDS,
   PUBLISH_WORK_BAND,
   exportStageBands,
@@ -83,6 +84,8 @@ export const timingStage = (
       return upload.bufferStage ?? "starting";
     case "render-vertical":
       return upload.renderVerticalStage ?? "starting";
+    case "duplicate-course":
+      return upload.duplicateCourseStage ?? "starting";
     case "publish": {
       const stage = upload.publishStage;
       if (!stage) return "starting";
@@ -133,6 +136,8 @@ export const stagePlan = (
         "polling",
         "cleaning-up",
       ];
+    case "duplicate-course":
+      return ["starting", "copying-rows", "copying-files"];
     case "render-vertical":
       return [
         "starting",
@@ -189,6 +194,10 @@ export const stageBand = (
       return stage === "work" ? AUTOFILL_WORK_BAND : null;
     case "render-vertical":
       return null;
+    case "duplicate-course":
+      return stage === "copying-files"
+        ? DUPLICATE_COURSE_STAGE_BANDS["copying-files"]
+        : null;
     case "youtube":
     case "youtube-shorts":
     case "ai-hero":

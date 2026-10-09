@@ -55,6 +55,12 @@ export const JOB_PARAMS = {
       })
     ),
   }),
+  /** A Course copied under a new name; the route chose the new Course's id. */
+  "duplicate-course": Schema.Struct({
+    sourceCourseId: Schema.String,
+    name: Schema.Trim.pipe(Schema.nonEmptyString()),
+    newCourseId: Schema.UUID,
+  }),
   autofill: Schema.Struct({
     /** For the success toast's "Back to Publish"; the run reads only the Version. */
     courseId: Schema.String,

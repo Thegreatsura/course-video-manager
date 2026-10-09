@@ -1,6 +1,7 @@
 import type {
   AutofillStage,
   BufferStage,
+  DuplicateCourseStage,
   ExportStage,
   ExportUploadEntry,
   PublishStage,
@@ -101,6 +102,16 @@ export const RENDER_VERTICAL_STAGE_BANDS: Record<
   transcribing: { start: 30, width: 0 },
   "rendering-overlay": { start: 60, width: 0 },
   compositing: { start: 85, width: 0 },
+};
+
+// A Course duplicate's rows go in as one transaction, which reports nothing
+// finer than "started"; its files stream a real percentage.
+export const DUPLICATE_COURSE_STAGE_BANDS: Record<
+  DuplicateCourseStage,
+  StageBand
+> = {
+  "copying-rows": { start: 2, width: 0 },
+  "copying-files": { start: 10, width: 89 },
 };
 
 /** A job that has said its final word: nothing may move it again. */

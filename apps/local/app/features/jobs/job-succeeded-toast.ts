@@ -2,6 +2,7 @@ import { isPostingJobKind } from "./job-wire";
 import { isUntoastedJobKind } from "./transcribe-footage-job";
 import { isImageUploadJobKind } from "@/features/image-upload/image-upload-job";
 import type { jobsReducer } from "./jobs-reducer";
+import { DUPLICATE_COURSE_JOB_KIND } from "./duplicate-course-job";
 import { jobUploadEntries, jobUploadEntry } from "./jobs-selectors";
 
 /**
@@ -83,6 +84,8 @@ export const succeededToastOf = (job: jobsReducer.JobView): SucceededToast => {
     // An export or a render draws a row of its own, but its toast is generic.
     case "export":
     case "render-vertical":
+    // A Course duplicate never toasts its success (`isSilentSettlement`).
+    case "duplicate-course":
     case undefined:
       return genericSucceededToast(job.kind, job.subjectId);
   }
@@ -95,6 +98,8 @@ export const isSilentSettlement = (job: jobsReducer.JobView): boolean => {
   // nothing for the batch itself; only its failure is news.
   if (job.kind === "batch-export" && succeeded) return true;
   if (isUntoastedJobKind(job.kind)) return true;
+  // A Course duplicate's row links to the copy; only its failure is news.
+  if (job.kind === DUPLICATE_COURSE_JOB_KIND && succeeded) return true;
   // An image upload shows in the body it changed; only its failure is news.
   return isImageUploadJobKind(job.kind) && succeeded;
 };

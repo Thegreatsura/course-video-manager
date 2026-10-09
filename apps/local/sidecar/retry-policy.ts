@@ -180,6 +180,22 @@ export const IMAGE_UPLOAD_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Course duplicate** was never an Upload Manager job: the modal awaited one
+ * `POST /api/courses/<id>/duplicate`, and a failure was final. It gets 2
+ * attempts, not the browser's 1 (the chief of staff's call, batch 10), so a run
+ * the Sidecar loses mid-copy is resumed rather than leaving the copy without
+ * its frames, WAVs and Thumbnails. Both halves are safe to run again: the row
+ * copy is one transaction, recorded as a Job Event, and skipped once recorded;
+ * a file already in place at its size is skipped
+ * (`services/course-duplicate-files.ts`). Not `neverRequeued`: a stop puts it
+ * back too.
+ */
+export const COURSE_DUPLICATE_POLICY = {
+  lane: "default",
+  maxAttempts: 2,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * The Upload Manager types that post to an outside service: each must be a
  * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
  */

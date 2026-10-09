@@ -228,7 +228,7 @@ function UploadStatusDetail({
         />
       );
     case "success":
-      return <SuccessDetail upload={upload} />;
+      return <SuccessDetail upload={upload} onFollowLink={onFollowLink} />;
     case "error":
       if (publishRecoveryHref) {
         return (
@@ -269,6 +269,7 @@ function UploadStatusDetail({
               Course, not a Video) offers no link here. */}
           {upload.uploadType !== "publish" &&
             upload.uploadType !== "autofill" &&
+            upload.uploadType !== "duplicate-course" &&
             !upload.parentUploadId && (
               <Link
                 to={`/videos/${upload.videoId}/post`}
@@ -441,7 +442,13 @@ function PostFailedDetail({
 }
 
 /** Where a finished job landed, plus a link to it when there is one to give. */
-function SuccessDetail({ upload }: { upload: UploadEntry }) {
+function SuccessDetail({
+  upload,
+  onFollowLink,
+}: {
+  upload: UploadEntry;
+  onFollowLink: () => void;
+}) {
   switch (upload.uploadType) {
     case "buffer":
       return <SuccessBadge label="Sent to Buffer" />;
@@ -479,6 +486,21 @@ function SuccessDetail({ upload }: { upload: UploadEntry }) {
     case "skills-changelog":
     case "render-vertical":
       return <SuccessBadge label="Complete" />;
+    case "duplicate-course":
+      return (
+        <SuccessBadge label="Duplicated">
+          <Link
+            to={`/courses/${upload.courseId}`}
+            className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFollowLink();
+            }}
+          >
+            Open Course
+          </Link>
+        </SuccessBadge>
+      );
     case "autofill":
       // An autofill run's result lands in the Video itself; there is no
       // destination to name.

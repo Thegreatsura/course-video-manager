@@ -107,6 +107,13 @@ const newRow = (
         uploadType,
         renderVerticalStage: "concatenating-clips",
       };
+    case "duplicate-course":
+      return {
+        ...base,
+        uploadType,
+        duplicateCourseStage: "copying-rows",
+        courseId: "c",
+      };
   }
 };
 
@@ -265,6 +272,8 @@ export const succeed = (uploadId: string): RowChange => ({
         return { ...done, publishStage: null };
       case "render-vertical":
         return { ...done, renderVerticalStage: null };
+      case "duplicate-course":
+        return { ...done, duplicateCourseStage: null };
       case "buffer":
         return { ...done, bufferStage: null };
       case "autofill":
