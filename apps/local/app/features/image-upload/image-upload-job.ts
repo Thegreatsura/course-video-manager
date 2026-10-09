@@ -16,6 +16,10 @@ import { Either, Schema } from "effect";
 export const UPLOAD_IMAGES_JOB_KIND = "upload-images";
 export const REMOVE_LOCAL_IMAGES_JOB_KIND = "remove-local-images";
 
+/** Both kinds: no Upload Manager row, and a toast only on failure. */
+export const isImageUploadJobKind = (kind: string) =>
+  kind === UPLOAD_IMAGES_JOB_KIND || kind === REMOVE_LOCAL_IMAGES_JOB_KIND;
+
 /** One image is on Cloudinary, and recorded: `{ ref, filePath, url }`. */
 export const IMAGE_UPLOADED_EVENT = "image-uploaded";
 

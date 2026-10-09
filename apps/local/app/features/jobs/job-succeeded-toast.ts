@@ -1,4 +1,6 @@
 import { isPostingJobKind } from "./job-wire";
+import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
+import { isImageUploadJobKind } from "@/features/image-upload/image-upload-job";
 import type { jobsReducer } from "./jobs-reducer";
 import { jobUploadEntries, jobUploadEntry } from "./jobs-selectors";
 
@@ -84,4 +86,16 @@ export const succeededToastOf = (job: jobsReducer.JobView): SucceededToast => {
     case undefined:
       return genericSucceededToast(job.kind, job.subjectId);
   }
+};
+
+/** A settled Job that never toasts at all, whatever its outcome says. */
+export const isSilentSettlement = (job: jobsReducer.JobView): boolean => {
+  const succeeded = job.status === "succeeded";
+  // A Batch export toasts each Video as it finishes (as the browser did), and
+  // nothing for the batch itself; only its failure is news.
+  if (job.kind === "batch-export" && succeeded) return true;
+  // A Clip transcription shows on its Clips in the editor, never as a toast.
+  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) return true;
+  // An image upload shows in the body it changed; only its failure is news.
+  return isImageUploadJobKind(job.kind) && succeeded;
 };

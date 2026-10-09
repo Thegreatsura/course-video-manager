@@ -8,17 +8,16 @@ import {
 import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
-import { succeededToastOf, type SucceededToast } from "./job-succeeded-toast";
+import {
+  isSilentSettlement,
+  succeededToastOf,
+  type SucceededToast,
+} from "./job-succeeded-toast";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
 import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
-import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
-import {
-  REMOVE_LOCAL_IMAGES_JOB_KIND,
-  UPLOAD_IMAGES_JOB_KIND,
-} from "@/features/image-upload/image-upload-job";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
 
 export { toJobsAction, isFinishedJob, jobIdOfRow };
@@ -364,21 +363,9 @@ const loadStageHistory = (
   return { ...state, stageHistoryRequest: requestId };
 };
 
-/** Kinds whose success is seen where it lands, so it never toasts. */
-const QUIET_WHEN_SUCCEEDED = new Set([
-  UPLOAD_IMAGES_JOB_KIND,
-  REMOVE_LOCAL_IMAGES_JOB_KIND,
-]);
-
 /** The toast for a Job that just settled. */
 const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
-  // A Batch export toasts each Video as it finishes (as the browser did), and
-  // nothing for the batch itself; only its failure is news.
-  if (job.kind === "batch-export" && job.status === "succeeded") return;
-  // A Clip transcription shows on its Clips in the editor, never as a toast.
-  if (job.kind === TRANSCRIBE_CLIPS_JOB_KIND) return;
-  // An image upload shows in the body it changed; only its failure is news.
-  if (QUIET_WHEN_SUCCEEDED.has(job.kind) && job.status === "succeeded") return;
+  if (isSilentSettlement(job)) return;
   if (job.status === "succeeded") {
     exec({
       type: "show-job-succeeded-toast",
