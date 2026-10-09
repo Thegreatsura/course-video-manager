@@ -15,6 +15,7 @@ const createInitialState = (
   insertionOrder: 0,
   error: null,
   sessions: [],
+  clipTranscriptionJobs: {},
   ...overrides,
 });
 

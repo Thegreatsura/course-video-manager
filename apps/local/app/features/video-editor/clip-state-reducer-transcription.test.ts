@@ -2,8 +2,10 @@ import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
   clipStateReducer,
+  type ClipOnDatabase,
   type ClipOptimisticallyAdded,
   type DatabaseId,
+  type FrontendId,
 } from "./clip-state-reducer";
 import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
 
@@ -16,6 +18,7 @@ const createInitialState = (
   insertionOrder: 0,
   error: null,
   sessions: [],
+  clipTranscriptionJobs: {},
   ...overrides,
 });
 
@@ -442,6 +445,87 @@ describe("clipStateReducer", () => {
 
       // Clip should be completely removed, not marked as shouldArchive
       expect(tester.getState().items).toHaveLength(0);
+    });
+  });
+
+  // The Sidecar runs the transcription (a `transcribe-clips` Job); its Job
+  // Events reach the editor as these actions (`transcription-job-events.ts`).
+  describe("A transcription Job's events", () => {
+    const onDatabase = (
+      id: string,
+      transcriptionStatus: ClipOnDatabase["transcriptionStatus"]
+    ): ClipOnDatabase =>
+      fromPartial<ClipOnDatabase>({
+        type: "on-database",
+        frontendId: `f-${id}` as FrontendId,
+        databaseId: id as DatabaseId,
+        text: "old text",
+        transcriptionStatus,
+      });
+    const statusOf = (state: clipStateReducer.State, id: string) =>
+      state.items.find(
+        (item): item is ClipOnDatabase =>
+          item.type === "on-database" && item.databaseId === id
+      )!.transcriptionStatus;
+    const started = (jobId: string, clipIds: string[]) =>
+      ({
+        type: "transcription-job-started",
+        jobId,
+        clipIds: clipIds as DatabaseId[],
+      }) as const;
+
+    it("a Job that fails fails the Clips it never settled, and only those", () => {
+      const tester = new ReducerTester(
+        clipStateReducer,
+        createInitialState({
+          items: [
+            onDatabase("a", "transcribing"),
+            onDatabase("b", "transcribing"),
+          ],
+        })
+      )
+        .send(started("job-1", ["a", "b"]))
+        .send({
+          type: "clips-transcribed",
+          clips: [
+            {
+              databaseId: "a" as DatabaseId,
+              transcriptionStatus: "done",
+              text: "landed",
+              hasTranscriptWords: true,
+            },
+          ],
+        })
+        .send({ type: "transcription-job-failed", jobId: "job-1" });
+
+      expect(statusOf(tester.getState(), "a")).toBe("done");
+      expect(statusOf(tester.getState(), "b")).toBe("failed");
+      expect(tester.getState().clipTranscriptionJobs).toEqual({});
+      expect(tester.getEffects()).toEqual([]);
+    });
+
+    it("a failed Job leaves a Clip a newer Job has taken on", () => {
+      const tester = new ReducerTester(
+        clipStateReducer,
+        createInitialState({ items: [onDatabase("a", "transcribing")] })
+      )
+        .send(started("job-1", ["a"]))
+        .send(started("job-2", ["a"]))
+        .send({ type: "transcription-job-failed", jobId: "job-1" });
+
+      expect(statusOf(tester.getState(), "a")).toBe("transcribing");
+      expect(tester.getState().clipTranscriptionJobs).toEqual({ a: "job-2" });
+    });
+
+    it("a failed Job the editor never saw start changes nothing", () => {
+      const state = createInitialState({
+        items: [onDatabase("a", "transcribing")],
+      });
+      const tester = new ReducerTester(clipStateReducer, state).send({
+        type: "transcription-job-failed",
+        jobId: "job-1",
+      });
+      expect(tester.getState()).toBe(state);
     });
   });
 });
