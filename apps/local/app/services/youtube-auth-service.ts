@@ -17,9 +17,14 @@ export class NotAuthenticatedError extends Data.TaggedError(
  */
 export const getValidAccessToken = Effect.gen(function* () {
   const linkAuthOps = yield* LinkAuthOperationsService;
+  // Overridable so a verification run refreshes against a local stub;
+  // nothing sets it day to day. verify-cvm defaults it to a dead port.
+  const tokenEndpoint = yield* Config.string("GOOGLE_OAUTH_TOKEN_URL").pipe(
+    Config.withDefault("https://oauth2.googleapis.com/token")
+  );
   return yield* getValidOAuthAccessToken({
     name: "YouTube",
-    tokenEndpoint: "https://oauth2.googleapis.com/token",
+    tokenEndpoint,
     clientCredentials: Config.all({
       clientId: Config.string("GOOGLE_CLIENT_ID"),
       clientSecret: Config.string("GOOGLE_CLIENT_SECRET"),

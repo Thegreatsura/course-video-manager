@@ -18,6 +18,9 @@ import type { LaneName } from "./lanes";
  *   (`upload-type-registry.ts:577-634`, `upload-type-autofill.ts:88-108`),
  *   which sets `terminal` (`upload-reducer.ts:533`) — and so do the per-Video
  *   rows each fans out into. So: 1 attempt.
+ * - EXCEPT posting (YouTube, Shorts, Buffer, AI Hero, Skills Changelog):
+ *   Matt's decision 5 gives each exactly 1 attempt and no re-queue — see
+ *   `PostingJobPolicy` below.
  * - A dropped stream is a failure like any other: the reader rejects, the
  *   client calls `onError`, and the job spends an attempt. The sidecar treats
  *   a run it lost — its lease ran out, or it was stopped — the same way
@@ -34,19 +37,58 @@ import type { LaneName } from "./lanes";
  * (`ai-hero-upload-service.ts:12`), Autofill's `recurs(3)` per Video
  * (`autofill-service.ts:57-62`).
  */
-export interface JobPolicy {
+/**
+ * A kind that retries: copied from the Upload Manager, attempts as listed.
+ */
+export interface RetryingJobPolicy {
   readonly lane: LaneName;
   readonly maxAttempts: number;
+  readonly posting?: false;
 }
 
-/** Every Upload Manager job type, and the policy it brings with it to the sidecar. */
+/**
+ * A kind that POSTS to an outside service (YouTube, Buffer, AI Hero). Matt's
+ * decision 5 (docs/plans/background-jobs-sidecar.md, section 6): "Posting
+ * twice would be disastrous." So a posting kind runs EXACTLY ONCE:
+ *
+ * - `maxAttempts` is the literal `1`: no automatic retry when it fails;
+ * - `posting: true` makes the sidecar end a run cut off by a deliberate stop
+ *   as `interrupted` instead of putting it back in the queue (section 7.5's
+ *   rule does not apply), and makes recovery after a crash end it the same
+ *   way whatever its attempt counts say;
+ * - only the author's Retry runs it again (`retryJob`).
+ *
+ * The browser used to retry a failed post up to 3 times; that is removed on
+ * purpose. `posting-kinds.test.ts` fails if any posting kind slips back.
+ */
+export interface PostingJobPolicy {
+  readonly lane: LaneName;
+  readonly maxAttempts: 1;
+  readonly posting: true;
+}
+
+export type JobPolicy = RetryingJobPolicy | PostingJobPolicy;
+
+/** The one policy every posting kind has. */
+export const POSTING_JOB_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+  posting: true,
+} as const satisfies PostingJobPolicy;
+
+/**
+ * Every Upload Manager job type, and the policy it brings with it to the
+ * sidecar. The five posting types are the exception decision 5 makes: the
+ * browser gave each of them 3 attempts (`UPLOAD_ERROR`,
+ * `upload-type-registry.ts`); the sidecar gives each exactly 1.
+ */
 export const UPLOAD_MANAGER_POLICIES = {
   export: { lane: "default", maxAttempts: 3 },
-  youtube: { lane: "default", maxAttempts: 3 },
-  "youtube-shorts": { lane: "default", maxAttempts: 3 },
-  buffer: { lane: "default", maxAttempts: 3 },
-  "ai-hero": { lane: "default", maxAttempts: 3 },
-  "skills-changelog": { lane: "default", maxAttempts: 3 },
+  youtube: POSTING_JOB_POLICY,
+  "youtube-shorts": POSTING_JOB_POLICY,
+  buffer: POSTING_JOB_POLICY,
+  "ai-hero": POSTING_JOB_POLICY,
+  "skills-changelog": POSTING_JOB_POLICY,
   "render-vertical": { lane: "default", maxAttempts: 3 },
   /**
    * A Batch export has no row and no retry of its own in the browser: it is
@@ -61,5 +103,18 @@ export const UPLOAD_MANAGER_POLICIES = {
   autofill: { lane: "default", maxAttempts: 1 },
 } as const satisfies Record<string, JobPolicy>;
 
+/**
+ * The Upload Manager types that post to an outside service: each must be a
+ * posting kind in the sidecar's registry (`posting-kinds.test.ts`).
+ */
+export const POSTING_KIND_NAMES = [
+  "youtube",
+  "youtube-shorts",
+  "buffer",
+  "ai-hero",
+  "skills-changelog",
+] as const;
+
 /** The policy of an ordinary, retrying Upload Manager job. */
-export const RETRYING_JOB_POLICY: JobPolicy = UPLOAD_MANAGER_POLICIES.export;
+export const RETRYING_JOB_POLICY: RetryingJobPolicy =
+  UPLOAD_MANAGER_POLICIES.export;

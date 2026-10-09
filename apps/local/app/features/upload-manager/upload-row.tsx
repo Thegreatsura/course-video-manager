@@ -11,10 +11,28 @@ import {
   Clock,
 } from "lucide-react";
 import { Link } from "react-router";
+import { useState } from "react";
 import type { uploadReducer } from "./upload-reducer";
 import { uploadStageLabel } from "./upload-stage-labels";
 import { etaLabel, type UploadEta } from "./upload-eta";
 import { Badge } from "@/components/ui/badge";
+
+/**
+ * What a POST's failed row offers (decision 5): posts never run again on
+ * their own, so the author reads what happened and presses Retry.
+ */
+export interface PostRowControls {
+  /** Cut off mid-run: it may or may not have gone out. */
+  interrupted: boolean;
+  /** What the sidecar found at the service; `null` while it looks. */
+  check: {
+    verdict: "posted" | "not-posted" | "unknown";
+    detail: string;
+    url: string | null;
+  } | null;
+  /** `null` when a Retry cannot help (a dead key: fix it, then post again). */
+  onRetry: (() => void) | null;
+}
 
 export function UploadRow({
   upload,
@@ -22,9 +40,12 @@ export function UploadRow({
   nested = false,
   eta,
   logHref,
+  post = null,
 }: {
   upload: uploadReducer.UploadEntry;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
+  /** A failed or interrupted post's check and Retry; `null` otherwise. */
+  post?: PostRowControls | null;
   /** Where a background Job's log is read, for a failed row; `null` otherwise. */
   logHref: string | null;
   /** A child task, indented under the parent job that spawned it. */
@@ -41,7 +62,12 @@ export function UploadRow({
       <StatusIcon upload={upload} />
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate">{upload.title}</p>
-        <UploadStatusDetail upload={upload} eta={eta} logHref={logHref} />
+        <UploadStatusDetail
+          upload={upload}
+          eta={eta}
+          logHref={logHref}
+          post={post}
+        />
       </div>
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
         <button
@@ -148,10 +174,12 @@ function UploadStatusDetail({
   upload,
   eta,
   logHref,
+  post,
 }: {
   upload: uploadReducer.UploadEntry;
   eta?: UploadEta;
   logHref: string | null;
+  post: PostRowControls | null;
 }) {
   switch (upload.status) {
     case "waiting":
@@ -178,6 +206,11 @@ function UploadStatusDetail({
     case "success":
       return <SuccessDetail upload={upload} />;
     case "error":
+      if (post) {
+        return (
+          <PostFailedDetail upload={upload} logHref={logHref} post={post} />
+        );
+      }
       return (
         <div className="flex items-center gap-2 mt-0.5">
           <span
@@ -211,6 +244,105 @@ function UploadStatusDetail({
         </div>
       );
   }
+}
+
+const CHECK_TONE = {
+  posted: "text-yellow-600 dark:text-yellow-500",
+  "not-posted": "text-muted-foreground",
+  unknown: "text-yellow-600 dark:text-yellow-500",
+} as const;
+
+/**
+ * A post that failed, or was cut off: why, what the check found at the
+ * service, its log, and the author's Retry. A Retry when the post may have
+ * gone out asks once more before it sends.
+ */
+function PostFailedDetail({
+  upload,
+  logHref,
+  post,
+}: {
+  upload: uploadReducer.UploadEntry;
+  logHref: string | null;
+  post: PostRowControls;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const mayHavePosted =
+    post.interrupted && post.check?.verdict !== "not-posted";
+  const retry = post.onRetry;
+  return (
+    <div className="mt-0.5 space-y-0.5">
+      <p
+        className={`text-xs ${post.interrupted ? "text-yellow-600 dark:text-yellow-500" : "text-destructive"}`}
+        title={upload.errorMessage ?? undefined}
+      >
+        {post.interrupted
+          ? "Interrupted — check before retrying"
+          : upload.errorMessage}
+      </p>
+      {post.interrupted && (
+        <p
+          className={`text-xs ${post.check ? CHECK_TONE[post.check.verdict] : "text-muted-foreground"}`}
+          role="status"
+        >
+          {post.check ? post.check.detail : "Checking whether it went out…"}
+          {post.check?.url && (
+            <>
+              {" "}
+              <SuccessLink href={post.check.url}>Open</SuccessLink>
+            </>
+          )}
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        {retry &&
+          (confirming ? (
+            <button
+              type="button"
+              className="text-xs text-destructive hover:underline whitespace-nowrap"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(false);
+                retry();
+              }}
+            >
+              Post again?
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap inline-flex items-center gap-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (mayHavePosted) setConfirming(true);
+                else retry();
+              }}
+            >
+              <RefreshCw className="size-3" />
+              Retry
+            </button>
+          ))}
+        {logHref && (
+          <a
+            href={logHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View log
+          </a>
+        )}
+        <Link
+          to={`/videos/${upload.videoId}/post`}
+          className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Go to Post
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 /** Where a finished job landed, plus a link to it when there is one to give. */

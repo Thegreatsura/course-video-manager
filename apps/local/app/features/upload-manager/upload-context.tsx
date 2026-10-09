@@ -28,6 +28,11 @@ export interface UploadContextType {
   /** Background Jobs the Sidecar runs (a Video export), as this tab sees them. */
   jobs: jobsReducer.State;
   dismissJob: (jobId: string) => void;
+  /**
+   * The author's Retry on a failed or interrupted post: the only way a post
+   * runs again (posts never retry on their own).
+   */
+  retryJob: (jobId: string) => void;
   /** Hide every finished Job: the Global Upload Progress's idle timer. */
   dismissFinishedJobs: () => void;
   /** Inputs to the ETA: see `estimateUploads`. */
@@ -212,6 +217,8 @@ export function UploadProvider({
     Map<string, { type: uploadReducer.UploadType; params: unknown }>
   >(new Map());
 
+  // A YouTube upload is a posting Job: the Sidecar runs it once, and only
+  // after the Job it waits on (its export) has succeeded.
   const startUpload = useCallback(
     (
       videoId: string,
@@ -220,34 +227,16 @@ export function UploadProvider({
       privacyStatus: "public" | "unlisted",
       thumbnailId: string,
       dependsOn?: string
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = { description, privacyStatus, thumbnailId };
-      paramsMapRef.current.set(uploadId, { type: "youtube", params });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    ) =>
+      startJob({
+        kind: "youtube",
         title,
-        dependsOn,
-      };
-      dispatch(action);
-
-      if (!dependsOn) {
-        initiateFromRegistry(
-          "youtube",
-          action,
-          params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      return uploadId;
-    },
-    []
+        params: { videoId, title, description, privacyStatus, thumbnailId },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: dependsOn ?? null,
+      }),
+    [startJob]
   );
 
   const startSocialUpload = useCallback(
@@ -282,44 +271,18 @@ export function UploadProvider({
     []
   );
 
+  // A Shorts post is a posting Job: run once, after its render succeeds.
   const startYoutubeShortsUpload = useCallback(
-    (
-      videoId: string,
-      title: string,
-      description: string,
-      dependsOn?: string
-    ) => {
-      const uploadId = generateUploadId();
-
-      const params = { description };
-      paramsMapRef.current.set(uploadId, {
-        type: "youtube-shorts",
-        params,
-      });
-
-      const action = {
-        type: "START_UPLOAD" as const,
-        uploadId,
-        videoId,
+    (videoId: string, title: string, description: string, dependsOn?: string) =>
+      startJob({
+        kind: "youtube-shorts",
         title,
-        uploadType: "youtube-shorts" as const,
-        dependsOn,
-      };
-      dispatch(action);
-
-      if (!dependsOn) {
-        initiateFromRegistry(
-          "youtube-shorts",
-          action,
-          params,
-          dispatch,
-          abortControllersRef.current
-        );
-      }
-
-      return uploadId;
-    },
-    []
+        params: { videoId, title, description },
+        subject: { type: "video", id: videoId },
+        attemptsSpent: 0,
+        dependsOn: dependsOn ?? null,
+      }),
+    [startJob]
   );
 
   const startAiHeroUpload = useCallback(
@@ -421,6 +384,7 @@ export function UploadProvider({
         params: { videoId },
         subject: { type: "video", id: videoId },
         attemptsSpent: 0,
+        dependsOn: null,
       }),
     [startJob]
   );
@@ -433,6 +397,7 @@ export function UploadProvider({
         params: { videoId },
         subject: { type: "video", id: videoId },
         attemptsSpent: 0,
+        dependsOn: null,
       }),
     [startJob]
   );
@@ -445,6 +410,7 @@ export function UploadProvider({
         params: { versionId, includeTodoLessons },
         subject: { type: "course-version", id: versionId },
         attemptsSpent: 0,
+        dependsOn: null,
       });
     },
     [startJob]
@@ -593,6 +559,7 @@ export function UploadProvider({
         uploads: state.uploads,
         jobs: jobs.state,
         dismissJob: jobs.dismissJob,
+        retryJob: jobs.retryJob,
         dismissFinishedJobs: jobs.dismissFinishedJobs,
         timings: state.timings,
         etaHistory: historyStore.lookup,

@@ -1,11 +1,22 @@
-import { Data, Effect } from "effect";
+import { Config, Data, Effect } from "effect";
 import { statSync } from "fs";
 import * as fs from "fs";
+import { SidecarContext } from "@/services/sidecar-context";
 
 export class YouTubeUploadError extends Data.TaggedError("YouTubeUploadError")<{
   message: string;
   code?: string;
 }> {}
+
+/**
+ * Where the YouTube Data API lives. Overridable (`YOUTUBE_API_URL`) so a test
+ * or a verification run points every YouTube call at a local stub; nothing
+ * sets it day to day. verify-cvm defaults it to a dead port.
+ */
+export const youtubeApiUrl = Config.string("YOUTUBE_API_URL").pipe(
+  Config.withDefault("https://www.googleapis.com"),
+  Config.map((url) => url.replace(/\/+$/, ""))
+);
 
 // YouTube requires chunks to be multiples of 256KB
 const CHUNK_SIZE = 256 * 1024 * 16; // 4MB chunks
@@ -15,6 +26,7 @@ const CHUNK_SIZE = 256 * 1024 * 16; // 4MB chunks
  * Returns the upload URI from the Location header.
  */
 const initiateResumableUpload = (opts: {
+  apiUrl: string;
   accessToken: string;
   title: string;
   description: string;
@@ -24,9 +36,7 @@ const initiateResumableUpload = (opts: {
 }) =>
   Effect.tryPromise({
     try: async () => {
-      const url = new URL(
-        "https://www.googleapis.com/upload/youtube/v3/videos"
-      );
+      const url = new URL(`${opts.apiUrl}/upload/youtube/v3/videos`);
       url.searchParams.set("uploadType", "resumable");
       url.searchParams.set("part", "snippet,status");
       url.searchParams.set("notifySubscribers", String(opts.notifySubscribers));
@@ -76,6 +86,9 @@ const initiateResumableUpload = (opts: {
  * Upload a video file to YouTube using the resumable upload protocol.
  * Calls onProgress with the percentage (0-100) after each chunk.
  * Returns the YouTube video ID on success.
+ *
+ * It POSTS, so it runs only in the Sidecar (`SidecarContext`), as a posting
+ * Job that runs once (docs/plans/background-jobs-sidecar.md, decision 5).
  */
 export const uploadVideoToYouTube = (opts: {
   accessToken: string;
@@ -87,6 +100,8 @@ export const uploadVideoToYouTube = (opts: {
   onProgress: (percentage: number) => void;
 }) =>
   Effect.gen(function* () {
+    yield* SidecarContext;
+    const apiUrl = yield* youtubeApiUrl;
     const fileSize = yield* Effect.try({
       try: () => statSync(opts.filePath).size,
       catch: () =>
@@ -99,6 +114,7 @@ export const uploadVideoToYouTube = (opts: {
     opts.onProgress(0);
 
     const uploadUri = yield* initiateResumableUpload({
+      apiUrl,
       accessToken: opts.accessToken,
       title: opts.title,
       description: opts.description,
@@ -209,6 +225,8 @@ export const setYouTubeThumbnail = (opts: {
   thumbnailFilePath: string;
 }) =>
   Effect.gen(function* () {
+    yield* SidecarContext;
+    const apiUrl = yield* youtubeApiUrl;
     const fileBuffer = yield* Effect.tryPromise({
       try: () => fs.promises.readFile(opts.thumbnailFilePath),
       catch: () =>
@@ -221,7 +239,7 @@ export const setYouTubeThumbnail = (opts: {
     yield* Effect.tryPromise({
       try: async () => {
         const res = await fetch(
-          `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(opts.youtubeVideoId)}`,
+          `${apiUrl}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(opts.youtubeVideoId)}`,
           {
             method: "POST",
             headers: {
@@ -252,4 +270,72 @@ export const setYouTubeThumbnail = (opts: {
     yield* Effect.logInfo(
       `YouTube thumbnail set for video ${opts.youtubeVideoId}`
     );
+  });
+
+const getJson = async (url: string, accessToken: string): Promise<unknown> => {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`YouTube answered ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+};
+
+/**
+ * READ-ONLY: the newest upload on the authorised channel titled `title` and
+ * published at or after `since`, or `null` when there is none among the
+ * channel's latest 50 uploads. The sidecar asks this after a YouTube post
+ * was cut off, to tell the author whether it went out before they retry.
+ */
+export const findRecentUpload = (opts: {
+  accessToken: string;
+  title: string;
+  since: Date | null;
+}) =>
+  Effect.gen(function* () {
+    const apiUrl = yield* youtubeApiUrl;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const channels = (await getJson(
+          `${apiUrl}/youtube/v3/channels?part=contentDetails&mine=true`,
+          opts.accessToken
+        )) as {
+          items?: {
+            contentDetails?: { relatedPlaylists?: { uploads?: string } };
+          }[];
+        };
+        const uploads =
+          channels.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+        if (!uploads) throw new Error("the channel has no uploads playlist");
+        const items = (await getJson(
+          `${apiUrl}/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(uploads)}`,
+          opts.accessToken
+        )) as {
+          items?: {
+            snippet?: {
+              title?: string;
+              publishedAt?: string;
+              resourceId?: { videoId?: string };
+            };
+          }[];
+        };
+        // A minute of slack for the two clocks.
+        const since = opts.since ? opts.since.getTime() - 60_000 : 0;
+        const match = (items.items ?? []).find(
+          (item) =>
+            item.snippet?.title === opts.title &&
+            Date.parse(item.snippet.publishedAt ?? "") >= since &&
+            item.snippet.resourceId?.videoId
+        );
+        return match?.snippet?.resourceId?.videoId
+          ? { videoId: match.snippet.resourceId.videoId }
+          : null;
+      },
+      catch: (e) =>
+        new YouTubeUploadError({
+          message: e instanceof Error ? e.message : String(e),
+          code: "lookup_failed",
+        }),
+    });
   });

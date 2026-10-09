@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1 (the skeleton) and 2 (job events in the Upload Manager; Video export) are done. Batch 3 (the vertical Shorts render; Batch export) is done too: section 7.6. Matt's decisions are in section 6;
+**Status:** Batches 1-3 are done; batch 4 (posting) is in progress (section 7.7). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -467,3 +467,59 @@ Left out, on purpose:
   toast, with its log — where today it showed nothing at all.
 - A Batch export's `title` ("Export all: <Course>") is new: a Job needs one for
   its log and its failure toast.
+
+### 7.7 What batch 4 built (first PR: the posting rule, YouTube and Shorts)
+
+**Decision 5 is enforced in four places**, so a post cannot run twice by
+mistake:
+
+1. **Types.** A posting kind is defined with `definePostingJobKind`
+   (`sidecar/job-kind.ts`), which takes no lane or attempts: it always gets
+   `POSTING_JOB_POLICY` (`maxAttempts: 1`, a literal type, and `posting:
+true`). `defineJobKind` refuses `posting: true`. Both are pinned with
+   `@ts-expect-error` in the guard test.
+2. **The sidecar.** A deliberate stop never puts a posting Job back
+   (`settle` skips `returnJobToQueue` for it); it ends `interrupted`. Settling
+   and recovery pass `mayRetry: false` / `neverRetryKinds` for posting kinds,
+   so even a row that claims 3 attempts is never retried on its own.
+3. **The database rule.** `settleFailure` takes `mayRetry`; only `retryJob`
+   (the author's **Retry**, `POST /api/jobs/<id>/retry`) runs a post again —
+   the same row as `attempt + 1`, with `max_attempts` set to that attempt.
+   Retry is refused for kinds that retry on their own, for unfinished Jobs,
+   and when the Job's dependency did not succeed.
+4. **The guard test** (`sidecar/posting-kinds.test.ts`): every posting type
+   in `POSTING_KIND_NAMES` that is registered is a posting kind with 1
+   attempt; the browser's list (`POSTING_JOB_KINDS`) matches; and, on a real
+   sidecar over PGlite: a failing post runs once; a post cut off by a stop or
+   by a crash ends `interrupted`, is never re-run, and is checked once; Retry
+   runs it exactly once more; a failed dependency fails it unrun.
+
+The browser retried a failed post up to 3 times (section 7.1). **That is
+removed on purpose.**
+
+**"Interrupted — check before retrying".** After recovery, the sidecar looks
+for every interrupted post with no `post-check` Job Event yet and asks the
+kind's `checkPosted`, read-only (30 s timeout; a failure says `unknown`).
+YouTube and Shorts look for an upload with the post's title among the
+channel's latest 50 since the run started (`findRecentUpload`). The row
+shows the verdict, a link when found, View log, and Retry — which asks
+"Post again?" first unless the check said it did not go out. Auth failures
+and failed dependencies show no Retry. An interrupted post stays in a new
+tab's snapshot for 24 hours and is never hidden by the idle timer.
+
+**`depends_on` is on the server.** `POST /api/jobs` takes `dependsOn`. The
+jobs reducer holds a post's enqueue until its export's enqueue has
+succeeded (the column is a foreign key), and fails it locally with
+`Dependency "<title>" failed` if that enqueue fails. A queued Job with a
+dependency draws as "Waiting for export".
+
+**Moved:** YouTube upload (`kinds/youtube.ts`) and YouTube Shorts post
+(`kinds/youtube-shorts.ts`). Deleted: `api.videos.$videoId.upload.ts`,
+`api.videos.$videoId.post-youtube-shorts.ts`, `sse-upload-client.ts`,
+`sse-youtube-shorts-client.ts`, and their allowlist entries.
+`uploadVideoToYouTube` and `setYouTubeThumbnail` now ask for
+`SidecarContext`. `YOUTUBE_API_URL` and `GOOGLE_OAUTH_TOKEN_URL` override
+Google's URLs; verify-cvm sets every posting base URL to the discard port
+unless the caller exports a strict loopback URL.
+
+No migration: `interrupted` already existed.

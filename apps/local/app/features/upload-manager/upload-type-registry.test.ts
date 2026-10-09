@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { uploadReducer } from "./upload-reducer";
 import { uploadTypeRegistry } from "./upload-type-registry";
 
@@ -276,80 +276,9 @@ describe("youtube registry entry", () => {
   });
 
   describe("initiate", () => {
-    it("should call startSSEUpload with correct params and wire dispatch", async () => {
-      const { startSSEUpload } = await import("./sse-upload-client");
-      vi.mocked(startSSEUpload);
-
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-
-      const entry: uploadReducer.YouTubeUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-        progress: 0,
-        status: "uploading",
-        uploadType: "youtube",
-        youtubeVideoId: null,
-        errorMessage: null,
-        retryCount: 0,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      const params = {
-        description: "A test video",
-        privacyStatus: "unlisted" as const,
-        thumbnailId: "thumb-1",
-      };
-
-      youtubeConfig.initiate!(
-        "upload-1",
-        entry,
-        params,
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortControllers.has("upload-1")).toBe(true);
-    });
-
-    it("should abort existing controller before starting new one", () => {
-      const dispatch = vi.fn();
-      const abortControllers = new Map<string, AbortController>();
-      const existingController = new AbortController();
-      const abortSpy = vi.spyOn(existingController, "abort");
-      abortControllers.set("upload-1", existingController);
-
-      const entry: uploadReducer.YouTubeUploadEntry = {
-        uploadId: "upload-1",
-        videoId: "video-1",
-        title: "Test Video",
-        progress: 0,
-        status: "uploading",
-        uploadType: "youtube",
-        youtubeVideoId: null,
-        errorMessage: null,
-        retryCount: 0,
-        terminal: false,
-        dependsOn: null,
-        parentUploadId: null,
-      };
-
-      youtubeConfig.initiate!(
-        "upload-1",
-        entry,
-        {
-          description: "desc",
-          privacyStatus: "public" as const,
-          thumbnailId: "thumb-1",
-        },
-        dispatch,
-        abortControllers
-      );
-
-      expect(abortSpy).toHaveBeenCalled();
+    it("has no browser driver: a YouTube upload is a posting Job the Sidecar runs once", () => {
+      expect(youtubeConfig.initiate).toBeNull();
+      expect(uploadTypeRegistry["youtube-shorts"].initiate).toBeNull();
     });
   });
 });

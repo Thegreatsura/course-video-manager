@@ -1,13 +1,13 @@
 import { useContext, useEffect, useCallback } from "react";
 import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { UploadContext } from "./upload-context";
-import { UploadRow } from "./upload-row";
+import { UploadRow, type PostRowControls } from "./upload-row";
 import { allDoneEta, estimateUploads } from "./upload-eta-schedule";
 import { formatRemaining } from "./upload-eta";
 import type { uploadReducer } from "./upload-reducer";
 import { visibleJobRows } from "@/features/jobs/jobs-selectors";
 import { jobIdOfRow } from "@/features/jobs/jobs-reducer";
-import { jobLogHref } from "@/features/jobs/job-wire";
+import { isPostingJobKind, jobLogHref } from "@/features/jobs/job-wire";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -16,6 +16,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useState } from "react";
+
+/**
+ * Failures a Retry cannot fix: a dead or missing key (fix it, then post again
+ * from the page), or an export that never finished (its post never started).
+ */
+const RETRY_CANNOT_HELP: readonly string[] = [
+  "BufferAuthError",
+  "NotAuthenticatedError",
+  "YouTubeAuthError",
+  "AiHeroNotAuthenticatedError",
+  "DependencyFailed",
+];
 
 const CIRCLE_RADIUS = 16;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -29,6 +41,7 @@ export function GlobalUploadProgress() {
     clock,
     jobs,
     dismissJob,
+    retryJob,
     dismissFinishedJobs,
   } = useContext(UploadContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,6 +50,19 @@ export function GlobalUploadProgress() {
   // Background Jobs the Sidecar runs, drawn as rows beside the browser's own.
   const jobEntries = visibleJobRows(jobs);
   const isJob = (uploadId: string) => jobIdOfRow(uploadId) in jobs.jobs;
+  /** A failed or cut-off post's check and Retry (posts never retry alone). */
+  const postControls = (uploadId: string): PostRowControls | null => {
+    const job = jobs.jobs[jobIdOfRow(uploadId)];
+    if (!job || !isPostingJobKind(job.kind)) return null;
+    if (job.status !== "failed" && job.status !== "interrupted") return null;
+    return {
+      interrupted: job.status === "interrupted",
+      check: job.postCheck,
+      onRetry: RETRY_CANNOT_HELP.includes(job.errorTag ?? "")
+        ? null
+        : () => retryJob(job.id),
+    };
+  };
   const hasUploads = uploadEntries.length + jobEntries.length > 0;
 
   // A child task is already counted inside its parent's bar, so only the
@@ -223,6 +249,7 @@ export function GlobalUploadProgress() {
                           ? jobLogHref(jobIdOfRow(upload.uploadId))
                           : null
                       }
+                      post={postControls(upload.uploadId)}
                     />
                     {childrenOf(upload.uploadId).map((child) => (
                       <UploadRow

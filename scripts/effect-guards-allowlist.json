@@ -71,11 +71,6 @@
       "reason": "Range-request loader returning a raw 206/404 Response; the Effect only resolves the export path before plain-Node streaming."
     },
     {
-      "file": "apps/local/app/routes/api.videos.$videoId.upload.ts",
-      "count": 1,
-      "reason": "A thumbnail lookup before the action hands off to createSseResponse; fold it into the SSE program to remove."
-    },
-    {
       "file": "apps/local/app/routes/videos.$videoId.export-to-davinci-resolve.ts",
       "count": 1,
       "reason": "Hand-rolled error pipeline with its own 404 text ('Video not found'); makeAction would echo the error's message instead."

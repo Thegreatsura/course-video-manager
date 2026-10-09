@@ -1,11 +1,13 @@
 import { Data, Effect } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LayerLive } from "@/services/layer.server";
-import type { JobKind } from "./job-kind";
+import { isPostingKind, type JobKind } from "./job-kind";
 import { batchExportJobKind } from "./kinds/batch-export";
 import { exportJobKind } from "./kinds/export";
 import { noopJobKind } from "./kinds/noop";
 import { renderVerticalJobKind } from "./kinds/render-vertical";
+import { youtubeJobKind } from "./kinds/youtube";
+import { youtubeShortsJobKind } from "./kinds/youtube-shorts";
 import type { SidecarContext } from "@/services/sidecar-context";
 
 /**
@@ -17,6 +19,9 @@ export const JOB_KINDS = {
   export: exportJobKind,
   "render-vertical": renderVerticalJobKind,
   "batch-export": batchExportJobKind,
+  // Posting kinds (decision 5): one attempt each, never re-queued.
+  youtube: youtubeJobKind,
+  "youtube-shorts": youtubeShortsJobKind,
 } as const satisfies Record<string, JobKind<JobServices>>;
 
 export type JobKindName = keyof typeof JOB_KINDS;
@@ -98,4 +103,62 @@ export const enqueueJob = Effect.fn("enqueueJob")(function* (input: {
     dependsOn: input.dependsOn,
     subject: input.subject,
   });
+});
+
+export class JobNotFoundError extends Data.TaggedError("JobNotFoundError")<{
+  readonly jobId: string;
+  readonly message: string;
+}> {}
+
+export class JobNotRetryableError extends Data.TaggedError(
+  "JobNotRetryableError"
+)<{ readonly jobId: string; readonly message: string }> {}
+
+/**
+ * The author's Retry. Only a POST waits for one (decision 5): every other
+ * kind retries on its own while it has attempts, and is not run again by
+ * hand. Runs the post once more — the same row, `attempt + 1` — and only if
+ * it failed or was interrupted.
+ */
+export const retryJob = Effect.fn("retryJob")(function* (input: {
+  jobId: string;
+  registry: JobKindRegistry<unknown>;
+}) {
+  const ops = yield* JobOperationsService;
+  const job = yield* ops.getJob(input.jobId);
+  if (!job) {
+    return yield* new JobNotFoundError({
+      jobId: input.jobId,
+      message: `no job ${input.jobId}`,
+    });
+  }
+  const kind = Object.hasOwn(input.registry, job.kind)
+    ? input.registry[job.kind]
+    : undefined;
+  if (!isPostingKind(kind)) {
+    return yield* new JobNotRetryableError({
+      jobId: job.id,
+      message: `a ${job.kind} Job retries on its own; only a post waits for the author's Retry`,
+    });
+  }
+  const retried = yield* ops.retryJob({ jobId: job.id });
+  switch (retried.outcome) {
+    case "queued":
+      return retried.job;
+    case "not-found":
+      return yield* new JobNotFoundError({
+        jobId: job.id,
+        message: `no job ${job.id}`,
+      });
+    case "not-retryable":
+      return yield* new JobNotRetryableError({
+        jobId: job.id,
+        message: `"${job.title}" is ${retried.job.status}: only a failed or interrupted post can be retried`,
+      });
+    case "dependency-not-succeeded":
+      return yield* new JobNotRetryableError({
+        jobId: job.id,
+        message: `"${job.title}" waits on "${retried.dependency}", which did not succeed: start it again from its page`,
+      });
+  }
 });

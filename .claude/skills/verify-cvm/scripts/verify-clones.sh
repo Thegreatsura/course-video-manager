@@ -60,6 +60,29 @@ migrate_run_clone() {
 # OpenAI, Anthropic, remove.bg and AI Hero all fail closed. The services that
 # read these at startup still need SOME value, or every page 500s.
 OFFLINE='verify-cvm-offline'
+
+# Every POSTING service's base URL. A run never reaches the real one: each
+# defaults to port 9 (discard: nothing answers, so a post fails at once), and
+# the only override taken from the caller's environment is a plain loopback
+# URL — http://127.0.0.1:<port> or http://localhost:<port>, a path at most —
+# so a run can post to a local stub and never anywhere else.
+POSTING_URL_VARS=(YOUTUBE_API_URL GOOGLE_OAUTH_TOKEN_URL BUFFER_API_URL S3_ENDPOINT AI_HERO_BASE_URL)
+DISCARD_URL='http://127.0.0.1:9'
+loopback_or_discard() {
+  if [[ "${1:-}" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}(/[A-Za-z0-9._~/-]*)?$ ]]; then
+    printf '%s\n' "$1"
+  else
+    printf '%s\n' "$DISCARD_URL"
+  fi
+}
+posting_urls_env() {
+  local v
+  for v in "${POSTING_URL_VARS[@]}"; do
+    printf '%s=%s\n' "$v" "$(loopback_or_discard "${!v:-}")"
+  done
+}
+mapfile -t POSTING_URLS_ENV < <(posting_urls_env)
+
 OFFLINE_SERVICES_ENV=(
   "BUFFER_API_TOKEN=$OFFLINE" "BUFFER_CHANNEL_ID=$OFFLINE"
   "S3_BUCKET=$OFFLINE" "AWS_REGION=us-east-1"
@@ -67,8 +90,9 @@ OFFLINE_SERVICES_ENV=(
   "DROPBOX_APP_KEY=$OFFLINE" "DROPBOX_APP_SECRET=$OFFLINE"
   "GOOGLE_CLIENT_ID=$OFFLINE" "GOOGLE_CLIENT_SECRET=$OFFLINE"
   "OPENAI_API_KEY=$OFFLINE" "ANTHROPIC_API_KEY=$OFFLINE" "REMOVE_BG_API_KEY=$OFFLINE"
-  # Port 9 is discard: nothing answers, so a sync attempt fails at once.
-  "AI_HERO_BASE_URL=http://127.0.0.1:9"
+  # YouTube, Google's token endpoint, Buffer, S3 and AI Hero: the discard
+  # port, or a loopback stub the caller started (POSTING_URL_VARS above).
+  "${POSTING_URLS_ENV[@]}"
 )
 
 # --- stale clones -----------------------------------------------------------

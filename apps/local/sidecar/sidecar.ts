@@ -9,13 +9,15 @@ import {
   type Scope,
 } from "effect";
 import {
+  INTERRUPTED_POST_MESSAGE,
   JobOperationsService,
   type Job,
   type JobFailure,
   type SidecarLease,
 } from "@cvm/core/services/db-job-operations.server";
 import { formatFailureCause } from "@/services/format-failure-cause";
-import type { JobContext } from "./job-kind";
+import { isPostingKind, type JobContext } from "./job-kind";
+import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import { UnknownJobKindError, type JobKindRegistry } from "./job-kinds";
 import { LANE_NAMES, LANES, laneHasRoom, type LaneName } from "./lanes";
@@ -47,6 +49,8 @@ export interface SidecarTiming {
   readonly recoverEveryMs: number;
   /** How long to wait for a live lease held by another sidecar to lapse. */
   readonly lapseWaitMs: number;
+  /** How long one look for an interrupted post at its service may take. */
+  readonly postCheckTimeoutMs: number;
 }
 
 export const SIDECAR_TIMING: SidecarTiming = {
@@ -57,7 +61,10 @@ export const SIDECAR_TIMING: SidecarTiming = {
   pollMs: 1_000,
   recoverEveryMs: 15_000,
   lapseWaitMs: 20_000,
+  postCheckTimeoutMs: 30_000,
 };
+
+export { POST_CHECK_EVENT } from "./post-checks";
 
 export interface SidecarIdentity {
   /** Fresh per process. */
@@ -123,6 +130,14 @@ const INTERRUPTED: JobFailure = {
   tag: "JobInterrupted",
   message: "The sidecar stopped while this job was running",
   cause: "interrupted: the sidecar was stopped, or lost the job's lease",
+};
+
+/** A post cut off by a stop: never re-run on its own (decision 5). */
+const INTERRUPTED_POST: JobFailure = {
+  tag: "JobInterrupted",
+  message: INTERRUPTED_POST_MESSAGE,
+  cause:
+    "interrupted: the sidecar was stopped, or lost the job's lease, mid-post",
 };
 
 const logCause = (what: string) =>
@@ -221,6 +236,9 @@ export const runSidecar = <R>(opts: {
       const runningIn = (lane: LaneName) =>
         [...running.values()].filter((r) => r.lane === lane).length;
 
+      const kindOf = (name: string) =>
+        Object.hasOwn(registry, name) ? registry[name] : undefined;
+
       /**
        * A run of `job` was lost — not stopped on purpose — and has been
        * settled as a failed attempt: let its kind clean up after it.
@@ -230,10 +248,10 @@ export const runSidecar = <R>(opts: {
         kind: string;
         title: string;
       }) => {
-        const kind = Object.hasOwn(registry, job.kind)
-          ? registry[job.kind]
-          : undefined;
-        if (!kind?.afterLostRun) return Effect.void;
+        const kind = kindOf(job.kind);
+        if (!kind || !("afterLostRun" in kind) || !kind.afterLostRun) {
+          return Effect.void;
+        }
         return kind
           .afterLostRun({ id: job.id, title: job.title })
           .pipe(
@@ -258,12 +276,15 @@ export const runSidecar = <R>(opts: {
               ),
           onFailure: (cause) => {
             const interrupted = Cause.isInterruptedOnly(cause);
+            const posting = isPostingKind(kindOf(job.kind));
             // A stop on purpose (a signal: `tsx watch` restarting after an
             // edit, Ctrl-C, verify-cvm's cleanup) is not the Job failing, so
             // it costs no attempt: the Job goes back to the queue as it was.
             // A sidecar that dies instead is settled by recovery, which does
             // spend one — as a dropped stream did in the browser.
-            if (interrupted && stopping) {
+            // A POST is never put back (decision 5): it may already have gone
+            // out, so it ends `interrupted` and waits for the author's Retry.
+            if (interrupted && stopping && !posting) {
               return Effect.logWarning(
                 "job interrupted: the sidecar is stopping; it goes back to the queue at the same attempt"
               ).pipe(
@@ -283,23 +304,38 @@ export const runSidecar = <R>(opts: {
             }
             return (
               interrupted
-                ? Effect.logWarning("job interrupted")
+                ? Effect.logWarning(
+                    posting
+                      ? "job interrupted: a post is never run again on its own; it waits for the author's Retry"
+                      : "job interrupted"
+                  )
                 : Effect.logError("job failed", cause)
             ).pipe(
               Effect.zipRight(
                 ops.failJobAttempt({
                   jobId: job.id,
                   holder: identity.holder,
-                  failure: interrupted ? INTERRUPTED : toJobFailure(cause),
+                  failure: interrupted
+                    ? posting
+                      ? INTERRUPTED_POST
+                      : INTERRUPTED
+                    : toJobFailure(cause),
                   interrupted,
+                  mayRetry: !posting,
                 })
               ),
               Effect.flatMap((outcome) =>
                 Effect.logInfo(`job settled: ${outcome}`)
               ),
               // Interrupted while not stopping: this sidecar lost the Job's
-              // lease mid-run. A handler that failed cleaned up itself.
-              Effect.zipRight(interrupted ? afterLostRun(job) : Effect.void)
+              // lease mid-run. A handler that failed cleaned up itself. A
+              // post cut off either way is looked for at its service.
+              Effect.zipRight(
+                interrupted && !stopping ? afterLostRun(job) : Effect.void
+              ),
+              Effect.zipRight(
+                interrupted && posting && !stopping ? checkPosts : Effect.void
+              )
             );
           },
         }).pipe(
@@ -397,27 +433,37 @@ export const runSidecar = <R>(opts: {
       };
 
       // -- Recovery, heartbeats, the lease's renewal --------------------------
-      const recover = ops.recoverExpiredJobs().pipe(
-        Effect.flatMap((recovered) =>
-          Effect.forEach(
-            recovered,
-            (r) =>
-              Effect.logWarning(`job recovered: ${r.outcome}`).pipe(
-                Effect.annotateLogs({ jobId: r.jobId }),
-                Effect.zipRight(
-                  ops.getJob(r.jobId).pipe(
-                    Effect.flatMap((job) =>
-                      job ? afterLostRun(job) : Effect.void
-                    ),
-                    logCause("sidecar: could not read a recovered job")
+      // -- Interrupted posts: did they go out? (`post-checks.ts`) ------------
+      const postChecks = yield* makePostChecks({
+        registry,
+        timeoutMs: timing.postCheckTimeoutMs,
+        wake: feed.wake,
+      });
+      const checkPosts = postChecks.sweep;
+
+      const recover = ops
+        .recoverExpiredJobs({ neverRetryKinds: postChecks.kinds })
+        .pipe(
+          Effect.flatMap((recovered) =>
+            Effect.forEach(
+              recovered,
+              (r) =>
+                Effect.logWarning(`job recovered: ${r.outcome}`).pipe(
+                  Effect.annotateLogs({ jobId: r.jobId }),
+                  Effect.zipRight(
+                    ops.getJob(r.jobId).pipe(
+                      Effect.flatMap((job) =>
+                        job ? afterLostRun(job) : Effect.void
+                      ),
+                      logCause("sidecar: could not read a recovered job")
+                    )
                   )
-                )
-              ),
-            { discard: true }
-          )
-        ),
-        logCause("sidecar: the recovery sweep failed")
-      );
+                ),
+              { discard: true }
+            )
+          ),
+          logCause("sidecar: the recovery sweep failed")
+        );
 
       const heartbeat = Effect.gen(function* () {
         const ids = [...running.keys()];
@@ -507,9 +553,15 @@ export const runSidecar = <R>(opts: {
       yield* Effect.forkScoped(
         Effect.repeat(heartbeat, Schedule.spaced(timing.jobHeartbeatMs))
       );
+      // Recovery may have just ended a post `interrupted`: look for it, in
+      // the background, so a slow service never holds up the lanes.
+      yield* Effect.forkScoped(checkPosts);
       yield* Effect.forkScoped(
         Effect.repeat(
-          Effect.sleep(timing.recoverEveryMs).pipe(Effect.zipRight(recover)),
+          Effect.sleep(timing.recoverEveryMs).pipe(
+            Effect.zipRight(recover),
+            Effect.zipRight(checkPosts)
+          ),
           Schedule.forever
         )
       );

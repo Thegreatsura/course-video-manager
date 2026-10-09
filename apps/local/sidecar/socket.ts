@@ -15,6 +15,7 @@ import {
   type WireJob,
   type WireJobEvent,
 } from "@/features/jobs/job-wire";
+import { isPostingKind } from "./job-kind";
 import { enqueueJob, type JobKindRegistry } from "./job-kinds";
 import { jobLogPath } from "./json-logger";
 import type { SidecarHandle } from "./sidecar";
@@ -36,6 +37,11 @@ import type { SidecarHandle } from "./sidecar";
 
 /** How long a finished Job stays in a new subscriber's snapshot. */
 export const SNAPSHOT_FINISHED_WITHIN_MS = 10 * 60_000;
+/**
+ * An interrupted post waits for the author ("check before retrying"), so a
+ * tab opened the next morning still shows it.
+ */
+export const SNAPSHOT_INTERRUPTED_WITHIN_MS = 24 * 60 * 60_000;
 /** A reconnect further behind than this gets a snapshot instead of a replay. */
 const MAX_REPLAY = 5_000;
 const KEEPALIVE_MS = 15_000;
@@ -79,6 +85,8 @@ const jobEventMessage = (row: JobEventWithJob) =>
  */
 const streamJobEvents = (opts: {
   readonly handle: SidecarHandle;
+  /** The kinds whose interrupted Jobs wait for the author: the posts. */
+  readonly postingKinds: readonly string[];
   readonly lastEventId: number | null;
   readonly write: (text: string) => void;
 }) =>
@@ -99,6 +107,10 @@ const streamJobEvents = (opts: {
       const cursor = yield* ops.latestJobEventId();
       const recent = yield* ops.listRecentJobs({
         finishedWithinMs: SNAPSHOT_FINISHED_WITHIN_MS,
+        interrupted: {
+          kinds: opts.postingKinds,
+          withinMs: SNAPSHOT_INTERRUPTED_WITHIN_MS,
+        },
       });
       opts.write(
         sseMessage(
@@ -339,6 +351,9 @@ export const serveSidecarSocket = (opts: {
         void run(
           streamJobEvents({
             handle,
+            postingKinds: Object.keys(registry).filter((name) =>
+              isPostingKind(registry[name])
+            ),
             lastEventId,
             write: (text) => {
               res.write(text);

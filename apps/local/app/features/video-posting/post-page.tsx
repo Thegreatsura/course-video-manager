@@ -5,7 +5,7 @@ import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
 import { toast } from "@/components/ui/toast";
 import { useFetcher } from "react-router";
 import { UploadContext } from "@/features/upload-manager/upload-context";
-import { findVideoUpload } from "@/features/upload-manager/upload-selectors";
+import { findVideoJobRow } from "@/features/jobs/jobs-selectors";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -101,13 +101,13 @@ export function PostPage({
 
   // Upload state from global context
   const {
-    uploads,
+    jobs,
     startUpload: globalStartUpload,
     startExportUpload,
   } = useContext(UploadContext);
 
-  // Find active upload for this video in global context
-  const activeUpload = findVideoUpload(uploads, videoId);
+  // This Video's YouTube upload: a posting Job the Sidecar runs.
+  const activeUpload = findVideoJobRow(jobs, videoId, "youtube");
 
   // Historical youtubeVideoId from localStorage (hydration-safe: read in useEffect)
   const [storedYoutubeVideoId, setStoredYoutubeVideoId] = useState("");
@@ -126,11 +126,7 @@ export function PostPage({
 
   // Save youtubeVideoId to localStorage when upload succeeds in global context
   useEffect(() => {
-    if (
-      activeUpload?.status === "success" &&
-      activeUpload.uploadType === "youtube" &&
-      activeUpload.youtubeVideoId
-    ) {
+    if (activeUpload?.status === "success" && activeUpload.youtubeVideoId) {
       localStorage.setItem(
         YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId),
         activeUpload.youtubeVideoId
@@ -149,10 +145,7 @@ export function PostPage({
       : "idle";
   const uploadProgress = activeUpload?.progress ?? 0;
   const uploadError = activeUpload?.errorMessage ?? "";
-  const youtubeVideoId =
-    activeUpload?.uploadType === "youtube"
-      ? (activeUpload.youtubeVideoId ?? storedYoutubeVideoId)
-      : storedYoutubeVideoId;
+  const youtubeVideoId = activeUpload?.youtubeVideoId ?? storedYoutubeVideoId;
 
   const generateContent = async (
     mode: "youtube-title" | "youtube-title-single" | "youtube-description"
