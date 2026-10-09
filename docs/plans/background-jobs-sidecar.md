@@ -509,6 +509,15 @@ and failed dependencies show no Retry. An interrupted post stays in a new
 tab's snapshot until the author dismisses it, and is never hidden by the
 idle timer.
 
+**A cut-off post stops for real.** Every request a post sends (YouTube,
+Buffer, S3, AI Hero) takes the fiber's `AbortSignal`, so interrupting the Job
+aborts the request on the wire instead of leaving it to land after the row
+says "interrupted". And a sidecar never recovers a Job it is still running
+(`recoverExpiredJobs`' `stillRunning`): a late heartbeat lets the lease lapse
+while the post goes on, and settling it then let a Retry run the post a
+second time beside it. Only the run that settles a lost run calls
+`afterLostRun`.
+
 **`depends_on` is on the server.** `POST /api/jobs` takes `dependsOn`. The
 jobs reducer holds a post's enqueue until its export's enqueue has
 succeeded (the column is a foreign key), and fails it locally with
