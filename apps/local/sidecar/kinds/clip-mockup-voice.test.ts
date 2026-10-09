@@ -196,6 +196,45 @@ describe("the clip-mockup-voice Job kind", () => {
     expect(again.spoken).toEqual([]);
   });
 
+  it("leaves a Clip Mockup deleted while it is voiced unvoiced, and keeps no WAV for it", async () => {
+    const [id] = await addPending("Deleted mid-Job.");
+    const speech = fakeSpeech();
+    // The author deletes it (archives it) while Kokoro is voicing its line.
+    const deleting: SpeechFake = {
+      spoken: speech.spoken,
+      layer: Layer.succeed(ClipMockupSpeechService, {
+        synthesizeLine: (line: string) =>
+          Effect.promise(() =>
+            testDb
+              .update(schema.clipMockups)
+              .set({ archived: true })
+              .where(eq(schema.clipMockups.id, id!))
+          ).pipe(
+            Effect.zipRight(
+              Effect.flatMap(ClipMockupSpeechService, (s) =>
+                s.synthesizeLine(line)
+              ).pipe(Effect.provide(speech.layer))
+            )
+          ),
+      } as unknown as ClipMockupSpeechService),
+    };
+
+    const exit = await runJob([id!], deleting);
+
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(await readRow(id!)).toMatchObject({
+      archived: true,
+      voiceStatus: "pending",
+      audioPath: null,
+    });
+    const dir = nodePath.join(store, "lineage-1");
+    expect(
+      nodeFs.existsSync(dir)
+        ? nodeFs.readdirSync(dir).filter((f) => f.endsWith(".wav"))
+        : []
+    ).toEqual([]);
+  });
+
   // Marking it failed once no attempt is left is the Sidecar's terminal
   // path (`afterFinalFailure`): clip-mockup-voice-final-failure.test.ts.
   it("leaves the voice pending when an attempt fails", async () => {

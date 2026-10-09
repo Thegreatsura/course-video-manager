@@ -70,7 +70,8 @@ const createClipMockupVoiceOperations = (db: Database) => {
 
   /**
    * The line's voice is on disk: record where, and how long it runs. Only if
-   * the row still says `line`; answers whether it did.
+   * the row still says `line` and is not archived (deleted): answers whether
+   * it did.
    */
   const markVoiceReady = (input: {
     readonly id: string;
@@ -87,7 +88,11 @@ const createClipMockupVoiceOperations = (db: Database) => {
           voiceError: null,
         })
         .where(
-          and(eq(clipMockups.id, input.id), eq(clipMockups.line, input.line))
+          and(
+            eq(clipMockups.id, input.id),
+            eq(clipMockups.line, input.line),
+            eq(clipMockups.archived, false)
+          )
         )
         .returning({ id: clipMockups.id })
     ).pipe(Effect.map((rows) => rows.length > 0));
@@ -160,7 +165,31 @@ const createClipMockupVoiceOperations = (db: Database) => {
         .orderBy(asc(clipMockups.videoId), asc(clipMockups.order))
     );
 
+  /**
+   * Whether any live Clip Mockup of a Video of `lineageId` — in any Version —
+   * plays the WAV at `audioPath`. One that none plays is an orphan.
+   */
+  const isVoiceInUse = (input: {
+    readonly lineageId: string;
+    readonly audioPath: string;
+  }) =>
+    makeDbCall(() =>
+      db
+        .select({ id: clipMockups.id })
+        .from(clipMockups)
+        .innerJoin(videos, eq(videos.id, clipMockups.videoId))
+        .where(
+          and(
+            eq(videos.lineageId, input.lineageId),
+            eq(clipMockups.audioPath, input.audioPath),
+            eq(clipMockups.archived, false)
+          )
+        )
+        .limit(1)
+    ).pipe(Effect.map((rows) => rows.length > 0));
+
   return {
+    isVoiceInUse,
     listClipMockupsToVoice,
     markVoiceReady,
     markVoiceFailed,

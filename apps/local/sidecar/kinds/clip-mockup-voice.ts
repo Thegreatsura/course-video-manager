@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
-import { writeClipMockupFile } from "@/services/clip-mockup-files";
+import {
+  removeClipMockupFile,
+  writeClipMockupFile,
+} from "@/services/clip-mockup-files";
 import { resolveClipMockupSpeeches } from "@/services/resolve-clip-mockup-speech";
 import { CLIP_MOCKUP_VOICING_EVENT } from "@cvm/core/features/clip-mockups/voice-status";
 import { defineJobKind } from "../job-kind";
@@ -19,7 +22,8 @@ import { CLIP_MOCKUP_VOICE_POLICY } from "../retry-policy";
  *
  * Each run READS THE ROWS AFRESH and voices only what is not `ready`, with
  * the words each row says NOW; the row is marked against that line, so a
- * line changed meanwhile is left for the Job its change queued. The WAVs are
+ * line changed meanwhile is left for the Job its change queued, and one
+ * deleted (archived) meanwhile is never marked, nor its new WAV kept. The WAVs are
  * named by a hash of the line, so a second run — a retry, or a Job put back
  * by a deliberate stop — finds the ones that landed on disk and voices only
  * the rest.
@@ -79,18 +83,29 @@ export const clipMockupVoiceJobKind = defineJobKind({
           yield* writeClipMockupFile(file.lineageId, file.audioPath, file.wav);
         }
 
-        let marked = 0;
+        const landed: number[] = [];
         for (const [i, row] of todo.entries()) {
-          const landed = yield* voice.markVoiceReady({
+          const marked = yield* voice.markVoiceReady({
             id: row.id,
             line: row.line,
             speech: voiced[i]!,
           });
-          if (landed) marked++;
+          if (marked) landed.push(i);
+        }
+        // A WAV no row took — its Clip Mockup was deleted, or its words
+        // changed, while it was voiced — is not kept, unless another Clip
+        // Mockup of the Video already plays it.
+        const taken = new Set(landed.map((i) => voiced[i]!.audioPath));
+        for (const file of files) {
+          if (taken.has(file.audioPath)) continue;
+          const inUse = yield* voice.isVoiceInUse(file);
+          if (!inUse) {
+            yield* removeClipMockupFile(file.lineageId, file.audioPath);
+          }
         }
         yield* Effect.logInfo("clip-mockup-voice: done", {
-          ready: marked,
-          changedMeanwhile: todo.length - marked,
+          ready: landed.length,
+          changedOrDeletedMeanwhile: todo.length - landed.length,
         });
       })
     ),
