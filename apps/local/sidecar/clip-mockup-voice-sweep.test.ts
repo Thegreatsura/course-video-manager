@@ -18,7 +18,8 @@ import { sweepUnqueuedVoices } from "./clip-mockup-voice-sweep";
 // A copied Clip Mockup is a new row, with a new id, that no voice Job names:
 // copying a Version (or a Course, or a Video) must not leave one `pending`
 // for ever. A ready one carries its WAV across; the Sidecar's sweep queues a
-// Job for the rest.
+// Job for a pending one. A failed one stays failed: a voice never re-queues
+// on its own, only on the author's `cvm clip-mockup update`.
 // ===========================================================================
 
 let testDb: TestDb;
@@ -52,7 +53,7 @@ const run = <A, E>(
 ) => Effect.runPromise(effect.pipe(Effect.provide(layer)));
 
 describe("copying a Version's Clip Mockups", () => {
-  it("keeps a ready voice's WAV, and queues a Job for one not ready", async () => {
+  it("keeps a ready voice's WAV, leaves a failed one failed, and queues a Job for a pending one", async () => {
     const { courseId, versionId, videoIds } = await seedCourseVersion(testDb, [
       { path: "01-intro", videos: [{}] },
     ]);
@@ -74,6 +75,14 @@ describe("copying a Version's Clip Mockups", () => {
         voiceStatus: "pending",
         order: "a1",
       },
+      {
+        videoId,
+        line: "Gave up on.",
+        imagePath: "c.png",
+        voiceStatus: "failed",
+        voiceError: "Kokoro refused",
+        order: "a2",
+      },
     ]);
 
     const { version } = await run(
@@ -93,6 +102,7 @@ describe("copying a Version's Clip Mockups", () => {
         line: schema.clipMockups.line,
         voiceStatus: schema.clipMockups.voiceStatus,
         audioPath: schema.clipMockups.audioPath,
+        voiceError: schema.clipMockups.voiceError,
       })
       .from(schema.clipMockups)
       .innerJoin(
@@ -107,10 +117,15 @@ describe("copying a Version's Clip Mockups", () => {
       .where(eq(schema.sections.repoVersionId, version.id));
     const ready = copied.find((r) => r.line === "Voiced already.")!;
     const pending = copied.find((r) => r.line === "Still being voiced.")!;
+    const failed = copied.find((r) => r.line === "Gave up on.")!;
 
     expect(ready).toMatchObject({
       voiceStatus: "ready",
       audioPath: "speech-a.wav",
+    });
+    expect(failed).toMatchObject({
+      voiceStatus: "failed",
+      voiceError: "Kokoro refused",
     });
     const live = await testDb
       .select({ params: schema.jobs.params })
