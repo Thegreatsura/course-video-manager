@@ -39,13 +39,16 @@ export interface ClipMockupSpeech {
   readonly durationSeconds: number;
 }
 
-/** One row of a `createClipMockups` run: a moment, or a divider between moments. */
+/**
+ * One row of a `createClipMockups` run: a moment, or a divider between
+ * moments. A moment carries no speech: its voice is made afterwards, by the
+ * `clip-mockup-voice` Job, so it is created `pending`.
+ */
 export type ClipMockupBatchEntry =
   | {
       readonly type: "clipMockup";
       readonly line: string;
       readonly imagePath: string;
-      readonly speech: ClipMockupSpeech;
     }
   | { readonly type: "clipMockupChapter"; readonly name: string };
 
@@ -53,7 +56,13 @@ export type ClipMockupBatchEntry =
 export interface ClipMockupEdit {
   readonly id: string;
   readonly imagePath?: string;
-  readonly say?: { readonly line: string; readonly speech: ClipMockupSpeech };
+  /** New words: the old voice is dropped and the row goes back to `pending`. */
+  readonly say?: { readonly line: string };
+  /**
+   * Put a voice that is not `ready` back to `pending` (clearing its error), so
+   * a new `clip-mockup-voice` Job makes it. A `ready` voice is left alone.
+   */
+  readonly requeueVoice?: boolean;
 }
 
 type ClipMockupRow = typeof clipMockups.$inferSelect;
@@ -140,10 +149,10 @@ const createClipMockupOperations = (db: Database) => {
    * `lockAnimatic` first. Without it, two runs appended to the same Video at
    * the same time read the same last row and made the same keys.
    *
-   * `speech` arrives already MEASURED and already on disk. This service never
-   * synthesises anything and never opens a file: the caller that owns the
-   * machine speaks the line, writes the WAV and hands over the two facts the
-   * row keeps — where it landed, and how long it runs.
+   * Every Clip Mockup is born with its voice `pending`: no `audioPath`, no
+   * `durationSeconds`. This service never synthesises anything and never
+   * opens a file; the `clip-mockup-voice` Job the caller enqueues voices the
+   * line and records it (`ClipMockupVoiceOperationsService`).
    */
   const createClipMockups = Effect.fn("createClipMockups")(function* (
     videoId: string,
@@ -181,10 +190,10 @@ const createClipMockupOperations = (db: Database) => {
             videoId,
             line: entry.line,
             imagePath: entry.imagePath,
-            audioPath: entry.speech.audioPath,
-            durationSeconds: entry.speech.durationSeconds,
-            // Voiced before the row is saved, so it is born ready.
-            voiceStatus: "ready",
+            audioPath: null,
+            durationSeconds: null,
+            // Voiced in the background, after the row is saved.
+            voiceStatus: "pending",
             voiceError: null,
             order,
           })
@@ -201,10 +210,10 @@ const createClipMockupOperations = (db: Database) => {
    * transaction — all of the edits, or none. The rows may belong to different
    * Videos: a round of notes on a Section is one call.
    *
-   * New WORDS travel WITH their speech (`say`): `durationSeconds` is the
-   * measured length of THIS line, and a row whose words say one thing while its
-   * duration measures another would make an Animatic's run-time estimate
-   * quietly wrong. A new frame is only a new `imagePath` — the caller that owns
+   * New WORDS drop the old speech (`say`): the row goes back to a `pending`
+   * voice with no `audioPath` and no `durationSeconds`, so it can never claim a
+   * run time measured off words it no longer says. The caller enqueues the
+   * `clip-mockup-voice` Job that voices the new line. A new frame is only a new `imagePath` — the caller that owns
    * the disk writes the PNG first, and the old one is left where it is, because
    * an orphan PNG costs nothing.
    *
@@ -222,25 +231,29 @@ const createClipMockupOperations = (db: Database) => {
           params: { id: edit.id },
         });
       }
-      yield* makeDbCall(() =>
-        db
-          .update(clipMockups)
-          .set({
-            ...(edit.imagePath === undefined
-              ? {}
-              : { imagePath: edit.imagePath }),
-            ...(edit.say === undefined
-              ? {}
-              : {
-                  line: edit.say.line,
-                  audioPath: edit.say.speech.audioPath,
-                  durationSeconds: edit.say.speech.durationSeconds,
-                  voiceStatus: "ready",
-                  voiceError: null,
-                }),
-          })
-          .where(eq(clipMockups.id, edit.id))
-      );
+      const changes: Partial<typeof clipMockups.$inferInsert> = {
+        ...(edit.imagePath === undefined ? {} : { imagePath: edit.imagePath }),
+        ...(edit.say === undefined
+          ? {}
+          : {
+              line: edit.say.line,
+              audioPath: null,
+              durationSeconds: null,
+              voiceStatus: "pending",
+              voiceError: null,
+            }),
+        ...(edit.say === undefined &&
+        edit.requeueVoice === true &&
+        current.voiceStatus !== "ready"
+          ? { voiceStatus: "pending", voiceError: null }
+          : {}),
+      };
+      // A re-queue of a voice that is already ready changes nothing.
+      if (Object.keys(changes).length > 0) {
+        yield* makeDbCall(() =>
+          db.update(clipMockups).set(changes).where(eq(clipMockups.id, edit.id))
+        );
+      }
       updated.push(yield* requireClipMockup(edit.id));
     }
     return updated;

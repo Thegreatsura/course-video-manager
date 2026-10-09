@@ -20,6 +20,7 @@ import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
 import { sweepStuckClips } from "./stuck-clip-sweep";
+import { sweepUnqueuedVoices } from "./clip-mockup-voice-sweep";
 import { superviseSidecar } from "./supervise";
 
 /**
@@ -148,7 +149,13 @@ const main = async (): Promise<void> => {
             registry: JOB_KINDS,
             timing: SIDECAR_TIMING,
             stop,
-            afterRecovery: sweepStuckClips,
+            // Each sweep on its own: one that fails never skips the other.
+            afterRecovery: sweepStuckClips.pipe(
+              Effect.catchAllCause((cause) =>
+                Effect.logError("sidecar: the stuck-Clip sweep failed", cause)
+              ),
+              Effect.zipRight(sweepUnqueuedVoices)
+            ),
             serve: (handle) =>
               serveSidecarSocket({
                 socket,

@@ -53,9 +53,9 @@ export const CLIP_MOCKUP_PREMOUNT_IN_FRAMES = ANIMATIC_FPS / 2;
  * How long a Clip Mockup with no measured speech is held for.
  *
  * `durationSeconds` is NULL on a Clip Mockup whose voice is not `ready`
- * (migration 0030). Every write still voices the line before saving, so today
- * only a caller that hands over a row it could not measure reaches this; it
- * stops such a row flashing past at one frame while the author reads the
+ * (migration 0030): `cvm clip-mockup add` and `update` leave it `pending` for
+ * the Sidecar's `clip-mockup-voice` Job. This holds such a row on screen
+ * rather than flashing it past at one frame while the author reads the
  * "speech missing" report.
  */
 export const UNVOICED_HOLD_SECONDS = 2;

@@ -41,19 +41,21 @@ const makeVideo = async (id: string) => {
   });
 };
 
-/** The measured speech a caller hands over; the service never makes one. */
-const speech = (audioPath: string, durationSeconds: number) => ({
-  audioPath,
-  durationSeconds,
-});
-
 /** One Clip Mockup entry of a `createClipMockups` run. */
-const moment = (line: string, imagePath: string, durationSeconds = 1) => ({
+const moment = (line: string, imagePath: string) => ({
   type: "clipMockup" as const,
   line,
   imagePath,
-  speech: speech(`${imagePath}.wav`, durationSeconds),
 });
+
+/** Give a row the voice the Sidecar's Job would have recorded. */
+const voiceReady = (id: string) =>
+  Effect.promise(() =>
+    testDb
+      .update(clipMockups)
+      .set({ voiceStatus: "ready", audioPath: "old.wav", durationSeconds: 3 })
+      .where(eq(clipMockups.id, id))
+  );
 
 /** Create one Clip Mockup and hand back its row. */
 const createOne = (videoId: string, line: string, imagePath: string) =>
@@ -67,14 +69,14 @@ const createOne = (videoId: string, line: string, imagePath: string) =>
   );
 
 describe("createClipMockups", () => {
-  it.effect("appends in the order given, carrying the measured speech", () =>
+  it.effect("appends in the order given, each voice pending", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeVideo("video-1"));
       const ops = yield* ClipMockupOperationsService;
 
       const created = yield* ops.createClipMockups("video-1", [
-        moment("Here's the problem.", "a.png", 2.75),
-        moment("And here's the fix.", "b.png", 1.5),
+        moment("Here's the problem.", "a.png"),
+        moment("And here's the fix.", "b.png"),
       ]);
 
       const first = created[0]!;
@@ -82,11 +84,10 @@ describe("createClipMockups", () => {
       if (first.type !== "clipMockup") return;
       expect(first.line).toBe("Here's the problem.");
       expect(first.imagePath).toBe("a.png");
-      expect(first.audioPath).toBe("a.png.wav");
-      // A float, never rounded: an Animatic's run time is the sum of these.
-      expect(first.durationSeconds).toBe(2.75);
-      // Voiced before it is saved, so it is born ready.
-      expect(first.voiceStatus).toBe("ready");
+      // Voiced AFTER it is saved, by the Sidecar: no speech yet.
+      expect(first.voiceStatus).toBe("pending");
+      expect(first.audioPath).toBeNull();
+      expect(first.durationSeconds).toBeNull();
       expect(first.voiceError).toBeNull();
       expect(first.archived).toBe(false);
 
@@ -162,28 +163,56 @@ describe("listClipMockupsByVideoId", () => {
 });
 
 describe("updateClipMockups", () => {
-  it.effect("replaces the words and their speech in one write", () =>
+  it.effect("new words drop the old speech and make the voice pending", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeVideo("video-1"));
       const ops = yield* ClipMockupOperationsService;
       const row = yield* createOne("video-1", "Too long by half.", "a.png");
+      yield* voiceReady(row.id);
 
       const [updated] = yield* ops.updateClipMockups([
-        {
-          id: row.id,
-          say: { line: "Shorter.", speech: speech("new.wav", 1.125) },
-        },
+        { id: row.id, say: { line: "Shorter." } },
       ]);
 
       expect(updated!.line).toBe("Shorter.");
-      expect(updated!.audioPath).toBe("new.wav");
-      expect(updated!.durationSeconds).toBe(1.125);
+      // No run time measured off words it no longer says.
+      expect(updated!.audioPath).toBeNull();
+      expect(updated!.durationSeconds).toBeNull();
+      expect(updated!.voiceStatus).toBe("pending");
       // The picture is untouched: only the words and their voicing moved.
       expect(updated!.imagePath).toBe("a.png");
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("new words with their speech make a failed voice ready", () =>
+  it.effect("re-queues a failed voice, and leaves a ready one alone", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeVideo("video-1"));
+      const ops = yield* ClipMockupOperationsService;
+      const failed = yield* createOne("video-1", "Broke.", "a.png");
+      const ready = yield* createOne("video-1", "Fine.", "b.png");
+      yield* voiceReady(ready.id);
+      yield* Effect.promise(() =>
+        testDb
+          .update(clipMockups)
+          .set({ voiceStatus: "failed", voiceError: "Kokoro was down" })
+          .where(eq(clipMockups.id, failed.id))
+      );
+
+      const [requeued, untouched] = yield* ops.updateClipMockups([
+        { id: failed.id, requeueVoice: true },
+        { id: ready.id, requeueVoice: true },
+      ]);
+
+      expect(requeued!.voiceStatus).toBe("pending");
+      expect(requeued!.voiceError).toBeNull();
+      expect(requeued!.line).toBe("Broke.");
+      expect(untouched!.voiceStatus).toBe("ready");
+      expect(untouched!.audioPath).toBe("old.wav");
+      expect(untouched!.durationSeconds).toBe(3);
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("new words make a failed voice pending again", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => makeVideo("video-1"));
       const ops = yield* ClipMockupOperationsService;
@@ -196,10 +225,10 @@ describe("updateClipMockups", () => {
       );
 
       const [updated] = yield* ops.updateClipMockups([
-        { id: row.id, say: { line: "Fixed.", speech: speech("f.wav", 1) } },
+        { id: row.id, say: { line: "Fixed." } },
       ]);
 
-      expect(updated!.voiceStatus).toBe("ready");
+      expect(updated!.voiceStatus).toBe("pending");
       expect(updated!.voiceError).toBeNull();
     }).pipe(Effect.provide(testLayer))
   );
@@ -209,6 +238,7 @@ describe("updateClipMockups", () => {
       yield* Effect.promise(() => makeVideo("video-1"));
       const ops = yield* ClipMockupOperationsService;
       const row = yield* createOne("video-1", "Keep me.", "a.png");
+      yield* voiceReady(row.id);
 
       const [updated] = yield* ops.updateClipMockups([
         { id: row.id, imagePath: "b.png" },
@@ -216,7 +246,8 @@ describe("updateClipMockups", () => {
 
       expect(updated!.imagePath).toBe("b.png");
       expect(updated!.line).toBe("Keep me.");
-      expect(updated!.audioPath).toBe(row.audioPath);
+      expect(updated!.audioPath).toBe("old.wav");
+      expect(updated!.voiceStatus).toBe("ready");
     }).pipe(Effect.provide(testLayer))
   );
 

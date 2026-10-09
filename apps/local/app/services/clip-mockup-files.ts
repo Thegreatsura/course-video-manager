@@ -200,6 +200,14 @@ export const writeClipMockupFile = (
     return full;
   });
 
+/** Delete a stored frame or speech file; one already gone is fine. */
+export const removeClipMockupFile = (lineageId: string, relativePath: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const full = yield* resolveClipMockupPath(lineageId, relativePath);
+    yield* fs.remove(full, { force: true });
+  });
+
 /**
  * Pick the name a newly-added frame is stored under.
  *

@@ -20,10 +20,11 @@ import { speakLinesInDaemon } from "./clip-mockup-daemon/client";
  * succeeded — so a frame that fails to capture while the lines are being
  * voiced leaves no WAV behind either.
  *
- * Its callers are `cvm clip-mockup add` and `update`, a whole batch at a time.
- * It lives under `app/services/` — the code the CLI and the web app may both
- * reach — rather than inside a CLI verb module, so a web surface that must
- * voice a line can call the same path instead of re-voicing the line
+ * Its caller is the Sidecar's `clip-mockup-voice` Job
+ * (`sidecar/kinds/clip-mockup-voice.ts`), a whole `cvm clip-mockup add` or
+ * `update` batch at a time; the CLI itself no longer voices anything. It
+ * lives under `app/services/` rather than inside the Job, so any surface that
+ * must voice a line calls the same path instead of re-voicing the line
  * differently (#1672).
  */
 

@@ -26,15 +26,31 @@ is checked first and lands together or not at all. Entry keys are in
 
 Rows carry imagePath / audioPath (relative to {CLIP_MOCKUP_DIR}/{lineageId}/)
 and imageFile / audioFile (the same files as absolute paths — read these).
+
+THE VOICE IS MADE IN THE BACKGROUND. 'add' and 'update' return once the frames
+and rows are written; each line is voiced afterwards by a 'clip-mockup-voice'
+Job that this machine's Sidecar runs (Kokoro, through the Clip Mockup
+daemon). Every Clip Mockup row says where its voice is:
+  voiceStatus        "pending" (queued), "ready" (the WAV is written), or
+                     "failed" (every attempt spent; voiceError says why).
+  durationSeconds    the WAV's measured length once "ready"; until then a
+                     GUESS from the line's word count — still summable.
+  durationEstimated  true while durationSeconds is that guess.
+  audioPath / audioFile  null until "ready".
+A failed voice is retried by 'update' on that Clip Mockup (any change, or the
+same "say" again). Do not wait for voices before you report: give the run
+time and say how many are still pending.
+
 An 'update' entry, 'move' and 'delete' address a Clip Mockup by id or by
 Video + position (counting from 1, as 'list' and the player show it).
 
-Exit codes: 2 not found; 3 invalid input (naming the entry); 4 a frame or a
-line could not be made (_tag FrameCaptureError / SpeechSynthesisError) — no
-row is written; 7 not the author's machine.
+Exit codes: 2 not found; 3 invalid input (naming the entry); 4 a frame could
+not be made (_tag FrameCaptureError) — no row is written; 7 not the author's
+machine. A voice that cannot be made never fails the command: it shows as
+voiceStatus "failed" on the row.
 
-LOCAL-ONLY. Frames, speech and the headless browser are on the author's
-machine (CLIP_MOCKUP_DIR). Elsewhere every verb is refused before doing
+LOCAL-ONLY. Frames, voices and the headless browser are on the author's
+machine (CLIP_MOCKUP_DIR), and so is the Sidecar that voices the lines. Elsewhere every verb is refused before doing
 anything: _tag "LocalOnlyCommandError", exit 7. Stop; do not retry.
 
 Examples:
@@ -107,8 +123,9 @@ Each entry is ONE of:
                                                above the moments after it
 
   "say"     the spoken line. One line per Clip Mockup: it maps to the Clip it
-            will become. Must not be empty. It is SPOKEN, and the WAV written
-            next to the frame. The same line twice is only voiced once.
+            will become. Must not be empty. It is SPOKEN in the background,
+            and the WAV written next to the frame. The same line twice is only
+            voiced once.
   "html"    an HTML page, rendered in a headless Chromium at exactly 1920x1080;
             the screenshot becomes the frame. Prefer this: write the page, look
             at the result, rewrite the page. A page that will not render is a
@@ -122,17 +139,23 @@ Each entry is ONE of:
 
 An unknown key, a missing "say", both or neither of "html" / "image", or a
 source file that does not exist is invalid input (exit 3), naming the entry —
-and it is found BEFORE any frame is captured or line voiced. A capture or
-speech failure (exit 4) creates no row.
+and it is found BEFORE any frame is captured. A capture failure (exit 4)
+creates no row.
+
+Returns AT ONCE — it does not wait for any voice. Every line's voice is
+queued as ONE 'clip-mockup-voice' Job for this machine's Sidecar.
 
 Prints every row it wrote as NDJSON, in file order, each with a 'type' —
 'clipMockup' (with its id, line, imagePath, audioPath, imageFile, audioFile,
-durationSeconds and order) or 'clipMockupChapter' (with its id and name).
-imagePath and audioPath are relative to {CLIP_MOCKUP_DIR}/{lineageId}/;
-imageFile and audioFile are the same files as ABSOLUTE paths. audioPath is
-named by a hash of the line, so two moments saying the same words share a WAV,
-and durationSeconds is that WAV's measured length (a float — sum it for a
-Video's run time).
+durationSeconds, durationEstimated, voiceStatus, voiceError and order) or
+'clipMockupChapter' (with its id and name). A new row's voiceStatus is
+"pending": audioPath and audioFile are null, and durationSeconds is a guess
+from the line's word count (durationEstimated: true) — sum it for a Video's
+run time all the same. Once the voice is "ready", 'list' and 'get' show the
+WAV (audioPath, named by a hash of the line, so two moments saying the same
+words share one) and its measured length. imagePath and audioPath are
+relative to {CLIP_MOCKUP_DIR}/{lineageId}/; imageFile and audioFile are the
+same files as ABSOLUTE paths.
 
 Want to see a frame before it becomes a row? 'cvm clip-mockup capture' renders
 pages to PNGs and writes nothing else.
@@ -143,13 +166,14 @@ Claude Code, browser, title card, diagram). The stylesheet is the contract;
 the markup is not. Copy the example nearest your moment, ALONGSIDE house.css,
 and rewrite it freely.
 
-Frames and speech are made by the CLIP MOCKUP DAEMON: one background process
+Frames and voices are made by the CLIP MOCKUP DAEMON: one background process
 on this machine holding one Chromium and one Kokoro-82M voice (af_heart) on
 the GPU, shared by every call. The first call starts it; it stops after five
 idle minutes; its log is in ~/.cache/cvm/clip-mockup-daemon/. Work from other
-calls queues first come first served, so give 'add' a generous timeout. There
-is no CPU fallback: a GPU that will not load fails with exit 4, and the
-message carries the one-time install command.
+calls queues first come first served, so give 'add' a generous timeout when it
+captures many "html" pages. The voices go through the same daemon, from the
+Sidecar: there is no CPU fallback, so a GPU that will not load leaves each
+voice "failed", its voiceError carrying the one-time install command.
 
 The browser binary is a one-off install on this machine:
   pnpm --filter @cvm/local exec playwright install chromium
@@ -170,7 +194,9 @@ export const LIST_HELP = `READS. List a Video's full, ordered Animatic as NDJSON
 object per line; an empty Animatic prints nothing and exits 0). Requires
 --video <videoId>.
 
-Rows sort by 'order' ascending — playback order. Archived (deleted) Clip
+Rows sort by 'order' ascending — playback order. Each Clip Mockup row says
+where its voice is (voiceStatus "pending" / "ready" / "failed", voiceError),
+and durationEstimated is true while its durationSeconds is a word-count guess. Archived (deleted) Clip
 Mockups are always excluded; there is no flag to include them.
 
 The line's POSITION in this stream, counted from 1, is how the author addresses
@@ -206,13 +232,15 @@ ABSOLUTE paths, so you can open a frame without knowing where the store is.
 
 Without --with-chapters the stream is Clip Mockups only, with no 'type' or
 'position' field. So every pipeline written against it keeps working,
-including the run-time sum below.
+including the run-time sum below. A run time with voices still pending is
+partly a guess: count them with the last example.
 
 Examples:
   cvm clip-mockup list --video vid_123
   cvm clip-mockup list --video vid_123 | jq -r .line
   cvm clip-mockup list --video vid_123 | jq -s length
   cvm clip-mockup list --video vid_123 | jq -s 'map(.durationSeconds) | add'
+  cvm clip-mockup list --video vid_123 | jq -s 'map(select(.voiceStatus != "ready")) | length'
   cvm clip-mockup list --video vid_123 --with-chapters
   cvm clip-mockup list --video vid_123 --with-chapters | jq -r '"\\(.position // "--") \\(.line // .name)"'`;
 
@@ -266,10 +294,12 @@ Each entry names ONE Clip Mockup, and at least one change:
                    screen. Every position is counted in the list as it is
                    BEFORE this call, so one entry never shifts another.
   "say"            the new spoken line. Must not be empty. New words are new
-                   speech: the line is RE-SYNTHESISED and 'durationSeconds'
-                   replaced in the same write, so the row can never claim a
-                   run time for words it no longer says. A line this Video
-                   has already voiced reuses that WAV.
+                   speech: the old voice is dropped in the same write and the
+                   row goes back to voiceStatus "pending" (durationSeconds a
+                   word-count guess again), so it can never claim a run time
+                   for words it no longer says. The Sidecar voices it after
+                   this command returns; a line this Video has already voiced
+                   reuses that WAV.
   "html"           a new page, captured at 1920x1080 exactly as 'add' does.
                    This is the redraw loop: "number 14 is too dense" — edit the
                    page, list it here.
@@ -286,8 +316,15 @@ that changes nothing, "html" beside "image", a missing source file, a position
 outside its list, and two entries for the same Clip Mockup. An unknown or
 archived id is a not-found (exit 2). All the edits land together, or none do.
 
+A Clip Mockup whose voice FAILED is queued again by any entry that names it —
+even one that only swaps its picture, or repeats its "say" unchanged. One
+still pending is queued again only if no Job already queued or running will
+voice its line: a new picture alone queues nothing. Returns AT ONCE: no voice
+is waited for.
+
 Prints every updated row as NDJSON, in file order, with imageFile and
-audioFile (absolute paths) beside imagePath and audioPath.
+audioFile (absolute paths) beside imagePath and audioPath, and its voice
+(voiceStatus, voiceError, durationEstimated).
 
 Example — notes.json:
   [

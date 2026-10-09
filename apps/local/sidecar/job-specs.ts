@@ -2,10 +2,15 @@ import { Data, Effect, Schema, type ParseResult } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { LiveJob } from "@cvm/core/services/db-job-enqueue.server";
 import { liveJobCoversClips } from "@/features/video-editor/transcribe-clips-response";
+import {
+  liveVoiceJobCovers,
+  type ClipMockupVoiceRequest,
+} from "@cvm/core/features/clip-mockups/voice-job-cover";
 import { isPostingKind } from "./job-kind";
 import { JOB_PARAMS } from "./job-params";
 import type { LaneName } from "./lanes";
 import {
+  CLIP_MOCKUP_VOICE_POLICY,
   CLIP_TRANSCRIPTION_POLICY,
   COURSE_DUPLICATE_POLICY,
   FOOTAGE_TRANSCRIPTION_POLICY,
@@ -101,6 +106,14 @@ export const JOB_KIND_SPECS = {
     COURSE_DUPLICATE_POLICY,
     JOB_PARAMS["duplicate-course"]
   ),
+  // One live Job per Clip Mockup and line: a request whose lines a live Job
+  // will voice (it has not read its rows yet, or is voicing those very
+  // words) adds none. New words always get a Job of their own.
+  "clip-mockup-voice": {
+    ...spec(CLIP_MOCKUP_VOICE_POLICY, JOB_PARAMS["clip-mockup-voice"]),
+    coveredBy: (params, live) =>
+      liveVoiceJobCovers(params as ClipMockupVoiceRequest, live),
+  },
   publish: spec(UPLOAD_MANAGER_POLICIES.publish, JOB_PARAMS.publish),
   youtube: spec(POSTING_JOB_POLICY, JOB_PARAMS.youtube),
   "youtube-shorts": spec(POSTING_JOB_POLICY, JOB_PARAMS["youtube-shorts"]),
