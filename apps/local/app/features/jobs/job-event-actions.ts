@@ -50,7 +50,7 @@ const postCheckOf = (
  * One Job Event off the wire as a reducer action, or `null` for a type this
  * tab has no use for. `event.type` is what `db-job-operations` and the
  * handlers write: `queued`, `started`, `stage`, `progress`, `retrying`,
- * `requeued`, `succeeded`, `failed`, `interrupted`.
+ * `requeued`, `succeeded`, `failed`, `interrupted`, `dismissed`.
  */
 export const toJobsAction = (
   message: JobEventMessage
@@ -115,6 +115,8 @@ export const toJobsAction = (
         message: errorMessageOf(data),
         tag: errorTagOf(data),
       };
+    case "dismissed":
+      return { ...base, type: "job-dismissed" };
     case "posted":
       return { ...base, type: "job-posted", result: { ...data } };
     case "post-check": {

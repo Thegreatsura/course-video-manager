@@ -311,6 +311,58 @@ describe("jobsReducer", () => {
     expect(visibleJobs(tester.getState())).toEqual([]);
   });
 
+  it("a settled Job's Dismiss is kept on the server, a running one's is not, and a dismissal from another tab hides it here", () => {
+    const failedJob = wireJob({ id: "failed", title: "Broke" });
+    const runningJob = wireJob({ id: "running", title: "Going" });
+    const tester = newTester()
+      .send(streamed(wireEvent("succeeded")))
+      .send(
+        streamed(
+          {
+            ...wireEvent("failed", { error: { message: "x" } }),
+            jobId: "failed",
+          },
+          failedJob
+        )
+      )
+      .send(streamed({ ...wireEvent("started"), jobId: "running" }, runningJob))
+      // The idle timer takes only the succeeded Job: a failure needs Matt.
+      .send({ type: "idle-timeout-elapsed" });
+    expect(visibleJobs(tester.getState()).map((j) => j.id)).toEqual([
+      "failed",
+      "running",
+    ]);
+    expect(tester.getEffects().at(-1)).toEqual({
+      type: "dismiss-jobs",
+      ids: [JOB_ID],
+    });
+
+    const before = tester.getEffects().length;
+    tester.send({ type: "press-dismiss", id: "running" });
+    expect(tester.getEffects()).toHaveLength(before);
+
+    tester.send({ type: "press-clear-finished" });
+    expect(tester.getEffects().at(-1)).toEqual({
+      type: "dismiss-jobs",
+      ids: ["failed"],
+    });
+
+    const elsewhere = newTester()
+      .send(
+        streamed(
+          {
+            ...wireEvent("failed", { error: { message: "x" } }),
+            jobId: "failed",
+          },
+          failedJob
+        )
+      )
+      .send(
+        streamed({ ...wireEvent("dismissed"), jobId: "failed" }, failedJob)
+      );
+    expect(visibleJobs(elsewhere.getState())).toEqual([]);
+  });
+
   describe("a vertical Shorts render", () => {
     const renderJob = wireJob({ kind: "render-vertical", title: "My Short" });
     const render = (type: string, data: Record<string, unknown> = {}) =>

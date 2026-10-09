@@ -5,6 +5,8 @@ import path from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { afterEach, beforeAll, beforeEach } from "vitest";
 import { Deferred, Effect, Fiber, Layer, Logger, Schema } from "effect";
+import { sql } from "drizzle-orm";
+import { jobEvents, jobs } from "@cvm/core/db/schema";
 import {
   JobOperationsService,
   type Job,
@@ -484,6 +486,41 @@ describe("the sidecar", () => {
         // Every live message carries its event's id, for a reconnect.
         const last = stream.messages.at(-1);
         expect(last?.id).toBe(String(last?.data.event.id));
+
+        yield* Deferred.succeed(stop, "test over");
+        yield* Fiber.join(fiber);
+      }).pipe(Effect.scoped, Effect.provide(layer()))
+  );
+
+  it.live(
+    "never streams yesterday's events to the morning's first subscriber",
+    () =>
+      Effect.gen(function* () {
+        const { stop, fiber, socket } = yield* startSidecar(JOB_KINDS);
+        const old = yield* enqueue(JOB_KINDS, "noop", {}, "yesterday");
+        yield* waitForJob(old.id, finished);
+        // Everything about it happened two days ago.
+        yield* Effect.promise(() =>
+          testDb.execute(
+            sql`UPDATE ${jobEvents} SET at = at - interval '2 days' WHERE ${jobEvents.jobId} = ${old.id}`
+          )
+        );
+        yield* Effect.promise(() =>
+          testDb.execute(
+            sql`UPDATE ${jobs} SET finished_at = finished_at - interval '2 days' WHERE ${jobs.id} = ${old.id}`
+          )
+        );
+
+        const stream = yield* subscribe(socket);
+        const today = yield* enqueue(JOB_KINDS, "noop", {}, "today");
+        yield* stream.waitFor((all) =>
+          eventTypes(all, today.id).includes("succeeded")
+        );
+        const snapshot = stream.messages.find((m) => m.event === "snapshot");
+        expect(snapshot?.data.jobs.map((j: any) => j.job.title)).not.toContain(
+          "yesterday"
+        );
+        expect(eventTypes(stream.messages, old.id)).toEqual([]);
 
         yield* Deferred.succeed(stop, "test over");
         yield* Fiber.join(fiber);

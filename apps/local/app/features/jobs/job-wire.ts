@@ -4,8 +4,9 @@ import { Either, Schema } from "effect";
  * What travels from the Sidecar to a browser tab, through the app server's
  * `/api/jobs/events` proxy: Server-Sent Events, each a JSON `data` line.
  *
- * - `snapshot` (first, on a fresh connection): every Job not yet finished and
- *   every one that finished in the last few minutes, each with all its Job
+ * - `snapshot` (first, on a fresh connection): every Job not yet finished,
+ *   every failed or interrupted one not dismissed, and every one that
+ *   succeeded in the last 24 hours not dismissed, each with all its Job
  *   Events. Its SSE `id` is the newest event id at that moment.
  * - `job-event` (then, live): one Job Event and the Job it belongs to. Its SSE
  *   `id` is the event's, so a tab that reconnects resumes after it
@@ -100,3 +101,6 @@ export const isPostingJobKind = (kind: string) =>
 /** Where the author's Retry of a post is sent. */
 export const jobRetryHref = (jobId: string) =>
   `/api/jobs/${encodeURIComponent(jobId)}/retry`;
+
+/** Where the author's Dismiss and "Clear finished" go: `{ jobIds }`. */
+export const JOBS_DISMISS_HREF = "/api/jobs/dismiss";
