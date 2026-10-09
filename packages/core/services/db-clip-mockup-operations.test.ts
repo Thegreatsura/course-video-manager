@@ -3,7 +3,8 @@ import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
 import { ClipMockupOperationsService } from "./db-clip-mockup-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
-import { videos } from "../db/schema.js";
+import { eq } from "drizzle-orm";
+import { clipMockups, videos } from "../db/schema.js";
 import {
   createTestDb,
   truncateAllTables,
@@ -84,6 +85,9 @@ describe("createClipMockups", () => {
       expect(first.audioPath).toBe("a.png.wav");
       // A float, never rounded: an Animatic's run time is the sum of these.
       expect(first.durationSeconds).toBe(2.75);
+      // Voiced before it is saved, so it is born ready.
+      expect(first.voiceStatus).toBe("ready");
+      expect(first.voiceError).toBeNull();
       expect(first.archived).toBe(false);
 
       const rows = yield* ops.listClipMockupsByVideoId("video-1");
@@ -176,6 +180,27 @@ describe("updateClipMockups", () => {
       expect(updated!.durationSeconds).toBe(1.125);
       // The picture is untouched: only the words and their voicing moved.
       expect(updated!.imagePath).toBe("a.png");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("new words with their speech make a failed voice ready", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => makeVideo("video-1"));
+      const ops = yield* ClipMockupOperationsService;
+      const row = yield* createOne("video-1", "Broke.", "a.png");
+      yield* Effect.promise(() =>
+        testDb
+          .update(clipMockups)
+          .set({ voiceStatus: "failed", voiceError: "Kokoro was down" })
+          .where(eq(clipMockups.id, row.id))
+      );
+
+      const [updated] = yield* ops.updateClipMockups([
+        { id: row.id, say: { line: "Fixed.", speech: speech("f.wav", 1) } },
+      ]);
+
+      expect(updated!.voiceStatus).toBe("ready");
+      expect(updated!.voiceError).toBeNull();
     }).pipe(Effect.provide(testLayer))
   );
 

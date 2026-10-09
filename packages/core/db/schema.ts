@@ -19,6 +19,7 @@ import { createTable } from "./table-creator.js";
 import type { BulletPanelBullet } from "../features/videos/bullet-panel.js";
 import type { BeatKind } from "../features/beats/beat-kinds.js";
 import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
+import type { ClipMockupVoiceStatus } from "../features/clip-mockups/voice-status.js";
 export { createTable } from "./table-creator.js";
 
 const varcharCollateC = customType<{
@@ -653,16 +654,24 @@ export const clipMockups = createTable(
     // The synthesised speech for `line`: a WAV beside the frame, and relative
     // to the same `{CLIP_MOCKUP_DIR}/{video.lineageId}/` directory. Named by a
     // hash of the line, the voice and the model, so two Clip Mockups that say
-    // the same words share one file. NOT NULL, like `line` and `imagePath`: a
-    // Clip Mockup with no voicing is not a thing, so there is no silent row to
-    // make room for (#1670).
-    audioPath: text("audio_path").notNull(),
+    // the same words share one file. NULL until the voice is made: set exactly
+    // when `voiceStatus` is 'ready' (migration 0030 relaxed the NOT NULL).
+    audioPath: text("audio_path"),
     // Seconds of speech for `line`, measured off the synthesised audio — a
     // FLOAT, not whole seconds: it is summed across a whole Animatic to
     // estimate a Lesson's run time, and rounding each line would drift by
-    // minutes. NOT NULL for the same reason as `audioPath` — the words and
-    // their measured length are written as one.
-    durationSeconds: doublePrecision("duration_seconds").notNull(),
+    // minutes. NULL alongside `audioPath` — the voice and its measured length
+    // are written as one.
+    durationSeconds: doublePrecision("duration_seconds"),
+    // Where the voice for `line` stands — see features/clip-mockups/
+    // voice-status.ts. Defaults to 'ready' because every row written before
+    // migration 0030 was voiced before it was saved.
+    voiceStatus: text("voice_status")
+      .$type<ClipMockupVoiceStatus>()
+      .notNull()
+      .default("ready"),
+    // Why the voice failed, when `voiceStatus` is 'failed'. NULL otherwise.
+    voiceError: text("voice_error"),
     order: varcharCollateC("order").notNull(),
     archived: boolean("archived").notNull().default(false),
     createdAt: timestamp("created_at", {
@@ -676,6 +685,11 @@ export const clipMockups = createTable(
     // Same FK-indexing gap as beat.video_id — resolving a Video's Clip Mockups
     // otherwise seq-scans the whole clip_mockup table once per Video.
     index("clip_mockup_video_id_idx").on(table.videoId),
+    // Mirrors CLIP_MOCKUP_VOICE_STATUSES (features/clip-mockups/voice-status.ts).
+    check(
+      "clip_mockup_voice_status_valid",
+      sql`${table.voiceStatus} IN ('pending', 'ready', 'failed')`
+    ),
   ]
 );
 

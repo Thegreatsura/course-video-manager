@@ -311,6 +311,8 @@ export const copyVideoImpl = (
                 imagePath: item.clipMockup.imagePath,
                 audioPath: item.clipMockup.audioPath,
                 durationSeconds: item.clipMockup.durationSeconds,
+                voiceStatus: item.clipMockup.voiceStatus,
+                voiceError: item.clipMockup.voiceError,
                 order,
               });
             } else {

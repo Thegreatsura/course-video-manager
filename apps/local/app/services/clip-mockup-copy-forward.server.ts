@@ -45,7 +45,10 @@ export const copyClipMockupAssetsForVideo = Effect.fn(
   return yield* copyClipMockupFiles(
     video.sourceLineageId,
     video.newLineageId,
-    rows.flatMap((row) => [row.imagePath, row.audioPath])
+    // A Clip Mockup whose voice is not made yet has no WAV to carry.
+    rows.flatMap((row) =>
+      row.audioPath === null ? [row.imagePath] : [row.imagePath, row.audioPath]
+    )
   );
 });
 

@@ -187,10 +187,9 @@ const animaticReport = (lineageId: string, videoId: string) =>
               lineageId,
               row.imagePath
             ));
-            const audioMissing = !(yield* clipMockupFileExists(
-              lineageId,
-              row.audioPath
-            ));
+            const audioMissing =
+              row.audioPath === null ||
+              !(yield* clipMockupFileExists(lineageId, row.audioPath));
             return { line: row.line, imageMissing, audioMissing };
           })
         )
