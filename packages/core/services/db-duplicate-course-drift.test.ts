@@ -245,12 +245,12 @@ describe("duplicateCourse — schema-drift guard", () => {
       videoId: video!.id,
       line: "Coverage Clip Mockup line",
       imagePath: "frame-001.png",
-      audioPath: "speech-001.wav",
-      durationSeconds: 2.75,
-      // Only a READY voice is carried as it is, WAV and all; any other comes
-      // over `pending`, for the Sidecar's sweep to queue (`copiedVoice`).
-      voiceStatus: "ready",
-      voiceError: null,
+      // A FAILED voice stays failed, error and all: a duplicate never
+      // re-queues a voice on its own (`copiedVoice`). A failed one has no WAV.
+      audioPath: null,
+      durationSeconds: null,
+      voiceStatus: "failed",
+      voiceError: "Kokoro refused",
       order: "m",
     });
     const [coverageChapter] = await testDb
