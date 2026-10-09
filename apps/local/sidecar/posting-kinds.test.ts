@@ -449,6 +449,7 @@ describe("a posting Job in the sidecar", () => {
 
       const retried = yield* retryJob({
         jobId: job.id,
+        attempt: 1,
         registry: stub.registry,
       });
       expect(retried).toMatchObject({ attempt: 2, maxAttempts: 2 });
@@ -471,6 +472,7 @@ describe("a posting Job in the sidecar", () => {
         const job = yield* enqueuePost(stub.registry, "succeed");
         const early = yield* retryJob({
           jobId: job.id,
+          attempt: 1,
           registry: stub.registry,
         }).pipe(Effect.flip);
         expect(early._tag).toBe("JobNotRetryableError");
@@ -487,6 +489,7 @@ describe("a posting Job in the sidecar", () => {
         });
         const refused = yield* retryJob({
           jobId: noop.id,
+          attempt: 1,
           registry: stub.registry,
         }).pipe(Effect.flip);
         expect(refused._tag).toBe("JobNotRetryableError");

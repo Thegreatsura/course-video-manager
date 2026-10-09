@@ -12,6 +12,27 @@ import { withDbTransaction } from "./with-db-transaction.server.js";
  * post runs again, and the list of interrupted posts nobody has looked for.
  * Part of `JobOperationsService`.
  */
+/** The Job Event a posting run writes once the service has its post. */
+export const POSTED_EVENT = "posted";
+/** The Job Event the sidecar writes when it has looked for a cut-off post. */
+export const POST_CHECK_EVENT = "post-check";
+
+/**
+ * Did the Job's LATEST run go out? Its events after the last `started`: a
+ * `posted` event, or a post-check that found the post at the service.
+ */
+const wentOut = (
+  events: readonly { type: string; data: unknown }[]
+): boolean => {
+  const lastStart = events.findLastIndex((e) => e.type === "started");
+  return events.slice(lastStart + 1).some((e) => {
+    if (e.type === POSTED_EVENT) return true;
+    if (e.type !== POST_CHECK_EVENT) return false;
+    const data = e.data as { verdict?: unknown };
+    return data.verdict === "posted";
+  });
+};
+
 export const createPostingJobOperations = (db: Database) => {
   const insertEvent = (
     handle: Database,
@@ -24,10 +45,19 @@ export const createPostingJobOperations = (db: Database) => {
    * The author's Retry: run a finished, unsuccessful Job ONE more time. The
    * same row goes back to `queued` as `attempt + 1`, with `max_attempts` set
    * to that attempt, so this run is its last unless the author retries again.
-   * Refused when the Job is not finished-and-unsuccessful, or when the Job it
-   * waits on has not succeeded (it would wait for ever).
+   *
+   * Refused when:
+   * - the Job is not finished-and-unsuccessful;
+   * - `attempt` is not the Job's attempt: the author saw an earlier run (a
+   *   second click, another tab), and this one is not the run they retried;
+   * - this run WENT OUT: it wrote a `posted` Job Event, or its post-check
+   *   found it at the service. Running it again would post twice;
+   * - the Job it waits on has not succeeded (it would wait for ever).
    */
-  const retryJob = Effect.fn("retryJob")(function* (input: { jobId: string }) {
+  const retryJob = Effect.fn("retryJob")(function* (input: {
+    jobId: string;
+    attempt: number;
+  }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
         const [job] = yield* makeDbCall(() =>
@@ -37,6 +67,17 @@ export const createPostingJobOperations = (db: Database) => {
         if (job.status !== "failed" && job.status !== "interrupted") {
           return { outcome: "not-retryable" as const, job };
         }
+        if (job.attempt !== input.attempt) {
+          return { outcome: "stale" as const, job };
+        }
+        const events = yield* makeDbCall(() =>
+          tx
+            .select({ type: jobEvents.type, data: jobEvents.data })
+            .from(jobEvents)
+            .where(eq(jobEvents.jobId, job.id))
+            .orderBy(asc(jobEvents.id))
+        );
+        if (wentOut(events)) return { outcome: "went-out" as const, job };
         if (job.dependsOn) {
           const [parent] = yield* makeDbCall(() =>
             tx
