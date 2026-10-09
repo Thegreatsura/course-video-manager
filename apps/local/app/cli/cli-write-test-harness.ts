@@ -1,11 +1,17 @@
-import { Effect } from "effect";
+import { afterAll, beforeAll, beforeEach } from "vitest";
+import { Effect, Layer } from "effect";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
-import type { TestDb } from "@/test-utils/pglite";
+import { createTestDb, type TestDb } from "@/test-utils/pglite";
 import * as schema from "@/db/schema";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";
+import {
+  DiagramRenderError,
+  FrameCaptureService,
+} from "@/services/frame-capture-service";
+import { APP_URL_ENV_KEY, LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   buildRemoteLayer,
   type RemoteHarnessOptions,
@@ -213,3 +219,100 @@ export const seedWrite = async (db: TestDb): Promise<WriteSeed> => {
     pitchArchivedId: pitchArchived!.id,
   };
 };
+
+export interface DiagramRenderCall {
+  appUrl: string;
+  scene: unknown;
+  outputPath: string;
+}
+
+/** Where `cvm diagram` writes its PNGs. */
+export const DIAGRAM_RENDERS = nodePath.join(
+  os.tmpdir(),
+  "cvm-diagram-renders"
+);
+
+/**
+ * The `cvm diagram` suites' harness. Call once at the top of a test file: it
+ * registers the hooks (a PGlite db, CVM_APP_URL, local-machine on, a fresh
+ * temp dir and an empty diagrams table before each test).
+ *
+ * The browser is faked with Layer.succeed, as in the clip-mockup suites: the
+ * command finds the fake through Effect.serviceOption, so no Chromium launches
+ * and no daemon starts. The fake writes canned bytes where it is told to and
+ * records each call in `render.calls`; set `render.fail` to make it fail.
+ */
+export const useDiagramCli = () => {
+  const render: { fail: boolean; calls: DiagramRenderCall[] } = {
+    fail: false,
+    calls: [],
+  };
+  const fakeRender = Layer.succeed(FrameCaptureService, {
+    renderDiagramToPng: (params: DiagramRenderCall) =>
+      Effect.suspend(() => {
+        render.calls.push(params);
+        if (render.fail) {
+          return Effect.fail(
+            new DiagramRenderError({
+              cause: null,
+              message:
+                "could not render the Diagram: net::ERR_CONNECTION_REFUSED",
+            })
+          );
+        }
+        nodeFs.writeFileSync(params.outputPath, "RENDERED-PNG");
+        return Effect.succeed(params.outputPath);
+      }),
+  } as unknown as FrameCaptureService);
+
+  let testDb: TestDb;
+  let runIn: (argv: ReadonlyArray<string>) => Promise<RunResult>;
+  let dir: string;
+  const saved = {
+    local: process.env[LOCAL_MACHINE_ENV_KEY],
+    app: process.env[APP_URL_ENV_KEY],
+  };
+  const restoreEnv = (key: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  };
+
+  beforeAll(async () => {
+    testDb = (await createTestDb()).testDb;
+    runIn = makeRun(Layer.merge(buildWriteLayer(testDb), fakeRender));
+    process.env[APP_URL_ENV_KEY] = "http://localhost:5299/";
+  });
+
+  afterAll(() => {
+    restoreEnv(LOCAL_MACHINE_ENV_KEY, saved.local);
+    restoreEnv(APP_URL_ENV_KEY, saved.app);
+  });
+
+  beforeEach(async () => {
+    process.env[LOCAL_MACHINE_ENV_KEY] = "true";
+    dir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-diagram-"));
+    render.fail = false;
+    render.calls = [];
+    await testDb.delete(schema.diagrams);
+  });
+
+  return {
+    render,
+    db: () => testDb,
+    dir: () => dir,
+    run: (argv: ReadonlyArray<string>) => runIn(argv),
+    /** Write `body` (JSON, or a raw string as-is) to the test's diagram.json. */
+    file: (body: unknown): string => {
+      const path = nodePath.join(dir, "diagram.json");
+      nodeFs.writeFileSync(
+        path,
+        typeof body === "string" ? body : JSON.stringify(body)
+      );
+      return path;
+    },
+  };
+};
+
+/** A failed `cvm` run's stderr, parsed. */
+export const failureOf = (r: RunResult) =>
+  JSON.parse(r.stderr.trim()) as { _tag: string; message: string };

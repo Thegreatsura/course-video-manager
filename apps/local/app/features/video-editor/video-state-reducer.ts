@@ -131,6 +131,14 @@ export namespace videoStateReducer {
         type: "press-alt-arrow-down";
       }
     | {
+        /**
+         * A dot was clicked on the teleprompter glass. Plays its Clip, or
+         * pauses it if it is the one already playing.
+         */
+        type: "click-teleprompter-mark";
+        clipId: FrontendId;
+      }
+    | {
         type: "play-from-chapter";
         chapterId: FrontendId;
       }
@@ -338,6 +346,34 @@ export const makeVideoEditorReducer =
           runningState: "playing",
           currentTimeInClip: 0,
           selectedClipsSet: new Set([mostRecentItemId]),
+        });
+      }
+      case "click-teleprompter-mark": {
+        // A mark can outlive its Clip on the glass by a push; a Clip that is
+        // no longer on the timeline has nothing to play.
+        if (!clipIds.includes(action.clipId)) return state;
+
+        if (state.currentClipId === action.clipId) {
+          const runningState =
+            state.runningState === "playing" ? "paused" : "playing";
+          return {
+            ...state,
+            runningState,
+            scrubSeekTime:
+              runningState === "playing" ? undefined : state.scrubSeekTime,
+            showLastFrameOfVideo:
+              runningState === "playing" ? false : state.showLastFrameOfVideo,
+          };
+        }
+
+        return preloadSelectedClips(clipIds, {
+          ...state,
+          currentClipId: action.clipId,
+          runningState: "playing",
+          currentTimeInClip: 0,
+          scrubSeekTime: undefined,
+          showLastFrameOfVideo: false,
+          selectedClipsSet: new Set([action.clipId]),
         });
       }
       case "play-from-chapter": {
