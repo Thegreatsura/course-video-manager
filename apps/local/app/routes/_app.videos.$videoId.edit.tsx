@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { DB } from "@/db/schema";
 import type {
   ClipOnDatabase,
@@ -20,7 +20,7 @@ import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
 import { useClipTranscriptionJobs } from "@/features/video-editor/use-clip-transcription-jobs";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
@@ -302,7 +302,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   const clipStateRef = useRef(initialState);
   const revalidator = useRevalidator();
 
-  const { startClipTranscription } = useContext(UploadContext);
+  const { startClipTranscription } = useUploadActions();
   const effectHandlers = useMemo(
     () =>
       createEditEffectHandlers({

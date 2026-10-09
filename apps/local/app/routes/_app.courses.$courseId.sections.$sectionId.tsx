@@ -22,7 +22,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Effect } from "effect";
 import { ChevronLeft } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Link,
   useFetcher,
@@ -33,7 +33,7 @@ import {
 } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
 import type { Route } from "./+types/_app.courses.$courseId.sections.$sectionId";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { AutofillChaptersProvider } from "@/features/course-view/autofill-chapters-context";
 import { SectionGrid } from "@/features/course-view/section-grid";
 import {
@@ -193,7 +193,7 @@ export default function Component(props: Route.ComponentProps) {
     [currentCourse, priorityFilter, iconFilter, searchQuery]
   );
 
-  const { startExportUpload } = useContext(UploadContext);
+  const { startExportUpload } = useUploadActions();
 
   useFocusRevalidate({ enabled: true, intervalMs: 5000 });
 

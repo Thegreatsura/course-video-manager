@@ -21,20 +21,13 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { AlertTriangle, Plus } from "lucide-react";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCollapsedIds } from "@/features/course-view/use-collapsed-ids";
 import { readCookie, useCookieState } from "@/hooks/use-cookie-state";
 import { useFetcher, useNavigate, useSubmit } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
 import type { Route } from "./+types/_app.courses.$courseId._index";
-import { UploadContext } from "@/features/upload-manager/upload-context";
+import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { ActionsDropdown } from "@/features/course-view/actions-menu";
 import { AutofillChaptersProvider } from "@/features/course-view/autofill-chapters-context";
 import { CourseViewVisibilityProvider } from "@/features/course-view/course-view-visibility";
@@ -189,8 +182,7 @@ export default function Component(props: Route.ComponentProps) {
   );
 
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
-  const { startExportUpload, startBatchExportUpload } =
-    useContext(UploadContext);
+  const { startExportUpload, startBatchExportUpload } = useUploadActions();
 
   useFocusRevalidate({
     enabled: !viewState.lessonBodyWriterVideoId,
