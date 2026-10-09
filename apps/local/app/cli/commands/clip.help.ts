@@ -25,6 +25,7 @@ Verbs:
                                              cut a new clip, text sliced from <source>'s cached transcript
   clip update <id> [flags]                   set --zoom and/or retime --start/--end
   clip move <id> --before/--after <id>       reposition within the timeline
+  clip move <id> --video <id> [--before/--after <id>]   move onto another Video's timeline
   clip delete <id>                           archive the clip (soft delete; see 'clip restore')
   clip restore <id>                          undo 'clip delete'
   clip words <id>                            the clip's Transcript Words, in spoken order (NDJSON)
@@ -78,12 +79,21 @@ Examples:
     | jq -r 'select(.scene == "Camera") | .id' \
     | xargs -n1 -I{} cvm clip update {} --zoom subtle`;
 
-export const MOVE_HELP = `Reposition a Clip within its Video's timeline.
+export const MOVE_HELP = `Reposition a Clip within its Video's timeline, or move it onto another Video.
 
-Requires exactly one of --before / --after <id>, where <id> is another active clip on the SAME
-video (a clip cannot move across videos via this command). Clips and Chapters share one fractional
-order space, so the new position is computed against both — landing a clip "after" the last clip
-before a Chapter is well-defined even though the anchor id is a clip.
+Within its own Video: requires exactly one of --before / --after <id>, where <id> is another
+active item on the SAME video. Clips and Chapters share one fractional order space, so the new
+position is computed against both — landing a clip "after" the last clip before a Chapter is
+well-defined even though the anchor id is a clip.
+
+Across Videos: --video <targetVideoId> moves the clip onto that Video's timeline. --before /
+--after are then optional and resolve against the TARGET Video's timeline; with neither, the clip
+is appended to the END of the target's timeline. Only the clip's Video and order change — its id,
+text, scene, profile, Diagram Snapshot, Transcript Words and Web Links all travel with it.
+Nothing is copied or deleted and no transcript is needed. Both the clip's current Version and the
+target Video's Version must be Drafts. A clip that anchors Overlays is refused (exit 3): an
+Overlay cannot move to another Video, so delete them first. --video naming the clip's own Video
+is a plain reposition (and then needs --before / --after).
 
 This jumps straight to an arbitrary position in one call, unlike a step-by-step up/down nudge.
 
@@ -91,7 +101,13 @@ Immediate — there is no confirmation prompt (this is an agent-facing tool).
 
 Examples:
   cvm clip move clip_abc --before clip_def   # clip_abc lands immediately before clip_def
-  cvm clip move clip_abc --after clip_def    # clip_abc lands immediately after clip_def`;
+  cvm clip move clip_abc --after clip_def    # clip_abc lands immediately after clip_def
+  cvm clip move --video vid_456 clip_abc     # clip_abc moves to the end of vid_456
+  cvm clip move --video vid_456 --before clip_xyz clip_abc   # onto vid_456, before clip_xyz
+
+  # Move every clip of one Video onto another, keeping their order:
+  cvm clip list --video vid_123 | jq -r '.id' \\
+    | xargs -n1 cvm clip move --video vid_456`;
 
 export const ADD_HELP = `Add a single Clip to a Video's timeline, cut from a source footage file.
 
