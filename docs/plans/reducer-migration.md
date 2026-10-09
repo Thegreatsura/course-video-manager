@@ -245,12 +245,11 @@ can stay as `useState` once the page is under the limit.
   guard does not flag it. Its nine `is…ModalOpen` flags should become one
   `openModal` union, the same change as batch 2. Do that whenever someone is
   next working in that file.
-- **The upload manager's snapshot-diff planner** (`planUploadReactions`). It
-  works, it has tests, and it is the one documented exception to the pattern.
-  Moving it onto `exec` would also make most of
-  `upload-manager-integration.test.ts` redundant, so it would make a
-  reasonable batch 10 if churn there picks up.
+- ~~**The upload manager's snapshot-diff planner** (`planUploadReactions`).~~
+  **Deleted** in sidecar batch 8 (#1930), with `upload-reducer.ts` and
+  `upload-manager-integration.test.ts`: every background job is a Job, and
+  the jobs reducer declares its toasts with `exec`.
 - **`upload-row.test.tsx`** (285 lines, rendered). A rendered test of row
   labels and progress-bar visibility. Once those decisions are selectors in
-  `upload-selectors.ts`, most of its cases can become selector tests. This
+  `features/jobs/jobs-selectors.ts` (`upload-selectors.ts` is deleted), most of its cases can become selector tests. This
   belongs to the test-pruning plan, not this one.

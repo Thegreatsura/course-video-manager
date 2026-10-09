@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1-7 are done (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8; batch 6, Publish: section 7.9; batch 7, Clip transcription: section 7.10). Matt's decisions are in section 6;
+**Status:** Done. Batches 1-8 have landed (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8; batch 6, Publish: section 7.9; batch 7, Clip transcription: section 7.10; batch 8, the browser Upload Manager deleted and ETA from Job Events: section 7.11). The decision is recorded in [ADR 0032](../adr/0032-background-work-runs-in-the-sidecar.md). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -16,6 +16,8 @@ long-lived process tied to its checkout.
 Paths are under `apps/local/app/` unless stated. `S/` = `services/`, `R/` = `routes/`, `UM/` = `features/upload-manager/`.
 
 ## 1. Inventory
+
+_Historical: the inventory as found on 2026-10-08. Every SSE route and `sse-*-client.ts` it names (for example `R/api.courses.$courseId.publish-sse.ts`) has since been deleted; section 7 says which batch moved each job._
 
 **Finding:** the server has no background work. There is no `runFork` or `forkDaemon` in any route, no cron,
 no server-side `setInterval` and no file watcher. Every long job is one HTTP request, usually SSE through
@@ -182,7 +184,7 @@ Each batch is one PR. Each can be merged on its own, and each leaves the app wor
 | 5 ✅  | **Done.** Course Autofill (#10), in the default lane: no `ai` lane (section 7.8).                                                                                                                                                                                                                                                     | —                                                                                                        |
 | 6 ✅  | **Publish (#9).** The `publish` lane replaces the semaphore. An interrupted Publish is never re-run; Promote/Discard stay by hand (section 7.2, 7.9). `cvm course publish` enqueues and follows it (`--wait`).                                                                                                                        | A restart mid-Publish ends `interrupted`, never re-run; the publish page offers Promote/Discard.         |
 | 7 ✅  | **Done.** Transcription (#12) is a `transcribe-clips` Job; a sweep fails Clips stuck in `transcribing` (section 7.10).                                                                                                                                                                                                                | No clip stays stuck in `transcribing` after a restart.                                                   |
-| 8     | **Delete** `upload-reducer.ts`, the `sse-*-client.ts` files, `planUploadReactions` and the localStorage ETA history. Allowlist at 0 except the listed interactive streams. Write ADR 0032.                                                                                                                                            | `check` is green with the guard at 0.                                                                    |
+| 8 ✅  | **Done.** **Delete** `upload-reducer.ts`, the `sse-*-client.ts` files, `planUploadReactions` and the localStorage ETA history. Allowlist at 0 except the listed interactive streams. Write ADR 0032.                                                                                                                                  | `check` is green with the guard at 0.                                                                    |
 
 Later, and optional: OBS ingestion (#13) and a `cvm job` noun.
 
@@ -381,6 +383,8 @@ Left out, on purpose:
 - **ETA for a server Job.** Its row shows stage and percent, not time left;
   the ETA still reads the browser's own stage history. Stage durations from
   `job_event` timestamps (section 3.3) come with batch 8's clean-up.
+  _Resolved in batch 8 (section 7.11): every Job row has an ETA, timed from
+  Job Event timestamps, with its stage history read from `job_event`._
 - **Cancel.** Dismissing a Job's row hides it; the export carries on. There is
   still no cancel verb.
 - **A stale row while the sidecar is down.** A stopping sidecar writes its
@@ -733,6 +737,40 @@ or the Clip `failed` — in the default lane, 1 attempt
   yet handed to a Job; the editor enqueues them).
 
 No migration.
+
+### 7.11 What batch 8 built (the browser Upload Manager deleted, ETA from Job Events)
+
+- **Toasts are reducer decisions** (#1926). The jobs reducer builds a settled
+  Job's toast (`features/jobs/job-succeeded-toast.ts`) and puts it on the
+  `show-job-succeeded-toast` effect; the handler no longer reads state.
+- **The browser Upload Manager is deleted** (#1930). `upload-reducer.ts`,
+  `upload-type-registry.ts`, `upload-transitions.ts` (`planUploadReactions`,
+  the last browser auto-retry), `upload-toasts.ts`, `consume-sse-stream.ts`
+  and `upload-selectors.ts` are gone. The row types moved verbatim to
+  `upload-entry.ts`; `features/upload-manager/` now only draws Job rows
+  (`visibleJobRows`) and their ETA. `use-upload-revalidate.ts` stays: the
+  Shorts page calls it.
+- **Every Job row has an ETA** (#1933), a Publish's parent and Video rows
+  included. Durations and rates come from each Job Event's `at` (the
+  database's clock); "now" is the tab's clock shifted by `clockOffsetOf`. A
+  reopened tab replays the same timings.
+- **Stage history comes from `job_event`** (#1938), not localStorage:
+  `GET /api/jobs/stage-history` (`db-job-stage-history.server.ts`) returns
+  the newest 20 succeeded Jobs of each kind, folded by the same
+  `foldJobEvents` the live rows use. A fresh browser has an ETA from its
+  first export. A failed or interrupted Job's stages are not in it.
+- **A toast fires only for a settlement this tab heard live** (#1938). A Job
+  Event at or below the snapshot's cursor (the feed's 60 s catch-up) changes
+  the row but never toasts, so a new tab no longer re-announces a finished or
+  dismissed Job. Clip transcription never toasts.
+- **The guard's end state.** `scripts/background-jobs-allowlist.json` keeps
+  the chapter Autofill modal and its route, OBS ingestion (#13) and the
+  virtual-camera wait, and the interactive and CLI spawns, each with a reason.
+  The Sidecar's spawners are listed as Sidecar-only.
+- **ADR 0032** records the decision and supersedes ADR 0024's "deferred" note.
+
+Nothing in batch 8 touches the retry policy, `neverRequeued` or `retryJob`: a
+post or a Publish still never runs again on its own. No migration.
 
 ## Dismissal is stored
 
