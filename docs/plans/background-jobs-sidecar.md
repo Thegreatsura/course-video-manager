@@ -1,6 +1,6 @@
 # Background jobs move to a sidecar
 
-**Status:** Batches 1-5 are done, and batch 6's Publish (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8; batch 6, Publish: section 7.9). Matt's decisions are in section 6;
+**Status:** Batches 1-7 are done (batch 4, posting: section 7.7; batch 5, Course Autofill: section 7.8; batch 6, Publish: section 7.9; batch 7, Clip transcription: section 7.10). Matt's decisions are in section 6;
 where they differ from the recommendations in sections 3 and 5, section 6 wins,
 and section 7 records the existing behaviour the sidecar copies, with file and
 line, as found on 2026-10-08.
@@ -181,7 +181,7 @@ Each batch is one PR. Each can be merged on its own, and each leaves the app wor
 | 4     | Posting: YouTube upload, Shorts, Buffer, AI Hero, Skills Changelog (#1-#5). `depends_on` moves to the server. Non-idempotent: an interrupted post asks before running again.                                                                                                                                                          | Chain "upload → AI Hero post" survives a reload.                                                         |
 | 5 ✅  | **Done.** Course Autofill (#10), in the default lane: no `ai` lane (section 7.8).                                                                                                                                                                                                                                                     | —                                                                                                        |
 | 6 ✅  | **Publish (#9).** The `publish` lane replaces the semaphore. An interrupted Publish is never re-run; Promote/Discard stay by hand (section 7.2, 7.9). `cvm course publish` enqueues and follows it (`--wait`).                                                                                                                        | A restart mid-Publish ends `interrupted`, never re-run; the publish page offers Promote/Discard.         |
-| 7     | Transcription (#12): the sweeper picks up `queued` clips, so the browser no longer drives them.                                                                                                                                                                                                                                       | No clip stays stuck in `transcribing` after a restart.                                                   |
+| 7 ✅  | **Done.** Transcription (#12) is a `transcribe-clips` Job; a sweep fails Clips stuck in `transcribing` (section 7.10).                                                                                                                                                                                                                | No clip stays stuck in `transcribing` after a restart.                                                   |
 | 8     | **Delete** `upload-reducer.ts`, the `sse-*-client.ts` files, `planUploadReactions` and the localStorage ETA history. Allowlist at 0 except the listed interactive streams. Write ADR 0032.                                                                                                                                            | `check` is green with the guard at 0.                                                                    |
 
 Later, and optional: OBS ingestion (#13) and a `cvm job` noun.
@@ -253,7 +253,7 @@ policy, and Matt's call.
 | **Server dies mid-job**: the stream's reader rejects (not an `AbortError`), so the client calls `onError` → `UPLOAD_ERROR`: the job spends an attempt and is retried at once (3-attempt kinds), or fails (1-attempt kinds) | `UM/consume-sse-stream.ts:19-28`                                              | A run the sidecar lost — it was stopped (SIGTERM), or died and its 30 s Job lease ran out — is settled as a failed attempt by the same rule: re-queued while attempts remain, `interrupted` on the last. `recoverExpiredJobs` does this on start and every 15 s |
 | A stream that closes cleanly without a final event leaves the row at its last stage, forever                                                                                                                               | `UM/consume-sse-stream.ts:58`                                                 | No equivalent: every handler exit is settled                                                                                                                                                                                                                    |
 | **A Publish cut off** leaves its Pending Version; the publish page classifies it from the Dropbox receipt and offers Promote or Discard **by hand**                                                                        | `S/pending-recovery.server.ts:12`, `R/_app.courses.$courseId.publish.tsx:123` | Batch 6 keeps that by hand: an interrupted Publish (1 attempt) is `interrupted`, and the page offers the same choice. Section 3.2's automatic Promote/Discard would be a new policy                                                                             |
-| Clips stuck in `queued`/`transcribing`: nothing sweeps them                                                                                                                                                                | `features/video-editor/edit-effect-handlers.ts`                               | Unchanged until batch 7                                                                                                                                                                                                                                         |
+| Clips stuck in `queued`/`transcribing`: nothing sweeps them                                                                                                                                                                | `features/video-editor/edit-effect-handlers.ts`                               | Batch 7: the stuck-Clip sweep fails a `transcribing` Clip no live Job holds (section 7.10)                                                                                                                                                                      |
 
 **Flag for Matt before batch 4.** Copying this exactly means a YouTube upload,
 Buffer post or AI Hero post that is cut off mid-run is run again automatically
@@ -699,7 +699,40 @@ the last background job that spawned from the app server, so the guard is on:
 
 Left for later: the `publish` entry type and `UPDATE_PUBLISH_STAGE` /
 `PUBLISH_COMPLETE` go with `upload-reducer.ts` in batch 8; clip transcription
-(#12) is batch 7.
+(#12) is batch 7 (section 7.10).
+
+### 7.10 What batch 7 built (Clip transcription)
+
+**Clip transcription (#12) is a kind** (`apps/local/sidecar/kinds/transcribe-clips.ts`,
+#1912): `transcribeAndStoreClips` (`app/services/clip-transcription.server.ts`)
+— each Clip through Whisper on its own, its text and Transcript Words stored,
+or the Clip `failed` — in the default lane, 1 attempt
+(`CLIP_TRANSCRIPTION_POLICY`), as the old `POST /clips/transcribe` did.
+
+- **The editor enqueues it** (#1917) through `/api/jobs` (subject: the
+  Video) and hears its `clips-started` / `clip-settled` Job Events back
+  (`features/jobs/job-event-hub.ts`, `use-clip-transcription-jobs.ts`).
+  `/clips/transcribe` is deleted. No Upload Manager row, no toast: the Clip
+  shows its own state.
+- **Whisper audio is Sidecar-only** (#1918): `WhisperTranscriptionService`
+  is in the Sidecar's layer, not `layerLive`.
+- **A deliberate stop puts the Job back**; the next run takes on only the
+  Clips no earlier run settled, and a request for the same Clips joins the
+  live Job (#1921, #1923).
+- **The stuck-Clip sweep** (`sidecar/stuck-clip-sweep.ts`): a Clip in
+  `transcribing` that no live (`queued` or `running`) `transcribe-clips` Job
+  names in its `clipIds` is marked `failed`, so the author re-transcribes it
+  by hand. It runs after every recovery sweep (`runSidecar`'s
+  `afterRecovery`: at start, then every `recoverEveryMs`), so a Job recovery
+  has just settled has its Clips failed in the same pass. **Matt's decision:
+  no Whisper re-run** for an old stuck Clip — the sweep never enqueues a Job
+  or calls Whisper. It writes only to a Draft Version's Videos (or a Video in
+  no Version), through the draft guard; a Pending or Published Version is
+  never touched. The check and the write are one `UPDATE`, so a Clip a Job
+  takes on meanwhile is left alone. Left alone too: Clips in `queued` (not
+  yet handed to a Job; the editor enqueues them).
+
+No migration.
 
 ## Dismissal is stored
 
