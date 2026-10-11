@@ -182,10 +182,17 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     lastCamera.set(videoId, key);
     publish(videoId, message);
   };
-  /** The scene, to an editor, only when it changed. */
+  /**
+   * The scene, to an editor, only when it changed. Once the recorder is not
+   * its Video's (closed, another Video's, unreachable) its editor has no
+   * scene, so it hears the scene again when the recorder comes back.
+   */
   const publishScene = (videoId: string) => {
     const message = reachable ? sceneMessage(state, videoId) : undefined;
-    if (message?.type !== "scene-changed") return;
+    if (message?.type !== "scene-changed") {
+      lastScene.delete(videoId);
+      return;
+    }
     if (lastScene.get(videoId) === message.scene) return;
     lastScene.set(videoId, message.scene);
     publish(videoId, message);
@@ -283,6 +290,14 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       }
       if ((failing.get(id)?.seq ?? Infinity) <= event.seq) failing.delete(id);
       if (!result.videoId) return;
+      // Refused (a Stream Deck Record outside the Draft): a take that is
+      // never saved does not run on.
+      if (
+        result.refused &&
+        state.kind === "recording" &&
+        state.recordingSessionId === id
+      )
+        send({ type: "stop" });
       // Moved by the editor while this Clip saved: the editor's point stands.
       if (
         result.insertionPoint &&
@@ -556,6 +571,16 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     setSilenceLength(videoId: string, silenceLength: SilenceLength) {
       silenceLengths.set(videoId, silenceLength);
       prepare();
+    },
+
+    /**
+     * The Video now records with OBS: the recorder lets it go at once, not
+     * after the close grace, and a Stream Deck Record no longer records on it.
+     */
+    releaseVideo(videoId: string) {
+      silenceLengths.delete(videoId);
+      wanted = wanted.filter((v) => v !== videoId);
+      reconcile();
     },
 
     /** The editor moved its insertion point: the next Clip goes there. */

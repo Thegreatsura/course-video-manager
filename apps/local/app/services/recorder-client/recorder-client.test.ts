@@ -10,6 +10,7 @@ import {
 } from "recorder-service/test-utils/fake-windows";
 import { WebSocket } from "ws";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
 import {
@@ -437,5 +438,98 @@ describe("the recorder client", () => {
       silenceLength: "long",
       status: "stopped",
     });
+  });
+});
+
+/** A Stream Deck button, pressed on the recorder service itself. */
+const streamDeck = async (port: number) => {
+  const deck = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => deck.once("open", r));
+  cleanups.unshift(() => deck.close());
+  return (action: "record" | "stop") =>
+    deck.send(JSON.stringify({ type: "stream-deck", press: { action } }));
+};
+
+const recorderState = async (port: number) =>
+  (await (await fetch(`http://127.0.0.1:${port}/health`)).json()).state;
+
+describe("the recorder client, guarding the Stream Deck and the scene", () => {
+  it("stops a Stream Deck take on a Video outside the Draft: it would never be saved", async () => {
+    const { client, port } = await setup();
+    const { videoIds } = await seedCourseVersion(
+      testDb,
+      [{ path: "01-frozen", videos: [{ description: null, clips: [] }] }],
+      { commitState: "published" }
+    );
+    const videoId = videoIds["01-frozen/Explainer"]!;
+    const heard: NewRecorderMessage[] = [];
+    client.subscribe(videoId, (m) => heard.push(m));
+    // Said while the Video was still the Draft's (a tab left open over a Publish).
+    client.setSilenceLength(videoId, "short");
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: "camera-went-live" })
+    );
+    const press = await streamDeck(port);
+
+    press("record");
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual(
+        expect.objectContaining({ type: "recorder-failed" })
+      )
+    );
+    await vi.waitFor(async () =>
+      expect((await recorderState(port)).kind).toBe("open")
+    );
+    expect(await readSession()).toBeUndefined();
+  });
+
+  it("lets a Video chosen to record with OBS go at once: a Stream Deck Record does not record on it", async () => {
+    const { client, port } = await setup();
+    const video = await clipService.createVideo("switched to OBS");
+    const heard: NewRecorderMessage[] = [];
+    client.subscribe(video.id, (m) => heard.push(m));
+    client.setSilenceLength(video.id, "short");
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: "camera-went-live" })
+    );
+    const press = await streamDeck(port);
+
+    client.releaseVideo(video.id);
+    await vi.waitFor(async () =>
+      expect((await recorderState(port)).kind).toBe("closed")
+    );
+    press("record");
+    await vi.waitFor(() =>
+      expect(heard.at(-1)).toMatchObject({
+        type: "recorder-failed",
+        message: expect.stringContaining("Stream Deck"),
+      })
+    );
+    expect(await readSession()).toBeUndefined();
+  });
+
+  it("tells an editor its scene again when the recorder comes back to its Video", async () => {
+    const { client } = await setup();
+    const a = await clipService.createVideo("a");
+    const b = await clipService.createVideo("b");
+    const heard: NewRecorderMessage[] = [];
+    client.subscribe(a.id, (m) => heard.push(m));
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: "camera-went-live" })
+    );
+
+    // Video B is opened in another tab, then closed: the recorder is A's again.
+    const leaveB = client.subscribe(b.id, () => {});
+    await vi.waitFor(() =>
+      expect(heard.map((m) => m.type)).toContain("camera-closed")
+    );
+    const closedAt = heard.length;
+    leaveB();
+    await vi.waitFor(() =>
+      expect(heard.slice(closedAt)).toContainEqual({
+        type: "scene-changed",
+        scene: "Code",
+      })
+    );
   });
 });
