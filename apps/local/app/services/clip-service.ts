@@ -28,10 +28,10 @@ export type Video = InferSelectModel<typeof videos>;
 // ============================================================================
 
 /**
- * Internal insertion point type for database operations.
- * Not exported - consumers use FrontendInsertionPoint instead.
+ * Internal insertion point type for database operations. Browser consumers
+ * use FrontendInsertionPoint instead; server-side operations resolve it.
  */
-type InsertionPoint =
+export type InsertionPoint =
   | { type: "start" }
   | { type: "after-clip"; databaseClipId: string }
   | { type: "after-chapter"; chapterId: string };
@@ -118,7 +118,7 @@ const isPersistedAndActive = (
   (c.type === "on-database" && !c.shouldArchive) ||
   c.type === "chapter-on-database";
 
-const resolveInsertionPoint = (
+export const resolveInsertionPoint = (
   insertionPoint: FrontendInsertionPoint,
   items: FrontendTimelineItem[]
 ): InsertionPoint => {
