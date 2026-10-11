@@ -1,6 +1,7 @@
 import type { DB } from "@/db/schema";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
+import type { FramesLost } from "recorder-service/protocol";
 
 /**
  * What the app server's recorder client tells an editor open on a New
@@ -53,10 +54,28 @@ export type NewRecorderMessage =
       transcriptionJobId: string;
     }
   | {
+      /**
+       * The Cam Link went mid-recording: the recorder stopped the whole
+       * Recording Session, keeping its files and the Clips so far.
+       * `recording-stopped` follows.
+       */
+      type: "camera-lost";
+      recordingSessionId: string;
+      /** What ffmpeg said, if anything. */
+      errors: string[];
+    }
+  | {
       type: "recording-stopped";
       recordingSessionId: string;
       /** Why the recorder stopped, when it was not asked to. */
       errors: string[];
+      /**
+       * True when the recorder service died mid-recording and found the
+       * Recording Session on its next start, repaired.
+       */
+      crashed: boolean;
+      /** Camera and screen frames lost; null when it crashed (not counted). */
+      framesLost: FramesLost | null;
     }
   | {
       /** The recorder service refused a command, or saving its events failed. */
@@ -75,6 +94,7 @@ export const NEW_RECORDER_MESSAGE_TYPES = [
   "speech-started",
   "speech-ended",
   "clips-saved",
+  "camera-lost",
   "recording-stopped",
   "recorder-failed",
 ] as const satisfies readonly NewRecorderMessage["type"][];

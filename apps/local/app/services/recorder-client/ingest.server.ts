@@ -15,7 +15,8 @@ import type { SequencedEvent } from "./sequencer";
 
 /**
  * What one recorder event means for the database: a Recording Session row
- * when it starts and stops, Clips when speech ends. Idempotent, so an event
+ * when it starts, stops (with its frames lost) or is found crashed, Clips
+ * when speech ends. Idempotent, so an event
  * replayed after a restart changes nothing it already changed.
  */
 
@@ -167,11 +168,23 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           : null,
       } satisfies IngestResult;
     }
+    case "camera-lost":
+      return {
+        videoId,
+        messages: [
+          { type: "camera-lost", recordingSessionId, errors: event.errors },
+        ],
+        insertionPoint: null,
+      } satisfies IngestResult;
     case "recording-stopped":
       yield* dbCall(() =>
         db
           .update(recordingSessions)
-          .set({ status: "stopped" })
+          .set({
+            status: "stopped",
+            cameraFramesLost: event.framesLost.camera,
+            screenFramesLost: event.framesLost.screen,
+          })
           .where(eq(recordingSessions.id, recordingSessionId))
       );
       return {
@@ -181,9 +194,46 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
             type: "recording-stopped",
             recordingSessionId,
             errors: event.errors,
+            crashed: false,
+            framesLost: event.framesLost,
+          },
+        ],
+        insertionPoint: null,
+      } satisfies IngestResult;
+    case "recording-crashed":
+      // Its Clips so far are already saved; a take still going at the crash
+      // came in just before, ended where the repaired mic file ends.
+      yield* dbCall(() =>
+        db
+          .update(recordingSessions)
+          .set({ status: "crashed" })
+          .where(eq(recordingSessions.id, recordingSessionId))
+      );
+      return {
+        videoId,
+        messages: [
+          {
+            type: "recording-stopped",
+            recordingSessionId,
+            errors: [],
+            crashed: true,
+            framesLost: null,
           },
         ],
         insertionPoint: null,
       } satisfies IngestResult;
   }
+});
+
+/** The Recording Sessions not yet seen to stop or crash. */
+export const unfinishedRecordingSessions = Effect.fn(
+  "unfinishedRecordingSessions"
+)(function* (db: Database) {
+  const rows = yield* dbCall(() =>
+    db.query.recordingSessions.findMany({
+      columns: { id: true },
+      where: eq(recordingSessions.status, "recording"),
+    })
+  );
+  return rows.map((r) => r.id);
 });

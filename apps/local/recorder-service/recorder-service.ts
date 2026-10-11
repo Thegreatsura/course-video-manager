@@ -4,6 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
+import { recoverCrashedSessions, type IndexEntry } from "./crash-recovery";
 import {
   CAMERA_START_TIMEOUT_MS,
   openCamera,
@@ -97,22 +98,22 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
 
   const indexFile = path.join(o.stateDir, "recording-sessions.jsonl");
   fs.mkdirSync(o.stateDir, { recursive: true });
+  /** Every Recording Session the service has started, oldest first. */
+  const readIndex = (): IndexEntry[] =>
+    fs.existsSync(indexFile)
+      ? fs
+          .readFileSync(indexFile, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as IndexEntry)
+      : [];
   /** Where a Recording Session's event log is, from the index the service keeps. */
-  const eventLogOf = (recordingSessionId: string) => {
-    if (!fs.existsSync(indexFile)) return undefined;
-    for (const line of fs.readFileSync(indexFile, "utf8").split("\n")) {
-      if (!line) continue;
-      const entry = JSON.parse(line) as {
-        recordingSessionId: string;
-        eventLog: string;
-      };
-      if (entry.recordingSessionId === recordingSessionId)
-        return entry.eventLog;
-    }
-    return undefined;
-  };
+  const eventLogOf = (recordingSessionId: string) =>
+    readIndex().find((e) => e.recordingSessionId === recordingSessionId)
+      ?.eventLog;
 
   let state: RecorderState = { kind: "closed" };
+  let listening: () => void = () => {};
   let session: RecordingSession | undefined;
   let camera: Camera | undefined;
   let screenPreview: LaunchedProcess | undefined;
@@ -335,9 +336,29 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     }
   };
 
+  let recovered: string[] = [];
+  // Crash recovery runs before any command and any greeting, so a client
+  // hears of every Recording Session it repaired. Only once listening: a
+  // second service that cannot take the port must not touch the files.
   let queue: Promise<void> = Promise.resolve();
+  const recovering = new Promise<void>((resolve) => {
+    listening = resolve;
+  }).then(async () => {
+    if (!ffmpeg.ok) return;
+    try {
+      recovered = await recoverCrashedSessions({
+        launch: o.launch,
+        index: readIndex(),
+      });
+    } catch (e) {
+      console.error("recorder: crash recovery failed", e);
+    }
+  });
+  queue = recovering;
   wss.on("connection", (ws) => {
-    send(ws, { type: "hello", ffmpeg, warnings, state });
+    void recovering.then(() =>
+      send(ws, { type: "hello", ffmpeg, warnings, state, recovered })
+    );
     ws.on("message", (data) => {
       const decoded = decodeCommand(data.toString());
       if (Either.isLeft(decoded)) {
@@ -364,6 +385,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     server.once("error", reject);
     server.listen(o.port, "127.0.0.1", () => resolve());
   });
+  listening();
 
   return {
     port: (server.address() as AddressInfo).port,

@@ -26,6 +26,7 @@ export type NewRecorderControls = {
   canRetryCamera: boolean;
   onRecord: () => void;
   onStop: () => void;
+  onDismissAlert: () => void;
   onRetryCamera: () => void;
 };
 
@@ -126,6 +127,7 @@ export const useNewRecorder = (o: {
         insertionPoint: savedItemBefore(o.clipStateRef.current),
       }),
     onStop: () => dispatch({ type: "press-stop" }),
+    onDismissAlert: () => dispatch({ type: "dismiss-alert" }),
     onRetryCamera: () => dispatch({ type: "press-retry" }),
   };
 };

@@ -97,7 +97,9 @@ const speech = (seq: number, from: number, to: number) =>
     },
   ] satisfies RecordingSessionEvent[];
 
-const stopped = (seq: number): RecordingSessionEvent => ({
+const stopped = (
+  seq: number
+): Extract<RecordingSessionEvent, { type: "recording-stopped" }> => ({
   type: "recording-stopped",
   seq,
   recordingSessionId: SESSION,
@@ -105,6 +107,7 @@ const stopped = (seq: number): RecordingSessionEvent => ({
   fileTime: 30,
   files: FILES,
   exitCodes: { screen: 0, camera: 0 },
+  framesLost: { camera: 0, screen: 0 },
   errors: [],
 });
 
@@ -306,5 +309,95 @@ describe("recorder ingest", () => {
         (i) => i.type === "clip" && i.data.text
       )
     ).toEqual(["hello"]);
+  });
+
+  it("stores the frames lost when the Recording Session stops", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+
+    await ingest.feed(started(video.id), {
+      ...stopped(2),
+      framesLost: { camera: 1, screen: 3 },
+    });
+
+    expect(await readSession()).toMatchObject({
+      status: "stopped",
+      cameraFramesLost: 1,
+      screenFramesLost: 3,
+    });
+    expect(ingest.messages.at(-1)).toMatchObject({
+      type: "recording-stopped",
+      framesLost: { camera: 1, screen: 3 },
+      crashed: false,
+    });
+  });
+
+  it("marks a crashed Recording Session crashed and keeps the Clips heard before the crash", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+
+    await ingest.feed(started(video.id), ...speech(2, 2, 5), {
+      type: "speech-started",
+      seq: 4,
+      recordingSessionId: SESSION,
+      fileTime: 8,
+    });
+    // The recorder service died; on its next start it repaired the files,
+    // ended the take where the mic file ends, and logged the crash.
+    await ingest.feed(
+      {
+        type: "speech-ended",
+        seq: 5,
+        recordingSessionId: SESSION,
+        fileTime: 11,
+      },
+      {
+        type: "recording-crashed",
+        seq: 6,
+        recordingSessionId: SESSION,
+        files: FILES,
+        repairs: { camera: "remuxed", screen: "remuxed", mic: "remuxed" },
+      }
+    );
+
+    expect((await readSession())?.status).toBe("crashed");
+    expect(
+      (await savedClips(video.id)).map((c) => [
+        c.sourceStartTime,
+        c.sourceEndTime,
+      ])
+    ).toEqual([
+      [2.15, 5.23],
+      [8.15, 11.23],
+    ]);
+    expect(ingest.messages.at(-1)).toMatchObject({
+      type: "recording-stopped",
+      crashed: true,
+      framesLost: null,
+    });
+  });
+
+  it("tells the editor the camera was lost", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+
+    await ingest.feed(
+      started(video.id),
+      {
+        type: "camera-lost",
+        seq: 2,
+        recordingSessionId: SESSION,
+        fileTime: 10,
+        errors: ["Error during demuxing: I/O error"],
+      },
+      { ...stopped(3), reason: "camera-lost" }
+    );
+
+    expect(ingest.messages.map((m) => m.type)).toEqual([
+      "recording-started",
+      "camera-lost",
+      "recording-stopped",
+    ]);
+    expect((await readSession())?.status).toBe("stopped");
   });
 });

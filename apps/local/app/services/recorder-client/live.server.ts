@@ -4,7 +4,10 @@ import { RECORDER_SERVICE_PORT } from "recorder-service/protocol";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { runtimeLive } from "@/services/layer.server";
 import { createRecorderClient, type RecorderClient } from "./client.server";
-import { ingestRecorderEvent } from "./ingest.server";
+import {
+  ingestRecorderEvent,
+  unfinishedRecordingSessions,
+} from "./ingest.server";
 
 /**
  * The app server's one recorder client, made on first use and kept across
@@ -39,6 +42,13 @@ export const recorderClient = (): RecorderClient => {
         Effect.gen(function* () {
           const db = yield* DrizzleService;
           return yield* ingestRecorderEvent(db, event, insertionPointFor);
+        })
+      ),
+    unfinishedRecordingSessions: () =>
+      runtimeLive.runPromise(
+        Effect.gen(function* () {
+          const db = yield* DrizzleService;
+          return yield* unfinishedRecordingSessions(db);
         })
       ),
     reconnectMs: 2_000,
