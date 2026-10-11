@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   canRecord,
+  canRetryCamera,
   createInitialNewRecorderState,
   newRecorderReducer,
 } from "./new-recorder-reducer";
@@ -18,8 +19,14 @@ const status = (
     reachable: true,
     problem: null,
     recordingSessionId: null,
+    previews: {
+      camera: "http://r/preview/camera",
+      screen: "http://r/preview/screen",
+    },
     ...o,
   });
+
+const live = heard({ type: "camera-went-live" });
 
 const pressRecord = {
   type: "press-record",
@@ -38,7 +45,7 @@ describe("the New recorder's Record and Stop", () => {
     expect(canRecord(t.getState())).toBe(false);
     expect(t.getEffects()).toEqual([]);
 
-    t.send(status()).send(pressRecord);
+    t.send(status()).send(live).send(pressRecord);
     expect(t.getEffects()).toEqual([
       {
         type: "start-recording",
@@ -52,6 +59,7 @@ describe("the New recorder's Record and Stop", () => {
   it("follows the recorder through a recording and Stop", () => {
     const t = tester();
     t.send(status())
+      .send(live)
       .send(pressRecord)
       .send(
         heard({
@@ -83,6 +91,7 @@ describe("the New recorder's Record and Stop", () => {
   it("shows why Record was refused and lets it be pressed again", () => {
     const t = tester();
     t.send(status())
+      .send(live)
       .send(pressRecord)
       .send({ type: "start-recording-failed", message: "Close OBS first" });
     expect(t.getState()).toMatchObject({
@@ -93,5 +102,68 @@ describe("the New recorder's Record and Stop", () => {
     t.send(pressRecord);
     expect(t.getState().error).toBeNull();
     expect(t.getEffects()).toHaveLength(2);
+  });
+});
+
+describe("the Cam Link in the editor", () => {
+  it("keeps Record disabled until the camera went live", () => {
+    const t = tester();
+    t.send(status())
+      .send(heard({ type: "camera-opening", attempt: 1 }))
+      .send(pressRecord);
+    expect(canRecord(t.getState())).toBe(false);
+    expect(t.getEffects()).toEqual([]);
+
+    t.send(live);
+    expect(canRecord(t.getState())).toBe(true);
+
+    t.send(heard({ type: "camera-closed" }));
+    expect(canRecord(t.getState())).toBe(false);
+  });
+
+  it("shows the replug message, and clears it once Retry has the camera opening again", () => {
+    const t = tester();
+    t.send(status())
+      .send(heard({ type: "camera-opening", attempt: 3 }))
+      .send(heard({ type: "cam-link-not-starting", message: "replug it" }));
+    expect(t.getState().camera).toEqual({
+      kind: "not-starting",
+      message: "replug it",
+    });
+    expect(canRetryCamera(t.getState())).toBe(true);
+
+    t.send({ type: "press-retry" });
+    expect(t.getEffects()).toEqual([{ type: "retry-camera" }]);
+    expect(canRetryCamera(t.getState())).toBe(false);
+
+    t.send(heard({ type: "camera-opening", attempt: 1 })).send(live);
+    expect(t.getState().camera).toEqual({ kind: "live" });
+    expect(canRecord(t.getState())).toBe(true);
+  });
+
+  it("shows Close OBS first until Retry, and why a Retry failed", () => {
+    const t = tester();
+    t.send(status()).send(
+      heard({ type: "cam-link-busy", message: "Close OBS first" })
+    );
+    expect(t.getState().camera).toMatchObject({ kind: "busy" });
+
+    t.send({ type: "press-retry" }).send({
+      type: "retry-camera-failed",
+      message: "The recorder service went away.",
+    });
+    expect(t.getState()).toMatchObject({
+      camera: { kind: "busy", message: "Close OBS first" },
+      error: "The recorder service went away.",
+    });
+    expect(canRetryCamera(t.getState())).toBe(true);
+
+    t.send({ type: "press-retry" }).send(
+      heard({ type: "camera-opening", attempt: 1 })
+    );
+    expect(t.getState()).toMatchObject({
+      camera: { kind: "opening" },
+      error: null,
+    });
   });
 });
