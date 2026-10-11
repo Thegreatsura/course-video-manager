@@ -11,11 +11,18 @@ import { computeExportHash, toExportClips } from "@/services/export-hash";
  * byte. They live apart from `export-hash.test.ts`, which is at the repo's
  * per-file size limit.
  */
+const OBS = {
+  recordingSessionId: null,
+  sceneOverride: null,
+  recordingSession: null,
+};
+
 const obsRows = [
   {
     videoFilename: "/mnt/d/obs-recordings/2026-10-01 09-14-02.mkv",
     sourceStartTime: 12.345,
     sourceEndTime: 19.876,
+    ...OBS,
     pauseType: "none",
     zoomType: "none",
     overlays: [],
@@ -24,6 +31,7 @@ const obsRows = [
     videoFilename: "/mnt/d/obs-recordings/2026-10-01 09-14-02.mkv",
     sourceStartTime: 21.5,
     sourceEndTime: 30.25,
+    ...OBS,
     pauseType: "long",
     zoomType: "none",
     overlays: [],
@@ -32,6 +40,7 @@ const obsRows = [
     videoFilename: "/mnt/d/obs-recordings/2026-10-01 10-02-41.mkv",
     sourceStartTime: 0.75,
     sourceEndTime: 4.125,
+    ...OBS,
     pauseType: "none",
     zoomType: "none",
     overlays: [],
@@ -46,6 +55,49 @@ describe("an OBS Clip's Export Hash through the Clip Source", () => {
     );
     expect(computeExportHash(clips, "short")).toBe(
       "4950ba6b38ec40b7cff9bc03a37d84d1"
+    );
+  });
+});
+
+const sessionRow = (micOffsetMs: number) => ({
+  videoFilename: "/rec/s1/mic.mkv",
+  sourceStartTime: 12,
+  sourceEndTime: 20,
+  pauseType: "none",
+  zoomType: "none",
+  overlays: [],
+  recordingSessionId: "session-1",
+  sceneOverride: null,
+  recordingSession: {
+    id: "session-1",
+    cameraFilePath: "/rec/s1/camera.mkv",
+    screenFilePath: "/rec/s1/screen.mkv",
+    micFilePath: "/rec/s1/mic.mkv",
+    micOffsetMs,
+    sceneEvents: [{ fileTime: 14, scene: "Camera" }],
+  },
+});
+
+const QUIETER_HIGHS = { lowDb: 0, midDb: 0, highDb: -3 };
+
+describe("a new-recorder Clip's Export Hash", () => {
+  const hash = (
+    rows: Parameters<typeof toExportClips>[0],
+    micEq?: typeof QUIETER_HIGHS
+  ) => computeExportHash(toExportClips(rows), "landscape", { micEq });
+  const base = hash([sessionRow(150)]);
+
+  it("moves when the Scene Override, mic offset or mic EQ changes", () => {
+    expect(hash([{ ...sessionRow(150), sceneOverride: "Code" }])).not.toBe(
+      base
+    );
+    expect(hash([sessionRow(180)])).not.toBe(base);
+    expect(hash([sessionRow(150)], QUIETER_HIGHS)).not.toBe(base);
+  });
+
+  it("leaves OBS Clips' addresses where they were, whatever the EQ", () => {
+    expect(hash(obsRows, QUIETER_HIGHS)).toBe(
+      "9a58c78eb23dbfc7020e1c84ae3cc711"
     );
   });
 });

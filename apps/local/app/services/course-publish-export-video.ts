@@ -1,4 +1,8 @@
-import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
+import {
+  clipComposite,
+  clipFfmpegInput,
+  clipSource,
+} from "@/packages/clip-source";
 import path from "node:path";
 import { assertUnder } from "@/services/assert-under";
 import { Cause, Effect } from "effect";
@@ -16,6 +20,7 @@ import {
   sidecarPath,
 } from "./export-sha256-sidecar";
 import {
+  clipExportDurationInSeconds,
   expectedExportDurationInSeconds,
   isExportUnacceptablyShort,
   paddedClipDurationsInSeconds,
@@ -151,12 +156,22 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       // list of padded durations, used for both, so the file asked for and
       // the file checked for cannot differ.
       const clipDurations = paddedClipDurationsInSeconds(video.clips);
-      const renderClips = video.clips.map((clip, index) => ({
-        ...clipFfmpegInput(clipSource(clip)),
-        duration: clipDurations[index]!.duration,
-        pauseType: clipDurations[index]!.pauseType,
-        zoomType: clip.zoomType,
-      }));
+      const renderClips = video.clips.map((clip, index) => {
+        const source = clipSource(clip);
+        const input = clipFfmpegInput(source);
+        const asked = clipDurations[index]!;
+        return {
+          ...input,
+          duration: asked.duration,
+          pauseType: asked.pauseType,
+          zoomType: clip.zoomType,
+          // Drawn over everything the Clip outputs, long Pause included.
+          composite: clipComposite(source, {
+            from: input.startTime,
+            to: input.startTime + clipExportDurationInSeconds(asked),
+          }),
+        };
+      });
 
       const expectedDurationInSeconds =
         expectedExportDurationInSeconds(clipDurations);

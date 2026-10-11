@@ -81,7 +81,10 @@ const markSeededVideoExported = async () => {
     with: {
       clips: {
         where: (c, { eq }) => eq(c.archived, false),
-        with: { overlays: true },
+        with: {
+          overlays: true,
+          recordingSession: { with: { sceneEvents: true } },
+        },
       },
     },
   });

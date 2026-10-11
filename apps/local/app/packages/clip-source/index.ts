@@ -6,18 +6,24 @@
 // and Clip transcription all ask it, instead of reading the Clip's Footage path
 // column themselves.
 //
-// Today every Clip has one answer — a single Footage file with a start and end
-// time (an OBS Clip). A second kind of source belongs inside `lib/`, behind
-// these same functions, not in the readers.
+// Two answers: an OBS Clip is a single Footage file with a start and end time;
+// a new-recorder Clip is its Recording Session's composite (screen + camera in
+// its scenes, mic shifted by the mic offset) — `clipComposite` says what the
+// export draws. Which answer a Clip has is decided inside `lib/`, not in the
+// readers.
 export {
+  clipComposite,
   clipFfmpegInput,
   clipFrame,
   clipPlaybackUrl,
   clipSource,
   clipSourceColumns,
   clipSourceHashFields,
+  type ClipComposite,
   type ClipFfmpegInput,
   type ClipFrame,
   type ClipSource,
   type ClipSourceColumns,
+  type ClipSourceRow,
+  type RecordingSessionColumns,
 } from "./lib/clip-source";

@@ -3,11 +3,13 @@ import path from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { resolveVideoFormat } from "@/features/videos/video-format";
+import type { MicEq } from "@cvm/core/features/videos/recorder";
 import {
   clipSource,
   clipSourceColumns,
   clipSourceHashFields,
   type ClipSourceColumns,
+  type ClipSourceRow,
 } from "@/packages/clip-source";
 import {
   DEFAULT_CLIP_ZOOM_TYPE,
@@ -55,9 +57,11 @@ export type ExportOverlay = {
 
 /**
  * A Clip as the export address sees it. Its picture and sound are the Clip
- * Source columns, read only through `@/packages/clip-source`.
+ * Source columns, read only through `@/packages/clip-source`. Built from DB
+ * rows by {@link toExportClips}, which insists the Recording Session was
+ * loaded.
  */
-export type ExportClip = ClipSourceColumns & {
+export type ExportClip = ClipSourceRow & {
   pauseType: string;
   zoomType: string;
   overlays: ExportOverlay[];
@@ -76,6 +80,10 @@ const LONG_PAUSE = "long";
  * down to the fields the export address is derived from. Every caller that
  * hashes DB clips goes through here, so no site can accidentally widen or
  * narrow what the hash sees.
+ *
+ * Its input requires the Clip's `recordingSession` (joined with its scene
+ * events — `CLIP_SOURCE_WITH` in db-video-operations): a query that forgot it
+ * would address a new-recorder Clip as a single file and never re-export it.
  */
 export const toExportClips = (
   clips: ReadonlyArray<
@@ -198,10 +206,17 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
  * contributes exactly what it always did, so adding this field left every
  * existing export address intact and re-exported only the videos whose address
  * had been lying about their contents.
+ *
+ * A new-recorder Clip's composite is drawn from more than its file and range:
+ * its Recording Session, scene segments, Scene Override, mic offset, the mic
+ * EQ setting and the layout version join its entry (see
+ * `clipSourceHashFields`). An OBS Clip's entry is untouched.
  */
 export const computeExportHash = (
   clips: ExportClip[],
-  format: string | null | undefined
+  format: string | null | undefined,
+  /** The saved mic EQ setting new-recorder Clips are exported with. */
+  settings: { readonly micEq?: MicEq } = {}
 ): string | null => {
   if (clips.length === 0) return null;
 
@@ -209,7 +224,7 @@ export const computeExportHash = (
     v: EXPORT_VERSION,
     fmt: resolveVideoFormat(format),
     clips: clips.map((c) => ({
-      ...clipSourceHashFields(clipSource(c)),
+      ...clipSourceHashFields(clipSource(c, settings)),
       ...(c.pauseType === LONG_PAUSE ? { p: LONG_PAUSE } : {}),
       ...(resolveClipZoomType(c.zoomType) === DEFAULT_CLIP_ZOOM_TYPE
         ? {}

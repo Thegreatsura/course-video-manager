@@ -4,6 +4,7 @@ import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
+import { recordingSessionExportRelation } from "./db-recording-session-relations.server.js";
 import {
   recorderForNewVideo,
   type VideoRecorder,
@@ -155,7 +156,10 @@ const createPitchOperations = (db: Database) => {
                 clips: {
                   orderBy: asc(clips.order),
                   where: eq(clips.archived, false),
-                  with: { overlays: overlayExportRelation },
+                  with: {
+                    overlays: overlayExportRelation,
+                    recordingSession: recordingSessionExportRelation,
+                  },
                 },
               },
             },
@@ -236,7 +240,10 @@ const createPitchOperations = (db: Database) => {
               clips: {
                 orderBy: asc(clips.order),
                 where: eq(clips.archived, false),
-                with: { overlays: overlayExportRelation },
+                with: {
+                  overlays: overlayExportRelation,
+                  recordingSession: recordingSessionExportRelation,
+                },
               },
               beats: {
                 columns: {

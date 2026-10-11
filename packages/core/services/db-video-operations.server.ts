@@ -24,6 +24,7 @@ import {
   requireDraftVersionForVideo,
 } from "./draft-guard.server.js";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
+import { recordingSessionExportRelation } from "./db-recording-session-relations.server.js";
 import {
   createVideoNavigationOps,
   type VideoNavigationDeps,
@@ -160,7 +161,10 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
             clips: {
               orderBy: asc(clips.order),
               where: eq(clips.archived, false),
-              with: { overlays: overlayExportRelation },
+              with: {
+                overlays: overlayExportRelation,
+                recordingSession: recordingSessionExportRelation,
+              },
             },
           },
         })
@@ -188,7 +192,10 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
             clips: {
               orderBy: asc(clips.order),
               where: eq(clips.archived, false),
-              with: { overlays: overlayExportRelation },
+              with: {
+                overlays: overlayExportRelation,
+                recordingSession: recordingSessionExportRelation,
+              },
             },
           },
         })
@@ -230,6 +237,7 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
             ...(opts?.withArchived ? {} : { where: eq(clips.archived, false) }),
             with: {
               overlays: overlayExportRelation,
+              recordingSession: recordingSessionExportRelation,
               diagramSnapshot: {
                 with: {
                   diagram: {
