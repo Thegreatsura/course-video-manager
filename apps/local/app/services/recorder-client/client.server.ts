@@ -10,6 +10,7 @@ import {
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
+import type { Scene } from "@/packages/scene-layout";
 import type { IngestResult } from "./ingest.server";
 import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 
@@ -103,6 +104,15 @@ const cameraMessage = (
   }
 };
 
+/** The scene, as an editor on `videoId` hears it, while the recorder is its. */
+const sceneMessage = (
+  state: RecorderState,
+  videoId: string
+): NewRecorderMessage | undefined =>
+  state.kind !== "closed" && state.videoId === videoId
+    ? { type: "scene-changed", scene: state.scene }
+    : undefined;
+
 type Listener = (message: NewRecorderMessage) => void;
 
 type Waiter = {
@@ -128,6 +138,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   /** The Video last asked to be open (null: asked to close), until it is. */
   let asked: string | null | undefined;
   const lastCamera = new Map<string, string>();
+  const lastScene = new Map<string, Scene>();
   const http = o.url.replace(/^ws/, "http");
   const previews = {
     camera: `${http}${previewPath("camera")}`,
@@ -160,10 +171,19 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     lastCamera.set(videoId, key);
     publish(videoId, message);
   };
+  /** The scene, to an editor, only when it changed. */
+  const publishScene = (videoId: string) => {
+    const message = reachable ? sceneMessage(state, videoId) : undefined;
+    if (message?.type !== "scene-changed") return;
+    if (lastScene.get(videoId) === message.scene) return;
+    lastScene.set(videoId, message.scene);
+    publish(videoId, message);
+  };
   const publishStatus = () => {
     for (const videoId of listeners.keys()) {
       publish(videoId, statusFor(videoId));
       publishCamera(videoId);
+      publishScene(videoId);
     }
   };
 
@@ -307,6 +327,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       case "replay-done":
         return;
       case "recording-started":
+      case "scene-changed":
       case "screen-recorder-tuned":
       case "speech-started":
       case "speech-ended":
@@ -409,6 +430,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         lastCamera.set(videoId, JSON.stringify(camera));
         listener(camera);
       }
+      const scene = reachable ? sceneMessage(state, videoId) : undefined;
+      if (scene?.type === "scene-changed") {
+        lastScene.set(videoId, scene.scene);
+        listener(scene);
+      }
       wanted = [...wanted.filter((v) => v !== videoId), videoId];
       reconcile();
       return () => {
@@ -416,6 +442,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         if (set.size > 0) return;
         listeners.delete(videoId);
         lastCamera.delete(videoId);
+        lastScene.delete(videoId);
         setTimeout(() => {
           if (listeners.has(videoId)) return;
           wanted = wanted.filter((v) => v !== videoId);
@@ -460,6 +487,22 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
           m.type === "state" &&
           m.state.kind === "open" &&
           m.state.camera.kind === "opening"
+      );
+    },
+
+    /** Draws the picture in `scene` from now on, recording or not. */
+    async switchScene(videoId: string, scene: Scene) {
+      if (state.kind === "closed" || state.videoId !== videoId)
+        throw new RecorderRefusedError(
+          "The recorder is not open for this Video."
+        );
+      await command(
+        { type: "switch-scene", scene },
+        (m) =>
+          m.type === "state" &&
+          m.state.kind !== "closed" &&
+          m.state.videoId === videoId &&
+          m.state.scene === scene
       );
     },
 

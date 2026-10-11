@@ -1,3 +1,4 @@
+import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
 
 /**
@@ -21,7 +22,14 @@ import type { SilenceLength } from "../app/silence-detection-constants";
  * (`multipart/x-mixed-replace`, so an `<img>` shows them), and the camera's
  * still for the thumbnail camera: `GET /still` (`STILL_PATH`).
  *
- * Scenes arrive in later slices as more members of these unions.
+ * TIME BASE. Every process stamps its frames with the one Windows wall clock,
+ * less the Recording Session's T0, so a file time is seconds since T0. The
+ * picture (screen and camera) is where Clips are cut: a scene change is
+ * logged at the picture time it was asked for, `(now - T0) / 1000`. Speech
+ * is heard in the mic file, which runs ahead of the picture by the Recording
+ * Session's mic offset, so a speech time becomes picture time only once the
+ * app server adds that offset; scenes and Clip bounds are then compared in
+ * the same clock.
  */
 
 /** The WebSocket and the MJPEG previews' HTTP port. */
@@ -69,6 +77,12 @@ export type RecorderCommand =
   | { type: "open"; videoId: string }
   /** Try the camera again after `not-starting` or `busy`. */
   | { type: "retry-camera" }
+  /**
+   * Draw the picture in this scene from now on. Open, it is the scene the
+   * preview shows and the next Recording Session starts in; recording, it
+   * is also logged as a `scene-changed`.
+   */
+  | { type: "switch-scene"; scene: Scene }
   /** Start a Recording Session in a new folder under `folder` (a WSL path). */
   | { type: "record"; silenceLength: SilenceLength; folder: string }
   | { type: "stop" }
@@ -107,6 +121,11 @@ export type RecordingSessionEvent = Logged<
       silenceLength: SilenceLength;
       files: RecordingSessionFiles;
     }
+  /**
+   * The scene from here on, in picture file time. Every Recording Session
+   * logs the scene it starts in at 0, right after `recording-started`.
+   */
+  | { type: "scene-changed"; scene: Scene; fileTime: number }
   /** The screen recorder's 1 ms timer, no-throttling and High priority. */
   | { type: "screen-recorder-tuned"; ok: boolean; detail: string }
   /** Speech in the mic file, in seconds of file time. */
@@ -146,10 +165,12 @@ export type RecordingSessionEvent = Logged<
 
 export type RecorderState =
   | { kind: "closed" }
-  | { kind: "open"; videoId: string; camera: CameraStatus }
+  /** `scene`: what the preview draws, and what Record starts in. */
+  | { kind: "open"; videoId: string; camera: CameraStatus; scene: Scene }
   | {
       kind: "recording";
       videoId: string;
+      scene: Scene;
       recordingSessionId: string;
       lastSeq: number;
     };

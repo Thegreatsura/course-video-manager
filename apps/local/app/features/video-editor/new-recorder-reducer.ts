@@ -1,4 +1,5 @@
 import type { EffectReducer } from "use-effect-reducer";
+import type { Scene } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost } from "recorder-service/protocol";
@@ -13,6 +14,10 @@ import type { NewRecorderMessage } from "./new-recorder-wire";
  * The Cam Link opens when the editor opens (the app server's recorder client
  * opens the recorder while an editor listens); Record waits for
  * `camera-went-live`, and the replug and Close-OBS messages wait for Retry.
+ *
+ * Scenes: the preview draws the scene the recorder says it is in
+ * (`scene-changed`); a scene button asks the recorder to switch, and the
+ * preview follows once it has.
  */
 export namespace newRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
@@ -36,6 +41,8 @@ export namespace newRecorderReducer {
     /** Where the browser watches the raw camera and screen. */
     previews: { camera: string; screen: string } | null;
     speaking: boolean;
+    /** The scene the recorder draws; null while it is not open for this Video. */
+    scene: Scene | null;
     /** The last thing that went wrong, until the next Record. */
     error: string | null;
     /**
@@ -57,6 +64,8 @@ export namespace newRecorderReducer {
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
     | { type: "press-retry" }
+    | { type: "press-scene"; scene: Scene }
+    | { type: "switch-scene-failed"; message: string }
     | { type: "retry-camera-failed"; message: string }
     | { type: "start-recording-failed"; message: string }
     | { type: "stop-recording-failed"; message: string };
@@ -68,7 +77,8 @@ export namespace newRecorderReducer {
         insertionPoint: InsertionPoint;
       }
     | { type: "stop-recording" }
-    | { type: "retry-camera" };
+    | { type: "retry-camera" }
+    | { type: "switch-scene"; scene: Scene };
 }
 
 export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
@@ -79,6 +89,7 @@ export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
   retrying: false,
   previews: null,
   speaking: false,
+  scene: null,
   error: null,
   alert: null,
   framesLost: null,
@@ -95,6 +106,9 @@ export const canRecord = (state: newRecorderReducer.State) =>
   state.problem === null &&
   state.phase === "idle" &&
   state.camera.kind === "live";
+
+export const canSwitchScene = (state: newRecorderReducer.State) =>
+  state.reachable === true && state.scene !== null;
 
 export const canRetryCamera = (state: newRecorderReducer.State) =>
   !state.retrying &&
@@ -121,6 +135,7 @@ const heard = (
         problem: message.problem,
         previews: message.previews,
         camera: message.reachable ? state.camera : { kind: "closed" },
+        scene: message.reachable ? state.scene : null,
         phase: recording
           ? state.phase === "stopping"
             ? "stopping"
@@ -143,7 +158,9 @@ const heard = (
     case "cam-link-busy":
       return cameraHeard(state, { kind: "busy", message: message.message });
     case "camera-closed":
-      return cameraHeard(state, { kind: "closed" });
+      return { ...cameraHeard(state, { kind: "closed" }), scene: null };
+    case "scene-changed":
+      return { ...state, scene: message.scene };
     case "recording-started":
       return { ...state, phase: "recording", speaking: false, error: null };
     case "speech-started":
@@ -209,6 +226,12 @@ export const newRecorderReducer: EffectReducer<
       if (!canRetryCamera(state)) return state;
       exec({ type: "retry-camera" });
       return { ...state, retrying: true, error: null };
+    case "press-scene":
+      if (!canSwitchScene(state) || action.scene === state.scene) return state;
+      exec({ type: "switch-scene", scene: action.scene });
+      return { ...state, error: null };
+    case "switch-scene-failed":
+      return { ...state, error: action.message };
     case "retry-camera-failed":
       return { ...state, retrying: false, error: action.message };
     case "start-recording-failed":

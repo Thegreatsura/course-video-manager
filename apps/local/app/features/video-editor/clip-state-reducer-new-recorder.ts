@@ -172,6 +172,7 @@ export const handleNewRecorderMessage = (
     case "cam-link-not-starting":
     case "cam-link-busy":
     case "camera-closed":
+    case "scene-changed":
     case "speech-started":
     case "speech-ended":
     case "recorder-failed":
