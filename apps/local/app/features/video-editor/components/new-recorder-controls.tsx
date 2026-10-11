@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CircleIcon, SquareIcon } from "lucide-react";
+import { CircleIcon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { SilenceLengthToggle } from "./silence-length-toggle";
@@ -24,6 +24,9 @@ const statusText = (
   }
 };
 
+const framesText = (count: number, picture: string) =>
+  `${count} ${picture} ${count === 1 ? "frame" : "frames"}`;
+
 const useNewRecorderControls = () =>
   useContextSelector(VideoEditorContext, (ctx) => ctx.newRecorder);
 
@@ -36,6 +39,24 @@ export const NewRecorderControls = () => {
   const { state } = controls;
   return (
     <div className="mt-2 flex flex-col items-center gap-2">
+      {state.alert && (
+        <div
+          role="alert"
+          data-testid="new-recorder-alert"
+          className="flex w-full max-w-xl items-start gap-3 rounded-md border-2 border-red-600 bg-red-600/10 p-3 text-sm font-semibold text-red-700 dark:text-red-200"
+        >
+          <TriangleAlertIcon className="size-5 shrink-0 text-red-500" />
+          <p className="flex-1">{state.alert}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={controls.onDismissAlert}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-center gap-3">
         <SilenceLengthToggle />
         {state.phase === "recording" || state.phase === "stopping" ? (
@@ -68,6 +89,15 @@ export const NewRecorderControls = () => {
           {statusText(controls)}
         </span>
       </div>
+      {state.framesLost && (
+        <p
+          className={`text-xs ${state.framesLost.camera + state.framesLost.screen > 0 ? "text-amber-500" : "text-muted-foreground"}`}
+          data-testid="new-recorder-frames-lost"
+        >
+          Last recording: {framesText(state.framesLost.camera, "camera")},{" "}
+          {framesText(state.framesLost.screen, "screen")} lost
+        </p>
+      )}
       {state.error && (
         <p className="text-xs text-red-500 whitespace-pre-line text-center">
           {state.error}

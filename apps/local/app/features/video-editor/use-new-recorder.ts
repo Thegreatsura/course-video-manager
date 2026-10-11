@@ -24,6 +24,7 @@ export type NewRecorderControls = {
   canStop: boolean;
   onRecord: () => void;
   onStop: () => void;
+  onDismissAlert: () => void;
 };
 
 const answer = async (response: Response) => {
@@ -111,5 +112,6 @@ export const useNewRecorder = (o: {
         insertionPoint: savedItemBefore(o.clipStateRef.current),
       }),
     onStop: () => dispatch({ type: "press-stop" }),
+    onDismissAlert: () => dispatch({ type: "dismiss-alert" }),
   };
 };

@@ -166,6 +166,7 @@ export const handleNewRecorderMessage = (
       );
     }
     case "recorder-status":
+    case "camera-lost":
     case "speech-started":
     case "speech-ended":
     case "recorder-failed":

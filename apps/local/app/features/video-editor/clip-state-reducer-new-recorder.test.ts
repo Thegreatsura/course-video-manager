@@ -92,6 +92,8 @@ describe("clip reducer on a New recorder Video", () => {
           type: "recording-stopped",
           recordingSessionId: SESSION,
           errors: [],
+          crashed: false,
+          framesLost: { camera: 0, screen: 0 },
         })
       );
 
