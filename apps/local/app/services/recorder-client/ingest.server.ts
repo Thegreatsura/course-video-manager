@@ -2,6 +2,7 @@ import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import type { DatabaseId } from "@cvm/core/db/ids";
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
 import { asc, eq } from "drizzle-orm";
+import { clipRecordingSessionRelation } from "@cvm/core/services/clip-recording-session-relation";
 import { Effect } from "effect";
 import { sceneSegments } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
@@ -195,12 +196,19 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         { type: "speech-ended", recordingSessionId },
       ];
       if (last && placed.transcriptionJobId) {
+        const recordingSession = yield* dbCall(() =>
+          db.query.recordingSessions.findFirst({
+            where: eq(recordingSessions.id, recordingSessionId),
+            ...clipRecordingSessionRelation,
+          })
+        );
         messages.push({
           type: "clips-saved",
           recordingSessionId,
           clips: placed.clips.map((c) => ({
             ...c,
             id: c.id as DatabaseId,
+            recordingSession: recordingSession!,
           })),
           placedAt: insertionPoint,
           transcriptionJobId: placed.transcriptionJobId,

@@ -322,6 +322,30 @@ describe("recorder ingest", () => {
     ]);
   });
 
+  it("hands the editor each saved Clip with its Recording Session, to play as the composite", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+    await ingest.feed(
+      started(video.id),
+      sceneChanged(2, "Code", 0),
+      sceneChanged(3, "Camera", 4),
+      ...speech(4, 2, 6)
+    );
+    const saved = ingest.messages.find((m) => m.type === "clips-saved");
+    if (saved?.type !== "clips-saved") throw new Error("no Clips saved");
+    expect(saved.clips[0]!.recordingSession).toEqual({
+      id: SESSION,
+      cameraFilePath: FILES.camera,
+      screenFilePath: FILES.screen,
+      micFilePath: FILES.mic,
+      micOffsetMs: 150,
+      sceneEvents: [
+        { fileTime: 0, scene: "Code" },
+        { fileTime: 4, scene: "Camera" },
+      ],
+    });
+  });
+
   it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file", async () => {
     const video = await clipService.createVideo("new recorder");
     const ingest = recorderIngest();
