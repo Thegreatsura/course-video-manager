@@ -1,4 +1,5 @@
 import { Data, Effect } from "effect";
+import type { ClipSourceColumns } from "@/packages/clip-source";
 import {
   computeExportHash,
   toExportClips,
@@ -101,10 +102,7 @@ export class InvalidVideoAssetReceiptError extends Data.TaggedError(
 
 // ── Input types ─────────────────────────────────────────────────────────
 
-type InputClip = {
-  videoFilename: string;
-  sourceStartTime: number;
-  sourceEndTime: number;
+type InputClip = ClipSourceColumns & {
   pauseType: string;
   zoomType: string;
   order: string;

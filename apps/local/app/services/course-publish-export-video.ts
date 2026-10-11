@@ -1,3 +1,4 @@
+import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
 import path from "node:path";
 import { assertUnder } from "@/services/assert-under";
 import { Cause, Effect } from "effect";
@@ -151,8 +152,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       // the file checked for cannot differ.
       const clipDurations = paddedClipDurationsInSeconds(video.clips);
       const renderClips = video.clips.map((clip, index) => ({
-        inputVideo: clip.videoFilename,
-        startTime: clip.sourceStartTime,
+        ...clipFfmpegInput(clipSource(clip)),
         duration: clipDurations[index]!.duration,
         pauseType: clipDurations[index]!.pauseType,
         zoomType: clip.zoomType,
