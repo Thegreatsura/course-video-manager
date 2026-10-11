@@ -171,3 +171,15 @@ export class ClipCarriesOverlaysError extends Data.TaggedError(
   overlayCount: number;
   message: string;
 }> {}
+
+/**
+ * A Recorder choice refused: the Video already has Clips (one Video never
+ * mixes OBS and new-recorder Clips), or it is a Short, which records with OBS
+ * only.
+ */
+export class VideoRecorderLockedError extends Data.TaggedError(
+  "VideoRecorderLockedError"
+)<{
+  videoId: string;
+  message: string;
+}> {}

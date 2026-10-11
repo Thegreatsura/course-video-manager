@@ -55,3 +55,24 @@ export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
  * applies to the same mic, which the new recorder's raw files do not carry.
  */
 export const DEFAULT_MIC_OFFSET_MS = 150;
+
+/**
+ * The Recorders a Video of this format may record with. Shorts record with
+ * OBS only: the New recorder cannot film the Spacedesk display yet.
+ */
+export function recordersForFormat(format: string): readonly VideoRecorder[] {
+  return format === "short" ? ["obs"] : VIDEO_RECORDERS;
+}
+
+/**
+ * The `video.recorder` a new Video is stored with: the Recorder it was
+ * created with (the editor's last choice), or null (OBS) when none was given
+ * or the format cannot record with it.
+ */
+export function recorderForNewVideo(
+  format: string,
+  recorder: VideoRecorder | null | undefined
+): VideoRecorder | null {
+  if (!recorder) return null;
+  return recordersForFormat(format).includes(recorder) ? recorder : null;
+}

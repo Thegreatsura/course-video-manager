@@ -11,6 +11,7 @@ import { getVideoPath } from "@/lib/video-helpers";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
+import { readLastRecorderChoice } from "@/features/video-editor/last-recorder-choice";
 
 export function AddVideoModal(props: {
   lessonId?: string;
@@ -59,6 +60,12 @@ export function AddVideoModal(props: {
           }}
           className="space-y-4 py-4"
         >
+          {/* A new Video starts with the Recorder chosen last. */}
+          <input
+            type="hidden"
+            name="recorder"
+            value={readLastRecorderChoice() ?? ""}
+          />
           <div className="space-y-2">
             <Label htmlFor="video-title">Video Name</Label>
             <Input

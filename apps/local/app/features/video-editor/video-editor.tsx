@@ -37,6 +37,11 @@ import type {
 } from "./clip-state-reducer";
 import { isClip } from "./clip-utils";
 import { type OBSConnectionOuterState } from "./obs-connector";
+import {
+  toRecorderPicker,
+  type useRecorderChoice,
+} from "./use-recorder-choice";
+import { isRecorderLocked } from "./recorder-choice-reducer";
 import { type FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import {
@@ -73,6 +78,7 @@ export const VideoEditor = (props: {
    */
   anyClipsMissingTranscriptWords: boolean;
   obsConnectorState: OBSConnectionOuterState;
+  recorderChoice: ReturnType<typeof useRecorderChoice>;
   items: TimelineItem[];
   sessions: RecordingSession[];
   videoTitle: string;
@@ -447,6 +453,10 @@ export const VideoEditor = (props: {
       onShowScriptPanel,
       insertionPoint: props.insertionPoint,
       obsConnectorState: props.obsConnectorState,
+      recorderPicker: toRecorderPicker(
+        props.recorderChoice,
+        isRecorderLocked(props.obsConnectorState, props.items, props.sessions)
+      ),
       liveMediaStream: props.liveMediaStream,
       speechDetectorState: props.speechDetectorState,
       silenceLength: props.silenceLength,
@@ -536,6 +546,7 @@ export const VideoEditor = (props: {
       onShowScriptPanel,
       props.insertionPoint,
       props.obsConnectorState,
+      props.recorderChoice.state,
       props.liveMediaStream,
       props.speechDetectorState,
       props.silenceLength,

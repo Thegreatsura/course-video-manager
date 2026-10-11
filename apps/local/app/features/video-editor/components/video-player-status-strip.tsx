@@ -3,6 +3,7 @@ import { AlertTriangleIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { MissingWordTimingBadge } from "./transcript-word-actions";
+import { RecorderPicker } from "./recorder-picker";
 
 /**
  * The one-line strip under the player: what this Video is, how long it runs,
@@ -37,6 +38,9 @@ export const VideoPlayerStatusStrip = () => {
         </span>
       )}
       <MissingWordTimingBadge />
+      <div className="ml-auto">
+        <RecorderPicker />
+      </div>
     </div>
   );
 };

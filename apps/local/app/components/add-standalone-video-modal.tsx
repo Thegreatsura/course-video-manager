@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useFetcher } from "react-router";
+import { readLastRecorderChoice } from "@/features/video-editor/last-recorder-choice";
 
 export function AddStandaloneVideoModal(props: {
   open: boolean;
@@ -32,6 +33,12 @@ export function AddStandaloneVideoModal(props: {
           onSubmit={() => props.onOpenChange(false)}
         >
           <input type="hidden" name="redirectTo" value="/videos/{id}/edit" />
+          {/* A new Video starts with the Recorder chosen last. */}
+          <input
+            type="hidden"
+            name="recorder"
+            value={readLastRecorderChoice() ?? ""}
+          />
           <div className="space-y-2">
             <Label htmlFor="video-title">Video Name</Label>
             <Input
