@@ -13,6 +13,9 @@ import type { RecordingSessionEvent } from "recorder-service/protocol";
  * An event handed out but then not saved is taken back by `forget`ting its
  * Recording Session: the sequencer starts it afresh, so a replay from the
  * start hands every event out again.
+ *
+ * After a reconnect, `heard` says where to replay a Recording Session from:
+ * after its last event handed out, which ingest saves (or, failing, forgets).
  */
 
 export type SequencedEvent =
@@ -97,5 +100,9 @@ export const createRecorderEventSequencer = () => {
     sessions.delete(recordingSessionId);
   };
 
-  return { accept, forget };
+  /** The last `seq` of a Recording Session handed out; 0 when none was. */
+  const heard = (recordingSessionId: string) =>
+    sessions.get(recordingSessionId)?.lastSeq ?? 0;
+
+  return { accept, forget, heard };
 };

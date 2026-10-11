@@ -265,9 +265,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   };
 
   /**
-   * Replays, from the start, every Recording Session that may have events
-   * this client never saved: the one recording now, the ones the service
-   * found crashed, and the ones the database still has as recording. What
+   * Replays every Recording Session that may have events this client never
+   * saved: the one recording now, the ones the service found crashed, and
+   * the ones the database still has as recording. Each replays from after
+   * the last event this client heard of it: after a dropped connection, only
+   * what it missed; after an app-server restart, the whole of it, and what
    * was saved already is skipped (ingest is idempotent).
    */
   const catchUp = (recovered: string[]) => {
@@ -285,7 +287,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       .then((unfinished) => {
         for (const id of unfinished) ids.add(id);
         for (const recordingSessionId of ids)
-          send({ type: "replay", recordingSessionId, afterSeq: 0 });
+          send({
+            type: "replay",
+            recordingSessionId,
+            afterSeq: sequencer.heard(recordingSessionId),
+          });
       });
   };
 

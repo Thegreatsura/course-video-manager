@@ -1,129 +1,37 @@
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { Effect, Layer } from "effect";
-import { startRecorderService } from "recorder-service/recorder-service";
-import {
-  fakeFootage,
-  fakeWindows,
-} from "recorder-service/test-utils/fake-windows";
-import { WebSocket } from "ws";
-import { DrizzleService } from "@/services/drizzle-service.server";
-import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import { describe, expect, it, vi } from "vitest";
+import { fakeFootage } from "recorder-service/test-utils/fake-windows";
+import { connect } from "recorder-service/test-utils/service-harness";
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
 import {
   setupClipServiceTests,
   clipService,
   testDb,
 } from "../clip-service-test-setup";
+import { createRecorderClient } from "./client.server";
 import {
-  createRecorderClient,
-  type RecorderClientOptions,
-} from "./client.server";
-import {
-  ingestRecorderEvent,
-  unfinishedRecordingSessions,
-} from "./ingest.server";
+  clipTimes,
+  connectClient,
+  readSession,
+  recordOn,
+  saveEvent,
+  speak,
+  startService,
+  tmp,
+  type Ingest,
+} from "./recorder-client-test-harness";
 
 /**
- * End to end, without hardware: the real recorder service on a scripted
- * Windows (its fake ffmpeg.exe), the app server's recorder client, and the
- * database on PGlite. Record, speak, Stop: saved Clips.
+ * End to end, without hardware (recorder-client-test-harness.ts): Record, speak, Stop:
+ * saved Clips.
  */
 
 setupClipServiceTests();
-
-const cleanups: (() => Promise<void> | void)[] = [];
-afterEach(async () => {
-  for (const c of cleanups.splice(0)) await c();
-});
-
-const tmp = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-client-"));
-  cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
-};
-
-const startService = async (stateDir = tmp()) => {
-  const windows = fakeWindows();
-  const service = await startRecorderService({
-    port: 0,
-    launch: windows.launch,
-    now: () => 1_760_000_000_000,
-    stateDir,
-  });
-  cleanups.unshift(() => service.close());
-  return { windows, port: service.port, stateDir };
-};
-
-type Ingest = RecorderClientOptions["ingest"];
-
-/** The real ingest, on PGlite. */
-const saveEvent: Ingest = (event, insertionPointFor) =>
-  Effect.runPromise(
-    ingestRecorderEvent(testDb as never, event, insertionPointFor).pipe(
-      Effect.provide(
-        JobOperationsService.Default.pipe(
-          Layer.provide(Layer.succeed(DrizzleService, testDb as never))
-        )
-      )
-    )
-  );
-
-/** The app server's recorder client, as live.server.ts makes it. */
-const connectClient = (port: number, ingest: Ingest = saveEvent) => {
-  const client = createRecorderClient({
-    url: `ws://127.0.0.1:${port}`,
-    ingest,
-    unfinishedRecordingSessions: () =>
-      Effect.runPromise(unfinishedRecordingSessions(testDb as never)),
-    reconnectMs: 50,
-    commandTimeoutMs: 5_000,
-    closeGraceMs: 50,
-    retryMs: 20,
-  });
-  cleanups.unshift(() => client.close());
-  return client;
-};
 
 const setup = async (ingest?: Ingest) => {
   const { windows, port, stateDir } = await startService();
   return { windows, client: connectClient(port, ingest), port, stateDir };
 };
-
-const readSession = () => testDb.query.recordingSessions.findFirst();
-
-const recordOn = async (client: ReturnType<typeof connectClient>) => {
-  const video = await clipService.createVideo("new recorder");
-  client.subscribe(video.id, () => {});
-  await vi.waitFor(() =>
-    client.startRecording(video.id, {
-      silenceLength: "short",
-      insertionPoint: { type: "start" },
-      folder: tmp(),
-    })
-  );
-  return video;
-};
-
-/** The camera's speech detector hears speech over each [from, to]. */
-const speak = (
-  camera: { stderr: (text: string) => void },
-  ...takes: [number, number][]
-) => {
-  for (const [from, to] of takes) {
-    camera.stderr(
-      `[silencedetect @ 1] silence_end: ${from} | silence_duration: 1\r\n`
-    );
-    camera.stderr(`[silencedetect @ 1] silence_start: ${to}\r\n`);
-  }
-};
-
-const clipTimes = async (videoId: string) =>
-  (await clipService.getTimeline(videoId)).flatMap((i) =>
-    i.type === "clip" ? [[i.data.sourceStartTime, i.data.sourceEndTime]] : []
-  );
 
 describe("the recorder client", () => {
   it("records on a New recorder Video: scene, Record, speech, Stop yields saved Clips, live", async () => {
@@ -249,15 +157,17 @@ describe("the recorder client", () => {
       closeGraceMs: 0,
       retryMs: 0,
     });
-    cleanups.push(() => client.close());
-
-    await expect(
-      client.startRecording("v1", {
-        silenceLength: "short",
-        insertionPoint: { type: "start" },
-        folder: "/tmp",
-      })
-    ).rejects.toThrow("The recorder service is not running");
+    try {
+      await expect(
+        client.startRecording("v1", {
+          silenceLength: "short",
+          insertionPoint: { type: "start" },
+          folder: "/tmp",
+        })
+      ).rejects.toThrow("The recorder service is not running");
+    } finally {
+      client.close();
+    }
   });
 
   it("marks a Recording Session crashed when the recorder service comes back after dying mid-take, keeping every take", async () => {
@@ -311,10 +221,8 @@ describe("the recorder client", () => {
     client.close();
 
     // Stopped from elsewhere (the Stream Deck) while no app server listened.
-    const deck = new WebSocket(`ws://127.0.0.1:${port}`);
-    await new Promise((r) => deck.once("open", r));
-    deck.send(JSON.stringify({ type: "stop" }));
-    cleanups.unshift(() => deck.close());
+    const deck = await connect(port);
+    deck.send({ type: "stop" });
     await vi.waitFor(async () => {
       const health = await fetch(`http://127.0.0.1:${port}/health`);
       expect((await health.json()).state.kind).toBe("open");
