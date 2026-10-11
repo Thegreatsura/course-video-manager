@@ -6,8 +6,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
-import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
-import type { RecorderCommand, RecorderMessage } from "./protocol";
+import {
+  FAKE_STILL_JPEG,
+  fakeFootage,
+  fakeWindows,
+} from "./test-utils/fake-windows";
+import {
+  STILL_PATH,
+  STILL_RECORDER_CLOSED,
+  type RecorderCommand,
+  type RecorderMessage,
+} from "./protocol";
 import { startRecorderService } from "./recorder-service";
 
 /**
@@ -244,6 +253,29 @@ describe("the Cam Link", () => {
     await client.next("state", (m) => m.state.kind === "closed");
     await vi.waitFor(() => expect(windows.camerasRunning()).toBe(0));
     expect(windows.screenPreviews.every((p) => !p.running)).toBe(true);
+  });
+});
+
+describe("a still", () => {
+  it("is the camera's latest still frame while the recorder is open, and a clear error when it is not", async () => {
+    const { port } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    const url = `http://127.0.0.1:${port}${STILL_PATH}`;
+
+    const closed = await fetch(url);
+    expect(closed.status).toBe(409);
+    expect(closed.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await closed.text()).toBe(STILL_RECORDER_CLOSED);
+
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    await vi.waitFor(async () => {
+      const still = await fetch(url);
+      expect(still.status).toBe(200);
+      expect(still.headers.get("content-type")).toBe("image/jpeg");
+      expect(Buffer.from(await still.arrayBuffer())).toEqual(FAKE_STILL_JPEG);
+    });
   });
 });
 

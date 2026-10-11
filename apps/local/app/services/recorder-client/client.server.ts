@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { WebSocket } from "ws";
 import {
   previewPath,
+  STILL_PATH,
   type RecorderCommand,
   type RecorderMessage,
   type RecorderState,
@@ -115,13 +116,12 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   /** The Video last asked to be open (null: asked to close), until it is. */
   let asked: string | null | undefined;
   const lastCamera = new Map<string, string>();
-  const previews = (() => {
-    const http = o.url.replace(/^ws/, "http");
-    return {
-      camera: `${http}${previewPath("camera")}`,
-      screen: `${http}${previewPath("screen")}`,
-    };
-  })();
+  const http = o.url.replace(/^ws/, "http");
+  const previews = {
+    camera: `${http}${previewPath("camera")}`,
+    screen: `${http}${previewPath("screen")}`,
+  };
+  const still = `${http}${STILL_PATH}`;
 
   const publish = (videoId: string, message: NewRecorderMessage) => {
     for (const listener of listeners.get(videoId) ?? []) listener(message);
@@ -135,6 +135,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         ? state.recordingSessionId
         : null,
     previews,
+    still,
   });
   /** The camera's state, to an editor, only when it changed. */
   const publishCamera = (videoId: string) => {

@@ -131,11 +131,11 @@ const WALLCLOCK = [
  * dropped when full, the connection retried every 0.5 s. The null output
  * keeps the tee alive.
  */
-export const previewOutput = (port: number) => [
+export const previewOutput = (port: number, quality = 7) => [
   "-c:v",
   "mjpeg",
   "-q:v",
-  "7",
+  String(quality),
   "-f",
   "tee",
   "-use_fifo",
@@ -168,18 +168,35 @@ const camLinkInput = (camera: string) => [
 ];
 
 /**
- * The camera while the recorder is open and not recording: the Cam Link in
- * the very mode the recording opens it in, to a preview only. Its first frame
- * is how the service knows the camera is live.
+ * The thumbnail camera's still (#2012): 1280x720, the size the OBS Virtual
+ * Camera gave it, a few times a second at a high JPEG quality. Scaled on the
+ * GPU like the preview; the rate is cut after the download, so no filter
+ * here has to take CUDA frames that the preview's own chain does not.
  */
-export const cameraPreviewArgs = (o: { camera: string; port: number }) => [
+const CAMERA_STILL_SCALE =
+  "scale_cuda=1280:720:interp_algo=bicubic,hwdownload,format=nv12,fps=4,format=yuvj420p";
+
+/**
+ * The camera while the recorder is open and not recording: the Cam Link in
+ * the very mode the recording opens it in, to a preview only, plus the
+ * thumbnail camera's still feed. Its first preview frame is how the service
+ * knows the camera is live.
+ */
+export const cameraPreviewArgs = (o: {
+  camera: string;
+  port: number;
+  stillPort: number;
+}) => [
   ...PREVIEW_HEAD,
   ...camLinkInput(o.camera),
   "-filter_complex",
-  `[0:v]hwupload_cuda,${CAMERA_PREVIEW_SCALE}[prev]`,
+  `[0:v]hwupload_cuda,split[p][s];[p]${CAMERA_PREVIEW_SCALE}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
   "-map",
   "[prev]",
   ...previewOutput(o.port),
+  "-map",
+  "[still]",
+  ...previewOutput(o.stillPort, 2),
 ];
 
 /**
