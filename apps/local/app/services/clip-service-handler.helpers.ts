@@ -205,7 +205,30 @@ export const appendClipsAtInsertionPoint = Effect.fn(
 });
 
 // ============================================================================
-// Mutex: Serialize append-from-obs calls per videoId
+// Helper: Place Clips — the placement half every recorder shares
+// ============================================================================
+
+/**
+ * Save Clips at an insertion point, in one transaction that re-checks the
+ * Draft under the version-row lock (#1403), so a Clip can never land on a
+ * version that stopped being a Draft while its speech was being found. The
+ * caller holds the video's mutex (`withVideoMutex`).
+ */
+export const placeClips = (
+  db: Database,
+  input: Extract<ClipServiceEvent, { type: "append-clips" }>["input"]
+) =>
+  withDbTransaction(db, (tx) =>
+    Effect.gen(function* () {
+      yield* requireDraftVersionForVideo(tx, input.videoId);
+      const inserted = yield* appendClipsAtInsertionPoint(tx, input);
+      yield* touchVideoUpdatedAt(tx, input.videoId);
+      return inserted;
+    })
+  );
+
+// ============================================================================
+// Mutex: Serialize Clip placement per videoId (append-from-obs, speech)
 // ============================================================================
 
 interface VideoMutex {
@@ -341,21 +364,13 @@ export const appendFromObsImpl = (
       return [];
     }
 
-    // #1403: the Draft may have been Submitted while OBS detection ran above.
-    // Re-check under the version-row lock, in the same transaction as the
-    // insert, so a clip can never land on a version that is no longer a Draft.
-    const result = yield* withDbTransaction(db, (tx) =>
-      Effect.gen(function* () {
-        yield* requireDraftVersionForVideo(tx, videoId);
-        const inserted = yield* appendClipsAtInsertionPoint(tx, {
-          videoId,
-          insertionPoint,
-          clips: clipsToAdd,
-        });
-        yield* touchVideoUpdatedAt(tx, videoId);
-        return inserted;
-      })
-    );
+    // #1403: the Draft may have been Submitted while OBS detection ran above;
+    // placeClips re-checks under the version-row lock.
+    const result = yield* placeClips(db, {
+      videoId,
+      insertionPoint,
+      clips: clipsToAdd,
+    });
 
     const totalDuplicatesSkipped =
       latestOBSVideoClips.clips.length - result.length;
