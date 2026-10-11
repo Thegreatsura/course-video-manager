@@ -107,14 +107,18 @@ export const startPreviewFeeds = async () => {
     /** A feed's latest JPEG and when it arrived (`Date.now()` ms), if any came. */
     latest: (feed: Feed) => latest[feed],
 
-    /** Serves `GET /preview/<feed>`; false for any other request. */
-    serve(req: http.IncomingMessage, res: http.ServerResponse) {
+    /** Serves `GET /preview/<feed>` with these CORS headers; false for any other request. */
+    serve(
+      req: http.IncomingMessage,
+      res: http.ServerResponse,
+      cors: Record<string, string>
+    ) {
       const feed = PREVIEW_FEEDS.find((f) => req.url === previewPath(f));
       if (!feed) return false;
       res.writeHead(200, {
         "Content-Type": `multipart/x-mixed-replace; boundary=${BOUNDARY}`,
         "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*",
+        ...cors,
       });
       res.socket?.setNoDelay(true);
       watchers[feed].add(res);
