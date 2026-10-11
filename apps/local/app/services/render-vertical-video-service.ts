@@ -1,3 +1,4 @@
+import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import { Cause, Config, Data, Effect, Stream } from "effect";
@@ -121,9 +122,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             const rawConcatenatedPath =
               yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
                 video.clips.map((clip) => ({
-                  inputVideo: clip.videoFilename,
-                  startTime: clip.sourceStartTime,
-                  duration: clip.sourceEndTime - clip.sourceStartTime,
+                  ...clipFfmpegInput(clipSource(clip)),
                   pauseType: clip.pauseType as "none" | "long",
                   zoomType: clip.zoomType,
                 })),

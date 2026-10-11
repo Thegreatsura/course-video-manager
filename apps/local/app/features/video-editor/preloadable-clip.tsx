@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClipOnDatabase, FrontendId } from "./clip-state-reducer";
 import { cn } from "@/lib/utils";
+import { clipPlaybackUrl, clipSource } from "@/packages/clip-source";
 import { clipZoomCssStyle } from "@/features/videos/clip-zoom";
 import {
   BEAT_DURATION,
@@ -203,7 +204,10 @@ export const PreloadableClip = (props: {
     >
       <video
         key={props.clip.frontendId}
-        src={`/view-video?videoPath=${props.clip.videoFilename}#t=${preloadFrom},${modifiedEndTime}`}
+        src={clipPlaybackUrl(clipSource(props.clip), {
+          from: preloadFrom,
+          to: modifiedEndTime,
+        })}
         className={cn(
           "w-full",
           props.profile === "TikTok" && "w-92 aspect-[9/16]"

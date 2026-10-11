@@ -5,6 +5,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import type { Options } from "react-markdown";
 import { ChooseScreenshot } from "./choose-screenshot";
 import type { IndexedClip } from "./types";
+import type { ClipFrame } from "@/packages/clip-source";
 
 /**
  * Everything a rendered `<ChooseScreenshot>` placeholder needs. It travels by
@@ -32,8 +33,7 @@ export interface ChooseScreenshotRuntime {
     messageId: string,
     clipIndex: number,
     alt: string,
-    timestamp: number,
-    videoFilename: string
+    frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (messageId: string, clipIndex: number, alt: string) => void;
 }
@@ -73,9 +73,7 @@ function ChooseScreenshotSlot(
       onClipIndexChange={(current, next) =>
         runtime.onClipIndexChange(messageId, current, next, alt)
       }
-      onCapture={(ci, a, timestamp, videoFilename) =>
-        runtime.onCapture(messageId, ci, a, timestamp, videoFilename)
-      }
+      onCapture={(ci, a, frame) => runtime.onCapture(messageId, ci, a, frame)}
       onRemove={(ci, a) => runtime.onRemove(messageId, ci, a)}
       isCapturing={
         runtime.capturingKey === runtime.keyFor(clipIndex, alt, messageId)

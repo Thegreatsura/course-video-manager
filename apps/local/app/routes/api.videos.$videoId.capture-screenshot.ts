@@ -6,9 +6,10 @@ import { getVideoFilePath } from "@/services/video-files";
 import { FileSystem } from "@effect/platform";
 import path from "node:path";
 
+/** A `ClipFrame` from `@/packages/clip-source`: the picker never names a file. */
 const RequestSchema = Schema.Struct({
-  timestamp: Schema.Number,
-  videoFilename: Schema.String,
+  inputVideo: Schema.String,
+  time: Schema.Number,
 });
 
 export const action = makeAction({
@@ -16,8 +17,7 @@ export const action = makeAction({
   errors: { NotFoundError: 404, FFmpegError: 500 },
   effect: ({ params, payload }) =>
     Effect.gen(function* () {
-      const { timestamp, videoFilename } =
-        yield* Schema.decodeUnknown(RequestSchema)(payload);
+      const frame = yield* Schema.decodeUnknown(RequestSchema)(payload);
 
       const videoOps = yield* VideoOperationsService;
       const ffmpeg = yield* FFmpegCommandsService;
@@ -39,7 +39,11 @@ export const action = makeAction({
 
       const outputPath = path.join(baseDir, filename);
 
-      yield* ffmpeg.captureFrameAtTime(videoFilename, timestamp, outputPath);
+      yield* ffmpeg.captureFrameAtTime(
+        frame.inputVideo,
+        frame.time,
+        outputPath
+      );
 
       return { imagePath: `./${filename}` };
     }),
