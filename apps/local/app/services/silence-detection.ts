@@ -9,31 +9,40 @@ import {
   type SilenceLength,
 } from "@/silence-detection-constants";
 
-const AUTO_EDITED_START_PADDING = 0; // frames
-const AUTO_EDITED_END_PADDING = AUTO_EDITED_END_PADDING_SECONDS; // seconds
-
-interface SpeakingClip {
-  startFrame: number;
-  endFrame: number;
-  startTime: number;
-  endTime: number;
-  durationInFrames: number;
+/** One stretch of speech, in the Footage file's own time (seconds). */
+export interface SpeechSegment {
+  readonly startTime: number;
+  readonly endTime: number;
 }
 
 /**
- * Pure function that parses ffmpeg silencedetect output into speaking clip boundaries.
- * No side effects — takes raw ffmpeg stdout and returns clip boundaries.
+ * The one rule for what of some speech becomes a Clip, whichever Recorder
+ * found it: speech shorter than the minimum Clip length is dropped, and the
+ * rest is snapped to the picture's frames, padded at the end so a cut never
+ * lands on the last syllable, and rounded to hundredths.
  */
-export function getClipsOfSpeakingFromFFmpeg(
-  rawOutput: string,
-  opts: {
-    startPadding: number;
-    endPadding: number;
-    fps: number;
-  }
-): SpeakingClip[] {
-  const { startPadding, endPadding, fps } = opts;
+export function speechToClipBounds(
+  speech: readonly SpeechSegment[],
+  fps: number
+): SpeechSegment[] {
+  const endPaddingFrames = Math.round(AUTO_EDITED_END_PADDING_SECONDS * fps);
+  return speech
+    .filter((s) => s.endTime - s.startTime >= MINIMUM_CLIP_LENGTH_SECONDS)
+    .map((s) => {
+      const startFrame = Math.max(0, Math.round(s.startTime * fps));
+      const endFrame = Math.round(s.endTime * fps) + endPaddingFrames;
+      return {
+        startTime: Math.round((startFrame / fps) * 100) / 100,
+        endTime: Math.round((endFrame / fps) * 100) / 100,
+      };
+    });
+}
 
+/**
+ * Pure function that parses ffmpeg silencedetect output into speech: what lies
+ * between one silence's end and the next silence's start.
+ */
+export function parseSpeechFromFFmpeg(rawOutput: string): SpeechSegment[] {
   // Parse silence periods from ffmpeg output
   const silencePeriods: { start: number; end: number }[] = [];
   const lines = rawOutput.split("\n");
@@ -64,40 +73,10 @@ export function getClipsOfSpeakingFromFFmpeg(
     }
   }
 
-  if (silencePeriods.length === 0) {
-    return [];
-  }
-
-  // Derive speaking clips as gaps between silence periods
-  const speakingClips: SpeakingClip[] = [];
-
-  for (let i = 0; i < silencePeriods.length; i++) {
-    const silenceEnd = silencePeriods[i]!.end;
-    const nextSilenceStart =
-      i + 1 < silencePeriods.length ? silencePeriods[i + 1]!.start : null;
-
-    if (nextSilenceStart === null) break;
-
-    const clipStartTime = silenceEnd;
-    const clipEndTime = nextSilenceStart;
-    const clipDuration = clipEndTime - clipStartTime;
-
-    // Skip clips shorter than minimum
-    if (clipDuration < MINIMUM_CLIP_LENGTH_SECONDS) continue;
-
-    const startFrame = Math.round(clipStartTime * fps) - startPadding;
-    const endFrame = Math.round(clipEndTime * fps) + endPadding;
-
-    speakingClips.push({
-      startFrame: Math.max(0, startFrame),
-      endFrame,
-      startTime: Math.max(0, startFrame / fps),
-      endTime: endFrame / fps,
-      durationInFrames: endFrame - Math.max(0, startFrame),
-    });
-  }
-
-  return speakingClips;
+  return silencePeriods.slice(0, -1).map((silence, i) => ({
+    startTime: silence.end,
+    endTime: silencePeriods[i + 1]!.start,
+  }));
 }
 
 /**
@@ -120,29 +99,17 @@ export function findSilenceInVideo(
       startTime: opts?.startTime,
     });
 
-    const speakingClips = getClipsOfSpeakingFromFFmpeg(rawOutput, {
-      startPadding: Math.round(AUTO_EDITED_START_PADDING * fps),
-      endPadding: Math.round(AUTO_EDITED_END_PADDING * fps),
-      fps,
-    });
+    const bounds = speechToClipBounds(parseSpeechFromFFmpeg(rawOutput), fps);
 
     // Add back the startTime offset so timestamps are absolute file positions,
     // not relative to the ffmpeg seek point (-ss flag)
     const startTimeAdjustment = opts?.startTime ?? 0;
 
-    // Convert frame-based durations to seconds (rounded to 2dp)
-    const clips = speakingClips.map((clip) => {
-      const startTime =
-        Math.round(clip.startTime * 100) / 100 + startTimeAdjustment;
-      const endTime =
-        Math.round(clip.endTime * 100) / 100 + startTimeAdjustment;
-
-      return {
-        inputVideo,
-        startTime,
-        endTime,
-      };
-    });
+    const clips = bounds.map((clip) => ({
+      inputVideo,
+      startTime: clip.startTime + startTimeAdjustment,
+      endTime: clip.endTime + startTimeAdjustment,
+    }));
 
     return { clips };
   });

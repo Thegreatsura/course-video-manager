@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Layer } from "effect";
+import { NodeContext } from "@effect/platform-node";
+import type { FFmpegCommandsService } from "./ffmpeg-commands";
+import { findSilenceInVideo } from "./silence-detection";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { placeSpeechAsClips } from "./clip-service-handler";
@@ -63,6 +66,7 @@ describe("placeSpeechAsClips", () => {
       footagePath: MIC,
       insertionPoint: start,
       items: [],
+      fps: 60,
       speech: [
         { startTime: 2, endTime: 5 },
         { startTime: 7.5, endTime: 12.25 },
@@ -83,6 +87,7 @@ describe("placeSpeechAsClips", () => {
       footagePath: MIC,
       insertionPoint: start,
       items: [],
+      fps: 60,
       speech: [
         { startTime: 1, endTime: 1.6 },
         { startTime: 3, endTime: 4.5 },
@@ -112,6 +117,7 @@ describe("placeSpeechAsClips", () => {
       footagePath: MIC,
       insertionPoint: afterClip(first!.id),
       items: await getItems(clipService, video.id),
+      fps: 60,
       speech: [{ startTime: 10, endTime: 12 }],
     });
 
@@ -130,6 +136,7 @@ describe("placeSpeechAsClips", () => {
       footagePath: MIC,
       insertionPoint: start,
       items: [],
+      fps: 60,
       speech: [
         { startTime: 0, endTime: 2 },
         { startTime: 4, endTime: 6 },
@@ -159,10 +166,51 @@ describe("placeSpeechAsClips", () => {
       footagePath: MIC,
       insertionPoint: start,
       items: [],
+      fps: 60,
       speech: [{ startTime: 0, endTime: 0.5 }],
     });
 
     expect(result).toEqual({ clips: [], transcriptionJobId: null });
     expect(await clipService.getTimeline(video.id)).toEqual([]);
+  });
+
+  it("bounds speech exactly as the OBS path does", async () => {
+    // At 30 fps the bounds snap to frames: 10.01 s is frame 300, 10.00 s.
+    const obsOutput = [
+      "[silencedetect @ 0x1] silence_start: 0",
+      "[silencedetect @ 0x1] silence_end: 10.01 | silence_duration: 10.01",
+      "[silencedetect @ 0x1] silence_start: 12",
+      "[silencedetect @ 0x1] silence_end: 13 | silence_duration: 1",
+    ].join("\n");
+    const { clips: obsClips } = await Effect.runPromise(
+      findSilenceInVideo(
+        {
+          getFPS: () => Effect.succeed(30),
+          detectSilence: () => Effect.succeed(obsOutput),
+        } as unknown as FFmpegCommandsService,
+        MIC
+      ).pipe(Effect.provide(NodeContext.layer))
+    );
+    const video = await clipService.createVideo("speech");
+
+    await place({
+      videoId: video.id,
+      footagePath: MIC,
+      insertionPoint: start,
+      items: [],
+      fps: 30,
+      speech: [{ startTime: 10.01, endTime: 12 }],
+    });
+
+    expect(await clipBounds(video.id)).toEqual(
+      obsClips.map((c) => ({
+        videoFilename: MIC,
+        sourceStartTime: c.startTime,
+        sourceEndTime: c.endTime,
+      }))
+    );
+    expect(obsClips).toEqual([
+      { inputVideo: MIC, startTime: 10, endTime: 12.07 },
+    ]);
   });
 });
