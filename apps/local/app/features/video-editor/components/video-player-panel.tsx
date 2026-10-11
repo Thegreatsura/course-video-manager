@@ -17,6 +17,7 @@ import { AutofillDescriptionModal } from "@/features/lesson-writer/autofill-desc
 import { VideoPlayerLinksTab } from "./video-player-links-tab";
 import { VideoMoreActions } from "./video-more-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
+import { clipStillUrl } from "../clip-still-url";
 import {
   getLastTranscribedClipId as getLastTranscribedClipIdSelector,
   getChapters as getChaptersSelector,
@@ -378,7 +379,10 @@ export const VideoPlayerPanel = () => {
                       <div className="absolute inset-0 rounded-lg">
                         <img
                           className="w-full h-full rounded-lg opacity-50 object-contain"
-                          src={`/clips/${databaseClipToShowLastFrameOf.databaseId}/last-frame`}
+                          src={clipStillUrl(
+                            databaseClipToShowLastFrameOf,
+                            "last"
+                          )}
                         />
                       </div>
                     )}

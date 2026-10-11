@@ -58,6 +58,7 @@ export const requireDraftForClipServiceEvent = Effect.fn(
       );
     case "update-pause":
     case "update-zoom":
+    case "update-scene-override":
     case "reorder-clip":
       return yield* requireDraftVersionForClip(db, event.clipId);
     case "update-chapter":
@@ -100,6 +101,7 @@ export const withClipServiceWriteClosure = <A, E>(
     case "update-clips":
     case "update-pause":
     case "update-zoom":
+    case "update-scene-override":
     case "reorder-clip":
     case "update-chapter":
     case "reorder-chapter":

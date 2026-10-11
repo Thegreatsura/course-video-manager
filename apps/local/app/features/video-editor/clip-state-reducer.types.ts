@@ -373,6 +373,11 @@ export type ClipReducerAction =
       clipId: FrontendId;
     }
   | {
+      type: "set-scene-override";
+      clipId: FrontendId;
+      sceneOverride: Scene | null;
+    }
+  | {
       type: "move-clip";
       clipId: FrontendId;
       direction: "up" | "down";
@@ -496,6 +501,11 @@ export type ClipReducerEffect =
       type: "update-zoom";
       clipId: DatabaseId;
       zoomType: ClipZoomType;
+    }
+  | {
+      type: "update-scene-override";
+      clipId: DatabaseId;
+      sceneOverride: Scene | null;
     }
   | {
       type: "reorder-clip";

@@ -30,6 +30,7 @@ import {
   checkClipZoomEligibility,
   clipZoomIneligibilityMessage,
 } from "../features/videos/clip-zoom.js";
+import { effectiveClipScene } from "../features/videos/effective-scene.js";
 import { ClipNotZoomableError } from "./db-service-errors.js";
 import { createChapterOperationsUnwrapped } from "./db-chapter-operations.server.js";
 import {
@@ -217,11 +218,12 @@ const createClipOperationsUnwrapped = (db: Database) => {
   ) {
     const clip = yield* getClipById(clipId);
 
-    const ineligibility = checkClipZoomEligibility(clip.scene);
+    const scene = effectiveClipScene(clip);
+    const ineligibility = checkClipZoomEligibility(scene);
     if (ineligibility) {
       return yield* new ClipNotZoomableError({
         clipId,
-        scene: clip.scene ?? null,
+        scene,
         message: clipZoomIneligibilityMessage(ineligibility),
       });
     }
