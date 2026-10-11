@@ -4,6 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
+import { corsHeaders, isAllowedOrigin } from "./allowed-origin";
 import { recoverCrashedSessions, type IndexEntry } from "./crash-recovery";
 import {
   CAMERA_START_TIMEOUT_MS,
@@ -158,10 +159,10 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const feeds = await startPreviewFeeds();
 
   /** `GET /still`: the camera's latest still, or why there is none. */
-  const serveStill = (res: http.ServerResponse) => {
+  const serveStill = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const headers = {
       "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*",
+      ...corsHeaders(req.headers.origin),
     };
     const still = feeds.latest("still");
     const refusal =
@@ -187,8 +188,13 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   const server = http.createServer((req, res) => {
-    if (feeds.serve(req, res)) return;
-    if (req.method === "GET" && req.url === STILL_PATH) return serveStill(res);
+    if (!isAllowedOrigin(req.headers.origin)) {
+      res.writeHead(403, { Vary: "Origin" }).end();
+      return;
+    }
+    if (feeds.serve(req, res, corsHeaders(req.headers.origin))) return;
+    if (req.method === "GET" && req.url === STILL_PATH)
+      return serveStill(req, res);
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ service: "recorder", pid: process.pid, state }));
@@ -196,7 +202,11 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     }
     res.writeHead(404).end();
   });
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({
+    server,
+    verifyClient: ({ origin }: { origin?: string }) =>
+      isAllowedOrigin(origin || undefined),
+  });
   const send = (ws: WebSocket, message: RecorderMessage) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   };
@@ -321,6 +331,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         mic,
         screenIndex: screen.index,
         cameraPreviewPort: feeds.port("camera"),
+        cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
         onEnded: () => {

@@ -119,11 +119,12 @@ export type RecordingSessionFiles = {
 };
 
 /**
- * Frames lost in a Recording Session, per picture file: the frames each
- * process's ffmpeg counted as duplicated or dropped in its `-progress`, plus,
- * for the camera, the frames DirectShow dropped from a full real-time buffer.
+ * Frames lost in a Recording Session, per picture file. The camera's are the
+ * frames DirectShow dropped from a full real-time buffer. The screen's are not
+ * measured yet (null): see recording-session.ts, FRAMES LOST. Logs written
+ * before that carry a number.
  */
-export type FramesLost = { camera: number; screen: number };
+export type FramesLost = { camera: number; screen: number | null };
 
 /**
  * What a file needed after a crash: `readable` as it was, `remuxed` to give

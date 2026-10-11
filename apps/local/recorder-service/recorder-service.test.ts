@@ -317,19 +317,9 @@ describe("a Recording Session", () => {
     expect((await client.next("recording-stopped")).reason).toBe("camera-lost");
   });
 
-  it("reports the camera and screen frames lost when it stops", async () => {
+  it("reports the Cam Link's dropped frames when it stops, and the screen's as not measured", async () => {
     const { windows, client } = await recordOnce();
-    const screen = windows.recorder("screen");
     const camera = windows.recorder("camera");
-    screen.stdout(
-      "frame=600\ndup_frames=1\ndrop_frames=0\nprogress=continue\n"
-    );
-    screen.stdout(
-      "frame=660\ndup_frames=2\ndrop_frames=1\nprogress=continue\n"
-    );
-    camera.stdout(
-      "frame=300\ndup_frames=0\ndrop_frames=0\nprogress=continue\n"
-    );
     camera.stderr(
       "[dshow @ 0001] [warning] real-time buffer [Cam Link 4K] [video input] too full or near too full (101% of size: 1500000000 [rtbufsize parameter])! frame dropped!\r\n"
     );
@@ -341,7 +331,7 @@ describe("a Recording Session", () => {
     client.send({ type: "stop" });
     expect((await client.next("recording-stopped")).framesLost).toEqual({
       camera: 1,
-      screen: 3,
+      screen: null,
     });
   });
 
