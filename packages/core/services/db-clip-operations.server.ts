@@ -72,18 +72,25 @@ const createClipOperationsUnwrapped = (db: Database) => {
     return clip;
   });
 
+  /** getClipsByIds, each with its Recording Session (null for OBS). */
+  const getClipsWithRecordingSessionByIds = Effect.fn(
+    "getClipsWithRecordingSessionByIds"
+  )(function* (clipIds: readonly string[]) {
+    return yield* makeDbCall(() =>
+      db.query.clips.findMany({
+        where: inArray(clips.id, clipIds),
+        with: { recordingSession: clipRecordingSessionRelation },
+      })
+    );
+  });
+
   /**
    * A Clip with its Recording Session (null for an OBS Clip): everything the
    * Clip Source module needs to show its picture.
    */
   const getClipWithRecordingSession = Effect.fn("getClipWithRecordingSession")(
     function* (clipId: string) {
-      const clip = yield* makeDbCall(() =>
-        db.query.clips.findFirst({
-          where: eq(clips.id, clipId),
-          with: { recordingSession: clipRecordingSessionRelation },
-        })
-      );
+      const [clip] = yield* getClipsWithRecordingSessionByIds([clipId]);
       if (!clip) {
         return yield* new NotFoundError({
           type: "getClipWithRecordingSession",
@@ -629,6 +636,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
     getClipById,
     getClipWithRecordingSession,
     getClipsByIds,
+    getClipsWithRecordingSessionByIds,
     updateClip,
     setTranscriptionStatus,
     listVideosWithStuckTranscriptions,
