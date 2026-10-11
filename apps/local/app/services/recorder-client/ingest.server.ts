@@ -1,9 +1,9 @@
 import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import type { DatabaseId } from "@cvm/core/db/ids";
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
-import type { RecordingSessionScene } from "@cvm/core/features/videos/recorder";
 import { asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
+import { sceneSegments } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
 import {
   dbCall,
@@ -15,16 +15,17 @@ import type { SequencedEvent } from "./sequencer";
 
 /**
  * What one recorder event means for the database: a Recording Session row
- * when it starts, stops (with its frames lost) or is found crashed, Clips
- * when speech ends. Idempotent, so an event
- * replayed after a restart changes nothing it already changed.
+ * when it starts, stops (with its frames lost) or is found crashed, a scene
+ * event row per scene change, Clips when speech ends. Idempotent, so an
+ * event replayed after a restart changes nothing it already changed.
+ *
+ * Scene events and Clip bounds are both in picture time; speech arrives in
+ * mic time and is moved to picture time (+ mic offset) before a Clip is cut
+ * or its scene looked up (recorder-service/protocol.ts, TIME BASE).
  */
 
 /** The picture's frame rate: the new recorder records the screen at 60 fps. */
 export const NEW_RECORDER_FPS = 60;
-
-/** The scene with no scene events: the layout module's default. */
-const DEFAULT_SCENE: RecordingSessionScene = "Code";
 
 export type IngestResult = {
   /** The Video the event is about; null when it means nothing to an editor. */
@@ -52,10 +53,11 @@ const endOfVideo = Effect.fn("endOfVideo")(function* (
     : ({ type: "after-chapter", chapterId: last.id } satisfies InsertionPoint);
 });
 
+/** The scene in force at a picture time, by the layout module's rule. */
 const sceneAt = Effect.fn("sceneAt")(function* (
   db: Database,
   recordingSessionId: string,
-  fileTime: number
+  pictureTime: number
 ) {
   const events = yield* dbCall(() =>
     db.query.recordingSessionSceneEvents.findMany({
@@ -66,7 +68,11 @@ const sceneAt = Effect.fn("sceneAt")(function* (
       orderBy: asc(recordingSessionSceneEvents.fileTime),
     })
   );
-  return events.findLast((e) => e.fileTime <= fileTime)?.scene ?? DEFAULT_SCENE;
+  const [first] = sceneSegments({
+    events: events.map((e) => ({ scene: e.scene, atSeconds: e.fileTime })),
+    clip: { startSeconds: pictureTime, endSeconds: pictureTime },
+  });
+  return first!.scene;
 });
 
 export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
@@ -116,6 +122,21 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
 
   switch (event.type) {
     case "screen-recorder-tuned":
+      return nothing;
+    case "scene-changed":
+      // One row per logged event: its id is the event's (Recording Session,
+      // seq), so a replay writes nothing new.
+      yield* dbCall(() =>
+        db
+          .insert(recordingSessionSceneEvents)
+          .values({
+            id: `${recordingSessionId}:${event.seq}`,
+            recordingSessionId,
+            fileTime: event.fileTime,
+            scene: event.scene,
+          })
+          .onConflictDoNothing()
+      );
       return nothing;
     case "speech-started":
       return {

@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import { eq } from "drizzle-orm";
-import { recordingSessions } from "@/db/schema";
+import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
@@ -96,6 +96,27 @@ const speech = (seq: number, from: number, to: number) =>
       fileTime: to,
     },
   ] satisfies RecordingSessionEvent[];
+
+const sceneChanged = (
+  seq: number,
+  scene: "Camera" | "Code" | "No Face",
+  fileTime: number
+): RecordingSessionEvent => ({
+  type: "scene-changed",
+  seq,
+  recordingSessionId: SESSION,
+  scene,
+  fileTime,
+});
+
+const sceneRows = async () =>
+  (
+    await testDb.query.recordingSessionSceneEvents.findMany({
+      where: eq(recordingSessionSceneEvents.recordingSessionId, SESSION),
+    })
+  )
+    .map((r) => [r.fileTime, r.scene])
+    .sort(([a], [b]) => Number(a) - Number(b));
 
 const stopped = (
   seq: number
@@ -251,6 +272,48 @@ describe("recorder ingest", () => {
     await recorderIngest().feed(...events);
 
     expect(await savedClips(video.id)).toHaveLength(1);
+  });
+
+  it("saves each scene change as a row, once however often it is replayed", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const events = [
+      started(video.id),
+      sceneChanged(2, "Code", 0),
+      sceneChanged(3, "Camera", 4.25),
+      stopped(4),
+    ];
+
+    await recorderIngest().feed(...events);
+    await recorderIngest().feed(...events);
+
+    expect(await sceneRows()).toEqual([
+      [0, "Code"],
+      [4.25, "Camera"],
+    ]);
+  });
+
+  it("gives each Clip the scene in force at its start, in picture time", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+
+    await ingest.feed(
+      started(video.id),
+      sceneChanged(2, "No Face", 0),
+      // Switched to Camera at picture time 10. Speech heard from mic time
+      // 9.9 starts at picture time 10.05 (the 150 ms mic offset): Camera.
+      sceneChanged(3, "Camera", 10),
+      ...speech(4, 9.9, 12),
+      sceneChanged(6, "Code", 20),
+      // Speech from mic 19.9 starts at picture 20.05, after the switch to
+      // Code; a scene change mid-take does not change its start's scene.
+      ...speech(7, 19.9, 23),
+      sceneChanged(9, "Camera", 21)
+    );
+
+    expect((await savedClips(video.id)).map((c) => c.scene)).toEqual([
+      "Camera",
+      "Code",
+    ]);
   });
 
   it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file", async () => {

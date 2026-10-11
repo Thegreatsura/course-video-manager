@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
+import { SCENES } from "@/packages/scene-layout";
+import { CompositePreview } from "./composite-preview";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 
 /** What the New recorder is doing, in a few words. */
@@ -48,38 +50,54 @@ const useNewRecorderControls = () =>
   useContextSelector(VideoEditorContext, (ctx) => ctx.newRecorder);
 
 /**
- * The raw camera and screen, straight from the recorder service (MJPEG in an
- * `<img>`). The camera shows once it is live or recording; the composite
- * comes with scenes.
+ * The composite preview: the scene the recorder is in, drawn from its raw
+ * camera and screen feeds, with the previous Clip's last frame over it when
+ * that is toggled on.
  */
-const RawPreviews = () => {
+const ScenePreview = () => {
   const controls = useNewRecorderControls();
   const { state } = controls;
-  const previews = state.previews;
-  if (!previews || !state.reachable) return null;
-  const cameraShowing = state.camera.kind === "live" || state.phase !== "idle";
+  const showLastFrame = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.showLastFrame
+  );
+  const lastFrameClip = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.databaseClipToShowLastFrameOf
+  );
+  if (!state.previews || !state.reachable || !state.scene) return null;
   return (
-    <div
-      className="grid w-full grid-cols-2 gap-2"
-      data-testid="new-recorder-previews"
-    >
-      {(["camera", "screen"] as const).map((feed) => (
-        <div
-          key={feed}
-          className="aspect-[16/9] overflow-hidden rounded bg-black flex items-center justify-center"
+    <CompositePreview
+      previews={state.previews}
+      scene={state.scene}
+      cameraShowing={state.camera.kind === "live" || state.phase !== "idle"}
+      cameraKey={state.camera.kind}
+      overlay={
+        showLastFrame && lastFrameClip
+          ? `/clips/${lastFrameClip.databaseId}/last-frame`
+          : null
+      }
+    />
+  );
+};
+
+/** Camera, Code and No Face: the one lit is the scene the recorder is in. */
+const SceneButtons = () => {
+  const controls = useNewRecorderControls();
+  return (
+    <div className="flex items-center gap-1" data-testid="new-recorder-scenes">
+      {SCENES.map((scene) => (
+        <Button
+          key={scene}
+          type="button"
+          size="sm"
+          variant={controls.state.scene === scene ? "default" : "outline"}
+          aria-pressed={controls.state.scene === scene}
+          disabled={!controls.canSwitchScene}
+          onClick={() => controls.onScene(scene)}
         >
-          {feed === "camera" && !cameraShowing ? (
-            <span className="text-xs text-muted-foreground">No camera yet</span>
-          ) : (
-            <img
-              // A new key when the camera comes back reconnects its stream.
-              key={`${feed}-${state.camera.kind}`}
-              src={previews[feed]}
-              alt={`Raw ${feed} preview`}
-              className="h-full w-full object-contain"
-            />
-          )}
-        </div>
+          {scene}
+        </Button>
       ))}
     </div>
   );
@@ -111,8 +129,8 @@ const CameraProblem = () => {
 };
 
 /**
- * Record and Stop for a New recorder Video, with its Silence Length, and the
- * raw previews. Clips appear in the timeline as the recorder hears each take
+ * Record and Stop for a New recorder Video, with its Silence Length, the
+ * scene buttons and the composite preview. Clips appear in the timeline as the recorder hears each take
  * end, already saved.
  */
 export const NewRecorderControls = () => {
@@ -170,6 +188,7 @@ export const NewRecorderControls = () => {
           {statusText(controls)}
         </span>
       </div>
+      <SceneButtons />
       <CameraProblem />
       {state.framesLost && (
         <p
@@ -185,7 +204,7 @@ export const NewRecorderControls = () => {
           {state.error}
         </p>
       )}
-      <RawPreviews />
+      <ScenePreview />
     </div>
   );
 };

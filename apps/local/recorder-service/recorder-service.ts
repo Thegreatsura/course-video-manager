@@ -13,6 +13,11 @@ import {
 } from "./camera";
 import { screenPreviewArgs } from "./capture-args";
 import type { LaunchedProcess, Launcher } from "./launcher";
+import {
+  DEFAULT_SCENE,
+  SCENES,
+  type Scene,
+} from "../app/packages/scene-layout";
 import { startPreviewFeeds } from "./preview-feeds";
 import {
   STILL_NO_PICTURE,
@@ -83,6 +88,10 @@ const Command = Schema.Union(
   Schema.Struct({ type: Schema.Literal("close") }),
   Schema.Struct({ type: Schema.Literal("retry-camera") }),
   Schema.Struct({
+    type: Schema.Literal("switch-scene"),
+    scene: Schema.Literal(...SCENES),
+  }),
+  Schema.Struct({
     type: Schema.Literal("replay"),
     recordingSessionId: Schema.String,
     afterSeq: Schema.Number,
@@ -120,6 +129,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       ?.eventLog;
 
   let state: RecorderState = { kind: "closed" };
+  /** The scene the picture is drawn in; kept while the service runs. */
+  let scene: Scene = DEFAULT_SCENE;
   let listening: () => void = () => {};
   let session: RecordingSession | undefined;
   let camera: Camera | undefined;
@@ -290,14 +301,15 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         mic,
         screenIndex: screen.index,
         cameraPreviewPort: feeds.port("camera"),
+        scene,
         emit: onEvent,
         onEnded: () => {
           session = undefined;
-          setState({ kind: "open", videoId, camera: startCamera() });
+          setState({ kind: "open", videoId, camera: startCamera(), scene });
         },
       });
     } catch (e) {
-      setState({ kind: "open", videoId, camera: startCamera() });
+      setState({ kind: "open", videoId, camera: startCamera(), scene });
       throw e;
     }
     fs.appendFileSync(
@@ -307,6 +319,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     setState({
       kind: "recording",
       videoId,
+      scene,
       recordingSessionId: session.id,
       lastSeq: session.lastSeq(),
     });
@@ -352,12 +365,21 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
           kind: "open",
           videoId: command.videoId,
           camera: startCamera(),
+          scene,
         });
         return void startScreenPreview();
       case "retry-camera":
         if (state.kind !== "open" || !camera?.retry())
           throw new Refusal("The camera is not waiting for a retry.");
         return;
+      case "switch-scene":
+        if (state.kind === "closed")
+          throw new Refusal("Open the recorder for a Video first.");
+        // While recording, logged first: a clock that cannot be read refuses
+        // the switch rather than showing a scene the Footage never got.
+        session?.switchScene(command.scene);
+        scene = command.scene;
+        return setState({ ...state, scene });
       case "record":
         return record(command);
       case "stop":

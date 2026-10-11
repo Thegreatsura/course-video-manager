@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { useEffectReducer } from "use-effect-reducer";
+import type { Scene } from "@/packages/scene-layout";
 import type { SilenceLength } from "@/silence-detection-constants";
 import { savedItemBefore } from "./clip-state-reducer-new-recorder";
 import type {
@@ -10,6 +11,7 @@ import {
   canRecord,
   canRetryCamera,
   canStop,
+  canSwitchScene,
   createInitialNewRecorderState,
   newRecorderReducer,
 } from "./new-recorder-reducer";
@@ -24,7 +26,9 @@ export type NewRecorderControls = {
   canRecord: boolean;
   canStop: boolean;
   canRetryCamera: boolean;
+  canSwitchScene: boolean;
   onRecord: () => void;
+  onScene: (scene: Scene) => void;
   onStop: () => void;
   onDismissAlert: () => void;
   onRetryCamera: () => void;
@@ -107,6 +111,17 @@ export const useNewRecorder = (o: {
             dispatch({ type: "retry-camera-failed", message: messageOf(error) })
           );
       },
+      "switch-scene": (_state, effect, dispatch) => {
+        fetch(`/api/videos/${videoId}/recorder/scene`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scene: effect.scene }),
+        })
+          .then(answer)
+          .catch((error: unknown) =>
+            dispatch({ type: "switch-scene-failed", message: messageOf(error) })
+          );
+      },
       "stop-recording": (_state, _effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/stop`, { method: "POST" })
           .then(answer)
@@ -134,6 +149,7 @@ export const useNewRecorder = (o: {
     canRecord: canRecord(state),
     canStop: canStop(state),
     canRetryCamera: canRetryCamera(state),
+    canSwitchScene: canSwitchScene(state),
     onRecord: () =>
       dispatch({
         type: "press-record",
@@ -141,6 +157,7 @@ export const useNewRecorder = (o: {
         insertionPoint: savedItemBefore(o.clipStateRef.current),
       }),
     onStop: () => dispatch({ type: "press-stop" }),
+    onScene: (scene) => dispatch({ type: "press-scene", scene }),
     onDismissAlert: () => dispatch({ type: "dismiss-alert" }),
     onRetryCamera: () => dispatch({ type: "press-retry" }),
   };

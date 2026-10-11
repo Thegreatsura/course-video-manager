@@ -104,7 +104,7 @@ const clipTimes = async (videoId: string) =>
   );
 
 describe("the recorder client", () => {
-  it("records on a New recorder Video: Record, speech, Stop yields saved Clips, live", async () => {
+  it("records on a New recorder Video: scene, Record, speech, Stop yields saved Clips, live", async () => {
     const { windows, client } = await setup();
     const video = await clipService.createVideo("new recorder");
     const heard: NewRecorderMessage[] = [];
@@ -112,6 +112,10 @@ describe("the recorder client", () => {
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })
     );
+    expect(heard).toContainEqual({ type: "scene-changed", scene: "Code" });
+
+    await client.switchScene(video.id, "Camera");
+    expect(heard.at(-1)).toEqual({ type: "scene-changed", scene: "Camera" });
 
     await client.startRecording(video.id, {
       silenceLength: "short",
@@ -147,11 +151,22 @@ describe("the recorder client", () => {
       i.type === "clip" ? [i.data] : []
     );
     expect(
-      clips.map((c) => [c.sourceStartTime, c.sourceEndTime, c.videoFilename])
+      clips.map((c) => [
+        c.sourceStartTime,
+        c.sourceEndTime,
+        c.videoFilename,
+        c.scene,
+      ])
     ).toEqual([
-      [2.15, 5.23, expect.stringMatching(/mic\.mkv$/)],
-      [7.15, 10.23, expect.stringMatching(/mic\.mkv$/)],
+      [2.15, 5.23, expect.stringMatching(/mic\.mkv$/), "Camera"],
+      [7.15, 10.23, expect.stringMatching(/mic\.mkv$/), "Camera"],
     ]);
+    expect(
+      (await testDb.query.recordingSessionSceneEvents.findMany()).map((e) => [
+        e.fileTime,
+        e.scene,
+      ])
+    ).toEqual([[0, "Camera"]]);
     const saved = heard.filter((m) => m.type === "clips-saved");
     expect(saved.flatMap((m) => m.clips.map((c) => c.id))).toEqual(
       clips.map((c) => c.id)
