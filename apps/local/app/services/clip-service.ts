@@ -308,6 +308,9 @@ interface InternalAppendClipsInput {
     inputVideo: string;
     startTime: number;
     endTime: number;
+    /** A new-recorder Clip's Recording Session and starting scene. */
+    recordingSessionId?: string | null;
+    scene?: string | null;
   }[];
 }
 

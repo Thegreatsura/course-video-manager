@@ -14,6 +14,7 @@ import type { videoStateReducer } from "./video-state-reducer";
 import type { editorModalsReducer } from "./editor-modals-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import type { RecorderPicker } from "./use-recorder-choice";
+import type { NewRecorderControls } from "./use-new-recorder";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { ClipComputedProps } from "./types";
@@ -109,6 +110,8 @@ export type VideoEditorContextType = {
   obsConnectorState: OBSConnectionOuterState;
   /** The Video's Recorder (OBS or New recorder), and the picker for it. */
   recorderPicker: RecorderPicker;
+  /** Record and Stop on a New recorder Video. */
+  newRecorder: NewRecorderControls;
   liveMediaStream: MediaStream | null;
   speechDetectorState: FrontendSpeechDetectorState;
   silenceLength: SilenceLength;

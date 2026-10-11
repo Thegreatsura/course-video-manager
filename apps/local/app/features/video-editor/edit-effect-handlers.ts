@@ -410,6 +410,23 @@ export function createEditEffectHandlers(
           });
         });
     },
+    "send-recorder-insertion-point": (_state, effect) => {
+      fetch(`/api/videos/${videoId}/recorder/insertion-point`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ insertionPoint: effect.insertionPoint }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        })
+        .catch((error) => {
+          // Not fatal: the next Clip lands where the last one did.
+          console.error(
+            "Could not tell the recorder the insertion point",
+            error
+          );
+        });
+    },
     "revalidate-loader": () => {
       revalidate();
     },

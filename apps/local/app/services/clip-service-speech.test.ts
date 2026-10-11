@@ -10,8 +10,6 @@ import {
   setupClipServiceTests,
   clipService,
   testDb,
-  getItems,
-  afterClip,
   start,
 } from "./clip-service-test-setup";
 
@@ -64,8 +62,8 @@ describe("placeSpeechAsClips", () => {
     await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: start,
-      items: [],
+      insertionPoint: { type: "start" },
+      recordingSession: null,
       fps: 60,
       speech: [
         { startTime: 2, endTime: 5 },
@@ -85,8 +83,8 @@ describe("placeSpeechAsClips", () => {
     const result = await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: start,
-      items: [],
+      insertionPoint: { type: "start" },
+      recordingSession: null,
       fps: 60,
       speech: [
         { startTime: 1, endTime: 1.6 },
@@ -115,8 +113,8 @@ describe("placeSpeechAsClips", () => {
     await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: afterClip(first!.id),
-      items: await getItems(clipService, video.id),
+      insertionPoint: { type: "after-clip", databaseClipId: first!.id },
+      recordingSession: null,
       fps: 60,
       speech: [{ startTime: 10, endTime: 12 }],
     });
@@ -134,8 +132,8 @@ describe("placeSpeechAsClips", () => {
     const result = await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: start,
-      items: [],
+      insertionPoint: { type: "start" },
+      recordingSession: null,
       fps: 60,
       speech: [
         { startTime: 0, endTime: 2 },
@@ -164,8 +162,8 @@ describe("placeSpeechAsClips", () => {
     const result = await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: start,
-      items: [],
+      insertionPoint: { type: "start" },
+      recordingSession: null,
       fps: 60,
       speech: [{ startTime: 0, endTime: 0.5 }],
     });
@@ -196,8 +194,8 @@ describe("placeSpeechAsClips", () => {
     await place({
       videoId: video.id,
       footagePath: MIC,
-      insertionPoint: start,
-      items: [],
+      insertionPoint: { type: "start" },
+      recordingSession: null,
       fps: 30,
       speech: [{ startTime: 10.01, endTime: 12 }],
     });

@@ -5,6 +5,8 @@ import type { TranscriptionStatus } from "@/features/videos/transcription-status
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
 import type { JobEventMessage } from "@/features/jobs/job-wire";
+import type { InsertionPoint } from "@/services/clip-service";
+import type { NewRecorderMessage } from "./new-recorder-wire";
 
 /**
  * The schema is typed in terms of `DatabaseId`, so it is declared in
@@ -195,6 +197,11 @@ export type RecordingSession = {
   outputPath: string;
   startedAt: number;
   silenceLength: SilenceLength;
+  /**
+   * A New recorder Recording Session: its id is the recorder's, and its
+   * Clips arrive saved (`clips-saved`), never optimistically.
+   */
+  newRecorder?: true;
 };
 
 /**
@@ -275,6 +282,12 @@ export type ClipReducerState = {
 };
 
 export type ClipReducerAction =
+  | {
+      /** The app server told this editor about its New recorder Video. */
+      type: "new-recorder-message-heard";
+      message: NewRecorderMessage;
+      receivedAt: number;
+    }
   | {
       type: "recording-started";
       outputPath: string;
@@ -435,6 +448,11 @@ export type ClipReducerAction =
     };
 
 export type ClipReducerEffect =
+  | {
+      /** The app server places the New recorder's next Clip here. */
+      type: "send-recorder-insertion-point";
+      insertionPoint: InsertionPoint;
+    }
   | {
       type: "transcribe-clips";
       jobId: string;

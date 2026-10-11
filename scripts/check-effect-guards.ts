@@ -74,6 +74,10 @@ const RUN_BOUNDARIES: ReadonlyArray<readonly [RegExp, string]> = [
     "the Clip Mockup daemon's entry point",
   ],
   [
+    /^apps\/local\/app\/services\/recorder-client\/live\.server\.ts$/,
+    "the recorder client's entry point: it saves each recorder event as it arrives",
+  ],
+  [
     /^apps\/local\/sidecar\/(run-sidecar|socket)\.ts$/,
     "the Sidecar's entry point and its socket's request handler",
   ],
