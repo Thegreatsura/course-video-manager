@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cameraPreviewArgs, PREVIEW_TAGS } from "./capture-args";
 import { quitProcess } from "./camera";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
-import { connect, recordOnce, start, tmp } from "./test-utils/recorder-harness";
+import { connect, recordOnce, start, tmp } from "./test-utils/service-harness";
 
 /**
  * Start-up after a crash, through the recorder service's WebSocket on a

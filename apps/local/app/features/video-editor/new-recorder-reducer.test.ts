@@ -3,6 +3,7 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   canRecord,
   canRetryCamera,
+  canSwitchScene,
   createInitialNewRecorderState,
   newRecorderReducer,
 } from "./new-recorder-reducer";
@@ -233,5 +234,40 @@ describe("the Cam Link in the editor", () => {
       camera: { kind: "opening" },
       error: null,
     });
+  });
+});
+
+describe("switching scenes on the New recorder", () => {
+  it("previews the scene the recorder says, and asks for a switch only while it is open", () => {
+    const t = tester();
+    t.send(status()).send({ type: "press-scene", scene: "Camera" });
+    expect(canSwitchScene(t.getState())).toBe(false);
+    expect(t.getEffects()).toEqual([]);
+
+    t.send(heard({ type: "scene-changed", scene: "Code" }));
+    expect(t.getState().scene).toBe("Code");
+
+    t.send({ type: "press-scene", scene: "Code" });
+    expect(t.getEffects()).toEqual([]);
+    t.send({ type: "press-scene", scene: "Camera" });
+    expect(t.getEffects()).toEqual([{ type: "switch-scene", scene: "Camera" }]);
+    // The preview follows the recorder, not the press.
+    expect(t.getState().scene).toBe("Code");
+
+    t.send(heard({ type: "scene-changed", scene: "Camera" }));
+    expect(t.getState().scene).toBe("Camera");
+
+    t.send(heard({ type: "camera-closed" }));
+    expect(t.getState().scene).toBe(null);
+    expect(canSwitchScene(t.getState())).toBe(false);
+  });
+
+  it("says why a switch failed", () => {
+    const t = tester();
+    t.send(status())
+      .send(heard({ type: "scene-changed", scene: "Code" }))
+      .send({ type: "press-scene", scene: "No Face" })
+      .send({ type: "switch-scene-failed", message: "Not open." });
+    expect(t.getState()).toMatchObject({ scene: "Code", error: "Not open." });
   });
 });

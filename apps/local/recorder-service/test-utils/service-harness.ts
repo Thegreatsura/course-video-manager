@@ -3,14 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach } from "vitest";
 import { WebSocket } from "ws";
+import { fakeWindows } from "./fake-windows";
 import type { RecorderCommand, RecorderMessage } from "../protocol";
 import { startRecorderService } from "../recorder-service";
-import { fakeWindows } from "./fake-windows";
 
 /**
  * The recorder service driven through its WebSocket, with the process
- * launcher as the only fake (`fake-windows.ts`). Shared by the service's
- * test files; every service, client and folder is cleaned up after each test.
+ * launcher as the only fake: a scripted Windows whose ffmpeg.exe answers
+ * -version and -list_devices, and whose recorders print what the test tells
+ * them to and quit on `q`. Nothing here opens a real device. Importing this
+ * registers the `afterEach` that stops every service and removes every
+ * temp folder a test made.
  */
 
 export const T0_MS = 1_760_000_000_000;
@@ -29,11 +32,17 @@ export const tmp = () => {
   return dir;
 };
 
+/** The Windows wall clock the service reads; tests move it on. */
+export const clock = { ms: T0_MS };
+afterEach(() => {
+  clock.ms = T0_MS;
+});
+
 export const start = async (windows = fakeWindows(), stateDir = tmp()) => {
   const service = await startRecorderService({
     port: 0,
     launch: windows.launch,
-    now: () => T0_MS,
+    now: () => clock.ms,
     stateDir,
     cameraStartTimeoutMs: 100,
   });

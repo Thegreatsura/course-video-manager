@@ -10,6 +10,7 @@ import {
   type LaunchedProcess,
   type Launcher,
 } from "./launcher";
+import type { Scene } from "../app/packages/scene-layout";
 import type { RecordingSessionEvent, RecordingSessionFiles } from "./protocol";
 import { repairFile } from "./footage-repair";
 import { createSpeechDetector } from "./speech-detector";
@@ -60,6 +61,8 @@ export type RecordingSessionOptions = {
   screenIndex: number;
   /** The service's camera preview feed, which the camera process sends to. */
   cameraPreviewPort: number;
+  /** The scene the Recording Session starts in. */
+  scene: Scene;
   /** Each event, after it is in the log. */
   emit: (event: RecordingSessionEvent) => void;
   /** Once, after `recording-stopped`. */
@@ -70,6 +73,8 @@ export type RecordingSession = {
   id: string;
   eventLog: string;
   lastSeq: () => number;
+  /** Logs a scene change at the picture time it is asked for. */
+  switchScene: (scene: Scene) => void;
   stop: () => Promise<void>;
 };
 
@@ -210,6 +215,7 @@ export const startRecordingSession = (
     silenceLength: o.silenceLength,
     files,
   });
+  log({ type: "scene-changed", scene: o.scene, fileTime: 0 });
 
   // ddagrab skips frame slots at Windows' default 15.6 ms timer tick and
   // ffmpeg never raises it; Normal priority and power throttling cost more.
@@ -297,6 +303,12 @@ export const startRecordingSession = (
     id,
     eventLog,
     lastSeq: () => seq,
+    switchScene: (scene) => {
+      if (ended) return;
+      // Picture time: the wall clock every process stamps its frames with,
+      // less T0 (protocol.ts, TIME BASE).
+      log({ type: "scene-changed", scene, fileTime: (o.now() - t0Ms) / 1000 });
+    },
     stop: () => stopWith("requested"),
   };
 };

@@ -1,4 +1,5 @@
 import type { DB } from "@/db/schema";
+import type { Scene } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost } from "recorder-service/protocol";
@@ -37,6 +38,11 @@ export type NewRecorderMessage =
   | { type: "cam-link-busy"; message: string }
   /** The recorder is not open for this Video (closed, or open for another). */
   | { type: "camera-closed" }
+  /**
+   * The scene the picture is drawn in, while the recorder is open for this
+   * Video: sent when the editor starts listening and on every switch.
+   */
+  | { type: "scene-changed"; scene: Scene }
   | {
       type: "recording-started";
       recordingSessionId: string;
@@ -92,6 +98,7 @@ export const NEW_RECORDER_MESSAGE_TYPES = [
   "cam-link-not-starting",
   "cam-link-busy",
   "camera-closed",
+  "scene-changed",
   "recording-started",
   "speech-started",
   "speech-ended",
