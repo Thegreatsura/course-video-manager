@@ -17,6 +17,7 @@ import { useOBSConnector } from "@/features/video-editor/obs-connector";
 import { targetProfileForFormat } from "@/features/video-editor/ensure-obs-profile";
 import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
+import { useNewRecorder } from "@/features/video-editor/use-new-recorder";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
@@ -344,6 +345,13 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   });
 
   const recorderChoice = useRecorderChoice(props.loaderData.video);
+  const newRecorder = useNewRecorder({
+    videoId: props.loaderData.video.id,
+    enabled: !recorderChoice.usesObs,
+    silenceLength,
+    clipStateRef,
+    clipDispatch: dispatch,
+  });
   const obsConnector = useOBSConnector({
     usesObs: recorderChoice.usesObs,
     onNewClipOptimisticallyAdded: ({ scene, profile, soundDetectionId }) => {
@@ -458,6 +466,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       }}
       obsConnectorState={obsConnector.state}
       recorderChoice={recorderChoice}
+      newRecorder={newRecorder}
       items={clipState.items}
       sessions={clipState.sessions}
       repoId={props.loaderData.video.lesson?.section.repoVersion.repo.id}

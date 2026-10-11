@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LiveMediaStream } from "./live-media-stream";
 import { SilenceLengthToggle } from "./silence-length-toggle";
+import { NewRecorderControls } from "./new-recorder-controls";
 import { RecordingSignalIndicator } from "./timeline-indicators";
 import { TableOfContents } from "./table-of-contents";
 import {
@@ -415,6 +416,7 @@ export const VideoPlayerPanel = () => {
               <SilenceLengthToggle />
             </div>
           )}
+          {recorder === "new-recorder" && <NewRecorderControls />}
 
           {showScrubSlider && currentClip?.type === "on-database" && (
             <input

@@ -47,6 +47,7 @@ import type { SilenceLength } from "@/silence-detection-constants";
 import {
   VideoEditorContext,
   type UpdateClipDiagramPinFn,
+  type VideoEditorContextType,
 } from "./video-editor-context";
 import type { editorModalsReducer } from "./editor-modals-reducer";
 import { useEditorModalsReducer } from "./hooks/use-editor-modals-reducer";
@@ -79,6 +80,7 @@ export const VideoEditor = (props: {
   anyClipsMissingTranscriptWords: boolean;
   obsConnectorState: OBSConnectionOuterState;
   recorderChoice: ReturnType<typeof useRecorderChoice>;
+  newRecorder: VideoEditorContextType["newRecorder"];
   items: TimelineItem[];
   sessions: RecordingSession[];
   videoTitle: string;
@@ -457,6 +459,7 @@ export const VideoEditor = (props: {
         props.recorderChoice,
         isRecorderLocked(props.obsConnectorState, props.items, props.sessions)
       ),
+      newRecorder: props.newRecorder,
       liveMediaStream: props.liveMediaStream,
       speechDetectorState: props.speechDetectorState,
       silenceLength: props.silenceLength,

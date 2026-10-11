@@ -5,7 +5,7 @@
 
 import { Schema } from "effect";
 
-const InsertionPointSchema = Schema.Union(
+export const InsertionPointSchema = Schema.Union(
   Schema.Struct({
     type: Schema.Literal("start"),
   }),

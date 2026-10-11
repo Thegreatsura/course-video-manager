@@ -8,18 +8,25 @@
  * the same Clip whichever Recorder found it. The OBS path also shares the
  * placement half (`placeClips`); it keeps its own dedup and its browser-side
  * transcription.
+ *
+ * Speech from a Recording Session is placed once: a speech whose Clip that
+ * Recording Session already has (archived or not) is skipped, so a replay of
+ * the recorder's events never duplicates a Clip.
  */
 
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
+import { clips as clipsTable } from "@/db/schema";
+import type { RecordingSessionScene } from "@cvm/core/features/videos/recorder";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 import type { Database } from "@/services/drizzle-service.server";
 import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
+import type { InsertionPoint } from "./clip-service";
 import {
-  resolveInsertionPoint,
-  type FrontendInsertionPoint,
-  type FrontendTimelineItem,
-} from "./clip-service";
-import { placeClips, withVideoMutex } from "./clip-service-handler.helpers";
+  dbCall,
+  placeClips,
+  withVideoMutex,
+} from "./clip-service-handler.helpers";
 import { speechToClipBounds, type SpeechSegment } from "./silence-detection";
 
 export type { SpeechSegment };
@@ -28,13 +35,24 @@ export interface PlaceSpeechAsClipsInput {
   readonly videoId: string;
   /** The Footage file the speech was found in: each Clip's Footage path. */
   readonly footagePath: string;
-  /** The editor's insertion point, as appendFromObs takes it. */
-  readonly insertionPoint: FrontendInsertionPoint;
-  readonly items: FrontendTimelineItem[];
+  /** Where the Clips go, resolved to saved Clips and chapters. */
+  readonly insertionPoint: InsertionPoint;
   /** The picture's frame rate: Clip bounds snap to its frames. */
   readonly fps: number;
   readonly speech: readonly SpeechSegment[];
+  /**
+   * The Recording Session the speech was recorded in, and the scene in force
+   * at its start: set on each Clip, and the key a replayed speech is
+   * recognised by. Null for speech from a single Footage file.
+   */
+  readonly recordingSession: {
+    readonly id: string;
+    readonly scene: RecordingSessionScene;
+  } | null;
 }
+
+/** Bounds within this of a saved Clip's are the same speech, replayed. */
+const SAME_BOUND_SECONDS = 0.005;
 
 /**
  * Save speech as Clips at the editor's insertion point and enqueue one
@@ -46,18 +64,45 @@ export const placeSpeechAsClips = Effect.fn("placeSpeechAsClips")(function* (
   input: PlaceSpeechAsClipsInput
 ) {
   const bounds = speechToClipBounds(input.speech, input.fps);
-  if (bounds.length === 0) {
-    return { clips: [], transcriptionJobId: null };
-  }
+  const session = input.recordingSession;
 
   const clips = yield* withVideoMutex(
     input.videoId,
-    placeClips(db, {
-      videoId: input.videoId,
-      insertionPoint: resolveInsertionPoint(input.insertionPoint, input.items),
-      clips: bounds.map((b) => ({ inputVideo: input.footagePath, ...b })),
+    Effect.gen(function* () {
+      const placed = session
+        ? yield* dbCall(() =>
+            db.query.clips.findMany({
+              where: and(
+                eq(clipsTable.videoId, input.videoId),
+                eq(clipsTable.recordingSessionId, session.id)
+              ),
+            })
+          )
+        : [];
+      const fresh = bounds.filter(
+        (b) =>
+          !placed.some(
+            (c) =>
+              Math.abs(c.sourceStartTime - b.startTime) < SAME_BOUND_SECONDS &&
+              Math.abs(c.sourceEndTime - b.endTime) < SAME_BOUND_SECONDS
+          )
+      );
+      if (fresh.length === 0) return [];
+      return yield* placeClips(db, {
+        videoId: input.videoId,
+        insertionPoint: input.insertionPoint,
+        clips: fresh.map((b) => ({
+          inputVideo: input.footagePath,
+          ...b,
+          recordingSessionId: session?.id ?? null,
+          scene: session?.scene ?? null,
+        })),
+      });
     })
   );
+  if (clips.length === 0) {
+    return { clips: [], transcriptionJobId: null };
+  }
 
   const clipIds = clips.map((c) => c.id);
   const job = yield* enqueueJob({
