@@ -18,9 +18,10 @@ import type { SilenceLength } from "../app/silence-detection-constants";
  *
  * The same port serves the MJPEG previews over HTTP, straight to the
  * browser: `GET /preview/camera` and `GET /preview/screen`
- * (`multipart/x-mixed-replace`, so an `<img>` shows them).
+ * (`multipart/x-mixed-replace`, so an `<img>` shows them), and the camera's
+ * still for the thumbnail camera: `GET /still` (`STILL_PATH`).
  *
- * Scenes and stills arrive in later slices as more members of these unions.
+ * Scenes arrive in later slices as more members of these unions.
  */
 
 /** The WebSocket and the MJPEG previews' HTTP port. */
@@ -31,6 +32,21 @@ export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
 
 /** The path the service serves a preview feed on. */
 export const previewPath = (feed: PreviewFeed) => `/preview/${feed}`;
+
+/**
+ * Where the service serves the camera's still: the latest 1280x720 JPEG of
+ * the Cam Link, while the recorder is open and not recording (the thumbnail
+ * camera, which used the OBS Virtual Camera). Otherwise it answers with an
+ * error status and one of the messages below as plain text.
+ */
+export const STILL_PATH = "/still";
+
+export const STILL_RECORDER_CLOSED =
+  "The recorder is not open: it opens while the editor or the thumbnail camera is open on a New recorder Video.";
+export const STILL_WHILE_RECORDING =
+  "The recorder is recording: stop it to take a still.";
+export const STILL_NO_PICTURE =
+  "The camera has no picture yet: wait for it to go live.";
 
 /**
  * The Cam Link while the recorder is open and not recording. It opens with

@@ -10,7 +10,15 @@ import { PREVIEW_FEEDS, previewPath, type PreviewFeed } from "./protocol";
  * browsers watching (`GET /preview/<feed>`) and to whoever waits for a frame
  * (the camera opener). A browser that falls behind skips frames instead of
  * queueing them.
+ *
+ * The `still` feed is not a preview: the camera preview process also sends a
+ * few full-size (1280x720) JPEGs a second there, and the service keeps only
+ * the latest (`latest`), for the thumbnail camera's still (`GET /still`).
  */
+
+/** Every feed the service listens on: the previews, and the camera's still. */
+export type Feed = PreviewFeed | "still";
+const FEEDS = [...PREVIEW_FEEDS, "still"] as const satisfies readonly Feed[];
 
 const BOUNDARY = "cvmpreviewframe";
 
@@ -40,17 +48,21 @@ const mpjpegParser = (onJpeg: (jpeg: Buffer) => void) => {
 };
 
 export const startPreviewFeeds = async () => {
-  const watchers: Record<PreviewFeed, Set<http.ServerResponse>> = {
+  const watchers: Record<Feed, Set<http.ServerResponse>> = {
     camera: new Set(),
     screen: new Set(),
+    still: new Set(),
   };
-  const frameListeners: Record<PreviewFeed, Set<() => void>> = {
+  const frameListeners: Record<Feed, Set<() => void>> = {
     camera: new Set(),
     screen: new Set(),
+    still: new Set(),
   };
+  const latest: Partial<Record<Feed, { jpeg: Buffer; atMs: number }>> = {};
   const sockets = new Set<net.Socket>();
 
-  const frame = (feed: PreviewFeed, jpeg: Buffer) => {
+  const frame = (feed: Feed, jpeg: Buffer) => {
+    latest[feed] = { jpeg, atMs: Date.now() };
     for (const listener of frameListeners[feed]) listener();
     const head = `--${BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
     for (const res of watchers[feed]) {
@@ -61,7 +73,7 @@ export const startPreviewFeeds = async () => {
     }
   };
 
-  const listen = (feed: PreviewFeed) =>
+  const listen = (feed: Feed) =>
     new Promise<net.Server>((resolve, reject) => {
       const server = net.createServer((socket) => {
         sockets.add(socket);
@@ -77,22 +89,23 @@ export const startPreviewFeeds = async () => {
       server.listen(0, "127.0.0.1", () => resolve(server));
     });
 
-  const servers = {
-    camera: await listen("camera"),
-    screen: await listen("screen"),
-  };
-  const portOf = (feed: PreviewFeed) =>
-    (servers[feed].address() as AddressInfo).port;
+  const servers = Object.fromEntries(
+    await Promise.all(FEEDS.map(async (f) => [f, await listen(f)] as const))
+  ) as Record<Feed, net.Server>;
+  const portOf = (feed: Feed) => (servers[feed].address() as AddressInfo).port;
 
   return {
     /** The TCP port ffmpeg.exe sends a feed's mpjpeg to. */
     port: portOf,
 
     /** Calls `listener` on each frame of a feed, until unsubscribed. */
-    onFrame(feed: PreviewFeed, listener: () => void) {
+    onFrame(feed: Feed, listener: () => void) {
       frameListeners[feed].add(listener);
       return () => void frameListeners[feed].delete(listener);
     },
+
+    /** A feed's latest JPEG and when it arrived (`Date.now()` ms), if any came. */
+    latest: (feed: Feed) => latest[feed],
 
     /** Serves `GET /preview/<feed>`; false for any other request. */
     serve(req: http.IncomingMessage, res: http.ServerResponse) {
