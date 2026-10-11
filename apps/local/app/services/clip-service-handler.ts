@@ -619,3 +619,9 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
     }
   }
 );
+
+export {
+  placeSpeechAsClips,
+  type PlaceSpeechAsClipsInput,
+  type SpeechSegment,
+} from "./clip-service-speech.server";
