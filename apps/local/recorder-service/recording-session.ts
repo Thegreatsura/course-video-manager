@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { SilenceLength } from "../app/silence-detection-constants";
+import { quitProcess } from "./camera";
 import { buildCaptureArgs, FILE_NAMES } from "./capture-args";
 import {
   lineSplitter,
@@ -226,11 +227,9 @@ export const startRecordingSession = (
     log({ type: "screen-recorder-tuned", ok: code === 0, detail });
   });
 
-  const quit = (p: LaunchedProcess) => {
-    p.writeStdin("q");
-    const timer = setTimeout(() => p.kill(), STOP_TIMEOUT_MS);
-    void p.exited.then(() => clearTimeout(timer));
-  };
+  /** Done once it exited and, if it had to be killed, Windows stopped it too. */
+  const quit = (p: LaunchedProcess) =>
+    quitProcess(p, { launch: o.launch, tag, timeoutMs: STOP_TIMEOUT_MS });
 
   const finished = Promise.all([screen.child.exited, camera.child.exited]);
 
@@ -243,9 +242,9 @@ export const startRecordingSession = (
     if (stopping) return finished.then(() => {});
     stopping = true;
     speech.stopRequested();
-    quit(screen.child);
-    quit(camera.child);
-    return finished.then(async ([screenCode, cameraCode]) => {
+    const quitting = Promise.all([quit(screen.child), quit(camera.child)]);
+    return quitting.then(async () => {
+      const [screenCode, cameraCode] = await finished;
       // `q` closes every file with its duration. A process that quit on an
       // error or was killed may not have: its files are repaired now, so
       // every file the Recording Session leaves is readable.

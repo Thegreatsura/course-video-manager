@@ -50,9 +50,11 @@ const probeAnswer = (file: string) => {
 
 /**
  * One try at opening the Cam Link: frames arrive, nothing arrives (the
- * Cam Link's start-up trouble), or another program holds it.
+ * Cam Link's start-up trouble), or another program holds it. `stuck` sends
+ * nothing and never reads `q` (ffmpeg stuck opening its input), and killing
+ * its WSL side leaves ffmpeg.exe running on Windows.
  */
-export type CameraTry = "frames" | "silent" | "busy";
+export type CameraTry = "frames" | "silent" | "busy" | "stuck";
 
 export type FakeProcess = LaunchedProcess & {
   launch: Launch;
@@ -63,6 +65,8 @@ export type FakeProcess = LaunchedProcess & {
   readonly running: boolean;
   /** What it prints between `q` and exiting. */
   onQuit?: () => void;
+  /** Ignores `q`, and a kill ends only its WSL side. */
+  stuck?: boolean;
 };
 
 const fakeProcess = (launch: Launch): FakeProcess => {
@@ -77,7 +81,7 @@ const fakeProcess = (launch: Launch): FakeProcess => {
     onStderr: (l) => void err.push(l),
     writeStdin: (text) => {
       // ffmpeg closes its files and exits 0 on `q`.
-      if (text === "q") {
+      if (text === "q" && !p.stuck) {
         setImmediate(() => {
           p.onQuit?.();
           p.exit(0);
@@ -85,7 +89,7 @@ const fakeProcess = (launch: Launch): FakeProcess => {
       }
     },
     exited,
-    kill: () => p.exit(null),
+    kill: () => (p.stuck ? resolveExit(null) : p.exit(null)),
     stdout: (t) => out.forEach((l) => l(t)),
     stderr: (t) => err.forEach((l) => l(t)),
     exit: (code) => {
@@ -177,8 +181,10 @@ export const fakeWindows = (
   const cameraPreviews: FakeProcess[] = [];
   const screenPreviews: FakeProcess[] = [];
   const cameraTries = [...(o.cameraTries ?? [])];
+  const launchedProcesses: FakeProcess[] = [];
   const launch: Launcher = (l) => {
     const p = fakeProcess(l);
+    launchedProcesses.push(p);
     if (l.tool === "nvidia-smi")
       return answer(p, { stdout: `${o.driver ?? "591.74"}\r\n` });
     if (l.tool === "powershell" && l.script === "screens.ps1") {
@@ -187,8 +193,21 @@ export const fakeWindows = (
           "0\t0\t0\t2560\t1440\t\\\\.\\DISPLAY1\tLG HDR QHD\r\n1\t2560\t0\t1920\t1080\t\\\\.\\DISPLAY2\tDELL U2424H\r\n",
       });
     }
-    if (l.tool === "powershell" && l.script === "stop-recorders.ps1")
-      return answer(p, { stdout: "0\r\n" });
+    if (l.tool === "powershell" && l.script === "stop-recorders.ps1") {
+      // As the script does: every running ffmpeg.exe whose command line has
+      // one of the tags, and only tags of CVM's own.
+      const tags = (l.args[1] ?? "")
+        .split(",")
+        .filter((t) => /^cvm-recorder-./.test(t));
+      const hits = launchedProcesses.filter(
+        (q) =>
+          q.running &&
+          q.launch.tool === "ffmpeg" &&
+          tags.some((t) => q.launch.args.join(" ").includes(t))
+      );
+      hits.forEach((q) => q.exit(null));
+      return answer(p, { stdout: `${hits.length}\r\n` });
+    }
     if (l.tool === "powershell")
       return answer(p, {
         stdout: "timeBeginPeriod(1) in ffmpeg.exe 42, priority High\r\n",
@@ -216,6 +235,7 @@ export const fakeWindows = (
     if (isPreview(l, "video=")) {
       cameraPreviews.push(p);
       const next = cameraTries.shift() ?? "frames";
+      p.stuck = next === "stuck";
       if (next === "frames")
         sendFrames(p, l.args, [
           o.jpeg?.camera ?? TINY_JPEG,
