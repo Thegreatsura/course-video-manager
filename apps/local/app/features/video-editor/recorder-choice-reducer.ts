@@ -10,8 +10,8 @@ import { isCaptureInProgress } from "./video-editor-selectors";
 
 /**
  * The editor's choice of Recorder (OBS or New recorder) for one Video. The
- * choice is saved on the Video and remembered as the last choice, which a
- * new Video then starts with (`last-recorder-choice.ts`).
+ * choice is saved on the Video and, once saved, remembered as the last
+ * choice, which a new Video then starts with (`last-recorder-choice.ts`).
  */
 export namespace recorderChoiceReducer {
   export type State = {
@@ -68,10 +68,12 @@ export const recorderChoiceReducer: EffectReducer<
         return state;
       }
       exec({ type: "save-recorder", recorder: action.recorder });
-      exec({ type: "remember-recorder-choice", recorder: action.recorder });
       return { ...state, recorder: action.recorder, error: null };
     }
     case "recorder-saved":
+      // Remembered only once the Video took it: a refused choice must not
+      // become the Recorder the next new Video starts with.
+      exec({ type: "remember-recorder-choice", recorder: action.recorder });
       return { ...state, saved: action.recorder };
     case "recorder-save-failed":
       if (action.recorder !== state.recorder) return state;

@@ -51,16 +51,22 @@ describe("recorder choice", () => {
     expect(showsOBSChecks(state)).toBe(true);
   });
 
-  it("picking the New recorder saves it, remembers it as the last choice and hides the OBS checks", () => {
-    const { state, effects } = run(landscape(), {
+  it("picking the New recorder saves it, hides the OBS checks, and remembers it as the last choice once saved", () => {
+    const picked = run(landscape(), {
       type: "recorder-picked",
       recorder: "new-recorder",
       locked: false,
     });
-    expect(state.recorder).toBe("new-recorder");
-    expect(showsOBSChecks(state)).toBe(false);
-    expect(effects).toEqual([
+    expect(picked.state.recorder).toBe("new-recorder");
+    expect(showsOBSChecks(picked.state)).toBe(false);
+    expect(picked.effects).toEqual([
       { type: "save-recorder", recorder: "new-recorder" },
+    ]);
+    const saved = run(picked.state, {
+      type: "recorder-saved",
+      recorder: "new-recorder",
+    });
+    expect(saved.effects).toEqual([
       { type: "remember-recorder-choice", recorder: "new-recorder" },
     ]);
   });
@@ -91,8 +97,8 @@ describe("recorder choice", () => {
     expect(effects).toEqual([]);
   });
 
-  it("a failed save goes back to the saved Recorder and says why", () => {
-    const { state } = run(
+  it("a failed save goes back to the saved Recorder, says why and is not remembered", () => {
+    const { state, effects } = run(
       landscape("obs"),
       { type: "recorder-picked", recorder: "new-recorder", locked: false },
       {
@@ -103,6 +109,9 @@ describe("recorder choice", () => {
     );
     expect(state.recorder).toBe("obs");
     expect(state.error).toBe("The Recorder is locked once the Video has Clips");
+    expect(effects).not.toContainEqual(
+      expect.objectContaining({ type: "remember-recorder-choice" })
+    );
   });
 
   it("a stale failure after a newer pick changes nothing", () => {
