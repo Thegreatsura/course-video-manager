@@ -166,6 +166,11 @@ export const handleNewRecorderMessage = (
       );
     }
     case "recorder-status":
+    case "camera-opening":
+    case "camera-went-live":
+    case "cam-link-not-starting":
+    case "cam-link-busy":
+    case "camera-closed":
     case "speech-started":
     case "speech-ended":
     case "recorder-failed":

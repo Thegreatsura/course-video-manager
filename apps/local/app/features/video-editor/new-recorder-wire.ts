@@ -19,7 +19,21 @@ export type NewRecorderMessage =
       problem: string | null;
       /** The Recording Session in progress for this Video, if any. */
       recordingSessionId: string | null;
+      /** Where the browser watches the raw camera and screen (MJPEG, for an `<img>`). */
+      previews: { camera: string; screen: string };
     }
+  /**
+   * The Cam Link, while the recorder is open for this Video and not
+   * recording. Record waits for `camera-went-live`.
+   */
+  | { type: "camera-opening"; attempt: number }
+  | { type: "camera-went-live" }
+  /** Three tries brought no frames: replug, then Retry. */
+  | { type: "cam-link-not-starting"; message: string }
+  /** Another program (OBS) holds the Cam Link: close it, then Retry. */
+  | { type: "cam-link-busy"; message: string }
+  /** The recorder is not open for this Video (closed, or open for another). */
+  | { type: "camera-closed" }
   | {
       type: "recording-started";
       recordingSessionId: string;
@@ -52,6 +66,11 @@ export type NewRecorderMessage =
 
 export const NEW_RECORDER_MESSAGE_TYPES = [
   "recorder-status",
+  "camera-opening",
+  "camera-went-live",
+  "cam-link-not-starting",
+  "cam-link-busy",
+  "camera-closed",
   "recording-started",
   "speech-started",
   "speech-ended",

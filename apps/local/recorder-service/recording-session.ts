@@ -42,6 +42,8 @@ export type RecordingSessionOptions = {
   camera: string;
   mic: string;
   screenIndex: number;
+  /** The service's camera preview feed, which the camera process sends to. */
+  cameraPreviewPort: number;
   /** Each event, after it is in the log. */
   emit: (event: RecordingSessionEvent) => void;
   /** Once, after `recording-stopped`. */
@@ -97,6 +99,7 @@ export const startRecordingSession = (
     camera: o.camera,
     mic: o.mic,
     silenceLength: o.silenceLength,
+    cameraPreviewPort: o.cameraPreviewPort,
   });
 
   const speech = createSpeechDetector();
