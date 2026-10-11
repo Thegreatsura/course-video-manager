@@ -15,10 +15,20 @@ import { BITEXACT_ARGS, LANDSCAPE_VIDEO_ENCODE_ARGS } from "./ffmpeg-error";
  * costs about what today's export does. An OBS-only Video never comes here.
  *
  * Every segment is encoded alike — {@link LANDSCAPE_VIDEO_ENCODE_ARGS} (CFR
- * 60, 8-bit yuv420p), BT.709 tags, 48 kHz stereo PCM in Matroska — so the
+ * 60, 8-bit yuv420p), BT.709 tags, 48 kHz stereo PCM in QuickTime — so the
  * concat can copy the picture. The sound is PCM until the concat so no
  * per-segment AAC priming lands between Clips; the concat encodes AAC 48 kHz
  * once, and the audio normalize pass that follows re-encodes it anyway.
+ *
+ * Two things keep the joined file CFR 60 with the sound on the picture:
+ * - Each segment is a whole number of frames, picture and sound alike
+ *   ({@link wholeFrameSeconds}). The concat demuxer starts the next segment
+ *   where the last one ends; a picture rounded up to its frame over sound cut
+ *   at the exact duration opens a gap of a few ms at every join, which the
+ *   AAC encode closes by sliding the sound earlier.
+ * - The segments carry a 1/15360 video time base (as today's single pass
+ *   writes): 60 fps lands on whole ticks, where Matroska's 1 ms ticks give
+ *   frame steps of 16 and 17 ms.
  */
 
 /** One Clip as a segmented export renders it. */
@@ -34,6 +44,15 @@ export type SegmentClip = {
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
+
+const FPS = 60;
+
+/** A duration rounded up to whole 60 fps frames (800 samples at 48 kHz). */
+const wholeFrameSeconds = (seconds: number): number =>
+  Math.ceil(seconds * FPS - 1e-6) / FPS;
+
+/** The extension of a segment file: QuickTime, which carries PCM. */
+export const SEGMENT_EXTENSION = ".mov";
 
 /**
  * OBS's 3-Band Equalizer splits the mic at 800 Hz and 5 kHz and applies one
@@ -88,7 +107,8 @@ export const clipSegmentArgs = (
   dims: Dimensions,
   outputFile: string
 ): string[] => {
-  const { composite, duration } = clip;
+  const { composite } = clip;
+  const duration = wholeFrameSeconds(clip.duration);
   const encode = [
     "-map",
     "[outv]",
@@ -97,6 +117,8 @@ export const clipSegmentArgs = (
     ...LANDSCAPE_VIDEO_ENCODE_ARGS,
     ...BT709_ARGS,
     ...SEGMENT_AUDIO_ARGS,
+    "-video_track_timescale",
+    String(FPS * 256),
     "-t",
     String(duration),
     ...BITEXACT_ARGS,
@@ -123,6 +145,15 @@ export const clipSegmentArgs = (
   }
 
   const start = composite.start;
+  // Draw the last scene on to the end of the last frame.
+  const segments = composite.segments.map((segment, i, all) =>
+    i === all.length - 1
+      ? {
+          ...segment,
+          endSeconds: Math.max(segment.endSeconds, start + duration),
+        }
+      : segment
+  );
   const micStart = start - composite.micOffsetSeconds;
   const silenceMs = Math.max(0, Math.round(-micStart * 1000));
   // Read a little past the end, so the 29.97 camera has a frame to hold.
@@ -157,7 +188,7 @@ export const clipSegmentArgs = (
     "-filter_complex",
     [
       sceneFilterGraph({
-        segments: composite.segments,
+        segments,
         inputs: { screen: "0:v", camera: "1:v" },
         inputStartSeconds: start,
         output: "composite",

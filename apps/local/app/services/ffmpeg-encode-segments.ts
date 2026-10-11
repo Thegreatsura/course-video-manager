@@ -9,6 +9,7 @@ import {
   clipSegmentArgs,
   concatList,
   concatSegmentsArgs,
+  SEGMENT_EXTENSION,
   type SegmentClip,
 } from "./clip-segment-args";
 
@@ -67,7 +68,7 @@ export const makeConcatenateClipSegments = <E, R>(deps: {
       for (const [index, clip] of clips.entries()) {
         const segmentFile = path.join(
           segmentDir,
-          `${String(index).padStart(4, "0")}.mkv`
+          `${String(index).padStart(4, "0")}${SEGMENT_EXTENSION}`
         );
         const before = done;
         yield* runEncode({
