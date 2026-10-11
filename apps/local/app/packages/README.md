@@ -51,7 +51,7 @@ points at `app/packages`.
 
 The rules above are about `apps/local/app/packages/` — packages that are plain
 directories reached through the app's `@/*` tsconfig alias, with no
-`package.json` of their own. Present members: `course-json`.
+`package.json` of their own. Present members: `course-json`, `scene-layout`.
 
 A deep module with consumers OUTSIDE `apps/local` cannot live here, because
 nothing outside the app can resolve the `@/*` alias. It is promoted to a
