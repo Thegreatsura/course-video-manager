@@ -26,12 +26,7 @@ import {
   compareOrderStrings,
   orderKeyBeforeItem,
 } from "../lib/sort-by-order.js";
-import {
-  checkClipZoomEligibility,
-  clipZoomIneligibilityMessage,
-} from "../features/videos/clip-zoom.js";
-import { effectiveClipScene } from "../features/videos/effective-scene.js";
-import { ClipNotZoomableError } from "./db-service-errors.js";
+import { createSetClipZoom } from "./db-clip-zoom.server.js";
 import { createChapterOperationsUnwrapped } from "./db-chapter-operations.server.js";
 import {
   createTranscriptWordOperationsUnwrapped,
@@ -211,37 +206,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
     }
   );
 
-  /**
-   * Set a Clip's Clip Zoom.
-   *
-   * A dedicated operation rather than another optional field on `updateClip`,
-   * because the write carries a rule `updateClip` has no business knowing:
-   * a zoom is legal only on a camera scene. Enforcing it here means the CLI
-   * and any future caller inherit the rule instead of reimplementing it.
-   */
-  const setClipZoom = Effect.fn("setClipZoom")(function* (
-    clipId: string,
-    zoomType: string
-  ) {
-    const clip = yield* getClipById(clipId);
-
-    const scene = effectiveClipScene(clip);
-    const ineligibility = checkClipZoomEligibility(scene);
-    if (ineligibility) {
-      return yield* new ClipNotZoomableError({
-        clipId,
-        scene,
-        message: clipZoomIneligibilityMessage(ineligibility),
-      });
-    }
-
-    yield* requireDraftVersionForClip(db, clipId);
-    const [updated] = yield* makeDbCall(() =>
-      db.update(clips).set({ zoomType }).where(eq(clips.id, clipId)).returning()
-    );
-
-    return updated!;
-  });
+  const setClipZoom = createSetClipZoom(db, { getClipById });
 
   const archiveClip = Effect.fn("archiveClip")(function* (clipId: string) {
     yield* requireDraftVersionForClip(db, clipId);
