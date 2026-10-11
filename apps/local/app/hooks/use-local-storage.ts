@@ -25,7 +25,7 @@ export function hasLocalStorage(): boolean {
 }
 
 /** The stored string, or `null` when there is nothing readable under `key`. */
-function readStored(key: string): string | null {
+export function readStored(key: string): string | null {
   if (!hasLocalStorage()) return null;
   try {
     return localStorage.getItem(key);
@@ -40,7 +40,7 @@ function readStored(key: string): string | null {
  * taking a render down for, because the in-memory value still serves the
  * session.
  */
-function writeStored(key: string, value: string): void {
+export function writeStored(key: string, value: string): void {
   if (!hasLocalStorage()) return;
   try {
     localStorage.setItem(key, value);

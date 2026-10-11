@@ -80,6 +80,10 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.obsConnectorState
   );
+  const recorder = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.recorderPicker.recorder
+  );
   const speechDetectorState = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.speechDetectorState
@@ -337,7 +341,9 @@ export const VideoPlayerPanel = () => {
             <div className="w-full aspect-[16/9] bg-card rounded-lg flex flex-col items-center justify-center gap-3">
               <VideoOffIcon className="size-10 text-muted-foreground" />
               <p className="text-muted-foreground text-sm text-center px-4">
-                No video stream or clips yet. Connect OBS to start recording.
+                {recorder === "obs"
+                  ? "No video stream or clips yet. Connect OBS to start recording."
+                  : "No clips yet. This Video records with the New recorder."}
               </p>
             </div>
           ) : (
