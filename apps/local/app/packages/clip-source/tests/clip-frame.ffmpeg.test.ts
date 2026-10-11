@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   clipFrame,
   clipFrameFfmpegArgs,
@@ -29,7 +29,8 @@ const W = 1920;
 const H = 1080;
 
 describe.skipIf(!hasFfmpeg)("a new-recorder Clip's stills in ffmpeg", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "clip-frame-"));
+  // Made in beforeAll: a skipped describe still runs its body.
+  const dir = path.join(tmpdir(), `clip-frame-${process.pid}-${Date.now()}`);
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   const file = (name: string, lavfi: string) => {
@@ -50,8 +51,13 @@ describe.skipIf(!hasFfmpeg)("a new-recorder Clip's stills in ffmpeg", () => {
     ]);
     return out;
   };
-  const screen = file("screen.mkv", "color=c=red:s=320x180:r=60:d=2");
-  const camera = file("camera.mkv", "color=c=lime:s=384x216:r=30000/1001:d=2");
+  const screen = path.join(dir, "screen.mkv");
+  const camera = path.join(dir, "camera.mkv");
+  beforeAll(() => {
+    mkdirSync(dir, { recursive: true });
+    file("screen.mkv", "color=c=red:s=320x180:r=60:d=2");
+    file("camera.mkv", "color=c=lime:s=384x216:r=30000/1001:d=2");
+  });
 
   // Code until 1 s, then Camera: the first frame is the screen with the face
   // cam bottom right, the last is the camera full frame.
