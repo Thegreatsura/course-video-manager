@@ -3,6 +3,7 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { makeAction } from "@/services/route-action.server";
 import { data, redirect } from "react-router";
 import { DEFAULT_VIDEO_FORMAT } from "@/features/videos/video-format";
+import { VIDEO_RECORDERS } from "@cvm/core/features/videos/recorder";
 
 const createVideoSchema = Schema.Struct({
   title: Schema.String,
@@ -10,6 +11,9 @@ const createVideoSchema = Schema.Struct({
     Schema.Union(Schema.Literal("landscape"), Schema.Literal("short"))
   ),
   redirectTo: Schema.optional(Schema.String),
+  recorder: Schema.optional(
+    Schema.Union(Schema.Literal(...VIDEO_RECORDERS), Schema.Literal(""))
+  ),
 });
 
 export const action = makeAction({
@@ -23,6 +27,7 @@ export const action = makeAction({
       const video = yield* videoOps.createStandaloneVideo({
         title: result.title,
         format: result.format ?? DEFAULT_VIDEO_FORMAT,
+        recorder: result.recorder || null,
       });
 
       if (

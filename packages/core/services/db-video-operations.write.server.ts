@@ -1,13 +1,18 @@
 import { type Database } from "./drizzle-service.server.js";
-import { lessons, videos } from "../db/schema.js";
+import { clips, lessons, videos } from "../db/schema.js";
 import {
   NotFoundError,
   UnknownDBServiceError,
+  VideoRecorderLockedError,
   VideoTitleTakenError,
 } from "./db-service-errors.js";
 import { and, eq, ne } from "drizzle-orm";
 import { Effect } from "effect";
 import type { VideoFormat } from "../features/videos/video-format.js";
+import {
+  recordersForFormat,
+  type VideoRecorder,
+} from "../features/videos/recorder.js";
 import {
   requireDraftVersionForLesson,
   requireDraftVersionForVideo,
@@ -328,8 +333,53 @@ export const createVideoWriteOps = (db: Database) => {
     return updated;
   });
 
+  /**
+   * Choose the Recorder a Video records with. Refused once the Video has any
+   * Clip (one Video never mixes OBS and new-recorder Clips) and for a format
+   * that cannot record with it (Shorts are OBS only).
+   */
+  const updateVideoRecorder = Effect.fn("updateVideoRecorder")(
+    function* (opts: { videoId: string; recorder: VideoRecorder }) {
+      yield* requireDraftVersionForVideo(db, opts.videoId);
+      const video = yield* getVideoRowById(opts.videoId);
+
+      if (!recordersForFormat(video.format).includes(opts.recorder)) {
+        return yield* new VideoRecorderLockedError({
+          videoId: opts.videoId,
+          message: `A ${video.format} Video cannot record with ${opts.recorder}`,
+        });
+      }
+
+      const clip = yield* makeDbCall(() =>
+        db.query.clips.findFirst({
+          columns: { id: true },
+          where: and(
+            eq(clips.videoId, opts.videoId),
+            eq(clips.archived, false)
+          ),
+        })
+      );
+      if (clip) {
+        return yield* new VideoRecorderLockedError({
+          videoId: opts.videoId,
+          message: "The Recorder is locked once the Video has Clips",
+        });
+      }
+
+      const [updated] = yield* makeDbCall(() =>
+        db
+          .update(videos)
+          .set({ recorder: opts.recorder, updatedAt: new Date() })
+          .where(eq(videos.id, opts.videoId))
+          .returning()
+      );
+      return updated!;
+    }
+  );
+
   return {
     getVideoRowById,
+    updateVideoRecorder,
     linkVideoToPitch,
     unlinkVideoFromPitch,
     moveVideoToLesson,
@@ -362,4 +412,5 @@ export const videoWriteMethods = [
   "updateVideoScript",
   "updateVideoDescription",
   "updateVideoFormat",
+  "updateVideoRecorder",
 ] as const;
