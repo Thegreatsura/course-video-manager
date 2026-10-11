@@ -2,7 +2,7 @@
  * Turns the camera+mic process's silencedetect lines into speech starting and
  * ending, in mic file time. The one silence detector (#1993, Q3): speech is
  * what lies between a silence's end and the next silence's start, the rule
- * `getClipsOfSpeakingFromFFmpeg` applies to OBS recordings.
+ * `parseSpeechFromFFmpeg` applies to OBS recordings.
  *
  * Every Recording Session opens in silence (the mic's first 1.5 s are padded
  * with it, capture-args.ts), so its first speech is a `silence_end`.

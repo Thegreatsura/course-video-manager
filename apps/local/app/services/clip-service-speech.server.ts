@@ -3,18 +3,14 @@
  * speech (the new recorder's silence detector), this decides what of it
  * becomes a Clip and where the Clips go.
  *
- * The OBS path (`appendFromObsImpl`) finds its speech and bounds its Clips in
- * `silence-detection.ts`, frame by frame, then shares the placement half
- * (`placeClips`). Both read the same constants
- * (`silence-detection-constants.ts`), so the two paths cannot drift on the
- * minimum Clip length or the end padding.
+ * What of the speech becomes a Clip is `speechToClipBounds`, the same rule the
+ * OBS path (`findSilenceInVideo`) bounds its Clips with, so one speech gives
+ * the same Clip whichever Recorder found it. The OBS path also shares the
+ * placement half (`placeClips`); it keeps its own dedup and its browser-side
+ * transcription.
  */
 
 import { Effect } from "effect";
-import {
-  AUTO_EDITED_END_PADDING_SECONDS,
-  MINIMUM_CLIP_LENGTH_SECONDS,
-} from "@/silence-detection-constants";
 import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-clips-response";
 import type { Database } from "@/services/drizzle-service.server";
 import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
@@ -24,12 +20,9 @@ import {
   type FrontendTimelineItem,
 } from "./clip-service";
 import { placeClips, withVideoMutex } from "./clip-service-handler.helpers";
+import { speechToClipBounds, type SpeechSegment } from "./silence-detection";
 
-/** One stretch of speech, in the Footage file's own time (seconds). */
-export interface SpeechSegment {
-  readonly startTime: number;
-  readonly endTime: number;
-}
+export type { SpeechSegment };
 
 export interface PlaceSpeechAsClipsInput {
   readonly videoId: string;
@@ -38,22 +31,10 @@ export interface PlaceSpeechAsClipsInput {
   /** The editor's insertion point, as appendFromObs takes it. */
   readonly insertionPoint: FrontendInsertionPoint;
   readonly items: FrontendTimelineItem[];
+  /** The picture's frame rate: Clip bounds snap to its frames. */
+  readonly fps: number;
   readonly speech: readonly SpeechSegment[];
 }
-
-const toHundredths = (seconds: number) => Math.round(seconds * 100) / 100;
-
-/**
- * Speech too short to be a take is dropped; the rest gets the end padding,
- * so a cut never lands on the last syllable.
- */
-const clipBoundsOf = (speech: readonly SpeechSegment[]) =>
-  speech
-    .filter((s) => s.endTime - s.startTime >= MINIMUM_CLIP_LENGTH_SECONDS)
-    .map((s) => ({
-      startTime: toHundredths(Math.max(0, s.startTime)),
-      endTime: toHundredths(s.endTime + AUTO_EDITED_END_PADDING_SECONDS),
-    }));
 
 /**
  * Save speech as Clips at the editor's insertion point and enqueue one
@@ -64,7 +45,7 @@ export const placeSpeechAsClips = Effect.fn("placeSpeechAsClips")(function* (
   db: Database,
   input: PlaceSpeechAsClipsInput
 ) {
-  const bounds = clipBoundsOf(input.speech);
+  const bounds = speechToClipBounds(input.speech, input.fps);
   if (bounds.length === 0) {
     return { clips: [], transcriptionJobId: null };
   }
