@@ -61,7 +61,7 @@
     },
     {
       "file": "apps/local/app/services/video-processing-service.ts",
-      "count": 3,
+      "count": 2,
       "reason": "Interactive, on the app server: a Clip's first or last frame for a thumbnail, and the DaVinci Resolve script behind Export to DaVinci Resolve. Each is one request the author's page waits on. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
     },
     {

@@ -1,6 +1,5 @@
 import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
-import type { DB } from "@/db/schema";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   clipStateReducer,
@@ -24,7 +23,12 @@ const saved = (id: string): ClipOnDatabase =>
     databaseId: id as DatabaseId,
   });
 
-const dbClip = (id: string): DB.Clip =>
+type SavedClip = Extract<
+  NewRecorderMessage,
+  { type: "clips-saved" }
+>["clips"][number];
+
+const dbClip = (id: string): SavedClip =>
   fromPartial({
     id: id as DatabaseId,
     videoFilename: "/mnt/d/r/mic.mkv",
