@@ -1,6 +1,5 @@
 import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
-import type { DB } from "@/db/schema";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   clipStateReducer,
@@ -97,7 +96,7 @@ describe("an editor that loads mid-recording", () => {
       type: "clips-saved",
       recordingSessionId: SESSION,
       clips: [
-        fromPartial<DB.Clip>({
+        fromPartial({
           id: "c" as DatabaseId,
           videoFilename: "/mnt/d/r/mic.mkv",
           sourceStartTime: 2.15,
@@ -112,5 +111,19 @@ describe("an editor that loads mid-recording", () => {
       transcriptionJobId: "job-1",
     });
     expect(databaseIds(editor.clips.getState().items)).toEqual(["a", "b", "c"]);
+  });
+
+  it("tells a restarted app server its insertion point again when it hears the take it is already in", () => {
+    const editor = loadEditor([saved("a"), saved("b")]);
+    onSubscribe.forEach(editor.hear);
+    const before = editor.clips.getEffects().length;
+
+    // The app server restarted: the editor's EventSource reconnects.
+    editor.hear(onSubscribe[0]!);
+
+    expect(editor.clips.getEffects().slice(before)).toContainEqual({
+      type: "send-recorder-insertion-point",
+      insertionPoint: { type: "after-clip", databaseClipId: "b" },
+    });
   });
 });

@@ -1,5 +1,6 @@
 import type { DB } from "@/db/schema";
 import type { Scene } from "@/packages/scene-layout";
+import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost } from "recorder-service/protocol";
@@ -56,7 +57,8 @@ export type NewRecorderMessage =
       /** Speech became saved Clips, placed after `placedAt`, in order. */
       type: "clips-saved";
       recordingSessionId: string;
-      clips: DB.Clip[];
+      /** With their Recording Session, so the editor plays them as the composite. */
+      clips: (DB.Clip & { recordingSession: ClipRecordingSession })[];
       placedAt: InsertionPoint;
       /** The `transcribe-clips` Job the app server enqueued for them. */
       transcriptionJobId: string;

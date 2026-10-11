@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, afterEach, vi } from "vitest";
 import { Effect, Layer } from "effect";
-import { afterEach, vi } from "vitest";
 import { start, tmp } from "recorder-service/test-utils/service-harness";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
@@ -49,17 +52,26 @@ export const saveEvent: Ingest = (event, insertionPointFor) =>
     )
   );
 
+/** Where a Stream Deck Record's Recording Sessions go. */
+export const STREAM_DECK_FOLDER = fs.mkdtempSync(
+  path.join(os.tmpdir(), "recorder-client-deck-")
+);
+afterAll(() => fs.rmSync(STREAM_DECK_FOLDER, { recursive: true, force: true }));
+
 /** The app server's recorder client, as live.server.ts makes it. */
 export const connectClient = (port: number, ingest: Ingest = saveEvent) => {
   const client = createRecorderClient({
     url: `ws://127.0.0.1:${port}`,
     ingest,
-    unfinishedRecordingSessions: () =>
-      Effect.runPromise(unfinishedRecordingSessions(testDb as never)),
+    unfinishedRecordingSessions: (candidates) =>
+      Effect.runPromise(
+        unfinishedRecordingSessions(testDb as never, candidates)
+      ),
     reconnectMs: 50,
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,
     retryMs: 20,
+    folder: STREAM_DECK_FOLDER,
   });
   clients.push(client);
   return client;

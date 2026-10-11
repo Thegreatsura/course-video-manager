@@ -1,7 +1,8 @@
 import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import type { DatabaseId } from "@cvm/core/db/ids";
 import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray, or } from "drizzle-orm";
+import { clipRecordingSessionRelation } from "@cvm/core/services/clip-recording-session-relation";
 import { Effect } from "effect";
 import { sceneSegments } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
@@ -195,12 +196,19 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         { type: "speech-ended", recordingSessionId },
       ];
       if (last && placed.transcriptionJobId) {
+        const recordingSession = yield* dbCall(() =>
+          db.query.recordingSessions.findFirst({
+            where: eq(recordingSessions.id, recordingSessionId),
+            ...clipRecordingSessionRelation,
+          })
+        );
         messages.push({
           type: "clips-saved",
           recordingSessionId,
           clips: placed.clips.map((c) => ({
             ...c,
             id: c.id as DatabaseId,
+            recordingSession: recordingSession!,
           })),
           placedAt: insertionPoint,
           transcriptionJobId: placed.transcriptionJobId,
@@ -229,7 +237,8 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           .set({
             status: "stopped",
             cameraFramesLost: event.framesLost.camera,
-            screenFramesLost: event.framesLost.screen,
+            // Not measured yet (null): the column keeps its default 0.
+            screenFramesLost: event.framesLost.screen ?? undefined,
           })
           .where(eq(recordingSessions.id, recordingSessionId))
       );
@@ -271,15 +280,27 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
   }
 });
 
-/** The Recording Sessions not yet seen to stop or crash. */
+/**
+ * The Recording Sessions not yet seen to stop or crash: rows still
+ * recording, and any of `candidates` with no row at all.
+ */
 export const unfinishedRecordingSessions = Effect.fn(
   "unfinishedRecordingSessions"
-)(function* (db: Database) {
+)(function* (db: Database, candidates: readonly string[] = []) {
   const rows = yield* dbCall(() =>
     db.query.recordingSessions.findMany({
-      columns: { id: true },
-      where: eq(recordingSessions.status, "recording"),
+      columns: { id: true, status: true },
+      where: or(
+        eq(recordingSessions.status, "recording"),
+        candidates.length > 0
+          ? inArray(recordingSessions.id, [...candidates])
+          : undefined
+      ),
     })
   );
-  return rows.map((r) => r.id);
+  const known = new Set(rows.map((r) => r.id));
+  return [
+    ...rows.filter((r) => r.status === "recording").map((r) => r.id),
+    ...candidates.filter((id) => !known.has(id)),
+  ];
 });

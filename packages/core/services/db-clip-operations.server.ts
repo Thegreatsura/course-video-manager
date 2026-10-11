@@ -21,6 +21,7 @@ import {
   requireDraftVersionForVideo,
 } from "./draft-guard.server.js";
 import { transactionalizeWrites } from "./with-db-transaction.server.js";
+import { clipRecordingSessionRelation } from "./clip-recording-session-relation.js";
 import {
   compareOrderStrings,
   orderKeyBeforeItem,
@@ -70,6 +71,28 @@ const createClipOperationsUnwrapped = (db: Database) => {
 
     return clip;
   });
+
+  /**
+   * A Clip with its Recording Session (null for an OBS Clip): everything the
+   * Clip Source module needs to show its picture.
+   */
+  const getClipWithRecordingSession = Effect.fn("getClipWithRecordingSession")(
+    function* (clipId: string) {
+      const clip = yield* makeDbCall(() =>
+        db.query.clips.findFirst({
+          where: eq(clips.id, clipId),
+          with: { recordingSession: clipRecordingSessionRelation },
+        })
+      );
+      if (!clip) {
+        return yield* new NotFoundError({
+          type: "getClipWithRecordingSession",
+          params: { clipId },
+        });
+      }
+      return clip;
+    }
+  );
 
   const getClipsByIds = Effect.fn("getClipsByIds")(function* (
     clipIds: readonly string[]
@@ -604,6 +627,7 @@ const createClipOperationsUnwrapped = (db: Database) => {
 
   return {
     getClipById,
+    getClipWithRecordingSession,
     getClipsByIds,
     updateClip,
     setTranscriptionStatus,

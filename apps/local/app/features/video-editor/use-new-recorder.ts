@@ -102,6 +102,21 @@ export const useNewRecorder = (o: {
             })
           );
       },
+      "send-silence-length": (_state, effect) => {
+        fetch(`/api/videos/${videoId}/recorder/silence-length`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ silenceLength: effect.silenceLength }),
+        })
+          .then(answer)
+          .catch((error: unknown) =>
+            // Not fatal: only a Stream Deck Record needs it, and says so.
+            console.error(
+              "Could not tell the recorder the Silence Length",
+              error
+            )
+          );
+      },
       "retry-camera": (_state, _effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/retry-camera`, {
           method: "POST",
@@ -134,6 +149,15 @@ export const useNewRecorder = (o: {
       },
     }
   );
+
+  // Bridges the editor's Silence Length (a localStorage choice) in.
+  useEffect(() => {
+    if (o.enabled)
+      dispatch({
+        type: "silence-length-chosen",
+        silenceLength: o.silenceLength,
+      });
+  }, [o.enabled, o.silenceLength, dispatch]);
 
   useRecorderEvents(videoId, o.enabled, (message) => {
     dispatch({ type: "recorder-message-heard", message });

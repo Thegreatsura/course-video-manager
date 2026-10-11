@@ -93,6 +93,12 @@ export const handleNewRecorderMessage = (
       const id = message.recordingSessionId as SessionId;
       if (state.sessions.some((s) => s.id === id)) return state;
       exec({ type: "scroll-to-insertion-point" });
+      // Started from the Stream Deck, the app server has no insertion point
+      // from this editor, or one from an earlier recording: its Clips go here.
+      exec({
+        type: "send-recorder-insertion-point",
+        insertionPoint: savedItemBefore(state),
+      });
       return {
         ...state,
         sessions: [
@@ -189,8 +195,9 @@ export const handleNewRecorderMessage = (
 /**
  * An editor opened (or reconnected) mid-take hears the take only through
  * `recorder-status`: it missed `recording-started`, and may miss
- * `recording-stopped`. It joins the take, so the Recorder stays locked and its
- * insertion point reaches the server, and leaves it once no take is recording.
+ * `recording-stopped`. It joins the take, so the Recorder stays locked, and
+ * leaves it once no take is recording. Every `recorder-status` naming a take
+ * re-sends the insertion point: a restarted app server has forgotten it.
  */
 const joinRecordingInProgress = (
   state: ClipReducerState,
@@ -204,15 +211,17 @@ const joinRecordingInProgress = (
       ? { ...s, status: "done" as const }
       : s
   );
+  if (recording) {
+    exec({
+      type: "send-recorder-insertion-point",
+      insertionPoint: savedItemBefore(state),
+    });
+  }
   if (!recording || sessions.some((s) => s.id === recording)) {
     return sessions.some((s, i) => s !== state.sessions[i])
       ? { ...state, sessions }
       : state;
   }
-  exec({
-    type: "send-recorder-insertion-point",
-    insertionPoint: savedItemBefore(state),
-  });
   return {
     ...state,
     sessions: [
@@ -229,21 +238,31 @@ const joinRecordingInProgress = (
 };
 
 /**
- * The editor's insertion point moved while a New recorder Recording Session
- * records: the app server must place the next Clip there too.
+ * The saved item the editor's insertion point comes after changed while a
+ * New recorder Recording Session records: the app server must place the
+ * next Clip there too. That includes a chapter added there being saved (a
+ * Stream Deck "add chapter" mid-recording), which moves no insertion point.
  */
 export const tellRecorderOfInsertionPoint = (
-  before: ClipReducerState,
+  before: InsertionPoint | null,
   after: ClipReducerState,
   action: ClipReducerAction,
   exec: ClipReducerExec
 ) => {
   if (action.type === "new-recorder-message-heard") return;
-  if (before.insertionPoint === after.insertionPoint) return;
-  if (!after.sessions.some((s) => s.newRecorder && s.status === "recording"))
-    return;
-  exec({
-    type: "send-recorder-insertion-point",
-    insertionPoint: savedItemBefore(after),
-  });
+  const point = recorderInsertionPoint(after);
+  if (!point || (before && samePoint(before, point))) return;
+  exec({ type: "send-recorder-insertion-point", insertionPoint: point });
 };
+
+/**
+ * Where the editor wants the recorder's next Clip, while a New recorder
+ * Recording Session records; null otherwise. Read before an action is
+ * reduced: some reducers change items in place.
+ */
+export const recorderInsertionPoint = (
+  state: ClipReducerState
+): InsertionPoint | null =>
+  state.sessions.some((s) => s.newRecorder && s.status === "recording")
+    ? savedItemBefore(state)
+    : null;
