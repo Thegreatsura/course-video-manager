@@ -71,6 +71,7 @@ describe("duplicateCourse — schema-drift guard", () => {
         "description",
         "script",
         "format",
+        "recorder",
       ],
       notCopied: [
         "id",
@@ -99,6 +100,9 @@ describe("duplicateCourse — schema-drift guard", () => {
         // should look the same as the one it came from.
         "zoomType",
         "diagramSnapshotId",
+        // Shared, not copied: the copy draws the same picture.
+        "recordingSessionId",
+        "sceneOverride",
       ],
       notCopied: ["id", "videoId", "archived", "createdAt"],
     },

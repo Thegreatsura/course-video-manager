@@ -25,6 +25,7 @@ export function makeVideo(
     body: null,
     description: null,
     format: "landscape",
+    recorder: null,
     updatedAt: new Date(),
     clipCount: 0,
     hasScript: false,

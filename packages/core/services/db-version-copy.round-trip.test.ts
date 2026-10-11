@@ -67,6 +67,15 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   // a pending one stays pending (`copiedVoice`).
   "clip_mockup.voiceStatus": () => "ready",
   "clip_mockup.voiceError": () => null,
+  // CHECK video_recorder_valid; "new-recorder" is the non-default value.
+  "video.recorder": () => "new-recorder",
+  // CHECK clip_scene_override_valid.
+  "clip.sceneOverride": () => "Code",
+  // CHECKs on a Recording Session and its scene events, which every copy
+  // shares rather than copies.
+  "recording_session.status": () => "stopped",
+  "recording_session.silenceLength": () => "long",
+  "recording_session_scene_event.scene": () => "Code",
   // Diagram Snapshots are shared per Diagram, not owned by a Version.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // CHECK clip_mockup_comment_one_parent: row 0 on a Clip Mockup, row 1 on
@@ -142,7 +151,12 @@ describe("Submit round trip — the new Draft is the old one, row for row", () =
       }).pipe(Effect.provide(testLayer))
     );
 
-    const of = await signaturesBelow(testDb, ROOT, NOT_CARRIED);
+    const of = await signaturesBelow(
+      testDb,
+      ROOT,
+      NOT_CARRIED,
+      COPY_PATHS.submit.tables
+    );
     const source = of(version.id);
     const copy = of(result.version.id);
     for (const [name, decision] of Object.entries(COPY_PATHS.submit.tables)) {
