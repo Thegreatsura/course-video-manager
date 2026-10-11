@@ -47,6 +47,9 @@ export const CompositePlayback = (props: {
     let frame = 0;
     const draw = () => {
       frame = requestAnimationFrame(draw);
+      // Mid-seek a `<video>` has no frame to give: keep the last one drawn
+      // rather than flash black.
+      if (camera.current?.seeking || screen.current?.seeking) return;
       drawComposite(ctx, scene, {
         camera: frameOf(camera.current),
         screen: frameOf(screen.current),
