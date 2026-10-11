@@ -23,6 +23,7 @@ const status = (
       camera: "http://r/preview/camera",
       screen: "http://r/preview/screen",
     },
+    still: "http://r/still",
     ...o,
   });
 

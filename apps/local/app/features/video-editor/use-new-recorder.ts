@@ -37,6 +37,31 @@ const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 /**
+ * Hears a Video's `NewRecorderMessage`s from `GET /api/videos/:id/recorder/
+ * events` while `enabled`. Listening is what opens the recorder (and the Cam
+ * Link) for that Video, so only a New recorder Video may listen. The editor
+ * and the thumbnail camera both listen through here.
+ */
+export const useRecorderEvents = (
+  videoId: string,
+  enabled: boolean,
+  onMessage: (message: NewRecorderMessage) => void
+) => {
+  const listener = useRef(onMessage);
+  listener.current = onMessage;
+  useEffect(() => {
+    if (!enabled) return;
+    const source = new EventSource(`/api/videos/${videoId}/recorder/events`);
+    for (const type of NEW_RECORDER_MESSAGE_TYPES) {
+      source.addEventListener(type, (event) => {
+        listener.current(JSON.parse(event.data) as NewRecorderMessage);
+      });
+    }
+    return () => source.close();
+  }, [videoId, enabled]);
+};
+
+/**
  * The effect runner for `newRecorderReducer`, and the bridge from the app
  * server's recorder events (`GET /api/videos/:id/recorder/events`) into it
  * and into the clip reducer. Listens only on a New recorder Video, and its
@@ -94,25 +119,14 @@ export const useNewRecorder = (o: {
     }
   );
 
-  const clipDispatch = useRef(o.clipDispatch);
-  clipDispatch.current = o.clipDispatch;
-
-  useEffect(() => {
-    if (!o.enabled) return;
-    const source = new EventSource(`/api/videos/${videoId}/recorder/events`);
-    for (const type of NEW_RECORDER_MESSAGE_TYPES) {
-      source.addEventListener(type, (event) => {
-        const message = JSON.parse(event.data) as NewRecorderMessage;
-        dispatch({ type: "recorder-message-heard", message });
-        clipDispatch.current({
-          type: "new-recorder-message-heard",
-          message,
-          receivedAt: Date.now(),
-        });
-      });
-    }
-    return () => source.close();
-  }, [videoId, o.enabled]);
+  useRecorderEvents(videoId, o.enabled, (message) => {
+    dispatch({ type: "recorder-message-heard", message });
+    o.clipDispatch({
+      type: "new-recorder-message-heard",
+      message,
+      receivedAt: Date.now(),
+    });
+  });
 
   return {
     state,

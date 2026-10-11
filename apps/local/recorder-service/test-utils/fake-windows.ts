@@ -84,25 +84,39 @@ const DEVICE_LISTING = [
 
 const TINY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 
-/** Sends a "JPEG" to the preview feed in the args every 20 ms until exit. */
+/** What the camera preview process sends to the still feed (its second output). */
+export const FAKE_STILL_JPEG = Buffer.from([0xff, 0xd8, 0x57, 0xff, 0xd9]);
+
+/**
+ * Sends a "JPEG" to each feed in the args every 20 ms until exit: `jpegs[i]`
+ * to the i-th `tcp://` output.
+ */
 const sendFrames = (
   p: FakeProcess,
   args: readonly string[],
-  jpeg: Buffer = TINY_JPEG
+  jpegs: Buffer[]
 ) => {
-  const port = Number(args.join(" ").match(/tcp:\/\/127\.0\.0\.1:(\d+)/)?.[1]);
-  const socket = net.connect(port, "127.0.0.1");
-  socket.on("error", () => {});
+  const ports = [...args.join(" ").matchAll(/tcp:\/\/127\.0\.0\.1:(\d+)/g)].map(
+    (m) => Number(m[1])
+  );
+  const sockets = ports.map((port) => {
+    const socket = net.connect(port, "127.0.0.1");
+    socket.on("error", () => {});
+    return socket;
+  });
   const timer = setInterval(() => {
-    socket.write(
-      `--ffmpeg\r\nContent-Type: image/jpeg\r\nContent-length: ${jpeg.length}\r\n\r\n`
-    );
-    socket.write(jpeg);
-    socket.write("\r\n");
+    sockets.forEach((socket, i) => {
+      const jpeg = jpegs[i] ?? TINY_JPEG;
+      socket.write(
+        `--ffmpeg\r\nContent-Type: image/jpeg\r\nContent-length: ${jpeg.length}\r\n\r\n`
+      );
+      socket.write(jpeg);
+      socket.write("\r\n");
+    });
   }, 20);
   void p.exited.then(() => {
     clearInterval(timer);
-    socket.destroy();
+    sockets.forEach((socket) => socket.destroy());
   });
 };
 
@@ -118,8 +132,8 @@ export const fakeWindows = (
     driver?: string;
     /** Each try at the Cam Link in turn; every try after these gets frames. */
     cameraTries?: CameraTry[];
-    /** A real JPEG per preview, for a browser to show (verify-cvm). */
-    jpeg?: { camera: Buffer; screen: Buffer };
+    /** A real JPEG per preview and for the still, for a browser to show (verify-cvm). */
+    jpeg?: { camera: Buffer; screen: Buffer; still?: Buffer };
   } = {}
 ) => {
   const recorders: FakeProcess[] = [];
@@ -151,7 +165,11 @@ export const fakeWindows = (
     if (isPreview(l, "video=")) {
       cameraPreviews.push(p);
       const next = cameraTries.shift() ?? "frames";
-      if (next === "frames") sendFrames(p, l.args, o.jpeg?.camera);
+      if (next === "frames")
+        sendFrames(p, l.args, [
+          o.jpeg?.camera ?? TINY_JPEG,
+          o.jpeg?.still ?? FAKE_STILL_JPEG,
+        ]);
       if (next === "busy") {
         // What dshow says when OBS has the Cam Link.
         return answer(p, {
@@ -164,7 +182,7 @@ export const fakeWindows = (
     }
     if (isPreview(l, "ddagrab")) {
       screenPreviews.push(p);
-      sendFrames(p, l.args, o.jpeg?.screen);
+      sendFrames(p, l.args, [o.jpeg?.screen ?? TINY_JPEG]);
       return p;
     }
     recorders.push(p);

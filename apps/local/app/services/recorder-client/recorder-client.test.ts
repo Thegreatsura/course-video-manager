@@ -140,6 +140,7 @@ describe("the recorder client", () => {
           ),
           screen: expect.stringMatching(/\/preview\/screen$/),
         },
+        still: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/still$/),
       })
     );
 

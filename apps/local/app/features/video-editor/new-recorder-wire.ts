@@ -21,6 +21,8 @@ export type NewRecorderMessage =
       recordingSessionId: string | null;
       /** Where the browser watches the raw camera and screen (MJPEG, for an `<img>`). */
       previews: { camera: string; screen: string };
+      /** Where the browser fetches the camera's still (a 1280x720 JPEG): the thumbnail camera. */
+      still: string;
     }
   /**
    * The Cam Link, while the recorder is open for this Video and not

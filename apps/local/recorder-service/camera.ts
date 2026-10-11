@@ -89,7 +89,11 @@ export const openCamera = (o: CameraOptions): Camera => {
     if (camera) {
       const p = o.launch({
         tool: "ffmpeg",
-        args: cameraPreviewArgs({ camera, port: o.feeds.port("camera") }),
+        args: cameraPreviewArgs({
+          camera,
+          port: o.feeds.port("camera"),
+          stillPort: o.feeds.port("still"),
+        }),
         cwd: "/mnt/c",
       });
       current = p;
