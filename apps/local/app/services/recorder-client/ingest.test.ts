@@ -346,7 +346,7 @@ describe("recorder ingest", () => {
     });
   });
 
-  it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file", async () => {
+  it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file at mic time", async () => {
     const video = await clipService.createVideo("new recorder");
     const ingest = recorderIngest();
     await ingest.feed(started(video.id), ...speech(2, 2, 5));
@@ -396,7 +396,9 @@ describe("recorder ingest", () => {
       )
     );
 
-    expect(heard).toMatchObject([{ inputVideo: MIC, startTime: 2.15 }]);
+    // Speech heard at mic time 2.0 is cut at picture time 2.15; Whisper hears
+    // the mic from 2.0, not 150 ms into the take.
+    expect(heard).toMatchObject([{ inputVideo: MIC, startTime: 2 }]);
     expect(
       (await clipService.getTimeline(video.id)).map(
         (i) => i.type === "clip" && i.data.text
