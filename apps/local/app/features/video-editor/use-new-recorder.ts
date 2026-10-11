@@ -8,6 +8,7 @@ import type {
 } from "./clip-state-reducer.types";
 import {
   canRecord,
+  canRetryCamera,
   canStop,
   createInitialNewRecorderState,
   newRecorderReducer,
@@ -22,9 +23,11 @@ export type NewRecorderControls = {
   state: newRecorderReducer.State;
   canRecord: boolean;
   canStop: boolean;
+  canRetryCamera: boolean;
   onRecord: () => void;
   onStop: () => void;
   onDismissAlert: () => void;
+  onRetryCamera: () => void;
 };
 
 const answer = async (response: Response) => {
@@ -37,7 +40,9 @@ const messageOf = (error: unknown) =>
 /**
  * The effect runner for `newRecorderReducer`, and the bridge from the app
  * server's recorder events (`GET /api/videos/:id/recorder/events`) into it
- * and into the clip reducer. Listens only on a New recorder Video.
+ * and into the clip reducer. Listens only on a New recorder Video, and its
+ * listening is what opens the recorder (and the Cam Link) for that Video:
+ * an OBS Video never opens it.
  */
 export const useNewRecorder = (o: {
   videoId: string;
@@ -66,6 +71,15 @@ export const useNewRecorder = (o: {
               type: "start-recording-failed",
               message: messageOf(error),
             })
+          );
+      },
+      "retry-camera": (_state, _effect, dispatch) => {
+        fetch(`/api/videos/${videoId}/recorder/retry-camera`, {
+          method: "POST",
+        })
+          .then(answer)
+          .catch((error: unknown) =>
+            dispatch({ type: "retry-camera-failed", message: messageOf(error) })
           );
       },
       "stop-recording": (_state, _effect, dispatch) => {
@@ -105,6 +119,7 @@ export const useNewRecorder = (o: {
     state,
     canRecord: canRecord(state),
     canStop: canStop(state),
+    canRetryCamera: canRetryCamera(state),
     onRecord: () =>
       dispatch({
         type: "press-record",
@@ -113,5 +128,6 @@ export const useNewRecorder = (o: {
       }),
     onStop: () => dispatch({ type: "press-stop" }),
     onDismissAlert: () => dispatch({ type: "dismiss-alert" }),
+    onRetryCamera: () => dispatch({ type: "press-retry" }),
   };
 };

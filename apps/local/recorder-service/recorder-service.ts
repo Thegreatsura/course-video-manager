@@ -5,8 +5,17 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import { recoverCrashedSessions, type IndexEntry } from "./crash-recovery";
-import type { Launcher } from "./launcher";
+import {
+  CAMERA_START_TIMEOUT_MS,
+  openCamera,
+  quitProcess,
+  type Camera,
+} from "./camera";
+import { screenPreviewArgs } from "./capture-args";
+import type { LaunchedProcess, Launcher } from "./launcher";
+import { startPreviewFeeds } from "./preview-feeds";
 import type {
+  CameraStatus,
   RecorderCommand,
   RecorderMessage,
   RecorderState,
@@ -32,6 +41,11 @@ import {
  *
  * Commands are handled one at a time, in the order they arrive, so a `stop`
  * can never overtake the `record` it stops.
+ *
+ * It holds the Cam Link only while the recorder is open for a Video: opening
+ * opens it (`camera.ts`) and the screen preview; Record is refused until the
+ * camera is live; Record hands the Cam Link from the preview process to the
+ * recording, and the end of the recording hands it back; closing lets it go.
  */
 
 /** The devices the rig proved, found by name. */
@@ -47,6 +61,8 @@ export type RecorderServiceOptions = {
   now: () => number;
   /** The service's own files: the last NVIDIA driver seen, the Recording Session index. */
   stateDir: string;
+  /** How long one try at the Cam Link waits for its first frame. */
+  cameraStartTimeoutMs?: number;
 };
 
 const Command = Schema.Union(
@@ -58,6 +74,7 @@ const Command = Schema.Union(
   }),
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("close") }),
+  Schema.Struct({ type: Schema.Literal("retry-camera") }),
   Schema.Struct({
     type: Schema.Literal("replay"),
     recordingSessionId: Schema.String,
@@ -98,8 +115,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   let state: RecorderState = { kind: "closed" };
   let listening: () => void = () => {};
   let session: RecordingSession | undefined;
+  let camera: Camera | undefined;
+  let screenPreview: LaunchedProcess | undefined;
+  const feeds = await startPreviewFeeds();
 
   const server = http.createServer((req, res) => {
+    if (feeds.serve(req, res)) return;
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ service: "recorder", pid: process.pid, state }));
@@ -119,6 +140,61 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     broadcast({ type: "state", state });
   };
 
+  const findCamera = async () => {
+    const { devices } = await listDshowDevices(o.launch);
+    return findByName(
+      devices.filter((d) => d.kind === "video").map((d) => d.name),
+      (n) => n,
+      CAMERA_NAME
+    );
+  };
+
+  /** Opens the Cam Link for the open recorder; its status goes in the state. */
+  const startCamera = (): CameraStatus => {
+    camera = openCamera({
+      launch: o.launch,
+      feeds,
+      findCamera,
+      startTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
+      onStatus: (status) => {
+        if (state.kind === "open") setState({ ...state, camera: status });
+      },
+    });
+    return camera.status();
+  };
+
+  const releaseCamera = async () => {
+    const released = camera;
+    camera = undefined;
+    await released?.release();
+  };
+
+  const startScreenPreview = async () => {
+    const screens = await listScreens(o.launch);
+    const screen = findByName(screens, (s) => s.name, SCREEN_NAME);
+    if (!screen || state.kind === "closed" || screenPreview) return;
+    const p = o.launch({
+      tool: "ffmpeg",
+      args: screenPreviewArgs({
+        screenIndex: screen.index,
+        port: feeds.port("screen"),
+      }),
+      cwd: "/mnt/c",
+    });
+    screenPreview = p;
+    void p.exited.then((code) => {
+      if (screenPreview !== p) return;
+      screenPreview = undefined;
+      console.error(`recorder: the screen preview quit (exit ${code})`);
+    });
+  };
+
+  const stopScreenPreview = async () => {
+    const p = screenPreview;
+    screenPreview = undefined;
+    if (p) await quitProcess(p);
+  };
+
   const onEvent = (event: RecordingSessionEvent) => {
     if (state.kind === "recording") state = { ...state, lastSeq: event.seq };
     broadcast(event);
@@ -130,6 +206,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     if (state.kind === "closed")
       throw new Refusal("Open the recorder for a Video first.");
     if (state.kind === "recording") throw new Refusal("Already recording.");
+    if (state.camera.kind !== "live")
+      throw new Refusal("The camera is not live yet.");
     if (!path.isAbsolute(command.folder)) {
       throw new Refusal(
         `The folder must be an absolute path: ${command.folder}`
@@ -161,21 +239,30 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       );
     }
     const videoId = state.videoId;
-    session = startRecordingSession({
-      launch: o.launch,
-      now: o.now,
-      videoId,
-      folder: command.folder,
-      silenceLength: command.silenceLength,
-      camera,
-      mic,
-      screenIndex: screen.index,
-      emit: onEvent,
-      onEnded: () => {
-        session = undefined;
-        setState({ kind: "open", videoId });
-      },
-    });
+    // The Cam Link opens in one process at a time: the recording's takes it
+    // over from the preview, and hands it back when it ends.
+    await releaseCamera();
+    try {
+      session = startRecordingSession({
+        launch: o.launch,
+        now: o.now,
+        videoId,
+        folder: command.folder,
+        silenceLength: command.silenceLength,
+        camera,
+        mic,
+        screenIndex: screen.index,
+        cameraPreviewPort: feeds.port("camera"),
+        emit: onEvent,
+        onEnded: () => {
+          session = undefined;
+          setState({ kind: "open", videoId, camera: startCamera() });
+        },
+      });
+    } catch (e) {
+      setState({ kind: "open", videoId, camera: startCamera() });
+      throw e;
+    }
     fs.appendFileSync(
       indexFile,
       `${JSON.stringify({ recordingSessionId: session.id, eventLog: session.eventLog })}\n`
@@ -221,7 +308,19 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
             "Stop recording before opening the recorder for another Video."
           );
         }
-        return setState({ kind: "open", videoId: command.videoId });
+        if (state.kind === "open") {
+          return setState({ ...state, videoId: command.videoId });
+        }
+        setState({
+          kind: "open",
+          videoId: command.videoId,
+          camera: startCamera(),
+        });
+        return void startScreenPreview();
+      case "retry-camera":
+        if (state.kind !== "open" || !camera?.retry())
+          throw new Refusal("The camera is not waiting for a retry.");
+        return;
       case "record":
         return record(command);
       case "stop":
@@ -230,7 +329,10 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       case "close":
         if (state.kind === "recording")
           throw new Refusal("Stop recording before closing the recorder.");
-        return setState({ kind: "closed" });
+        if (state.kind === "closed") return setState(state);
+        setState({ kind: "closed" });
+        await Promise.all([releaseCamera(), stopScreenPreview()]);
+        return;
     }
   };
 
@@ -291,6 +393,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     close: async () => {
       await queue;
       if (session) await session.stop();
+      await Promise.all([releaseCamera(), stopScreenPreview()]);
+      await feeds.close();
       for (const ws of wss.clients) ws.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => server.close(() => resolve()));

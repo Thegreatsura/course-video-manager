@@ -16,16 +16,43 @@ import type { SilenceLength } from "../app/silence-detection-constants";
  * - **Status messages** have no `seq` and are not logged: the greeting, the
  *   recorder's state, a refused command and the end of a replay.
  *
- * Scenes, stills, camera state and previews arrive in later slices as more
- * members of these unions.
+ * The same port serves the MJPEG previews over HTTP, straight to the
+ * browser: `GET /preview/camera` and `GET /preview/screen`
+ * (`multipart/x-mixed-replace`, so an `<img>` shows them).
+ *
+ * Scenes and stills arrive in later slices as more members of these unions.
  */
 
-/** The WebSocket (and, later, the MJPEG previews' HTTP) port. */
+/** The WebSocket and the MJPEG previews' HTTP port. */
 export const RECORDER_SERVICE_PORT = 5177;
 
+export const PREVIEW_FEEDS = ["camera", "screen"] as const;
+export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
+
+/** The path the service serves a preview feed on. */
+export const previewPath = (feed: PreviewFeed) => `/preview/${feed}`;
+
+/**
+ * The Cam Link while the recorder is open and not recording. It opens with
+ * the recorder, and is live once its first real frame arrives; it is tried
+ * up to three times before the service asks for a replug.
+ */
+export type CameraStatus =
+  | { kind: "opening"; attempt: number }
+  | { kind: "live" }
+  /** Three tries brought no frames: "unplug and replug it", then Retry. */
+  | { kind: "not-starting"; message: string }
+  /** Another program (OBS) holds it. The service never closes OBS itself. */
+  | { kind: "busy"; message: string };
+
 export type RecorderCommand =
-  /** Open the recorder for a Video. Later slices open the camera here. */
+  /**
+   * Open the recorder for a Video: opens the camera and the previews. Open
+   * already, for any Video, it keeps the camera and only changes the Video.
+   */
   | { type: "open"; videoId: string }
+  /** Try the camera again after `not-starting` or `busy`. */
+  | { type: "retry-camera" }
   /** Start a Recording Session in a new folder under `folder` (a WSL path). */
   | { type: "record"; silenceLength: SilenceLength; folder: string }
   | { type: "stop" }
@@ -103,7 +130,7 @@ export type RecordingSessionEvent = Logged<
 
 export type RecorderState =
   | { kind: "closed" }
-  | { kind: "open"; videoId: string }
+  | { kind: "open"; videoId: string; camera: CameraStatus }
   | {
       kind: "recording";
       videoId: string;

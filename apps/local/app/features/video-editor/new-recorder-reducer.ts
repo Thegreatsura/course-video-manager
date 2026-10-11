@@ -9,9 +9,20 @@ import type { NewRecorderMessage } from "./new-recorder-wire";
  * records; this follows what the app server reports of it (`recorder-message-
  * heard`) and asks for Record and Stop. Whatever started a recording, the
  * editor shows what the recorder says.
+ *
+ * The Cam Link opens when the editor opens (the app server's recorder client
+ * opens the recorder while an editor listens); Record waits for
+ * `camera-went-live`, and the replug and Close-OBS messages wait for Retry.
  */
 export namespace newRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
+
+  export type Camera =
+    | { kind: "closed" }
+    | { kind: "opening"; attempt: number }
+    | { kind: "live" }
+    | { kind: "not-starting"; message: string }
+    | { kind: "busy"; message: string };
 
   export type State = {
     /** Null until the app server first says. */
@@ -19,6 +30,11 @@ export namespace newRecorderReducer {
     /** Why the recorder cannot record at all (a wrong ffmpeg). */
     problem: string | null;
     phase: Phase;
+    camera: Camera;
+    /** Retry was pressed and the camera has not started opening again yet. */
+    retrying: boolean;
+    /** Where the browser watches the raw camera and screen. */
+    previews: { camera: string; screen: string } | null;
     speaking: boolean;
     /** The last thing that went wrong, until the next Record. */
     error: string | null;
@@ -40,6 +56,8 @@ export namespace newRecorderReducer {
       }
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
+    | { type: "press-retry" }
+    | { type: "retry-camera-failed"; message: string }
     | { type: "start-recording-failed"; message: string }
     | { type: "stop-recording-failed"; message: string };
 
@@ -49,13 +67,17 @@ export namespace newRecorderReducer {
         silenceLength: SilenceLength;
         insertionPoint: InsertionPoint;
       }
-    | { type: "stop-recording" };
+    | { type: "stop-recording" }
+    | { type: "retry-camera" };
 }
 
 export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
   reachable: null,
   problem: null,
   phase: "idle",
+  camera: { kind: "closed" },
+  retrying: false,
+  previews: null,
   speaking: false,
   error: null,
   alert: null,
@@ -69,7 +91,19 @@ export const CRASHED_ALERT =
   "The recorder crashed during the last recording. Its files were repaired and the Clips up to the crash are kept. Press Record to carry on.";
 
 export const canRecord = (state: newRecorderReducer.State) =>
-  state.reachable === true && state.problem === null && state.phase === "idle";
+  state.reachable === true &&
+  state.problem === null &&
+  state.phase === "idle" &&
+  state.camera.kind === "live";
+
+export const canRetryCamera = (state: newRecorderReducer.State) =>
+  !state.retrying &&
+  (state.camera.kind === "not-starting" || state.camera.kind === "busy");
+
+const cameraHeard = (
+  state: newRecorderReducer.State,
+  camera: newRecorderReducer.Camera
+): newRecorderReducer.State => ({ ...state, camera, retrying: false });
 
 export const canStop = (state: newRecorderReducer.State) =>
   state.phase === "recording";
@@ -85,6 +119,8 @@ const heard = (
         ...state,
         reachable: message.reachable,
         problem: message.problem,
+        previews: message.previews,
+        camera: message.reachable ? state.camera : { kind: "closed" },
         phase: recording
           ? state.phase === "stopping"
             ? "stopping"
@@ -95,6 +131,19 @@ const heard = (
         speaking: recording && state.speaking,
       };
     }
+    case "camera-opening":
+      return cameraHeard(state, { kind: "opening", attempt: message.attempt });
+    case "camera-went-live":
+      return cameraHeard(state, { kind: "live" });
+    case "cam-link-not-starting":
+      return cameraHeard(state, {
+        kind: "not-starting",
+        message: message.message,
+      });
+    case "cam-link-busy":
+      return cameraHeard(state, { kind: "busy", message: message.message });
+    case "camera-closed":
+      return cameraHeard(state, { kind: "closed" });
     case "recording-started":
       return { ...state, phase: "recording", speaking: false, error: null };
     case "speech-started":
@@ -106,6 +155,8 @@ const heard = (
         ...state,
         phase: "idle",
         speaking: false,
+        // Gone until the recorder reopens it and it goes live again.
+        camera: { kind: "closed" },
         alert: CAMERA_LOST_ALERT,
         error: message.errors.length > 0 ? message.errors.join("\n") : null,
       };
@@ -154,6 +205,12 @@ export const newRecorderReducer: EffectReducer<
       if (!canStop(state)) return state;
       exec({ type: "stop-recording" });
       return { ...state, phase: "stopping" };
+    case "press-retry":
+      if (!canRetryCamera(state)) return state;
+      exec({ type: "retry-camera" });
+      return { ...state, retrying: true, error: null };
+    case "retry-camera-failed":
+      return { ...state, retrying: false, error: action.message };
     case "start-recording-failed":
       return {
         ...state,

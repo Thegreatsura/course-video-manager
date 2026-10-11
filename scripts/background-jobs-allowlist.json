@@ -8,7 +8,7 @@
     {
       "file": "apps/local/app/routes/api.videos.$videoId.recorder.events.ts",
       "count": 1,
-      "reason": "A live Recording Session, not background work: the New recorder's events for the editor open on that Video. It only listens; the recorder service records and the app server's recorder client saves whether or not anyone listens, so closing it cancels nothing."
+      "reason": "A live Recording Session, not background work: the New recorder's events for the editor open on that Video. Its listening keeps the recorder open for that Video (the Cam Link and the previews); the recorder service records and the app server's recorder client saves whether or not anyone listens, so closing it cancels no recording."
     }
   ],
   "browser-driver": [
@@ -30,7 +30,7 @@
     {
       "file": "apps/local/app/features/video-editor/use-new-recorder.ts",
       "count": 1,
-      "reason": "A live Recording Session, not background work: the editor hears the New recorder's events (saved Clips) while it is open. It only listens and drives nothing."
+      "reason": "A live Recording Session, not background work: the editor hears the New recorder's events (saved Clips) while it is open. Its listening keeps the recorder (and the Cam Link) open for that Video; it cancels no recording."
     }
   ],
   "spawn": [

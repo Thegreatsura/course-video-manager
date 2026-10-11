@@ -72,6 +72,7 @@ const connectClient = (port: number) => {
       Effect.runPromise(unfinishedRecordingSessions(testDb as never)),
     reconnectMs: 50,
     commandTimeoutMs: 5_000,
+    closeGraceMs: 50,
   });
   cleanups.unshift(() => client.close());
   return client;
@@ -109,9 +110,7 @@ describe("the recorder client", () => {
     const heard: NewRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
     await vi.waitFor(() =>
-      expect(heard).toContainEqual(
-        expect.objectContaining({ type: "recorder-status", reachable: true })
-      )
+      expect(heard).toContainEqual({ type: "camera-went-live" })
     );
 
     await client.startRecording(video.id, {
@@ -161,6 +160,32 @@ describe("the recorder client", () => {
     expect(session).toMatchObject({ videoId: video.id, status: "stopped" });
   });
 
+  it("opens the recorder, and the Cam Link, only while an editor listens on the Video", async () => {
+    const { windows, client } = await setup();
+    expect(windows.camerasRunning()).toBe(0);
+
+    const heard: NewRecorderMessage[] = [];
+    const unsubscribe = client.subscribe("video-1", (m) => heard.push(m));
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: "camera-went-live" })
+    );
+    expect(windows.camerasRunning()).toBe(1);
+    expect(heard).toContainEqual(
+      expect.objectContaining({
+        type: "recorder-status",
+        previews: {
+          camera: expect.stringMatching(
+            /^http:\/\/127\.0\.0\.1:\d+\/preview\/camera$/
+          ),
+          screen: expect.stringMatching(/\/preview\/screen$/),
+        },
+      })
+    );
+
+    unsubscribe();
+    await vi.waitFor(() => expect(windows.camerasRunning()).toBe(0));
+  });
+
   it("refuses Record with the recorder's reason", async () => {
     const { client } = await setup();
     const video = await clipService.createVideo("new recorder");
@@ -183,6 +208,7 @@ describe("the recorder client", () => {
       unfinishedRecordingSessions: () => Promise.resolve([]),
       reconnectMs: 1_000,
       commandTimeoutMs: 1_000,
+      closeGraceMs: 0,
     });
     cleanups.push(() => client.close());
 

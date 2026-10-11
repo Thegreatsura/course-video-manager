@@ -1,9 +1,11 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
+import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import type { RecorderCommand, RecorderMessage } from "./protocol";
 import { startRecorderService } from "./recorder-service";
@@ -34,6 +36,7 @@ const start = async (windows = fakeWindows(), stateDir = tmp()) => {
     launch: windows.launch,
     now: () => T0_MS,
     stateDir,
+    cameraStartTimeoutMs: 100,
   });
   cleanups.unshift(() => service.close());
   return { windows, stateDir, port: service.port, close: service.close };
@@ -58,8 +61,14 @@ const connect = async (port: number) => {
   });
   await new Promise((r) => ws.once("open", r));
   cleanups.unshift(async () => ws.close());
-  const next = <T extends RecorderMessage["type"]>(type: T) => {
-    const seen = received.find((m) => m.type === type);
+  /** The first unconsumed message of a type (and matching `where`), consuming it and any skipped. */
+  const next = <T extends RecorderMessage["type"]>(
+    type: T,
+    where: (m: Extract<RecorderMessage, { type: T }>) => boolean = () => true
+  ) => {
+    const matches = (m: RecorderMessage) =>
+      m.type === type && where(m as Extract<RecorderMessage, { type: T }>);
+    const seen = received.find(matches);
     if (seen) {
       received.splice(received.indexOf(seen), 1);
       return Promise.resolve(seen as Extract<RecorderMessage, { type: T }>);
@@ -67,14 +76,21 @@ const connect = async (port: number) => {
     return new Promise<Extract<RecorderMessage, { type: T }>>((resolve) =>
       waiters.push({
         match: (m) =>
-          m.type === type && (received.splice(received.indexOf(m), 1), true),
+          matches(m) && (received.splice(received.indexOf(m), 1), true),
         resolve: (m) => resolve(m as Extract<RecorderMessage, { type: T }>),
       })
     );
   };
+  /** The next state with the camera in this kind. */
+  const camera = (kind: string) =>
+    next(
+      "state",
+      (m) => m.state.kind === "open" && m.state.camera.kind === kind
+    );
   return {
     send: (command: RecorderCommand) => ws.send(JSON.stringify(command)),
     next,
+    camera,
     received,
   };
 };
@@ -124,10 +140,112 @@ const recordOnce = async () => {
   const client = await connect(s.port);
   await client.next("hello");
   client.send({ type: "open", videoId: "video-1" });
+  await client.camera("live");
   client.send({ type: "record", silenceLength: "long", folder });
   const started = await client.next("recording-started");
   return { ...s, client, started, folder };
 };
+
+/** The first bytes a browser gets from a preview feed. */
+const firstPreviewBytes = (port: number, feed: "camera" | "screen") =>
+  new Promise<{ type: string | undefined; body: string }>((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/preview/${feed}`, (res) => {
+      res.once("data", (chunk: Buffer) => {
+        resolve({
+          type: res.headers["content-type"],
+          body: chunk.toString("latin1"),
+        });
+        req.destroy();
+      });
+    });
+  });
+
+describe("the Cam Link", () => {
+  it("opens with the recorder and is live on its first frame, with raw camera and screen previews", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    expect(windows.camerasRunning()).toBe(0);
+
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    expect(windows.cameraPreviews).toHaveLength(1);
+
+    for (const feed of ["camera", "screen"] as const) {
+      const { type, body } = await firstPreviewBytes(port, feed);
+      expect(type).toContain("multipart/x-mixed-replace");
+      expect(body).toContain("Content-Type: image/jpeg");
+    }
+  });
+
+  it("tries again on its own when no frames come, live on the third try", async () => {
+    const { port } = await start(
+      fakeWindows({ cameraTries: ["silent", "silent"] })
+    );
+    const client = await connect(port);
+    client.send({ type: "open", videoId: "video-1" });
+    await client.next(
+      "state",
+      (m) =>
+        m.state.kind === "open" &&
+        m.state.camera.kind === "opening" &&
+        m.state.camera.attempt === 3
+    );
+    await client.camera("live");
+  });
+
+  it("asks for a replug after three tries, refuses Record meanwhile, and Retry opens it", async () => {
+    const { port, windows } = await start(
+      fakeWindows({ cameraTries: ["silent", "silent", "silent"] })
+    );
+    const client = await connect(port);
+    client.send({ type: "open", videoId: "video-1" });
+    const stuck = await client.camera("not-starting");
+    expect(stuck.state).toMatchObject({
+      camera: { message: CAM_LINK_NOT_STARTING },
+    });
+    expect(windows.cameraPreviews).toHaveLength(3);
+    expect(windows.camerasRunning()).toBe(0);
+
+    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    expect((await client.next("refused")).message).toBe(
+      "The camera is not live yet."
+    );
+
+    client.send({ type: "retry-camera" });
+    await client.camera("live");
+  });
+
+  it("says Close OBS first when another program holds it, without trying again or closing anything", async () => {
+    const { port, windows } = await start(
+      fakeWindows({ cameraTries: ["busy"] })
+    );
+    const client = await connect(port);
+    client.send({ type: "open", videoId: "video-1" });
+    const busy = await client.camera("busy");
+    expect(busy.state).toMatchObject({ camera: { message: CAM_LINK_BUSY } });
+    expect(windows.cameraPreviews).toHaveLength(1);
+
+    client.send({ type: "retry-camera" });
+    await client.camera("live");
+  });
+
+  it("is held only while the recorder is open, by the preview or the recording", async () => {
+    const { windows, client } = await recordOnce();
+    expect(windows.camerasRunning()).toBe(1);
+    expect(windows.cameraPreviews.every((p) => !p.running)).toBe(true);
+
+    client.send({ type: "stop" });
+    await client.next("recording-stopped");
+    await client.camera("live");
+    expect(windows.camerasRunning()).toBe(1);
+
+    client.send({ type: "close" });
+    await client.next("state", (m) => m.state.kind === "closed");
+    await vi.waitFor(() => expect(windows.camerasRunning()).toBe(0));
+    expect(windows.screenPreviews.every((p) => !p.running)).toBe(true);
+  });
+});
 
 describe("a Recording Session", () => {
   it("is refused before the recorder is open for a Video", async () => {
