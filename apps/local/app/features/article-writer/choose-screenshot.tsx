@@ -19,6 +19,12 @@ import {
 } from "./screenshot-navigation";
 import { stepScreenshotFrame } from "./screenshot-frame-step";
 import { useScreenshotSteps } from "./screenshot-io-step-dial";
+import {
+  clipFrame,
+  clipPlaybackUrl,
+  clipSource,
+  type ClipFrame,
+} from "@/packages/clip-source";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
@@ -30,8 +36,7 @@ export interface ChooseScreenshotProps {
   onCapture: (
     clipIndex: number,
     alt: string,
-    timestamp: number,
-    videoFilename: string
+    frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (clipIndex: number, alt: string) => void;
   isCapturing?: boolean;
@@ -95,7 +100,7 @@ export function ChooseScreenshot({
   };
   const capture = () =>
     clip
-      ? onCapture(clipIndex, alt, currentTime, clip.videoFilename)
+      ? onCapture(clipIndex, alt, clipFrame(clipSource(clip), currentTime))
       : Promise.resolve(false);
 
   const handleCaptureRequest = async (request: ScreenshotCaptureRequest) => {
@@ -213,7 +218,10 @@ export function ChooseScreenshot({
       )}
       <video
         ref={videoRef}
-        src={`/view-video?videoPath=${encodeURIComponent(clip.videoFilename)}#t=${clip.sourceStartTime},${clip.sourceEndTime}`}
+        src={clipPlaybackUrl(clipSource(clip), {
+          from: clip.sourceStartTime,
+          to: clip.sourceEndTime,
+        })}
         className="w-full rounded-md aspect-video"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => {

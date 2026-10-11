@@ -2,6 +2,7 @@ import { Config, Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
+import type { ClipSourceColumns } from "@/packages/clip-source";
 import {
   computeExportHash,
   type ExportOverlay,
@@ -24,15 +25,14 @@ export type VideoForExport = {
   lesson?: {
     section: { repoVersion: { repo: { id: string } } };
   } | null;
-  clips: Array<{
-    videoFilename: string;
-    sourceStartTime: number;
-    sourceEndTime: number;
-    pauseType: string;
-    zoomType: string;
-    order: string;
-    overlays: ExportOverlay[];
-  }>;
+  clips: Array<
+    ClipSourceColumns & {
+      pauseType: string;
+      zoomType: string;
+      order: string;
+      overlays: ExportOverlay[];
+    }
+  >;
 };
 
 /**

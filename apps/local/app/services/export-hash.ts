@@ -4,6 +4,12 @@ import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { resolveVideoFormat } from "@/features/videos/video-format";
 import {
+  clipSource,
+  clipSourceColumns,
+  clipSourceHashFields,
+  type ClipSourceColumns,
+} from "@/packages/clip-source";
+import {
   DEFAULT_CLIP_ZOOM_TYPE,
   resolveClipZoomType,
 } from "@/features/videos/clip-zoom";
@@ -47,10 +53,11 @@ export type ExportOverlay = {
   bullets: BulletPanelBullet[] | null;
 };
 
-export type ExportClip = {
-  videoFilename: string;
-  sourceStartTime: number;
-  sourceEndTime: number;
+/**
+ * A Clip as the export address sees it. Its picture and sound are the Clip
+ * Source columns, read only through `@/packages/clip-source`.
+ */
+export type ExportClip = ClipSourceColumns & {
   pauseType: string;
   zoomType: string;
   overlays: ExportOverlay[];
@@ -71,28 +78,25 @@ const LONG_PAUSE = "long";
  * narrow what the hash sees.
  */
 export const toExportClips = (
-  clips: ReadonlyArray<{
-    videoFilename: string;
-    sourceStartTime: number;
-    sourceEndTime: number;
-    pauseType: string;
-    zoomType: string;
-    overlays: ReadonlyArray<{
-      at: number;
-      durationInSeconds: number;
-      kind: string;
-      disableEnterAnimation: boolean;
-      disableExitAnimation: boolean;
-      title: string;
-      description: string;
-      bullets: BulletPanelBullet[] | null;
-    }>;
-  }>
+  clips: ReadonlyArray<
+    ClipSourceColumns & {
+      pauseType: string;
+      zoomType: string;
+      overlays: ReadonlyArray<{
+        at: number;
+        durationInSeconds: number;
+        kind: string;
+        disableEnterAnimation: boolean;
+        disableExitAnimation: boolean;
+        title: string;
+        description: string;
+        bullets: BulletPanelBullet[] | null;
+      }>;
+    }
+  >
 ): ExportClip[] =>
   clips.map((c) => ({
-    videoFilename: c.videoFilename,
-    sourceStartTime: c.sourceStartTime,
-    sourceEndTime: c.sourceEndTime,
+    ...clipSourceColumns(c),
     pauseType: c.pauseType,
     zoomType: c.zoomType,
     overlays: c.overlays.map((o) => ({
@@ -205,9 +209,7 @@ export const computeExportHash = (
     v: EXPORT_VERSION,
     fmt: resolveVideoFormat(format),
     clips: clips.map((c) => ({
-      f: c.videoFilename,
-      s: c.sourceStartTime,
-      e: c.sourceEndTime,
+      ...clipSourceHashFields(clipSource(c)),
       ...(c.pauseType === LONG_PAUSE ? { p: LONG_PAUSE } : {}),
       ...(resolveClipZoomType(c.zoomType) === DEFAULT_CLIP_ZOOM_TYPE
         ? {}

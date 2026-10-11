@@ -7,6 +7,7 @@ import {
 } from "./choose-screenshot-mutations";
 import type { ChooseScreenshotRuntime } from "./choose-screenshot-components";
 import type { IndexedClip } from "./types";
+import type { ClipFrame } from "@/packages/clip-source";
 
 /**
  * The document pane's `<ChooseScreenshot>` runtime: capturing a frame from the
@@ -26,19 +27,14 @@ export function useDocScreenshotRuntime(opts: {
   const [docCapturingKey, setDocCapturingKey] = useState<string | null>(null);
 
   const handleDocCapture = useCallback(
-    async (
-      clipIndex: number,
-      alt: string,
-      timestamp: number,
-      videoFilename: string
-    ) => {
+    async (clipIndex: number, alt: string, frame: ClipFrame) => {
       const key = `doc-${clipIndex}-${alt}`;
       setDocCapturingKey(key);
       try {
         const res = await fetch(`/api/videos/${videoId}/capture-screenshot`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ timestamp, videoFilename }),
+          body: JSON.stringify(frame),
         });
         if (!res.ok) {
           const text = await res.text();
@@ -105,8 +101,8 @@ export function useDocScreenshotRuntime(opts: {
       onClipIndexChange: (_messageId, current, next, alt) =>
         handleDocClipIndexChange(current, next, alt),
       // The capture toasts its own failure; Return waits on the result.
-      onCapture: (_messageId, clipIndex, alt, timestamp, videoFilename) =>
-        handleDocCapture(clipIndex, alt, timestamp, videoFilename),
+      onCapture: (_messageId, clipIndex, alt, frame) =>
+        handleDocCapture(clipIndex, alt, frame),
       onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
     }),
     [

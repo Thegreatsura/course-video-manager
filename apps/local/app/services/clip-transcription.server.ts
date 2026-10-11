@@ -1,3 +1,4 @@
+import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
 import { Effect } from "effect";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
@@ -40,12 +41,7 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
       (clip) =>
         Effect.gen(function* () {
           const [transcribedClip] = yield* whisper.transcribeClips([
-            {
-              id: clip.id,
-              inputVideo: clip.videoFilename,
-              startTime: clip.sourceStartTime,
-              duration: clip.sourceEndTime - clip.sourceStartTime,
-            },
+            { id: clip.id, ...clipFfmpegInput(clipSource(clip)) },
           ]);
 
           const updated = yield* clipOps.updateClip(clip.id, {

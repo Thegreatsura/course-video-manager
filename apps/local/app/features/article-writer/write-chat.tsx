@@ -36,6 +36,7 @@ import { AssistantMessage } from "./assistant-message";
 import { useMessageTextMutation } from "./message-text-mutation";
 import { RegenerateReply, RejectedToolCall, TurnFailure } from "./turn-failure";
 import type { WriterFailure } from "./writer-errors";
+import type { ClipFrame } from "@/packages/clip-source";
 
 export interface WriteChatProps {
   messages: DocumentAgentMessage[];
@@ -116,8 +117,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
       messageId: string,
       clipIndex: number,
       alt: string,
-      timestamp: number,
-      videoFilename: string
+      frame: ClipFrame
     ) => {
       const key = `${messageId}-${clipIndex}-${alt}`;
       setCapturingKey(key);
@@ -125,7 +125,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
         const res = await fetch(`/api/videos/${videoId}/capture-screenshot`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ timestamp, videoFilename }),
+          body: JSON.stringify(frame),
         });
         if (!res.ok) {
           const text = await res.text();
