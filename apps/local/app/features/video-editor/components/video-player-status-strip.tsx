@@ -26,7 +26,7 @@ export const VideoPlayerStatusStrip = () => {
   );
 
   return (
-    <div className="flex items-center gap-2 mb-2">
+    <div className="flex flex-wrap items-center gap-2 mb-2">
       <span className="text-xs text-muted-foreground">
         {videoTitle}
         {" · " + formatDuration(totalDuration)}
@@ -38,7 +38,7 @@ export const VideoPlayerStatusStrip = () => {
         </span>
       )}
       <MissingWordTimingBadge />
-      <div className="ml-auto">
+      <div className="ml-auto shrink-0">
         <RecorderPicker />
       </div>
     </div>
