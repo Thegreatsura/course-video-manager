@@ -97,6 +97,7 @@
       "files": [
         "apps/local/app/services/**",
         "apps/local/app/cli/**",
+        "apps/local/recorder-service/**",
         "apps/local/app/routes/**/*.ts",
         "apps/remote/**",
         "packages/**",
