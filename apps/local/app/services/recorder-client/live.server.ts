@@ -55,6 +55,7 @@ export const recorderClient = (): RecorderClient => {
     commandTimeoutMs: 30_000,
     // Long enough for a page reload not to close the camera and reopen it.
     closeGraceMs: 10_000,
+    retryMs: 1_000,
   });
   store[KEY] = client;
   return client;

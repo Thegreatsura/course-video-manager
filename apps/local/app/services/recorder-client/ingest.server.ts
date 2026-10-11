@@ -11,6 +11,8 @@ import {
 } from "@/services/clip-service-handler.helpers";
 import { placeSpeechAsClips } from "@/services/clip-service-speech.server";
 import type { Database } from "@/services/drizzle-service.server";
+import { requireDraftVersionForVideo } from "@/services/draft-guard.server";
+import { withDbTransaction } from "@/services/with-db-transaction.server";
 import type { SequencedEvent } from "./sequencer";
 
 /**
@@ -77,21 +79,44 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
 ) {
   const recordingSessionId = event.recordingSessionId;
   if (event.type === "recording-started") {
-    yield* dbCall(() =>
-      db
-        .insert(recordingSessions)
-        .values({
-          id: recordingSessionId,
-          videoId: event.videoId,
-          cameraFilePath: event.files.camera,
-          screenFilePath: event.files.screen,
-          micFilePath: event.files.mic,
-          status: "recording",
-          startedAt: new Date(event.t0Ms),
-          silenceLength: event.silenceLength,
-        })
-        .onConflictDoNothing()
+    // A Recording Session hangs off its Video, so the Video's Version must
+    // be the Draft (docs/DRAFT_GUARD.md). Refused, it is never saved, and
+    // nor is anything after it: the editor is told, not retried.
+    const refused = yield* withDbTransaction(db, (tx) =>
+      Effect.gen(function* () {
+        yield* requireDraftVersionForVideo(tx, event.videoId);
+        yield* dbCall(() =>
+          tx
+            .insert(recordingSessions)
+            .values({
+              id: recordingSessionId,
+              videoId: event.videoId,
+              cameraFilePath: event.files.camera,
+              screenFilePath: event.files.screen,
+              micFilePath: event.files.mic,
+              status: "recording",
+              startedAt: new Date(event.t0Ms),
+              silenceLength: event.silenceLength,
+            })
+            .onConflictDoNothing()
+        );
+      })
+    ).pipe(
+      Effect.as(false),
+      Effect.catchTag("VersionNotDraftError", () => Effect.succeed(true))
     );
+    if (refused)
+      return {
+        videoId: event.videoId,
+        messages: [
+          {
+            type: "recorder-failed",
+            message:
+              "This Video's Version is not the Draft, so this recording is not saved.",
+          },
+        ],
+        insertionPoint: null,
+      } satisfies IngestResult;
     return {
       videoId: event.videoId,
       messages: [
