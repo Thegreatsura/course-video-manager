@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { LAYOUT_VERSION } from "@/packages/scene-layout";
 import {
   clipComposite,
+  clipCompositePicture,
   clipFfmpegInput,
   clipFrame,
+  clipPlaybackClock,
   clipPlaybackUrl,
   clipSource,
   clipSourceColumns,
@@ -34,16 +36,22 @@ describe("an OBS Clip's source", () => {
 
   it("takes its stills from its Footage file", () => {
     expect(clipFrame(source, "first")).toEqual({
+      kind: "footage",
       inputVideo: OBS_FILE,
       time: 12.5,
     });
     // A tenth of a second short of the end: the very last frame of a cut is
     // often the next take's first.
     expect(clipFrame(source, "last")).toEqual({
+      kind: "footage",
       inputVideo: OBS_FILE,
       time: 19.65,
     });
-    expect(clipFrame(source, 15)).toEqual({ inputVideo: OBS_FILE, time: 15 });
+    expect(clipFrame(source, 15)).toEqual({
+      kind: "footage",
+      inputVideo: OBS_FILE,
+      time: 15,
+    });
   });
 
   it("hands ffmpeg its Footage file, start and duration", () => {
@@ -76,83 +84,161 @@ describe("an OBS Clip's source", () => {
   });
 });
 
-const session = {
-  id: "session-1",
-  cameraFilePath: "/rec/s1/camera.mkv",
-  screenFilePath: "/rec/s1/screen.mkv",
-  micFilePath: "/rec/s1/mic.mkv",
-  micOffsetMs: 150,
-  // Code from 0, Camera from 14, back to Code from 30.
-  sceneEvents: [
-    { fileTime: 30, scene: "Code" },
-    { fileTime: 0, scene: "Code" },
-    { fileTime: 14, scene: "Camera" },
-  ],
-};
+const SESSION_DIR = "/mnt/d/obs-recordings/2026-10-11T09-00-00 abcd1234";
 
 const newRecorderClip = {
-  videoFilename: session.micFilePath,
-  sourceStartTime: 12,
-  sourceEndTime: 20,
-  recordingSessionId: session.id,
+  ...obsClip,
+  // A new-recorder Clip's Footage path is its mic file; its range is in the
+  // picture's clock.
+  videoFilename: `${SESSION_DIR}/mic.mkv`,
+  sourceStartTime: 10,
+  sourceEndTime: 14,
+  recordingSessionId: "session-1",
   sceneOverride: null,
-  recordingSession: session,
+  recordingSession: {
+    id: "session-1",
+    cameraFilePath: `${SESSION_DIR}/camera.mkv`,
+    screenFilePath: `${SESSION_DIR}/screen.mkv`,
+    micFilePath: `${SESSION_DIR}/mic.mkv`,
+    micOffsetMs: 150,
+    sceneEvents: [
+      { fileTime: 0, scene: "Code" as const },
+      { fileTime: 12, scene: "Camera" as const },
+      { fileTime: 20, scene: "No Face" as const },
+    ],
+  },
 };
 
 describe("a new-recorder Clip's source", () => {
-  it("composites its Session's files in the scenes of its range", () => {
-    expect(clipComposite(clipSource(newRecorderClip))).toEqual({
-      screen: "/rec/s1/screen.mkv",
-      camera: "/rec/s1/camera.mkv",
-      mic: "/rec/s1/mic.mkv",
+  const source = clipSource(newRecorderClip);
+
+  it("is its Recording Session's files, scene segments and mic offset", () => {
+    expect(source).toEqual({
+      kind: "recording-session",
+      recordingSessionId: "session-1",
+      files: {
+        camera: `${SESSION_DIR}/camera.mkv`,
+        screen: `${SESSION_DIR}/screen.mkv`,
+        mic: `${SESSION_DIR}/mic.mkv`,
+      },
+      micOffsetSeconds: 0.15,
+      micOffsetMs: 150,
+      micEq: { lowDb: 0, midDb: 0, highDb: -6.1 },
+      sceneEvents: [
+        { scene: "Code", atSeconds: 0 },
+        { scene: "Camera", atSeconds: 12 },
+        { scene: "No Face", atSeconds: 20 },
+      ],
+      sceneOverride: null,
+      segments: [
+        { scene: "Code", startSeconds: 10, endSeconds: 12 },
+        { scene: "Camera", startSeconds: 12, endSeconds: 14 },
+      ],
+      start: 10,
+      end: 14,
+    });
+  });
+
+  it("is exported as the composite of its Session's files, mic EQ applied", () => {
+    expect(clipComposite(source)).toEqual({
+      start: 10,
+      screen: `${SESSION_DIR}/screen.mkv`,
+      camera: `${SESSION_DIR}/camera.mkv`,
+      mic: `${SESSION_DIR}/mic.mkv`,
       micOffsetSeconds: 0.15,
       eq: { lowDb: 0, midDb: 0, highDb: -6.1 },
       segments: [
-        { scene: "Code", startSeconds: 12, endSeconds: 14 },
-        { scene: "Camera", startSeconds: 14, endSeconds: 20 },
+        { scene: "Code", startSeconds: 10, endSeconds: 12 },
+        { scene: "Camera", startSeconds: 12, endSeconds: 14 },
       ],
     });
-  });
-
-  it("composites a longer range when asked (a long pause)", () => {
-    const composite = clipComposite(clipSource(newRecorderClip), {
-      from: 12,
-      to: 31,
-    });
-    expect(composite?.segments.map((s) => s.scene)).toEqual([
-      "Code",
-      "Camera",
-      "Code",
-    ]);
-  });
-
-  it("draws its whole range in its Scene Override", () => {
-    const source = clipSource({ ...newRecorderClip, sceneOverride: "No Face" });
-    expect(clipComposite(source)?.segments).toEqual([
-      { scene: "No Face", startSeconds: 12, endSeconds: 20 },
-    ]);
-  });
-
-  it("is exported with the mic EQ setting it is given", () => {
     const micEq = { lowDb: 1, midDb: 0, highDb: 0 };
     expect(clipComposite(clipSource(newRecorderClip, { micEq }))?.eq).toBe(
       micEq
     );
   });
 
+  it("composites past its end when its output runs longer (a long Pause)", () => {
+    const composite = clipComposite(source, { durationSeconds: 12 });
+    expect(composite?.segments.map((s) => s.scene)).toEqual([
+      "Code",
+      "Camera",
+      "No Face",
+    ]);
+  });
+
   it("adds its composite's inputs to the Export Hash after the OBS keys", () => {
-    expect(clipSourceHashFields(clipSource(newRecorderClip))).toEqual({
-      f: "/rec/s1/mic.mkv",
-      s: 12,
-      e: 20,
-      rs: "session-1",
-      sg: [
-        ["Code", 12, 14],
-        ["Camera", 14, 20],
-      ],
-      mo: 150,
-      eq: [0, 0, -6.1],
-      lv: LAYOUT_VERSION,
+    expect(JSON.stringify(clipSourceHashFields(source))).toBe(
+      JSON.stringify({
+        f: `${SESSION_DIR}/mic.mkv`,
+        s: 10,
+        e: 14,
+        rs: "session-1",
+        sg: [
+          ["Code", 10, 12],
+          ["Camera", 12, 14],
+        ],
+        mo: 150,
+        eq: [0, 0, -6.1],
+        lv: LAYOUT_VERSION,
+      })
+    );
+  });
+
+  it("is drawn in its Scene Override for its whole length", () => {
+    const overridden = clipSource({
+      ...newRecorderClip,
+      sceneOverride: "No Face",
     });
+    expect(
+      overridden.kind === "recording-session" && overridden.segments
+    ).toEqual([{ scene: "No Face", startSeconds: 10, endSeconds: 14 }]);
+  });
+
+  it("plays its mic as the clock, read the mic offset earlier", () => {
+    expect(clipPlaybackUrl(source, { from: 10, to: 14 })).toBe(
+      `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/mic.mkv`)}#t=9.85,13.85`
+    );
+    expect(clipPlaybackClock(source)).toEqual({ offsetSeconds: 0.15 });
+  });
+
+  it("draws its picture from its camera and screen, in the picture's clock", () => {
+    expect(clipCompositePicture(source, { from: 10, to: 14 })).toEqual({
+      camera: `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/camera.mkv`)}#t=10,14`,
+      screen: `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/screen.mkv`)}#t=10,14`,
+      segments: source.kind === "recording-session" ? source.segments : [],
+    });
+  });
+
+  it("takes composited stills in the scene drawn at that moment", () => {
+    const files = {
+      screen: `${SESSION_DIR}/screen.mkv`,
+      camera: `${SESSION_DIR}/camera.mkv`,
+    };
+    expect(clipFrame(source, "first")).toEqual({
+      kind: "composite",
+      ...files,
+      scene: "Code",
+      time: 10,
+    });
+    expect(clipFrame(source, "last")).toEqual({
+      kind: "composite",
+      ...files,
+      scene: "Camera",
+      time: 13.9,
+    });
+    expect(clipFrame(source, 11.5)).toMatchObject({
+      scene: "Code",
+      time: 11.5,
+    });
+  });
+});
+
+describe("an OBS Clip that has no Recording Session", () => {
+  it("is still its Footage file, played and stilled as before", () => {
+    const source = clipSource({ ...obsClip, recordingSession: null });
+    expect(source.kind).toBe("footage");
+    expect(clipPlaybackClock(source)).toEqual({ offsetSeconds: 0 });
+    expect(clipCompositePicture(source, { from: 12, to: 19 })).toBeNull();
   });
 });

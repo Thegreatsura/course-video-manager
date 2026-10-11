@@ -1,15 +1,16 @@
 import { useEffect, useRef } from "react";
-import {
-  CANVAS,
-  drawInstructions,
-  type Scene,
-  type SourceSize,
-} from "@/packages/scene-layout";
+import { CANVAS, type Scene } from "@/packages/scene-layout";
+import { drawComposite, type CompositeSourceFrame } from "../draw-composite";
 
-/** A feed's picture size once it has shown a frame, else undefined. */
-const sizeOf = (img: HTMLImageElement | null): SourceSize | undefined =>
+/** A feed's frame once it has shown one, else undefined. */
+const frameOf = (
+  img: HTMLImageElement | null
+): CompositeSourceFrame | undefined =>
   img && img.naturalWidth > 0
-    ? { width: img.naturalWidth, height: img.naturalHeight }
+    ? {
+        image: img,
+        size: { width: img.naturalWidth, height: img.naturalHeight },
+      }
     : undefined;
 
 /**
@@ -42,20 +43,10 @@ export const CompositePreview = (props: {
     let frame = 0;
     const draw = () => {
       frame = requestAnimationFrame(draw);
-      const images = { camera: cameraRef.current, screen: screenRef.current };
-      const camera = sizeOf(images.camera);
-      const screen = sizeOf(images.screen);
-      ctx.fillStyle = "black";
-      ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
-      const fallback = { width: 1, height: 1 };
-      for (const d of drawInstructions(scene, {
-        camera: camera ?? fallback,
-        screen: screen ?? fallback,
-      })) {
-        const img = images[d.source];
-        if (!img || !sizeOf(img)) continue;
-        ctx.drawImage(img, d.sx, d.sy, d.sw, d.sh, d.dx, d.dy, d.dw, d.dh);
-      }
+      drawComposite(ctx, scene, {
+        camera: frameOf(cameraRef.current),
+        screen: frameOf(screenRef.current),
+      });
     };
     draw();
     return () => cancelAnimationFrame(frame);

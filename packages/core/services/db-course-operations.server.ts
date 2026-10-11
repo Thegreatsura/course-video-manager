@@ -292,7 +292,7 @@ const createCourseOperations = (db: Database) => {
                                 pauseType: true,
                                 zoomType: true,
                                 // A new-recorder Clip's composite — see
-                                // recordingSessionExportRelation.
+                                // clipRecordingSessionRelation.
                                 recordingSessionId: true,
                                 sceneOverride: true,
                                 order: true,

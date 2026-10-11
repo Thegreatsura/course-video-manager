@@ -74,7 +74,7 @@ const sessionRow = (micOffsetMs: number) => ({
     screenFilePath: "/rec/s1/screen.mkv",
     micFilePath: "/rec/s1/mic.mkv",
     micOffsetMs,
-    sceneEvents: [{ fileTime: 14, scene: "Camera" }],
+    sceneEvents: [{ fileTime: 14, scene: "Camera" as const }],
   },
 });
 

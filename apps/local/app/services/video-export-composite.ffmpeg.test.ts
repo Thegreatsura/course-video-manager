@@ -96,7 +96,7 @@ describe.skipIf(!hasFfmpeg)("exporting a Video of new-recorder Clips", () => {
       micFilePath: path.join(dir, "mic.mkv"),
       micOffsetMs: 150,
       // Code until 1.5 s, then Camera.
-      sceneEvents: [{ fileTime: 1.5, scene: "Camera" }],
+      sceneEvents: [{ fileTime: 1.5, scene: "Camera" as const }],
     },
   });
   // The first Clip changes scene inside it; the second is all Camera.

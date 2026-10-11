@@ -14,7 +14,7 @@ import { Effect } from "effect";
 import { toTranscriptItems } from "../lib/transcript-builder.js";
 import { projectVersionPaths, attachDerivedPaths } from "./path-projection.js";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
-import { recordingSessionExportRelation } from "./db-recording-session-relations.server.js";
+import { clipRecordingSessionRelation } from "./clip-recording-session-relation.js";
 import { createVersionLifecycleOps } from "./db-version-lifecycle.server.js";
 import { createVersionPathOps } from "./db-version-paths.server.js";
 import { createVersionCopyOps } from "./db-version-copy.server.js";
@@ -110,7 +110,7 @@ const createVersionOperations = (db: Database) => {
                     where: eq(clips.archived, false),
                     with: {
                       overlays: overlayExportRelation,
-                      recordingSession: recordingSessionExportRelation,
+                      recordingSession: clipRecordingSessionRelation,
                     },
                   },
                   chapters: {
@@ -209,7 +209,7 @@ const createVersionOperations = (db: Database) => {
                         where: eq(clips.archived, false),
                         with: {
                           overlays: overlayExportRelation,
-                          recordingSession: recordingSessionExportRelation,
+                          recordingSession: clipRecordingSessionRelation,
                         },
                       },
                       chapters: {

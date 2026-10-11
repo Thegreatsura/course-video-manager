@@ -1,9 +1,10 @@
-import { Config, Effect, Schema } from "effect";
-import { homedir } from "node:os";
-import path from "node:path";
+import { Effect, Schema } from "effect";
 import { InsertionPointSchema } from "@/services/clip-service.schemas";
 import { recorderCommand } from "@/services/recorder-client/client.server";
-import { recorderClient } from "@/services/recorder-client/live.server";
+import {
+  recorderClient,
+  recordingFolder,
+} from "@/services/recorder-client/live.server";
 import { requireRecordableVideo } from "@/services/recorder-client/record-guard.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { makeAction } from "@/services/route-action.server";
@@ -30,9 +31,7 @@ export const action = makeAction({
     Effect.gen(function* () {
       const request =
         yield* Schema.decodeUnknown(startRecordingSchema)(payload);
-      const folder = yield* Config.string("OBS_RECORDING_DIR").pipe(
-        Effect.orElseSucceed(() => path.join(homedir(), "Videos"))
-      );
+      const folder = recordingFolder();
       const videoId = params.videoId!;
       yield* requireRecordableVideo(yield* DrizzleService, videoId);
       yield* recorderCommand(() =>

@@ -1,33 +1,34 @@
 import { DEFAULT_MIC_EQ, type MicEq } from "@cvm/core/features/videos/recorder";
 import {
   LAYOUT_VERSION,
-  SCENES,
+  sceneFilterGraph,
   sceneSegments,
   type Scene,
   type SceneSegment,
 } from "@/packages/scene-layout";
 
 /**
- * A new-recorder Clip's Recording Session, as read with the Clip: its three
- * Footage files, its mic offset and its scene events (`fileTime` is picture
- * file time, seconds).
+ * A new-recorder Clip's Recording Session, as loaded with the Clip (the
+ * `recordingSession` relation with its `sceneEvents`). Scene event times are
+ * the picture's file time.
  */
-export type RecordingSessionColumns = {
+export type ClipRecordingSession = {
   readonly id: string;
   readonly cameraFilePath: string;
   readonly screenFilePath: string;
   readonly micFilePath: string;
   readonly micOffsetMs: number;
-  readonly sceneEvents: ReadonlyArray<{
+  readonly sceneEvents: readonly {
     readonly fileTime: number;
-    readonly scene: string;
-  }>;
+    readonly scene: Scene;
+  }[];
 };
 
 /**
- * The persisted columns a Clip's picture and sound are read from. Every Clip
- * row carries them; nothing outside this package should read them for picture
- * or sound — it asks a {@link ClipSource} instead.
+ * The persisted columns a Clip's picture and sound are read from — what the
+ * export carries (`toExportClips` demands every one). Nothing outside this
+ * package should read them for picture or sound — it asks a
+ * {@link ClipSource} instead.
  *
  * `recordingSession` is the joined Recording Session row (with its scene
  * events) — null for an OBS Clip. A query that feeds the Export Hash must
@@ -39,13 +40,13 @@ export type ClipSourceColumns = {
   readonly sourceEndTime: number;
   readonly recordingSessionId: string | null;
   readonly sceneOverride: Scene | null;
-  readonly recordingSession: RecordingSessionColumns | null;
+  readonly recordingSession: ClipRecordingSession | null;
 };
 
 /**
- * A row `clipSource` can read. The new-recorder columns are optional so a
- * reader holding only the OBS columns (an editor Clip, a test row) still gets
- * an answer: without a loaded Recording Session it is read as one file.
+ * Everything `clipSource` reads off a Clip row. The new-recorder columns are
+ * optional: a row loaded without its Recording Session (or an OBS Clip, whose
+ * relation is null) answers as a single Footage file.
  */
 export type ClipSourceRow = Pick<
   ClipSourceColumns,
@@ -59,17 +60,16 @@ export type ClipSourceRow = Pick<
   >;
 
 /**
- * Where a Clip's picture and sound come from:
+ * Where a Clip's picture and sound come from. The variants are this package's
+ * business; readers hand a ClipSource back to the functions below and never
+ * look inside it.
  *
- * - `footage` — a single Footage file (an OBS recording) cut between a start
- *   and an end time.
- * - `recording-session` — a new-recorder Clip: the composite of its Recording
- *   Session's screen and camera, drawn in its scenes, with the mic shifted by
- *   the Session's mic offset. `start`/`end` are picture file time;
- *   `footagePath` is the mic file (the `videoFilename` column).
- *
- * The variants are this package's business; readers hand a ClipSource back to
- * the functions below and never look inside it.
+ * - `footage`: an OBS Clip — one Footage file cut between a start and an end.
+ * - `recording-session`: a new-recorder Clip — camera, screen and mic files
+ *   of one Recording Session. `start`/`end` and the segments are in the
+ *   picture's clock; the mic is read `micOffsetSeconds` earlier. The export
+ *   also needs its scene events (to draw past the Clip's end, over a long
+ *   Pause), its Scene Override and the mic EQ it is exported with.
  */
 export type ClipSource =
   | {
@@ -80,22 +80,23 @@ export type ClipSource =
     }
   | {
       readonly kind: "recording-session";
-      readonly footagePath: string;
-      readonly start: number;
-      readonly end: number;
       readonly recordingSessionId: string;
       readonly files: {
-        readonly screen: string;
         readonly camera: string;
+        readonly screen: string;
         readonly mic: string;
       };
+      readonly micOffsetSeconds: number;
       readonly micOffsetMs: number;
       readonly micEq: MicEq;
-      readonly sceneEvents: ReadonlyArray<{
+      readonly sceneEvents: readonly {
         readonly scene: Scene;
         readonly atSeconds: number;
-      }>;
+      }[];
       readonly sceneOverride: Scene | null;
+      readonly segments: readonly SceneSegment[];
+      readonly start: number;
+      readonly end: number;
     };
 
 /**
@@ -103,6 +104,8 @@ export type ClipSource =
  * time: the files, the scene segments, and the mic's offset and EQ.
  */
 export type ClipComposite = {
+  /** Picture file time the composite starts at (the Clip's start). */
+  readonly start: number;
   readonly screen: string;
   readonly camera: string;
   readonly mic: string;
@@ -112,8 +115,23 @@ export type ClipComposite = {
   readonly segments: readonly SceneSegment[];
 };
 
-/** One frame of a Clip's picture: the file to seek and the time to seek to. */
-export type ClipFrame = { readonly inputVideo: string; readonly time: number };
+/**
+ * One still of a Clip's picture: a frame of a Footage file, or the composite
+ * drawn from a Recording Session's screen and camera in one scene.
+ */
+export type ClipFrame =
+  | {
+      readonly kind: "footage";
+      readonly inputVideo: string;
+      readonly time: number;
+    }
+  | {
+      readonly kind: "composite";
+      readonly screen: string;
+      readonly camera: string;
+      readonly scene: Scene;
+      readonly time: number;
+    };
 
 /** One Clip as an input to the ffmpeg encode/transcribe pipelines. */
 export type ClipFfmpegInput = {
@@ -149,9 +167,6 @@ export const clipSourceColumns = (
   },
 });
 
-const asScene = (scene: string | null | undefined): Scene | null =>
-  (SCENES as readonly string[]).includes(scene ?? "") ? (scene as Scene) : null;
-
 /**
  * The Clip's source. `micEq` is the saved mic EQ setting a new-recorder Clip
  * is exported with (default: Matt's OBS EQ, {@link DEFAULT_MIC_EQ}).
@@ -160,91 +175,229 @@ export const clipSource = (
   row: ClipSourceRow,
   settings: { readonly micEq?: MicEq } = {}
 ): ClipSource => {
+  const start = row.sourceStartTime;
+  const end = row.sourceEndTime;
   const session = row.recordingSession;
-  if (!row.recordingSessionId || !session) {
-    return {
-      kind: "footage",
-      footagePath: row.videoFilename,
-      start: row.sourceStartTime,
-      end: row.sourceEndTime,
-    };
+  if (!session) {
+    return { kind: "footage", footagePath: row.videoFilename, start, end };
   }
+  const sceneEvents = session.sceneEvents.map((e) => ({
+    scene: e.scene,
+    atSeconds: e.fileTime,
+  }));
+  const sceneOverride = row.sceneOverride ?? null;
   return {
     kind: "recording-session",
-    footagePath: row.videoFilename,
-    start: row.sourceStartTime,
-    end: row.sourceEndTime,
     recordingSessionId: session.id,
     files: {
-      screen: session.screenFilePath,
       camera: session.cameraFilePath,
+      screen: session.screenFilePath,
       mic: session.micFilePath,
     },
+    micOffsetSeconds: session.micOffsetMs / 1000,
     micOffsetMs: session.micOffsetMs,
     micEq: settings.micEq ?? DEFAULT_MIC_EQ,
-    sceneEvents: session.sceneEvents.flatMap((e) => {
-      const scene = asScene(e.scene);
-      return scene ? [{ scene, atSeconds: e.fileTime }] : [];
+    sceneEvents,
+    sceneOverride,
+    segments: sceneSegments({
+      events: sceneEvents,
+      clip: { startSeconds: start, endSeconds: end },
+      override: sceneOverride,
     }),
-    sceneOverride: asScene(row.sceneOverride),
+    start,
+    end,
   };
 };
 
 /**
- * What the export composites for a new-recorder Clip from `from` to `to`
- * (picture file time; default the Clip's own range), or null for an OBS
- * Clip, whose single Footage file is cut as it always was.
+ * What the export composites for a new-recorder Clip from its start, for
+ * `durationSeconds` of output (default: the Clip's own length; longer over a
+ * long Pause), or null for an OBS Clip, whose single Footage file is cut as
+ * it always was.
  */
 export const clipComposite = (
   source: ClipSource,
-  range?: { readonly from: number; readonly to: number }
+  opts?: { readonly durationSeconds: number }
 ): ClipComposite | null => {
   if (source.kind === "footage") return null;
-  const from = range?.from ?? source.start;
-  const to = range?.to ?? source.end;
   return {
+    start: source.start,
     screen: source.files.screen,
     camera: source.files.camera,
     mic: source.files.mic,
-    micOffsetSeconds: source.micOffsetMs / 1000,
+    micOffsetSeconds: source.micOffsetSeconds,
     eq: source.micEq,
-    segments: sceneSegments({
-      events: source.sceneEvents,
-      clip: { startSeconds: from, endSeconds: to },
-      override: source.sceneOverride,
-    }),
+    segments: opts
+      ? sceneSegments({
+          events: source.sceneEvents,
+          clip: {
+            startSeconds: source.start,
+            endSeconds: source.start + opts.durationSeconds,
+          },
+          override: source.sceneOverride,
+        })
+      : source.segments,
   };
 };
 
+/** Rounds away float noise from subtracting the mic offset (9.850000001). */
+const tidy = (seconds: number) => Math.round(seconds * 1e6) / 1e6;
+
 /**
- * The URL a `<video>` plays the source from, cued to `from`–`to` (source
- * time, as a media fragment).
+ * The media element that clocks playback, and how its time maps to the
+ * Clip's: source time = clock `currentTime` + `offsetSeconds`. An OBS Clip's
+ * clock is its Footage (offset 0); a new-recorder Clip's is its mic, which is
+ * read `micOffsetSeconds` earlier than the picture.
+ */
+export const clipPlaybackClock = (
+  source: ClipSource
+): { offsetSeconds: number } => ({
+  offsetSeconds: source.kind === "footage" ? 0 : source.micOffsetSeconds,
+});
+
+/**
+ * The URL the playback clock (a `<video>`) plays, cued to `from`–`to` (source
+ * time, as a media fragment in the clock's own time).
  */
 export const clipPlaybackUrl = (
   source: ClipSource,
   range: { readonly from: number; readonly to: number }
-): string =>
-  `/view-video?videoPath=${encodeURIComponent(source.footagePath)}#t=${range.from},${range.to}`;
+): string => {
+  if (source.kind === "footage") {
+    return viewVideoUrl(source.footagePath, range.from, range.to);
+  }
+  const offset = source.micOffsetSeconds;
+  return viewVideoUrl(
+    source.files.mic,
+    tidy(range.from - offset),
+    tidy(range.to - offset)
+  );
+};
+
+const viewVideoUrl = (file: string, from: number, to: number) =>
+  `/view-video?videoPath=${encodeURIComponent(file)}#t=${from},${to}`;
+
+/**
+ * A new-recorder Clip's picture, for the composite playback canvas: its
+ * camera and screen cued to `from`–`to` (source time; they share the
+ * picture's clock) and the scene segments to draw them in. Null for an OBS
+ * Clip, whose clock is its picture.
+ */
+export const clipCompositePicture = (
+  source: ClipSource,
+  range: { readonly from: number; readonly to: number }
+): {
+  readonly camera: string;
+  readonly screen: string;
+  readonly segments: readonly SceneSegment[];
+} | null =>
+  source.kind === "footage"
+    ? null
+    : {
+        camera: viewVideoUrl(source.files.camera, range.from, range.to),
+        screen: viewVideoUrl(source.files.screen, range.from, range.to),
+        segments: source.segments,
+      };
+
+/**
+ * The scene a run of segments draws at a source time: before the first
+ * segment its scene, after the last segment its scene.
+ */
+export const sceneAt = (
+  segments: readonly SceneSegment[],
+  time: number
+): Scene =>
+  (
+    segments.find((s) => time >= s.startSeconds && time < s.endSeconds) ??
+    (time < segments[0]!.startSeconds ? segments[0]! : segments.at(-1)!)
+  ).scene;
 
 /** The first frame, the last frame, or the frame at a source time. */
 export const clipFrame = (
   source: ClipSource,
   at: "first" | "last" | number
-): ClipFrame => ({
-  inputVideo: source.footagePath,
-  time:
+): ClipFrame => {
+  const time =
     at === "first"
       ? source.start
       : at === "last"
-        ? source.end - LAST_FRAME_INSET_SECONDS
-        : at,
-});
+        ? tidy(source.end - LAST_FRAME_INSET_SECONDS)
+        : at;
+  if (source.kind === "footage") {
+    return { kind: "footage", inputVideo: source.footagePath, time };
+  }
+  return {
+    kind: "composite",
+    screen: source.files.screen,
+    camera: source.files.camera,
+    scene: sceneAt(source.segments, time),
+    time,
+  };
+};
 
-export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput => ({
-  inputVideo: source.footagePath,
-  startTime: source.start,
-  duration: source.end - source.start,
-});
+/** How much picture the composite still's graph draws (it keeps the first). */
+const STILL_SECONDS = 0.05;
+
+/**
+ * The ffmpeg input and picture arguments that make `frame` the first output
+ * frame; the caller adds the frame count and the output. `seek` is the `-ss`
+ * value as the caller formats `frame.time`. `filter` is an extra video filter
+ * (a scale) applied to the picture.
+ */
+export const clipFrameFfmpegArgs = (
+  frame: ClipFrame,
+  opts: { readonly seek: string; readonly filter?: string }
+): string[] => {
+  if (frame.kind === "footage") {
+    return [
+      "-ss",
+      opts.seek,
+      "-i",
+      frame.inputVideo,
+      ...(opts.filter ? ["-vf", opts.filter] : []),
+    ];
+  }
+  const at = Number(opts.seek);
+  const graph = sceneFilterGraph({
+    segments: [
+      { scene: frame.scene, startSeconds: at, endSeconds: at + STILL_SECONDS },
+    ],
+    inputStartSeconds: at,
+    output: opts.filter ? "composite" : "v",
+  });
+  return [
+    "-ss",
+    opts.seek,
+    "-i",
+    frame.screen,
+    "-ss",
+    opts.seek,
+    "-i",
+    frame.camera,
+    "-filter_complex",
+    opts.filter ? `${graph};[composite]${opts.filter}[v]` : graph,
+    "-map",
+    "[v]",
+  ];
+};
+
+/**
+ * A Clip's sound as an ffmpeg input: its Footage file, or a new-recorder
+ * Clip's mic, read the mic offset earlier (compositing its picture is the
+ * export's business).
+ */
+export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput =>
+  source.kind === "footage"
+    ? {
+        inputVideo: source.footagePath,
+        startTime: source.start,
+        duration: source.end - source.start,
+      }
+    : {
+        inputVideo: source.files.mic,
+        startTime: tidy(source.start - source.micOffsetSeconds),
+        duration: source.end - source.start,
+      };
 
 /**
  * What the source contributes to the Export Hash payload. The keys and their
@@ -271,16 +424,18 @@ export const clipSourceHashFields = (
       eq: [number, number, number];
       lv: number;
     } => {
-  const fields = { f: source.footagePath, s: source.start, e: source.end };
-  const composite = clipComposite(source);
-  if (source.kind === "footage" || !composite) return fields;
+  if (source.kind === "footage") {
+    return { f: source.footagePath, s: source.start, e: source.end };
+  }
   return {
-    ...fields,
+    f: source.files.mic,
+    s: source.start,
+    e: source.end,
     rs: source.recordingSessionId,
-    sg: composite.segments.map((g) => [g.scene, g.startSeconds, g.endSeconds]),
+    sg: source.segments.map((g) => [g.scene, g.startSeconds, g.endSeconds]),
     ...(source.sceneOverride ? { so: source.sceneOverride } : {}),
     mo: source.micOffsetMs,
-    eq: [composite.eq.lowDb, composite.eq.midDb, composite.eq.highDb],
+    eq: [source.micEq.lowDb, source.micEq.midDb, source.micEq.highDb],
     lv: LAYOUT_VERSION,
   };
 };

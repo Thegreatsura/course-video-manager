@@ -23,6 +23,7 @@ import { BITEXACT_ARGS, LANDSCAPE_VIDEO_ENCODE_ARGS } from "./ffmpeg-error";
 
 /** One Clip as a segmented export renders it. */
 export type SegmentClip = {
+  /** The Footage file and start an OBS Clip is cut from (a composite reads its own). */
   readonly inputVideo: string;
   readonly startTime: number;
   /** Seconds of output, long Pause included. */
@@ -87,7 +88,7 @@ export const clipSegmentArgs = (
   dims: Dimensions,
   outputFile: string
 ): string[] => {
-  const { composite, startTime: start, duration } = clip;
+  const { composite, duration } = clip;
   const encode = [
     "-map",
     "[outv]",
@@ -107,7 +108,7 @@ export const clipSegmentArgs = (
       "-y",
       "-hide_banner",
       "-ss",
-      String(start),
+      String(clip.startTime),
       "-t",
       String(duration),
       "-i",
@@ -121,6 +122,7 @@ export const clipSegmentArgs = (
     ];
   }
 
+  const start = composite.start;
   const micStart = start - composite.micOffsetSeconds;
   const silenceMs = Math.max(0, Math.round(-micStart * 1000));
   // Read a little past the end, so the 29.97 camera has a frame to hold.

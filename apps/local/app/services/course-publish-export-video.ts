@@ -167,8 +167,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
           zoomType: clip.zoomType,
           // Drawn over everything the Clip outputs, long Pause included.
           composite: clipComposite(source, {
-            from: input.startTime,
-            to: input.startTime + clipExportDurationInSeconds(asked),
+            durationSeconds: clipExportDurationInSeconds(asked),
           }),
         };
       });

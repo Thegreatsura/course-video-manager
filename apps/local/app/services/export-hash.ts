@@ -82,7 +82,7 @@ const LONG_PAUSE = "long";
  * narrow what the hash sees.
  *
  * Its input requires the Clip's `recordingSession` (joined with its scene
- * events — `CLIP_SOURCE_WITH` in db-video-operations): a query that forgot it
+ * events — `clipRecordingSessionRelation` in core): a query that forgot it
  * would address a new-recorder Clip as a single file and never re-export it.
  */
 export const toExportClips = (
