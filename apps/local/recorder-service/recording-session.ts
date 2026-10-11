@@ -78,6 +78,11 @@ export const startRecordingSession = (
   const eventLog = path.join(dir, EVENT_LOG_NAME);
 
   let seq = 0;
+  /** Why the event log could not be written, once it could not. */
+  let logFailure: string | undefined;
+  // `log` runs inside ffmpeg's stderr listener and promise callbacks, where a
+  // throw would kill the service and leave ffmpeg.exe recording. A failed
+  // append (a full or missing drive) stops the Recording Session instead.
   const log = (event: Unlogged) => {
     seq += 1;
     const logged = {
@@ -85,7 +90,18 @@ export const startRecordingSession = (
       seq,
       recordingSessionId: id,
     } as RecordingSessionEvent;
-    fs.appendFileSync(eventLog, `${JSON.stringify(logged)}\n`);
+    try {
+      fs.appendFileSync(eventLog, `${JSON.stringify(logged)}\n`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`recorder: could not write ${eventLog}`, e);
+      if (!logFailure) {
+        logFailure = `Could not write the event log: ${message}`;
+        // `recording-stopped` reports the failure; nothing else waits on it.
+        void stopWith("event-log-failed");
+      }
+    }
+    // Still sent: a live client should hear that speech, and the stop.
     o.emit(logged);
   };
 
@@ -123,6 +139,49 @@ export const startRecordingSession = (
 
   const screen = run("screen", args.screen);
   const camera = run("camera", args.camera);
+  const quit = (p: LaunchedProcess) => {
+    p.writeStdin("q");
+    const timer = setTimeout(() => p.kill(), STOP_TIMEOUT_MS);
+    // Only disarms the kill; stopWith waits on `exited` itself.
+    void p.exited.then(() => clearTimeout(timer));
+  };
+
+  const finished = Promise.all([screen.child.exited, camera.child.exited]);
+
+  const stopWith = (
+    reason: Extract<
+      RecordingSessionEvent,
+      { type: "recording-stopped" }
+    >["reason"]
+  ) => {
+    if (stopping) return finished.then(() => {});
+    stopping = true;
+    speech.stopRequested();
+    quit(screen.child);
+    quit(camera.child);
+    return finished.then(([screenCode, cameraCode]) => {
+      const last = speech.stop(lastFileTime);
+      if (last) log(last);
+      log({
+        type: "recording-stopped",
+        reason,
+        fileTime: lastFileTime,
+        files,
+        exitCodes: { screen: screenCode, camera: cameraCode },
+        errors: [
+          ...(logFailure ? [logFailure] : []),
+          ...(reason === "ffmpeg-exited"
+            ? [...screen.errors(), ...camera.errors()]
+            : []),
+        ],
+      });
+      ended = true;
+      screen.closeLog();
+      camera.closeLog();
+      o.onEnded();
+    });
+  };
+
   camera.child.onStderr(
     lineSplitter((line) => {
       const change = speech.line(line);
@@ -160,41 +219,6 @@ export const startRecordingSession = (
       (code === 0 ? stdout : stderr || stdout).trim().split(/\r?\n/)[0] ?? "";
     log({ type: "screen-recorder-tuned", ok: code === 0, detail });
   });
-
-  const quit = (p: LaunchedProcess) => {
-    p.writeStdin("q");
-    const timer = setTimeout(() => p.kill(), STOP_TIMEOUT_MS);
-    void p.exited.then(() => clearTimeout(timer));
-  };
-
-  const finished = Promise.all([screen.child.exited, camera.child.exited]);
-
-  const stopWith = (reason: "requested" | "ffmpeg-exited") => {
-    if (stopping) return finished.then(() => {});
-    stopping = true;
-    speech.stopRequested();
-    quit(screen.child);
-    quit(camera.child);
-    return finished.then(([screenCode, cameraCode]) => {
-      const last = speech.stop(lastFileTime);
-      if (last) log(last);
-      log({
-        type: "recording-stopped",
-        reason,
-        fileTime: lastFileTime,
-        files,
-        exitCodes: { screen: screenCode, camera: cameraCode },
-        errors:
-          reason === "ffmpeg-exited"
-            ? [...screen.errors(), ...camera.errors()]
-            : [],
-      });
-      ended = true;
-      screen.closeLog();
-      camera.closeLog();
-      o.onEnded();
-    });
-  };
 
   // A process that quits on its own ends the Recording Session: the other is
   // stopped so its file closes cleanly.

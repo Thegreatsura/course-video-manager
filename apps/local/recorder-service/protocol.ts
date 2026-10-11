@@ -57,12 +57,16 @@ export type RecordingSessionEvent = Logged<
   | { type: "speech-ended"; fileTime: number }
   | {
       type: "recording-stopped";
-      /** `ffmpeg-exited`: a process quit on its own and the other was stopped. */
-      reason: "requested" | "ffmpeg-exited";
+      /**
+       * `ffmpeg-exited`: a process quit on its own and the other was stopped.
+       * `event-log-failed`: `events.jsonl` could not be written, so both were
+       * stopped rather than record what a replay could never send.
+       */
+      reason: "requested" | "ffmpeg-exited" | "event-log-failed";
       fileTime: number;
       files: RecordingSessionFiles;
       exitCodes: { screen: number | null; camera: number | null };
-      /** The last error lines of a process that quit on its own. */
+      /** Why the event log failed, and the last error lines of a process that quit on its own. */
       errors: string[];
     }
 >;
