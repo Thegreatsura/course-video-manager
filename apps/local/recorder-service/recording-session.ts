@@ -148,9 +148,9 @@ export const startRecordingSession = (
     const ffmpegLog = fs.createWriteStream(
       path.join(dir, `ffmpeg-${name}.log`)
     );
-    // A log that cannot be written must not take the service down with it.
-    ffmpegLog.on("error", (e) =>
-      console.error(`recorder: ffmpeg-${name}.log: ${e.message}`)
+    // A log that cannot be written must not take the recording down with it.
+    ffmpegLog.on("error", (error) =>
+      console.error(`recorder: ffmpeg-${name}.log`, error.message)
     );
     let tail = "";
     const child = o.launch({ tool: "ffmpeg", args: processArgs, cwd: dir });

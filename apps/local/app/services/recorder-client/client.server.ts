@@ -21,7 +21,14 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
  * and passes what was saved on to the editors open on that Video.
  *
  * It keeps, per Video, where the next Clip goes: the editor's insertion point
- * as sent with Record (and whenever it moves), then after each Clip placed.
+ * as sent with Record (and whenever it moves), then after each Clip placed,
+ * unless the editor moved it while that Clip was being saved.
+ *
+ * An event it could not save is not lost: the rest of that Recording Session
+ * waits, and after a pause the whole of it is asked for again (saving is
+ * idempotent, so what was saved stays saved), the pause doubling each time,
+ * until `MAX_SAVE_RETRIES`; the next greeting from the recorder service tries
+ * again after that.
  *
  * An editor listening is what keeps the recorder open: the first editor on a
  * New recorder Video opens the recorder for it (which opens the Cam Link and
@@ -30,6 +37,9 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
  * listening: the one most recently opened has it. A recording is never
  * closed this way; it closes once stopped, if nobody listens by then.
  */
+
+/** How many times one event that will not save is asked for again. */
+export const MAX_SAVE_RETRIES = 5;
 
 export class RecorderUnavailableError extends Error {}
 export class RecorderRefusedError extends Error {}
@@ -69,6 +79,8 @@ export type RecorderClientOptions = {
   commandTimeoutMs: number;
   /** How long the recorder stays open after its last editor goes (a reload). */
   closeGraceMs: number;
+  /** The pause before a Recording Session with an unsaved event is asked for again. */
+  retryMs: number;
 };
 
 /** The camera, as an editor on `videoId` hears it, from the recorder's state. */
@@ -194,22 +206,61 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     send(want ? { type: "open", videoId: want } : { type: "close" });
   };
 
+  /**
+   * Per Recording Session: bumped when one of its events fails to save, so
+   * the events queued behind it wait for the replay instead of saving out of
+   * order.
+   */
+  const generations = new Map<string, number>();
+  /** Per Recording Session: the event that will not save, and its tries. */
+  const failing = new Map<string, { seq: number; tries: number }>();
+
+  const saveFailed = (event: SequencedEvent, error: unknown) => {
+    const id = event.recordingSessionId;
+    console.error(`recorder client: could not save ${event.type}`, error);
+    const message = `Could not save the recorder's ${event.type}: ${error instanceof Error ? error.message : String(error)}`;
+    for (const videoId of listeners.keys())
+      publish(videoId, { type: "recorder-failed", message });
+
+    generations.set(id, (generations.get(id) ?? 0) + 1);
+    sequencer.forget(id);
+    const before = failing.get(id);
+    const tries = before?.seq === event.seq ? before.tries + 1 : 1;
+    failing.set(id, { seq: event.seq, tries });
+    if (tries > MAX_SAVE_RETRIES) return;
+    setTimeout(
+      () => send({ type: "replay", recordingSessionId: id, afterSeq: 0 }),
+      o.retryMs * 2 ** (tries - 1)
+    );
+  };
+
   const ingest = (event: SequencedEvent) => {
+    const id = event.recordingSessionId;
+    const generation = generations.get(id) ?? 0;
     ingesting = ingesting.then(async () => {
+      if ((generations.get(id) ?? 0) !== generation) return;
+      /** The insertion point each Video's Clip was placed at. */
+      const used = new Map<string, InsertionPoint | undefined>();
+      let result: IngestResult;
       try {
-        const result = await o.ingest(event, (videoId) =>
-          insertionPoints.get(videoId)
-        );
-        if (!result.videoId) return;
-        if (result.insertionPoint)
-          insertionPoints.set(result.videoId, result.insertionPoint);
-        for (const message of result.messages) publish(result.videoId, message);
+        result = await o.ingest(event, (videoId) => {
+          const point = insertionPoints.get(videoId);
+          used.set(videoId, point);
+          return point;
+        });
       } catch (error) {
-        console.error(`recorder client: could not save ${event.type}`, error);
-        const message = `Could not save the recorder's ${event.type}: ${error instanceof Error ? error.message : String(error)}`;
-        for (const videoId of listeners.keys())
-          publish(videoId, { type: "recorder-failed", message });
+        saveFailed(event, error);
+        return;
       }
+      if ((failing.get(id)?.seq ?? Infinity) <= event.seq) failing.delete(id);
+      if (!result.videoId) return;
+      // Moved by the editor while this Clip saved: the editor's point stands.
+      if (
+        result.insertionPoint &&
+        insertionPoints.get(result.videoId) === used.get(result.videoId)
+      )
+        insertionPoints.set(result.videoId, result.insertionPoint);
+      for (const message of result.messages) publish(result.videoId, message);
     });
   };
 
