@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { Effect, Layer } from "effect";
 import { startRecorderService } from "recorder-service/recorder-service";
 import {
@@ -71,6 +71,12 @@ const saveEvent: Ingest = (event, insertionPointFor) =>
     )
   );
 
+/** Where a Stream Deck Record's Recording Sessions go. */
+const STREAM_DECK_FOLDER = fs.mkdtempSync(
+  path.join(os.tmpdir(), "recorder-client-deck-")
+);
+afterAll(() => fs.rmSync(STREAM_DECK_FOLDER, { recursive: true, force: true }));
+
 /** The app server's recorder client, as live.server.ts makes it. */
 const connectClient = (port: number, ingest: Ingest = saveEvent) => {
   const client = createRecorderClient({
@@ -82,6 +88,7 @@ const connectClient = (port: number, ingest: Ingest = saveEvent) => {
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,
     retryMs: 20,
+    folder: STREAM_DECK_FOLDER,
   });
   cleanups.unshift(() => client.close());
   return client;
@@ -247,6 +254,7 @@ describe("the recorder client", () => {
       reconnectMs: 1_000,
       commandTimeoutMs: 1_000,
       closeGraceMs: 0,
+      folder: "/tmp",
       retryMs: 0,
     });
     cleanups.push(() => client.close());
@@ -384,5 +392,50 @@ describe("the recorder client", () => {
 
     await vi.waitFor(() => expect(placedAt).toHaveLength(2));
     expect(placedAt[1]).toEqual({ type: "after-chapter", chapterId: "Q" });
+  });
+
+  it("records from the Stream Deck with the editor's Silence Length, and the editor hears it as its own Record", async () => {
+    const { client, port } = await setup();
+    const video = await clipService.createVideo("new recorder");
+    const heard: NewRecorderMessage[] = [];
+    client.subscribe(video.id, (m) => heard.push(m));
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: "camera-went-live" })
+    );
+    const deck = new WebSocket(`ws://127.0.0.1:${port}`);
+    await new Promise((r) => deck.once("open", r));
+    cleanups.unshift(() => deck.close());
+    const press = (action: "record" | "stop") =>
+      deck.send(JSON.stringify({ type: "stream-deck", press: { action } }));
+
+    // The editor has not said its Silence Length: the press does nothing.
+    press("record");
+    await vi.waitFor(() =>
+      expect(heard.at(-1)).toMatchObject({
+        type: "recorder-failed",
+        message: expect.stringContaining("Stream Deck"),
+      })
+    );
+
+    client.setSilenceLength(video.id, "long");
+    press("record");
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual(
+        expect.objectContaining({
+          type: "recording-started",
+          silenceLength: "long",
+          micFile: expect.stringContaining(STREAM_DECK_FOLDER),
+        })
+      )
+    );
+    press("stop");
+    await vi.waitFor(() =>
+      expect(heard.map((m) => m.type)).toContain("recording-stopped")
+    );
+    expect(await readSession()).toMatchObject({
+      videoId: video.id,
+      silenceLength: "long",
+      status: "stopped",
+    });
   });
 });
