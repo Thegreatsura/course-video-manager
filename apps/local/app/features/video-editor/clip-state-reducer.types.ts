@@ -194,9 +194,13 @@ export type RecordingSession = {
   id: SessionId;
   displayNumber: number;
   status: RecordingSessionStatus;
-  outputPath: string;
+  /**
+   * Unknown only for a New recorder Recording Session this editor joined
+   * late (`recorder-status`), having missed its `recording-started`.
+   */
+  outputPath?: string;
   startedAt: number;
-  silenceLength: SilenceLength;
+  silenceLength?: SilenceLength;
   /**
    * A New recorder Recording Session: its id is the recorder's, and its
    * Clips arrive saved (`clips-saved`), never optimistically.
