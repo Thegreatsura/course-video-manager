@@ -31,6 +31,18 @@ const NEVER_POSTED =
   "Shorts are posted, and they never sit in a Course; a copied Video has " +
   "never been posted anywhere.";
 
+const SHARED_FOOTAGE =
+  "A Recording Session is the new recorder's Footage: files on the author's " +
+  "machine plus their scene timeline. A copied Clip keeps pointing at the " +
+  "same Recording Session, as an OBS Clip keeps its Footage path, so the " +
+  "copy draws the same picture.";
+
+/** A Recording Session and its scene timeline: shared by every copy. */
+const RECORDING_SESSION_TABLES: Record<string, CopyDecision> = {
+  recording_session: { notCopied: SHARED_FOOTAGE },
+  recording_session_scene_event: { notCopied: SHARED_FOOTAGE },
+};
+
 /** Every table below a Course Version, decided for a whole-version copy. */
 const VERSION_TABLES: Record<string, CopyDecision> = {
   section: "copied",
@@ -49,6 +61,7 @@ const VERSION_TABLES: Record<string, CopyDecision> = {
   clip_mockup_comment: "copied",
   thumbnail: "copied",
   video_post: { notCopied: NEVER_POSTED },
+  ...RECORDING_SESSION_TABLES,
 };
 
 /**
@@ -78,6 +91,7 @@ const TIMELINE_TABLES: Record<string, CopyDecision> = {
   clip_mockup_comment: { notCopied: NOT_THE_TIMELINE },
   thumbnail: { notCopied: NOT_THE_TIMELINE },
   video_post: { notCopied: NEVER_POSTED },
+  ...RECORDING_SESSION_TABLES,
 };
 
 export const COPY_PATHS: Record<
@@ -103,6 +117,7 @@ export const COPY_PATHS: Record<
           "rows would alias the source's files. A copy starts without one.",
       },
       video_post: { notCopied: NEVER_POSTED },
+      ...RECORDING_SESSION_TABLES,
     },
   },
   /** The video editor's "Create video from selection", copy or move. */

@@ -255,8 +255,16 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 ### Recording
 
 **Recording Session**:
-A period of time during which clips are captured, grouping Optimistic Clips before they are saved.
-_Avoid_: Session, Take session
+A period of time, from start to stop, during which clips are captured for one **Video**. In the editor it groups Optimistic Clips before they are saved. On a Video whose **Recorder** is the New recorder it is also stored: three **Footage** files (camera, screen and mic, on one shared clock), its scene timeline (which scene was live from each moment), its speech events, its mic offset (how much later the mic's sound is played at export, 150 ms by default), its **Silence Length** and whether it stopped cleanly or crashed. Its Clips point at it, and their picture is drawn from its files and scene timeline at export instead of being baked into the Footage. An OBS Recording Session is not stored. Getting the camera ready before a Recording Session starts is "opening the recorder for a Video", not opening a Recording Session.
+_Avoid_: Session, Take session, Recording (a Video's _Avoid_)
+
+**Recorder**:
+What films a **Video**, chosen per Video: **OBS** (one Footage file with the scene baked in) or the **New recorder** (CVM's own, which stores a **Recording Session** of separate camera, screen and mic Footage). A Video filmed before the choice existed uses OBS. The choice is locked once the Video has Footage.
+_Avoid_: Recording mode, Capture backend
+
+**Scene Override**:
+A marker on a **Clip** from a New-recorder **Recording Session** naming one scene (Camera, Code or No Face) to draw the whole Clip in, in place of the scenes that were live while it was filmed. With none, the Clip follows its Recording Session's scene timeline. An OBS Clip cannot have one: its scene is baked into its Footage.
+_Avoid_: Scene change (a live switch during a Recording Session), Layout
 
 **Silence Length**:
 A setting of each Recording Session (short or long) for how long a silence must be to end a clip: short (the default) cuts on brief pauses in a sentence, long only on long ones. It is fixed when recording starts.

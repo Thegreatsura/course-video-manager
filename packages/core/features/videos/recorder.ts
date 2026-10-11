@@ -1,0 +1,57 @@
+/**
+ * The Recorder a Video is filmed with, chosen per Video (`video.recorder`):
+ *
+ * - `obs` — OBS records one file with the scene baked in, and the editor makes
+ *   Clips from it as it always has.
+ * - `new-recorder` — CVM's own recorder writes a Recording Session: camera,
+ *   screen and mic as three Footage files plus a scene timeline, so the
+ *   picture is drawn at export and a Clip can carry a Scene Override.
+ *
+ * Every Video filmed before the choice existed has a null column, which reads
+ * as OBS.
+ */
+export const VIDEO_RECORDERS = ["obs", "new-recorder"] as const;
+
+export type VideoRecorder = (typeof VIDEO_RECORDERS)[number];
+
+export const DEFAULT_VIDEO_RECORDER: VideoRecorder = "obs";
+
+/** Read `video.recorder`: null (or anything unknown) is OBS. */
+export function resolveVideoRecorder(
+  recorder: string | null | undefined
+): VideoRecorder {
+  return (VIDEO_RECORDERS as readonly string[]).includes(recorder ?? "")
+    ? (recorder as VideoRecorder)
+    : DEFAULT_VIDEO_RECORDER;
+}
+
+/**
+ * Where a Recording Session stands (`recording_session.status`):
+ * `recording` while the recorder is writing its files, `stopped` once it
+ * finished them cleanly, `crashed` when the recorder found it still
+ * `recording` after a restart.
+ */
+export const RECORDING_SESSION_STATUSES = [
+  "recording",
+  "stopped",
+  "crashed",
+] as const;
+
+export type RecordingSessionStatus =
+  (typeof RECORDING_SESSION_STATUSES)[number];
+
+/**
+ * The scenes a Recording Session's picture can be drawn in. A scene event
+ * records which one was live from a moment in the Footage on; a Clip's Scene
+ * Override replaces them for that Clip alone.
+ */
+export const RECORDING_SESSION_SCENES = ["Camera", "Code", "No Face"] as const;
+
+export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
+
+/**
+ * The mic offset a new Recording Session gets, in ms: the mic's sound is
+ * shifted later by this much at export. 150 ms matches the sync offset OBS
+ * applies to the same mic, which the new recorder's raw files do not carry.
+ */
+export const DEFAULT_MIC_OFFSET_MS = 150;

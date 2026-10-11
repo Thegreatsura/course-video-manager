@@ -20,6 +20,11 @@ import type { BulletPanelBullet } from "../features/videos/bullet-panel.js";
 import type { BeatKind } from "../features/beats/beat-kinds.js";
 import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
 import type { ClipMockupVoiceStatus } from "../features/clip-mockups/voice-status.js";
+import type {
+  RecordingSessionScene,
+  RecordingSessionStatus,
+  VideoRecorder,
+} from "../features/videos/recorder.js";
 export { createTable } from "./table-creator.js";
 
 const varcharCollateC = customType<{
@@ -295,6 +300,12 @@ export const videos = createTable(
     script: text("script"),
     archived: boolean("archived").notNull().default(false),
     format: text("format").notNull().default("landscape"),
+    /**
+     * The Recorder this Video is filmed with — see VIDEO_RECORDERS
+     * (features/videos/recorder.ts). Null reads as OBS: every Video filmed
+     * before the choice existed was. See migration 0031.
+     */
+    recorder: text("recorder").$type<VideoRecorder>(),
     createdAt: timestamp("created_at", {
       mode: "date",
       withTimezone: true,
@@ -320,6 +331,11 @@ export const videos = createTable(
     // never ran on production, and every Video stayed 'standard' while
     // `--format landscape` filters silently missed them. See migration 0027.
     check("video_format_valid", sql`${table.format} IN ('landscape', 'short')`),
+    // Mirrors VIDEO_RECORDERS (features/videos/recorder.ts).
+    check(
+      "video_recorder_valid",
+      sql`${table.recorder} IS NULL OR ${table.recorder} IN ('obs', 'new-recorder')`
+    ),
   ]
 );
 
@@ -371,8 +387,29 @@ export const clips = createTable(
     diagramSnapshotId: varchar("diagram_snapshot_id", {
       length: 255,
     }).references(() => diagramSnapshots.id, { onDelete: "set null" }),
+    /**
+     * The Recording Session a new-recorder Clip was cut from. Null for every
+     * OBS Clip. For a new-recorder Clip, `videoFilename` holds the Session's
+     * mic file and `scene` the scene in force at the Clip's start.
+     */
+    recordingSessionId: varchar("recording_session_id", {
+      length: 255,
+    }).references(() => recordingSessions.id),
+    /**
+     * Scene Override — the scene this Clip is drawn in for its whole length,
+     * replacing its Recording Session's scene events. Null follows them.
+     */
+    sceneOverride: varchar("scene_override", {
+      length: 255,
+    }).$type<RecordingSessionScene>(),
   },
   (table) => [
+    index("clip_recording_session_id_idx").on(table.recordingSessionId),
+    // Mirrors RECORDING_SESSION_SCENES (features/videos/recorder.ts).
+    check(
+      "clip_scene_override_valid",
+      sql`${table.sceneOverride} IS NULL OR ${table.sceneOverride} IN ('Camera', 'Code', 'No Face')`
+    ),
     // The diagram playground resolves clips-per-snapshot for every snapshot it
     // renders. Without this the FK column is unindexed (Postgres does not index
     // FKs automatically) and each lookup seq-scans the whole clip table.
@@ -385,6 +422,101 @@ export const clips = createTable(
     check(
       "clip_transcription_status_valid",
       sql`${table.transcriptionStatus} IN ('queued', 'transcribing', 'failed', 'done')`
+    ),
+  ]
+);
+
+/**
+ * A Recording Session filmed with the new recorder: one start-to-stop capture
+ * of three Footage files (camera, screen, mic) on one shared clock, plus its
+ * scene timeline (`recordingSessionSceneEvents`). The picture is drawn from
+ * them at export, so nothing is baked in. OBS Recording Sessions are not
+ * stored. File paths are stored as Clip Footage paths are. Never copied: see
+ * SHARED_FOOTAGE in services/version-copy-manifest.ts.
+ */
+export const recordingSessions = createTable(
+  "recording_session",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    /**
+     * The Video it was filmed for. Nullable, and cleared rather than cascaded
+     * when that Video row goes: every copy of the Video's Clips (a new Draft, a
+     * duplicated Course, a copied Video) shares this Recording Session, as an
+     * OBS Clip's copies share its Footage path, so it must outlive the row it
+     * was filmed for (a discarded Pending Version deletes that row).
+     */
+    videoId: varchar("video_id", { length: 255 }).references(() => videos.id, {
+      onDelete: "set null",
+    }),
+    cameraFilePath: text("camera_file_path").notNull(),
+    screenFilePath: text("screen_file_path").notNull(),
+    micFilePath: text("mic_file_path").notNull(),
+    /** Shifts the mic later by this much at export — see DEFAULT_MIC_OFFSET_MS. */
+    micOffsetMs: integer("mic_offset_ms").notNull().default(150),
+    /** See RECORDING_SESSION_STATUSES (features/videos/recorder.ts). */
+    status: text("status")
+      .$type<RecordingSessionStatus>()
+      .notNull()
+      .default("recording"),
+    startedAt: timestamp("started_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    /** The Silence Length fixed when recording started. */
+    silenceLength: text("silence_length")
+      .$type<"short" | "long">()
+      .notNull()
+      .default("short"),
+    cameraFramesLost: integer("camera_frames_lost").notNull().default(0),
+    screenFramesLost: integer("screen_frames_lost").notNull().default(0),
+  },
+  (table) => [
+    index("recording_session_video_id_idx").on(table.videoId),
+    check(
+      "recording_session_status_valid",
+      sql`${table.status} IN ('recording', 'stopped', 'crashed')`
+    ),
+    check(
+      "recording_session_silence_length_valid",
+      sql`${table.silenceLength} IN ('short', 'long')`
+    ),
+  ]
+);
+
+/**
+ * One live scene change in a Recording Session: from `fileTime` (seconds into
+ * the Session's Footage) on, `scene` was live. Written as it happens; the
+ * scene in force at any moment is the latest event at or before it.
+ */
+export const recordingSessionSceneEvents = createTable(
+  "recording_session_scene_event",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    recordingSessionId: varchar("recording_session_id", { length: 255 })
+      .references(() => recordingSessions.id, { onDelete: "cascade" })
+      .notNull(),
+    fileTime: doublePrecision("file_time").notNull(),
+    scene: varchar("scene", { length: 255 })
+      .$type<RecordingSessionScene>()
+      .notNull(),
+  },
+  (table) => [
+    index("recording_session_scene_event_session_time_idx").on(
+      table.recordingSessionId,
+      table.fileTime
+    ),
+    // Mirrors RECORDING_SESSION_SCENES (features/videos/recorder.ts).
+    check(
+      "recording_session_scene_event_scene_valid",
+      sql`${table.scene} IN ('Camera', 'Code', 'No Face')`
     ),
   ]
 );
@@ -881,7 +1013,33 @@ export const clipsRelations = relations(clips, ({ one, many }) => ({
   webLinks: many(clipWebLinks),
   transcriptWords: many(clipTranscriptWords),
   overlays: many(overlays),
+  recordingSession: one(recordingSessions, {
+    fields: [clips.recordingSessionId],
+    references: [recordingSessions.id],
+  }),
 }));
+
+export const recordingSessionsRelations = relations(
+  recordingSessions,
+  ({ one, many }) => ({
+    video: one(videos, {
+      fields: [recordingSessions.videoId],
+      references: [videos.id],
+    }),
+    sceneEvents: many(recordingSessionSceneEvents),
+    clips: many(clips),
+  })
+);
+
+export const recordingSessionSceneEventsRelations = relations(
+  recordingSessionSceneEvents,
+  ({ one }) => ({
+    recordingSession: one(recordingSessions, {
+      fields: [recordingSessionSceneEvents.recordingSessionId],
+      references: [recordingSessions.id],
+    }),
+  })
+);
 
 export const overlaysRelations = relations(overlays, ({ one }) => ({
   clip: one(clips, {
@@ -996,6 +1154,7 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
   clipMockupChapters: many(clipMockupChapters),
   clipMockupComments: many(clipMockupComments),
   videoPosts: many(videoPosts),
+  recordingSessions: many(recordingSessions),
 }));
 
 export const lessonsRelations = relations(lessons, ({ one, many }) => ({

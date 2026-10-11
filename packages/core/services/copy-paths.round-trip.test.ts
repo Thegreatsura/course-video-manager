@@ -65,6 +65,13 @@ const overrides = (ctx: {
   // a pending one stays pending (`copiedVoice`).
   "clip_mockup.voiceStatus": () => "ready",
   "clip_mockup.voiceError": () => null,
+  // CHECK clip_scene_override_valid.
+  "clip.sceneOverride": () => "Code",
+  // CHECKs on a Recording Session and its scene events, which every copy
+  // shares rather than copies.
+  "recording_session.status": () => "stopped",
+  "recording_session.silenceLength": () => "long",
+  "recording_session_scene_event.scene": () => "Code",
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // A Learning Goal belongs to the Video's Section, which every copy shares.
@@ -201,7 +208,12 @@ describe("Video-level copy paths round trip — the copy is the source, row for 
       const source = await generateVideoTree();
       const copyId = await run!(source.id);
 
-      const of = await signaturesBelow(testDb, ROOT, NOT_CARRIED);
+      const of = await signaturesBelow(
+        testDb,
+        ROOT,
+        NOT_CARRIED,
+        COPY_PATHS[path].tables
+      );
       const before = of(source.id);
       const after = of(copyId);
       for (const [name, decision] of Object.entries(COPY_PATHS[path].tables)) {

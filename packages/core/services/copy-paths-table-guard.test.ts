@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
+import { eq } from "drizzle-orm";
 import { VersionOperationsService } from "./db-version-operations.server.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
@@ -100,6 +101,22 @@ async function seedEveryTable() {
     })
     .returning();
   const clipId = clip!.id;
+  const [session] = await testDb
+    .insert(schema.recordingSessions)
+    .values({
+      videoId,
+      cameraFilePath: "camera.mkv",
+      screenFilePath: "screen.mkv",
+      micFilePath: "take.mp4",
+    })
+    .returning();
+  await testDb
+    .insert(schema.recordingSessionSceneEvents)
+    .values({ recordingSessionId: session!.id, fileTime: 0, scene: "Camera" });
+  await testDb
+    .update(schema.clips)
+    .set({ recordingSessionId: session!.id })
+    .where(eq(schema.clips.id, clipId));
   await testDb
     .insert(schema.clipWebLinks)
     .values({ clipId, url: "https://example.com" });

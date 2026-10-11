@@ -245,6 +245,7 @@ export const createVersionCopyOps = (db: Database) => {
                   description: sourceVideo.description,
                   script: sourceVideo.script,
                   format: sourceVideo.format,
+                  recorder: sourceVideo.recorder,
                 })
                 .returning()
             );
@@ -278,6 +279,9 @@ export const createVersionCopyOps = (db: Database) => {
                     // Diagram Snapshots are shared per Diagram, not owned by a
                     // Version, so the pin carries over verbatim (no remap).
                     diagramSnapshotId: clip.diagramSnapshotId,
+                    // Shared, not copied: see SHARED_FOOTAGE in version-copy-manifest.ts.
+                    recordingSessionId: clip.recordingSessionId,
+                    sceneOverride: clip.sceneOverride,
                   }))
                 )
               );

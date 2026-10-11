@@ -253,6 +253,7 @@ export const makeDuplicateCourse = (db: Database) =>
             description: sourceVideo.description,
             script: sourceVideo.script,
             format: sourceVideo.format,
+            recorder: sourceVideo.recorder,
           });
           videoLineageMappings.push({
             sourceLineageId: sourceVideo.lineageId,
@@ -280,6 +281,9 @@ export const makeDuplicateCourse = (db: Database) =>
               pauseType: clip.pauseType,
               zoomType: clip.zoomType,
               diagramSnapshotId: clip.diagramSnapshotId,
+              // Shared, not copied: see SHARED_FOOTAGE in version-copy-manifest.ts.
+              recordingSessionId: clip.recordingSessionId,
+              sceneOverride: clip.sceneOverride,
             });
           }
 

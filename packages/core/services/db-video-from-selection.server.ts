@@ -61,6 +61,7 @@ export const createVideoFromSelectionImpl = Effect.fn(
         // A selection from a Short is a Short: the format drives the export
         // frame dimensions.
         format: sourceVideo.format,
+        recorder: sourceVideo.recorder,
       })
       .returning()
   );

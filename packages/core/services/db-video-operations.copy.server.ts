@@ -141,6 +141,7 @@ export const copyVideoImpl = (
             lessonId: sourceVideo.lessonId,
             pitchId: sourceVideo.pitchId,
             format: sourceVideo.format,
+            recorder: sourceVideo.recorder,
             script: copyScript ? sourceVideo.script : null,
             archived: false,
             createdAt: now,

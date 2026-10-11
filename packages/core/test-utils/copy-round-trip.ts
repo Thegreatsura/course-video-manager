@@ -1,6 +1,7 @@
 import { getTableColumns } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import {
+  type CopyDecision,
   parentEdges,
   pathToRoot,
   shortName,
@@ -116,12 +117,14 @@ export async function generateTreeBelow(
 /**
  * Reads every row below every root row; returns, for one root row, each
  * table's rows as sorted signatures. Columns in `notCarried` (`table.key`)
- * are left out.
+ * are left out. A link to a table the path does not copy (`notCopied` in
+ * `decisions`) is SHARED by the copy, so it is compared by its raw id.
  */
 export async function signaturesBelow(
   testDb: TestDb,
   root: PgTable,
-  notCarried: Readonly<Record<string, string>>
+  notCarried: Readonly<Record<string, string>>,
+  decisions: Readonly<Record<string, CopyDecision>> = {}
 ) {
   const below = tablesBelow(root);
   const all = new Map<PgTable, Row[]>();
@@ -141,6 +144,9 @@ export async function signaturesBelow(
     throw new Error("unreachable");
   };
 
+  const isShared = (table: PgTable) =>
+    typeof decisions[shortName(table)] === "object";
+
   const memo = new Map<Row, Row>();
   const signature = (table: PgTable, row: Row): Row => {
     const cached = memo.get(row);
@@ -153,6 +159,7 @@ export async function signaturesBelow(
       const edge = edges.get(key);
       if (key === "id" || name in notCarried) continue;
       if (edge?.to === root) out[key] = "ROOT";
+      else if (edge && isShared(edge.to)) out[key] = `SHARED ${String(value)}`;
       else if (edge && byId.has(edge.to) && value !== null) {
         const parent = byId.get(edge.to)!.get(value)!;
         out[key] =
