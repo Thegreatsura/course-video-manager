@@ -271,3 +271,64 @@ describe("switching scenes on the New recorder", () => {
     expect(t.getState()).toMatchObject({ scene: "Code", error: "Not open." });
   });
 });
+
+describe("the Stream Deck on the New recorder", () => {
+  const started = heard({
+    type: "recording-started",
+    recordingSessionId: "s1",
+    silenceLength: "long",
+    micFile: "mic.mkv",
+  });
+
+  it("moves the editor through a recording and a scene switch exactly as its own buttons would", () => {
+    const opened = () =>
+      tester()
+        .send(status())
+        .send(live)
+        .send(heard({ type: "scene-changed", scene: "Code" }));
+
+    const buttons = opened()
+      .send(pressRecord)
+      .send(status({ recordingSessionId: "s1" }))
+      .send(started)
+      .send({ type: "press-scene", scene: "Camera" })
+      .send(heard({ type: "scene-changed", scene: "Camera" }));
+    // The Stream Deck pressed them on the recorder service: only its events.
+    const deck = opened()
+      .send(status({ recordingSessionId: "s1" }))
+      .send(started)
+      .send(heard({ type: "scene-changed", scene: "Camera" }));
+    expect(deck.getState()).toEqual(buttons.getState());
+    expect(deck.getState()).toMatchObject({
+      phase: "recording",
+      scene: "Camera",
+    });
+    expect(deck.getEffects()).toEqual([]);
+
+    buttons
+      .send({ type: "press-stop" })
+      .send(status())
+      .send(heard(stoppedMessage()));
+    deck.send(status()).send(heard(stoppedMessage()));
+    expect(deck.getState()).toEqual(buttons.getState());
+    expect(deck.getState().phase).toBe("idle");
+  });
+
+  it("tells the app server its Silence Length once it answers, and on each change", () => {
+    const t = tester();
+    t.send({ type: "silence-length-chosen", silenceLength: "short" });
+    t.send({ type: "silence-length-chosen", silenceLength: "long" });
+    expect(t.getEffects()).toEqual([]);
+
+    t.send(status())
+      .send({ type: "silence-length-chosen", silenceLength: "long" })
+      .send({ type: "silence-length-chosen", silenceLength: "short" })
+      // A restarted app server greets the editor again.
+      .send(status());
+    expect(t.getEffects()).toEqual([
+      { type: "send-silence-length", silenceLength: "long" },
+      { type: "send-silence-length", silenceLength: "short" },
+      { type: "send-silence-length", silenceLength: "short" },
+    ]);
+  });
+});

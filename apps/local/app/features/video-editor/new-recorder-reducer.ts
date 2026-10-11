@@ -18,6 +18,12 @@ import type { NewRecorderMessage } from "./new-recorder-wire";
  * Scenes: the preview draws the scene the recorder says it is in
  * (`scene-changed`); a scene button asks the recorder to switch, and the
  * preview follows once it has.
+ *
+ * The Stream Deck records, stops and switches scenes on the recorder service
+ * directly: the editor hears the same messages as for its own buttons, so it
+ * follows them the same way. For a Stream Deck Record to use the editor's
+ * Silence Length, the editor tells the app server its choice whenever it
+ * changes and whenever the recorder reports in.
  */
 export namespace newRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
@@ -52,10 +58,13 @@ export namespace newRecorderReducer {
     alert: string | null;
     /** The last Recording Session's frames lost, until the next Record. */
     framesLost: FramesLost | null;
+    /** The editor's Silence Length, for a Stream Deck Record. */
+    silenceLength: SilenceLength | null;
   };
 
   export type Action =
     | { type: "recorder-message-heard"; message: NewRecorderMessage }
+    | { type: "silence-length-chosen"; silenceLength: SilenceLength }
     | {
         type: "press-record";
         silenceLength: SilenceLength;
@@ -77,6 +86,7 @@ export namespace newRecorderReducer {
         insertionPoint: InsertionPoint;
       }
     | { type: "stop-recording" }
+    | { type: "send-silence-length"; silenceLength: SilenceLength }
     | { type: "retry-camera" }
     | { type: "switch-scene"; scene: Scene };
 }
@@ -93,6 +103,7 @@ export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
   error: null,
   alert: null,
   framesLost: null,
+  silenceLength: null,
 });
 
 export const CAMERA_LOST_ALERT =
@@ -200,8 +211,31 @@ export const newRecorderReducer: EffectReducer<
   newRecorderReducer.Effect
 > = (state, action, exec) => {
   switch (action.type) {
-    case "recorder-message-heard":
-      return heard(state, action.message);
+    case "recorder-message-heard": {
+      const next = heard(state, action.message);
+      // A new or restarted app server knows nothing of the editor's choice.
+      if (
+        action.message.type === "recorder-status" &&
+        next.reachable === true &&
+        next.silenceLength
+      )
+        exec({
+          type: "send-silence-length",
+          silenceLength: next.silenceLength,
+        });
+      return next;
+    }
+    case "silence-length-chosen":
+      // Until the app server first answers, its recorder-status sends it.
+      if (
+        state.reachable === true &&
+        action.silenceLength !== state.silenceLength
+      )
+        exec({
+          type: "send-silence-length",
+          silenceLength: action.silenceLength,
+        });
+      return { ...state, silenceLength: action.silenceLength };
     case "press-record":
       if (!canRecord(state)) return state;
       exec({
