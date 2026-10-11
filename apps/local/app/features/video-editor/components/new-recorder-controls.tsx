@@ -192,11 +192,13 @@ export const NewRecorderControls = () => {
       <CameraProblem />
       {state.framesLost && (
         <p
-          className={`text-xs ${state.framesLost.camera + state.framesLost.screen > 0 ? "text-amber-500" : "text-muted-foreground"}`}
+          className={`text-xs ${state.framesLost.camera + (state.framesLost.screen ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground"}`}
           data-testid="new-recorder-frames-lost"
         >
-          Last recording: {framesText(state.framesLost.camera, "camera")},{" "}
-          {framesText(state.framesLost.screen, "screen")} lost
+          Last recording:{" "}
+          {state.framesLost.screen === null
+            ? `${framesText(state.framesLost.camera, "camera")} lost (screen not measured)`
+            : `${framesText(state.framesLost.camera, "camera")}, ${framesText(state.framesLost.screen, "screen")} lost`}
         </p>
       )}
       {state.error && (

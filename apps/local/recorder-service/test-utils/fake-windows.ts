@@ -171,6 +171,8 @@ export const fakeWindows = (
     cameraTries?: CameraTry[];
     /** A real JPEG per preview and for the still, for a browser to show (verify-cvm). */
     jpeg?: { camera: Buffer; screen: Buffer; still?: Buffer };
+    /** The recording's camera + mic process: its first frame comes at once, or never. */
+    recordingCamera?: "frames" | "silent";
   } = {}
 ) => {
   const recorders: FakeProcess[] = [];
@@ -240,6 +242,10 @@ export const fakeWindows = (
     if (l.args.at(-2) === "-i")
       return answer(p, probeAnswer(path.join(l.cwd, l.args.at(-1) ?? "")));
     recorders.push(p);
+    if (l.args.includes("camera.mkv") && o.recordingCamera !== "silent")
+      setImmediate(() =>
+        p.stdout("frame=1\nout_time_us=0\nprogress=continue\n")
+      );
     return p;
   };
   const recorder = (kind: "screen" | "camera") => {
