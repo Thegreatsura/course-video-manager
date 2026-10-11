@@ -237,7 +237,8 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           .set({
             status: "stopped",
             cameraFramesLost: event.framesLost.camera,
-            screenFramesLost: event.framesLost.screen,
+            // Not measured yet (null): the column keeps its default 0.
+            screenFramesLost: event.framesLost.screen ?? undefined,
           })
           .where(eq(recordingSessions.id, recordingSessionId))
       );

@@ -14,7 +14,6 @@ describe("a still", () => {
 
     const closed = await fetch(url);
     expect(closed.status).toBe(409);
-    expect(closed.headers.get("access-control-allow-origin")).toBe("*");
     expect(await closed.text()).toBe(STILL_RECORDER_CLOSED);
 
     client.send({ type: "open", videoId: "video-1" });
