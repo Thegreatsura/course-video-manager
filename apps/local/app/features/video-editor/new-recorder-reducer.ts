@@ -1,6 +1,7 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
+import type { FramesLost } from "recorder-service/protocol";
 import type { NewRecorderMessage } from "./new-recorder-wire";
 
 /**
@@ -37,6 +38,13 @@ export namespace newRecorderReducer {
     speaking: boolean;
     /** The last thing that went wrong, until the next Record. */
     error: string | null;
+    /**
+     * Something Matt must see at once (the camera lost mid-recording, a
+     * Recording Session cut off by a crash), until he dismisses it.
+     */
+    alert: string | null;
+    /** The last Recording Session's frames lost, until the next Record. */
+    framesLost: FramesLost | null;
   };
 
   export type Action =
@@ -47,6 +55,7 @@ export namespace newRecorderReducer {
         insertionPoint: InsertionPoint;
       }
     | { type: "press-stop" }
+    | { type: "dismiss-alert" }
     | { type: "press-retry" }
     | { type: "retry-camera-failed"; message: string }
     | { type: "start-recording-failed"; message: string }
@@ -71,7 +80,15 @@ export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
   previews: null,
   speaking: false,
   error: null,
+  alert: null,
+  framesLost: null,
 });
+
+export const CAMERA_LOST_ALERT =
+  "The Cam Link stopped sending video, so recording stopped. Everything up to then is kept, Clips included. Check its USB cable, or unplug and replug it, then press Record to carry on.";
+
+export const CRASHED_ALERT =
+  "The recorder crashed during the last recording. Its files were repaired and the Clips up to the crash are kept. Press Record to carry on.";
 
 export const canRecord = (state: newRecorderReducer.State) =>
   state.reachable === true &&
@@ -133,12 +150,25 @@ const heard = (
       return { ...state, speaking: true };
     case "speech-ended":
       return { ...state, speaking: false };
+    case "camera-lost":
+      return {
+        ...state,
+        phase: "idle",
+        speaking: false,
+        // Gone until the recorder reopens it and it goes live again.
+        camera: { kind: "closed" },
+        alert: CAMERA_LOST_ALERT,
+        error: message.errors.length > 0 ? message.errors.join("\n") : null,
+      };
     case "recording-stopped":
       return {
         ...state,
         phase: "idle",
         speaking: false,
-        error: message.errors.length > 0 ? message.errors.join("\n") : null,
+        error:
+          message.errors.length > 0 ? message.errors.join("\n") : state.error,
+        alert: message.crashed ? CRASHED_ALERT : state.alert,
+        framesLost: message.framesLost,
       };
     case "recorder-failed":
       return { ...state, error: message.message };
@@ -162,7 +192,15 @@ export const newRecorderReducer: EffectReducer<
         silenceLength: action.silenceLength,
         insertionPoint: action.insertionPoint,
       });
-      return { ...state, phase: "starting", error: null };
+      return {
+        ...state,
+        phase: "starting",
+        error: null,
+        alert: null,
+        framesLost: null,
+      };
+    case "dismiss-alert":
+      return { ...state, alert: null };
     case "press-stop":
       if (!canStop(state)) return state;
       exec({ type: "stop-recording" });

@@ -82,6 +82,20 @@ export type RecordingSessionFiles = {
   mic: string;
 };
 
+/**
+ * Frames lost in a Recording Session, per picture file: the frames each
+ * process's ffmpeg counted as duplicated or dropped in its `-progress`, plus,
+ * for the camera, the frames DirectShow dropped from a full real-time buffer.
+ */
+export type FramesLost = { camera: number; screen: number };
+
+/**
+ * What a file needed after a crash: `readable` as it was, `remuxed` to give
+ * it a duration (the raw file is kept as `<name>.raw.mkv`), `missing`, or
+ * `failed` (left as it was).
+ */
+export type FileRepair = "readable" | "remuxed" | "missing" | "failed";
+
 type Logged<T> = T & { seq: number; recordingSessionId: string };
 
 export type RecordingSessionEvent = Logged<
@@ -98,15 +112,35 @@ export type RecordingSessionEvent = Logged<
   /** Speech in the mic file, in seconds of file time. */
   | { type: "speech-started"; fileTime: number }
   | { type: "speech-ended"; fileTime: number }
+  /**
+   * The camera process quit on its own, or the Cam Link stopped sending
+   * frames: the Recording Session stops (`recording-stopped` follows, reason
+   * `camera-lost`), keeping its files.
+   */
+  | { type: "camera-lost"; fileTime: number; errors: string[] }
   | {
       type: "recording-stopped";
-      /** `ffmpeg-exited`: a process quit on its own and the other was stopped. */
-      reason: "requested" | "ffmpeg-exited";
+      /**
+       * `ffmpeg-exited`: the screen process quit on its own and the camera's
+       * was stopped. `camera-lost`: see `camera-lost`.
+       */
+      reason: "requested" | "ffmpeg-exited" | "camera-lost";
       fileTime: number;
       files: RecordingSessionFiles;
       exitCodes: { screen: number | null; camera: number | null };
+      framesLost: FramesLost;
       /** The last error lines of a process that quit on its own. */
       errors: string[];
+    }
+  /**
+   * Found at start-up with no stop in its log: the recorder service died
+   * while it recorded. Logged then, after a `speech-ended` at the end of the
+   * repaired mic file for a take still going at the crash.
+   */
+  | {
+      type: "recording-crashed";
+      files: RecordingSessionFiles;
+      repairs: Record<keyof RecordingSessionFiles, FileRepair>;
     }
 >;
 
@@ -130,6 +164,11 @@ export type RecorderStatusMessage =
       /** Start-up warnings that do not stop recording (an NVIDIA driver change). */
       warnings: string[];
       state: RecorderState;
+      /**
+       * Recording Sessions this run of the service found cut off and logged
+       * `recording-crashed` for. A client replays each to catch up.
+       */
+      recovered: string[];
     }
   | { type: "state"; state: RecorderState }
   | { type: "refused"; command: RecorderCommand["type"]; message: string }

@@ -166,6 +166,7 @@ export const handleNewRecorderMessage = (
       );
     }
     case "recorder-status":
+    case "camera-lost":
     case "camera-opening":
     case "camera-went-live":
     case "cam-link-not-starting":

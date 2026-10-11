@@ -56,6 +56,12 @@ export type RecorderClientOptions = {
     event: SequencedEvent,
     insertionPointFor: (videoId: string) => InsertionPoint | undefined
   ) => Promise<IngestResult>;
+  /**
+   * The Recording Sessions the database still has as recording. Each is
+   * replayed whenever the recorder service greets the client, so a stop or a
+   * crash it missed (the app server was down) is caught up on.
+   */
+  unfinishedRecordingSessions: () => Promise<string[]>;
   /** How long to wait before reconnecting to a recorder service that went away. */
   reconnectMs: number;
   /** How long a command may take to be carried out. */
@@ -187,6 +193,31 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     });
   };
 
+  /**
+   * Replays, from the start, every Recording Session that may have events
+   * this client never saved: the one recording now, the ones the service
+   * found crashed, and the ones the database still has as recording. What
+   * was saved already is skipped (ingest is idempotent).
+   */
+  const catchUp = (recovered: string[]) => {
+    const ids = new Set(recovered);
+    if (state.kind === "recording") ids.add(state.recordingSessionId);
+    void o
+      .unfinishedRecordingSessions()
+      .catch((error: unknown) => {
+        console.error(
+          "recorder client: could not read unfinished Recording Sessions",
+          error
+        );
+        return [];
+      })
+      .then((unfinished) => {
+        for (const id of unfinished) ids.add(id);
+        for (const recordingSessionId of ids)
+          send({ type: "replay", recordingSessionId, afterSeq: 0 });
+      });
+  };
+
   const onMessage = (message: RecorderMessage) => {
     for (const waiter of waiters.slice()) {
       if (message.type === "refused" && message.command === waiter.command) {
@@ -204,14 +235,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         state = message.state;
         asked = undefined;
         reconcile();
-        // Recording since before this client connected: catch up on the
-        // whole Recording Session; what was saved already is skipped.
-        if (state.kind === "recording")
-          send({
-            type: "replay",
-            recordingSessionId: state.recordingSessionId,
-            afterSeq: 0,
-          });
+        catchUp(message.recovered);
         return publishStatus();
       case "state":
         state = message.state;
@@ -235,7 +259,9 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       case "screen-recorder-tuned":
       case "speech-started":
       case "speech-ended":
-      case "recording-stopped": {
+      case "camera-lost":
+      case "recording-stopped":
+      case "recording-crashed": {
         const { ready, replay } = sequencer.accept(message);
         if (replay) send({ type: "replay", ...replay });
         for (const event of ready) ingest(event);
