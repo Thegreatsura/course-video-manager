@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import { eq } from "drizzle-orm";
-import { recordingSessions } from "@/db/schema";
+import { recordingSessions, videos } from "@/db/schema";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
@@ -18,7 +18,9 @@ import {
   testDb,
   start,
 } from "../clip-service-test-setup";
+import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import { ingestRecorderEvent } from "./ingest.server";
+import { requireRecordableVideo } from "./record-guard.server";
 import { createRecorderEventSequencer } from "./sequencer";
 
 /**
@@ -399,5 +401,55 @@ describe("recorder ingest", () => {
       "recording-stopped",
     ]);
     expect((await readSession())?.status).toBe("stopped");
+  });
+
+  it("refuses a Recording Session on a Video outside the Draft, and says so", async () => {
+    const { videoIds } = await seedCourseVersion(
+      testDb,
+      [{ path: "01-frozen", videos: [{ description: null, clips: [] }] }],
+      { commitState: "published" }
+    );
+    const videoId = videoIds["01-frozen/Explainer"]!;
+    const ingest = recorderIngest();
+
+    await ingest.feed(started(videoId), ...speech(2, 2, 5));
+
+    expect(await readSession()).toBeUndefined();
+    expect(ingest.messages).toEqual([
+      {
+        type: "recorder-failed",
+        message: expect.stringContaining("not the Draft"),
+      },
+    ]);
+  });
+
+  it("lets Record start only on a Draft Video that records with the New recorder", async () => {
+    const canRecord = (videoId: string) =>
+      Effect.runPromise(
+        requireRecordableVideo(testDb as never, videoId).pipe(
+          Effect.as("ok"),
+          Effect.catchAll((e) => Effect.succeed(e._tag))
+        )
+      );
+    const video = await clipService.createVideo("new recorder");
+    expect(await canRecord(video.id)).toBe("RecordOnOBSVideoError");
+
+    await testDb
+      .update(videos)
+      .set({ recorder: "new-recorder" })
+      .where(eq(videos.id, video.id));
+    expect(await canRecord(video.id)).toBe("ok");
+
+    const { videoIds } = await seedCourseVersion(
+      testDb,
+      [{ path: "01-frozen", videos: [{ description: null, clips: [] }] }],
+      { commitState: "published" }
+    );
+    const frozen = videoIds["01-frozen/Explainer"]!;
+    await testDb
+      .update(videos)
+      .set({ recorder: "new-recorder" })
+      .where(eq(videos.id, frozen));
+    expect(await canRecord(frozen)).toBe("VersionNotDraftError");
   });
 });

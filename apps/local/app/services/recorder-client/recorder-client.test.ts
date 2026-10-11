@@ -17,7 +17,10 @@ import {
   clipService,
   testDb,
 } from "../clip-service-test-setup";
-import { createRecorderClient } from "./client.server";
+import {
+  createRecorderClient,
+  type RecorderClientOptions,
+} from "./client.server";
 import {
   ingestRecorderEvent,
   unfinishedRecordingSessions,
@@ -54,33 +57,39 @@ const startService = async (stateDir = tmp()) => {
   return { windows, port: service.port, stateDir };
 };
 
+type Ingest = RecorderClientOptions["ingest"];
+
+/** The real ingest, on PGlite. */
+const saveEvent: Ingest = (event, insertionPointFor) =>
+  Effect.runPromise(
+    ingestRecorderEvent(testDb as never, event, insertionPointFor).pipe(
+      Effect.provide(
+        JobOperationsService.Default.pipe(
+          Layer.provide(Layer.succeed(DrizzleService, testDb as never))
+        )
+      )
+    )
+  );
+
 /** The app server's recorder client, as live.server.ts makes it. */
-const connectClient = (port: number) => {
+const connectClient = (port: number, ingest: Ingest = saveEvent) => {
   const client = createRecorderClient({
     url: `ws://127.0.0.1:${port}`,
-    ingest: (event, insertionPointFor) =>
-      Effect.runPromise(
-        ingestRecorderEvent(testDb as never, event, insertionPointFor).pipe(
-          Effect.provide(
-            JobOperationsService.Default.pipe(
-              Layer.provide(Layer.succeed(DrizzleService, testDb as never))
-            )
-          )
-        )
-      ),
+    ingest,
     unfinishedRecordingSessions: () =>
       Effect.runPromise(unfinishedRecordingSessions(testDb as never)),
     reconnectMs: 50,
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,
+    retryMs: 20,
   });
   cleanups.unshift(() => client.close());
   return client;
 };
 
-const setup = async () => {
+const setup = async (ingest?: Ingest) => {
   const { windows, port, stateDir } = await startService();
-  return { windows, client: connectClient(port), port, stateDir };
+  return { windows, client: connectClient(port, ingest), port, stateDir };
 };
 
 const readSession = () => testDb.query.recordingSessions.findFirst();
@@ -96,6 +105,19 @@ const recordOn = async (client: ReturnType<typeof connectClient>) => {
     })
   );
   return video;
+};
+
+/** The camera's speech detector hears speech over each [from, to]. */
+const speak = (
+  camera: { stderr: (text: string) => void },
+  ...takes: [number, number][]
+) => {
+  for (const [from, to] of takes) {
+    camera.stderr(
+      `[silencedetect @ 1] silence_end: ${from} | silence_duration: 1\r\n`
+    );
+    camera.stderr(`[silencedetect @ 1] silence_start: ${to}\r\n`);
+  }
 };
 
 const clipTimes = async (videoId: string) =>
@@ -210,6 +232,7 @@ describe("the recorder client", () => {
       reconnectMs: 1_000,
       commandTimeoutMs: 1_000,
       closeGraceMs: 0,
+      retryMs: 0,
     });
     cleanups.push(() => client.close());
 
@@ -286,5 +309,65 @@ describe("the recorder client", () => {
     await vi.waitFor(async () =>
       expect((await readSession())?.status).toBe("stopped")
     );
+  });
+
+  it("saves a take whose save failed, in its place, by asking for it again", async () => {
+    let failed = false;
+    const { windows, client } = await setup((event, insertionPointFor) => {
+      if (event.type === "speech-ended" && !failed) {
+        failed = true;
+        return Promise.reject(new Error("the database blinked"));
+      }
+      return saveEvent(event, insertionPointFor);
+    });
+    const video = await recordOn(client);
+    const camera = windows.recorder("camera");
+    camera.stderr("[silencedetect @ 1] silence_start: -0.0001\r\n");
+    speak(camera, [2, 5], [7, 10]);
+
+    await vi.waitFor(async () =>
+      expect(await clipTimes(video.id)).toEqual([
+        [2.15, 5.23],
+        [7.15, 10.23],
+      ])
+    );
+  });
+
+  it("puts the next take where the editor moved the insertion point to while a take was saving", async () => {
+    let release!: () => void;
+    const placedAt: unknown[] = [];
+    const { windows, client } = await setup(
+      async (event, insertionPointFor) => {
+        if (event.type !== "speech-ended")
+          return { videoId: null, messages: [], insertionPoint: null };
+        placedAt.push(insertionPointFor("v1"));
+        if (placedAt.length === 1)
+          await new Promise<void>((r) => (release = r));
+        return {
+          videoId: "v1",
+          messages: [],
+          insertionPoint: { type: "after-clip", databaseClipId: "clip-1" },
+        };
+      }
+    );
+    client.subscribe("v1", () => {});
+    await vi.waitFor(() =>
+      client.startRecording("v1", {
+        silenceLength: "short",
+        insertionPoint: { type: "start" },
+        folder: tmp(),
+      })
+    );
+    const camera = windows.recorder("camera");
+    camera.stderr("[silencedetect @ 1] silence_start: -0.0001\r\n");
+    speak(camera, [2, 5]);
+    await vi.waitFor(() => expect(placedAt).toHaveLength(1));
+
+    client.setInsertionPoint("v1", { type: "after-chapter", chapterId: "Q" });
+    release();
+    speak(camera, [7, 10]);
+
+    await vi.waitFor(() => expect(placedAt).toHaveLength(2));
+    expect(placedAt[1]).toEqual({ type: "after-chapter", chapterId: "Q" });
   });
 });
