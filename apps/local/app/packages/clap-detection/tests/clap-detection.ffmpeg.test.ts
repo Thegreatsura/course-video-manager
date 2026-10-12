@@ -13,6 +13,12 @@ import { detectClaps } from "@/packages/clap-detection";
  * `audioS`, and a camera file (29.97 fps, as the run writes it) in which two
  * "hands" close in at a steady speed and meet at each `videoS`, rest a moment,
  * then part. Light noise in both, so nothing is perfectly still.
+ *
+ * The two ways 2026-10-12's real calibrations lost claps can be added: a
+ * louder room (`hissDb`), so each clap rises only ~25 dB over it, and Matt
+ * swaying the whole time (`sway`), a body at the frame's edge moving back
+ * and forth. And the way their Mic Offset went wrong: a start-up gap
+ * (`gap`), a run of exact silence in the mic just after it starts.
  */
 
 const SAMPLE_RATE = 48_000;
@@ -25,6 +31,10 @@ const CLOSE_S = 0.25;
 const REST_S = 0.15;
 const PART_S = 0.5;
 const OPEN_GAP = 240;
+/** The swaying body: its width, how far its edge sways, and how often, in px and s. */
+const BODY_W = 100;
+const BODY_SWAY = 40;
+const SWAY_PERIOD_S = 1.1;
 
 /** A seeded random in [0, 1), so a fixture is the same every run. */
 const random = (seed: number) => () => {
@@ -37,16 +47,21 @@ const writeSyntheticTake = (o: {
   durationS: number;
   audioS: readonly number[];
   videoS: readonly number[];
+  hissDb?: number;
+  sway?: boolean;
+  gap?: { atS: number; ms: number };
 }) => {
   const rand = random(42);
 
-  // The mic: a -65 dBFS hiss, and each clap a 0.3 ms rise into a noise burst
-  // that dies away with an 8 ms time constant.
+  // The mic: a hiss (-65 dBFS by default), and each clap a 0.3 ms rise into
+  // a noise burst that dies away with an 8 ms time constant.
   const n = Math.round(o.durationS * SAMPLE_RATE);
   const mic = new Float32Array(n * 2);
+  const hiss = 10 ** ((o.hissDb ?? -65) / 20);
   for (let i = 0; i < n; i++) {
-    let x = (rand() - 0.5) * 2 * 10 ** (-65 / 20);
     const t = i / SAMPLE_RATE;
+    if (o.gap && t >= o.gap.atS && t < o.gap.atS + o.gap.ms / 1000) continue;
+    let x = (rand() - 0.5) * 2 * hiss;
     for (const a of o.audioS) {
       const dt = t - a;
       if (dt < 0 || dt > 0.2) continue;
@@ -100,9 +115,14 @@ const writeSyntheticTake = (o: {
   const top = 100;
   const bottom = 260;
   for (let f = 0; f < frames; f++) {
-    const gap = gapAt((f * FPS_DEN) / FPS_NUM);
+    const t = (f * FPS_DEN) / FPS_NUM;
+    const gap = gapAt(t);
     const leftEdge = W / 2 - gap / 2;
     const rightEdge = W / 2 + gap / 2;
+    // The swaying body's edge, at the frame's right.
+    const bodyEdge = o.sway
+      ? W - BODY_W + BODY_SWAY * Math.sin((2 * Math.PI * t) / SWAY_PERIOD_S)
+      : W;
     const frame = video.subarray(f * W * H, (f + 1) * W * H);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -111,7 +131,9 @@ const writeSyntheticTake = (o: {
           y < bottom &&
           ((x >= leftEdge - handW && x < leftEdge) ||
             (x >= rightEdge && x < rightEdge + handW));
-        frame[y * W + x] = (hand ? 200 : 60) + Math.floor(rand() * 4);
+        const body = x >= bodyEdge;
+        frame[y * W + x] =
+          (hand ? 200 : body ? 160 : 60) + Math.floor(rand() * 4);
       }
     }
   }
@@ -173,7 +195,11 @@ describe.skipIf(!hasFfmpeg)("clap detection over real files", () => {
   const take = (
     name: string,
     offsetsMs: readonly number[],
-    audioS = CLAPS_AUDIO_S
+    audioS = CLAPS_AUDIO_S,
+    room: Pick<
+      Parameters<typeof writeSyntheticTake>[0],
+      "hissDb" | "sway" | "gap"
+    > = {}
   ) => {
     const dir = path.join(root, name);
     mkdirSync(dir, { recursive: true });
@@ -182,6 +208,7 @@ describe.skipIf(!hasFfmpeg)("clap detection over real files", () => {
       durationS: 10,
       audioS,
       videoS: CLAPS_AUDIO_S.map((a, i) => a + offsetsMs[i]! / 1000),
+      ...room,
     });
     return Effect.runPromise(
       detectClaps({ ...files, window: WINDOW }).pipe(
@@ -224,5 +251,37 @@ describe.skipIf(!hasFfmpeg)("clap detection over real files", () => {
     expect(result.found).toBe(5);
     expect(result.spreadMs!).toBeGreaterThan(FRAME_MS);
     expect(Math.abs(result.spreadMs! - 65)).toBeLessThan(FRAME_MS);
+  }, 60_000);
+
+  it("finds claps that rise only ~25 dB over a louder room", async () => {
+    const result = await take(
+      "low-rise",
+      [-50, -48, -52, -49, -51],
+      CLAPS_AUDIO_S,
+      { hissDb: -30 }
+    );
+    expect(result.found).toBe(5);
+    expect(Math.abs(result.micOffsetMs! - -50)).toBeLessThan(FRAME_MS);
+  }, 60_000);
+
+  it("finds claps while Matt sways the whole time", async () => {
+    const offsets = [-90, -88, -92, -91, -89];
+    const result = await take("sway", offsets, CLAPS_AUDIO_S, { sway: true });
+    expect(result.found).toBe(5);
+    expect(Math.abs(result.micOffsetMs! - -90)).toBeLessThan(FRAME_MS);
+    expect(result.spreadMs!).toBeLessThanOrEqual(FRAME_MS);
+  }, 60_000);
+
+  it("finds the claps but trusts no Mic Offset when the mic had a start-up gap", async () => {
+    const offsets = [-50, -50, -50, -50, -50];
+    const clean = await take("no-gap", offsets);
+    expect(clean.startUpGap).toBeNull();
+    const result = await take("gap", offsets, CLAPS_AUDIO_S, {
+      gap: { atS: 0.4, ms: 150 },
+    });
+    expect(result.found).toBe(5);
+    expect(result.micOffsetMs).toBeNull();
+    expect(result.startUpGap!.atSeconds).toBeCloseTo(0.4, 2);
+    expect(Math.abs(result.startUpGap!.ms - 150)).toBeLessThan(1);
   }, 60_000);
 });

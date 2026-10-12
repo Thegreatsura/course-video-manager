@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { runToEnd, type Launcher } from "./launcher";
 import type { CalibrationMeasurement, CalibrationWindow } from "./protocol";
 
@@ -13,13 +15,19 @@ import type { CalibrationMeasurement, CalibrationWindow } from "./protocol";
  * gives: the noise floor over the silence, the integrated speech loudness
  * over the reading rounds, and the true peak over the whole take less the
  * clap window (a clap must never fail the level check). The claps
- * themselves are found by the app server (`clap-detection`).
+ * themselves are found by the app server (`clap-detection`). Both
+ * processes' ffmpeg logs are kept in the folder, so a stall in the capture
+ * (a start-up gap in the mic) can be confirmed afterwards.
  */
 
 /** The run's mic file, in the run's own folder. */
 export const CALIBRATION_MIC_FILE = "mic.wav";
 /** The run's camera file, beside it. */
 export const CALIBRATION_CAMERA_FILE = "camera.mkv";
+/** The capture's ffmpeg log (all it printed), beside them... */
+export const CALIBRATION_CAPTURE_LOG = "ffmpeg-capture.log";
+/** ...and the measurement's. */
+export const CALIBRATION_ANALYSIS_LOG = "ffmpeg-analysis.log";
 
 const trim = (w: CalibrationWindow) =>
   `atrim=start=${w.startSeconds}:end=${w.endSeconds}`;
@@ -109,7 +117,10 @@ export const parseCalibrationAnalysis = (
   };
 };
 
-/** Measures a run's file in `dir` (a WSL path); rejects with what ffmpeg said. */
+/**
+ * Measures a run's file in `dir` (a WSL path), keeping ffmpeg's log beside
+ * it; rejects with what ffmpeg said.
+ */
 export const measureCalibration = async (o: {
   launch: Launcher;
   dir: string;
@@ -125,6 +136,7 @@ export const measureCalibration = async (o: {
       cwd: o.dir,
     })
   );
+  fs.writeFileSync(path.join(o.dir, CALIBRATION_ANALYSIS_LOG), stderr);
   const measured = code === 0 ? parseCalibrationAnalysis(stderr) : undefined;
   if (!measured) {
     const said = stderr

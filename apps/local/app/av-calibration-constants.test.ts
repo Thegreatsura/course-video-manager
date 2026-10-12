@@ -23,6 +23,7 @@ const GOOD: CalibrationMeasures = {
   truePeakDb: -9,
   clapsFound: 5,
   clapSpreadMs: 8,
+  micOffsetMs: -47,
 };
 
 describe("judging an AV Calibration", () => {
@@ -68,6 +69,16 @@ describe("judging an AV Calibration", () => {
       ],
     ],
     [
+      "claps found, but the mic's start-up gap left no Mic Offset",
+      { micOffsetMs: null },
+      [{ kind: "mic-start-up-gap" }],
+    ],
+    [
+      "no clap found, so no Mic Offset either: one miss, not two",
+      { clapsFound: 0, clapSpreadMs: null, micOffsetMs: null },
+      [{ kind: "too-few-claps", found: 0 }],
+    ],
+    [
       "a good level but bad claps",
       { clapsFound: 1, clapSpreadMs: 0 },
       [{ kind: "too-few-claps", found: 1 }],
@@ -94,6 +105,9 @@ describe("judging an AV Calibration", () => {
     );
     expect(describeClapMiss({ kind: "claps-disagree", spreadMs: 25.4 })).toBe(
       "Claps disagree by 25 ms"
+    );
+    expect(describeClapMiss({ kind: "mic-start-up-gap" })).toBe(
+      "The mic dropped out as it started: its Mic Offset can't be trusted"
     );
   });
 
@@ -230,6 +244,7 @@ describe("whether a Recorder may start (the gate)", () => {
         truePeakDb: -9,
         clapsFound: null,
         clapSpreadMs: null,
+        micOffsetMs: null,
       })
     ).toBe(false);
   });
