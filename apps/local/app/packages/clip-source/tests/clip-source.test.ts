@@ -59,6 +59,7 @@ describe("an OBS Clip's source", () => {
       inputVideo: OBS_FILE,
       startTime: 12.5,
       duration: 7.25,
+      leadingSilenceSeconds: 0,
     });
   });
 
@@ -202,6 +203,31 @@ describe("a new-recorder Clip's source", () => {
       `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/mic.mkv`)}#t=9.85,13.85`
     );
     expect(clipPlaybackClock(source)).toEqual({ offsetSeconds: 0.15 });
+  });
+
+  it("hands ffmpeg its mic, read the mic offset earlier", () => {
+    expect(clipFfmpegInput(source)).toEqual({
+      inputVideo: `${SESSION_DIR}/mic.mkv`,
+      startTime: 9.85,
+      duration: 4,
+      leadingSilenceSeconds: 0,
+    });
+  });
+
+  it("never asks ffmpeg to read the mic before it starts", () => {
+    // Picture 0.05–4.05 is mic −0.1–3.95: the mic is silent for its first
+    // 0.1 s, so it is read from 0 and the Clip's 4 s still stand.
+    const early = clipSource({
+      ...newRecorderClip,
+      sourceStartTime: 0.05,
+      sourceEndTime: 4.05,
+    });
+    expect(clipFfmpegInput(early)).toEqual({
+      inputVideo: `${SESSION_DIR}/mic.mkv`,
+      startTime: 0,
+      duration: 4,
+      leadingSilenceSeconds: 0.1,
+    });
   });
 
   it("draws its picture from its camera and screen, in the picture's clock", () => {
