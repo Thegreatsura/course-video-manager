@@ -255,6 +255,14 @@ export const SCRIPT_SCHEDULE: readonly ScriptStep[] = (() => {
 
 export const SCRIPT_END_SECONDS = SCRIPT_SCHEDULE.at(-1)!.endSeconds;
 
+/**
+ * Why Start is refused when another program (OBS) holds the Cam Link: the
+ * session never starts, and nothing is recorded or stored. CVM never closes
+ * OBS itself; Matt does, then presses Start again.
+ */
+export const CLOSE_OBS_TO_CALIBRATE =
+  "Close OBS to calibrate: another program has the Cam Link.";
+
 export type TimeWindow = { startSeconds: number; endSeconds: number };
 
 /**

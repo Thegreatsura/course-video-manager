@@ -342,6 +342,27 @@ export const CalibrationSession = ({
         </>
       )}
 
+      {session.kind === "camera-busy" && (
+        <div className="flex items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="text-xl font-semibold text-amber-500">
+              Close OBS to calibrate
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Another program has the Cam Link, so the session did not start and
+              nothing was recorded. Close OBS, then press Start.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            onClick={onStart}
+            disabled={state.meter.status !== "running"}
+          >
+            Start
+          </Button>
+        </div>
+      )}
+
       {session.kind === "failed" && (
         <div className="space-y-3">
           <div className="text-xl font-semibold text-red-500">
