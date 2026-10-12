@@ -48,7 +48,8 @@ export interface Layout {
 }
 
 const LANDSCAPE = {
-  version: 1,
+  // 2: items scaled bilinear, as OBS draws them (was ffmpeg's bicubic).
+  version: 2,
   canvas: { width: 1920, height: 1080 },
   scenes: {
     Camera: [
@@ -93,7 +94,8 @@ const LANDSCAPE = {
 const SHORT = {
   // 2: the screen is the Spacedesk display's left 1080x1080 square, 1:1, not
   // the whole frame stretched to 1080x1920.
-  version: 2,
+  // 3: items scaled bilinear, as OBS draws them (was ffmpeg's bicubic).
+  version: 3,
   canvas: { width: 1080, height: 1920 },
   scenes: {
     // TikTok Face: the 4K camera at scale 0.891 (3423x1925) at x=-1157, y=0.

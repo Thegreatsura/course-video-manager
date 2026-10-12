@@ -8,6 +8,8 @@ import { ConfigProvider, Effect, Layer } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { clipComposite, clipSource } from "@/packages/clip-source";
 import { sceneFilterGraph } from "@/packages/scene-layout";
+import { DEFAULT_MIC_EQ } from "@cvm/core/features/videos/recorder";
+import { micEqFilters } from "./clip-segment-args";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import { SidecarContextTest } from "./sidecar-context";
@@ -206,11 +208,11 @@ describe.skipIf(!hasFfmpeg)("exporting a Video of CVM-recorder Clips", () => {
           output: "composite",
         })
       );
-      // The mic is read 150 ms earlier than the picture, with the highs down.
+      // The mic is read 150 ms earlier than the picture, through OBS's EQ.
       expect(command).toContain(
         `-ss ${clip.startTime - 0.15} -t ${clip.duration} -i ${path.join(dir, "mic.mkv")}`
       );
-      expect(command).toContain("highshelf=f=5000:g=-6.1");
+      expect(command).toContain(micEqFilters(DEFAULT_MIC_EQ).join(","));
     });
     expect(clips[0]!.composite!.segments.map((s) => s.scene)).toEqual([
       "Code",

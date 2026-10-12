@@ -25,7 +25,7 @@ const graphs = {
     "[0:v]nullsink",
     "[1:v]split=1[camera0]",
     "color=c=black:s=1920x1080:r=60:d=1[base0]",
-    "[camera0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item0_0]",
+    "[camera0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item0_0]",
     "[base0][item0_0]overlay=x=2:y=2:eof_action=repeat[seg0_0]",
     "[seg0_0]null[seg0]",
     "[seg0]format=yuv420p[v]",
@@ -34,9 +34,9 @@ const graphs = {
     "[0:v]split=1[screen0]",
     "[1:v]split=1[camera0]",
     "color=c=black:s=1920x1080:r=60:d=1[base0]",
-    "[screen0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item0_0]",
+    "[screen0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item0_0]",
     "[base0][item0_0]overlay=x=0:y=0:eof_action=repeat[seg0_0]",
-    "[camera0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*0.370833:h=ih*0.961111:x=iw*0.31875:y=ih*0,scale=491:716[item0_1]",
+    "[camera0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*0.370833:h=ih*0.961111:x=iw*0.31875:y=ih*0,scale=491:716:flags=bilinear[item0_1]",
     "[seg0_0][item0_1]overlay=x=1429:y=364:eof_action=repeat[seg0_1]",
     "[seg0_1]null[seg0]",
     "[seg0]format=yuv420p[v]",
@@ -45,7 +45,7 @@ const graphs = {
     "[0:v]split=1[screen0]",
     "[1:v]nullsink",
     "color=c=black:s=1920x1080:r=60:d=1[base0]",
-    "[screen0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item0_0]",
+    "[screen0]trim=start=0:end=1,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item0_0]",
     "[base0][item0_0]overlay=x=0:y=0:eof_action=repeat[seg0_0]",
     "[seg0_0]null[seg0]",
     "[seg0]format=yuv420p[v]",
@@ -53,9 +53,9 @@ const graphs = {
 };
 
 describe("the Landscape layout", () => {
-  it("stays version 1 on the 1920x1080 canvas", () => {
-    expect(LAYOUT_VERSION).toBe(1);
-    expect(LAYOUT_VERSIONS.landscape).toBe(1);
+  it("is version 2 on the 1920x1080 canvas", () => {
+    expect(LAYOUT_VERSION).toBe(2);
+    expect(LAYOUT_VERSIONS.landscape).toBe(2);
     expect(CANVAS).toEqual({ width: 1920, height: 1080 });
     expect(CANVASES.landscape).toEqual(CANVAS);
   });
@@ -142,17 +142,17 @@ describe("the Landscape layout", () => {
         "[2:v]split=2[screen0][screen1]",
         "[3:v]split=2[camera0][camera1]",
         "color=c=black:s=1920x1080:r=60:d=1[base0]",
-        "[camera0]trim=start=0.5:end=1.5,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item0_0]",
+        "[camera0]trim=start=0.5:end=1.5,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item0_0]",
         "[base0][item0_0]overlay=x=2:y=2:eof_action=repeat[seg0_0]",
         "[seg0_0]null[seg0]",
         "color=c=black:s=1920x1080:r=60:d=1.5[base1]",
-        "[screen0]trim=start=1.5:end=3,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item1_0]",
+        "[screen0]trim=start=1.5:end=3,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item1_0]",
         "[base1][item1_0]overlay=x=0:y=0:eof_action=repeat[seg1_0]",
-        "[camera1]trim=start=1.5:end=3,setpts=PTS-STARTPTS,fps=60,crop=w=iw*0.370833:h=ih*0.961111:x=iw*0.31875:y=ih*0,scale=491:716[item1_1]",
+        "[camera1]trim=start=1.5:end=3,setpts=PTS-STARTPTS,fps=60,crop=w=iw*0.370833:h=ih*0.961111:x=iw*0.31875:y=ih*0,scale=491:716:flags=bilinear[item1_1]",
         "[seg1_0][item1_1]overlay=x=1429:y=364:eof_action=repeat[seg1_1]",
         "[seg1_1]null[seg1]",
         "color=c=black:s=1920x1080:r=60:d=1.5[base2]",
-        "[screen1]trim=start=3:end=4.5,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080[item2_0]",
+        "[screen1]trim=start=3:end=4.5,setpts=PTS-STARTPTS,fps=60,crop=w=iw*1:h=ih*1:x=iw*0:y=ih*0,scale=1920:1080:flags=bilinear[item2_0]",
         "[base2][item2_0]overlay=x=0:y=0:eof_action=repeat[seg2_0]",
         "[seg2_0]null[seg2]",
         "[seg0][seg1][seg2]concat=n=3:v=1:a=0,format=yuv420p[out]",

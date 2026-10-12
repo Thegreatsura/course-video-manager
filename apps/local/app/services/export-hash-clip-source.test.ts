@@ -107,13 +107,14 @@ describe("a CVM-recorder Clip's Export Hash", () => {
 
 describe("a Landscape CVM-recorder Clip's Export Hash", () => {
   it("keeps its address now Recording Sessions remember their format", () => {
-    // Computed on main before the Short layout reached the Export Hash.
+    // Computed on main before the Short layout reached the Export Hash, then
+    // moved once by layout versions 2 and 3 (bilinear item scaling).
     const clips = toExportClips([sessionRow(150)]);
     expect(computeExportHash(clips, "landscape")).toBe(
-      "cf1e0f9b1e019ae88d5bd17e6da75709"
+      "040fe2894dcfead6bb03c0086f432b97"
     );
     expect(computeExportHash(clips, "short")).toBe(
-      "177bfa2abcf20a2b32b0f2746877bfa0"
+      "7d710ca8c4838658be6378bf73a76a28"
     );
   });
 });

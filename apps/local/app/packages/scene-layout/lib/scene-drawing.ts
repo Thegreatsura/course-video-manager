@@ -143,6 +143,14 @@ export interface SceneFilterGraphInput {
 const FPS = 60;
 
 /**
+ * How each item is scaled: bilinear, as OBS draws a scene item whose scale
+ * filter is "Disable" (every item in Matt's scenes). ffmpeg's default bicubic
+ * rings at hard edges, which pushed a Short's upscaled camera to YMAX ~245
+ * where OBS's draw of the same light peaks ~239.
+ */
+const ITEM_SCALE_FLAGS = "bilinear";
+
+/**
  * The `-filter_complex` graph that draws `segments` back to back as one
  * 60 fps yuv420p stream on the format's canvas (1920x1080 Landscape, 1080x1920
  * Short), labelled `[output]` (export, stills).
@@ -175,7 +183,7 @@ export const sceneFilterGraph = ({
       const { x, y, w, h } = item.crop;
       chains.push(
         `[${branch}]trim=start=${start}:end=${end},setpts=PTS-STARTPTS,fps=${FPS},` +
-          `crop=w=iw*${w}:h=ih*${h}:x=iw*${x}:y=ih*${y},scale=${dw}:${dh}[item${k}_${j}]`
+          `crop=w=iw*${w}:h=ih*${h}:x=iw*${x}:y=ih*${y},scale=${dw}:${dh}:flags=${ITEM_SCALE_FLAGS}[item${k}_${j}]`
       );
       const next = `seg${k}_${j}`;
       chains.push(
