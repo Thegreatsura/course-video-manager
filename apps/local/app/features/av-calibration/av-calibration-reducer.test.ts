@@ -9,6 +9,7 @@ import {
   avCalibrationReducer,
   createInitialAVCalibrationState,
   currentStep,
+  liveClaps,
 } from "./av-calibration-reducer";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import type { SavedAVCalibration } from "./calibration-wire";
@@ -187,5 +188,38 @@ describe("the AV Calibration page's session", () => {
       kind: "failed",
       message: notStarting,
     });
+  });
+
+  it("shows the run's clap marks during the clap step only, ignoring another run's", () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState(createMockExec())
+    );
+    const clapsAt = SCRIPT_SCHEDULE.find((s) => s.kind === "clap-ready")!;
+    const readAt = SCRIPT_SCHEDULE.find((s) => s.kind === "read")!;
+    const marks = [
+      { audioS: 4.2 + 17.1, seen: true },
+      { audioS: 4.2 + 18.6, seen: false },
+    ];
+    t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
+      .send({ type: "start-clicked" })
+      .send({
+        type: "calibration-started",
+        calibrationId: "run-1",
+        mic: "Voicemeeter Out B1",
+        scriptStartSeconds: 4.2,
+      })
+      .send(reading(4.2 + 1));
+    expect(liveClaps(t.getState())).toBeNull();
+
+    t.send(reading(4.2 + clapsAt.startSeconds + 0.1));
+    expect(liveClaps(t.getState())).toEqual([]);
+    t.send({ type: "calibration-claps", calibrationId: "run-1", claps: marks })
+      .send({ type: "calibration-claps", calibrationId: "run-0", claps: [] })
+      .send(reading(4.2 + clapsAt.startSeconds + 5));
+    expect(liveClaps(t.getState())).toEqual(marks);
+
+    t.send(reading(4.2 + readAt.startSeconds + 0.1));
+    expect(liveClaps(t.getState())).toBeNull();
   });
 });

@@ -10,7 +10,7 @@
 //
 // `matchClaps` is the pure part, over the decoded onset and motion series, so
 // it is testable without ffmpeg; `findAudioOnsets` and `findStartUpGap` are
-// the mic's pure parts.
+// the mic's pure parts. The same rules run live during the run (`live.ts`).
 export {
   detectClaps,
   ClapDetectionError,

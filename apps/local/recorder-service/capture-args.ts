@@ -3,6 +3,10 @@ import {
   silencedetectFilter,
   type SilenceLength,
 } from "../app/silence-detection-constants";
+import {
+  MOTION_FILTERS,
+  MOTION_KEY,
+} from "../app/packages/clap-detection/live";
 
 /**
  * THE CAPTURE, AS THE RIG (#1992) PROVED IT: two ffmpeg.exe processes writing
@@ -280,7 +284,9 @@ const micOnClock = (t0: string) =>
  * readings (timed in mic file seconds: it counts the samples the file gets)
  * to `micFile`, raw PCM; the camera, scaled to 640x360 on the GPU (enough to
  * see hands meet), to `cameraFile`. Both tagged as the meter is, so a run
- * left behind can be found and stopped.
+ * left behind can be found and stopped. The 640x360 picture is also read
+ * for motion (`MOTION_FILTERS`, as the offline clap pass reads the file),
+ * each frame's printed to the log, for the live clap marks (#2121).
  */
 export const calibrationCaptureArgs = (o: {
   t0Ms: number;
@@ -303,7 +309,8 @@ export const calibrationCaptureArgs = (o: {
     ...micInput(o.mic),
     "-filter_complex",
     [
-      `${cameraOnClock(t0)},hwupload_cuda,scale_cuda=640:360[cam]`,
+      `${cameraOnClock(t0)},hwupload_cuda,scale_cuda=640:360,split[cam][camm]`,
+      `[camm]hwdownload,format=nv12,${MOTION_FILTERS.join(",")},metadata=mode=print:key=${MOTION_KEY},nullsink`,
       // framelog=info: ebur128 logs each 100 ms reading at info, not verbose.
       `${micOnClock(t0)},ebur128=framelog=info[mic]`,
     ].join(";"),

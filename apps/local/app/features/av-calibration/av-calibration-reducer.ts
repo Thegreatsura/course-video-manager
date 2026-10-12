@@ -11,6 +11,7 @@ import type {
   FinishCalibrationRequest,
   SavedAVCalibration,
 } from "./calibration-wire";
+import type { ClapMark } from "@/packages/clap-detection/live";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
 
@@ -39,6 +40,11 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * soon as OBS lets go. A camera that opens but sends nothing is refused with
  * the "Cam Link not starting" message, as any other refusal.
  *
+ * During the clap step each clap shows as the mic hears it, marked seen once
+ * the camera saw its contact (`calibration-claps`, worked out by the
+ * recorder service with the result's own rules, so the claps marked seen are
+ * the claps the result finds).
+ *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
  * and timed onto the same axis through the reading heard last.
  *
@@ -66,6 +72,8 @@ export namespace avCalibrationReducer {
         seconds: number;
         /** In seconds of the run's files, as the browser trace is timed. */
         anchor: Anchor | null;
+        /** The claps heard so far, each seen or not (`calibration-claps`). */
+        claps: ClapMark[];
       }
     | { kind: "analysing"; calibrationId: string }
     | {
@@ -279,8 +287,18 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
           scriptStartSeconds: action.scriptStartSeconds,
           seconds: 0,
           anchor: null,
+          claps: [],
         },
       };
+    }
+    case "calibration-claps": {
+      const session = state.session;
+      if (
+        session.kind !== "running" ||
+        session.calibrationId !== action.calibrationId
+      )
+        return state;
+      return { ...state, session: { ...session, claps: action.claps } };
     }
     case "calibration-failed": {
       const session = state.session;
@@ -425,3 +443,17 @@ export const currentStep = (state: State) =>
   state.session.kind === "running"
     ? (stepAt(state.session.seconds) ?? null)
     : null;
+
+/**
+ * The claps to show now: during the clap step (hands up, then each clap),
+ * every clap heard so far, each seen or not; null outside it.
+ */
+export const liveClaps = (state: State): ClapMark[] | null => {
+  const now = currentStep(state);
+  if (
+    state.session.kind !== "running" ||
+    (now?.step.kind !== "clap-ready" && now?.step.kind !== "clap")
+  )
+    return null;
+  return state.session.claps;
+};
