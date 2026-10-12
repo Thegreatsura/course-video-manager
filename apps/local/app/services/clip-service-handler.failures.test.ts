@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit, Option } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   handleClipServiceEvent,
   type VideoProcessingAdapter,
@@ -21,6 +21,11 @@ const failureTag = <A, E>(exit: Exit.Exit<A, E>) =>
         (e) => (e as { _tag: string })._tag
       )
     : Option.none();
+
+// An OBS append compares Footage paths in their root-relative form.
+beforeAll(() => {
+  process.env.STORAGE_ROOTS = "/mnt/t";
+});
 
 describe("handleClipServiceEvent: a rejected promise is a typed failure", () => {
   const noObs: VideoProcessingAdapter = {

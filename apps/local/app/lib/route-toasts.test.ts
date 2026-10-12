@@ -1,9 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NO_TOASTS, toastsAllowed } from "./route-toasts";
 import * as teleprompter from "@/routes/teleprompter";
 import * as playgroundHome from "@/routes/diagram-playground._index";
 import * as playgroundDiagram from "@/routes/diagram-playground.$diagramId";
 import * as appLayout from "@/routes/_app";
+
+// The app's layer refuses to load without STORAGE_ROOTS (its startup check);
+// these tests read no file, so any root will do.
+vi.hoisted(() => {
+  process.env.STORAGE_ROOTS ??= "/test-storage-root";
+});
 
 // A route module, as root's `useMatches()` sees it: the root match plus its handle.
 const matchesFor = (...modules: object[]) => [

@@ -37,6 +37,7 @@ import { AutofillService } from "./autofill-service";
 import { DiagramThumbnailStoreLive } from "./diagram-thumbnail-store.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { assertServiceUrlOverrides } from "./service-url-guard";
+import { assertStorageRoots } from "./storage-roots";
 
 const CloudinaryMarkdownLayer = CloudinaryMarkdownService.Default.pipe(
   Layer.provide(CloudinaryService.Default)
@@ -103,6 +104,9 @@ const autofillLayer = AutofillService.DefaultWithoutDependencies.pipe(
 // Before any service is built: a base-URL override in .env that names a host
 // other than the service's own (or loopback) would send it the real token.
 assertServiceUrlOverrides(process.env);
+// And before any file is read: without STORAGE_ROOTS no Footage, export or
+// Clip Mockup can be found, so the server refuses to start, naming it.
+assertStorageRoots(process.env);
 
 export const layerLive = Layer.mergeAll(
   coreLayer,

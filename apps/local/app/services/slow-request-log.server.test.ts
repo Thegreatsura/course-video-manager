@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { countSqlStatement } from "@cvm/core/db/sql-statement-tally";
 import { makeLoader, runRouteEffect } from "./route-action.server";
@@ -8,6 +8,12 @@ import {
   SLOW_REQUEST_PREFIX,
   tallyStatements,
 } from "./slow-request-log.server";
+
+// The app's layer refuses to load without STORAGE_ROOTS (its startup check);
+// these tests read no file, so any root will do.
+vi.hoisted(() => {
+  process.env.STORAGE_ROOTS ??= "/test-storage-root";
+});
 
 /** What the Drizzle logger does per statement, after `ms` of waiting. */
 const statementAfter = (ms: number) =>

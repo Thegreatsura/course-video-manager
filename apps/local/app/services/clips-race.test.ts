@@ -33,6 +33,8 @@ let testDb: TestDb;
 let pglite: PGlite;
 
 beforeAll(async () => {
+  // An OBS append compares Footage paths in their root-relative form.
+  process.env.STORAGE_ROOTS = "/mnt/t";
   const result = await createTestDb();
   testDb = result.testDb;
   pglite = result.pglite as PGlite;

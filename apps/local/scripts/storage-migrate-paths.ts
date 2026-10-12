@@ -5,7 +5,8 @@
  *   pnpm storage:migrate-paths            # dry run: report only, writes nothing
  *   pnpm storage:migrate-paths --apply    # rewrite, in one transaction
  *
- * Safe in either order with `storage:rename-exports`, and safe to run twice:
+ * --apply refuses while this checkout's app (port 5173) or Sidecar is
+ * running: stop `pnpm dev` first. Safe in either order with `storage:rename-exports`, and safe to run twice:
  * a relative path is never touched again. Paths under no root (Recording
  * Sessions in ~/Videos) are reported and left as they are. It writes around
  * the Draft guard on purpose — see packages/core/services/storage-path-migration.server.ts.
@@ -14,11 +15,20 @@ import { migrateStoragePaths } from "@cvm/core/services/storage-path-migration.s
 import type { Database } from "@cvm/core/services/drizzle-service.server";
 import { readStorageRootsSync } from "@/services/storage-roots";
 import { scriptDrizzle } from "./script-database-url";
+import { CVM_APP_PORT, refuseApplyWhileCvmRuns } from "./running-cvm";
+import { sidecarSocketPath } from "@/services/sidecar-socket.server";
 
 const apply = process.argv.includes("--apply");
 const roots = readStorageRootsSync();
 console.log(`Storage Roots: ${roots.join(", ")}`);
 console.log(apply ? "Mode: APPLY" : "Mode: dry run (pass --apply to write)");
+
+if (apply) {
+  await refuseApplyWhileCvmRuns({
+    appPort: CVM_APP_PORT,
+    sidecarSocket: sidecarSocketPath(),
+  });
+}
 
 const { db } = scriptDrizzle();
 const report = await migrateStoragePaths(db as Database, { roots, apply });

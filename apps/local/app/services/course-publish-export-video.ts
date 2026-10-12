@@ -180,30 +180,6 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       // list of padded durations, used for both, so the file asked for and
       // the file checked for cannot differ.
       const clipDurations = paddedClipDurationsInSeconds(video.clips);
-      // Each Clip's files found on a Storage Root. One that is on none
-      // fails the export with "Footage not found (E: offline?)".
-      const renderClips = yield* Effect.forEach(video.clips, (clip, index) =>
-        Effect.gen(function* () {
-          const source = yield* resolveClipSourceFiles(clipSource(clip), roots);
-          const input = clipFfmpegInput(source);
-          const asked = clipDurations[index]!;
-          return {
-            ...input,
-            duration: asked.duration,
-            pauseType: asked.pauseType,
-            zoomType: clip.zoomType,
-            // Drawn over everything the Clip outputs, long Pause included.
-            composite: clipComposite(source, {
-              durationSeconds: clipExportDurationInSeconds(asked),
-            }),
-          };
-        })
-      ).pipe(
-        Effect.mapError(
-          (error) => new ExportError({ message: error.message, cause: error })
-        )
-      );
-
       const expectedDurationInSeconds =
         expectedExportDurationInSeconds(clipDurations);
 
@@ -235,6 +211,32 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
         yield* removeQuietly(existingPath);
         yield* removeQuietly(sidecarPath(existingPath));
       }
+
+      // Each Clip's files found on a Storage Root. One that is on none
+      // fails the export with "Footage not found (E: offline?)". Looked up
+      // only once a sound export has not been found above: an export whose
+      // Footage is on an unplugged drive still ships.
+      const renderClips = yield* Effect.forEach(video.clips, (clip, index) =>
+        Effect.gen(function* () {
+          const source = yield* resolveClipSourceFiles(clipSource(clip), roots);
+          const input = clipFfmpegInput(source);
+          const asked = clipDurations[index]!;
+          return {
+            ...input,
+            duration: asked.duration,
+            pauseType: asked.pauseType,
+            zoomType: clip.zoomType,
+            // Drawn over everything the Clip outputs, long Pause included.
+            composite: clipComposite(source, {
+              durationSeconds: clipExportDurationInSeconds(asked),
+            }),
+          };
+        })
+      ).pipe(
+        Effect.mapError(
+          (error) => new ExportError({ message: error.message, cause: error })
+        )
+      );
 
       // Where every Overlay on this Video lands on the flattened timeline. The
       // Clips are in playback order with the archived ones already gone, so a

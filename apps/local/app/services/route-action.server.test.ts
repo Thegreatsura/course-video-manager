@@ -3,6 +3,12 @@ import { Data, Effect, Layer, ManagedRuntime, Runtime } from "effect";
 import { createStaticHandler } from "react-router";
 import { makeAction, makeLoader } from "./route-action.server";
 
+// The app's layer refuses to load without STORAGE_ROOTS (its startup check);
+// these tests read no file, so any root will do.
+vi.hoisted(() => {
+  process.env.STORAGE_ROOTS ??= "/test-storage-root";
+});
+
 /**
  * What a failed route throws: react-router's `data(message, init)`, unwrapped.
  * Naming the shape HERE is what keeps `as any` out of the assertions below.
