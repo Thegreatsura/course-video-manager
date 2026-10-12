@@ -43,11 +43,13 @@ export const RECORDER_SERVICE_PORT = 5177;
  * Calibration run; 5: Record's silence threshold; 6: the calibration's true
  * peak; 7: Record carries its AV Calibration, and is gated on it; 8: the
  * recording-started event's `avCalibrationId`, renamed from Audio
- * Calibration). The app server reloads on a change and the service does not
+ * Calibration; 9: the calibration run records the camera too, starts once
+ * live, and cuts its clap window out of the true peak; 10: the
+ * recording-started event's `devices`, for the pair's Mic Offset). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 8;
+export const RECORDER_PROTOCOL_VERSION = 10;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -169,20 +171,24 @@ export type RecorderCommand =
   | { type: "stop-meter" }
   /**
    * Start an AV Calibration's run (`calibration-run.ts`): the meter's
-   * process, which also writes the mic to a file in a new folder under
-   * `folder` (a WSL path), its readings timed in that file's seconds. Refused
-   * while recording, as Record is refused while it runs.
+   * process, which also opens the camera and writes the mic and the camera
+   * to files in a new folder under `folder` (a WSL path), on one shared
+   * clock, its readings timed in the files' seconds. Answered once the run
+   * is live (`calibration-started`), or refused with why it could not open.
+   * Refused while recording, as Record is refused while it runs.
    */
   | { type: "start-calibration"; folder: string }
   /**
-   * End the run and measure its file: the noise floor over `silence` and the
-   * integrated speech loudness over the `speech` windows, in file seconds.
-   * The meter carries on after it.
+   * End the run and measure its mic file: the noise floor over `silence`,
+   * the integrated speech loudness over the `speech` windows, and the true
+   * peak over the whole take but `claps`, in file seconds. The meter carries
+   * on after it.
    */
   | {
       type: "finish-calibration";
       silence: CalibrationWindow;
       speech: readonly CalibrationWindow[];
+      claps: CalibrationWindow;
     }
   /** End the run and delete its file: a cancelled calibration keeps nothing. */
   | { type: "cancel-calibration" };
@@ -263,6 +269,12 @@ export type RecordingSessionEvent = Logged<
       thresholdDb?: number;
       /** The AV Calibration that set it; null or absent: none. */
       avCalibrationId?: string | null;
+      /**
+       * The camera and mic it records (DirectShow names): the pair whose Mic
+       * Offset it starts with. Absent in logs written before protocol 10:
+       * DEFAULT_MIC_OFFSET_MS.
+       */
+      devices?: { camera: string; mic: string };
     }
   /**
    * The scene from here on, in picture file time. Every Recording Session
@@ -374,21 +386,28 @@ export type RecorderStatusMessage =
   /** `message`: why, when it quit without being asked; null when asked. */
   | { type: "meter-stopped"; message: string | null }
   /**
-   * An AV Calibration's run started: from here on, `meter-reading`s are
-   * timed in seconds of `micFile` (a WSL path), until it ends. Broadcast.
+   * An AV Calibration's run is live: from here on, `meter-reading`s are
+   * timed in seconds of `micFile` and `cameraFile` (WSL paths, one clock),
+   * until it ends. The files' clock started before the camera opened, so
+   * the script starts at `scriptStartSeconds`. Broadcast.
    */
   | {
       type: "calibration-started";
       calibrationId: string;
       mic: string;
       micFile: string;
+      camera: string;
+      cameraFile: string;
+      scriptStartSeconds: number;
     }
-  /** The run ended and its file was measured. Broadcast. */
+  /** The run ended and its mic file was measured. Broadcast. */
   | ({
       type: "calibration-measured";
       calibrationId: string;
       mic: string;
       micFile: string;
+      camera: string;
+      cameraFile: string;
     } & CalibrationMeasurement)
   /**
    * The run ended without a measurement and its folder was deleted:
@@ -403,7 +422,7 @@ export type RecorderStatusMessage =
 /**
  * What a calibration run measured: the noise floor (the RMS level of the
  * silence, dBFS), the integrated loudness of the speech (LUFS) and the true
- * peak of the whole take (dBTP).
+ * peak of the take less its clap window (dBTP).
  */
 export type CalibrationMeasurement = {
   noiseFloorDb: number;

@@ -365,7 +365,7 @@ export const fakeWindows = (
         });
       return answer(p, { stderr: calibrationAnalysisStderr(analysis) });
     }
-    if (l.args.some((a) => a.startsWith("ebur128"))) {
+    if (l.args.some((a) => a.includes("ebur128=framelog=info"))) {
       const loudness = o.micLoudness;
       if (loudness) {
         let t = 0;
@@ -396,7 +396,7 @@ export const fakeWindows = (
       (p) =>
         p.running &&
         p.launch.tool === "ffmpeg" &&
-        p.launch.args.some((a) => a.startsWith("ebur128"))
+        p.launch.args.some((a) => a.includes("ebur128=framelog=info"))
     );
   const recorder = (kind: "screen" | "camera") => {
     const p = recorders.find(

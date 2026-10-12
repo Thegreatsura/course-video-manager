@@ -88,9 +88,14 @@ export const freshCalibration: LastPassed = async () => {
       thresholdDb: CALIBRATION.thresholdDb,
       recorderMic: CALIBRATION.recorderMic,
       browserInputLabel: CALIBRATION.browserInputLabel,
-      scriptVersion: 2,
-      micFilePath: "/calibrations/ok/mic.mkv",
+      scriptVersion: 3,
+      micFilePath: "/calibrations/ok/mic.wav",
       browserTracePath: "/calibrations/ok/browser-trace.json",
+      cameraDevice: "Cam Link 4K",
+      clapsFound: 5,
+      clapSpreadMs: 8,
+      micOffsetMs: 142,
+      cameraFilePath: "/calibrations/ok/camera.mkv",
     })
     .onConflictDoNothing();
   return CALIBRATION;

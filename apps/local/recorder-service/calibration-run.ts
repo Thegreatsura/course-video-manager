@@ -2,26 +2,24 @@ import { runToEnd, type Launcher } from "./launcher";
 import type { CalibrationMeasurement, CalibrationWindow } from "./protocol";
 
 /**
- * AN AV CALIBRATION'S RUN (#2079): the level meter's process
- * (`level-meter.ts`), which also writes the mic to `mic.wav` in a folder of
- * its own, so the meter's readings are timed in that file's seconds (ebur128
- * counts the samples it passes on, and the file gets every one). When the
- * page says the script is done, the process quits and a second ffmpeg.exe
- * measures the file over the windows the page gives: the noise floor over
- * the silence, the integrated speech loudness over the reading rounds, and
- * the true peak over the whole take.
+ * AN AV CALIBRATION'S RUN (#2079, #2095): the level meter's process
+ * (`level-meter.ts`) made a capture. It opens the camera as well as the mic,
+ * both on the shared clock a Recording Session uses
+ * (`calibrationCaptureArgs`), and writes the mic to `mic.wav` and the camera
+ * to `camera.mkv` in a folder of its own. The meter's readings are timed in
+ * the files' seconds (ebur128 counts the samples it passes on, and the file
+ * gets every one). When the page says the script is done, the process quits
+ * and a second ffmpeg.exe measures the mic file over the windows the page
+ * gives: the noise floor over the silence, the integrated speech loudness
+ * over the reading rounds, and the true peak over the whole take less the
+ * clap window (a clap must never fail the level check). The claps
+ * themselves are found by the app server (`clap-detection`).
  */
 
 /** The run's mic file, in the run's own folder. */
 export const CALIBRATION_MIC_FILE = "mic.wav";
-
-/** The run's mic output: raw 16-bit PCM, as dshow hands it over. */
-export const calibrationOutput = [
-  "-c:a",
-  "pcm_s16le",
-  "-y",
-  CALIBRATION_MIC_FILE,
-];
+/** The run's camera file, beside it. */
+export const CALIBRATION_CAMERA_FILE = "camera.mkv";
 
 const trim = (w: CalibrationWindow) =>
   `atrim=start=${w.startSeconds}:end=${w.endSeconds}`;
@@ -29,20 +27,23 @@ const trim = (w: CalibrationWindow) =>
 /**
  * ffmpeg.exe's args to measure the run's file: astats' overall RMS level over
  * the silence, ebur128's integrated loudness over the speech windows, cut out
- * and joined end to end, and a second ebur128's true peak over the whole
- * take. (`aselect=between(t,…)` let every frame through on ffmpeg 8.0.1, so
- * the windows are `atrim`s and a `concat`.)
+ * and joined end to end, and a second ebur128's true peak over the take with
+ * the clap window cut out. (`aselect=between(t,…)` let every frame through on
+ * ffmpeg 8.0.1, so the windows are `atrim`s and a `concat`.)
  */
 export const calibrationAnalysisArgs = (o: {
   silence: CalibrationWindow;
   speech: readonly CalibrationWindow[];
+  claps: CalibrationWindow;
 }) => {
   const n = o.speech.length;
   const reads = o.speech.map((_, i) => `[r${i}]`).join("");
   const graph = [
-    `[0:a]asplit=${n + 2}[n][p]${reads}`,
+    `[0:a]asplit=${n + 3}[n][pa][pb]${reads}`,
     `[n]${trim(o.silence)},astats=measure_perchannel=none:measure_overall=RMS_level,anullsink`,
-    `[p]ebur128=peak=true:framelog=quiet,anullsink`,
+    `[pa]atrim=end=${o.claps.startSeconds},asetpts=PTS-STARTPTS[p0]`,
+    `[pb]atrim=start=${o.claps.endSeconds},asetpts=PTS-STARTPTS[p1]`,
+    `[p0][p1]concat=n=2:v=0:a=1,ebur128=peak=true:framelog=quiet,anullsink`,
     ...o.speech.map((w, i) => `[r${i}]${trim(w)},asetpts=PTS-STARTPTS[s${i}]`),
     `${o.speech.map((_, i) => `[s${i}]`).join("")}concat=n=${n}:v=0:a=1,ebur128=framelog=verbose[out]`,
   ].join(";");
@@ -114,6 +115,7 @@ export const measureCalibration = async (o: {
   dir: string;
   silence: CalibrationWindow;
   speech: readonly CalibrationWindow[];
+  claps: CalibrationWindow;
 }): Promise<CalibrationMeasurement> => {
   if (o.speech.length === 0) throw new Error("No speech windows to measure.");
   const { code, stderr } = await runToEnd(

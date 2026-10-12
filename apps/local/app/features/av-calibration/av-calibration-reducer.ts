@@ -1,5 +1,7 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  CLOSE_OBS_TO_CALIBRATE,
+  runMeasurementWindows,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
   type ScriptStep,
@@ -16,16 +18,26 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * THE AV CALIBRATION PAGE (#2079): the level meter, then the scripted
  * session, then its result.
  *
- *   meter → countdown → silence → read 1 / pause 1 … read 5 / pause 5
- *         → analysing → result
+ *   meter → starting (the camera opening) → countdown → silence
+ *         → hands up → clap 1 … clap 5 → read 1 / pause 1 … read 5 / pause 5
+ *         → loud → analysing → result
  *
  * The session runs on the recorder service's clock: every meter reading of a
- * run is timed in seconds of its mic file, and the step on screen is the
- * schedule's step at the latest reading (`currentStep`), so the prompts Matt
- * saw and the audio they are measured against share one time axis. When a
- * reading reaches the end of the script the page asks for the measurement,
- * which stores the AV Calibration, passed or failed. Cancel, from any step
- * before the analysis, stores nothing.
+ * run is timed in seconds of its mic and camera files, the script starting
+ * where the run went live (`scriptStartSeconds`, once the camera opened), and
+ * the step on screen is the schedule's step at the latest reading
+ * (`currentStep`), so the prompts Matt saw and the audio and picture they are
+ * measured against share one time axis. When a reading reaches the end of
+ * the script the page asks for the measurement over the script's windows in
+ * the files' seconds (the silence, the speech and the clap window), which
+ * stores the AV Calibration, passed or failed. Cancel, from any step before
+ * the analysis, stores nothing.
+ *
+ * Start opens the camera first. Another program (OBS) holding the Cam Link
+ * refuses it with `CLOSE_OBS_TO_CALIBRATE`: the session never starts, and
+ * the page says "Close OBS to calibrate" with Start, which works again as
+ * soon as OBS lets go. A camera that opens but sends nothing is refused with
+ * the "Cam Link not starting" message, as any other refusal.
  *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
  * and timed onto the same axis through the reading heard last.
@@ -43,11 +55,16 @@ export namespace avCalibrationReducer {
     | { kind: "meter" }
     /** Start was pressed; the run has not said it runs. */
     | { kind: "starting" }
+    /** Start was refused: another program (OBS) holds the Cam Link. */
+    | { kind: "camera-busy" }
     | {
         kind: "running";
         calibrationId: string;
-        /** Seconds of the run's mic file at the latest reading. */
+        /** Where the script starts, in seconds of the run's files. */
+        scriptStartSeconds: number;
+        /** Seconds of the script at the latest reading (negative: not yet). */
         seconds: number;
+        /** In seconds of the run's files, as the browser trace is timed. */
         anchor: Anchor | null;
       }
     | { kind: "analysing"; calibrationId: string }
@@ -178,12 +195,13 @@ const onReading = (
 ): State => {
   const session = state.session;
   if (session.kind !== "running") return state;
-  if (reading.seconds < SCRIPT_END_SECONDS)
+  const seconds = reading.seconds - session.scriptStartSeconds;
+  if (seconds < SCRIPT_END_SECONDS)
     return {
       ...state,
       session: {
         ...session,
-        seconds: reading.seconds,
+        seconds,
         anchor: session.anchor ?? reading,
       },
     };
@@ -191,6 +209,8 @@ const onReading = (
   exec({
     type: "finish-calibration",
     calibrationId: session.calibrationId,
+    scriptStartSeconds: session.scriptStartSeconds,
+    windows: runMeasurementWindows(session.scriptStartSeconds),
     browserInputLabel: browser.label,
     browserTrace: browser.label ? browser.trace : null,
   });
@@ -213,6 +233,16 @@ const showResult = (
     session: { kind: "result", calibration, timeline: { status: "loading" } },
   };
 };
+
+/**
+ * No run in progress: Start, and a past calibration, may be opened. The
+ * meter, a result, a failure or a refused Start.
+ */
+export const isSessionIdle = (session: avCalibrationReducer.Session) =>
+  session.kind === "meter" ||
+  session.kind === "result" ||
+  session.kind === "failed" ||
+  session.kind === "camera-busy";
 
 export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
   state,
@@ -246,6 +276,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
         session: {
           kind: "running",
           calibrationId: action.calibrationId,
+          scriptStartSeconds: action.scriptStartSeconds,
           seconds: 0,
           anchor: null,
         },
@@ -261,9 +292,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       return fail(state, exec, action.message);
     }
     case "start-clicked": {
-      const { kind } = state.session;
-      if (kind !== "meter" && kind !== "result" && kind !== "failed")
-        return state;
+      if (!isSessionIdle(state.session)) return state;
       if (state.meter.status !== "running") return state;
       exec({ type: "start-calibration" });
       return {
@@ -277,6 +306,12 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
     }
     case "start-refused":
       if (state.session.kind !== "starting") return state;
+      if (action.message === CLOSE_OBS_TO_CALIBRATE)
+        return {
+          ...state,
+          session: { kind: "camera-busy" },
+          browser: stopCapture(state, exec),
+        };
       return fail(state, exec, action.message);
     case "cancel-clicked": {
       const { kind } = state.session;
@@ -286,7 +321,11 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, session: { kind: "meter" }, browser: noBrowser() };
     }
     case "back-to-meter-clicked":
-      if (state.session.kind !== "result" && state.session.kind !== "failed")
+      if (
+        state.session.kind !== "result" &&
+        state.session.kind !== "failed" &&
+        state.session.kind !== "camera-busy"
+      )
         return state;
       return { ...state, session: { kind: "meter" } };
     case "browser-input-opened":
@@ -339,9 +378,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       exec({ type: "refresh-history" });
       return showResult(state, action.calibration, exec);
     case "past-calibration-clicked": {
-      const { kind } = state.session;
-      if (kind !== "meter" && kind !== "result" && kind !== "failed")
-        return state;
+      if (!isSessionIdle(state.session)) return state;
       return showResult(state, action.calibration, exec);
     }
     case "timeline-loaded":

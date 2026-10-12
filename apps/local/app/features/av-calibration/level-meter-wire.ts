@@ -21,8 +21,16 @@ export type LevelMeterMessage =
     }
   /** The meter is not running, and why: refused, quit, or no recorder service. */
   | { type: "meter-failed"; message: string }
-  /** An AV Calibration's run started: readings from here on are its file's. */
-  | { type: "calibration-started"; calibrationId: string; mic: string }
+  /**
+   * An AV Calibration's run is live: readings from here on are its files'
+   * seconds, the script starting at `scriptStartSeconds`.
+   */
+  | {
+      type: "calibration-started";
+      calibrationId: string;
+      mic: string;
+      scriptStartSeconds: number;
+    }
   /** The run ended without being measured, and why (its ffmpeg quit, say). */
   | { type: "calibration-failed"; calibrationId: string; message: string };
 

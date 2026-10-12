@@ -28,6 +28,9 @@ export const CAMERA_START_TIMEOUT_MS = 10_000;
 /** What ffmpeg's dshow input says when another program holds the device. */
 const BUSY = /Could not run graph|in use|busy/i;
 
+/** Whether ffmpeg's stderr says another program (OBS) holds the device. */
+export const saysDeviceBusy = (stderr: string) => BUSY.test(stderr);
+
 /** How long a preview process gets to quit on `q` before it is killed. */
 const QUIT_TIMEOUT_MS = 5_000;
 
@@ -141,7 +144,7 @@ export const openCamera = (o: CameraOptions): Camera => {
       }
       await quitProcess(p, quitting);
       if (released) return;
-      if (BUSY.test(stderr)) {
+      if (saysDeviceBusy(stderr)) {
         return set({ kind: "busy", message: CAM_LINK_BUSY });
       }
     }

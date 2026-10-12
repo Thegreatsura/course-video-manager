@@ -1,5 +1,4 @@
 import { Effect, Schema } from "effect";
-import { MEASUREMENT_WINDOWS } from "@/av-calibration-constants";
 import { recordAVCalibration } from "@/services/av-calibration.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { recorderCommand } from "@/services/recorder-client/recorder-command";
@@ -9,8 +8,19 @@ import {
 } from "@/services/recorder-client/live.server";
 import { makeAction } from "@/services/route-action.server";
 
+const WindowSchema = Schema.Struct({
+  startSeconds: Schema.Number,
+  endSeconds: Schema.Number,
+});
+
 const finishSchema = Schema.Struct({
   calibrationId: Schema.String,
+  scriptStartSeconds: Schema.Number,
+  windows: Schema.Struct({
+    silence: WindowSchema,
+    speech: Schema.Array(WindowSchema),
+    claps: WindowSchema,
+  }),
   browserInputLabel: Schema.NullOr(Schema.String),
   browserTrace: Schema.NullOr(
     Schema.Array(
@@ -21,9 +31,11 @@ const finishSchema = Schema.Struct({
 
 /**
  * The script is done: the recorder service ends the run and measures its mic
- * file over the measurement windows, and the AV Calibration is stored,
- * passed or failed, with the browser's level trace beside the file. Answers
- * the stored calibration (`SavedAVCalibration`).
+ * file over the windows the page sends (the clap window cut out of the true
+ * peak), the claps are found in its mic and camera files for the Mic Offset,
+ * and the AV Calibration is stored, passed or failed, with the browser's
+ * level trace beside the files. Answers the stored calibration
+ * (`SavedAVCalibration`).
  */
 export const action = makeAction({
   input: "json",
@@ -35,12 +47,19 @@ export const action = makeAction({
   effect: ({ payload }) =>
     Effect.gen(function* () {
       const request = yield* Schema.decodeUnknown(finishSchema)(payload);
+      const windows = {
+        silence: request.windows.silence,
+        speech: [...request.windows.speech],
+        claps: request.windows.claps,
+      };
       const measured = yield* recorderCommand(() =>
-        recorderClient().finishCalibration(MEASUREMENT_WINDOWS)
+        recorderClient().finishCalibration(windows)
       );
       const saved = yield* recordAVCalibration(yield* DrizzleService, {
         calibrationId: request.calibrationId,
         measured,
+        windows,
+        scriptStartSeconds: request.scriptStartSeconds,
         recordingsFolder: recordingFolder(),
         browserInputLabel: request.browserInputLabel,
         browserTrace: request.browserTrace ? [...request.browserTrace] : null,

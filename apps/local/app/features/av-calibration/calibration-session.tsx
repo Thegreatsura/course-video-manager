@@ -1,7 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
+  CLAP_SECONDS,
+  CLAPS_PROMPTED,
+  describeClapMiss,
   LOUD_LINE,
+  MAX_CLAP_SPREAD_MS,
   MAX_TRUE_PEAK_DBTP,
+  MIN_CLAPS_FOUND,
   READ_SECONDS,
   PAUSE_SECONDS,
   SCRIPT_END_SECONDS,
@@ -27,6 +32,8 @@ const dB = (n: number) => `${n.toFixed(1)} dB`;
 const PROMPT: Record<ScriptStep["kind"], string> = {
   countdown: "Get ready",
   silence: "Stay quiet",
+  "clap-ready": "Hands in front of your face",
+  clap: "Clap",
   read: "Read line",
   pause: "Pause",
   loud: "Read it loud",
@@ -35,6 +42,8 @@ const PROMPT: Record<ScriptStep["kind"], string> = {
 const PROMPT_STYLE: Record<ScriptStep["kind"], string> = {
   countdown: "text-muted-foreground",
   silence: "text-sky-400",
+  "clap-ready": "text-violet-400",
+  clap: "text-violet-400",
   read: "text-emerald-400",
   pause: "text-amber-400",
   loud: "text-red-400",
@@ -47,7 +56,7 @@ const Prompt = ({ state }: { state: State }) => {
     return (
       <div className="flex items-center gap-3 text-2xl text-muted-foreground">
         <Loader2 className="w-6 h-6 animate-spin" />
-        Starting the run…
+        Opening the camera and mic…
       </div>
     );
   const { step, remainingSeconds } = now;
@@ -58,6 +67,7 @@ const Prompt = ({ state }: { state: State }) => {
         <div className={cn("text-4xl font-bold", PROMPT_STYLE[step.kind])}>
           {PROMPT[step.kind]}
           {step.kind === "read" && ` ${line}`}
+          {step.kind === "clap" && ` ${step.clap} of ${CLAPS_PROMPTED}`}
         </div>
         <div className="font-mono tabular-nums text-6xl font-semibold">
           {Math.ceil(remainingSeconds)}
@@ -83,6 +93,19 @@ const Prompt = ({ state }: { state: State }) => {
         {step.kind === "silence" && (
           <span className="text-muted-foreground">
             Measuring the room. Keep still and say nothing.
+          </span>
+        )}
+        {step.kind === "clap-ready" && (
+          <span className="text-muted-foreground">
+            On camera, hands apart, ready. Clap once, sharply, each time a
+            number comes up: {CLAPS_PROMPTED} claps.
+          </span>
+        )}
+        {step.kind === "clap" && (
+          <span className="text-muted-foreground">
+            {step.clap === CLAPS_PROMPTED
+              ? "Last one. Then read the lines."
+              : `Next clap in ${CLAP_SECONDS} s.`}
           </span>
         )}
         {step.kind === "countdown" && (
@@ -118,6 +141,10 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 
 const missTitle = (miss: CalibrationMiss) => {
   switch (miss.kind) {
+    case "too-few-claps":
+    case "claps-disagree":
+    case "no-clap-step":
+      return describeClapMiss(miss);
     case "too-quiet":
       return `Too quiet by ${dB(miss.byDb)}`;
     case "too-loud":
@@ -135,6 +162,12 @@ const missAdvice = (miss: CalibrationMiss) => {
       return "Turn your level down until the meter sits in the band, then run it again.";
     case "peak-too-high":
       return "Your loudest moment would come close to clipping: turn your level down, then run it again.";
+    case "too-few-claps":
+      return "Clap sharply, with your hands in front of your face where the camera sees them meet, then run it again.";
+    case "claps-disagree":
+      return "The claps gave different offsets: clap crisply, hands meeting flat, then run it again.";
+    case "no-clap-step":
+      return "Run an AV Calibration to measure the Mic Offset.";
   }
 };
 
@@ -165,7 +198,7 @@ const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
           </ul>
         </div>
       )}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-5 gap-6">
         <Stat
           label="Speech loudness"
           value={`${calibration.speechLufs.toFixed(1)} LUFS`}
@@ -179,6 +212,14 @@ const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
           }
         />
         <Stat
+          label="Mic Offset"
+          value={
+            calibration.micOffsetMs === null
+              ? "—"
+              : `${Math.round(calibration.micOffsetMs)} ms`
+          }
+        />
+        <Stat
           label="Noise floor"
           value={`${calibration.noiseFloorDb.toFixed(1)} dBFS`}
         />
@@ -186,9 +227,14 @@ const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
       </div>
       <p className="text-sm text-muted-foreground">
         Target band {TARGET_BAND.lowLufs} to {TARGET_BAND.highLufs} LUFS; true
-        peak at most {MAX_TRUE_PEAK_DBTP} dBTP. Stored{" "}
-        {new Date(calibration.createdAt).toLocaleString()}, on{" "}
+        peak at most {MAX_TRUE_PEAK_DBTP} dBTP; at least {MIN_CLAPS_FOUND} of{" "}
+        {CLAPS_PROMPTED} claps agreeing within {Math.round(MAX_CLAP_SPREAD_MS)}{" "}
+        ms (one frame).
+        {calibration.clapsFound !== null &&
+          ` Found ${calibration.clapsFound} of ${CLAPS_PROMPTED} claps${calibration.clapSpreadMs === null ? "" : `, ${Math.round(calibration.clapSpreadMs)} ms apart`}.`}{" "}
+        Stored {new Date(calibration.createdAt).toLocaleString()}, on{" "}
         {calibration.recorderMic}
+        {calibration.cameraDevice ? ` and ${calibration.cameraDevice}` : ""}
         {calibration.browserInputLabel
           ? `; browser input ${calibration.browserInputLabel}`
           : "; no browser input"}
@@ -242,10 +288,11 @@ export const CalibrationSession = ({
               Run the scripted session
             </div>
             <p className="text-muted-foreground">
-              About {Math.round(SCRIPT_END_SECONDS)} s: {SILENCE_SECONDS} s of
-              silence, then {SCRIPT_LINES.length} rounds of reading a line (
-              {READ_SECONDS} s) and pausing ({PAUSE_SECONDS} s), then one line
-              read loudly.
+              About {Math.round(SCRIPT_END_SECONDS)} s, on camera:{" "}
+              {SILENCE_SECONDS} s of silence, {CLAPS_PROMPTED} claps with your
+              hands in front of your face, then {SCRIPT_LINES.length} rounds of
+              reading a line ({READ_SECONDS} s) and pausing ({PAUSE_SECONDS} s),
+              then one line read loudly.
             </p>
           </div>
           <Button
@@ -276,7 +323,7 @@ export const CalibrationSession = ({
       {session.kind === "analysing" && (
         <div className="flex items-center gap-3 text-2xl text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
-          Measuring your mic…
+          Measuring your mic and finding your claps…
         </div>
       )}
 
@@ -293,6 +340,27 @@ export const CalibrationSession = ({
             Back to the meter
           </Button>
         </>
+      )}
+
+      {session.kind === "camera-busy" && (
+        <div className="flex items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="text-xl font-semibold text-amber-500">
+              Close OBS to calibrate
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Another program has the Cam Link, so the session did not start and
+              nothing was recorded. Close OBS, then press Start.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            onClick={onStart}
+            disabled={state.meter.status !== "running"}
+          >
+            Start
+          </Button>
+        </div>
       )}
 
       {session.kind === "failed" && (
