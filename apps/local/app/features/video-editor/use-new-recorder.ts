@@ -8,6 +8,7 @@ import type {
   ClipReducerAction,
   ClipReducerState,
   FrontendId,
+  MicOffsetRefusal,
 } from "./clip-state-reducer.types";
 import {
   canRecord,
@@ -41,6 +42,9 @@ export type NewRecorderControls = {
     clipId: FrontendId,
     settings: { micOffsetMs: number; micEq: MicEq }
   ) => void;
+  /** A refused mic offset the Mic Settings dialog reopens to explain. */
+  micOffsetRefusal: MicOffsetRefusal | null;
+  onDismissMicOffsetRefusal: () => void;
 };
 
 const answer = async (response: Response) => {
@@ -88,6 +92,7 @@ export const useNewRecorder = (o: {
   silenceLength: SilenceLength;
   clipStateRef: RefObject<ClipReducerState>;
   clipDispatch: (action: ClipReducerAction) => void;
+  micOffsetRefusal: MicOffsetRefusal | null;
 }): NewRecorderControls => {
   const { videoId } = o;
   const [state, dispatch] = useEffectReducer(
@@ -197,5 +202,8 @@ export const useNewRecorder = (o: {
       o.clipDispatch({ type: "set-scene-override", clipId, sceneOverride }),
     onSubmitMicSettings: (clipId, settings) =>
       o.clipDispatch({ type: "mic-settings-submitted", clipId, ...settings }),
+    micOffsetRefusal: o.micOffsetRefusal,
+    onDismissMicOffsetRefusal: () =>
+      o.clipDispatch({ type: "mic-offset-refusal-dismissed" }),
   };
 };

@@ -25,6 +25,7 @@ const createInitialState = (): clipStateReducer.State => ({
   sessions: [],
   clipTranscriptionJobs: {},
   jobEventCursor: 0,
+  micOffsetRefusal: null,
 });
 
 /**

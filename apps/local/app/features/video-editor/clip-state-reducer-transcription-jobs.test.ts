@@ -30,6 +30,7 @@ const createState = (
   sessions: [],
   clipTranscriptionJobs: {},
   jobEventCursor: 0,
+  micOffsetRefusal: null,
   ...overrides,
 });
 
@@ -269,6 +270,7 @@ describe("a Job that ends without settling its Clips", () => {
       createState({
         items: [onDatabase("a", "transcribing")],
         jobEventCursor: 0,
+        micOffsetRefusal: null,
       })
     ).send(transcriptionJobEnded("job-live", "interrupted"));
     expect(clipIn(tester.getState(), "a").transcriptionStatus).toBe("failed");

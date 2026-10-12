@@ -34,7 +34,10 @@ import { DELETED_CLIPS_SESSION_ID } from "./video-editor-selectors";
 import { canZoomClip, type ClipZoomType } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { handleSetSceneOverride } from "./clip-state-reducer-scene-override";
-import { handleMicSettingsSubmitted } from "./clip-state-reducer-mic-settings";
+import {
+  handleMicOffsetSaveFailed,
+  handleMicSettingsSubmitted,
+} from "./clip-state-reducer-mic-settings";
 
 export namespace clipStateReducer {
   export type State = ClipReducerState;
@@ -68,6 +71,14 @@ const reduceClipState = (
 
   if (action.type === "mic-settings-submitted") {
     return handleMicSettingsSubmitted(state, action, exec);
+  }
+
+  if (action.type === "mic-offset-save-failed") {
+    return handleMicOffsetSaveFailed(state, action);
+  }
+
+  if (action.type === "mic-offset-refusal-dismissed") {
+    return { ...state, micOffsetRefusal: null };
   }
 
   if (isRecordingAction(action)) {

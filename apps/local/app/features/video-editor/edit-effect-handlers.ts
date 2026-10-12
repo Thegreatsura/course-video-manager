@@ -136,8 +136,8 @@ export function createEditEffectHandlers(
         .updateMicOffset(effect.clipId, effect.micOffsetMs)
         .catch((error) => {
           dispatch({
-            type: "effect-failed",
-            effectType: "update-mic-offset",
+            type: "mic-offset-save-failed",
+            effect,
             message:
               error instanceof Error
                 ? error.message

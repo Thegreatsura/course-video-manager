@@ -18,6 +18,8 @@ export const action = makeAction({
   errors: {
     // Write-closure: writes into a Pending/Published version are refused.
     VersionNotDraftError: 409,
+    // A mic offset change on a Recording Session a non-Draft Version shares.
+    MicOffsetSharedWithFrozenVersionError: 409,
   },
   effect: ({ payload }) =>
     Effect.gen(function* () {

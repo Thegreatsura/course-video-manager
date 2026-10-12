@@ -192,6 +192,8 @@ export type EditorError = {
   timestamp: number;
 };
 
+export type MicOffsetRefusal = { clipId: FrontendId; message: string };
+
 export type SessionId = Brand<string, "SessionId">;
 
 export const createSessionId = (): SessionId => {
@@ -268,6 +270,12 @@ export type ClipReducerState = {
    * newer result back.
    */
   jobEventCursor: number;
+  /**
+   * A mic offset the server refused because a Version that is not a Draft
+   * shares its Recording Session (issue #2010): the Mic Settings dialog
+   * reopens on `clipId` and says why, until dismissed.
+   */
+  micOffsetRefusal: MicOffsetRefusal | null;
   /**
    * Live browser link-capture state, fed by `browser-event` actions from the
    * Chrome extension. `browserFocus` + `browserUrl` fold to the single web page
@@ -388,6 +396,16 @@ export type ClipReducerAction =
       clipId: FrontendId;
       micOffsetMs: number;
       micEq: MicEq;
+    }
+  | {
+      /** Saving a mic offset failed; `effect` is the save that was sent. */
+      type: "mic-offset-save-failed";
+      effect: Extract<ClipReducerEffect, { type: "update-mic-offset" }>;
+      message: string;
+    }
+  | {
+      /** The Mic Settings dialog showing a refused offset was closed. */
+      type: "mic-offset-refusal-dismissed";
     }
   | {
       type: "move-clip";
@@ -523,6 +541,10 @@ export type ClipReducerEffect =
       type: "update-mic-offset";
       clipId: DatabaseId;
       micOffsetMs: number;
+      /** Echoed back on failure, to put the offset back and say why. */
+      frontendClipId: FrontendId;
+      recordingSessionId: string;
+      previousMicOffsetMs: number;
     }
   | {
       type: "update-mic-eq";

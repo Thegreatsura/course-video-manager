@@ -1,3 +1,4 @@
+import { clips, courseVersions, lessons, sections, videos } from "@/db/schema";
 import type { Database } from "@/services/drizzle-service.server";
 import {
   UnknownDBServiceError,
@@ -11,7 +12,9 @@ import {
   requireDraftVersionForClips,
   requireDraftVersionForVideo,
 } from "@/services/draft-guard.server";
-import { Effect } from "effect";
+import { MIC_OFFSET_SHARED_WITH_FROZEN_VERSION_MESSAGE } from "@/services/recording-session-shared-message";
+import { and, eq, ne } from "drizzle-orm";
+import { Data, Effect } from "effect";
 import type { ClipServiceEvent } from "@/services/clip-service";
 
 /**
@@ -24,6 +27,75 @@ import type { ClipServiceEvent } from "@/services/clip-service";
  * input types. Splitting them out is what keeps the core package free of the
  * application it serves.
  */
+
+/**
+ * A mic offset change was refused: the Clip's Recording Session is shared by
+ * a Clip in a Version that is not a Draft (issue #2010).
+ */
+export class MicOffsetSharedWithFrozenVersionError extends Data.TaggedError(
+  "MicOffsetSharedWithFrozenVersionError"
+)<{
+  recordingSessionId: string;
+  versionId: string;
+}> {
+  // Serialized as the 409 body; the editor matches on it to show the refusal
+  // in the Mic Settings dialog.
+  override get message() {
+    return MIC_OFFSET_SHARED_WITH_FROZEN_VERSION_MESSAGE;
+  }
+}
+
+/**
+ * A Recording Session is not owned by one Version: every copy of its Clips (a
+ * new Draft, a Course duplicate, a Video copy) points at the same row, and its
+ * mic offset joins the Export Hash of all of them. Guarding the edited Clip's
+ * own Version is not enough, so refuse the offset change while any Clip of
+ * the Session is in a Version that is not a Draft. The owning Version rows
+ * are locked FOR UPDATE, like the draft guard, so a Submit cannot straddle
+ * the check. A Clip with no Session (OBS) passes; its handler refuses it.
+ */
+const requireRecordingSessionOnlyInDrafts = Effect.fn(
+  "requireRecordingSessionOnlyInDrafts"
+)(function* (db: Database, clipId: string) {
+  const clip = yield* Effect.tryPromise({
+    try: () =>
+      db.query.clips.findFirst({
+        where: eq(clips.id, clipId),
+        columns: { recordingSessionId: true },
+      }),
+    catch: (cause) => new UnknownDBServiceError({ cause }),
+  });
+  const recordingSessionId = clip?.recordingSessionId;
+  if (!recordingSessionId) return;
+  const [frozen] = yield* Effect.tryPromise({
+    try: () =>
+      db
+        .select({ id: courseVersions.id })
+        .from(clips)
+        .innerJoin(videos, eq(videos.id, clips.videoId))
+        .innerJoin(lessons, eq(lessons.id, videos.lessonId))
+        .innerJoin(sections, eq(sections.id, lessons.sectionId))
+        .innerJoin(
+          courseVersions,
+          eq(courseVersions.id, sections.repoVersionId)
+        )
+        .where(
+          and(
+            eq(clips.recordingSessionId, recordingSessionId),
+            ne(courseVersions.commitState, "draft")
+          )
+        )
+        .limit(1)
+        .for("update", { of: courseVersions }),
+    catch: (cause) => new UnknownDBServiceError({ cause }),
+  });
+  if (frozen) {
+    return yield* new MicOffsetSharedWithFrozenVersionError({
+      recordingSessionId,
+      versionId: frozen.id,
+    });
+  }
+});
 
 /**
  * Write-closure for the clip-service handler, which writes to the DB directly
@@ -59,9 +131,11 @@ export const requireDraftForClipServiceEvent = Effect.fn(
     case "update-pause":
     case "update-zoom":
     case "update-scene-override":
-    case "update-mic-offset":
     case "reorder-clip":
       return yield* requireDraftVersionForClip(db, event.clipId);
+    case "update-mic-offset":
+      yield* requireDraftVersionForClip(db, event.clipId);
+      return yield* requireRecordingSessionOnlyInDrafts(db, event.clipId);
     case "update-chapter":
     case "reorder-chapter":
       return yield* requireDraftVersionForChapter(db, event.chapterId);
@@ -87,7 +161,13 @@ export const withClipServiceWriteClosure = <A, E>(
   db: Database,
   event: ClipServiceEvent,
   run: (db: Database) => Effect.Effect<A, E>
-): Effect.Effect<A, E | VersionNotDraftError | UnknownDBServiceError> => {
+): Effect.Effect<
+  A,
+  | E
+  | VersionNotDraftError
+  | MicOffsetSharedWithFrozenVersionError
+  | UnknownDBServiceError
+> => {
   switch (event.type) {
     case "create-video":
     case "get-timeline":
