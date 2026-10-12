@@ -1,8 +1,11 @@
 import { DEFAULT_MIC_EQ, type MicEq } from "@cvm/core/features/videos/recorder";
+import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 import {
-  LAYOUT_VERSION,
+  drawnSources,
+  LAYOUT_VERSIONS,
   sceneFilterGraph,
   sceneSegments,
+  type LayoutSource,
   type Scene,
   type SceneSegment,
 } from "@/packages/scene-layout";
@@ -12,6 +15,10 @@ import {
  * `recordingSession` relation with its `sceneEvents` and `micEq`). Scene
  * event times are the picture's file time. `micEq` is the saved Mic EQ
  * Setting, null until it is first saved ({@link DEFAULT_MIC_EQ}).
+ *
+ * `format` is the Video Format it was filmed in: its picture is drawn in that
+ * format's layout. `screenCaptured` is false for a camera-only Short session,
+ * whose `screenFilePath` names no file.
  */
 export type ClipRecordingSession = {
   readonly id: string;
@@ -19,6 +26,8 @@ export type ClipRecordingSession = {
   readonly screenFilePath: string;
   readonly micFilePath: string;
   readonly micOffsetMs: number;
+  readonly format: VideoFormat;
+  readonly screenCaptured: boolean;
   readonly micEq: MicEq | null;
   readonly sceneEvents: readonly {
     readonly fileTime: number;
@@ -72,10 +81,12 @@ export type ClipSourceRow = Pick<
  *
  * - `footage`: an OBS Clip — one Footage file cut between a start and an end.
  * - `recording-session`: a CVM-recorder Clip — camera, screen and mic files
- *   of one Recording Session. `start`/`end` and the segments are in the
- *   picture's clock; the mic is read `micOffsetSeconds` earlier. The export
- *   also needs its scene events (to draw past the Clip's end, over a long
- *   Pause), its Scene Override and the mic EQ it is exported with.
+ *   of one Recording Session, drawn in its Video Format's layout. `start`/
+ *   `end` and the segments are in the picture's clock; the mic is read
+ *   `micOffsetSeconds` earlier. The export also needs its scene events (to
+ *   draw past the Clip's end, over a long Pause), its Scene Override and the
+ *   mic EQ it is exported with. `files.screen` is null when the session
+ *   captured no screen (a camera-only Short).
  */
 export type ClipSource =
   | {
@@ -87,9 +98,10 @@ export type ClipSource =
   | {
       readonly kind: "recording-session";
       readonly recordingSessionId: string;
+      readonly format: VideoFormat;
       readonly files: {
         readonly camera: string;
-        readonly screen: string;
+        readonly screen: string | null;
         readonly mic: string;
       };
       readonly micOffsetSeconds: number;
@@ -110,9 +122,12 @@ export type ClipSource =
  * time: the files, the scene segments, and the mic's offset and EQ.
  */
 export type ClipComposite = {
+  /** The layout (and canvas) it is drawn in. */
+  readonly format: VideoFormat;
   /** Picture file time the composite starts at (the Clip's start). */
   readonly start: number;
-  readonly screen: string;
+  /** Null when the Recording Session captured no screen. */
+  readonly screen: string | null;
   readonly camera: string;
   readonly mic: string;
   /** The mic is read from `start - micOffsetSeconds`. */
@@ -133,7 +148,8 @@ export type ClipFrame =
     }
   | {
       readonly kind: "composite";
-      readonly screen: string;
+      readonly format: VideoFormat;
+      readonly screen: string | null;
       readonly camera: string;
       readonly scene: Scene;
       readonly time: number;
@@ -174,6 +190,8 @@ export const clipSourceColumns = (
     screenFilePath: row.recordingSession.screenFilePath,
     micFilePath: row.recordingSession.micFilePath,
     micOffsetMs: row.recordingSession.micOffsetMs,
+    format: row.recordingSession.format,
+    screenCaptured: row.recordingSession.screenCaptured,
     micEq: row.recordingSession.micEq && {
       lowDb: row.recordingSession.micEq.lowDb,
       midDb: row.recordingSession.micEq.midDb,
@@ -206,9 +224,10 @@ export const clipSource = (row: ClipSourceRow): ClipSource => {
   return {
     kind: "recording-session",
     recordingSessionId: session.id,
+    format: session.format,
     files: {
       camera: session.cameraFilePath,
-      screen: session.screenFilePath,
+      screen: session.screenCaptured ? session.screenFilePath : null,
       mic: session.micFilePath,
     },
     micOffsetSeconds: session.micOffsetMs / 1000,
@@ -238,6 +257,7 @@ export const clipComposite = (
 ): ClipComposite | null => {
   if (source.kind === "footage") return null;
   return {
+    format: source.format,
     start: source.start,
     screen: source.files.screen,
     camera: source.files.camera,
@@ -295,26 +315,69 @@ const viewVideoUrl = (file: string, from: number, to: number) =>
   `/view-video?videoPath=${encodeURIComponent(file)}#t=${from},${to}`;
 
 /**
+ * The recordings a composite of `segments` opens, in input order. A Landscape
+ * composite opens screen and camera whatever it draws (its ffmpeg arguments
+ * and Export Hash are pinned); a Short opens only what its segments draw, so
+ * a Camera-only run never asks for a screen (a camera-only session has none).
+ */
+export const compositeSources = (
+  format: VideoFormat,
+  segments: readonly { readonly scene: Scene }[]
+): LayoutSource[] =>
+  format === "landscape"
+    ? ["screen", "camera"]
+    : drawnSources(segments, format);
+
+/** The file of each source a composite opens; throws on a screen it lacks. */
+export const compositeFiles = (
+  composite: {
+    readonly format: VideoFormat;
+    readonly screen: string | null;
+    readonly camera: string;
+  },
+  segments: readonly { readonly scene: Scene }[]
+): { source: LayoutSource; file: string }[] =>
+  compositeSources(composite.format, segments).map((source) => {
+    const file = source === "screen" ? composite.screen : composite.camera;
+    if (file === null) {
+      throw new Error(
+        "This Recording Session captured no screen, so only the Camera scene can be drawn"
+      );
+    }
+    return { source, file };
+  });
+
+/**
  * A CVM-recorder Clip's picture, for the composite playback canvas: its
  * camera and screen cued to `from`–`to` (source time; they share the
- * picture's clock) and the scene segments to draw them in. Null for an OBS
- * Clip, whose clock is its picture.
+ * picture's clock), the scene segments to draw them in and the format whose
+ * layout draws them. `screen` is null when the picture never draws it (a
+ * Short's Camera-only run, a camera-only session). Null for an OBS Clip,
+ * whose clock is its picture.
  */
 export const clipCompositePicture = (
   source: ClipSource,
   range: { readonly from: number; readonly to: number }
 ): {
+  readonly format: VideoFormat;
   readonly camera: string;
-  readonly screen: string;
+  readonly screen: string | null;
   readonly segments: readonly SceneSegment[];
-} | null =>
-  source.kind === "footage"
-    ? null
-    : {
-        camera: viewVideoUrl(source.files.camera, range.from, range.to),
-        screen: viewVideoUrl(source.files.screen, range.from, range.to),
-        segments: source.segments,
-      };
+} | null => {
+  if (source.kind === "footage") return null;
+  const opensScreen = compositeSources(source.format, source.segments).includes(
+    "screen"
+  );
+  return {
+    format: source.format,
+    camera: viewVideoUrl(source.files.camera, range.from, range.to),
+    screen:
+      opensScreen && source.files.screen !== null
+        ? viewVideoUrl(source.files.screen, range.from, range.to)
+        : null,
+    segments: source.segments,
+  };
+};
 
 /**
  * The scene a run of segments draws at a source time: before the first
@@ -345,6 +408,7 @@ export const clipFrame = (
   }
   return {
     kind: "composite",
+    format: source.format,
     screen: source.files.screen,
     camera: source.files.camera,
     scene: sceneAt(source.segments, time),
@@ -375,22 +439,21 @@ export const clipFrameFfmpegArgs = (
     ];
   }
   const at = Number(opts.seek);
+  const segments = [
+    { scene: frame.scene, startSeconds: at, endSeconds: at + STILL_SECONDS },
+  ];
+  const files = compositeFiles(frame, segments);
   const graph = sceneFilterGraph({
-    segments: [
-      { scene: frame.scene, startSeconds: at, endSeconds: at + STILL_SECONDS },
-    ],
+    segments,
+    inputs: Object.fromEntries(
+      files.map(({ source }, i) => [source, `${i}:v`])
+    ),
     inputStartSeconds: at,
     output: opts.filter ? "composite" : "v",
+    format: frame.format,
   });
   return [
-    "-ss",
-    opts.seek,
-    "-i",
-    frame.screen,
-    "-ss",
-    opts.seek,
-    "-i",
-    frame.camera,
+    ...files.flatMap(({ file }) => ["-ss", opts.seek, "-i", file]),
     "-filter_complex",
     opts.filter ? `${graph};[composite]${opts.filter}[v]` : graph,
     "-map",
@@ -429,8 +492,11 @@ export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput => {
  *
  * A CVM-recorder Clip adds, after those: its Recording Session (`rs`), the
  * scene segments in its range (`sg`), its Scene Override (`so`, only when
- * set), the mic offset (`mo`), the mic EQ (`eq`) and the layout version
- * (`lv`) — everything else its composite is drawn from.
+ * set), the mic offset (`mo`), the mic EQ (`eq`) and its format's layout
+ * version (`lv`) — everything else its composite is drawn from. A Short adds
+ * its Video Format (`vf`) last, so a Short layout version never addresses the
+ * same export as the Landscape one; a Landscape Clip has no `vf`, so every
+ * Landscape export keeps its hash.
  */
 export const clipSourceHashFields = (
   source: ClipSource
@@ -446,6 +512,7 @@ export const clipSourceHashFields = (
       mo: number;
       eq: [number, number, number];
       lv: number;
+      vf?: VideoFormat;
     } => {
   if (source.kind === "footage") {
     return { f: source.footagePath, s: source.start, e: source.end };
@@ -459,6 +526,7 @@ export const clipSourceHashFields = (
     ...(source.sceneOverride ? { so: source.sceneOverride } : {}),
     mo: source.micOffsetMs,
     eq: [source.micEq.lowDb, source.micEq.midDb, source.micEq.highDb],
-    lv: LAYOUT_VERSION,
+    lv: LAYOUT_VERSIONS[source.format],
+    ...(source.format === "landscape" ? {} : { vf: source.format }),
   };
 };

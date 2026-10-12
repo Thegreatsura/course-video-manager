@@ -6,10 +6,12 @@ import { getVideoFilePath } from "@/services/video-files";
 import { FileSystem } from "@effect/platform";
 import path from "node:path";
 import { SCENES } from "@/packages/scene-layout";
+import { VIDEO_FORMATS } from "@cvm/core/features/videos/video-format";
 
 /**
  * A `ClipFrame` from `@/packages/clip-source`: the picker never names a file.
- * A CVM-recorder Clip's is a composite, drawn from its screen and camera.
+ * A CVM-recorder Clip's is a composite, drawn from its screen and camera in
+ * its Recording Session's Video Format.
  */
 const RequestSchema = Schema.Union(
   Schema.Struct({
@@ -19,7 +21,11 @@ const RequestSchema = Schema.Union(
   }),
   Schema.Struct({
     kind: Schema.Literal("composite"),
-    screen: Schema.String,
+    format: Schema.optionalWith(Schema.Literal(...VIDEO_FORMATS), {
+      default: () => "landscape",
+    }),
+    // Null for a camera-only Short Recording Session.
+    screen: Schema.NullOr(Schema.String),
     camera: Schema.String,
     scene: Schema.Literal(...SCENES),
     time: Schema.Number,

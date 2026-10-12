@@ -18,6 +18,7 @@ import {
 import { createTable } from "./table-creator.js";
 import type { BulletPanelBullet } from "../features/videos/bullet-panel.js";
 import type { BeatKind } from "../features/beats/beat-kinds.js";
+import type { VideoFormat } from "../features/videos/video-format.js";
 import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
 import type { ClipMockupVoiceStatus } from "../features/clip-mockups/voice-status.js";
 import type {
@@ -492,6 +493,17 @@ export const recordingSessions = createTable(
       .default("short"),
     cameraFramesLost: integer("camera_frames_lost").notNull().default(0),
     screenFramesLost: integer("screen_frames_lost").notNull().default(0),
+    /**
+     * The Video Format it was filmed in (its Video's format when recording
+     * started): every reader of its Clips' picture draws them in this format's
+     * layout (`@/packages/scene-layout`).
+     */
+    format: text("format").$type<VideoFormat>().notNull().default("landscape"),
+    /**
+     * Whether it captured the screen. A Short's may be camera-only: then
+     * `screenFilePath` names no file and nothing opens it.
+     */
+    screenCaptured: boolean("screen_captured").notNull().default(true),
   },
   (table) => [
     index("recording_session_video_id_idx").on(table.videoId),
@@ -502,6 +514,10 @@ export const recordingSessions = createTable(
     check(
       "recording_session_silence_length_valid",
       sql`${table.silenceLength} IN ('short', 'long')`
+    ),
+    check(
+      "recording_session_format_valid",
+      sql`${table.format} IN ('landscape', 'short')`
     ),
   ]
 );

@@ -141,6 +141,8 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             });
             // The vertical renderer always produces a 9:16 short — the Remotion
             // subtitle/CTA overlay below is rendered at 1080x1920 to match.
+            // A CVM-recorder Short Clip's composite is drawn on the Short
+            // layout's own 1080x1920 canvas, so this scale stretches nothing.
             const dimensions = VIDEO_FORMAT_DIMENSIONS.short;
             const concatExtras = { onLog: logCliOutput("concat") };
             // As the export does: a Video with any CVM-recorder Clip is

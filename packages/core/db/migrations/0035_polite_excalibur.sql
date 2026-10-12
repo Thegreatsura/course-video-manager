@@ -1,0 +1,3 @@
+ALTER TABLE "course-video-manager_recording_session" ADD COLUMN "format" text DEFAULT 'landscape' NOT NULL;--> statement-breakpoint
+ALTER TABLE "course-video-manager_recording_session" ADD COLUMN "screen_captured" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "course-video-manager_recording_session" ADD CONSTRAINT "recording_session_format_valid" CHECK ("course-video-manager_recording_session"."format" IN ('landscape', 'short'));

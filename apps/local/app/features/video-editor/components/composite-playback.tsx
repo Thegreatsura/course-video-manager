@@ -26,7 +26,8 @@ export const CompositePlayback = (props: {
   clock: RefObject<HTMLVideoElement | null>;
   picture: {
     camera: string;
-    screen: string;
+    /** Null when the picture never draws the screen. */
+    screen: string | null;
     segments: readonly SceneSegment[];
   };
   offsetSeconds: number;
@@ -79,14 +80,16 @@ export const CompositePlayback = (props: {
         preload="auto"
         className={offscreen}
       />
-      <video
-        ref={screen}
-        src={props.picture.screen}
-        muted
-        playsInline
-        preload="auto"
-        className={offscreen}
-      />
+      {props.picture.screen !== null && (
+        <video
+          ref={screen}
+          src={props.picture.screen}
+          muted
+          playsInline
+          preload="auto"
+          className={offscreen}
+        />
+      )}
     </>
   );
 };

@@ -106,6 +106,8 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
               status: "recording",
               startedAt: new Date(event.t0Ms),
               silenceLength: event.silenceLength,
+              format: event.format ?? "landscape",
+              screenCaptured: event.screenCaptured ?? true,
             })
             .onConflictDoNothing()
         );

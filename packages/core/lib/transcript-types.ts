@@ -17,6 +17,7 @@ export type SectionWithWordCount = {
 };
 
 import type { RecordingSessionScene } from "../features/videos/recorder.js";
+import type { VideoFormat } from "../features/videos/video-format.js";
 
 /**
  * A CVM-recorder Clip's Recording Session as loaded with it — the shape the
@@ -28,6 +29,10 @@ export type IndexedClipRecordingSession = {
   screenFilePath: string;
   micFilePath: string;
   micOffsetMs: number;
+  /** The Video Format it was filmed in: its picture is drawn in that layout. */
+  format: VideoFormat;
+  /** False on a camera-only Short session: there is no screen file. */
+  screenCaptured: boolean;
   sceneEvents: { fileTime: number; scene: RecordingSessionScene }[];
 };
 
