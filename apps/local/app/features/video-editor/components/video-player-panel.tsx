@@ -144,10 +144,6 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.allClipsHaveText
   );
-  const exportToDavinciResolveFetcher = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.exportToDavinciResolveFetcher
-  );
   const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
   const referenceCandidates = useContextSelector(
     VideoEditorContext,
@@ -277,17 +273,6 @@ export const VideoPlayerPanel = () => {
       : undefined,
     createConcatenatedVideo: () =>
       navigate(`/videos/concatenate?initial=${videoId}`),
-    // OBS Clips only (#2011): hidden once the Video holds a CVM-recorder
-    // Clip, refused by the route (`davinciResolveRefusal`).
-    exportToDavinciResolve: !clips.some(
-      (clip) => clip.type === "on-database" && clip.recordingSession
-    )
-      ? () =>
-          exportToDavinciResolveFetcher.submit(null, {
-            method: "post",
-            action: `/videos/${videoId}/export-to-davinci-resolve`,
-          })
-      : undefined,
   });
   const menuGroups = videoMenuGroups({
     ...editorVideoActions.common,
@@ -394,7 +379,6 @@ export const VideoPlayerPanel = () => {
               videoId={videoId}
               groups={menuGroups}
               allClipsHaveSilenceDetected={allClipsHaveSilenceDetected}
-              isPending={exportToDavinciResolveFetcher.state === "submitting"}
             />
             <Button
               variant="secondary"

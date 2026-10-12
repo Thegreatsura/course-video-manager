@@ -6,7 +6,7 @@ status: accepted
 
 The Course Video Manager holds every **Course**, **Course Version**, **Section**, **Lesson**, **Video**, **Clip**, **Beat**, **Pitch** and **Deliverable** in one Postgres database. That database ran in a container on the author's machine and `cvm` reached it by importing the Effect services in-process, so an agent could only touch the domain data while sitting on that machine — not while filming, not with the laptop closed, not at all when the author was away.
 
-Most of the application genuinely cannot move. OBS drives **Recording Sessions**, ffmpeg computes **Export Hashes** and produces **Exported Videos**, the finished videos directory holds the `.mp4` files, **Video Files** live on disk, DaVinci Resolve and spacedesk are Windows processes, and the Stream Deck hub and the link-capture extension are local ports. The database has no such constraint: it was always Postgres behind a connection string.
+Most of the application genuinely cannot move. OBS drives **Recording Sessions**, ffmpeg computes **Export Hashes** and produces **Exported Videos**, the finished videos directory holds the `.mp4` files, **Video Files** live on disk, spacedesk is a Windows process, and the Stream Deck hub and the link-capture extension are local ports. The database has no such constraint: it was always Postgres behind a connection string.
 
 So the repo splits along the one axis that is real — **what needs the machine, and what only needs the data**:
 

@@ -1,6 +1,6 @@
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Config, Data, Effect, Option, Stream } from "effect";
+import { Config, Effect, Option } from "effect";
 import crypto from "node:crypto";
 import path from "node:path";
 import { homedir, tmpdir } from "os";
@@ -11,18 +11,6 @@ import type { SilenceLength } from "@/silence-detection-constants";
 import { clipFrameFfmpegArgs, type ClipFrame } from "@/packages/clip-source";
 
 export type PauseType = "none" | "long";
-
-const AUTO_EDITED_VIDEO_FINAL_END_PADDING = 0.5;
-
-const FUSCRIPT_LOCATION =
-  "/mnt/d/Program Files/Blackmagic Design/DaVinci Resolve/fuscript.exe";
-
-class CouldNotRunDavinciResolveScriptError extends Data.TaggedError(
-  "CouldNotRunDavinciResolveScriptError"
-)<{
-  cause: unknown;
-  message: string;
-}> {}
 
 export class VideoProcessingService extends Effect.Service<VideoProcessingService>()(
   "VideoProcessingService",
@@ -135,132 +123,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
 
       const getFirstFrame = (frame: ClipFrame) => renderStill(frame, "first-");
 
-      /**
-       * Serialize clips into the format expected by the clip-and-append.lua script.
-       */
-      const serializeClipsForAppendScript = (
-        clips: {
-          startFrame: number;
-          endFrame: number;
-          videoIndex: number;
-          trackIndex: number;
-        }[]
-      ) => {
-        return clips
-          .map(
-            (clip) =>
-              `${clip.startFrame}___${clip.endFrame}___${clip.videoIndex}___${clip.trackIndex}`
-          )
-          .join(":::");
-      };
-
-      /**
-       * Run a DaVinci Resolve Lua script via fuscript.exe.
-       */
-      const runDavinciResolveScript = Effect.fn("runDavinciResolveScript")(
-        function* (script: string, env: Record<string, string>) {
-          const scriptPath = path.resolve(
-            import.meta.dirname,
-            "../../resources/resolve",
-            script
-          );
-
-          // Convert to Windows UNC path for fuscript
-          const windowsScriptPath = scriptPath.replace(
-            /^\/home\/(\w+)/,
-            (_, user) =>
-              `\\\\\\\\wsl.localhost\\\\Ubuntu-24.04\\\\home\\\\${user}`
-          );
-
-          const command = Command.make(
-            FUSCRIPT_LOCATION,
-            "-q",
-            windowsScriptPath
-          ).pipe(Command.env(env));
-
-          return yield* Effect.scoped(
-            Effect.gen(function* () {
-              const process = yield* Command.start(command).pipe(
-                Effect.mapError(
-                  (e) =>
-                    new CouldNotRunDavinciResolveScriptError({
-                      cause: e,
-                      message: `Failed to run DaVinci Resolve script: ${e.message}`,
-                    })
-                )
-              );
-
-              const [stdout, stderr] = yield* Effect.all(
-                [
-                  process.stdout.pipe(Stream.decodeText(), Stream.mkString),
-                  process.stderr.pipe(Stream.decodeText(), Stream.mkString),
-                ],
-                { concurrency: 2 }
-              );
-              yield* process.exitCode.pipe(Effect.ignore);
-
-              return { stdout, stderr };
-            })
-          );
-        }
-      );
-
-      const sendClipsToDavinciResolve = Effect.fn("sendClipsToDavinciResolve")(
-        function* (opts: {
-          timelineName: string;
-          clips: {
-            inputVideo: string;
-            startTime: number;
-            duration: number;
-          }[];
-        }) {
-          const uniqueInputVideos = [
-            ...new Set(opts.clips.map((clip) => clip.inputVideo)),
-          ];
-
-          const inputVideosMap = uniqueInputVideos.reduce(
-            (acc, video, index) => {
-              acc[video] = index;
-              return acc;
-            },
-            {} as Record<string, number>
-          );
-
-          const firstInputVideo = uniqueInputVideos[0];
-          if (!firstInputVideo) {
-            return "";
-          }
-
-          const fps = yield* ffmpegCommands.getFPS(firstInputVideo);
-
-          const serializedClips = serializeClipsForAppendScript(
-            opts.clips.map((clip, index, array) => {
-              const isLastClip = index === array.length - 1;
-              const endPadding = isLastClip
-                ? AUTO_EDITED_VIDEO_FINAL_END_PADDING
-                : 0;
-              return {
-                startFrame: Math.floor(clip.startTime * fps),
-                endFrame: Math.ceil(
-                  (clip.startTime + clip.duration + endPadding) * fps
-                ),
-                videoIndex: inputVideosMap[clip.inputVideo]!,
-                trackIndex: 1,
-              };
-            })
-          );
-
-          const result = yield* runDavinciResolveScript("clip-and-append.lua", {
-            NEW_TIMELINE_NAME: opts.timelineName,
-            INPUT_VIDEOS: uniqueInputVideos.join(":::"),
-            CLIPS_TO_APPEND: serializedClips,
-            WSLENV: "INPUT_VIDEOS/p:CLIPS_TO_APPEND:NEW_TIMELINE_NAME",
-          });
-
-          return result.stdout;
-        }
-      );
-
       return {
         getLatestOBSVideoClips,
         /**
@@ -274,7 +136,6 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
         getVideoDurationInSeconds: ffmpegCommands.getVideoDurationInSeconds,
         getLastFrame,
         getFirstFrame,
-        sendClipsToDavinciResolve,
       };
     }),
     dependencies: [

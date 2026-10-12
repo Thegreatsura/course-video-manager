@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  davinciResolveRefusal,
-  parseVideoRecorder,
-  resolveVideoRecorder,
-} from "./recorder.js";
+import { parseVideoRecorder, resolveVideoRecorder } from "./recorder.js";
 
 describe("reading a stored Recorder", () => {
   it("reads the CVM recorder's pre-rename value `new-recorder` as `cvm`", () => {
@@ -30,17 +26,5 @@ describe("reading a stored Recorder", () => {
     expect(resolveVideoRecorder({ format: "short", recorder: null })).toBe(
       "cvm"
     );
-  });
-});
-
-describe("davinciResolveRefusal", () => {
-  it("refuses a Video holding a CVM-recorder Clip, whatever Recorder it opens next", () => {
-    const obsClip = { recordingSessionId: null };
-    const cvmRecorderClip = { recordingSessionId: "rs-1" };
-
-    expect(davinciResolveRefusal({ clips: [obsClip, cvmRecorderClip] })).toBe(
-      "Export to DaVinci Resolve works on OBS Clips only: this Video holds CVM-recorder Clips."
-    );
-    expect(davinciResolveRefusal({ clips: [obsClip] })).toBe(null);
   });
 });
