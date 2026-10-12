@@ -168,6 +168,7 @@ describe("diagramPlaygroundReducer", () => {
 
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
+      { type: "centre-camera-after-layout" },
     ]);
 
     tester
@@ -177,8 +178,11 @@ describe("diagramPlaygroundReducer", () => {
       .send({ type: "recording-status-reported", recording: false })
       .send({ type: "recording-status-reported", recording: false });
 
+    // Centred once, as the take starts — never again while it runs, so the
+    // author can pan.
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
+      { type: "centre-camera-after-layout" },
       { type: "set-focus-mode", isFocusMode: false },
     ]);
   });
@@ -194,6 +198,7 @@ describe("diagramPlaygroundReducer", () => {
     expect(tester.getState().isFocusMode).toBe(false);
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
+      { type: "centre-camera-after-layout" },
     ]);
   });
 });

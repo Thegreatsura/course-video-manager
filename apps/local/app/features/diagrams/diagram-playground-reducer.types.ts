@@ -148,4 +148,10 @@ export type DiagramPlaygroundEffect =
   /** Report `error-timed-out` for error `id` once `ms` have passed. */
   | { type: "time-out-error"; id: number; ms: number }
   /** Turn tldraw's Focus Mode on (sidebar hidden) or off (sidebar shown). */
-  | { type: "set-focus-mode"; isFocusMode: boolean };
+  | { type: "set-focus-mode"; isFocusMode: boolean }
+  /**
+   * Centre the camera on the diagram (`centreCameraOnContent`) once the layout
+   * has caught up with any sidebar change declared alongside it, so the fit
+   * uses the canvas's new size.
+   */
+  | { type: "centre-camera-after-layout" };
