@@ -113,7 +113,7 @@ export type VideoEditorContextType = {
   recorderPicker: RecorderPicker;
   /** Record and Stop on a CVM recorder Video. */
   cvmRecorder: CvmRecorderControls;
-  /** Whether each Recorder may start, by the Audio Calibration gate (ADR 0038). */
+  /** Whether each Recorder may start, by the AV Calibration gate (ADR 0038). */
   calibrationGate: CalibrationGate;
   liveMediaStream: MediaStream | null;
   speechDetectorState: FrontendSpeechDetectorState;

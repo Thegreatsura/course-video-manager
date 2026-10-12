@@ -7,9 +7,9 @@ import {
   passesCurrentRules,
   type CurrentInputDevice,
   type LastPassedCalibration,
-} from "./audio-calibration-constants";
+} from "./av-calibration-constants";
 
-describe("judging an Audio Calibration", () => {
+describe("judging an AV Calibration", () => {
   it("passes inside -27 LUFS ± 2, edges included, with the true peak at or under -6 dBTP", () => {
     expect(judgeCalibration({ speechLufs: -29, truePeakDb: -6 })).toEqual({
       outcome: "passed",

@@ -3,7 +3,7 @@ import {
   CALIBRATION_REFUSAL_PREFIX,
   CALIBRATION_VALIDITY_MS,
   type LastPassedCalibration,
-} from "../app/audio-calibration-constants";
+} from "../app/av-calibration-constants";
 import {
   CALIBRATION,
   clock,
@@ -16,7 +16,7 @@ import {
 /**
  * THE GATE (ADR 0038), where it bites: the recorder service refuses to start
  * a Recording Session, from the editor or the Stream Deck, without a fresh
- * Audio Calibration on the mic it records. It never stops one running.
+ * AV Calibration on the mic it records. It never stops one running.
  */
 
 const openRecorder = async () => {
@@ -29,7 +29,7 @@ const openRecorder = async () => {
   return { app, deck };
 };
 
-describe("the Audio Calibration gate on the recorder service", () => {
+describe("the AV Calibration gate on the recorder service", () => {
   it.each<[string, LastPassedCalibration | null, string]>([
     ["none has passed", null, "none has passed"],
     [

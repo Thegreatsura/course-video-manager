@@ -10,17 +10,17 @@ import {
   TARGET_BAND,
   type CalibrationMiss,
   type ScriptStep,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import {
   currentStep,
-  type audioCalibrationReducer,
-} from "./audio-calibration-reducer";
+  type avCalibrationReducer,
+} from "./av-calibration-reducer";
 import { CalibrationTimelineView } from "./calibration-timeline-view";
-import type { SavedAudioCalibration } from "./calibration-wire";
+import type { SavedAVCalibration } from "./calibration-wire";
 
-type State = audioCalibrationReducer.State;
+type State = avCalibrationReducer.State;
 
 const dB = (n: number) => `${n.toFixed(1)} dB`;
 
@@ -138,7 +138,7 @@ const missAdvice = (miss: CalibrationMiss) => {
   }
 };
 
-const Result = ({ calibration }: { calibration: SavedAudioCalibration }) => {
+const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
   const { judgement } = calibration;
   return (
     <div className="space-y-5">
@@ -217,7 +217,7 @@ const BrowserInput = ({ state }: { state: State }) => {
 };
 
 /**
- * The scripted session of an Audio Calibration: Start from the meter, the
+ * The scripted session of an AV Calibration: Start from the meter, the
  * prompts and their countdowns, then the result. Every decision is the
  * reducer's; this only draws it.
  */

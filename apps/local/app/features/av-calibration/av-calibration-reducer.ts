@@ -3,17 +3,17 @@ import {
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
   type ScriptStep,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import type {
   BrowserTracePoint,
   FinishCalibrationRequest,
-  SavedAudioCalibration,
+  SavedAVCalibration,
 } from "./calibration-wire";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
 
 /**
- * THE AUDIO CALIBRATION PAGE (#2079): the level meter, then the scripted
+ * THE AV CALIBRATION PAGE (#2079): the level meter, then the scripted
  * session, then its result.
  *
  *   meter → countdown → silence → read 1 / pause 1 … read 5 / pause 5
@@ -24,7 +24,7 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * schedule's step at the latest reading (`currentStep`), so the prompts Matt
  * saw and the audio they are measured against share one time axis. When a
  * reading reaches the end of the script the page asks for the measurement,
- * which stores the Audio Calibration, passed or failed. Cancel, from any step
+ * which stores the AV Calibration, passed or failed. Cancel, from any step
  * before the analysis, stores nothing.
  *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
@@ -34,7 +34,7 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * is stored. A past calibration's result, timeline and all, opens again from
  * the page's history.
  */
-export namespace audioCalibrationReducer {
+export namespace avCalibrationReducer {
   /** Where the page's clock meets the run's: a reading, and when the page heard it. */
   export type Anchor = { seconds: number; receivedAtMs: number };
 
@@ -53,7 +53,7 @@ export namespace audioCalibrationReducer {
     | { kind: "analysing"; calibrationId: string }
     | {
         kind: "result";
-        calibration: SavedAudioCalibration;
+        calibration: SavedAVCalibration;
         timeline: Timeline;
       }
     /** The session could not go on (refused, ffmpeg quit, not stored). */
@@ -107,11 +107,11 @@ export namespace audioCalibrationReducer {
     | {
         type: "calibration-saved";
         calibrationId: string;
-        calibration: SavedAudioCalibration;
+        calibration: SavedAVCalibration;
       }
     | { type: "calibration-not-saved"; calibrationId: string; message: string }
     /** Matt opens a past calibration from the history. */
-    | { type: "past-calibration-clicked"; calibration: SavedAudioCalibration }
+    | { type: "past-calibration-clicked"; calibration: SavedAVCalibration }
     | {
         type: "timeline-loaded";
         calibrationId: string;
@@ -131,18 +131,18 @@ export namespace audioCalibrationReducer {
     | { type: "refresh-history" };
 }
 
-type State = audioCalibrationReducer.State;
-type Action = audioCalibrationReducer.Action;
-type Effect = audioCalibrationReducer.Effect;
+type State = avCalibrationReducer.State;
+type Action = avCalibrationReducer.Action;
+type Effect = avCalibrationReducer.Effect;
 
-const noBrowser = (): audioCalibrationReducer.Browser => ({
+const noBrowser = (): avCalibrationReducer.Browser => ({
   label: null,
   problem: null,
   trace: [],
   capture: null,
 });
 
-export const createInitialAudioCalibrationState = (
+export const createInitialAVCalibrationState = (
   exec: (effect: Effect) => EffectEntity<State, Action>
 ): State => ({
   meter: STARTING_LEVEL_METER,
@@ -155,7 +155,7 @@ export const createInitialAudioCalibrationState = (
 const stopCapture = (
   state: State,
   exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): audioCalibrationReducer.Browser => {
+): avCalibrationReducer.Browser => {
   if (state.browser.capture) exec.stop(state.browser.capture);
   return { ...state.browser, capture: null };
 };
@@ -204,7 +204,7 @@ const onReading = (
 /** A calibration's result, its timeline loading. */
 const showResult = (
   state: State,
-  calibration: SavedAudioCalibration,
+  calibration: SavedAVCalibration,
   exec: Parameters<EffectReducer<State, Action, Effect>>[2]
 ): State => {
   exec({ type: "load-timeline", calibrationId: calibration.id });
@@ -214,7 +214,7 @@ const showResult = (
   };
 };
 
-export const audioCalibrationReducer: EffectReducer<State, Action, Effect> = (
+export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
   exec

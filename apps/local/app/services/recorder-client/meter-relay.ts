@@ -2,7 +2,7 @@ import type {
   RecorderCommand,
   RecorderMessage,
 } from "recorder-service/protocol";
-import type { LevelMeterMessage } from "@/features/audio-calibration/level-meter-wire";
+import type { LevelMeterMessage } from "@/features/av-calibration/level-meter-wire";
 
 type MeterListener = (message: LevelMeterMessage) => void;
 
@@ -30,7 +30,7 @@ export const isMeterMessage = (m: RecorderMessage): m is MeterMessage =>
 
 /**
  * The recorder client's half of the level meter: passes the recorder
- * service's meter messages on to the Audio Calibration pages listening. The
+ * service's meter messages on to the AV Calibration pages listening. The
  * first page listening starts the meter, and the last one going stops it, at
  * once, so the mic is held only while a page is open.
  */

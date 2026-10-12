@@ -11,8 +11,8 @@ import {
   CALIBRATION_REFUSAL_PREFIX,
   CALIBRATION_VALIDITY_MS,
   deriveThreshold,
-} from "@/audio-calibration-constants";
-import { requireFreshAudioCalibration } from "../audio-calibration.server";
+} from "@/av-calibration-constants";
+import { requireFreshAVCalibration } from "../av-calibration.server";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import {
@@ -20,7 +20,7 @@ import {
   clipService,
   testDb,
 } from "../clip-service-test-setup";
-import { audioCalibrations } from "@/db/schema";
+import { avCalibrations } from "@/db/schema";
 import { createRecorderClient } from "./client.server";
 import {
   clipTimes,
@@ -405,7 +405,7 @@ describe("the recorder client", () => {
 });
 
 /**
- * A stored Audio Calibration, taken `minutesBefore` the recorder service's
+ * A stored AV Calibration, taken `minutesBefore` the recorder service's
  * clock, on its mic, passing today's rules unless told otherwise.
  */
 const calibrated = (
@@ -419,7 +419,7 @@ const calibrated = (
   }
 ) => {
   const speechLufs = o.speechLufs ?? -27;
-  return testDb.insert(audioCalibrations).values({
+  return testDb.insert(avCalibrations).values({
     id,
     createdAt: new Date(T0_MS - o.minutesBefore * 60_000),
     outcome: o.outcome ?? "passed",
@@ -436,15 +436,15 @@ const calibrated = (
 
 const guard = (now: number) =>
   Effect.runPromise(
-    Effect.either(requireFreshAudioCalibration(testDb as never, new Date(now)))
+    Effect.either(requireFreshAVCalibration(testDb as never, new Date(now)))
   );
 
-describe("the recorder client, gated on the Audio Calibration (ADR 0038)", () => {
+describe("the recorder client, gated on the AV Calibration (ADR 0038)", () => {
   it("refuses Record with no calibration passed under today's rules (an old -21 LUFS pass does not count), or an expired one; allows a fresh one", async () => {
     expect(await guard(T0_MS)).toMatchObject({
       _tag: "Left",
       left: {
-        _tag: "AudioCalibrationRequiredError",
+        _tag: "AVCalibrationRequiredError",
         reason: { kind: "none" },
       },
     });
@@ -519,7 +519,7 @@ describe("the recorder client, gated on the Audio Calibration (ADR 0038)", () =>
     await vi.waitFor(async () =>
       expect(await readSession()).toMatchObject({
         status: "stopped",
-        audioCalibrationId: "passed-earlier",
+        avCalibrationId: "passed-earlier",
       })
     );
 
@@ -529,7 +529,7 @@ describe("the recorder client, gated on the Audio Calibration (ADR 0038)", () =>
       press("record");
       expect(
         await testDb.query.recordingSessions.findFirst({
-          where: (s, { eq }) => eq(s.audioCalibrationId, "passed-mid-session"),
+          where: (s, { eq }) => eq(s.avCalibrationId, "passed-mid-session"),
         })
       ).toBeDefined();
     });

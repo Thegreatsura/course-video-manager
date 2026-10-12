@@ -47,7 +47,7 @@ import { MIC_NAME } from "../app/mic-device";
 import {
   calibrationValidity,
   describeCalibrationRefusal,
-} from "../app/audio-calibration-constants";
+} from "../app/av-calibration-constants";
 import {
   createScreenSide,
   refuseScreenlessScene,
@@ -79,7 +79,7 @@ import {
  * The level meter (`level-meter.ts`) holds only the mic, and needs no Video:
  * it runs whether the recorder is closed or open, for the client that started
  * it, until it asks to stop or goes. It and a recording never run together,
- * and neither does an Audio Calibration's run, which takes the meter's place
+ * and neither does an AV Calibration's run, which takes the meter's place
  * while it writes the mic to a file (`calibration-run.ts`).
  */
 
@@ -318,7 +318,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         folder: command.folder,
         silenceLength: command.silenceLength,
         thresholdDb: gate.calibration.thresholdDb,
-        audioCalibrationId: gate.calibration.id,
+        avCalibrationId: gate.calibration.id,
         camera,
         mic,
         screenIndex,

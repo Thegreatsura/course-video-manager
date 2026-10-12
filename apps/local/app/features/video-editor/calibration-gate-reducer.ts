@@ -2,12 +2,12 @@ import {
   calibrationValidity,
   type CalibrationValidity,
   type LastPassedCalibration,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 
 /**
  * THE GATE, as the editor shows it (ADR 0038): whether either Recorder may
  * start now, so the banner on its Record controls says why not before Record
- * is pressed. The latest Audio Calibration passed under today's rules comes
+ * is pressed. The latest AV Calibration passed under today's rules comes
  * from the loader; the clock ticks in as an event, so a calibration that
  * expires while the editor is open shows as expired.
  *

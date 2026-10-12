@@ -128,7 +128,7 @@ export const ebur128Line = (seconds: number, m: number, s: number) =>
   `[Parsed_ebur128_0 @ 000001d2] [info] t: ${seconds.toFixed(4)}   TARGET:-23 LUFS    M: ${m.toFixed(1)} S: ${s.toFixed(1)}     I: ${s.toFixed(1)} LUFS       LRA:   0.0 LU`;
 
 /**
- * The end of an Audio Calibration's analysis, as ffmpeg printed it for a real
+ * The end of an AV Calibration's analysis, as ffmpeg printed it for a real
  * file: the speech windows' Summary, then the whole take's with its true
  * peak (in that order, though the parser does not rely on it).
  */
@@ -232,7 +232,7 @@ export const fakeWindows = (
      */
     micLoudness?: (seconds: number) => number;
     /**
-     * What an Audio Calibration's analysis of its mic file measures (default:
+     * What an AV Calibration's analysis of its mic file measures (default:
      * a -97.3 dBFS floor, -27.4 LUFS speech, a -9.2 dBTP peak), printed as
      * ffmpeg does.
      * `failed`: it exits 1 with an error instead.
@@ -350,7 +350,7 @@ export const fakeWindows = (
       sendFrames(p, l.args, [o.jpeg?.screen ?? TINY_JPEG]);
       return p;
     }
-    // An Audio Calibration's analysis of its mic file (calibration-run.ts).
+    // An AV Calibration's analysis of its mic file (calibration-run.ts).
     if (l.args.some((a) => a.includes("astats="))) {
       const analysis = o.calibrationAnalysis ?? {
         noiseFloorDb: -97.3,

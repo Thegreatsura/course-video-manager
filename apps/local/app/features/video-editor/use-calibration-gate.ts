@@ -2,7 +2,7 @@ import { useEffect, useMemo, useReducer } from "react";
 import type {
   CalibrationValidity,
   LastPassedCalibration,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import {
   calibrationGateReducer,
   createInitialCalibrationGateState,

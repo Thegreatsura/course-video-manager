@@ -1,7 +1,7 @@
-import type { ScriptStep } from "@/audio-calibration-constants";
+import type { ScriptStep } from "@/av-calibration-constants";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import type { audioCalibrationReducer } from "./audio-calibration-reducer";
+import type { avCalibrationReducer } from "./av-calibration-reducer";
 import type { CalibrationTimeline, TimelineSpan } from "./calibration-timeline";
 
 /** Where `seconds` sits along the axis, as a CSS percentage. */
@@ -131,14 +131,14 @@ const Axis = ({ endSeconds }: { endSeconds: number }) => {
 };
 
 /**
- * An Audio Calibration's review timeline (#2081): the prompts, the browser
+ * An AV Calibration's review timeline (#2081): the prompts, the browser
  * detector and the FFmpeg detector on one axis, in seconds of the mic file.
  * For Matt to judge by eye; it decides nothing.
  */
 export const CalibrationTimelineView = ({
   timeline: load,
 }: {
-  timeline: audioCalibrationReducer.Timeline;
+  timeline: avCalibrationReducer.Timeline;
 }) => {
   if (load.status === "loading")
     return (

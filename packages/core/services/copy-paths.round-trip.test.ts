@@ -77,8 +77,8 @@ const overrides = (ctx: {
   "recording_session.silenceLength": () => "long",
   "recording_session.format": () => "short",
   "recording_session_scene_event.scene": () => "Code",
-  // An Audio Calibration is never copied, as a Recording Session is not.
-  "recording_session.audioCalibrationId": () => null,
+  // An AV Calibration is never copied, as a Recording Session is not.
+  "recording_session.avCalibrationId": () => null,
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // A Learning Goal belongs to the Video's Section, which every copy shares.

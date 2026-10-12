@@ -10,10 +10,10 @@ import {
 } from "recorder-service/test-utils/service-harness";
 import { fakeWindows } from "recorder-service/test-utils/fake-windows";
 import { DrizzleService } from "@/services/drizzle-service.server";
-import { audioCalibrations } from "@/db/schema";
+import { avCalibrations } from "@/db/schema";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { clipService, testDb } from "../clip-service-test-setup";
-import { lastPassedCalibration } from "../audio-calibration.server";
+import { lastPassedCalibration } from "../av-calibration.server";
 import {
   createRecorderClient,
   type RecorderClientOptions,
@@ -72,12 +72,12 @@ afterAll(() => fs.rmSync(STREAM_DECK_FOLDER, { recursive: true, force: true }));
 export type LastPassed = RecorderClientOptions["calibration"];
 
 /**
- * A fresh Audio Calibration on the scripted mic, stored (a Recording Session
+ * A fresh AV Calibration on the scripted mic, stored (a Recording Session
  * links it): every Record is let through.
  */
 export const freshCalibration: LastPassed = async () => {
   await testDb
-    .insert(audioCalibrations)
+    .insert(avCalibrations)
     .values({
       id: CALIBRATION.id,
       createdAt: new Date(CALIBRATION.createdAtMs),

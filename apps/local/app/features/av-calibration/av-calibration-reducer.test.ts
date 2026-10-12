@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
 import {
-  audioCalibrationReducer,
-  createInitialAudioCalibrationState,
-} from "./audio-calibration-reducer";
+  avCalibrationReducer,
+  createInitialAVCalibrationState,
+} from "./av-calibration-reducer";
 import type { CalibrationTimeline } from "./calibration-timeline";
-import type { SavedAudioCalibration } from "./calibration-wire";
+import type { SavedAVCalibration } from "./calibration-wire";
 
-const calibration = (id: string): SavedAudioCalibration => ({
+const calibration = (id: string): SavedAVCalibration => ({
   id,
   createdAt: "2026-10-12T09:00:00.000Z",
   outcome: "passed",
@@ -30,11 +30,11 @@ const timeline = (calibrationId: string): CalibrationTimeline => ({
   ffmpeg: [],
 });
 
-describe("the Audio Calibration page's review timeline", () => {
+describe("the AV Calibration page's review timeline", () => {
   it("opens a past calibration's result and loads its timeline, ignoring a late one for a calibration it has left", () => {
     const t = new ReducerTester(
-      audioCalibrationReducer,
-      createInitialAudioCalibrationState(createMockExec())
+      avCalibrationReducer,
+      createInitialAVCalibrationState(createMockExec())
     );
     t.send({ type: "past-calibration-clicked", calibration: calibration("a") })
       .send({ type: "past-calibration-clicked", calibration: calibration("b") })

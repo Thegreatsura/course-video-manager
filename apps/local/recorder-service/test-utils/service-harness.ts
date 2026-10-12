@@ -7,7 +7,7 @@ import { fakeWindows } from "./fake-windows";
 import type { RecorderCommand, RecorderMessage } from "../protocol";
 import { startRecorderService } from "../recorder-service";
 import { DEFAULT_SILENCE_THRESHOLD_DB } from "../../app/silence-detection-constants";
-import type { LastPassedCalibration } from "../../app/audio-calibration-constants";
+import type { LastPassedCalibration } from "../../app/av-calibration-constants";
 
 /**
  * The recorder service driven through its WebSocket, with the process
@@ -24,7 +24,7 @@ export const T0_MS = 1_760_000_000_000;
 export const FAKE_MIC = "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)";
 
 /**
- * An Audio Calibration that lets a Record through (ADR 0038): taken a day
+ * An AV Calibration that lets a Record through (ADR 0038): taken a day
  * before the service's clock, on its mic, at the fixed default threshold.
  */
 export const CALIBRATION: LastPassedCalibration = {

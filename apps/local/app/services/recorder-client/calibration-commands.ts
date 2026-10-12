@@ -5,14 +5,14 @@ import type {
 } from "recorder-service/protocol";
 import { RecorderRefusedError } from "./recorder-command";
 
-/** What an Audio Calibration's run measured, and on which mic and file. */
+/** What an AV Calibration's run measured, and on which mic and file. */
 export type CalibrationMeasured = Extract<
   RecorderMessage,
   { type: "calibration-measured" }
 >;
 
 /**
- * The recorder client's Audio Calibration commands (`client.server.ts`): each
+ * The recorder client's AV Calibration commands (`client.server.ts`): each
  * sends one command and waits until the recorder service has carried it out.
  */
 export const calibrationCommands = (o: {
@@ -25,7 +25,7 @@ export const calibrationCommands = (o: {
   problem: () => string | null;
 }) => ({
   /**
-   * Starts an Audio Calibration's run, its mic file in a new folder under
+   * Starts an AV Calibration's run, its mic file in a new folder under
    * `folder` (a WSL path). Answers once it is running.
    */
   async startCalibration(folder: string) {

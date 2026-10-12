@@ -1,6 +1,6 @@
 /**
- * What the app server tells the Audio Calibration page of the level meter,
- * over `GET /api/audio-calibration/meter` (one SSE event per message, its
+ * What the app server tells the AV Calibration page of the level meter,
+ * over `GET /api/av-calibration/meter` (one SSE event per message, its
  * `type` as the event name). Listening is what runs the meter: the recorder
  * service's mic-only ffmpeg.exe starts with the first listener and stops
  * when the last one goes.
@@ -10,7 +10,7 @@ export type LevelMeterMessage =
   | { type: "meter-started"; mic: string }
   /**
    * The mic's loudness now, in LUFS: momentary (400 ms) and short-term (3 s).
-   * `seconds`: since the meter's process started; during an Audio
+   * `seconds`: since the meter's process started; during an AV
    * Calibration's run, seconds of its mic file (the recorder service's clock).
    */
   | {
@@ -21,7 +21,7 @@ export type LevelMeterMessage =
     }
   /** The meter is not running, and why: refused, quit, or no recorder service. */
   | { type: "meter-failed"; message: string }
-  /** An Audio Calibration's run started: readings from here on are its file's. */
+  /** An AV Calibration's run started: readings from here on are its file's. */
   | { type: "calibration-started"; calibrationId: string; mic: string }
   /** The run ended without being measured, and why (its ffmpeg quit, say). */
   | { type: "calibration-failed"; calibrationId: string; message: string };

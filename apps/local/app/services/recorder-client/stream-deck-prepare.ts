@@ -1,15 +1,15 @@
 import type { RecorderCommand } from "recorder-service/protocol";
 import type { SilenceLength } from "@/silence-detection-constants";
-import type { LastPassedCalibration } from "@/audio-calibration-constants";
+import type { LastPassedCalibration } from "@/av-calibration-constants";
 
 /**
  * What a Stream Deck Record on the open Video records with, as the recorder
  * client (`client.server.ts`) tells the recorder service: the Video's editor's
- * Silence Length, the recordings folder, and the latest Audio Calibration
+ * Silence Length, the recordings folder, and the latest AV Calibration
  * passed under today's rules, read when the recorder is prepared. The service
  * gates the press itself (ADR 0038), so a calibration that expires while the
  * recorder stays prepared still stops a Record. Sent again whenever
- * the Video or its Silence Length changes, the connection is new, or an Audio
+ * the Video or its Silence Length changes, the connection is new, or an AV
  * Calibration is stored (`forget`, then `prepare`).
  */
 export const streamDeckPreparation = (o: {
@@ -52,7 +52,7 @@ export const streamDeckPreparation = (o: {
       .catch((error: unknown) => {
         if (attempt === attempts) prepared = undefined;
         console.error(
-          "recorder client: could not read the Audio Calibration",
+          "recorder client: could not read the AV Calibration",
           error
         );
       });

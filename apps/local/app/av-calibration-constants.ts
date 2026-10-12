@@ -1,7 +1,7 @@
 /**
- * THE NUMBERS of an Audio Calibration (#2077, "The numbers"), beside the one
+ * THE NUMBERS of an AV Calibration (#2077, "The numbers"), beside the one
  * definition of silence (`silence-detection-constants.ts`) whose threshold an
- * Audio Calibration will set. Every number the Audio Calibration page and its
+ * AV Calibration will set. Every number the AV Calibration page and its
  * judgement use lives here, as a named constant.
  */
 
@@ -49,7 +49,7 @@ export const THRESHOLD_OFFSET_DB = 16;
  */
 export const THRESHOLD_CLAMP = { lowDb: -45, highDb: -30 } as const;
 
-/** The silence threshold an Audio Calibration sets: speech - 16 dB, clamped. */
+/** The silence threshold an AV Calibration sets: speech - 16 dB, clamped. */
 export const deriveThreshold = (speechLufs: number): number =>
   Math.min(
     Math.max(speechLufs - THRESHOLD_OFFSET_DB, THRESHOLD_CLAMP.lowDb),
@@ -209,7 +209,7 @@ export const MEASUREMENT_WINDOWS: {
 };
 
 /**
- * THE GATE (ADR 0038). A Recorder starts only under a passed Audio
+ * THE GATE (ADR 0038). A Recorder starts only under a passed AV
  * Calibration less than this old, taken on the current audio input device.
  */
 export const CALIBRATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -231,7 +231,7 @@ export const passesCurrentRules = (c: {
   judgeCalibration(c).outcome === "passed";
 
 /**
- * The latest Audio Calibration that passes under today's rules
+ * The latest AV Calibration that passes under today's rules
  * (`passesCurrentRules`), as the gate and a Record need it: when it was
  * taken, on which input device, and the threshold it set.
  */
@@ -319,12 +319,12 @@ export const calibrationValidity = (
   return { valid: true, calibration: lastPassed, expiresAtMs };
 };
 
-/** Where Matt runs an Audio Calibration. */
-export const AUDIO_CALIBRATION_PATH = "/audio-calibration";
+/** Where Matt runs an AV Calibration. */
+export const AV_CALIBRATION_PATH = "/av-calibration";
 
 /** Every gate refusal starts with this, so the editor can link the page. */
 export const CALIBRATION_REFUSAL_PREFIX =
-  "Recording needs a fresh Audio Calibration: ";
+  "Recording needs a fresh AV Calibration: ";
 
 /** A moment as Matt reads it, the same on every machine (UTC). */
 export const formatCalibrationTime = (ms: number): string =>

@@ -1,11 +1,11 @@
 import type {
   CalibrationJudgement,
   CalibrationOutcome,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 
 /**
- * What the Audio Calibration page and the app server say to each other about
- * a run, over `POST /api/audio-calibration/{start,cancel,finish}`. The run's
+ * What the AV Calibration page and the app server say to each other about
+ * a run, over `POST /api/av-calibration/{start,cancel,finish}`. The run's
  * progress itself comes over the level meter's stream (`level-meter-wire.ts`).
  */
 
@@ -17,7 +17,7 @@ import type {
  */
 export type BrowserTracePoint = { seconds: number; peakDb: number };
 
-/** `POST /api/audio-calibration/finish`: the script is done; measure and store it. */
+/** `POST /api/av-calibration/finish`: the script is done; measure and store it. */
 export type FinishCalibrationRequest = {
   /** The run the page followed (`calibration-started`). */
   calibrationId: string;
@@ -27,8 +27,8 @@ export type FinishCalibrationRequest = {
   browserTrace: BrowserTracePoint[] | null;
 };
 
-/** A stored Audio Calibration, as the page shows it. */
-export type SavedAudioCalibration = {
+/** A stored AV Calibration, as the page shows it. */
+export type SavedAVCalibration = {
   id: string;
   createdAt: string;
   outcome: CalibrationOutcome;

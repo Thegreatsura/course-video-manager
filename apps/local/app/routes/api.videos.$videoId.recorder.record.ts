@@ -7,7 +7,7 @@ import {
 } from "@/services/recorder-client/live.server";
 import { requireRecordableVideo } from "@/services/recorder-client/record-guard.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
-import { requireFreshAudioCalibration } from "@/services/audio-calibration.server";
+import { requireFreshAVCalibration } from "@/services/av-calibration.server";
 import { makeAction } from "@/services/route-action.server";
 
 const startRecordingSchema = Schema.Struct({
@@ -19,7 +19,7 @@ const startRecordingSchema = Schema.Struct({
  * Record, on a CVM recorder Video: the recorder service starts a Recording
  * Session in a folder of its own beside the OBS recordings. Answers once it
  * is recording; a refusal is a 409 with the reason: the Video records with
- * OBS, its Version is not the Draft, no Audio Calibration passed in the last
+ * OBS, its Version is not the Draft, no AV Calibration passed in the last
  * 7 days (ADR 0038), or the recorder said no (it checks the mic).
  */
 export const action = makeAction({
@@ -27,7 +27,7 @@ export const action = makeAction({
   errors: {
     RecorderCommandError: 409,
     RecordOnOBSVideoError: 409,
-    AudioCalibrationRequiredError: 409,
+    AVCalibrationRequiredError: 409,
     VersionNotDraftError: 409,
   },
   effect: ({ params, payload }) =>
@@ -38,7 +38,7 @@ export const action = makeAction({
       const videoId = params.videoId!;
       const db = yield* DrizzleService;
       const { format } = yield* requireRecordableVideo(db, videoId);
-      yield* requireFreshAudioCalibration(db, new Date());
+      yield* requireFreshAVCalibration(db, new Date());
       yield* recorderCommand(() =>
         recorderClient().startRecording(videoId, {
           ...request,

@@ -1,11 +1,11 @@
-import { bandPosition, type BandPosition } from "@/audio-calibration-constants";
+import { bandPosition, type BandPosition } from "@/av-calibration-constants";
 import type { LevelMeterMessage } from "./level-meter-wire";
 
 /**
- * THE LEVEL METER on the Audio Calibration page: the mic's loudness, live,
+ * THE LEVEL METER on the AV Calibration page: the mic's loudness, live,
  * from the recorder service's ffmpeg (`level-meter-wire.ts`). Opening the page
  * listens, which starts the meter; leaving it stops listening, which stops it.
- * The page's reducer (`audio-calibration-reducer.ts`) owns the listening, and
+ * The page's reducer (`av-calibration-reducer.ts`) owns the listening, and
  * hands every meter message to this one.
  */
 export namespace levelMeterReducer {
