@@ -8,12 +8,12 @@ import type { Scene, SceneSegment } from "@/packages/scene-layout";
  * along, muted, in the picture's clock — the mic offset after the mic — to be
  * drawn on a canvas in the scene of the moment.
  *
- * Events are what the clock and the two picture `<video>`s report; effects
- * are what the runner does to the picture `<video>`s.
+ * Events are what the clock and the picture `<video>`s report; effects are
+ * what the runner does to the picture `<video>`s. Only the sources the
+ * picture opens are mounted (a Short's Camera-only picture has no screen
+ * `<video>`), so only those are ever sent anywhere or waited on.
  */
 export type PictureSource = "camera" | "screen";
-
-const PICTURE_SOURCES: readonly PictureSource[] = ["camera", "screen"];
 
 /** How far a picture `<video>` may wander from the mic before it is reseeked. */
 export const MAX_PICTURE_DRIFT_SECONDS = 0.1;
@@ -26,6 +26,10 @@ export namespace compositePlaybackReducer {
     /** Where the clock says the picture is, in the picture's clock. */
     readonly pictureTime: number;
     readonly playing: boolean;
+    /** The clock's playback rate, for a source mounted mid-play. */
+    readonly rate: number;
+    /** The picture `<video>`s mounted: the sources the picture opens. */
+    readonly sources: readonly PictureSource[];
     /** Picture `<video>`s told to seek that have not reported `seeked` yet. */
     readonly seeking: readonly PictureSource[];
   }
@@ -41,28 +45,40 @@ export namespace compositePlaybackReducer {
       }
     | { type: "clock-rate-changed"; rate: number }
     | { type: "source-seeked"; source: PictureSource }
-    /** The Clip's picture was redrawn (a Scene Override, a new mic offset). */
+    /**
+     * The Clip's picture was redrawn (a Scene Override, a new mic offset):
+     * a Short's override may also mount or unmount its screen `<video>`.
+     */
     | {
         type: "clip-source-changed";
         segments: readonly SceneSegment[];
         offsetSeconds: number;
+        sources: readonly PictureSource[];
       };
 
   export type Effect =
-    | { type: "play-sources"; at: number; rate: number }
-    | { type: "pause-sources"; at: number }
+    | {
+        type: "play-sources";
+        at: number;
+        rate: number;
+        sources: PictureSource[];
+      }
+    | { type: "pause-sources"; at: number; sources: PictureSource[] }
     | { type: "seek-sources"; at: number; sources: PictureSource[] }
-    | { type: "set-sources-rate"; rate: number };
+    | { type: "set-sources-rate"; rate: number; sources: PictureSource[] };
 }
 
 export const createInitialCompositePlaybackState = (o: {
   segments: readonly SceneSegment[];
   offsetSeconds: number;
+  sources: readonly PictureSource[];
 }): compositePlaybackReducer.State => ({
   segments: o.segments,
   offsetSeconds: o.offsetSeconds,
   pictureTime: o.segments[0]?.startSeconds ?? 0,
   playing: false,
+  rate: 1,
+  sources: o.sources,
   seeking: [],
 });
 
@@ -79,26 +95,27 @@ export const compositePlaybackReducer: EffectReducer<
   compositePlaybackReducer.Effect
 > = (state, action, exec) => {
   const picture = (clockTime: number) => tidy(clockTime + state.offsetSeconds);
+  const sources = [...state.sources];
   switch (action.type) {
     case "clock-played": {
       const at = picture(action.clockTime);
-      exec({ type: "play-sources", at, rate: action.rate });
-      return { ...state, pictureTime: at, playing: true };
+      exec({ type: "play-sources", at, rate: action.rate, sources });
+      return { ...state, pictureTime: at, playing: true, rate: action.rate };
     }
     case "clock-paused": {
       const at = picture(action.clockTime);
-      exec({ type: "pause-sources", at });
+      exec({ type: "pause-sources", at, sources });
       return { ...state, pictureTime: at, playing: false };
     }
     case "clock-seeked": {
       const at = picture(action.clockTime);
-      exec({ type: "seek-sources", at, sources: [...PICTURE_SOURCES] });
-      return { ...state, pictureTime: at, seeking: [...PICTURE_SOURCES] };
+      exec({ type: "seek-sources", at, sources });
+      return { ...state, pictureTime: at, seeking: sources };
     }
     case "clock-ticked": {
       const at = picture(action.clockTime);
       if (!state.playing) return { ...state, pictureTime: at };
-      const drifted = PICTURE_SOURCES.filter(
+      const drifted = sources.filter(
         (s) =>
           !state.seeking.includes(s) &&
           Math.abs(action.sourceTimes[s] - at) > MAX_PICTURE_DRIFT_SECONDS
@@ -113,14 +130,29 @@ export const compositePlaybackReducer: EffectReducer<
       };
     }
     case "clock-rate-changed":
-      exec({ type: "set-sources-rate", rate: action.rate });
-      return state;
-    case "clip-source-changed":
+      exec({ type: "set-sources-rate", rate: action.rate, sources });
+      return { ...state, rate: action.rate };
+    case "clip-source-changed": {
+      const at = state.pictureTime;
+      const mounted = action.sources.filter((s) => !sources.includes(s));
+      if (mounted.length > 0) {
+        exec(
+          state.playing
+            ? { type: "play-sources", at, rate: state.rate, sources: mounted }
+            : { type: "seek-sources", at, sources: mounted }
+        );
+      }
       return {
         ...state,
         segments: action.segments,
         offsetSeconds: action.offsetSeconds,
+        sources: action.sources,
+        seeking: [
+          ...state.seeking.filter((s) => action.sources.includes(s)),
+          ...(state.playing ? [] : mounted),
+        ],
       };
+    }
     case "source-seeked":
       return {
         ...state,

@@ -12,7 +12,9 @@
 // CVM-recorder Clip, when the row is loaded with its `recordingSession`).
 // `clipComposite` says what the export draws for a CVM-recorder Clip, drawn
 // in its Recording Session's Video Format; `compositeFiles` says which files a
-// run of its segments opens (a Short opens only what it draws).
+// run of its segments opens (a Short opens only what it draws);
+// `sceneOverrideScenes` says which scenes a Scene Override may pick (only
+// Camera on a session that captured no screen).
 export {
   clipComposite,
   compositeFiles,
@@ -23,6 +25,7 @@ export {
   clipPlaybackClock,
   clipPlaybackUrl,
   sceneAt,
+  sceneOverrideScenes,
   clipSource,
   clipSourceColumns,
   clipSourceHashFields,
