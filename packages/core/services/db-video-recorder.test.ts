@@ -29,7 +29,7 @@ beforeEach(async () => {
   await truncateAllTables(testDb);
 });
 
-const addClip = (videoId: string) =>
+const addClip = (videoId: string, archived = false) =>
   Effect.promise(() =>
     testDb.insert(schema.clips).values({
       videoId,
@@ -38,8 +38,31 @@ const addClip = (videoId: string) =>
       sourceEndTime: 5,
       order: "a0",
       text: "",
+      archived,
     })
   );
+
+const addRecordingSession = (
+  videoId: string,
+  status: "recording" | "stopped"
+) =>
+  Effect.promise(() =>
+    testDb.insert(schema.recordingSessions).values({
+      videoId,
+      cameraFilePath: "/footage/camera.mkv",
+      screenFilePath: "/footage/screen.mkv",
+      micFilePath: "/footage/mic.wav",
+      status,
+    })
+  );
+
+const pickNewRecorder = (videoId: string) =>
+  Effect.gen(function* () {
+    const videoOps = yield* VideoOperationsService;
+    return yield* Effect.flip(
+      videoOps.updateVideoRecorder({ videoId, recorder: "new-recorder" })
+    );
+  });
 
 describe("the Video's Recorder", () => {
   it.effect("a new Video takes the Recorder it is created with", () =>
@@ -116,6 +139,53 @@ describe("the Video's Recorder", () => {
         })
       );
       expect(error._tag).toBe("VideoRecorderLockedError");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "an archived Clip locks the Recorder too, since it can be restored",
+    () =>
+      Effect.gen(function* () {
+        const videoOps = yield* VideoOperationsService;
+        const video = yield* videoOps.createStandaloneVideo({
+          title: "Landscape",
+          format: "landscape",
+        });
+        yield* addClip(video.id, true);
+        const error = yield* pickNewRecorder(video.id);
+        expect(error._tag).toBe("VideoRecorderLockedError");
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("a Recording Session still recording locks the Recorder", () =>
+    Effect.gen(function* () {
+      const videoOps = yield* VideoOperationsService;
+      const video = yield* videoOps.createStandaloneVideo({
+        title: "Landscape",
+        format: "landscape",
+        recorder: "new-recorder",
+      });
+      yield* addRecordingSession(video.id, "recording");
+      const error = yield* Effect.flip(
+        videoOps.updateVideoRecorder({ videoId: video.id, recorder: "obs" })
+      );
+      expect(error._tag).toBe("VideoRecorderLockedError");
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("changing a Video to a Short drops the New recorder", () =>
+    Effect.gen(function* () {
+      const videoOps = yield* VideoOperationsService;
+      const video = yield* videoOps.createStandaloneVideo({
+        title: "Landscape",
+        format: "landscape",
+        recorder: "new-recorder",
+      });
+      const updated = yield* videoOps.updateVideoFormat({
+        videoId: video.id,
+        format: "short",
+      });
+      expect(updated.recorder).toBeNull();
     }).pipe(Effect.provide(testLayer))
   );
 });
