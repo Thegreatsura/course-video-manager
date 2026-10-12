@@ -12,7 +12,6 @@ export const streamDeckForwarderMessageSchema = z.object({
     // is an if/else chain, so it ignores these rather than throwing.
     "teleprompter-advance",
     "teleprompter-back",
-    "teleprompter-toggle-play",
     "teleprompter-reset",
   ]),
 });

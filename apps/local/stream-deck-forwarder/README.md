@@ -40,12 +40,11 @@ service says why. OBS Videos keep Elgato's OBS plugin buttons.
 
 Consumed only by `/teleprompter`; the Video Editor ignores them.
 
-| Action     | HTTP Endpoint                       | Description                      |
-| ---------- | ----------------------------------- | -------------------------------- |
-| Advance    | `GET /api/teleprompter-advance`     | Move forward one step            |
-| Back       | `GET /api/teleprompter-back`        | Move back one step               |
-| Play/Pause | `GET /api/teleprompter-toggle-play` | Meaning varies per reading model |
-| Reset      | `GET /api/teleprompter-reset`       | Return to the top                |
+| Action  | HTTP Endpoint                   | Description           |
+| ------- | ------------------------------- | --------------------- |
+| Advance | `GET /api/teleprompter-advance` | Move forward one step |
+| Back    | `GET /api/teleprompter-back`    | Move back one step    |
+| Reset   | `GET /api/teleprompter-reset`   | Return to the top     |
 
 ## Stream Deck Setup
 

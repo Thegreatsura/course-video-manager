@@ -3,19 +3,10 @@ import { describe, expect, it } from "vitest";
 import { parseScriptBlocks } from "./script-blocks";
 import { TeleprompterCrawl } from "./teleprompter-crawl";
 
-/**
- * The crawl's own animation is a rAF loop in an effect, so static markup is the
- * whole surface here: what the glass shows before anything moves.
- */
+/** Static markup: what the glass shows before anything scrolls. */
 const render = (script: string) =>
   renderToStaticMarkup(
-    <TeleprompterCrawl
-      blocks={parseScriptBlocks(script)}
-      wpm={200}
-      playing={false}
-      onTogglePlay={() => {}}
-      onRewind={() => {}}
-    />
+    <TeleprompterCrawl blocks={parseScriptBlocks(script)} />
   );
 
 describe("TeleprompterCrawl", () => {

@@ -7,9 +7,8 @@ export const HELP = `clip-mockup-comment — a note the author pins to one Clip 
 
 A Clip Mockup Comment is a body of text and nothing else. It hangs off EXACTLY
 ONE parent: a Clip Mockup (one moment of the Animatic) or a Clip Mockup Chapter
-(one of its dividers). A parent can have many comments. The teleprompter shows
-them under the line or divider they hang off, so the author sees them while he
-films. Read them before you review or rewrite a Video's Clip Mockups: they are
+(one of its dividers). A parent can have many comments. The Animatic shows
+them under the line or divider they hang off. Read them before you review or rewrite a Video's Clip Mockups: they are
 the author's own notes on the plan.
 
 There is NO AUTHOR on a comment. The CVM has no users, so every comment is

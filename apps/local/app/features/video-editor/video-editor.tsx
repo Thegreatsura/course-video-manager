@@ -18,7 +18,6 @@ import { useAutofillChaptersModal } from "./hooks/use-autofill-chapters-modal";
 import { useChapterModal } from "./hooks/use-chapter-modal";
 import { getHasLivePreview } from "./live-preview";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
-import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
 import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
 import { toCaptureStatus } from "./recorder-capture";
 import { useTeleprompterConnected } from "./hooks/use-teleprompter-connected";
@@ -325,16 +324,13 @@ export const VideoEditor = (props: {
     hasAnimatic,
   });
 
-  // Sits below `activeTab` rather than up with the other mount effects because
-  // it carries the tab — and above the error-overlay early return, because
-  // these are hooks.
+  // Above the error-overlay early return, because these are hooks.
   useTeleprompterEditorMode({
     videoId: props.videoId,
     capture: toCaptureStatus({
       isRecording: props.isRecordingActive,
       speech: props.speechDetectorState,
     }),
-    tab: activeTab,
     items: props.items,
     sessions: props.sessions,
     playingClipId:
@@ -345,7 +341,6 @@ export const VideoEditor = (props: {
         clipId: clipId as FrontendId,
       }),
   });
-  useTeleprompterShortcuts();
 
   const isTeleprompterConnected = useTeleprompterConnected();
 

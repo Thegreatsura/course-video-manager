@@ -13,9 +13,7 @@
  *     an empty teleprompter.
  *   - `editorState` also carries capture state, mirroring the editor's recording
  *     + silence-detection indicator so the same status is visible on the glass,
- *     the side panel's active tab, so the glass shows whichever of Script,
- *     Animatic or Beats you're looking at in the editor, and one mark per clip in the
- *     current recording session, so the glass can show clips landing, and the
+ *     and one mark per clip in the current recording session, so the glass can show clips landing, and the
  *     newest clip's transcript, so a take can be read back, and the Video's
  *     length so far, so the scope of the video is visible from the glass.
  *
@@ -49,26 +47,6 @@ export const CaptureStatus = z.enum([
   "silence",
 ]);
 export type CaptureStatus = z.infer<typeof CaptureStatus>;
-
-/**
- * Which tab the editor's side panel is showing. Declared here rather than
- * imported from `app/features/video-editor/beat-tab.ts` because this is a wire
- * format: `app/lib` doesn't reach into features, and a transport that owns its
- * own vocabulary can't be broken by a refactor on either side of the channel.
- *
- * `mockups` stays in the union although the editor no longer has that tab
- * (#1724). It is what a stale editor build still on the other end of the
- * channel sends, and the glass shows nothing for it either way. `animatic` is
- * its read-only successor, and the glass does show that one.
- */
-export const EditorTab = z.enum([
-  "beats",
-  "reference",
-  "script",
-  "animatic",
-  "mockups",
-]);
-export type EditorTab = z.infer<typeof EditorTab>;
 
 /**
  * The state of one clip in the current recording session.
@@ -118,15 +96,14 @@ export type ClipMarkIds = z.infer<typeof ClipMarkIds>;
 
 export const TeleprompterParentToChild = z.discriminatedUnion("type", [
   /**
-   * What the editor has open, what capture is doing, and which tab it's showing.
-   * Pushed whenever any of the three changes — plus once on editor mount, and
-   * once in answer to a `hello`. Never sent on a timer.
+   * What the editor has open, and what capture is doing. Pushed whenever any
+   * of it changes — plus once on editor mount, and once in answer to a
+   * `hello`. Never sent on a timer.
    */
   z.object({
     type: z.literal("editorState"),
     videoId: z.string().nullable(),
     capture: CaptureStatus,
-    tab: EditorTab,
     marks: ClipMarks.optional(),
     /** See `ClipMarkIds`. Optional for the same stale-popup reason as `marks`. */
     markClipIds: ClipMarkIds.optional(),
@@ -152,7 +129,7 @@ export const TeleprompterParentToChild = z.discriminatedUnion("type", [
   /** Heartbeat answer, and nothing more. State travels by `editorState`. */
   z.object({ type: z.literal("pong") }),
   z.object({ type: z.literal("editorDisconnected") }),
-  /** Editor saved a script or edited beats; refetch now, don't wait for the poll. */
+  /** Editor saved a script; refetch now, don't wait for the poll. */
   z.object({ type: z.literal("contentChanged"), videoId: z.string() }),
   /**
    * The script as it stands in the editor *right now*, pushed on every
@@ -164,15 +141,6 @@ export const TeleprompterParentToChild = z.discriminatedUnion("type", [
     type: z.literal("scriptChanged"),
     videoId: z.string(),
     script: z.string(),
-  }),
-  /**
-   * A transport control pressed in the *editor* window. The popup only receives
-   * keystrokes when it has OS focus, which it won't while you're reading off the
-   * Prompter, so the editor forwards its own presses.
-   */
-  z.object({
-    type: z.literal("command"),
-    command: z.enum(["advance", "back", "togglePlay", "reset"]),
   }),
 ]);
 
@@ -191,10 +159,6 @@ export const TeleprompterChildToParent = z.discriminatedUnion("type", [
 export type TeleprompterParentToChildMessage = z.infer<
   typeof TeleprompterParentToChild
 >;
-export type TeleprompterCommand = Extract<
-  TeleprompterParentToChildMessage,
-  { type: "command" }
->["command"];
 export type TeleprompterChildToParentMessage = z.infer<
   typeof TeleprompterChildToParent
 >;

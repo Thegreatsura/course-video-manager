@@ -180,8 +180,7 @@ WRITES
                                      'move' REQUIRES an anchor
     clip-mockup-comment
             add/update/delete        pin the author's notes to one Clip Mockup
-                                     or one Clip Mockup Chapter; the
-                                     teleprompter shows them while filming.
+                                     or one Clip Mockup Chapter.
                                      'list --video <id>' reads them all. NOT
                                      local-only; needs a Draft Version;
                                      'delete' is a HARD delete

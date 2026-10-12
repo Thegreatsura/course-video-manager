@@ -6,8 +6,8 @@ import { compareOrderStrings } from "@/lib/sort-by-order";
  * The author often films from these lines instead of the Script, and each one
  * is a Clip, so the boundaries between them are the point.
  *
- * Shared by the Teleprompter's Animatic view and the Video Editor's Animatic
- * tab, so the two read the same list in the same order.
+ * Shared by the Video Editor's Animatic tab and the Article Writer, so the two
+ * read the same list in the same order.
  *
  * The two nouns share one fractional order space, so the list is ONE merged
  * sort of both kinds of row. EMPTY when there is no Clip Mockup: a Chapter
@@ -45,7 +45,7 @@ export interface CommentParentIds {
 /**
  * Comments keyed by the id of the one Clip Mockup or Clip Mockup Chapter they
  * hang off, each list in the order given. The one place that reads the pair of
- * parent ids, for the teleprompter's lines and the Animatic's threads alike.
+ * parent ids, for the Animatic's lines and its threads alike.
  */
 export function groupCommentsByParent<C extends CommentParentIds>(
   comments: readonly C[]

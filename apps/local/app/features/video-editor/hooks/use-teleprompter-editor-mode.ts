@@ -2,8 +2,8 @@
  * Keep the teleprompter popup in step with this editor.
  *
  * The popup has no picker, so this is the only way it learns which video to
- * show, what capture is doing, which of Script or Beats you're looking at, and
- * what this recording session's clips are doing, and how long the Video runs.
+ * show, what capture is doing, what this recording session's clips are doing,
+ * and how long the Video runs.
  *
  * Two effects, doing two different jobs:
  *
@@ -15,7 +15,7 @@
  *   - The second *pushes* state the moment it changes, so the glass is never a
  *     heartbeat behind the editor. Its dependencies are the primitives rather
  *     than the state object, so a re-render that produces an identical
- *     `{ videoId, capture, tab }` sends nothing — which matters, because the
+ *     `{ videoId, capture }` sends nothing — which matters, because the
  *     speech detector re-renders far more often than it actually transitions.
  */
 import { useEffect, useMemo, useRef } from "react";
@@ -28,7 +28,6 @@ import type {
   ClipMarkIds,
   ClipMarks,
 } from "@/lib/teleprompter-protocol";
-import type { BeatTab } from "../beat-tab";
 import type { RecordingSession, TimelineItem } from "../clip-state-reducer";
 import { useSessionClipMarks } from "../session-clip-marks";
 import { useLatestSessionTranscript } from "../session-latest-transcript";
@@ -38,7 +37,6 @@ import { isClip } from "../clip-utils";
 export type TeleprompterEditorInput = {
   videoId: string | null;
   capture: CaptureStatus;
-  tab: BeatTab;
   /** The editor's clips and sessions, from which the session state is derived. */
   items: TimelineItem[];
   sessions: RecordingSession[];
@@ -49,7 +47,7 @@ export type TeleprompterEditorInput = {
 };
 
 export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
-  const { videoId, capture, tab, playingClipId } = input;
+  const { videoId, capture, playingClipId } = input;
   // One per clip in the current session — see `session-clip-marks.ts`.
   const { marks, markClipIds } = useSessionClipMarks(
     input.items,
@@ -72,7 +70,6 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
   const state = {
     videoId,
     capture,
-    tab,
     marks,
     markClipIds,
     playingClipId,
@@ -101,7 +98,6 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
     pushTeleprompterState({
       videoId,
       capture,
-      tab,
       marks: marksKey === "" ? [] : (marksKey.split(",") as ClipMarks),
       markClipIds:
         markClipIdsKey === "" ? [] : (markClipIdsKey.split(",") as ClipMarkIds),
@@ -112,7 +108,6 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
   }, [
     videoId,
     capture,
-    tab,
     marksKey,
     markClipIdsKey,
     playingClipId,
