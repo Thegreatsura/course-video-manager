@@ -525,6 +525,49 @@ export const recordingSessions = createTable(
 );
 
 /**
+ * An Audio Calibration (GLOSSARY.md): one scripted check of Matt's mic, kept
+ * whether it passed or failed; a cancelled one is never stored. Its mic file
+ * and the browser detector's level trace stay beside each other in the
+ * recordings area (`audio-calibrations/<stamp> <id>/`), named here.
+ */
+export const audioCalibrations = createTable(
+  "audio_calibration",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    /** Passed when the speech loudness was inside the target band. */
+    outcome: text("outcome").$type<"passed" | "failed">().notNull(),
+    /** The RMS level of the silence, in dBFS. */
+    noiseFloorDb: doublePrecision("noise_floor_db").notNull(),
+    /** The integrated loudness of the reading rounds, in LUFS. */
+    speechLufs: doublePrecision("speech_lufs").notNull(),
+    /** The silence threshold it chose (speech - 16 dB, clamped), in dB. */
+    thresholdDb: doublePrecision("threshold_db").notNull(),
+    /** The recorder service's mic: its DirectShow name. */
+    recorderMic: text("recorder_mic").notNull(),
+    /** The browser's audio input label; null when the browser could not open it. */
+    browserInputLabel: text("browser_input_label"),
+    /** SCRIPT_VERSION of the script it ran. */
+    scriptVersion: integer("script_version").notNull(),
+    micFilePath: text("mic_file_path").notNull(),
+    /** The browser detector's level trace and the prompt schedule (JSON). */
+    browserTracePath: text("browser_trace_path").notNull(),
+  },
+  (table) => [
+    index("audio_calibration_created_at_idx").on(table.createdAt),
+    check(
+      "audio_calibration_outcome_valid",
+      sql`${table.outcome} IN ('passed', 'failed')`
+    ),
+  ]
+);
+
+/**
  * A saved mic EQ: the three band gains, in dB, of OBS's 3-Band Equalizer (see
  * MicEq in features/videos/recorder.ts), applied to a Recording Session's mic
  * at export. One row today, MIC_EQ_SETTING_ID, written the first time Matt

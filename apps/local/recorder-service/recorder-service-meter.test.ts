@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
+import { ebur128Line } from "./test-utils/fake-windows";
 import { connect, start, tmp } from "./test-utils/service-harness";
 
 /** The level meter through the WebSocket (test-utils/service-harness.ts). */
@@ -57,5 +60,74 @@ describe("the level meter", () => {
       message: METER_WHILE_RECORDING,
     });
     expect(windows.meter()).toBeUndefined();
+  });
+
+  it("runs an Audio Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows; a cancelled run keeps nothing", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    const folder = tmp();
+
+    client.send({ type: "start-meter" });
+    await client.next("meter-started");
+    client.send({ type: "start-calibration", folder });
+    const started = await client.next("calibration-started");
+    expect(started.micFile).toMatch(
+      new RegExp(`^${folder}/audio-calibrations/[^/]+/mic\\.wav$`)
+    );
+    expect(fs.existsSync(path.dirname(started.micFile))).toBe(true);
+    // One process holds the mic: the run's, writing the file.
+    const run = windows.meter();
+    expect(run?.launch.args).toContain("mic.wav");
+    run?.stderr(`${ebur128Line(12.3, -21.9, -22.4)}\r\n`);
+    expect(await client.next("meter-reading")).toMatchObject({
+      seconds: 12.3,
+      shortTermLufs: -22.4,
+    });
+
+    // Record is refused while it runs.
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    client.send({ type: "record", silenceLength: "short", folder: tmp() });
+    expect((await client.next("refused")).message).toBe(RECORD_WHILE_METERING);
+
+    client.send({
+      type: "finish-calibration",
+      silence: { startSeconds: 3.75, endSeconds: 12.25 },
+      speech: [
+        { startSeconds: 13.75, endSeconds: 19.75 },
+        { startSeconds: 23.75, endSeconds: 29.75 },
+      ],
+    });
+    expect(await client.next("calibration-measured")).toEqual({
+      type: "calibration-measured",
+      calibrationId: started.calibrationId,
+      mic: "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)",
+      micFile: started.micFile,
+      noiseFloorDb: -97.3,
+      speechLufs: -21.4,
+    });
+    const analysis = windows.launched.find((l) =>
+      l.args.some((a) => a.includes("astats="))
+    );
+    expect(analysis?.args.join(" ")).toContain(
+      "atrim=start=3.75:end=12.25,astats="
+    );
+    expect(analysis?.args.join(" ")).toContain("concat=n=2:v=0:a=1,ebur128");
+    // The run is over and the plain meter is back, not writing a file.
+    expect(run?.running).toBe(false);
+    expect(windows.meter()?.launch.args).not.toContain("mic.wav");
+
+    // A cancelled run deletes its folder.
+    client.send({ type: "start-calibration", folder });
+    const cancelled = await client.next("calibration-started");
+    client.send({ type: "cancel-calibration" });
+    expect(await client.next("calibration-ended")).toEqual({
+      type: "calibration-ended",
+      calibrationId: cancelled.calibrationId,
+      message: null,
+    });
+    expect(fs.existsSync(path.dirname(cancelled.micFile))).toBe(false);
+    expect(fs.existsSync(path.dirname(started.micFile))).toBe(true);
   });
 });

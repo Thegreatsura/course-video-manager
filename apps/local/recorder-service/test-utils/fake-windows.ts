@@ -127,6 +127,27 @@ const DEVICE_LISTING = [
 export const ebur128Line = (seconds: number, m: number, s: number) =>
   `[Parsed_ebur128_0 @ 000001d2] [info] t: ${seconds.toFixed(4)}   TARGET:-23 LUFS    M: ${m.toFixed(1)} S: ${s.toFixed(1)}     I: ${s.toFixed(1)} LUFS       LRA:   0.0 LU`;
 
+/** The end of an Audio Calibration's analysis, as ffmpeg 8.0.1 printed it for a real file. */
+const calibrationAnalysisStderr = (a: {
+  noiseFloorDb: number | "-inf";
+  speechLufs: number;
+}) =>
+  [
+    "[info] Input #0, wav, from 'mic.wav':",
+    "[Parsed_ebur128_15 @ 000001899126b300] [info] Summary:",
+    "",
+    "  Integrated loudness:",
+    `    I:         ${a.speechLufs.toFixed(1)} LUFS`,
+    "    Threshold: -35.1 LUFS",
+    "",
+    "  Loudness range:",
+    "    LRA:         1.4 LU",
+    "[Parsed_astats_2 @ 0000018990e32b00] [info] Overall",
+    `[Parsed_astats_2 @ 0000018990e32b00] [info] RMS level dB: ${typeof a.noiseFloorDb === "number" ? a.noiseFloorDb.toFixed(6) : a.noiseFloorDb}`,
+    "[out#0/null @ 0000018990e32280] [info] video:0KiB audio:5625KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown",
+    "",
+  ].join("\r\n");
+
 const TINY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 
 /** What the camera preview process sends to the still feed (its second output). */
@@ -194,6 +215,13 @@ export const fakeWindows = (
      * prints only what a test tells it to.
      */
     micLoudness?: (seconds: number) => number;
+    /**
+     * What an Audio Calibration's analysis of its mic file measures (default:
+     * a -97.3 dBFS floor, -21.4 LUFS speech), printed as ffmpeg 8.0.1 does.
+     * `failed`: it exits 1 with an error instead.
+     */
+    calibrationAnalysis?:
+      { noiseFloorDb: number | "-inf"; speechLufs: number } | "failed";
   } = {}
 ) => {
   const spacedesk: {
@@ -299,6 +327,20 @@ export const fakeWindows = (
       screenPreviews.push(p);
       sendFrames(p, l.args, [o.jpeg?.screen ?? TINY_JPEG]);
       return p;
+    }
+    // An Audio Calibration's analysis of its mic file (calibration-run.ts).
+    if (l.args.some((a) => a.includes("astats="))) {
+      const analysis = o.calibrationAnalysis ?? {
+        noiseFloorDb: -97.3,
+        speechLufs: -21.4,
+      };
+      if (analysis === "failed")
+        return answer(p, {
+          stderr:
+            "[in#0 @ 0001] [error] Error opening input: Invalid data found when processing input\r\n",
+          code: 1,
+        });
+      return answer(p, { stderr: calibrationAnalysisStderr(analysis) });
     }
     if (l.args.some((a) => a.startsWith("ebur128"))) {
       const loudness = o.micLoudness;
