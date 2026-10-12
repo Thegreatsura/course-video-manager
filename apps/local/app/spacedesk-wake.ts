@@ -253,5 +253,16 @@ export const wakeSpacedesk = (
         )
       )
     );
-    socket.on("close", () => finish());
+    // Closed after the upgrade: the identification packet went out. Before
+    // it, nothing was woken (spacedesk restarting, another service on the port).
+    socket.on("close", () =>
+      finish(
+        upgraded
+          ? undefined
+          : new SpacedeskWakeError(
+              `spacedesk closed the connection before the handshake (${host}:${port}).`,
+              { cause: new Error("closed before the WebSocket upgrade") }
+            )
+      )
+    );
   });

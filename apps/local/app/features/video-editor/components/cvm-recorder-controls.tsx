@@ -32,7 +32,7 @@ const statusText = (
         case "busy":
           return "The Cam Link is not live.";
         case "live":
-          // Off only when a Short's scene needs a screen that is not ready.
+          // Off only on a Short: Spacedesk still waking, or the scene needs a screen that is not ready.
           return controls.canRecord
             ? "Ready to record."
             : "Waiting for the screen.";

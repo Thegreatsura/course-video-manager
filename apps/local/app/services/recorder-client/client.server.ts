@@ -12,6 +12,7 @@ import type { SilenceLength } from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
 import { cameraMessage, sceneMessage, screenMessage } from "./editor-messages";
+import { helloProblem, stateFormat } from "./service-version";
 import type { IngestResult } from "./ingest.server";
 import {
   RecorderRefusedError,
@@ -201,7 +202,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     const settled = want
       ? state.kind === "open" &&
         state.videoId === want &&
-        state.format === format
+        stateFormat(state) === format
       : state.kind === "closed";
     if (settled) {
       asked = undefined;
@@ -325,7 +326,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     switch (message.type) {
       case "hello":
         reachable = true;
-        problem = message.ffmpeg.ok ? null : message.ffmpeg.message;
+        problem = helloProblem(message, http);
         state = message.state;
         asked = undefined;
         prepared = undefined;
@@ -453,7 +454,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     message.state.kind === kind &&
     message.state.kind !== "closed" &&
     message.state.videoId === videoId &&
-    (!format || message.state.format === format);
+    (!format || stateFormat(message.state) === format);
 
   const requireOpenFor = (videoId: string) => {
     if (state.kind === "closed" || state.videoId !== videoId)

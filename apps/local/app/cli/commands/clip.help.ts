@@ -22,7 +22,9 @@ Recorder and scenes: each Video's Recorder is OBS or the CVM recorder. An OBS Cl
 Footage file with the scene baked in; its 'scene' is the scene OBS reported. A CVM-recorder Clip
 points at a Recording Session ('recordingSessionId'; 'clip list' also carries the session's files,
 mic offset and scene timeline as 'recordingSession'): its camera, screen and mic Footage on one
-shared clock, plus which scene was live from each moment. Its picture is drawn at export from those
+shared clock, plus which scene was live from each moment. A Short's Recording Session ('format'
+"short") may be camera-only: with 'screenCaptured' false no screen file was written, so its
+'screenFilePath' names no file (do not open it) and only Camera can be drawn. Its picture is drawn at export from those
 files and that timeline, so a scene change in the middle of the Clip changes the picture there; its
 'videoFilename' is the session's mic file and its 'scene' is the scene live at its start. A Scene
 Override ('sceneOverride': "Camera", "Code" or "No Face", set from the editor) draws the whole Clip

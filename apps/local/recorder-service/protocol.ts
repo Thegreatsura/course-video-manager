@@ -36,6 +36,14 @@ import type { SilenceLength } from "../app/silence-detection-constants";
 /** The WebSocket and the MJPEG previews' HTTP port. */
 export const RECORDER_SERVICE_PORT = 5177;
 
+/**
+ * Bumped whenever the wire changes in a way an older service cannot follow
+ * (2: a Short's `format` and `screen`). The service outlives app restarts
+ * (ADR 0034), so after a pull the app may meet a service started from older
+ * code; `hello` says which wire it speaks (none before 2).
+ */
+export const RECORDER_PROTOCOL_VERSION = 2;
+
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
 
@@ -249,6 +257,8 @@ export type FfmpegCheck =
 export type RecorderStatusMessage =
   | {
       type: "hello";
+      /** `RECORDER_PROTOCOL_VERSION` of the service's code; absent before 2. */
+      protocol?: number;
       ffmpeg: FfmpegCheck;
       /** Start-up warnings that do not stop recording (an NVIDIA driver change). */
       warnings: string[];

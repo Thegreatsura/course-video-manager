@@ -66,6 +66,20 @@ describe("wakeSpacedesk", () => {
     ).rejects.toBeInstanceOf(SpacedeskWakeError);
   });
 
+  it("rejects with a SpacedeskWakeError when the server closes before the upgrade", async () => {
+    server = net.createServer((socket) =>
+      socket.once("data", () => socket.end())
+    );
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as net.AddressInfo;
+
+    const woken = wakeSpacedesk({ host: "127.0.0.1", port });
+    await expect(woken).rejects.toBeInstanceOf(SpacedeskWakeError);
+    await expect(woken).rejects.toThrow(
+      "spacedesk closed the connection before the handshake"
+    );
+  });
+
   it("targets the PC's fixed host, with the port overridable from the env", () => {
     expect(spacedeskAddress({})).toEqual({
       host: SPACEDESK_HOST,

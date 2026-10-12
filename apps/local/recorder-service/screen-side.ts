@@ -44,6 +44,24 @@ export const refuseScreenlessScene = (
     );
 };
 
+/**
+ * Refuses a Stream Deck switch to a scene that draws the screen while a
+ * Short's screen is still waking, as the editor's scene buttons do.
+ */
+export const refuseWakingScene = (
+  scene: Scene,
+  format: VideoFormat,
+  screen: ScreenStatus | null
+) => {
+  if (
+    screen?.kind === "waking" &&
+    drawnSources([{ scene }], format).includes("screen")
+  )
+    throw new Refusal(
+      `${scene} shows the screen, and Spacedesk is still waking: wait for the screen.`
+    );
+};
+
 export const createScreenSide = (o: {
   launch: Launcher;
   /** The service's screen preview feed. */
@@ -121,13 +139,19 @@ export const createScreenSide = (o: {
    * preview for Landscape; for a Short, the Spacedesk display found (woken
    * if need be) and its portrait preview. Not awaited by the command queue:
    * a wake takes seconds, and nothing waits on it.
+   *
+   * A Short is `waking` before the first await, so a command queued right
+   * behind (Record, retry-screen) never sees the old status; and only the
+   * latest restart sets a status, so an overtaken one never overwrites it.
    */
   const restart = async () => {
     const check = (generation += 1);
     const format = o.format();
     const current = () => check === generation && o.format() === format;
+    if (format === "short") o.setStatus({ kind: "waking" });
     try {
       await stopPreview();
+      if (!current()) return;
       if (format === "landscape") {
         const screens = await listScreens(o.launch);
         const dell = findByName(screens, (s) => s.name, SCREEN_NAME);
@@ -135,7 +159,6 @@ export const createScreenSide = (o: {
         return;
       }
       if (format !== "short") return;
-      o.setStatus({ kind: "waking" });
       const found = await spacedeskScreen();
       if (!current()) return;
       if (found.kind === "unavailable") return o.setStatus(found);

@@ -25,6 +25,7 @@ import {
   STILL_RECORDER_CLOSED,
   STILL_WHILE_RECORDING,
   RECENT_SESSIONS,
+  RECORDER_PROTOCOL_VERSION,
   type CameraStatus,
   type RecorderCommand,
   type RecorderMessage,
@@ -42,7 +43,11 @@ import {
   listDshowDevices,
 } from "./windows-devices";
 import { findByName, Refusal } from "./refusal";
-import { createScreenSide, refuseScreenlessScene } from "./screen-side";
+import {
+  createScreenSide,
+  refuseScreenlessScene,
+  refuseWakingScene,
+} from "./screen-side";
 
 /**
  * THE RECORDER SERVICE (ADR 0034): a long-running process of its own in WSL
@@ -263,7 +268,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     wakeSpacedesk: o.wakeSpacedesk,
     format: () => (state.kind === "closed" ? undefined : state.format),
     setStatus: (screen) => {
-      if (state.kind !== "closed" && state.format === "short")
+      if (state.kind === "closed" || state.format !== "short") return;
+      // An open for a Short already went in waking.
+      if (screen.kind !== "waking" || state.screen?.kind !== "waking")
         setState({ ...state, screen });
     },
   });
@@ -407,6 +414,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       case "stop":
         return handle(ws, { type: "stop" });
       case "switch-scene":
+        refuseWakingScene(p.scene, state.format, state.screen);
         return handle(ws, { type: "switch-scene", scene: p.scene });
     }
   };
@@ -535,6 +543,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     void recovering.then(() =>
       send(ws, {
         type: "hello",
+        protocol: RECORDER_PROTOCOL_VERSION,
         ffmpeg,
         warnings,
         state,
