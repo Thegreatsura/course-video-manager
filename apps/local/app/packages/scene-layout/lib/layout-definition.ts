@@ -1,6 +1,12 @@
-// The scenes, copied from the OBS-free recorder spike's `layouts.json`
+// One layout per Video Format, each with the same three scenes.
+//
+// Landscape: copied from the OBS-free recorder spike's `layouts.json`
 // (branch `spike/obs-free-recorder`), which was derived from Matt's OBS scene
 // collection (profile Landscape Recording, canvas 1920x1080).
+//
+// Short: copied from OBS's TikTok Face / TikTok Code / TikTok Code No Face
+// (profile TikTok, canvas 1080x1920), as the visible part of each item (PRD
+// #2052, "Layout module").
 //
 // - `crop` is a fraction of the source frame, so one definition holds for the
 //   4K camera, the 2560x1440 screen recording and the low-res previews alike.
@@ -9,8 +15,11 @@
 //   the definition stays a faithful copy of OBS; they are never drawn.
 // - There is no Empty scene (decision log #1993, Q5).
 //
-// Bump `version` whenever anything here changes what a scene looks like: it is
-// part of the Export Hash, so every CVM-recorder export goes stale.
+// Bump a layout's `version` whenever anything in it changes what a scene looks
+// like: it is part of the Export Hash, so every CVM-recorder export in that
+// format goes stale.
+
+import type { VideoFormat } from "@/features/videos/video-format";
 
 export const SCENES = ["Camera", "Code", "No Face"] as const;
 export type Scene = (typeof SCENES)[number];
@@ -30,7 +39,13 @@ export interface LayoutItem {
   readonly dest: Rect;
 }
 
-export const LAYOUT = {
+export interface Layout {
+  readonly version: number;
+  readonly canvas: { readonly width: number; readonly height: number };
+  readonly scenes: Readonly<Record<Scene, readonly LayoutItem[]>>;
+}
+
+const LANDSCAPE = {
   version: 1,
   canvas: { width: 1920, height: 1080 },
   scenes: {
@@ -71,13 +86,59 @@ export const LAYOUT = {
       },
     ],
   },
-} as const satisfies {
-  version: number;
-  canvas: { width: number; height: number };
-  scenes: Record<Scene, readonly LayoutItem[]>;
+} as const satisfies Layout;
+
+const SHORT = {
+  version: 1,
+  canvas: { width: 1080, height: 1920 },
+  scenes: {
+    // TikTok Face: the 4K camera at scale 0.891 (3423x1925) at x=-1157, y=0.
+    // OBS's display item underneath is fully covered, so it is left out.
+    Camera: [
+      {
+        source: "camera",
+        crop: { x: 0.33801, y: 0, w: 0.31551, h: 0.9974 },
+        dest: { x: 0, y: 0, w: 1080, h: 1920 },
+      },
+    ],
+    // TikTok Code: the screen full-frame; the camera, cropped 92 px off the
+    // top and scaled by 0.498 (1913x1030) at x=-393, y=1080, below it.
+    Code: [
+      {
+        source: "screen",
+        crop: { x: 0, y: 0, w: 1, h: 1 },
+        dest: { x: 0, y: 0, w: 1080, h: 1920 },
+      },
+      {
+        source: "camera",
+        crop: { x: 0.20544, y: 0.04259, w: 0.56456, h: 0.78079 },
+        dest: { x: 0, y: 1080, w: 1080, h: 840 },
+      },
+    ],
+    // TikTok Code No Face: the camera is hidden in OBS, so it is left out.
+    "No Face": [
+      {
+        source: "screen",
+        crop: { x: 0, y: 0, w: 1, h: 1 },
+        dest: { x: 0, y: 0, w: 1080, h: 1920 },
+      },
+    ],
+  },
+} as const satisfies Layout;
+
+export const LAYOUTS: Readonly<Record<VideoFormat, Layout>> = {
+  landscape: LANDSCAPE,
+  short: SHORT,
 };
 
-export const LAYOUT_VERSION = LAYOUT.version;
+/** Each format's layout version: part of every CVM-recorder Export Hash. */
+export const LAYOUT_VERSIONS: Readonly<Record<VideoFormat, number>> = {
+  landscape: LANDSCAPE.version,
+  short: SHORT.version,
+};
+
+/** The Landscape layout's version (kept for today's Landscape callers). */
+export const LAYOUT_VERSION = LANDSCAPE.version;
 
 /** The scene a Recording Session is in before its first scene event. */
 export const DEFAULT_SCENE: Scene = "Code";

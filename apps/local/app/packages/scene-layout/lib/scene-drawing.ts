@@ -1,5 +1,6 @@
+import type { VideoFormat } from "@/features/videos/video-format";
 import {
-  LAYOUT,
+  LAYOUTS,
   type LayoutItem,
   type LayoutSource,
   type Scene,
@@ -14,7 +15,8 @@ export interface SourceSize {
 /**
  * One `ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh)` call: source
  * rect in the source's own pixels, destination rect in canvas pixels (the
- * canvas is `CANVAS`; scale the context to draw it smaller).
+ * canvas is the format's `CANVASES` entry; scale the context to draw it
+ * smaller).
  */
 export interface DrawInstruction {
   readonly source: LayoutSource;
@@ -28,7 +30,16 @@ export interface DrawInstruction {
   readonly dh: number;
 }
 
-export const CANVAS = LAYOUT.canvas;
+/** Each format's canvas, in pixels. */
+export const CANVASES: Readonly<
+  Record<VideoFormat, { readonly width: number; readonly height: number }>
+> = {
+  landscape: LAYOUTS.landscape.canvas,
+  short: LAYOUTS.short.canvas,
+};
+
+/** The Landscape canvas (kept for today's Landscape callers). */
+export const CANVAS = CANVASES.landscape;
 
 /** Where an item lands on the canvas, in whole pixels — shared by both renderers. */
 interface Placement {
@@ -39,9 +50,13 @@ interface Placement {
   readonly dh: number;
 }
 
+/** Every source, in input order. */
+const SOURCES = ["screen", "camera"] as const satisfies LayoutSource[];
+
 /** The scene's visible items, bottom to top, placed in whole canvas pixels. */
-const placements = (scene: Scene): Placement[] =>
-  LAYOUT.scenes[scene]
+const placements = (scene: Scene, format: VideoFormat): Placement[] => {
+  const canvas = CANVASES[format];
+  return LAYOUTS[format].scenes[scene]
     .map((item: LayoutItem) => ({
       item,
       dx: Math.round(item.dest.x),
@@ -51,19 +66,46 @@ const placements = (scene: Scene): Placement[] =>
     }))
     .filter(
       (p) =>
-        p.dx < CANVAS.width &&
-        p.dy < CANVAS.height &&
+        p.dx < canvas.width &&
+        p.dy < canvas.height &&
         p.dx + p.dw > 0 &&
         p.dy + p.dh > 0
     );
+};
 
-/** How a canvas draws a scene (live preview, editor playback), bottom to top. */
+/**
+ * The sources a run of segments draws, in input order (screen, camera). A
+ * source no segment draws (the Short Camera scene's screen, say) need not be
+ * opened at all: leave it out of `drawInstructions` and `sceneFilterGraph`.
+ */
+export const drawnSources = (
+  segments: readonly { readonly scene: Scene }[],
+  format: VideoFormat = "landscape"
+): LayoutSource[] => {
+  const drawn = new Set(
+    segments.flatMap(({ scene }) =>
+      placements(scene, format).map((p) => p.item.source)
+    )
+  );
+  return SOURCES.filter((source) => drawn.has(source));
+};
+
+const missingSource = (source: LayoutSource, format: VideoFormat) =>
+  new Error(`The ${format} layout draws the ${source}, but it was not given`);
+
+/**
+ * How a canvas draws a scene (live preview, editor playback), bottom to top.
+ * A source the scene doesn't draw may be left out of `sources`.
+ */
 export const drawInstructions = (
   scene: Scene,
-  sources: Readonly<Record<LayoutSource, SourceSize>>
+  sources: Readonly<Partial<Record<LayoutSource, SourceSize>>>,
+  format: VideoFormat = "landscape"
 ): DrawInstruction[] =>
-  placements(scene).map(({ item, dx, dy, dw, dh }) => {
-    const { width, height } = sources[item.source];
+  placements(scene, format).map(({ item, dx, dy, dw, dh }) => {
+    const size = sources[item.source];
+    if (!size) throw missingSource(item.source, format);
+    const { width, height } = size;
     return {
       source: item.source,
       sx: Math.round(item.crop.x * width),
@@ -80,8 +122,12 @@ export const drawInstructions = (
 export interface SceneFilterGraphInput {
   /** The segments to draw, in order, in the Recording Session's file time. */
   readonly segments: readonly SceneSegment[];
-  /** ffmpeg stream specifiers of the recordings. Default `0:v` and `1:v`. */
-  readonly inputs?: Readonly<Record<LayoutSource, string>>;
+  /**
+   * ffmpeg stream specifiers of the recordings. Default `0:v` (screen) and
+   * `1:v` (camera). A source no segment draws (see `drawnSources`) may be
+   * left out; a given source no segment draws is sent to a `nullsink`.
+   */
+  readonly inputs?: Readonly<Partial<Record<LayoutSource, string>>>;
   /**
    * The session file time at the inputs' t=0: 0 for whole files, or the time
    * the caller seeked each input to with `-ss`.
@@ -89,6 +135,8 @@ export interface SceneFilterGraphInput {
   readonly inputStartSeconds?: number;
   /** The output label. Default `v`. */
   readonly output?: string;
+  /** Whose layout and canvas to draw. Default Landscape. */
+  readonly format?: VideoFormat;
 }
 
 /** Output frame rate: the camera's 29.97 is resampled up to it. */
@@ -96,14 +144,17 @@ const FPS = 60;
 
 /**
  * The `-filter_complex` graph that draws `segments` back to back as one
- * 1920x1080 60 fps yuv420p stream labelled `[output]` (export, stills).
+ * 60 fps yuv420p stream on the format's canvas (1920x1080 Landscape, 1080x1920
+ * Short), labelled `[output]` (export, stills).
  */
 export const sceneFilterGraph = ({
   segments,
   inputs = { screen: "0:v", camera: "1:v" },
   inputStartSeconds = 0,
   output = "v",
+  format = "landscape",
 }: SceneFilterGraphInput): string => {
+  const canvas = CANVASES[format];
   const chains: string[] = [];
   const branches: Record<LayoutSource, string[]> = { screen: [], camera: [] };
   const take = (source: LayoutSource) => {
@@ -117,9 +168,9 @@ export const sceneFilterGraph = ({
     const end = segment.endSeconds - inputStartSeconds;
     let base = `base${k}`;
     chains.push(
-      `color=c=black:s=${CANVAS.width}x${CANVAS.height}:r=${FPS}:d=${end - start}[${base}]`
+      `color=c=black:s=${canvas.width}x${canvas.height}:r=${FPS}:d=${end - start}[${base}]`
     );
-    placements(segment.scene).forEach(({ item, dx, dy, dw, dh }, j) => {
+    placements(segment.scene, format).forEach(({ item, dx, dy, dw, dh }, j) => {
       const branch = take(item.source);
       const { x, y, w, h } = item.crop;
       chains.push(
@@ -135,11 +186,18 @@ export const sceneFilterGraph = ({
     chains.push(`[${base}]null[seg${k}]`);
   });
 
-  const splits = (["screen", "camera"] as const).map((source) => {
+  const splits = SOURCES.flatMap((source) => {
     const labels = branches[source];
+    const input = inputs[source];
+    if (input === undefined) {
+      if (labels.length > 0) throw missingSource(source, format);
+      return [];
+    }
     return labels.length === 0
-      ? `[${inputs[source]}]nullsink`
-      : `[${inputs[source]}]split=${labels.length}${labels.map((l) => `[${l}]`).join("")}`;
+      ? [`[${input}]nullsink`]
+      : [
+          `[${input}]split=${labels.length}${labels.map((l) => `[${l}]`).join("")}`,
+        ];
   });
 
   const joined = segments.map((_, k) => `[seg${k}]`).join("");

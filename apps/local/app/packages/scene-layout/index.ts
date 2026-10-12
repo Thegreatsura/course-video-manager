@@ -2,13 +2,23 @@
 // their maths, pure (no filesystem, no ffmpeg), so the browser and the server
 // share one definition.
 //
+// Each Video Format has its own layout of the same three scenes (Landscape
+// 1920x1080, Short 1080x1920); every function takes the format and defaults
+// to Landscape. `drawnSources` says which recordings a run of segments needs.
+//
 // Given a Recording Session's scene events, a Clip's time range and an
 // optional Scene Override, `sceneSegments` says which scene draws which part
 // of the Clip. From one layout definition, `drawInstructions` says how a
 // canvas draws a scene (live preview, editor playback) and `sceneFilterGraph`
-// says how ffmpeg draws a run of segments (export, stills). `LAYOUT_VERSION`
+// says how ffmpeg draws a run of segments (export, stills). `LAYOUT_VERSIONS`
 // goes into the Export Hash.
-export { DEFAULT_SCENE, SCENES, type Scene } from "./lib/layout-definition";
+export {
+  DEFAULT_SCENE,
+  LAYOUT_VERSIONS,
+  SCENES,
+  type LayoutSource,
+  type Scene,
+} from "./lib/layout-definition";
 export {
   sceneSegments,
   type SceneEvent,
@@ -17,12 +27,14 @@ export {
 } from "./lib/scene-segments";
 export {
   CANVAS,
+  CANVASES,
   drawInstructions,
+  drawnSources,
   sceneFilterGraph,
   type DrawInstruction,
   type SceneFilterGraphInput,
   type SourceSize,
 } from "./lib/scene-drawing";
 
-/** The layout definition's version: part of every CVM-recorder Export Hash. */
+/** The Landscape layout's version: part of every Landscape CVM-recorder Export Hash. */
 export { LAYOUT_VERSION } from "./lib/layout-definition";

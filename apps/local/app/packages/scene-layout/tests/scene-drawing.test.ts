@@ -1,66 +1,171 @@
 import { describe, expect, it } from "vitest";
 import {
+  CANVASES,
   drawInstructions,
+  drawnSources,
+  LAYOUT_VERSIONS,
   SCENES,
   sceneFilterGraph,
 } from "@/packages/scene-layout";
 
-const sources = {
+const landscapeSources = {
   screen: { width: 2560, height: 1440 },
   camera: { width: 3840, height: 2160 },
 };
 
+const shortSources = {
+  screen: { width: 1080, height: 1920 },
+  camera: { width: 3840, height: 2160 },
+};
+
 describe("drawInstructions", () => {
-  it("crops the Code scene's face cam out of the camera and puts it bottom right", () => {
-    expect(drawInstructions("Code", sources)).toEqual([
-      {
-        source: "screen",
-        sx: 0,
-        sy: 0,
-        sw: 2560,
-        sh: 1440,
-        dx: 0,
-        dy: 0,
-        dw: 1920,
-        dh: 1080,
-      },
+  it("leaves out what falls entirely off the Landscape canvas", () => {
+    expect(
+      drawInstructions("No Face", landscapeSources).map((i) => i.source)
+    ).toEqual(["screen"]);
+    expect(
+      drawInstructions("Camera", landscapeSources).map((i) => i.source)
+    ).toEqual(["camera"]);
+  });
+
+  it("draws a Short on its own 1080x1920 canvas with its own version", () => {
+    expect(CANVASES.short).toEqual({ width: 1080, height: 1920 });
+    expect(LAYOUT_VERSIONS.short).toBe(1);
+  });
+
+  it("fills the Short Camera scene with the camera's centre crop, needing no screen", () => {
+    expect(
+      drawInstructions("Camera", { camera: shortSources.camera }, "short")
+    ).toEqual([
       {
         source: "camera",
-        sx: 1224,
+        sx: 1298,
         sy: 0,
-        sw: 1424,
-        sh: 2076,
-        dx: 1429,
-        dy: 364,
-        dw: 491,
-        dh: 716,
+        sw: 1212,
+        sh: 2154,
+        dx: 0,
+        dy: 0,
+        dw: 1080,
+        dh: 1920,
       },
     ]);
   });
 
-  it("leaves out what falls entirely off the canvas", () => {
-    expect(drawInstructions("No Face", sources).map((i) => i.source)).toEqual([
-      "screen",
+  it("draws the Short Code scene as the screen full-frame with the camera band below", () => {
+    expect(drawInstructions("Code", shortSources, "short")).toEqual([
+      {
+        source: "screen",
+        sx: 0,
+        sy: 0,
+        sw: 1080,
+        sh: 1920,
+        dx: 0,
+        dy: 0,
+        dw: 1080,
+        dh: 1920,
+      },
+      {
+        source: "camera",
+        sx: 789,
+        sy: 92,
+        sw: 2168,
+        sh: 1687,
+        dx: 0,
+        dy: 1080,
+        dw: 1080,
+        dh: 840,
+      },
     ]);
-    expect(drawInstructions("Camera", sources).map((i) => i.source)).toEqual([
+  });
+
+  it("draws the Short No Face scene as the screen full-frame", () => {
+    expect(drawInstructions("No Face", shortSources, "short")).toEqual([
+      {
+        source: "screen",
+        sx: 0,
+        sy: 0,
+        sw: 1080,
+        sh: 1920,
+        dx: 0,
+        dy: 0,
+        dw: 1080,
+        dh: 1920,
+      },
+    ]);
+  });
+
+  it("refuses to draw a scene without a source it draws", () => {
+    expect(() =>
+      drawInstructions("Code", { camera: shortSources.camera }, "short")
+    ).toThrow(/screen/);
+  });
+});
+
+describe("drawnSources", () => {
+  const run = (...scenes: (typeof SCENES)[number][]) =>
+    scenes.map((scene) => ({ scene }));
+
+  it("says the Short Camera scene draws the camera alone", () => {
+    expect(drawnSources(run("Camera"), "short")).toEqual(["camera"]);
+  });
+
+  it("says the Short Code scene draws both", () => {
+    expect(drawnSources(run("Code"), "short")).toEqual(["screen", "camera"]);
+  });
+
+  it("says Landscape Camera draws the camera alone, its screen item being off-canvas", () => {
+    expect(drawnSources(run("Camera"))).toEqual(["camera"]);
+  });
+
+  it("joins what every segment of a run draws", () => {
+    expect(drawnSources(run("Camera", "No Face"), "short")).toEqual([
+      "screen",
       "camera",
     ]);
   });
 });
 
-describe("sceneFilterGraph agrees with drawInstructions", () => {
-  it.each(SCENES)(
-    "places every item of %s where the canvas draws it",
-    (scene) => {
-      const graph = sceneFilterGraph({
-        segments: [{ scene, startSeconds: 0, endSeconds: 1 }],
-      });
-      const instructions = drawInstructions(scene, sources);
-      expect(graph.match(/overlay=/g)).toHaveLength(instructions.length);
-      for (const i of instructions) {
-        expect(graph).toContain(`scale=${i.dw}:${i.dh}`);
-        expect(graph).toContain(`overlay=x=${i.dx}:y=${i.dy}`);
+describe("sceneFilterGraph", () => {
+  it.each([
+    ["landscape", landscapeSources],
+    ["short", shortSources],
+  ] as const)(
+    "places every %s item where the canvas draws it",
+    (format, sources) => {
+      for (const scene of SCENES) {
+        const graph = sceneFilterGraph({
+          segments: [{ scene, startSeconds: 0, endSeconds: 1 }],
+          format,
+        });
+        const { width, height } = CANVASES[format];
+        expect(graph).toContain(`color=c=black:s=${width}x${height}`);
+        const instructions = drawInstructions(scene, sources, format);
+        expect(graph.match(/overlay=/g)).toHaveLength(instructions.length);
+        for (const i of instructions) {
+          expect(graph).toContain(`scale=${i.dw}:${i.dh}`);
+          expect(graph).toContain(`overlay=x=${i.dx}:y=${i.dy}`);
+        }
       }
     }
   );
+
+  it("consumes only the inputs it is given when the run draws no screen", () => {
+    const graph = sceneFilterGraph({
+      segments: [{ scene: "Camera", startSeconds: 0, endSeconds: 1 }],
+      inputs: { camera: "0:v" },
+      format: "short",
+    });
+    expect(graph).not.toContain("1:v");
+    expect(graph).not.toContain("nullsink");
+  });
+
+  it("refuses to leave out an input the run draws", () => {
+    expect(() =>
+      sceneFilterGraph({
+        segments: [{ scene: "Code", startSeconds: 0, endSeconds: 1 }],
+        inputs: { camera: "0:v" },
+        format: "short",
+      })
+    ).toThrow(/screen/);
+  });
 });
