@@ -9,7 +9,7 @@
  */
 
 import { clips, chapters, videos } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
 import {
@@ -17,6 +17,7 @@ import {
   clipZoomIneligibilityMessage,
 } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
+import { clipRestoreRefusal } from "@cvm/core/features/videos/recorder";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
@@ -174,6 +175,23 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "unarchive-clips": {
+        // One Video never mixes OBS and new-recorder Clips: once the Recorder
+        // switched (every Clip archived), the other Recorder's Clips stay
+        // archived. Checked for the whole batch before any write.
+        if (event.clipIds.length > 0) {
+          const toRestore = yield* dbCall(() =>
+            db.query.clips.findMany({
+              columns: { recordingSessionId: true, archived: true },
+              where: inArray(clips.id, [...event.clipIds]),
+              with: { video: { columns: { recorder: true } } },
+            })
+          );
+          for (const clip of toRestore) {
+            if (!clip.archived) continue;
+            const refusal = clipRestoreRefusal(clip.video.recorder, clip);
+            if (refusal) throw new Error(refusal);
+          }
+        }
         for (const clipId of event.clipIds) {
           yield* dbCall(() =>
             db

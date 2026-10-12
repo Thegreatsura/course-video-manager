@@ -3,6 +3,7 @@ import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
 import { VideoOperationsService } from "./db-video-operations.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
+import { ClipOperationsService } from "./db-clip-operations.server.js";
 import { DrizzleService } from "./drizzle-service.server.js";
 import * as schema from "../db/schema.js";
 import {
@@ -12,49 +13,64 @@ import {
 } from "../test-utils/pglite.js";
 
 let testDb: TestDb;
-let testLayer: Layer.Layer<VideoOperationsService>;
+let testLayer: Layer.Layer<VideoOperationsService | ClipOperationsService>;
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
   const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
-  testLayer = VideoOperationsService.Default.pipe(
-    Layer.provide(
-      CourseOperationsService.Default.pipe(Layer.provide(drizzleLayer))
+  testLayer = Layer.mergeAll(
+    VideoOperationsService.Default.pipe(
+      Layer.provide(
+        CourseOperationsService.Default.pipe(Layer.provide(drizzleLayer))
+      )
     ),
-    Layer.provide(drizzleLayer)
-  );
+    ClipOperationsService.Default
+  ).pipe(Layer.provide(drizzleLayer));
 });
 
 beforeEach(async () => {
   await truncateAllTables(testDb);
 });
 
-const addClip = (videoId: string, archived = false) =>
-  Effect.promise(() =>
-    testDb.insert(schema.clips).values({
-      videoId,
-      videoFilename: "/footage/obs.mp4",
-      sourceStartTime: 0,
-      sourceEndTime: 5,
-      order: "a0",
-      text: "",
-      archived,
-    })
-  );
+const addClip = (
+  videoId: string,
+  archived = false,
+  recordingSessionId: string | null = null
+) =>
+  Effect.promise(async () => {
+    const [clip] = await testDb
+      .insert(schema.clips)
+      .values({
+        videoId,
+        videoFilename: "/footage/obs.mp4",
+        sourceStartTime: 0,
+        sourceEndTime: 5,
+        order: "a0",
+        text: "",
+        archived,
+        recordingSessionId,
+      })
+      .returning();
+    return clip!;
+  });
 
 const addRecordingSession = (
   videoId: string,
   status: "recording" | "stopped"
 ) =>
-  Effect.promise(() =>
-    testDb.insert(schema.recordingSessions).values({
-      videoId,
-      cameraFilePath: "/footage/camera.mkv",
-      screenFilePath: "/footage/screen.mkv",
-      micFilePath: "/footage/mic.wav",
-      status,
-    })
-  );
+  Effect.promise(async () => {
+    const [session] = await testDb
+      .insert(schema.recordingSessions)
+      .values({
+        videoId,
+        cameraFilePath: "/footage/camera.mkv",
+        screenFilePath: "/footage/screen.mkv",
+        micFilePath: "/footage/mic.wav",
+        status,
+      })
+      .returning();
+    return session!;
+  });
 
 const pickNewRecorder = (videoId: string) =>
   Effect.gen(function* () {
@@ -143,18 +159,77 @@ describe("the Video's Recorder", () => {
   );
 
   it.effect(
-    "an archived Clip locks the Recorder too, since it can be restored",
+    "a Video whose Clips are all archived has no Footage, so the Recorder unlocks",
     () =>
       Effect.gen(function* () {
         const videoOps = yield* VideoOperationsService;
         const video = yield* videoOps.createStandaloneVideo({
           title: "Landscape",
           format: "landscape",
+          recorder: "new-recorder",
         });
         yield* addClip(video.id, true);
-        const error = yield* pickNewRecorder(video.id);
-        expect(error._tag).toBe("VideoRecorderLockedError");
+        yield* addClip(video.id, true);
+        yield* videoOps.updateVideoRecorder({
+          videoId: video.id,
+          recorder: "obs",
+        });
+        const reread = yield* videoOps.getVideoRowById(video.id);
+        expect(reread.recorder).toBe("obs");
       }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "an archived Clip from the other Recorder cannot be restored once the Recorder switched",
+    () =>
+      Effect.gen(function* () {
+        const videoOps = yield* VideoOperationsService;
+        const clipOps = yield* ClipOperationsService;
+        const video = yield* videoOps.createStandaloneVideo({
+          title: "Landscape",
+          format: "landscape",
+          recorder: "new-recorder",
+        });
+        const session = yield* addRecordingSession(video.id, "stopped");
+        const clip = yield* addClip(video.id, true, session.id);
+        yield* videoOps.updateVideoRecorder({
+          videoId: video.id,
+          recorder: "obs",
+        });
+        const error = yield* Effect.flip(clipOps.restoreClip(clip.id));
+        expect(error._tag).toBe("VideoRecorderLockedError");
+        const reread = yield* clipOps.getClipById(clip.id);
+        expect(reread.archived).toBe(true);
+      }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("an archived Clip from the Video's own Recorder restores", () =>
+    Effect.gen(function* () {
+      const videoOps = yield* VideoOperationsService;
+      const clipOps = yield* ClipOperationsService;
+      const video = yield* videoOps.createStandaloneVideo({
+        title: "Landscape",
+        format: "landscape",
+      });
+      const clip = yield* addClip(video.id, true);
+      yield* clipOps.restoreClip(clip.id);
+      const reread = yield* clipOps.getClipById(clip.id);
+      expect(reread.archived).toBe(false);
+    }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect("one live Clip beside archived ones still locks the Recorder", () =>
+    Effect.gen(function* () {
+      const videoOps = yield* VideoOperationsService;
+      const video = yield* videoOps.createStandaloneVideo({
+        title: "Landscape",
+        format: "landscape",
+      });
+      yield* addClip(video.id, true);
+      yield* addClip(video.id, false);
+      const error = yield* pickNewRecorder(video.id);
+      expect(error._tag).toBe("VideoRecorderLockedError");
+    }).pipe(Effect.provide(testLayer))
   );
 
   it.effect("a Recording Session still recording locks the Recorder", () =>
