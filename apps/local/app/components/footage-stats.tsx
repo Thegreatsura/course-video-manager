@@ -8,7 +8,7 @@ import type { FootageStats as FootageStatsData } from "@cvm/core/services/db-foo
 import { Film } from "lucide-react";
 
 const ROW_CLASS =
-  "flex items-center gap-2.5 h-9 pt-3 mt-3 border-t text-xs text-muted-foreground tabular-nums whitespace-nowrap cursor-default";
+  "flex items-center gap-3 h-9 pt-3 mt-3 border-t text-xs text-muted-foreground tabular-nums whitespace-nowrap cursor-default";
 
 /**
  * How much Footage was filmed today, in the last 7 and in the last 30
@@ -52,9 +52,13 @@ function StatsRow({
     <div {...props} className={ROW_CLASS} aria-label="Footage filmed">
       <Film className="w-3.5 h-3.5 shrink-0" />
       {LABELS.map((label, i) => (
-        <span key={label}>
-          <span className="font-medium text-foreground/70">{label}</span>{" "}
-          {seconds ? formatHoursMinutes(seconds[i]!) : "–"}
+        <span key={label} className="inline-flex items-baseline gap-1">
+          <span className="text-[10px] tracking-wide text-muted-foreground/70">
+            {label}
+          </span>
+          <span className="text-foreground/75">
+            {seconds ? formatHoursMinutes(seconds[i]!) : "–"}
+          </span>
         </span>
       ))}
     </div>
