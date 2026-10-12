@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
-import { Data, Effect } from "effect";
 import { desc, eq } from "drizzle-orm";
+import { Data, Effect, Schema } from "effect";
 import path from "node:path";
 import { audioCalibrations } from "@/db/schema";
 import {
@@ -18,6 +18,12 @@ import type {
   BrowserTracePoint,
   SavedAudioCalibration,
 } from "@/features/audio-calibration/calibration-wire";
+import {
+  buildCalibrationTimeline,
+  calibrationDetectorRule,
+} from "@/features/audio-calibration/calibration-timeline";
+import { NotFoundError } from "@/services/db-service-errors";
+import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import type { CalibrationMeasured } from "@/services/recorder-client/calibration-commands";
 import { assertUnderEffect } from "@/services/assert-under";
 import { dbCall } from "@/services/clip-service-handler.helpers";
@@ -93,18 +99,109 @@ export const recordAudioCalibration = Effect.fn("recordAudioCalibration")(
         })
         .returning()
     );
-    const saved = row!;
-    return {
-      id: saved.id,
-      createdAt: saved.createdAt.toISOString(),
-      outcome: saved.outcome,
-      judgement,
-      noiseFloorDb: saved.noiseFloorDb,
-      speechLufs: saved.speechLufs,
-      thresholdDb: saved.thresholdDb,
-      recorderMic: saved.recorderMic,
-      browserInputLabel: saved.browserInputLabel,
-    } satisfies SavedAudioCalibration;
+    return toSaved(row!);
+  }
+);
+
+type AudioCalibrationRow = typeof audioCalibrations.$inferSelect;
+
+/** A stored row as the page shows it; the judgement is the stored speech loudness's. */
+const toSaved = (row: AudioCalibrationRow): SavedAudioCalibration => ({
+  id: row.id,
+  createdAt: row.createdAt.toISOString(),
+  outcome: row.outcome,
+  judgement: judgeCalibration(row),
+  noiseFloorDb: row.noiseFloorDb,
+  speechLufs: row.speechLufs,
+  thresholdDb: row.thresholdDb,
+  recorderMic: row.recorderMic,
+  browserInputLabel: row.browserInputLabel,
+});
+
+/** How many past Audio Calibrations the page lists. */
+export const AUDIO_CALIBRATION_HISTORY_LIMIT = 20;
+
+/** The latest Audio Calibrations, passed and failed, newest first. */
+export const listAudioCalibrations = Effect.fn("listAudioCalibrations")(
+  function* (db: Database) {
+    const rows = yield* dbCall(() =>
+      db
+        .select()
+        .from(audioCalibrations)
+        .orderBy(desc(audioCalibrations.createdAt))
+        .limit(AUDIO_CALIBRATION_HISTORY_LIMIT)
+    );
+    return rows.map(toSaved);
+  }
+);
+
+const TimeWindowSchema = Schema.Struct({
+  startSeconds: Schema.Number,
+  endSeconds: Schema.Number,
+});
+
+/** `BROWSER_TRACE_FILE`, as `recordAudioCalibration` writes it. */
+const TraceFileSchema = Schema.parseJson(
+  Schema.Struct({
+    schedule: Schema.Array(
+      Schema.Union(
+        Schema.Struct({
+          kind: Schema.Literal("countdown", "silence"),
+          ...TimeWindowSchema.fields,
+        }),
+        Schema.Struct({
+          kind: Schema.Literal("read", "pause"),
+          line: Schema.Number,
+          ...TimeWindowSchema.fields,
+        })
+      )
+    ),
+    measurementWindows: Schema.Struct({
+      silence: TimeWindowSchema,
+      speech: Schema.Array(TimeWindowSchema),
+    }),
+    trace: Schema.NullOr(
+      Schema.Array(
+        Schema.Struct({ seconds: Schema.Number, peakDb: Schema.Number })
+      )
+    ),
+  })
+);
+
+/**
+ * A stored Audio Calibration's review timeline (#2081), redrawn from what
+ * was kept: silencedetect is run on its mic file with its own threshold and
+ * the short Silence Length, and its browser trace and prompt schedule are
+ * read from the file beside it. Review only; it decides nothing.
+ */
+export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
+  function* (db: Database, calibrationId: string) {
+    const [row] = yield* dbCall(() =>
+      db
+        .select()
+        .from(audioCalibrations)
+        .where(eq(audioCalibrations.id, calibrationId))
+    );
+    if (!row)
+      return yield* new NotFoundError({
+        type: "audioCalibration",
+        params: { calibrationId },
+        message: `No Audio Calibration ${calibrationId}.`,
+      });
+    const fs = yield* FileSystem.FileSystem;
+    const traceFile = yield* Schema.decodeUnknown(TraceFileSchema)(
+      yield* fs.readFileString(row.browserTracePath)
+    );
+    const ffmpeg = yield* FFmpegCommandsService;
+    const silencedetectOutput = yield* ffmpeg.detectSilence(row.micFilePath, {
+      rule: calibrationDetectorRule(row.thresholdDb),
+    });
+    return buildCalibrationTimeline({
+      calibrationId: row.id,
+      thresholdDb: row.thresholdDb,
+      traceFile,
+      silencedetectOutput,
+    });
   }
 );
 
