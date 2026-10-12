@@ -46,6 +46,7 @@ import { findByName, Refusal } from "./refusal";
 import { MIC_NAME } from "../app/mic-device";
 import {
   calibrationValidity,
+  RECORDER_CAMERA_NAME,
   describeCalibrationRefusal,
 } from "../app/av-calibration-constants";
 import {
@@ -84,7 +85,7 @@ import {
  */
 
 /** The devices the rig proved, found by name. */
-export const CAMERA_NAME = "Cam Link 4K";
+export const CAMERA_NAME = RECORDER_CAMERA_NAME;
 
 /** A still older than this is not the camera now: the preview process stalled or quit. */
 const STILL_MAX_AGE_MS = 2_000;
@@ -308,11 +309,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         `${missing} is not among the DirectShow devices. Found: ${devices.map((d) => `${d.name} (${d.kind})`).join(", ") || `none. ffmpeg said: ${raw.slice(0, 500)}`}`
       );
     }
-    // THE GATE (ADR 0038), at the one moment it applies: the start. The mic
-    // is compared here because only the service knows which one it records.
+    // THE GATE (ADR 0038), at the one moment it applies: the start. The
+    // camera + mic pair is compared here because only the service knows
+    // which pair it records.
     const gate = calibrationValidity(
       command.calibration,
-      { recorderMic: mic },
+      { recorderMic: mic, camera },
       o.now()
     );
     if (!gate.valid) throw new Refusal(describeCalibrationRefusal(gate.reason));

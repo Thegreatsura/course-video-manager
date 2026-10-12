@@ -316,7 +316,7 @@ export const runMeasurementWindows = (
 
 /**
  * THE GATE (ADR 0038). A Recorder starts only under a passed AV
- * Calibration less than this old, taken on the current audio input device.
+ * Calibration less than this old, taken on the current camera + mic pair.
  */
 export const CALIBRATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -336,9 +336,17 @@ export const passesCurrentRules = (
   judgeCalibration(c).outcome === "passed";
 
 /**
+ * The camera the recorder service records, as it finds it among the
+ * DirectShow devices: the first whose name contains this (`findByName`).
+ * OBS cannot say which camera it records, so on the OBS path the editor
+ * takes it to be this one too.
+ */
+export const RECORDER_CAMERA_NAME = "Cam Link 4K";
+
+/**
  * The latest AV Calibration that passes under today's rules
  * (`passesCurrentRules`), as the gate and a Record need it: when it was
- * taken, on which input device, and the threshold it set.
+ * taken, on which camera + mic pair, and the threshold it set.
  */
 export type LastPassedCalibration = {
   id: string;
@@ -349,16 +357,24 @@ export type LastPassedCalibration = {
   recorderMic: string;
   /** The browser's audio input label it was taken on; null: none opened. */
   browserInputLabel: string | null;
+  /**
+   * The recorder service's camera (its DirectShow name) it was taken on;
+   * null only on a row from before AV Calibration, which never passes.
+   */
+  cameraDevice: string | null;
 };
 
 /**
- * The audio input device now, as far as the asker knows it: the recorder
- * service its mic (CVM recorder), the editor its getUserMedia audio track's
- * label (OBS; null when it has none open). A device left out is not compared.
+ * The camera + mic pair now, as far as the asker knows it: the recorder
+ * service its mic and camera (their DirectShow names, at Record), the editor
+ * its getUserMedia audio track's label (OBS; null when it has none open) and
+ * the camera the recorder service is configured with
+ * (`RECORDER_CAMERA_NAME`). A device left out is not compared.
  */
 export type CurrentInputDevice = {
   recorderMic?: string;
   browserInputLabel?: string | null;
+  camera?: string;
 };
 
 export type CalibrationInvalidReason =
@@ -366,7 +382,7 @@ export type CalibrationInvalidReason =
   | { kind: "expired"; expiredAtMs: number }
   | {
       kind: "device-changed";
-      device: "recorder-mic" | "browser-input";
+      device: "recorder-mic" | "browser-input" | "camera";
       from: string | null;
       to: string | null;
     };
@@ -379,9 +395,19 @@ export const calibrationExpiresAtMs = (c: LastPassedCalibration): number =>
   c.createdAtMs + CALIBRATION_VALIDITY_MS;
 
 /**
+ * Whether the calibration's camera is `current`: the same DirectShow name,
+ * or one the configured name finds, the way the recorder service finds its
+ * camera (case-insensitive containment), so the editor's configured name
+ * matches the full name the service recorded the calibration on.
+ */
+const isSameCamera = (calibrated: string | null, current: string) =>
+  calibrated !== null &&
+  calibrated.toLowerCase().includes(current.toLowerCase());
+
+/**
  * Whether a Recorder may start now: the latest calibration passed under
  * today's rules exists, is less than 7 days old (exactly 7 days is expired),
- * and was taken on every input device `current` names.
+ * and was taken on every device `current` names: the camera + mic pair.
  */
 export const calibrationValidity = (
   lastPassed: LastPassedCalibration | null,
@@ -421,6 +447,19 @@ export const calibrationValidity = (
         to: current.browserInputLabel,
       },
     };
+  if (
+    current.camera !== undefined &&
+    !isSameCamera(lastPassed.cameraDevice, current.camera)
+  )
+    return {
+      valid: false,
+      reason: {
+        kind: "device-changed",
+        device: "camera",
+        from: lastPassed.cameraDevice,
+        to: current.camera,
+      },
+    };
   return { valid: true, calibration: lastPassed, expiresAtMs };
 };
 
@@ -435,8 +474,12 @@ export const CALIBRATION_REFUSAL_PREFIX =
 export const formatCalibrationTime = (ms: number): string =>
   `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
-const deviceName = (device: "recorder-mic" | "browser-input") =>
-  device === "recorder-mic" ? "The recorder's mic" : "The browser's mic input";
+const DEVICE_NAMES = {
+  "recorder-mic": "The recorder's mic",
+  "browser-input": "The browser's mic input",
+  camera: "The camera",
+} as const;
+const deviceName = (device: keyof typeof DEVICE_NAMES) => DEVICE_NAMES[device];
 
 /** Why a Recorder will not start, in a sentence, with the refusal prefix. */
 export const describeCalibrationRefusal = (

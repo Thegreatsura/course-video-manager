@@ -34,6 +34,7 @@ const fresh = {
     thresholdDb: -43,
     recorderMic: MIC,
     browserInputLabel: MIC,
+    cameraDevice: "Cam Link 4K",
   },
   browserInputLabel: MIC,
   nowMs: CALIBRATION_AT + 60_000,
@@ -74,6 +75,14 @@ describe("the OBS connector and the Video's Recorder", () => {
       "the editor's mic is another",
       { ...fresh, browserInputLabel: "MacBook Pro Microphone" },
       'to "MacBook Pro Microphone"',
+    ],
+    [
+      "it was taken on another camera than the recorder's",
+      {
+        ...fresh,
+        lastPassed: { ...fresh.lastPassed, cameraDevice: "Elgato Facecam" },
+      },
+      'camera changed from "Elgato Facecam" to "Cam Link 4K"',
     ],
   ])(
     "stops a recording OBS starts when %s, and says why, until one is let through",

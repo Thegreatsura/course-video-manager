@@ -44,11 +44,13 @@ export const RECORDER_SERVICE_PORT = 5177;
  * peak; 7: Record carries its AV Calibration, and is gated on it; 8: the
  * recording-started event's `avCalibrationId`, renamed from Audio
  * Calibration; 9: the calibration run records the camera too, starts once
- * live, and cuts its clap window out of the true peak). The app server reloads on a change and the service does not
+ * live, and cuts its clap window out of the true peak; 10: Record's
+ * calibration names its camera, and Record is gated on the camera + mic
+ * pair). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 9;
+export const RECORDER_PROTOCOL_VERSION = 10;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -129,8 +131,8 @@ export type RecorderCommand =
    * its silencedetect cutting with the threshold of `calibration`, the
    * latest AV Calibration passed under today's rules (null: none). THE
    * GATE (ADR 0038): refused unless that calibration is less than 7 days old
-   * by the service's clock and was taken on the mic the service records
-   * now (`calibrationValidity`). Refused without the field at all
+   * by the service's clock and was taken on the camera + mic pair the
+   * service records now (`calibrationValidity`). Refused without the field at all
    * (`CALIBRATION_REQUIRED`). Checked only here, at the start: a Recording
    * Session already running is never stopped by it.
    */

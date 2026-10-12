@@ -24,6 +24,7 @@ const calibration = {
       thresholdDb: Schema.Number,
       recorderMic: Schema.String,
       browserInputLabel: Schema.NullOr(Schema.String),
+      cameraDevice: Schema.NullOr(Schema.String),
     })
   ),
 };
@@ -90,7 +91,9 @@ export const decodeCommand = Schema.decodeUnknownEither(
 /**
  * A command that did not decode but must be answered, not dropped: a Record
  * (or the Stream Deck's prepare-record) with no `calibration`, from an app
- * server older than the AV Calibration gate. Its sender hears why.
+ * server older than the AV Calibration gate, or with a calibration that
+ * names no camera, from one older than the camera + mic gate (protocol 10).
+ * Its sender hears why.
  */
 export const refusalOfUndecodable = (
   raw: string
@@ -102,10 +105,14 @@ export const refusalOfUndecodable = (
     return undefined;
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
-  const { type } = parsed as Record<string, unknown>;
+  const { type, calibration } = parsed as Record<string, unknown>;
+  const namesNoCamera =
+    typeof calibration === "object" &&
+    calibration !== null &&
+    !("cameraDevice" in calibration);
   if (
     (type === "record" || type === "prepare-record") &&
-    !("calibration" in parsed)
+    (!("calibration" in parsed) || namesNoCamera)
   )
     return { command: type, message: CALIBRATION_REQUIRED };
   return undefined;
