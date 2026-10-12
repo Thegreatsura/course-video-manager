@@ -1,11 +1,14 @@
 import { Button } from "@/components/ui/button";
 import {
+  LOUD_LINE,
+  MAX_TRUE_PEAK_DBTP,
   READ_SECONDS,
   PAUSE_SECONDS,
   SCRIPT_END_SECONDS,
   SCRIPT_LINES,
   SILENCE_SECONDS,
   TARGET_BAND,
+  type CalibrationMiss,
   type ScriptStep,
 } from "@/audio-calibration-constants";
 import { cn } from "@/lib/utils";
@@ -26,6 +29,7 @@ const PROMPT: Record<ScriptStep["kind"], string> = {
   silence: "Stay quiet",
   read: "Read line",
   pause: "Pause",
+  loud: "Read it loud",
 };
 
 const PROMPT_STYLE: Record<ScriptStep["kind"], string> = {
@@ -33,6 +37,7 @@ const PROMPT_STYLE: Record<ScriptStep["kind"], string> = {
   silence: "text-sky-400",
   read: "text-emerald-400",
   pause: "text-amber-400",
+  loud: "text-red-400",
 };
 
 /** The step on screen during a run: the prompt, its countdown, the line to read. */
@@ -60,10 +65,18 @@ const Prompt = ({ state }: { state: State }) => {
       </div>
       <div className="min-h-[4.5rem] text-2xl leading-snug">
         {step.kind === "read" && <q>{SCRIPT_LINES[step.line - 1]}</q>}
+        {step.kind === "loud" && (
+          <div className="space-y-2">
+            <q>{LOUD_LINE}</q>
+            <p className="text-base text-muted-foreground">
+              As loudly as you get when you are excited.
+            </p>
+          </div>
+        )}
         {step.kind === "pause" && (
           <span className="text-muted-foreground">
             {line === SCRIPT_LINES.length
-              ? "Last pause: stay quiet."
+              ? "Next: one line, read loudly."
               : `Next: line ${line! + 1}.`}
           </span>
         )}
@@ -103,6 +116,28 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
+const missTitle = (miss: CalibrationMiss) => {
+  switch (miss.kind) {
+    case "too-quiet":
+      return `Too quiet by ${dB(miss.byDb)}`;
+    case "too-loud":
+      return `Too loud by ${dB(miss.byDb)}`;
+    case "peak-too-high":
+      return `Peaked at ${miss.truePeakDb.toFixed(1)} dBTP, ${dB(miss.byDb)} over the ${MAX_TRUE_PEAK_DBTP} dBTP ceiling`;
+  }
+};
+
+const missAdvice = (miss: CalibrationMiss) => {
+  switch (miss.kind) {
+    case "too-quiet":
+      return "Turn your level up until the meter sits in the band, then run it again.";
+    case "too-loud":
+      return "Turn your level down until the meter sits in the band, then run it again.";
+    case "peak-too-high":
+      return "Your loudest moment would come close to clipping: turn your level down, then run it again.";
+  }
+};
+
 const Result = ({ calibration }: { calibration: SavedAudioCalibration }) => {
   const { judgement } = calibration;
   return (
@@ -113,23 +148,35 @@ const Result = ({ calibration }: { calibration: SavedAudioCalibration }) => {
           Passed
         </div>
       ) : (
-        <div>
+        <div className="space-y-2">
           <div className="flex items-center gap-3 text-3xl font-bold text-red-500">
             <XCircle className="w-8 h-8" />
-            Failed: too {judgement.miss === "too-quiet"
-              ? "quiet"
-              : "loud"} by {dB(judgement.byDb)}
+            Failed
           </div>
-          <p className="mt-1 text-muted-foreground">
-            Turn your level {judgement.miss === "too-quiet" ? "up" : "down"}{" "}
-            until the meter sits in the band, then run it again.
-          </p>
+          <ul className="space-y-1">
+            {judgement.misses.map((miss) => (
+              <li key={miss.kind}>
+                <span className="font-semibold">{missTitle(miss)}.</span>{" "}
+                <span className="text-muted-foreground">
+                  {missAdvice(miss)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-4 gap-6">
         <Stat
           label="Speech loudness"
           value={`${calibration.speechLufs.toFixed(1)} LUFS`}
+        />
+        <Stat
+          label="True peak"
+          value={
+            calibration.truePeakDb === null
+              ? "—"
+              : `${calibration.truePeakDb.toFixed(1)} dBTP`
+          }
         />
         <Stat
           label="Noise floor"
@@ -138,7 +185,8 @@ const Result = ({ calibration }: { calibration: SavedAudioCalibration }) => {
         <Stat label="Silence threshold" value={dB(calibration.thresholdDb)} />
       </div>
       <p className="text-sm text-muted-foreground">
-        Target band {TARGET_BAND.lowLufs} to {TARGET_BAND.highLufs} LUFS. Stored{" "}
+        Target band {TARGET_BAND.lowLufs} to {TARGET_BAND.highLufs} LUFS; true
+        peak at most {MAX_TRUE_PEAK_DBTP} dBTP. Stored{" "}
         {new Date(calibration.createdAt).toLocaleString()}, on{" "}
         {calibration.recorderMic}
         {calibration.browserInputLabel
@@ -196,7 +244,8 @@ export const CalibrationSession = ({
             <p className="text-muted-foreground">
               About {Math.round(SCRIPT_END_SECONDS)} s: {SILENCE_SECONDS} s of
               silence, then {SCRIPT_LINES.length} rounds of reading a line (
-              {READ_SECONDS} s) and pausing ({PAUSE_SECONDS} s).
+              {READ_SECONDS} s) and pausing ({PAUSE_SECONDS} s), then one line
+              read loudly.
             </p>
           </div>
           <Button

@@ -13,15 +13,16 @@ const calibration = (id: string): SavedAudioCalibration => ({
   outcome: "passed",
   judgement: { outcome: "passed" },
   noiseFloorDb: -80,
-  speechLufs: -21,
-  thresholdDb: -37,
+  speechLufs: -27,
+  truePeakDb: -9,
+  thresholdDb: -43,
   recorderMic: "Voicemeeter Out B1",
   browserInputLabel: "Voicemeeter Out B1",
 });
 
 const timeline = (calibrationId: string): CalibrationTimeline => ({
   calibrationId,
-  rule: { thresholdDb: -37, minSilenceSeconds: 0.8 },
+  rule: { thresholdDb: -43, minSilenceSeconds: 0.8 },
   endSeconds: 63,
   prompts: [],
   reactionMarginSeconds: 0.75,
