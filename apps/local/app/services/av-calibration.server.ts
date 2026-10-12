@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Data, Effect, Schema } from "effect";
 import path from "node:path";
 import { avCalibrations } from "@/db/schema";
@@ -306,6 +306,47 @@ export const lastPassedCalibration = Effect.fn("lastPassedCalibration")(
       : null;
   }
 );
+
+/** A camera + mic device pair, by their DirectShow names. */
+export type DevicePair = { camera: string; mic: string };
+
+/**
+ * The latest AV Calibration taken on `pair` that passes under today's rules
+ * (`passesCurrentRules`), or null: the pair's one query, which its Mic
+ * Offset is read from.
+ */
+export const lastPassedCalibrationForPair = Effect.fn(
+  "lastPassedCalibrationForPair"
+)(function* (db: Database, pair: DevicePair) {
+  const rows = yield* dbCall(() =>
+    db
+      .select()
+      .from(avCalibrations)
+      .where(
+        and(
+          eq(avCalibrations.outcome, "passed"),
+          eq(avCalibrations.cameraDevice, pair.camera),
+          eq(avCalibrations.recorderMic, pair.mic)
+        )
+      )
+      .orderBy(desc(avCalibrations.createdAt))
+      .limit(LAST_PASSED_SCAN)
+  );
+  return rows.find(passesCurrentRules) ?? null;
+});
+
+/**
+ * The Mic Offset for a pair (GLOSSARY.md, AV Calibration), in whole ms: its
+ * latest passed AV Calibration's. A new Recording Session starts with it;
+ * null when the pair was never measured (DEFAULT_MIC_OFFSET_MS then).
+ */
+export const pairMicOffsetMs = Effect.fn("pairMicOffsetMs")(function* (
+  db: Database,
+  pair: DevicePair
+) {
+  const offset = (yield* lastPassedCalibrationForPair(db, pair))?.micOffsetMs;
+  return offset == null ? null : Math.round(offset);
+});
 
 /** `lastPassedCalibration` on the app's database. */
 export const lastPassedCalibrationNow = Effect.gen(function* () {

@@ -44,11 +44,12 @@ export const RECORDER_SERVICE_PORT = 5177;
  * peak; 7: Record carries its AV Calibration, and is gated on it; 8: the
  * recording-started event's `avCalibrationId`, renamed from Audio
  * Calibration; 9: the calibration run records the camera too, starts once
- * live, and cuts its clap window out of the true peak). The app server reloads on a change and the service does not
+ * live, and cuts its clap window out of the true peak; 10: the
+ * recording-started event's `devices`, for the pair's Mic Offset). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 9;
+export const RECORDER_PROTOCOL_VERSION = 10;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -268,6 +269,12 @@ export type RecordingSessionEvent = Logged<
       thresholdDb?: number;
       /** The AV Calibration that set it; null or absent: none. */
       avCalibrationId?: string | null;
+      /**
+       * The camera and mic it records (DirectShow names): the pair whose Mic
+       * Offset it starts with. Absent in logs written before protocol 10:
+       * DEFAULT_MIC_OFFSET_MS.
+       */
+      devices?: { camera: string; mic: string };
     }
   /**
    * The scene from here on, in picture file time. Every Recording Session
