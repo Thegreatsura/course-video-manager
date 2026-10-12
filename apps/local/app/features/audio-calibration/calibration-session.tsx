@@ -14,6 +14,7 @@ import {
   currentStep,
   type audioCalibrationReducer,
 } from "./audio-calibration-reducer";
+import { CalibrationTimelineView } from "./calibration-timeline-view";
 import type { SavedAudioCalibration } from "./calibration-wire";
 
 type State = audioCalibrationReducer.State;
@@ -233,6 +234,7 @@ export const CalibrationSession = ({
       {session.kind === "result" && (
         <>
           <Result calibration={session.calibration} />
+          <CalibrationTimelineView timeline={session.timeline} />
           <Button
             variant={
               session.calibration.outcome === "passed" ? "outline" : "default"
