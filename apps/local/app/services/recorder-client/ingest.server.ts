@@ -36,6 +36,8 @@ export type IngestResult = {
   messages: NewRecorderMessage[];
   /** Where the next Clip of this Video goes, when the event moved it. */
   insertionPoint: InsertionPoint | null;
+  /** The Recording Session was refused: nothing of it is saved. */
+  refused?: boolean;
 };
 
 const nothing: IngestResult = {
@@ -123,6 +125,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           },
         ],
         insertionPoint: null,
+        refused: true,
       } satisfies IngestResult;
     return {
       videoId: event.videoId,
