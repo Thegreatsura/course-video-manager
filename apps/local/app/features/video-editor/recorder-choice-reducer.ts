@@ -9,7 +9,7 @@ import type { OBSConnectionOuterState } from "./obs-connector";
 import { isCaptureInProgress } from "./video-editor-selectors";
 
 /**
- * The editor's choice of Recorder (OBS or New recorder) for one Video. The
+ * The editor's choice of Recorder (OBS or CVM recorder) for one Video. The
  * choice is saved on the Video and, once saved, remembered as the last
  * choice, which a new Video then starts with (`last-recorder-choice.ts`).
  */
@@ -92,13 +92,13 @@ export const showsOBSChecks = (state: recorderChoiceReducer.State): boolean =>
  * Record, the scene buttons and the composite preview: only on a New
  * recorder Video.
  */
-export const showsNewRecorderControls = (
+export const showsCvmRecorderControls = (
   state: Pick<recorderChoiceReducer.State, "recorder">
-): boolean => state.recorder === "new-recorder";
+): boolean => state.recorder === "cvm";
 
 /**
  * The Recorder is locked once the Video has a live Clip, so one Video never
- * mixes OBS and new-recorder Clips, and while a capture is still in progress
+ * mixes OBS and CVM-recorder Clips, and while a capture is still in progress
  * (its first Clip may not have landed yet). Archived Clips do not count: a
  * Video whose Clips are all archived has no Footage.
  */

@@ -15,7 +15,7 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
  * blocks that restore up front, and rolls back any restore the server refuses.
  */
 
-const newRecorderClip = fromPartial<ClipOnDatabase>({
+const cvmRecorderClip = fromPartial<ClipOnDatabase>({
   type: "on-database",
   frontendId: "fe-new" as FrontendId,
   databaseId: "db-new" as DatabaseId,
@@ -34,7 +34,7 @@ const obsClip = fromPartial<ClipOnDatabase>({
 const createTester = () =>
   new ReducerTester(clipStateReducer, {
     clipIdsWithTranscriptWords: new Set<DatabaseId>(),
-    items: [newRecorderClip, obsClip],
+    items: [cvmRecorderClip, obsClip],
     insertionPoint: { type: "end" },
     insertionOrder: 0,
     error: null,
@@ -59,11 +59,11 @@ describe("restoring a Clip filmed with the other Recorder", () => {
   it("is blocked up front: the Clip stays archived and the refusal is shown", () => {
     const tester = createTester().send({
       type: "restore-clip",
-      clipId: newRecorderClip.frontendId,
+      clipId: cvmRecorderClip.frontendId,
       videoRecorder: "obs",
     });
 
-    expect(isArchived(tester, newRecorderClip.frontendId)).toBe(true);
+    expect(isArchived(tester, cvmRecorderClip.frontendId)).toBe(true);
     expect(tester.getState().error).toBeNull();
     expect(tester.getEffects()).toEqual([
       { type: "show-clip-restore-refused-toast", message: refusal },
@@ -84,13 +84,13 @@ describe("restoring a Clip filmed with the other Recorder", () => {
   });
 
   it("rolls back a restore the server refuses, and shows why", () => {
-    // The editor thought the Video still recorded with the New recorder (say,
+    // The editor thought the Video still recorded with the CVM recorder (say,
     // another tab switched it), so it sent the restore.
     const tester = createTester()
       .send({
         type: "restore-clip",
-        clipId: newRecorderClip.frontendId,
-        videoRecorder: "new-recorder",
+        clipId: cvmRecorderClip.frontendId,
+        videoRecorder: "cvm",
       })
       .send({
         type: "clip-restore-failed",
@@ -98,7 +98,7 @@ describe("restoring a Clip filmed with the other Recorder", () => {
         message: refusal,
       });
 
-    expect(isArchived(tester, newRecorderClip.frontendId)).toBe(true);
+    expect(isArchived(tester, cvmRecorderClip.frontendId)).toBe(true);
     expect(tester.getState().error).toBeNull();
     expect(tester.getEffects()).toEqual([
       { type: "unarchive-clips", clipIds: ["db-new"] },

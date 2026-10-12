@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { clipStillUrl } from "../clip-still-url";
-import { getNewRecorderLivePreview } from "../live-preview";
+import { getCvmRecorderLivePreview } from "../live-preview";
 import {
   getIsOBSActive,
   getIsLiveStreamPortrait,
@@ -17,7 +17,7 @@ import { RecordingSignalIndicator } from "./timeline-indicators";
 /**
  * The editor's live frame: the live picture while paused, with the previous
  * Clip's last frame over it at half opacity to match position between takes.
- * OBS fills it with its Virtual Camera; the New recorder with its composite.
+ * OBS fills it with its Virtual Camera; the CVM recorder with its composite.
  * Both get the same capture badge, ring, recording signal and centre line.
  * Renders nothing while there is no live picture (the Clip player shows).
  */
@@ -26,9 +26,9 @@ export const LivePreviewFrame = () => {
     VideoEditorContext,
     (ctx) => ctx.liveMediaStream
   );
-  const newRecorderState = useContextSelector(
+  const cvmRecorderState = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.state
+    (ctx) => ctx.cvmRecorder.state
   );
   const showVideoPlayer = useContextSelector(
     VideoEditorContext,
@@ -63,7 +63,7 @@ export const LivePreviewFrame = () => {
     (ctx) => ctx.databaseClipToShowLastFrameOf
   );
 
-  const composite = getNewRecorderLivePreview(newRecorderState);
+  const composite = getCvmRecorderLivePreview(cvmRecorderState);
   if (!liveMediaStream && !composite) return null;
 
   const showLastFrameOverlay = getShouldShowLastFrameOverlay(

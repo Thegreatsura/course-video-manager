@@ -169,10 +169,10 @@ export const setupPublishableCourse = async (opts?: {
    */
   throwOnLogWrite?: Error;
   /**
-   * Film every Video with the New recorder: its Clips are cut from one
+   * Film every Video with the CVM recorder: its Clips are cut from one
    * Recording Session (Code, then Camera from 5 s). Default: OBS Clips.
    */
-  newRecorder?: boolean;
+  cvmRecorder?: boolean;
 }) => {
   const videoCount = opts?.videoCount ?? 1;
   await truncateAllTables(testDb);
@@ -225,7 +225,7 @@ export const setupPublishableCourse = async (opts?: {
   // Video n's clips are shifted by n, so every Video gets a distinct Export
   // Hash — and therefore a distinct export file and bundle entry. Video 0's
   // timings are the historical ones, so its Export Hash is stable.
-  const recordingSession = opts?.newRecorder
+  const recordingSession = opts?.cvmRecorder
     ? await (async () => {
         const [row] = await testDb
           .insert(recordingSessionsTable)

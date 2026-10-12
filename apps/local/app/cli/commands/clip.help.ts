@@ -18,8 +18,8 @@ scoping. 'list'/'get' default to ACTIVE clips only, but unlike most other archiv
 archive is a REVIEW SURFACE, not a one-way trapdoor: pass --archived to either verb to reveal
 soft-deleted clips (so a wrongly-deleted one can be found), and 'clip restore' undoes 'clip delete'.
 
-Recorder and scenes: each Video's Recorder is OBS or the New recorder. An OBS Clip is cut from one
-Footage file with the scene baked in; its 'scene' is the scene OBS reported. A New-recorder Clip
+Recorder and scenes: each Video's Recorder is OBS or the CVM recorder. An OBS Clip is cut from one
+Footage file with the scene baked in; its 'scene' is the scene OBS reported. A CVM-recorder Clip
 points at a Recording Session ('recordingSessionId'; 'clip list' also carries the session's files,
 mic offset and scene timeline as 'recordingSession'): its camera, screen and mic Footage on one
 shared clock, plus which scene was live from each moment. Its picture is drawn at export from those

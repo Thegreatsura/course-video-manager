@@ -32,7 +32,7 @@ const NEVER_POSTED =
   "never been posted anywhere.";
 
 const SHARED_FOOTAGE =
-  "A Recording Session is the new recorder's Footage: files on the author's " +
+  "A Recording Session is the CVM recorder's Footage: files on the author's " +
   "machine plus their scene timeline. A copied Clip keeps pointing at the " +
   "same Recording Session, as an OBS Clip keeps its Footage path, so the " +
   "copy draws the same picture.";

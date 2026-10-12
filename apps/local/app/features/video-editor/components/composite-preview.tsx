@@ -53,7 +53,7 @@ export const CompositePreview = (props: {
   return (
     <div
       className="relative w-full h-full overflow-hidden rounded-lg bg-black"
-      data-testid="new-recorder-composite"
+      data-testid="cvm-recorder-composite"
       data-scene={scene}
     >
       <canvas

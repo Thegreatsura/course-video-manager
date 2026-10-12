@@ -8,7 +8,7 @@ import {
 } from "@/packages/scene-layout";
 
 /**
- * A new-recorder Clip's Recording Session, as loaded with the Clip (the
+ * A CVM-recorder Clip's Recording Session, as loaded with the Clip (the
  * `recordingSession` relation with its `sceneEvents` and `micEq`). Scene
  * event times are the picture's file time. `micEq` is the saved Mic EQ
  * Setting, null until it is first saved ({@link DEFAULT_MIC_EQ}).
@@ -41,7 +41,7 @@ type ShownRecordingSession = Omit<ClipRecordingSession, "micEq"> &
  *
  * `recordingSession` is the joined Recording Session row (with its scene
  * events) — null for an OBS Clip. A query that feeds the Export Hash must
- * load it, or a new-recorder Clip would be addressed as a single file.
+ * load it, or a CVM-recorder Clip would be addressed as a single file.
  */
 export type ClipSourceColumns = {
   readonly videoFilename: string;
@@ -53,7 +53,7 @@ export type ClipSourceColumns = {
 };
 
 /**
- * Everything `clipSource` reads off a Clip row. The new-recorder columns are
+ * Everything `clipSource` reads off a Clip row. The CVM-recorder columns are
  * optional: a row loaded without its Recording Session (or an OBS Clip, whose
  * relation is null) answers as a single Footage file.
  */
@@ -71,7 +71,7 @@ export type ClipSourceRow = Pick<
  * look inside it.
  *
  * - `footage`: an OBS Clip — one Footage file cut between a start and an end.
- * - `recording-session`: a new-recorder Clip — camera, screen and mic files
+ * - `recording-session`: a CVM-recorder Clip — camera, screen and mic files
  *   of one Recording Session. `start`/`end` and the segments are in the
  *   picture's clock; the mic is read `micOffsetSeconds` earlier. The export
  *   also needs its scene events (to draw past the Clip's end, over a long
@@ -106,7 +106,7 @@ export type ClipSource =
     };
 
 /**
- * What the export draws for a new-recorder Clip over a stretch of picture
+ * What the export draws for a CVM-recorder Clip over a stretch of picture
  * time: the files, the scene segments, and the mic's offset and EQ.
  */
 export type ClipComposite = {
@@ -142,7 +142,7 @@ export type ClipFrame =
 /**
  * One Clip as an input to the ffmpeg encode/transcribe pipelines.
  *
- * `startTime` is never negative. When a new-recorder Clip starts within the
+ * `startTime` is never negative. When a CVM-recorder Clip starts within the
  * mic offset of its Recording Session's start, the mic is read from 0 and
  * `leadingSilenceSeconds` says how much of the Clip's start it has no sound
  * for; `duration` stays the Clip's own, in the picture's clock.
@@ -187,7 +187,7 @@ export const clipSourceColumns = (
 });
 
 /**
- * The Clip's source. A new-recorder Clip is exported with its Recording
+ * The Clip's source. A CVM-recorder Clip is exported with its Recording
  * Session's saved mic EQ, or Matt's OBS EQ ({@link DEFAULT_MIC_EQ}) until one
  * is saved.
  */
@@ -227,7 +227,7 @@ export const clipSource = (row: ClipSourceRow): ClipSource => {
 };
 
 /**
- * What the export composites for a new-recorder Clip from its start, for
+ * What the export composites for a CVM-recorder Clip from its start, for
  * `durationSeconds` of output (default: the Clip's own length; longer over a
  * long Pause), or null for an OBS Clip, whose single Footage file is cut as
  * it always was.
@@ -263,7 +263,7 @@ const tidy = (seconds: number) => Math.round(seconds * 1e6) / 1e6;
 /**
  * The media element that clocks playback, and how its time maps to the
  * Clip's: source time = clock `currentTime` + `offsetSeconds`. An OBS Clip's
- * clock is its Footage (offset 0); a new-recorder Clip's is its mic, which is
+ * clock is its Footage (offset 0); a CVM-recorder Clip's is its mic, which is
  * read `micOffsetSeconds` earlier than the picture.
  */
 export const clipPlaybackClock = (
@@ -295,7 +295,7 @@ const viewVideoUrl = (file: string, from: number, to: number) =>
   `/view-video?videoPath=${encodeURIComponent(file)}#t=${from},${to}`;
 
 /**
- * A new-recorder Clip's picture, for the composite playback canvas: its
+ * A CVM-recorder Clip's picture, for the composite playback canvas: its
  * camera and screen cued to `from`–`to` (source time; they share the
  * picture's clock) and the scene segments to draw them in. Null for an OBS
  * Clip, whose clock is its picture.
@@ -399,7 +399,7 @@ export const clipFrameFfmpegArgs = (
 };
 
 /**
- * A Clip's sound as an ffmpeg input: its Footage file, or a new-recorder
+ * A Clip's sound as an ffmpeg input: its Footage file, or a CVM-recorder
  * Clip's mic, read the mic offset earlier (compositing its picture is the
  * export's business). A mic read that would start before the file does
  * starts at 0 instead, the gap stated as `leadingSilenceSeconds`.
@@ -427,7 +427,7 @@ export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput => {
  * order are load-bearing: every existing export is addressed by them, so an
  * OBS Clip must keep hashing as `{ f, s, e }` for ever.
  *
- * A new-recorder Clip adds, after those: its Recording Session (`rs`), the
+ * A CVM-recorder Clip adds, after those: its Recording Session (`rs`), the
  * scene segments in its range (`sg`), its Scene Override (`so`, only when
  * set), the mic offset (`mo`), the mic EQ (`eq`) and the layout version
  * (`lv`) — everything else its composite is drawn from.

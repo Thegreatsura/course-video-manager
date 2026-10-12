@@ -259,7 +259,7 @@ describe("RenderVerticalVideoService", () => {
   );
 
   it.effect(
-    "renders a new-recorder Clip as its composite, through the Clip Source",
+    "renders a CVM-recorder Clip as its composite, through the Clip Source",
     () => {
       const segmentCalls: unknown[] = [];
       const singlePassCalls: unknown[] = [];

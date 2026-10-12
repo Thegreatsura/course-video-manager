@@ -1,4 +1,4 @@
-// Entry point for the scene-layout package: the new recorder's scenes and
+// Entry point for the scene-layout package: the CVM recorder's scenes and
 // their maths, pure (no filesystem, no ffmpeg), so the browser and the server
 // share one definition.
 //
@@ -24,5 +24,5 @@ export {
   type SourceSize,
 } from "./lib/scene-drawing";
 
-/** The layout definition's version: part of every new-recorder Export Hash. */
+/** The layout definition's version: part of every CVM-recorder Export Hash. */
 export { LAYOUT_VERSION } from "./lib/layout-definition";

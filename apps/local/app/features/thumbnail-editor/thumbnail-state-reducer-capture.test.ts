@@ -14,10 +14,10 @@ const createState = (
 });
 
 describe("Camera", () => {
-  it("takes the still from the recorder service on a New recorder Video", () => {
+  it("takes the still from the recorder service on a CVM recorder Video", () => {
     const tester = new ReducerTester(
       thumbnailStateReducer,
-      createInitialThumbnailState("new-recorder")
+      createInitialThumbnailState("cvm")
     );
     expect(openCameraModal(tester.getState())).toBeNull();
 

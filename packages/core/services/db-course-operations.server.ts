@@ -291,7 +291,7 @@ const createCourseOperations = (db: Database) => {
                                 // Part of the export address — see export-hash.
                                 pauseType: true,
                                 zoomType: true,
-                                // A new-recorder Clip's composite — see
+                                // A CVM-recorder Clip's composite — see
                                 // clipRecordingSessionRelation.
                                 recordingSessionId: true,
                                 sceneOverride: true,
@@ -361,7 +361,7 @@ const createCourseOperations = (db: Database) => {
         });
       }
 
-      // A new-recorder Clip's scene events and mic EQ, loaded apart: nested
+      // A CVM-recorder Clip's scene events and mic EQ, loaded apart: nested
       // here they would pass Postgres's identifier limit (see
       // recordingSessionExportColumns).
       const withEvents = yield* makeDbCall(() =>

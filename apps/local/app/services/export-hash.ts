@@ -82,7 +82,7 @@ const LONG_PAUSE = "long";
  *
  * Its input requires the Clip's `recordingSession` (joined with its scene
  * events — `clipRecordingSessionRelation` in core): a query that forgot it
- * would address a new-recorder Clip as a single file and never re-export it.
+ * would address a CVM-recorder Clip as a single file and never re-export it.
  */
 export const toExportClips = (
   clips: ReadonlyArray<
@@ -206,7 +206,7 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
  * existing export address intact and re-exported only the videos whose address
  * had been lying about their contents.
  *
- * A new-recorder Clip's composite is drawn from more than its file and range:
+ * A CVM-recorder Clip's composite is drawn from more than its file and range:
  * its Recording Session, scene segments, Scene Override, mic offset, the
  * saved mic EQ (loaded with its Recording Session) and the layout version
  * join its entry (see

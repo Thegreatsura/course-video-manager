@@ -4,12 +4,12 @@ import { clipRecordingSessionRelation } from "../services/clip-recording-session
 import type { TestDb } from "./pglite.js";
 
 /**
- * A new-recorder Clip on `videoId`: a Recording Session with a two-event
+ * A CVM-recorder Clip on `videoId`: a Recording Session with a two-event
  * scene timeline, and a Clip cut from it carrying a Scene Override. For the
  * copy tests (Video copy, Course duplicate, new Draft), which each check the
  * copy draws the same picture.
  */
-export async function seedNewRecorderClip(testDb: TestDb, videoId: string) {
+export async function seedCvmRecorderClip(testDb: TestDb, videoId: string) {
   const [session] = await testDb
     .insert(schema.recordingSessions)
     .values({
@@ -32,7 +32,7 @@ export async function seedNewRecorderClip(testDb: TestDb, videoId: string) {
       sourceStartTime: 1,
       sourceEndTime: 5,
       order: "a0",
-      text: "new recorder",
+      text: "CVM recorder",
       recordingSessionId: session!.id,
       scene: "Camera",
       sceneOverride: "No Face",

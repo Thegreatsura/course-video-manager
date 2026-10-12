@@ -67,8 +67,8 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   // a pending one stays pending (`copiedVoice`).
   "clip_mockup.voiceStatus": () => "ready",
   "clip_mockup.voiceError": () => null,
-  // CHECK video_recorder_valid; "new-recorder" is the non-default value.
-  "video.recorder": () => "new-recorder",
+  // CHECK video_recorder_valid; "cvm" is the non-default value.
+  "video.recorder": () => "cvm",
   // CHECK clip_scene_override_valid.
   "clip.sceneOverride": () => "Code",
   // CHECKs on a Recording Session and its scene events, which every copy

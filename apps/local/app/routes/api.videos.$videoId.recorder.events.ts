@@ -2,8 +2,8 @@ import type { Route } from "./+types/api.videos.$videoId.recorder.events";
 import { recorderClient } from "@/services/recorder-client/live.server";
 
 /**
- * The editor's subscription to a New recorder Video's Recording Sessions
- * (`NewRecorderMessage`, one SSE event each, named by its `type`). It only
+ * The editor's subscription to a CVM recorder Video's Recording Sessions
+ * (`CvmRecorderMessage`, one SSE event each, named by its `type`). It only
  * listens: closing it stops nothing, because the recorder service and the
  * app server's recorder client record and save whether anyone listens.
  */

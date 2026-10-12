@@ -1,6 +1,6 @@
 /**
  * A Clip's effective scene: its Scene Override if it has one, else the scene
- * in force when it was recorded (`clips.scene` — for a New-recorder Clip, the
+ * in force when it was recorded (`clips.scene` — for a CVM-recorder Clip, the
  * scene live at the Clip's start; for an OBS Clip, the scene OBS reported).
  *
  * Every rule judged on "the Clip's scene" — Clip Zoom eligibility, what `cvm`

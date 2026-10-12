@@ -17,7 +17,7 @@ import { useOBSConnector } from "@/features/video-editor/obs-connector";
 import { targetProfileForFormat } from "@/features/video-editor/ensure-obs-profile";
 import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
-import { useNewRecorder } from "@/features/video-editor/use-new-recorder";
+import { useCvmRecorder } from "@/features/video-editor/use-cvm-recorder";
 import { captureProps } from "@/features/video-editor/recorder-capture";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
@@ -344,7 +344,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   });
 
   const recorderChoice = useRecorderChoice(props.loaderData.video);
-  const newRecorder = useNewRecorder({
+  const cvmRecorder = useCvmRecorder({
     videoId: props.loaderData.video.id,
     enabled: !recorderChoice.usesObs,
     silenceLength,
@@ -470,7 +470,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       }}
       obsConnectorState={obsConnector.state}
       recorderChoice={recorderChoice}
-      newRecorder={newRecorder}
+      cvmRecorder={cvmRecorder}
       items={clipState.items}
       sessions={clipState.sessions}
       repoId={props.loaderData.video.lesson?.section.repoVersion.repo.id}
@@ -480,7 +480,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       repoName={props.loaderData.video.lesson?.section.repoVersion.repo.name}
       videoId={props.loaderData.video.id}
       liveMediaStream={obsConnector.mediaStream}
-      {...captureProps(recorderChoice, obsConnector, newRecorder)}
+      {...captureProps(recorderChoice, obsConnector, cvmRecorder)}
       silenceLength={silenceLength}
       onSilenceLengthChange={setSilenceLength}
       fsData={props.loaderData.fsData}

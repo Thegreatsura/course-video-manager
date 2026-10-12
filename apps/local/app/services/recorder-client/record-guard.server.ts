@@ -14,7 +14,7 @@ export class RecordOnOBSVideoError extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 /**
- * Whether Record may start on a Video: it records with the New recorder, and
+ * Whether Record may start on a Video: it records with the CVM recorder, and
  * its Version is the Draft (a Recording Session hangs off the Video, so the
  * Draft guard is its guard too; docs/DRAFT_GUARD.md).
  */
@@ -28,7 +28,7 @@ export const requireRecordableVideo = Effect.fn("requireRecordableVideo")(
     );
     if (!video)
       return yield* new NotFoundError({ type: "video", params: { videoId } });
-    if (resolveVideoRecorder(video.recorder) !== "new-recorder")
+    if (resolveVideoRecorder(video.recorder) !== "cvm")
       return yield* new RecordOnOBSVideoError({
         message: "This Video records with OBS. Reload to see its Recorder.",
       });

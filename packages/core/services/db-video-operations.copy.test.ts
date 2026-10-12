@@ -17,8 +17,8 @@ import { Effect } from "effect";
 import {
   effectiveScenesOf,
   recordingSessionRowCounts,
-  seedNewRecorderClip,
-} from "../test-utils/new-recorder-clip.js";
+  seedCvmRecorderClip,
+} from "../test-utils/cvm-recorder-clip.js";
 
 let testDb: TestDb;
 
@@ -249,10 +249,10 @@ describe("copyVideoImpl — copyScript", () => {
   });
 });
 
-describe("copyVideoImpl — new-recorder Clips", () => {
+describe("copyVideoImpl — CVM-recorder Clips", () => {
   it("carries the Recording Session and Scene Override, sharing the session", async () => {
-    const source = await createVideo({ recorder: "new-recorder" });
-    await seedNewRecorderClip(testDb, source.id);
+    const source = await createVideo({ recorder: "cvm" });
+    await seedCvmRecorderClip(testDb, source.id);
     const before = await recordingSessionRowCounts(testDb);
 
     const newVideoId = await run(

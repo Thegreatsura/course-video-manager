@@ -4,28 +4,28 @@ import {
   canRecord,
   canRetryCamera,
   canSwitchScene,
-  createInitialNewRecorderState,
-  newRecorderReducer,
-} from "./new-recorder-reducer";
-import type { NewRecorderMessage } from "./new-recorder-wire";
+  createInitialCvmRecorderState,
+  cvmRecorderReducer,
+} from "./cvm-recorder-reducer";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import { getRecorderCapture, toCaptureStatus } from "./recorder-capture";
 
 /** What the teleprompter's capture indicator would show for this state. */
-const captureOf = (state: newRecorderReducer.State) =>
+const captureOf = (state: cvmRecorderReducer.State) =>
   toCaptureStatus(
     getRecorderCapture({
       usesObs: false,
       obsState: { type: "obs-not-running" },
       obsSpeech: { type: "warming-up" },
-      newRecorder: state,
+      cvmRecorder: state,
     })
   );
 
-const heard = (message: NewRecorderMessage) =>
+const heard = (message: CvmRecorderMessage) =>
   ({ type: "recorder-message-heard", message }) as const;
 
 const status = (
-  o: Partial<Extract<NewRecorderMessage, { type: "recorder-status" }>> = {}
+  o: Partial<Extract<CvmRecorderMessage, { type: "recorder-status" }>> = {}
 ) =>
   heard({
     type: "recorder-status",
@@ -49,8 +49,8 @@ const pressRecord = {
 } as const;
 
 const stoppedMessage = (
-  o: Partial<Extract<NewRecorderMessage, { type: "recording-stopped" }>> = {}
-): NewRecorderMessage => ({
+  o: Partial<Extract<CvmRecorderMessage, { type: "recording-stopped" }>> = {}
+): CvmRecorderMessage => ({
   type: "recording-stopped",
   recordingSessionId: "s1",
   errors: [],
@@ -74,9 +74,9 @@ const recording = () =>
     );
 
 const tester = () =>
-  new ReducerTester(newRecorderReducer, createInitialNewRecorderState());
+  new ReducerTester(cvmRecorderReducer, createInitialCvmRecorderState());
 
-describe("the New recorder's Record and Stop", () => {
+describe("the CVM recorder's Record and Stop", () => {
   it("records only once the recorder service is there and able", () => {
     const t = tester();
     t.send(pressRecord);
@@ -254,7 +254,7 @@ describe("the Cam Link in the editor", () => {
   });
 });
 
-describe("switching scenes on the New recorder", () => {
+describe("switching scenes on the CVM recorder", () => {
   it("previews the scene the recorder says, and asks for a switch only while it is open", () => {
     const t = tester();
     t.send(status()).send({ type: "press-scene", scene: "Camera" });
@@ -289,7 +289,7 @@ describe("switching scenes on the New recorder", () => {
   });
 });
 
-describe("the Stream Deck on the New recorder", () => {
+describe("the Stream Deck on the CVM recorder", () => {
   const started = heard({
     type: "recording-started",
     recordingSessionId: "s1",
@@ -350,7 +350,7 @@ describe("the Stream Deck on the New recorder", () => {
   });
 });
 
-describe("silence detection on the New recorder, as the glass shows it", () => {
+describe("silence detection on the CVM recorder, as the glass shows it", () => {
   const speechStarted = heard({
     type: "speech-started",
     recordingSessionId: "s1",

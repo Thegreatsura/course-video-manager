@@ -1,6 +1,6 @@
 /**
  * Speech to Clips: the source-agnostic half of recording. Whoever finds the
- * speech (the new recorder's silence detector), this decides what of it
+ * speech (the CVM recorder's silence detector), this decides what of it
  * becomes a Clip and where the Clips go.
  *
  * What of the speech becomes a Clip is `speechToClipBounds`, the same rule the

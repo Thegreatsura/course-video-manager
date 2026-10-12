@@ -17,7 +17,7 @@ type ClipRestoreFailed = Extract<
 /**
  * Restore an archived Clip, optimistically. A Clip filmed with the other
  * Recorder than the Video's is refused up front (#2043), the same rule the
- * server enforces: one Video never mixes OBS and new-recorder Clips.
+ * server enforces: one Video never mixes OBS and CVM-recorder Clips.
  */
 export const handleRestoreClip = (
   state: clipStateReducer.State,

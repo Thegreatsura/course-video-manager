@@ -50,7 +50,7 @@ export const previewPath = (feed: PreviewFeed) => `/preview/${feed}`;
 export const STILL_PATH = "/still";
 
 export const STILL_RECORDER_CLOSED =
-  "The recorder is not open: it opens while the editor or the thumbnail camera is open on a New recorder Video.";
+  "The recorder is not open: it opens while the editor or the thumbnail camera is open on a CVM recorder Video.";
 export const STILL_WHILE_RECORDING =
   "The recorder is recording: stop it to take a still.";
 export const STILL_NO_PICTURE =

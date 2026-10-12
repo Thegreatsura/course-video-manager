@@ -10,7 +10,7 @@
 // - There is no Empty scene (decision log #1993, Q5).
 //
 // Bump `version` whenever anything here changes what a scene looks like: it is
-// part of the Export Hash, so every new-recorder export goes stale.
+// part of the Export Hash, so every CVM-recorder export goes stale.
 
 export const SCENES = ["Camera", "Code", "No Face"] as const;
 export type Scene = (typeof SCENES)[number];

@@ -10,14 +10,14 @@ import {
 setupClipServiceTests();
 
 /**
- * A Video whose only Clip is an archived new-recorder Clip, then switched to
+ * A Video whose only Clip is an archived CVM-recorder Clip, then switched to
  * OBS (allowed: every Clip is archived, so it has no Footage).
  */
 const seedSwitchedVideo = async () => {
   const video = await clipService.createVideo("switched");
   await testDb
     .update(schema.videos)
-    .set({ recorder: "new-recorder" })
+    .set({ recorder: "cvm" })
     .where(eq(schema.videos.id, video.id));
   const [session] = await testDb
     .insert(schema.recordingSessions)
@@ -45,13 +45,13 @@ const seedSwitchedVideo = async () => {
       .returning();
     return clip!;
   };
-  const newRecorderClip = await insertClip(session!.id);
+  const cvmRecorderClip = await insertClip(session!.id);
   await testDb
     .update(schema.videos)
     .set({ recorder: "obs" })
     .where(eq(schema.videos.id, video.id));
   const obsClip = await insertClip(null);
-  return { newRecorderClip, obsClip };
+  return { cvmRecorderClip, obsClip };
 };
 
 const isArchived = async (id: string) =>
@@ -60,11 +60,11 @@ const isArchived = async (id: string) =>
 
 describe("restoring archived Clips across a Recorder switch", () => {
   it("refuses to restore a Clip from the other Recorder, and restores none of the batch", async () => {
-    const { newRecorderClip, obsClip } = await seedSwitchedVideo();
+    const { cvmRecorderClip, obsClip } = await seedSwitchedVideo();
     await expect(
-      clipService.unarchiveClips([obsClip.id, newRecorderClip.id])
+      clipService.unarchiveClips([obsClip.id, cvmRecorderClip.id])
     ).rejects.toThrow(/Recorder/);
-    expect(await isArchived(newRecorderClip.id)).toBe(true);
+    expect(await isArchived(cvmRecorderClip.id)).toBe(true);
     expect(await isArchived(obsClip.id)).toBe(true);
   });
 

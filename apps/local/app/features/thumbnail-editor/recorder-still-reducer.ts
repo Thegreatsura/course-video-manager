@@ -1,23 +1,23 @@
 import type { EffectReducer, EffectReducerExec } from "use-effect-reducer";
 import {
   canRetryCamera,
-  createInitialNewRecorderState,
-  newRecorderReducer,
-} from "@/features/video-editor/new-recorder-reducer";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+  createInitialCvmRecorderState,
+  cvmRecorderReducer,
+} from "@/features/video-editor/cvm-recorder-reducer";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 
 /**
- * The thumbnail camera on a New recorder Video (#2012): it takes its still
+ * The thumbnail camera on a CVM recorder Video (#2012): it takes its still
  * from the recorder service (`GET /still`, a 1280x720 JPEG) instead of the
  * OBS Virtual Camera. While the modal is open it listens to the Video's
  * recorder events like the editor does, which keeps the recorder (and the
- * Cam Link) open; the camera's state is the editor's own `newRecorderReducer`
+ * Cam Link) open; the camera's state is the editor's own `cvmRecorderReducer`
  * view of those events.
  */
 export namespace recorderStillReducer {
   export type State = {
     /** The recorder and its camera, as the editor sees them. */
-    recorder: newRecorderReducer.State;
+    recorder: cvmRecorderReducer.State;
     /** Where the still is fetched from; null until the app server says. */
     stillUrl: string | null;
     taking: boolean;
@@ -28,7 +28,7 @@ export namespace recorderStillReducer {
   };
 
   export type Action =
-    | { type: "recorder-message-heard"; message: NewRecorderMessage }
+    | { type: "recorder-message-heard"; message: CvmRecorderMessage }
     | { type: "press-capture" }
     | { type: "still-taken"; dataUrl: string }
     | { type: "still-failed"; message: string }
@@ -42,7 +42,7 @@ export namespace recorderStillReducer {
 
 export const createInitialRecorderStillState =
   (): recorderStillReducer.State => ({
-    recorder: createInitialNewRecorderState(),
+    recorder: createInitialCvmRecorderState(),
     stillUrl: null,
     taking: false,
     still: null,
@@ -59,9 +59,9 @@ export const canCapture = (state: recorderStillReducer.State) =>
 
 /** Hearing a message or a failed Retry declares no effects in the editor's reducer. */
 const noEffects = (() => {}) as unknown as EffectReducerExec<
-  newRecorderReducer.State,
-  newRecorderReducer.Action,
-  newRecorderReducer.Effect
+  cvmRecorderReducer.State,
+  cvmRecorderReducer.Action,
+  cvmRecorderReducer.Effect
 >;
 
 export const recorderStillReducer: EffectReducer<
@@ -74,7 +74,7 @@ export const recorderStillReducer: EffectReducer<
     case "retry-camera-failed":
       return {
         ...state,
-        recorder: newRecorderReducer(state.recorder, action, noEffects),
+        recorder: cvmRecorderReducer(state.recorder, action, noEffects),
         stillUrl:
           action.type === "recorder-message-heard" &&
           action.message.type === "recorder-status"

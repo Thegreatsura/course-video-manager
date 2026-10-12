@@ -418,7 +418,7 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
 
       return {
         createAndConcatenateVideoClipsSinglePass,
-        // A Video with a new-recorder Clip: per-Clip segments, joined by copy.
+        // A Video with a CVM-recorder Clip: per-Clip segments, joined by copy.
         concatenateClipSegments: makeConcatenateClipSegments({
           fs,
           runEncode,

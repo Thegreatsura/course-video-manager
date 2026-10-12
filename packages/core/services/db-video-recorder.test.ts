@@ -72,11 +72,11 @@ const addRecordingSession = (
     return session!;
   });
 
-const pickNewRecorder = (videoId: string) =>
+const pickCvmRecorder = (videoId: string) =>
   Effect.gen(function* () {
     const videoOps = yield* VideoOperationsService;
     return yield* Effect.flip(
-      videoOps.updateVideoRecorder({ videoId, recorder: "new-recorder" })
+      videoOps.updateVideoRecorder({ videoId, recorder: "cvm" })
     );
   });
 
@@ -87,9 +87,9 @@ describe("the Video's Recorder", () => {
       const video = yield* videoOps.createStandaloneVideo({
         title: "Landscape",
         format: "landscape",
-        recorder: "new-recorder",
+        recorder: "cvm",
       });
-      expect(video.recorder).toBe("new-recorder");
+      expect(video.recorder).toBe("cvm");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -99,7 +99,7 @@ describe("the Video's Recorder", () => {
       const video = yield* videoOps.createStandaloneVideo({
         title: "Short",
         format: "short",
-        recorder: "new-recorder",
+        recorder: "cvm",
       });
       expect(video.recorder).toBeNull();
     }).pipe(Effect.provide(testLayer))
@@ -114,10 +114,10 @@ describe("the Video's Recorder", () => {
       });
       yield* videoOps.updateVideoRecorder({
         videoId: video.id,
-        recorder: "new-recorder",
+        recorder: "cvm",
       });
       const reread = yield* videoOps.getVideoRowById(video.id);
-      expect(reread.recorder).toBe("new-recorder");
+      expect(reread.recorder).toBe("cvm");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -132,7 +132,7 @@ describe("the Video's Recorder", () => {
       const error = yield* Effect.flip(
         videoOps.updateVideoRecorder({
           videoId: video.id,
-          recorder: "new-recorder",
+          recorder: "cvm",
         })
       );
       expect(error._tag).toBe("VideoRecorderLockedError");
@@ -141,7 +141,7 @@ describe("the Video's Recorder", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("a Short is never given the New recorder", () =>
+  it.effect("a Short is never given the CVM recorder", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const video = yield* videoOps.createStandaloneVideo({
@@ -151,7 +151,7 @@ describe("the Video's Recorder", () => {
       const error = yield* Effect.flip(
         videoOps.updateVideoRecorder({
           videoId: video.id,
-          recorder: "new-recorder",
+          recorder: "cvm",
         })
       );
       expect(error._tag).toBe("VideoRecorderLockedError");
@@ -166,7 +166,7 @@ describe("the Video's Recorder", () => {
         const video = yield* videoOps.createStandaloneVideo({
           title: "Landscape",
           format: "landscape",
-          recorder: "new-recorder",
+          recorder: "cvm",
         });
         yield* addClip(video.id, true);
         yield* addClip(video.id, true);
@@ -188,7 +188,7 @@ describe("the Video's Recorder", () => {
         const video = yield* videoOps.createStandaloneVideo({
           title: "Landscape",
           format: "landscape",
-          recorder: "new-recorder",
+          recorder: "cvm",
         });
         const session = yield* addRecordingSession(video.id, "stopped");
         const clip = yield* addClip(video.id, true, session.id);
@@ -227,7 +227,7 @@ describe("the Video's Recorder", () => {
       });
       yield* addClip(video.id, true);
       yield* addClip(video.id, false);
-      const error = yield* pickNewRecorder(video.id);
+      const error = yield* pickCvmRecorder(video.id);
       expect(error._tag).toBe("VideoRecorderLockedError");
     }).pipe(Effect.provide(testLayer))
   );
@@ -238,7 +238,7 @@ describe("the Video's Recorder", () => {
       const video = yield* videoOps.createStandaloneVideo({
         title: "Landscape",
         format: "landscape",
-        recorder: "new-recorder",
+        recorder: "cvm",
       });
       yield* addRecordingSession(video.id, "recording");
       const error = yield* Effect.flip(
@@ -248,13 +248,13 @@ describe("the Video's Recorder", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("changing a Video to a Short drops the New recorder", () =>
+  it.effect("changing a Video to a Short drops the CVM recorder", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const video = yield* videoOps.createStandaloneVideo({
         title: "Landscape",
         format: "landscape",
-        recorder: "new-recorder",
+        recorder: "cvm",
       });
       const updated = yield* videoOps.updateVideoFormat({
         videoId: video.id,

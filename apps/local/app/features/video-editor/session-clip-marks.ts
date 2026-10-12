@@ -42,21 +42,21 @@ export function getSessionClipMarks(
 }
 
 /**
- * A New recorder take has no Optimistic Clip: its Clips are saved by the app
+ * A CVM recorder take has no Optimistic Clip: its Clips are saved by the app
  * server once the speech ends. So the speech the recorder is hearing, once it
  * is long enough for a Clip, is shown as a pending mark, as OBS's Optimistic
  * Clip is, until the saved Clip lands in its place. Never orphaned: the one
  * silence detection that heard it is the one that saves it.
  */
-const newRecorderSpeechMark = (
+const cvmRecorderSpeechMark = (
   session: RecordingSession,
   capture: CaptureStatus
 ): SessionClipMark | null =>
-  session.newRecorder &&
+  session.cvmRecorder &&
   session.status === "recording" &&
   capture === "long-enough-speaking-for-clip-detected"
     ? {
-        clipId: `new-recorder-speech:${session.id}` as FrontendId,
+        clipId: `cvm-recorder-speech:${session.id}` as FrontendId,
         state: "pending",
       }
     : null;
@@ -108,7 +108,7 @@ export function getSessionClipMarksWithIds(
   const sorted = marks
     .sort((a, b) => a.insertionOrder - b.insertionOrder)
     .map(({ clipId, state }) => ({ clipId, state }));
-  const speech = newRecorderSpeechMark(currentSession, capture);
+  const speech = cvmRecorderSpeechMark(currentSession, capture);
   return speech ? [...sorted, speech] : sorted;
 }
 

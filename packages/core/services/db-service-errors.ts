@@ -174,7 +174,7 @@ export class ClipCarriesOverlaysError extends Data.TaggedError(
 
 /**
  * A Recorder choice refused: the Video already has Clips (one Video never
- * mixes OBS and new-recorder Clips), or it is a Short, which records with OBS
+ * mixes OBS and CVM-recorder Clips), or it is a Short, which records with OBS
  * only.
  */
 export class VideoRecorderLockedError extends Data.TaggedError(

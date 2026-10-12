@@ -1,11 +1,11 @@
 import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
-import { createInitialNewRecorderState } from "./new-recorder-reducer";
+import { createInitialCvmRecorderState } from "./cvm-recorder-reducer";
 import { getRecorderCapture, toCaptureStatus } from "./recorder-capture";
 
 describe("the capture the editor and the glass show", () => {
-  const newRecorderSpeaking = {
-    ...createInitialNewRecorderState(),
+  const cvmRecorderSpeaking = {
+    ...createInitialCvmRecorderState(),
     phase: "recording" as const,
     speech: { type: "speaking-detected" as const },
   };
@@ -15,7 +15,7 @@ describe("the capture the editor and the glass show", () => {
       usesObs: true,
       obsState: fromPartial({ type: "obs-recording" }),
       obsSpeech: { type: "silence" },
-      newRecorder: newRecorderSpeaking,
+      cvmRecorder: cvmRecorderSpeaking,
     });
     expect(toCaptureStatus(capture)).toBe("silence");
     expect(
@@ -24,18 +24,18 @@ describe("the capture the editor and the glass show", () => {
           usesObs: true,
           obsState: { type: "obs-not-running" },
           obsSpeech: { type: "silence" },
-          newRecorder: newRecorderSpeaking,
+          cvmRecorder: cvmRecorderSpeaking,
         })
       )
     ).toBe("not-recording");
   });
 
-  it("is the New recorder's on a New recorder Video, whatever OBS says", () => {
+  it("is the CVM recorder's on a CVM recorder Video, whatever OBS says", () => {
     const capture = getRecorderCapture({
       usesObs: false,
       obsState: { type: "obs-not-running" },
       obsSpeech: { type: "silence" },
-      newRecorder: newRecorderSpeaking,
+      cvmRecorder: cvmRecorderSpeaking,
     });
     expect(capture.isRecording).toBe(true);
     expect(toCaptureStatus(capture)).toBe("speaking-detected");

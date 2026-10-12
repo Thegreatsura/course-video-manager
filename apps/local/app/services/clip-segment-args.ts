@@ -8,7 +8,7 @@ import { BITEXACT_ARGS, LANDSCAPE_VIDEO_ENCODE_ARGS } from "./ffmpeg-error";
  * The ffmpeg command lines of a segmented export: each Clip rendered on its
  * own into a segment file, then the segments joined by stream copy.
  *
- * A Video with a new-recorder Clip is exported this way. Its Clips are
+ * A Video with a CVM-recorder Clip is exported this way. Its Clips are
  * composites drawn from three files each, and one filter graph across every
  * Clip opens a decoder per file per Clip (about 39 for 13 Clips, 4–5 GB more
  * GPU memory — the composite-cost measurement on #1993). One graph per Clip
@@ -95,7 +95,7 @@ const audioTail = (duration: number) =>
   `aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo,apad,atrim=0:${duration},asetpts=PTS-STARTPTS`;
 
 /**
- * Render one Clip to a segment file: the composite for a new-recorder Clip,
+ * Render one Clip to a segment file: the composite for a CVM-recorder Clip,
  * the Footage cut for any other.
  *
  * The composite reads screen and camera from the Clip's picture time and the

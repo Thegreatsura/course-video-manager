@@ -14,7 +14,7 @@ import type { videoStateReducer } from "./video-state-reducer";
 import type { editorModalsReducer } from "./editor-modals-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import type { RecorderPicker } from "./use-recorder-choice";
-import type { NewRecorderControls } from "./use-new-recorder";
+import type { CvmRecorderControls } from "./use-cvm-recorder";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { ClipComputedProps } from "./types";
@@ -108,10 +108,10 @@ export type VideoEditorContextType = {
   onShowScriptPanel: () => void;
   insertionPoint: FrontendInsertionPoint;
   obsConnectorState: OBSConnectionOuterState;
-  /** The Video's Recorder (OBS or New recorder), and the picker for it. */
+  /** The Video's Recorder (OBS or CVM recorder), and the picker for it. */
   recorderPicker: RecorderPicker;
-  /** Record and Stop on a New recorder Video. */
-  newRecorder: NewRecorderControls;
+  /** Record and Stop on a CVM recorder Video. */
+  cvmRecorder: CvmRecorderControls;
   liveMediaStream: MediaStream | null;
   speechDetectorState: FrontendSpeechDetectorState;
   silenceLength: SilenceLength;
@@ -163,7 +163,7 @@ export type VideoEditorContextType = {
 
   // From editorModalsReducer: the open dialog and the inline suggestion
   openModal: editorModalsReducer.Modal | null;
-  /** The New-recorder Clip the Mic Settings dialog is open on. */
+  /** The CVM-recorder Clip the Mic Settings dialog is open on. */
   micSettingsClipId: FrontendId | null;
   modalDispatch: (action: editorModalsReducer.Action) => void;
   /** Each dialog's `onOpenChange`; stable, so a dialog may list it in an effect. */

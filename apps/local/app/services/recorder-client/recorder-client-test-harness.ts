@@ -81,9 +81,9 @@ export type TestRecorderClient = ReturnType<typeof connectClient>;
 
 export const readSession = () => testDb.query.recordingSessions.findFirst();
 
-/** Records on a new New recorder Video, the insertion point at its start. */
+/** Records on a new CVM recorder Video, the insertion point at its start. */
 export const recordOn = async (client: TestRecorderClient) => {
-  const video = await clipService.createVideo("new recorder");
+  const video = await clipService.createVideo("CVM recorder");
   client.subscribe(video.id, () => {});
   await vi.waitFor(() =>
     client.startRecording(video.id, {

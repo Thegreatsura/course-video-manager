@@ -303,7 +303,8 @@ export const videos = createTable(
     /**
      * The Recorder this Video is filmed with — see VIDEO_RECORDERS
      * (features/videos/recorder.ts). Null reads as OBS: every Video filmed
-     * before the choice existed was. See migration 0031.
+     * before the choice existed was. See migrations 0031 and 0033 (the CVM
+     * recorder was stored as `new-recorder` before 0033).
      */
     recorder: text("recorder").$type<VideoRecorder>(),
     createdAt: timestamp("created_at", {
@@ -334,7 +335,7 @@ export const videos = createTable(
     // Mirrors VIDEO_RECORDERS (features/videos/recorder.ts).
     check(
       "video_recorder_valid",
-      sql`${table.recorder} IS NULL OR ${table.recorder} IN ('obs', 'new-recorder')`
+      sql`${table.recorder} IS NULL OR ${table.recorder} IN ('obs', 'cvm')`
     ),
   ]
 );
@@ -388,8 +389,8 @@ export const clips = createTable(
       length: 255,
     }).references(() => diagramSnapshots.id, { onDelete: "set null" }),
     /**
-     * The Recording Session a new-recorder Clip was cut from. Null for every
-     * OBS Clip. For a new-recorder Clip, `videoFilename` holds the Session's
+     * The Recording Session a CVM-recorder Clip was cut from. Null for every
+     * OBS Clip. For a CVM-recorder Clip, `videoFilename` holds the Session's
      * mic file and `scene` the scene in force at the Clip's start.
      */
     recordingSessionId: varchar("recording_session_id", {
@@ -427,7 +428,7 @@ export const clips = createTable(
 );
 
 /**
- * A Recording Session filmed with the new recorder: one start-to-stop capture
+ * A Recording Session filmed with the CVM recorder: one start-to-stop capture
  * of three Footage files (camera, screen, mic) on one shared clock, plus its
  * scene timeline (`recordingSessionSceneEvents`). The picture is drawn from
  * them at export, so nothing is baked in. OBS Recording Sessions are not
@@ -459,7 +460,7 @@ export const recordingSessions = createTable(
     /**
      * The Mic EQ Setting the mic is exported with (`micEqSettings.id`). Every
      * Session names the one setting, MIC_EQ_SETTING_ID, so changing it re-EQs
-     * every New-recorder Video. Not a foreign key: until the setting is first
+     * every CVM-recorder Video. Not a foreign key: until the setting is first
      * saved there is no row, and the mic reads as DEFAULT_MIC_EQ.
      */
     micEqSettingId: varchar("mic_eq_setting_id", { length: 255 })

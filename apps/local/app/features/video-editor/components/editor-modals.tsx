@@ -58,23 +58,23 @@ export const EditorModals = (props: {
   );
   const micOffsetRefusal = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.micOffsetRefusal
+    (ctx) => ctx.cvmRecorder.micOffsetRefusal
   );
   const onDismissMicOffsetRefusal = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.onDismissMicOffsetRefusal
+    (ctx) => ctx.cvmRecorder.onDismissMicOffsetRefusal
   );
   // A refused offset reopens the dialog on its Clip to say why.
   const micSettingsClip = useContextSelector(VideoEditorContext, (ctx) =>
     ctx.clips.find(
       (c) =>
         c.frontendId ===
-        (ctx.newRecorder.micOffsetRefusal?.clipId ?? ctx.micSettingsClipId)
+        (ctx.cvmRecorder.micOffsetRefusal?.clipId ?? ctx.micSettingsClipId)
     )
   );
   const onSubmitMicSettings = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.onSubmitMicSettings
+    (ctx) => ctx.cvmRecorder.onSubmitMicSettings
   );
 
   return (

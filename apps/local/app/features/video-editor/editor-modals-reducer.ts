@@ -19,7 +19,7 @@ export namespace editorModalsReducer {
 
   export interface State {
     openModal: Modal | null;
-    /** The New-recorder Clip the Mic Settings dialog is open on. */
+    /** The CVM-recorder Clip the Mic Settings dialog is open on. */
     micSettingsClipId: FrontendId | null;
     /** What the Suggestions panel last reported, shown under the timeline. */
     suggestion: SuggestionState;

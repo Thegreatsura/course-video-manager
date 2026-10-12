@@ -7,7 +7,7 @@ import { makeAction } from "@/services/route-action.server";
 const switchSceneSchema = Schema.Struct({ scene: Schema.Literal(...SCENES) });
 
 /**
- * Switch scene, on a New recorder Video: the preview draws the new scene at
+ * Switch scene, on a CVM recorder Video: the preview draws the new scene at
  * once and, while recording, the recorder logs the switch as a scene event.
  */
 export const action = makeAction({
