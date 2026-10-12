@@ -15,6 +15,7 @@ export function TimelinePanel({
   diagramId,
   onRestoreRequest,
   refreshKey,
+  activeContentHash,
 }: {
   diagramId: string;
   /**
@@ -27,6 +28,8 @@ export function TimelinePanel({
    * and so does a snapshot that changed on the server (`timelineHash`).
    */
   refreshKey: string;
+  /** The snapshot on the canvas, by content (`activeSnapshotHash`). */
+  activeContentHash: string | null;
 }) {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -109,7 +112,16 @@ export function TimelinePanel({
           type="button"
           onClick={() => handleRestoreClick(snapshot)}
           title="Restore snapshot"
-          className="group flex h-14 items-center gap-2 overflow-hidden rounded border border-zinc-700 bg-zinc-800 pr-2 text-left hover:bg-zinc-700/60 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400"
+          aria-current={
+            snapshot.contentHash === activeContentHash ? "true" : undefined
+          }
+          className={
+            "group flex h-14 items-center gap-2 overflow-hidden rounded border border-zinc-700 pr-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 " +
+            // The Diagram Rail's active row.
+            (snapshot.contentHash === activeContentHash
+              ? "bg-zinc-700/60"
+              : "bg-zinc-800 hover:bg-zinc-700/40")
+          }
         >
           <DiagramThumbnail
             // A snapshot redrawn in place keeps its id; its picture is new.
