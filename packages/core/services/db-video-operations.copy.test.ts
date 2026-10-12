@@ -14,6 +14,11 @@ import {
 import type { Database } from "./drizzle-service.server.js";
 import { sortByOrder } from "../lib/sort-by-order.js";
 import { Effect } from "effect";
+import {
+  effectiveScenesOf,
+  recordingSessionRowCounts,
+  seedNewRecorderClip,
+} from "../test-utils/new-recorder-clip.js";
 
 let testDb: TestDb;
 
@@ -241,6 +246,30 @@ describe("copyVideoImpl — copyScript", () => {
     expect(newVideo!.script).toBe(
       "INT. TERMINAL - DAY\n\n[improvise the build]"
     );
+  });
+});
+
+describe("copyVideoImpl — new-recorder Clips", () => {
+  it("carries the Recording Session and Scene Override, sharing the session", async () => {
+    const source = await createVideo({ recorder: "new-recorder" });
+    await seedNewRecorderClip(testDb, source.id);
+    const before = await recordingSessionRowCounts(testDb);
+
+    const newVideoId = await run(
+      copyVideoImpl(db(), {
+        sourceVideoId: source.id,
+        newTitle: "problem (copy)",
+        copyClips: true,
+        copyBeats: false,
+        copyScript: false,
+        renameOld: false,
+      })
+    );
+
+    const scenes = await effectiveScenesOf(testDb, newVideoId);
+    expect(scenes).toHaveLength(1);
+    expect(scenes).toEqual(await effectiveScenesOf(testDb, source.id));
+    expect(await recordingSessionRowCounts(testDb)).toEqual(before);
   });
 });
 

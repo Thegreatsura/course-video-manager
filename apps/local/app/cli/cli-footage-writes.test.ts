@@ -211,6 +211,36 @@ describe("footage list", () => {
   });
 });
 
+describe("footage on a Recording Session's mic file", () => {
+  it("lists the mic file of each Recording Session folder, and transcribes it", async () => {
+    // The new recorder writes each Recording Session into a folder of its
+    // own beside the OBS recordings: camera, screen and mic.
+    const session = nodePath.join(footageDir, "2026-10-12T10-00-00 abcd1234");
+    nodeFs.mkdirSync(session);
+    for (const name of ["camera.mkv", "screen.mkv", "mic.mkv"]) {
+      nodeFs.writeFileSync(nodePath.join(session, name), name);
+    }
+    const obs = footageFile("2026-10-11 09-00-00.mkv", "obs");
+    const mic = nodePath.join(session, "mic.mkv");
+
+    const listed = () =>
+      run(["footage", "list"]).then(
+        (r) => ndjson(r.stdout) as Array<{ path: string; transcribed: boolean }>
+      );
+    expect((await listed()).map((x) => x.path)).toEqual([obs, mic]);
+
+    const summary = one<TranscribeSummary>(
+      (await run(["footage", "transcribe", mic])).stdout
+    );
+    expect(summary).toMatchObject({ path: mic, sidecar: sidecarOf(mic) });
+    expect((await listed())[1]).toEqual({
+      path: mic,
+      size: "mic.mkv".length,
+      transcribed: true,
+    });
+  });
+});
+
 describe("footage transcribe", () => {
   it("writes a sidecar next to the source and echoes a summary", async () => {
     const file = footageFile("take.mkv", "the-bytes");

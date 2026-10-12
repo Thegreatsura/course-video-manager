@@ -33,6 +33,7 @@ import { loadRepoEnv } from "@/services/repo-env";
 import { NEEDS_FOOTAGE_ON_DISK, requireLocalMachine } from "@/cli/local-only";
 import { enqueueJob, JOB_KIND_SPECS } from "../../../sidecar/job-specs";
 import { waitForFootageTranscription } from "./footage-transcribe-wait";
+import { FILE_NAMES } from "recorder-service/capture-args";
 import {
   HELP,
   LIST_HELP,
@@ -97,11 +98,22 @@ const listCmd = Command.make("list", { dir: dirOption }, ({ dir }) =>
         )
       );
 
-    const files = entries
-      .filter((name) => VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase()))
-      .sort();
+    const files = entries.filter((name) =>
+      VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase())
+    );
+    // The new recorder writes each Recording Session into a folder of its own
+    // here; its mic file is the one a lost take is searched for in (a
+    // new-recorder Clip's Footage path is that same file).
+    const micFiles = yield* Effect.filter(
+      entries.map((name) => path.join(name, FILE_NAMES.mic)),
+      // Under a file rather than a folder, `exists` fails (ENOTDIR): not one.
+      (name) =>
+        fs
+          .exists(path.join(directory, name))
+          .pipe(Effect.orElseSucceed(() => false))
+    );
 
-    const rows = yield* Effect.forEach(files, (name) =>
+    const rows = yield* Effect.forEach([...files, ...micFiles].sort(), (name) =>
       Effect.gen(function* () {
         const full = path.join(directory, name);
         const stat = yield* fs.stat(full);

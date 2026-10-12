@@ -9,6 +9,11 @@ import {
 } from "../test-utils/pglite.js";
 import * as schema from "../db/schema.js";
 import { sortByOrder } from "../lib/sort-by-order.js";
+import {
+  effectiveScenesOf,
+  recordingSessionRowCounts,
+  seedNewRecorderClip,
+} from "../test-utils/new-recorder-clip.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<VersionOperationsService>;
@@ -342,5 +347,46 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
       // so the new Draft pins the very same snapshot row.
       { zoomType: "subtle", diagramSnapshotId: snapshot!.id },
     ]);
+  });
+
+  it("carries a new-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
+    const { course, version } = await createCourseAndVersion();
+    const [section] = await testDb
+      .insert(schema.sections)
+      .values({ repoVersionId: version.id, title: "Section", order: 1 })
+      .returning();
+    const [lesson] = await testDb
+      .insert(schema.lessons)
+      .values({ sectionId: section!.id, order: 1, title: "Lesson" })
+      .returning();
+    const [video] = await testDb
+      .insert(schema.videos)
+      .values({
+        lessonId: lesson!.id,
+        title: "take",
+        originalFootagePath: "/rec",
+        recorder: "new-recorder",
+      })
+      .returning();
+    await seedNewRecorderClip(testDb, video!.id);
+    const before = await recordingSessionRowCounts(testDb);
+
+    const result = await run(
+      Effect.gen(function* () {
+        const versionOps = yield* VersionOperationsService;
+        return yield* versionOps.freezeAndCloneVersion({
+          sourceVersionId: version.id,
+          repoId: course.id,
+          sourceName: "v1",
+          sourceDescription: "",
+        });
+      })
+    );
+
+    const newVideoId = result.videoIdMappings[0]!.newVideoId;
+    const scenes = await effectiveScenesOf(testDb, newVideoId);
+    expect(scenes).toHaveLength(1);
+    expect(scenes).toEqual(await effectiveScenesOf(testDb, video!.id));
+    expect(await recordingSessionRowCounts(testDb)).toEqual(before);
   });
 });

@@ -304,11 +304,15 @@ export const VideoPlayerPanel = () => {
       : undefined,
     createConcatenatedVideo: () =>
       navigate(`/videos/concatenate?initial=${videoId}`),
-    exportToDavinciResolve: () =>
-      exportToDavinciResolveFetcher.submit(null, {
-        method: "post",
-        action: `/videos/${videoId}/export-to-davinci-resolve`,
-      }),
+    // OBS-only (#2011): hidden on a New recorder Video, refused by the route.
+    exportToDavinciResolve:
+      recorder === "obs"
+        ? () =>
+            exportToDavinciResolveFetcher.submit(null, {
+              method: "post",
+              action: `/videos/${videoId}/export-to-davinci-resolve`,
+            })
+        : undefined,
   });
   const menuGroups = videoMenuGroups({
     ...editorVideoActions.common,

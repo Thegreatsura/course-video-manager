@@ -257,4 +257,104 @@ describe("RenderVerticalVideoService", () => {
       );
     }
   );
+
+  it.effect(
+    "renders a new-recorder Clip as its composite, through the Clip Source",
+    () => {
+      const segmentCalls: unknown[] = [];
+      const singlePassCalls: unknown[] = [];
+      const stop = new RenderVerticalError({ cause: null, message: "stop" });
+
+      const dbLayer = Layer.succeed(DrizzleService, testDb as any);
+      const depsLayer = Layer.mergeAll(
+        VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
+        Layer.succeed(WhisperTranscriptionService, {} as any),
+        Layer.succeed(FFmpegCommandsService, {} as any),
+        Layer.succeed(FFmpegEncodeService, {
+          concatenateClipSegments: (clips: unknown) => {
+            segmentCalls.push(clips);
+            return Effect.fail(stop);
+          },
+          createAndConcatenateVideoClipsSinglePass: (clips: unknown) => {
+            singlePassCalls.push(clips);
+            return Effect.fail(stop);
+          },
+        } as any),
+        Layer.succeed(VideoEditorLoggerService, {
+          log: () => Effect.void,
+        } as any),
+        Layer.setConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([["FINISHED_VIDEOS_DIRECTORY", "/tmp/test-finished"]])
+          )
+        ),
+        NodeContext.layer
+      );
+
+      return Effect.gen(function* () {
+        const [video] = yield* Effect.promise(() =>
+          testDb
+            .insert(schema.videos)
+            .values({
+              title: "Short",
+              originalFootagePath: "/rec",
+              format: "short",
+            })
+            .returning()
+        );
+        const [session] = yield* Effect.promise(() =>
+          testDb
+            .insert(schema.recordingSessions)
+            .values({
+              videoId: video!.id,
+              cameraFilePath: "/rec/s1/camera.mkv",
+              screenFilePath: "/rec/s1/screen.mkv",
+              micFilePath: "/rec/s1/mic.mkv",
+            })
+            .returning()
+        );
+        yield* Effect.promise(() =>
+          testDb.insert(schema.clips).values({
+            videoId: video!.id,
+            videoFilename: "/rec/s1/mic.mkv",
+            sourceStartTime: 2,
+            sourceEndTime: 6,
+            order: "a0",
+            text: "hello",
+            recordingSessionId: session!.id,
+            sceneOverride: "Code",
+          })
+        );
+
+        const service = yield* RenderVerticalVideoService;
+        yield* service
+          .renderVerticalVideo({ videoId: video!.id })
+          .pipe(Effect.flip);
+
+        expect(singlePassCalls).toEqual([]);
+        expect(segmentCalls).toEqual([
+          [
+            expect.objectContaining({
+              startTime: 1.85,
+              duration: 4,
+              composite: expect.objectContaining({
+                start: 2,
+                screen: "/rec/s1/screen.mkv",
+                camera: "/rec/s1/camera.mkv",
+                mic: "/rec/s1/mic.mkv",
+                segments: [{ scene: "Code", startSeconds: 2, endSeconds: 6 }],
+              }),
+            }),
+          ],
+        ]);
+      }).pipe(
+        Effect.provide(
+          RenderVerticalVideoService.DefaultWithoutDependencies.pipe(
+            Layer.provide(depsLayer)
+          )
+        ),
+        Effect.provide(Layer.merge(NodeContext.layer, SidecarContextTest))
+      );
+    }
+  );
 });

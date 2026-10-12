@@ -10,6 +10,11 @@ import {
 import * as schema from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { sortByOrder } from "../lib/sort-by-order.js";
+import {
+  effectiveScenesOf,
+  recordingSessionRowCounts,
+  seedNewRecorderClip,
+} from "../test-utils/new-recorder-clip.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<CourseOperationsService>;
@@ -521,5 +526,27 @@ describe("duplicateCourse", () => {
       where: (v, { eq }) => eq(v.id, mapping!.newVideoId),
     });
     expect(newVideo!.lineageId).toBe(mapping!.newLineageId);
+  });
+
+  it("carries a new-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
+    const { course, video } = await createFullCourseStructure();
+    await seedNewRecorderClip(testDb, video.id);
+    const before = await recordingSessionRowCounts(testDb);
+
+    const result = await run(
+      Effect.gen(function* () {
+        const courseOps = yield* CourseOperationsService;
+        return yield* courseOps.duplicateCourse({
+          sourceCourseId: course.id,
+          name: "Dup",
+        });
+      })
+    );
+
+    const copyId = result.videoLineageMappings[0]!.newVideoId;
+    const scenes = await effectiveScenesOf(testDb, copyId);
+    expect(scenes).toHaveLength(1);
+    expect(scenes).toEqual(await effectiveScenesOf(testDb, video.id));
+    expect(await recordingSessionRowCounts(testDb)).toEqual(before);
   });
 });
