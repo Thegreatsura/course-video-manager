@@ -421,7 +421,7 @@ export const clips = createTable(
     // seq-scans the whole clip table once per Video.
     index("clip_video_id_idx").on(table.videoId),
     // The sidebar's footage stats (services/db-footage-stats.server.ts) read
-    // the Clips filmed in the last 30 days on every page load. A Clip is
+    // the Clips filmed in the last 365 days on every page load. A Clip is
     // dated by the earlier of when it was made and when it was transcribed
     // (a copy carries its original's transcription time), so the index is on
     // that expression; without it the read seq-scans every Clip.

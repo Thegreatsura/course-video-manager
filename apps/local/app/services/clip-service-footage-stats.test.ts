@@ -50,13 +50,11 @@ describe("ClipService.getFootageStats", () => {
     expect(await stats("2026-10-12T09:00:00Z")).toEqual({
       todaySeconds: 0,
       last7DaysSeconds: 0,
-      last30DaysSeconds: 0,
+      personalBest: null,
       todayClips: 0,
       todayKeptClips: 0,
       last7DaysClips: 0,
       last7DaysKeptClips: 0,
-      last30DaysClips: 0,
-      last30DaysKeptClips: 0,
     });
   });
 
@@ -68,20 +66,33 @@ describe("ClipService.getFootageStats", () => {
     // 7D starts at local midnight on Tue 6 Oct.
     await film("7d-first-second.mp4", "2026-10-05T23:00:00Z", 240);
     await film("8d-last-second.mp4", "2026-10-05T22:59:59Z", 480);
-    // 30D starts at local midnight on Sun 13 Sep.
-    await film("30d-first-second.mp4", "2026-09-12T23:00:00Z", 960);
-    await film("31d-last-second.mp4", "2026-09-12T22:59:59Z", 1920);
 
-    expect(await stats(now)).toEqual({
+    expect(await stats(now)).toMatchObject({
       todaySeconds: 60,
       last7DaysSeconds: 60 + 120 + 240,
-      last30DaysSeconds: 60 + 120 + 240 + 480 + 960,
       todayClips: 1,
       todayKeptClips: 1,
       last7DaysClips: 3,
       last7DaysKeptClips: 3,
-      last30DaysClips: 5,
-      last30DaysKeptClips: 5,
+    });
+  });
+
+  it("names the personal-best day of the last 365 by its live Footage", async () => {
+    // 10:00 BST on Mon 12 Oct; the window opens at local midnight on 13 Oct 2025.
+    const now = "2026-10-12T09:00:00Z";
+    // Two takes either side of UTC midnight that are both 3 May, London time.
+    await film("may-a.mp4", "2026-05-02T23:30:00Z", 600);
+    await film("may-b.mp4", "2026-05-03T20:00:00Z", 600);
+    // A longer single day, but all of it archived.
+    const { clip: cut } = await film("june.mp4", "2026-06-01T10:00:00Z", 1500);
+    await clipService.archiveClips([cut.id]);
+    await film("today.mp4", "2026-10-12T08:00:00Z", 900);
+    // The biggest day of all, one second before the window opens.
+    await film("too-old.mp4", "2025-10-12T22:59:59Z", 5000);
+
+    expect((await stats(now)).personalBest).toEqual({
+      date: "2026-05-03",
+      seconds: 1200,
     });
   });
 
@@ -141,8 +152,8 @@ describe("ClipService.getFootageStats", () => {
     const now = "2026-10-12T09:00:00Z";
     // A copy (a Submit's new Draft, a duplicated Course) is a new row made
     // today, carrying its original's transcription time.
-    // Filmed 40 days ago, copied today: not filmed in the last 30 days, even
-    // after the original row is gone.
+    // Filmed 40 days ago, copied today: not filmed today, even after the
+    // original row is gone.
     await film("old-take.mp4", "2026-10-12T08:00:00Z", 300, {
       transcribedAt: "2026-09-02T10:05:00Z",
     });
@@ -157,13 +168,11 @@ describe("ClipService.getFootageStats", () => {
     expect(await stats(now)).toEqual({
       todaySeconds: 45,
       last7DaysSeconds: 45,
-      last30DaysSeconds: 45,
+      personalBest: { date: "2026-09-02", seconds: 300 },
       todayClips: 1,
       todayKeptClips: 1,
       last7DaysClips: 1,
       last7DaysKeptClips: 1,
-      last30DaysClips: 1,
-      last30DaysKeptClips: 1,
     });
   });
 
@@ -185,9 +194,9 @@ describe("ClipService.getFootageStats", () => {
       videoId,
       startTime: 610,
     });
-    // Archived yesterday's take: in 7D and 30D, not today.
+    // Archived yesterday's take: in 7D, not today.
     const { clip: old } = await film("old.mp4", "2026-10-11T12:00:00Z", 5);
-    // Kept take from 11 days ago: in 30D only.
+    // Kept take from 11 days ago: in neither.
     await film("older.mp4", "2026-10-01T12:00:00Z", 5);
     await clipService.archiveClips([dud1.id, dud2.id, old.id]);
 
@@ -198,8 +207,6 @@ describe("ClipService.getFootageStats", () => {
       todayKeptClips: 2,
       last7DaysClips: 5,
       last7DaysKeptClips: 2,
-      last30DaysClips: 6,
-      last30DaysKeptClips: 3,
     });
   });
 
