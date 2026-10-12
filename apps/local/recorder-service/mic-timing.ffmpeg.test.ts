@@ -1,5 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { findStartUpGap } from "../app/packages/clap-detection";
 import { micOnClock } from "./capture-args";
 
 /**
@@ -89,6 +93,51 @@ describe.skipIf(!hasFfmpeg)("the mic's timing in ffmpeg", () => {
       expect({ stallMs, shiftMs: Math.abs(shiftMs) < 1 ? 0 : shiftMs }).toEqual(
         { stallMs, shiftMs: 0 }
       );
+    }
+  });
+
+  it("leaves no start-up gap for the AV Calibration's gap check to fail on", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mic-timing-"));
+    try {
+      for (const stallMs of [0, 150, 400]) {
+        // mic.wav as the calibration run writes it, read back as the clap
+        // detection reads it.
+        const wav = path.join(dir, `${stallMs}.wav`);
+        execFileSync("ffmpeg", [
+          "-hide_banner",
+          "-v",
+          "error",
+          "-y",
+          "-copyts",
+          "-f",
+          "lavfi",
+          "-i",
+          `aevalsrc=exprs='0.1*sin(2*PI*440*t)|0.1*sin(2*PI*440*t)':s=48000:n=${BUFFER_SAMPLES}:d=5,asetpts='${arrival(stallMs / 1000)}'`,
+          "-filter_complex",
+          `${micOnClock(T0.toFixed(3), "0:a")}[mic]`,
+          "-map",
+          "[mic]",
+          "-c:a",
+          "pcm_s16le",
+          wav,
+        ]);
+        const pcm = execFileSync(
+          "ffmpeg",
+          ["-v", "error", "-i", wav, "-ac", "1", "-f", "f32le", "-"],
+          { maxBuffer: 1 << 26 }
+        );
+        const samples = new Float32Array(
+          pcm.buffer,
+          pcm.byteOffset,
+          pcm.byteLength / 4
+        );
+        expect({ stallMs, gap: findStartUpGap(samples, 48000) }).toEqual({
+          stallMs,
+          gap: null,
+        });
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
