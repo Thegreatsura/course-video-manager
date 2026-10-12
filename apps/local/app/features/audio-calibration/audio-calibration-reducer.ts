@@ -9,6 +9,7 @@ import type {
   FinishCalibrationRequest,
   SavedAudioCalibration,
 } from "./calibration-wire";
+import type { CalibrationTimeline } from "./calibration-timeline";
 import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
 
 /**
@@ -28,6 +29,10 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
  * and timed onto the same axis through the reading heard last.
+ *
+ * The result shows the calibration's review timeline (#2081), loaded once it
+ * is stored. A past calibration's result, timeline and all, opens again from
+ * the page's history.
  */
 export namespace audioCalibrationReducer {
   /** Where the page's clock meets the run's: a reading, and when the page heard it. */
@@ -46,9 +51,19 @@ export namespace audioCalibrationReducer {
         anchor: Anchor | null;
       }
     | { kind: "analysing"; calibrationId: string }
-    | { kind: "result"; calibration: SavedAudioCalibration }
+    | {
+        kind: "result";
+        calibration: SavedAudioCalibration;
+        timeline: Timeline;
+      }
     /** The session could not go on (refused, ffmpeg quit, not stored). */
     | { kind: "failed"; message: string };
+
+  /** The result's review timeline, as far as it has loaded. */
+  export type Timeline =
+    | { status: "loading" }
+    | { status: "loaded"; timeline: CalibrationTimeline }
+    | { status: "failed"; message: string };
 
   export type Browser = {
     /** The browser's audio input, once open. */
@@ -94,7 +109,15 @@ export namespace audioCalibrationReducer {
         calibrationId: string;
         calibration: SavedAudioCalibration;
       }
-    | { type: "calibration-not-saved"; calibrationId: string; message: string };
+    | { type: "calibration-not-saved"; calibrationId: string; message: string }
+    /** Matt opens a past calibration from the history. */
+    | { type: "past-calibration-clicked"; calibration: SavedAudioCalibration }
+    | {
+        type: "timeline-loaded";
+        calibrationId: string;
+        timeline: CalibrationTimeline;
+      }
+    | { type: "timeline-not-loaded"; calibrationId: string; message: string };
 
   export type Effect =
     | { type: "listen-to-meter" }
@@ -102,7 +125,10 @@ export namespace audioCalibrationReducer {
     | { type: "cancel-calibration" }
     | ({ type: "finish-calibration" } & FinishCalibrationRequest)
     /** Open the browser detector's input and report its levels until stopped. */
-    | { type: "capture-browser-levels" };
+    | { type: "capture-browser-levels" }
+    | { type: "load-timeline"; calibrationId: string }
+    /** A calibration was stored: the page's history is out of date. */
+    | { type: "refresh-history" };
 }
 
 type State = audioCalibrationReducer.State;
@@ -172,6 +198,19 @@ const onReading = (
     ...state,
     session: { kind: "analysing", calibrationId: session.calibrationId },
     browser,
+  };
+};
+
+/** A calibration's result, its timeline loading. */
+const showResult = (
+  state: State,
+  calibration: SavedAudioCalibration,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State => {
+  exec({ type: "load-timeline", calibrationId: calibration.id });
+  return {
+    ...state,
+    session: { kind: "result", calibration, timeline: { status: "loading" } },
   };
 };
 
@@ -297,10 +336,33 @@ export const audioCalibrationReducer: EffectReducer<State, Action, Effect> = (
         state.session.calibrationId !== action.calibrationId
       )
         return state;
+      exec({ type: "refresh-history" });
+      return showResult(state, action.calibration, exec);
+    case "past-calibration-clicked": {
+      const { kind } = state.session;
+      if (kind !== "meter" && kind !== "result" && kind !== "failed")
+        return state;
+      return showResult(state, action.calibration, exec);
+    }
+    case "timeline-loaded":
+    case "timeline-not-loaded": {
+      const session = state.session;
+      if (
+        session.kind !== "result" ||
+        session.calibration.id !== action.calibrationId
+      )
+        return state;
       return {
         ...state,
-        session: { kind: "result", calibration: action.calibration },
+        session: {
+          ...session,
+          timeline:
+            action.type === "timeline-loaded"
+              ? { status: "loaded", timeline: action.timeline }
+              : { status: "failed", message: action.message },
+        },
       };
+    }
     case "calibration-not-saved":
       if (
         state.session.kind !== "analysing" ||

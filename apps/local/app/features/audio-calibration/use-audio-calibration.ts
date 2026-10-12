@@ -1,9 +1,11 @@
+import { useRevalidator } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
 import {
   audioCalibrationReducer,
   createInitialAudioCalibrationState,
 } from "./audio-calibration-reducer";
+import type { CalibrationTimeline } from "./calibration-timeline";
 import type { SavedAudioCalibration } from "./calibration-wire";
 import { listenToMeter } from "./use-level-meter";
 
@@ -132,8 +134,9 @@ const captureBrowserLevels = (
 };
 
 /** The effect runner for `audioCalibrationReducer`. */
-export const useAudioCalibration = () =>
-  useEffectReducer(
+export const useAudioCalibration = () => {
+  const revalidator = useRevalidator();
+  return useEffectReducer(
     audioCalibrationReducer,
     createInitialAudioCalibrationState,
     {
@@ -176,5 +179,29 @@ export const useAudioCalibration = () =>
       },
       "capture-browser-levels": (_state, _effect, dispatch) =>
         captureBrowserLevels(dispatch),
+      "load-timeline": (_state, { calibrationId }, dispatch) => {
+        fetch(
+          `/api/audio-calibration/${encodeURIComponent(calibrationId)}/timeline`
+        )
+          .then(answer)
+          .then(async (response) =>
+            dispatch({
+              type: "timeline-loaded",
+              calibrationId,
+              timeline: (await response.json()) as CalibrationTimeline,
+            })
+          )
+          .catch((error: unknown) =>
+            dispatch({
+              type: "timeline-not-loaded",
+              calibrationId,
+              message: messageOf(error),
+            })
+          );
+      },
+      "refresh-history": () => {
+        void revalidator.revalidate();
+      },
     }
   );
+};
