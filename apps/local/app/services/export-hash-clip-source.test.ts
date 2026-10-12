@@ -61,7 +61,8 @@ describe("an OBS Clip's Export Hash through the Clip Source", () => {
 
 const sessionRow = (
   micOffsetMs: number,
-  micEq: { lowDb: number; midDb: number; highDb: number } | null = null
+  micEq: { lowDb: number; midDb: number; highDb: number } | null = null,
+  format: "landscape" | "short" = "landscape"
 ) => ({
   videoFilename: "/rec/s1/mic.mkv",
   sourceStartTime: 12,
@@ -78,6 +79,8 @@ const sessionRow = (
     micFilePath: "/rec/s1/mic.mkv",
     micOffsetMs,
     micEq,
+    format,
+    screenCaptured: true,
     sceneEvents: [{ fileTime: 14, scene: "Camera" as const }],
   },
 });
@@ -99,5 +102,32 @@ describe("a CVM-recorder Clip's Export Hash", () => {
     expect(hash([sessionRow(150, { lowDb: 0, midDb: 0, highDb: -6.1 })])).toBe(
       base
     );
+  });
+});
+
+describe("a Landscape CVM-recorder Clip's Export Hash", () => {
+  it("keeps its address now Recording Sessions remember their format", () => {
+    // Computed on main before the Short layout reached the Export Hash.
+    const clips = toExportClips([sessionRow(150)]);
+    expect(computeExportHash(clips, "landscape")).toBe(
+      "cf1e0f9b1e019ae88d5bd17e6da75709"
+    );
+    expect(computeExportHash(clips, "short")).toBe(
+      "177bfa2abcf20a2b32b0f2746877bfa0"
+    );
+  });
+});
+
+describe("a Short CVM-recorder Clip's Export Hash", () => {
+  it("is not the same Clip's as if filmed in Landscape (its fields carry the Short layout version: clip-source.test.ts)", () => {
+    const landscape = computeExportHash(
+      toExportClips([sessionRow(150)]),
+      "short"
+    );
+    const short = computeExportHash(
+      toExportClips([sessionRow(150, null, "short")]),
+      "short"
+    );
+    expect(short).not.toBe(landscape);
   });
 });
