@@ -4,7 +4,8 @@ import type { cvmRecorderReducer } from "./cvm-recorder-reducer";
 /**
  * A Short's screen in the editor: the Spacedesk display the recorder wakes
  * when it opens for a Short. Until it is ready, a scene that draws the
- * screen can be neither switched to nor recorded in; Camera always can.
+ * screen can be neither switched to nor recorded in; Camera can, once the
+ * wake has answered (the recorder refuses every Record while it wakes).
  * A Landscape Video's screen (the DELL) is checked by the recorder at Record,
  * so every Landscape scene is available here.
  */
@@ -23,6 +24,11 @@ export const isSceneAvailable = (
   state.format !== "short" ||
   !sceneShowsScreen(scene, state.format) ||
   state.screen?.kind === "ready";
+
+/** A Short's Spacedesk wake has not answered yet: the recorder refuses Record until it has. */
+export const isScreenWaking = (
+  state: Pick<cvmRecorderReducer.State, "format" | "screen">
+) => state.format === "short" && state.screen?.kind === "waking";
 
 /** What the Short's screen is doing, for the status line; null when there is nothing to say. */
 export const screenStatusText = (
@@ -49,6 +55,7 @@ export const recordNeedsScreenHint = (
   state.phase === "idle" &&
   state.camera.kind === "live" &&
   state.scene !== null &&
+  !isScreenWaking(state) &&
   !isSceneAvailable(state, state.scene)
     ? `${state.scene} shows the screen, which is not ready: pick Camera to record without it.`
     : null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCENES } from "@/packages/scene-layout";
+import { SCENES, type Scene } from "@/packages/scene-layout";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   canRecord,
@@ -14,6 +14,7 @@ import {
 } from "./cvm-recorder-screen";
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import { getCvmRecorderLivePreview } from "./live-preview";
+import { SPACEDESK_DEFAULT_PORT, SPACEDESK_HOST } from "@/spacedesk-wake";
 
 /**
  * A Short on the CVM recorder, in the editor: the recorder wakes Spacedesk
@@ -24,15 +25,14 @@ import { getCvmRecorderLivePreview } from "./live-preview";
 const heard = (message: CvmRecorderMessage) =>
   ({ type: "recorder-message-heard", message }) as const;
 
-const UNAVAILABLE =
-  "Could not wake Spacedesk: timed out after 8 s against 192.168.68.58:28252";
+const UNAVAILABLE = `Could not wake Spacedesk: timed out after 8 s against ${SPACEDESK_HOST}:${SPACEDESK_DEFAULT_PORT}`;
 
 const screen = (
   s: Extract<CvmRecorderMessage, { type: "screen-changed" }>["screen"]
 ) => heard({ type: "screen-changed", screen: s });
 
 /** The recorder open for this Video, in `scene`, with the Cam Link live. */
-const open = (format: "short" | "landscape", scene = "Code" as const) =>
+const open = (format: "short" | "landscape", scene: Scene = "Code") =>
   new ReducerTester(cvmRecorderReducer, createInitialCvmRecorderState(format))
     .send(
       heard({
@@ -51,12 +51,23 @@ const available = (state: cvmRecorderReducer.State) =>
   SCENES.filter((scene) => isSceneAvailable(state, scene));
 
 describe("a Short on the CVM recorder", () => {
-  it("while Spacedesk wakes, offers Camera only and says so", () => {
-    const t = open("short").send(screen({ kind: "waking" }));
+  it("while Spacedesk wakes, offers Camera only, says so, and holds Record (the recorder refuses it) even in Camera", () => {
+    const t = open("short", "Camera").send(screen({ kind: "waking" }));
     const state = t.getState();
     expect(available(state)).toEqual(["Camera"]);
     expect(screenStatusText(state)).toBe("Waking Spacedesk…");
     expect(canWakeSpacedeskAgain(state)).toBe(false);
+    expect(canRecord(state)).toBe(false);
+    expect(recordNeedsScreenHint(state)).toBeNull();
+    t.send({
+      type: "press-record",
+      silenceLength: "long",
+      insertionPoint: { type: "start" },
+    });
+    expect(t.getEffects()).toEqual([]);
+
+    t.send(screen({ kind: "unavailable", message: UNAVAILABLE }));
+    expect(canRecord(t.getState())).toBe(true);
   });
 
   it("once the screen is ready, offers every scene and records in Code", () => {

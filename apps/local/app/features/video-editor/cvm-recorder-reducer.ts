@@ -4,7 +4,7 @@ import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
-import { isSceneAvailable } from "./cvm-recorder-screen";
+import { isSceneAvailable, isScreenWaking } from "./cvm-recorder-screen";
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 
@@ -155,6 +155,7 @@ export const canRecord = (state: cvmRecorderReducer.State) =>
   state.problem === null &&
   state.phase === "idle" &&
   state.camera.kind === "live" &&
+  !isScreenWaking(state) &&
   (state.scene === null || isSceneAvailable(state, state.scene));
 
 export const canSwitchScene = (state: cvmRecorderReducer.State) =>
