@@ -454,9 +454,11 @@ export const recordingSessions = createTable(
     /**
      * The Video it was filmed for. Nullable, and cleared rather than cascaded
      * when that Video row goes: every copy of the Video's Clips (a new Draft, a
-     * duplicated Course, a copied Video) shares this Recording Session, as an
-     * OBS Clip's copies share its Footage path, so it must outlive the row it
-     * was filmed for (a discarded Pending Version deletes that row).
+     * duplicated Course, a copied Video — archived Clips included) shares this
+     * Recording Session, as an OBS Clip's copies share its Footage path, so it
+     * must outlive the row it was filmed for (a discarded Pending Version
+     * deletes that row). A Video archived before a Submit is not copied, so
+     * a Discard deletes its Clips, and nothing points here from them any more.
      */
     videoId: varchar("video_id", { length: 255 }).references(() => videos.id, {
       onDelete: "set null",

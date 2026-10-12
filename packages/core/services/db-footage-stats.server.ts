@@ -46,17 +46,24 @@ const EFFECT_CLIP_SCENE = "white noise";
  *
  * - **When** a Clip was filmed is the earlier of its `created_at` and its
  *   `transcribed_at`. Every copy of a Clip (a Submit's new Draft, a
- *   duplicated Course or Video, a Video made from a selection) is a new row
- *   stamped with the time of the copy, but it carries its original's
- *   `transcribed_at`, which dates the take. A fresh take is made before it is
- *   transcribed, so for it the earlier time is `created_at`.
+ *   duplicated Course or Video, a Video made from a selection) carries its
+ *   original's `created_at` and `transcribed_at`, so it dates the take as the
+ *   original does. (Copies made before copies carried `created_at` were
+ *   stamped with the time of the copy; their `transcribed_at` still dates
+ *   them, unless they were never transcribed.)
  * - **How much**: the live Clips — not archived, not an Effect Clip, on a
  *   standalone Video or a Video of a Draft Version (a Pending or Published
  *   Version holds frozen copies) — each counted for `source_end_time -
  *   source_start_time`. The same stretch of Footage on two live Videos (a
  *   duplicated Course) counts once, dated by its earliest copy.
- * - **Efficiency** (per window): the same Clips, archived ones now included,
- *   each counted once as above. A Clip is kept when any copy of it is live.
+ * - **Efficiency** (per window): every Clip that is not an Effect Clip, on
+ *   ANY Version, archived ones included, each stretch of Footage counted once
+ *   and dated by its earliest copy. Every Version, because a take archived in
+ *   a Draft that was then Submitted lives on in the Published Version (and,
+ *   since copies carry archived Clips, in the new Draft too: the dedupe makes
+ *   that one take). A stretch is kept when a copy of it is live where the
+ *   duration counts it (a standalone Video or a Draft): a take archived after
+ *   a Submit is cut, even though the Published Version still holds it live.
  *
  * Day boundaries are local midnights in `timeZone` (an IANA name), so a day
  * that changes the clocks is still one calendar day.
@@ -77,6 +84,8 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
   const tz = input.timeZone;
   const localMidnight = sql`date_trunc('day', ${now} AT TIME ZONE ${tz})`;
   const filmedAt = sql`least(${clips.createdAt}, ${clips.transcribedAt})`;
+  /** On a standalone Video or a Draft's: where a live Clip is current work. */
+  const current = sql`(${videos.lessonId} IS NULL OR ${courseVersions.commitState} = 'draft')`;
   const result = yield* Effect.tryPromise({
     try: () =>
       db.execute<{
@@ -91,9 +100,9 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
         last_30_days_kept_clips: number | string | null;
       }>(sql`
         WITH segments AS (
-          SELECT min(${filmedAt}) FILTER (WHERE ${clips.archived} = false) AS filmed_at,
+          SELECT min(${filmedAt}) FILTER (WHERE ${clips.archived} = false AND ${current}) AS filmed_at,
                  min(${filmedAt}) AS any_filmed_at,
-                 bool_or(${clips.archived} = false) AS kept,
+                 bool_or(${clips.archived} = false AND ${current}) AS kept,
                  greatest(${clips.sourceEndTime} - ${clips.sourceStartTime}, 0) AS seconds
           FROM ${clips}
           JOIN ${videos} ON ${videos.id} = ${clips.videoId}
@@ -102,7 +111,6 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
           LEFT JOIN ${courseVersions} ON ${courseVersions.id} = ${sections.repoVersionId}
           WHERE ${filmedAt} >= (${localMidnight} - interval '29 days') AT TIME ZONE ${tz}
             AND ${clips.scene} IS DISTINCT FROM ${EFFECT_CLIP_SCENE}
-            AND (${videos.lessonId} IS NULL OR ${courseVersions.commitState} = 'draft')
           GROUP BY ${clips.videoFilename}, ${clips.sourceStartTime}, ${clips.sourceEndTime}
         )
         SELECT

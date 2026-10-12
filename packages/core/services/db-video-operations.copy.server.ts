@@ -155,12 +155,10 @@ export const copyVideoImpl = (
         }
 
         if (copyClips) {
-          // Load non-archived clips
+          // Archived Clips too, still archived: see KEEPS_ARCHIVED_CLIPS in
+          // version-copy-manifest.ts.
           const sourceClips = await tx.query.clips.findMany({
-            where: and(
-              eq(clips.videoId, sourceVideoId),
-              eq(clips.archived, false)
-            ),
+            where: eq(clips.videoId, sourceVideoId),
             orderBy: asc(clips.order),
             with: clipChildrenWith,
           });

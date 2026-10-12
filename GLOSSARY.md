@@ -57,7 +57,7 @@ The Pending → Published transition, made once the release is confirmed as land
 _Avoid_: Finalize, Confirm
 
 **Discard**:
-Deletes a Pending Version whose release did not land. It never deletes a Draft or a Published Version. Nothing is lost, because the content lives on in the fresh Draft. A failed release is Discarded automatically.
+Deletes a Pending Version whose release did not land. It never deletes a Draft or a Published Version. The content lives on in the fresh Draft, every **Clip** of a live Video included, archived ones still archived. What Submit leaves out of the fresh Draft is lost: archived Sections, Lessons and Videos (with their Clips), and archived Learning Goals, Chapters, Beats and Clip Mockups. A failed release is Discarded automatically.
 _Avoid_: Rollback, Delete version
 
 **Publish**:
@@ -132,7 +132,7 @@ The **Video Format** of a vertical, short-form video (the kind posted to YouTube
 _Avoid_: TikTok (reserved for the actual TikTok platform, and NOT the name for a Short)
 
 **Clip**:
-A segment of **Footage** within a Video, defined by a start time and an end time in one source file. Deleting a Clip is an **Archive**, but unlike most archived nouns it can be reviewed and restored, so a Clip deleted by mistake can be found again. A Clip is what was FILMED; a **Clip Mockup** is its PRE-IMAGE: the still and the line that stood in for it before filming. Clip Mockups are kept after filming, so the plan can be compared with the Clips really cut.
+A segment of **Footage** within a Video, defined by a start time and an end time in one source file. Deleting a Clip is an **Archive**, but unlike most archived nouns it can be reviewed and restored, so a Clip deleted by mistake can be found again. So an archived Clip is never left behind by a copy: a new Draft (**Submit**), a duplicated Course and a copied Video carry it, still archived. A Clip is what was FILMED; a **Clip Mockup** is its PRE-IMAGE: the still and the line that stood in for it before filming. Clip Mockups are kept after filming, so the plan can be compared with the Clips really cut.
 _Avoid_: Segment, Cut, Take
 
 **Footage**:

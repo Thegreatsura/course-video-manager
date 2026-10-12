@@ -14,7 +14,8 @@ import type { Database } from "./drizzle-service.server.js";
  * path (Submit's version copy, duplicateCourse, the Video copy). Each path
  * makes the new parent ids itself (see `newIdsFor`), then hands the old -> new
  * maps here so the children are re-pointed at the COPY of their parent. A child
- * whose parent was not copied (it was archived) is dropped with it.
+ * whose parent was not copied (it was archived, on a path that drops archived
+ * rows) is dropped with it.
  *
  * Which path copies which table, and why the rest do not, is the table-level
  * guard in copy-paths-table-guard.test.ts.
@@ -153,7 +154,10 @@ export const copyClipChildren = async (
  * Clip is made of. Every Clip column but its identity and its place comes from
  * spreading the source row, so a Clip column added later travels with no edit
  * here; a Clip child table added later fails copy-paths-table-guard.test.ts
- * until `copyClipChildren` carries it.
+ * until `copyClipChildren` carries it. That includes `archived` (an archived
+ * Clip stays archived: which ones a path passes in is its own choice, see
+ * `keepsArchived` in version-copy-manifest.ts) and `createdAt`, when the take
+ * was filmed, which the footage stats date it by.
  *
  * Returns the source -> copy Clip id map.
  */
@@ -174,19 +178,12 @@ export const copyClipsOntoVideo = async (
     placements.map(({ clip, videoId, order }) => {
       const {
         id,
-        createdAt: _createdAt,
         webLinks: _webLinks,
         transcriptWords: _transcriptWords,
         overlays: _overlays,
         ...carried
       } = clip;
-      return {
-        ...carried,
-        id: clipIds.get(id)!,
-        videoId,
-        order,
-        archived: false,
-      };
+      return { ...carried, id: clipIds.get(id)!, videoId, order };
     })
   );
   await copyClipChildren(

@@ -93,7 +93,7 @@ export class VersionCopyIncompleteError extends Data.TaggedError(
   sourceVersionId: string;
 }> {
   override get message() {
-    return `Submit refused: copying Version ${this.sourceVersionId} would carry ${this.copyCount} of its ${this.sourceCount} live "${this.table}" row(s) into the new Draft. Nothing was changed. This is a bug in the version copy (packages/core/services/db-version-copy.server.ts).`;
+    return `Submit refused: copying Version ${this.sourceVersionId} would carry ${this.copyCount} of its ${this.sourceCount} "${this.table}" row(s) into the new Draft. Nothing was changed. This is a bug in the version copy (packages/core/services/db-version-copy.server.ts).`;
   }
 }
 

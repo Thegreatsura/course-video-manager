@@ -82,7 +82,8 @@ import {
  *   zoomType          Clip Zoom; "none" or "subtle" (camera scenes only)
  *   diagramSnapshotId pinned DiagramSnapshot filmed against this clip, if any
  *   archived         true for a soft-deleted clip; only ever seen with --archived
- *   createdAt        row creation timestamp
+ *   createdAt        when the clip was cut; a copy (new Draft, duplicated
+ *                    Course or Video) keeps its original's
  *
  * VERBS:
  *   clip list --video <videoId> [--archived]  clips on a Video, timeline order

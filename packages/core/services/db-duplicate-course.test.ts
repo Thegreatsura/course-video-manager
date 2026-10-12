@@ -329,7 +329,13 @@ describe("duplicateCourse", () => {
     const videos = newSections[0]!.lessons[0]!.videos;
     expect(videos.map((v) => v.title)).toEqual(["video-01.mp4"]);
     const video = videos[0]!;
-    expect(video.clips.map((c) => c.videoFilename)).toEqual(["clip-01.mp4"]);
+    // Archived Clips travel too, still archived.
+    expect(
+      sortByOrder(video.clips).map((c) => [c.videoFilename, c.archived])
+    ).toEqual([
+      ["clip-01.mp4", false],
+      ["clip-02.mp4", true],
+    ]);
     expect(video.chapters.map((c) => c.name)).toEqual(["Section A"]);
     expect(video.beats.map((b) => b.title)).toEqual(["Active Beat"]);
   });
