@@ -74,6 +74,7 @@ const obsRecording: OBSConnectionOuterState = {
   profile: "Default",
   scene: "Camera",
   latestOutputPath: "/tmp/out.mkv",
+  silenceThresholdDb: -38,
 };
 
 // ---------------------------------------------------------------------------

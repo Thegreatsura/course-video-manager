@@ -49,6 +49,7 @@ export interface VideoProcessingAdapter {
     filePath: string | undefined;
     startTime: number | undefined;
     silenceLength?: SilenceLength;
+    thresholdDb?: number;
   }) => Promise<{
     readonly clips: ReadonlyArray<{
       readonly inputVideo: string;
@@ -314,6 +315,7 @@ export const appendFromObsImpl = (
           filePath: resolvedFilePath,
           startTime: resolvedStartTime,
           silenceLength: event.input.silenceLength,
+          thresholdDb: event.input.silenceThresholdDb,
         }),
       catch: (cause) => new ObsClipDetectionError({ cause }),
     });

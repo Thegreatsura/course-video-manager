@@ -299,6 +299,7 @@ export function createEditEffectHandlers(
               insertionPoint,
               items,
               silenceLength: effect.silenceLength,
+              silenceThresholdDb: effect.silenceThresholdDb,
             });
             if (clips.length > 0) {
               dispatch({

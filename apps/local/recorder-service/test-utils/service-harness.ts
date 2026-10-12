@@ -6,6 +6,7 @@ import { WebSocket } from "ws";
 import { fakeWindows } from "./fake-windows";
 import type { RecorderCommand, RecorderMessage } from "../protocol";
 import { startRecorderService } from "../recorder-service";
+import { UNCALIBRATED_SILENCE_THRESHOLD } from "../../app/silence-detection-constants";
 
 /**
  * The recorder service driven through its WebSocket, with the process
@@ -17,6 +18,9 @@ import { startRecorderService } from "../recorder-service";
  */
 
 export const T0_MS = 1_760_000_000_000;
+
+/** What a Record carries when no Audio Calibration has passed: the fixed default. */
+export const THRESHOLD = UNCALIBRATED_SILENCE_THRESHOLD;
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -120,7 +124,7 @@ export const recordOnce = async (
   await client.next("hello");
   client.send({ type: "open", videoId: "video-1" });
   await client.camera("live");
-  client.send({ type: "record", silenceLength: "long", folder });
+  client.send({ type: "record", silenceLength: "long", folder, ...THRESHOLD });
   const started = await client.next("recording-started");
   return { ...s, client, started, folder };
 };

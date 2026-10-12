@@ -58,6 +58,10 @@ export type RecordingSessionOptions = {
   /** The folder (WSL path) the Recording Session's own folder goes in. */
   folder: string;
   silenceLength: SilenceLength;
+  /** The silence threshold its silencedetect cuts with, in dB. */
+  thresholdDb: number;
+  /** The Audio Calibration that set it; null: none had passed. */
+  audioCalibrationId: string | null;
   camera: string;
   mic: string;
   /** ddagrab's output_idx for the screen; null records camera and mic only. */
@@ -153,6 +157,7 @@ export const startRecordingSession = (
     camera: o.camera,
     mic: o.mic,
     silenceLength: o.silenceLength,
+    thresholdDb: o.thresholdDb,
     cameraPreviewPort: o.cameraPreviewPort,
   });
 
@@ -244,6 +249,8 @@ export const startRecordingSession = (
     files,
     format: o.format,
     screenCaptured: screen !== null,
+    thresholdDb: o.thresholdDb,
+    audioCalibrationId: o.audioCalibrationId,
   });
   log({ type: "scene-changed", scene: o.scene, fileTime: 0 });
 

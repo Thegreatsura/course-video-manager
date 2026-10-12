@@ -1,7 +1,12 @@
 import { FileSystem } from "@effect/platform";
 import { Data, Effect } from "effect";
+import { desc, eq } from "drizzle-orm";
 import path from "node:path";
 import { audioCalibrations } from "@/db/schema";
+import {
+  UNCALIBRATED_SILENCE_THRESHOLD,
+  type SilenceThreshold,
+} from "@/silence-detection-constants";
 import {
   deriveThreshold,
   judgeCalibration,
@@ -16,7 +21,10 @@ import type {
 import type { CalibrationMeasured } from "@/services/recorder-client/calibration-commands";
 import { assertUnderEffect } from "@/services/assert-under";
 import { dbCall } from "@/services/clip-service-handler.helpers";
-import type { Database } from "@/services/drizzle-service.server";
+import {
+  DrizzleService,
+  type Database,
+} from "@/services/drizzle-service.server";
 
 /** Beside a calibration's mic file: the browser's level trace and the prompt schedule. */
 export const BROWSER_TRACE_FILE = "browser-trace.json";
@@ -99,3 +107,31 @@ export const recordAudioCalibration = Effect.fn("recordAudioCalibration")(
     } satisfies SavedAudioCalibration;
   }
 );
+
+/**
+ * The silence threshold a Recording Session that starts now cuts with: the
+ * latest passed Audio Calibration's, or the fixed default while none has
+ * passed. Read once, when recording starts; the Recording Session keeps it.
+ */
+export const currentSilenceThreshold = Effect.fn("currentSilenceThreshold")(
+  function* (db: Database) {
+    const latest = yield* dbCall(() =>
+      db.query.audioCalibrations.findFirst({
+        where: eq(audioCalibrations.outcome, "passed"),
+        orderBy: desc(audioCalibrations.createdAt),
+        columns: { id: true, thresholdDb: true },
+      })
+    );
+    return latest
+      ? ({
+          thresholdDb: latest.thresholdDb,
+          audioCalibrationId: latest.id,
+        } satisfies SilenceThreshold)
+      : UNCALIBRATED_SILENCE_THRESHOLD;
+  }
+);
+
+/** `currentSilenceThreshold` on the app's database. */
+export const silenceThresholdNow = Effect.gen(function* () {
+  return yield* currentSilenceThreshold(yield* DrizzleService);
+});

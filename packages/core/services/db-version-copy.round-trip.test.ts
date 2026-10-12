@@ -79,6 +79,8 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   "recording_session.silenceLength": () => "long",
   "recording_session.format": () => "short",
   "recording_session_scene_event.scene": () => "Code",
+  // An Audio Calibration is never copied, as a Recording Session is not.
+  "recording_session.audioCalibrationId": () => null,
   // Diagram Snapshots are shared per Diagram, not owned by a Version.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
   // CHECK clip_mockup_comment_one_parent: row 0 on a Clip Mockup, row 1 on

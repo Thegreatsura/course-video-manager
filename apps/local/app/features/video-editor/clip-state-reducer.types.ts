@@ -214,6 +214,11 @@ export type RecordingSession = {
   startedAt: number;
   silenceLength?: SilenceLength;
   /**
+   * An OBS Recording Session's silence threshold, fixed when it started: its
+   * after-recording FFmpeg pass cuts with it.
+   */
+  silenceThresholdDb?: number;
+  /**
    * A CVM recorder Recording Session: its id is the recorder's, and its
    * Clips arrive saved (`clips-saved`), never optimistically.
    */
@@ -314,6 +319,11 @@ export type ClipReducerAction =
       type: "recording-started";
       outputPath: string;
       silenceLength: SilenceLength;
+      /**
+       * The threshold the browser detector cuts this take with, which its
+       * after-recording FFmpeg pass cuts with too. Absent: the fixed default.
+       */
+      silenceThresholdDb?: number;
     }
   | {
       type: "recording-stopped";
@@ -616,6 +626,7 @@ export type ClipReducerEffect =
       sessionId: SessionId;
       outputPath: string;
       silenceLength: SilenceLength;
+      silenceThresholdDb?: number;
     }
   | {
       type: "revalidate-loader";

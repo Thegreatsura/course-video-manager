@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
 import { ebur128Line } from "./test-utils/fake-windows";
-import { connect, start, tmp } from "./test-utils/service-harness";
+import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
 
 /** The level meter through the WebSocket (test-utils/service-harness.ts). */
 
@@ -43,14 +43,24 @@ describe("the level meter", () => {
     // Record is refused while the meter runs...
     client.send({ type: "open", videoId: "video-1" });
     await client.camera("live");
-    client.send({ type: "record", silenceLength: "short", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "short",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect((await client.next("refused")).message).toBe(RECORD_WHILE_METERING);
 
     // ...and once it stops, the mic is let go and Record records.
     client.send({ type: "stop-meter" });
     expect(await client.next("meter-stopped")).toMatchObject({ message: null });
     expect(windows.meter()).toBeUndefined();
-    client.send({ type: "record", silenceLength: "short", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "short",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     await client.next("recording-started");
 
     // The meter is refused while recording.
@@ -88,7 +98,12 @@ describe("the level meter", () => {
     // Record is refused while it runs.
     client.send({ type: "open", videoId: "video-1" });
     await client.camera("live");
-    client.send({ type: "record", silenceLength: "short", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "short",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect((await client.next("refused")).message).toBe(RECORD_WHILE_METERING);
 
     client.send({

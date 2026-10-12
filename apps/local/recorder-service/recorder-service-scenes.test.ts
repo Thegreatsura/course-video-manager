@@ -7,6 +7,7 @@ import {
   start,
   T0_MS,
   tmp,
+  THRESHOLD,
 } from "./test-utils/service-harness";
 
 /** Scenes switched live, through the recorder service's WebSocket. */
@@ -26,7 +27,12 @@ describe("scenes", () => {
       (m) => m.state.kind === "open" && m.state.scene === "No Face"
     );
 
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     const started = await client.next("recording-started");
     // A Recording Session starts in the scene the preview was in.
     expect(await client.next("scene-changed")).toMatchObject({

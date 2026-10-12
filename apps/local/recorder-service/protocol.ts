@@ -1,6 +1,9 @@
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
-import type { SilenceLength } from "../app/silence-detection-constants";
+import type {
+  SilenceLength,
+  SilenceThreshold,
+} from "../app/silence-detection-constants";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -39,12 +42,12 @@ export const RECORDER_SERVICE_PORT = 5177;
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
  * (2: a Short's `format` and `screen`; 3: the level meter; 4: the Audio
- * Calibration run). The app server reloads on a change
+ * Calibration run; 5: Record's silence threshold). The app server reloads on a change
  * and the service does not (ADR 0035), so after a pull mid-session the app may
  * meet a service started from older code; `hello` says which wire it speaks
  * (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 4;
+export const RECORDER_PROTOCOL_VERSION = 5;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -120,21 +123,31 @@ export type RecorderCommand =
    * is also logged as a `scene-changed`.
    */
   | { type: "switch-scene"; scene: Scene }
-  /** Start a Recording Session in a new folder under `folder` (a WSL path). */
-  | { type: "record"; silenceLength: SilenceLength; folder: string }
+  /**
+   * Start a Recording Session in a new folder under `folder` (a WSL path),
+   * its silencedetect cutting with `thresholdDb`, the threshold of the Audio
+   * Calibration `audioCalibrationId` (null: none has passed, the fixed
+   * default). Refused without a threshold (`THRESHOLD_REQUIRED`).
+   */
+  | ({
+      type: "record";
+      silenceLength: SilenceLength;
+      folder: string;
+    } & SilenceThreshold)
   | { type: "stop" }
   | { type: "close" }
   /**
    * What a Stream Deck Record records with on this Video: the editor's
-   * Silence Length and the recordings folder. Kept until the recorder closes
-   * or opens for another Video.
+   * Silence Length, the recordings folder, and the silence threshold and its
+   * Audio Calibration. Kept until the recorder closes or opens for another
+   * Video. Refused without a threshold, as `record` is.
    */
-  | {
+  | ({
       type: "prepare-record";
       videoId: string;
       silenceLength: SilenceLength;
       folder: string;
-    }
+    } & SilenceThreshold)
   | { type: "stream-deck"; press: StreamDeckPress }
   /** Send this Recording Session's logged events with `seq > afterSeq`. */
   | { type: "replay"; recordingSessionId: string; afterSeq: number }
@@ -169,6 +182,13 @@ export type RecorderCommand =
 
 /** A stretch of a calibration's mic file, in its seconds. */
 export type CalibrationWindow = { startSeconds: number; endSeconds: number };
+
+/**
+ * Why a `record` or `prepare-record` with no silence threshold is refused:
+ * the app server that sent it is older than Audio Calibration.
+ */
+export const THRESHOLD_REQUIRED =
+  "Record needs the silence threshold to cut with, from the latest Audio Calibration: reload the app so it sends one.";
 
 /** Why the meter will not start while recording. */
 export const METER_WHILE_RECORDING =
@@ -229,6 +249,13 @@ export type RecordingSessionEvent = Logged<
       format?: VideoFormat;
       /** Whether a screen process recorded `files.screen`. Absent: true. */
       screenCaptured?: boolean;
+      /**
+       * The silence threshold its silencedetect cuts with. Absent in logs
+       * written before Audio Calibration: the fixed default.
+       */
+      thresholdDb?: number;
+      /** The Audio Calibration that set it; null or absent: none. */
+      audioCalibrationId?: string | null;
     }
   /**
    * The scene from here on, in picture file time. Every Recording Session

@@ -1,13 +1,16 @@
 import { OBS_WEBSOCKET_URL } from "@/lib/live-channels";
 import { OBSWebSocket } from "obs-websocket-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEffectReducer, type EffectReducer } from "use-effect-reducer";
 import {
   useSpeechDetector,
   useWatchForSilenceDetected,
   useWatchForSpeechDetected,
 } from "./use-speech-detector";
-import type { SilenceLength } from "@/silence-detection-constants";
+import type {
+  SilenceLength,
+  SilenceThreshold,
+} from "@/silence-detection-constants";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
 import { ensureOBSProfile } from "./ensure-obs-profile";
 import { useEnsureOBSProfile } from "./use-ensure-obs-profile";
@@ -32,6 +35,12 @@ export type OBSRecordingState = {
   profile: string;
   scene: string;
   latestOutputPath: string;
+  /**
+   * The silence threshold this take cuts with, fixed when it started (the
+   * latest passed Audio Calibration's then): the browser detector and the
+   * after-recording FFmpeg pass both use it, whatever is calibrated since.
+   */
+  silenceThresholdDb: number;
 };
 
 export type OBSConnectionOuterState =
@@ -253,6 +262,8 @@ export namespace useOBSConnector {
     | {
         type: "recording-started";
         outputPath: string;
+        /** The editor's silence threshold when OBS started recording. */
+        silenceThresholdDb: number;
       }
     | {
         type: "recording-stopped";
@@ -391,6 +402,7 @@ export const obsConnectorReducer: EffectReducer<
           profile: state.profile,
           scene: state.scene,
           latestOutputPath: action.outputPath,
+          silenceThresholdDb: action.silenceThresholdDb,
         };
       }
 
@@ -441,11 +453,19 @@ export const useOBSConnector = (props: {
   }) => void;
   onClipAudioWindowClosed: () => void;
   silenceLength: SilenceLength;
+  /**
+   * The latest passed Audio Calibration's threshold (or the fixed default):
+   * what a take that starts now cuts with.
+   */
+  silenceThreshold: SilenceThreshold;
   targetProfile: string;
   /** False for a CVM recorder Video: OBS is left alone. */
   usesObs: boolean;
 }) => {
   const [websocket] = useState(() => new OBSWebSocket());
+  // Read by OBS's recording listener, which outlives a render.
+  const silenceThresholdRef = useRef(props.silenceThreshold.thresholdDb);
+  silenceThresholdRef.current = props.silenceThreshold.thresholdDb;
 
   const [state, dispatch] = useEffectReducer(
     obsConnectorReducer,
@@ -507,6 +527,7 @@ export const useOBSConnector = (props: {
             dispatch({
               type: "recording-started",
               outputPath: e.outputPath,
+              silenceThresholdDb: silenceThresholdRef.current,
             });
           } else if (e.outputState === "OBS_WEBSOCKET_OUTPUT_STOPPED") {
             dispatch({
@@ -580,6 +601,10 @@ export const useOBSConnector = (props: {
     mediaStream,
     isRecording: state.type === "obs-recording",
     silenceLength: props.silenceLength,
+    thresholdDb:
+      state.type === "obs-recording"
+        ? state.silenceThresholdDb
+        : props.silenceThreshold.thresholdDb,
   });
 
   useWatchForSpeechDetected({

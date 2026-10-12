@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fakeWindows } from "./test-utils/fake-windows";
-import { connect, start, tmp } from "./test-utils/service-harness";
+import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
 
 /**
  * A Short's screen while Spacedesk wakes, and screen-side restarts that
@@ -59,7 +59,12 @@ describe("a Short's screen", () => {
     preview.stuck = true; // slow to quit, as a real ffmpeg.exe flushing
 
     client.send({ type: "retry-screen" });
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect(await answerTo(client)).toBe(
       "refused: Spacedesk is still waking: wait for the screen before recording."
     );
@@ -87,7 +92,12 @@ describe("a Short's screen", () => {
     expect((await client.next("stream-deck-ignored")).message).toBe(
       "Code shows the screen, and Spacedesk is still waking: wait for the screen."
     );
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect(await answerTo(client)).toMatch(/Spacedesk is still waking/);
   });
 });

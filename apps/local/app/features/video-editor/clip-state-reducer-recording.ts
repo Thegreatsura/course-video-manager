@@ -139,6 +139,7 @@ const handleRecordingStarted = (
     outputPath: action.outputPath,
     startedAt: Date.now(),
     silenceLength: action.silenceLength,
+    silenceThresholdDb: action.silenceThresholdDb,
   };
 
   exec({
@@ -146,6 +147,7 @@ const handleRecordingStarted = (
     sessionId: newSession.id,
     outputPath: action.outputPath,
     silenceLength: action.silenceLength,
+    silenceThresholdDb: action.silenceThresholdDb,
   });
 
   exec({

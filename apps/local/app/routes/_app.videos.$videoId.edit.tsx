@@ -28,6 +28,7 @@ import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
+import { silenceThresholdNow } from "@/services/audio-calibration.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
@@ -187,6 +188,7 @@ export const loader = makeLoader({
         beats,
         animatic,
         overlays,
+        threshold: yield* silenceThresholdNow,
       };
     }),
 });
@@ -374,6 +376,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       });
     },
     silenceLength,
+    silenceThreshold: props.loaderData.threshold,
     // Only a Landscape Video records with OBS (ADR 0037).
     targetProfile: OBS_PROFILE_LANDSCAPE,
   });
@@ -385,20 +388,17 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   // Sync OBS recording state to clip-state-reducer sessions.
   const prevOBSStateTypeRef = useRef(obsConnector.state.type);
   useEffect(() => {
+    const obs = obsConnector.state;
     const prevType = prevOBSStateTypeRef.current;
-    const currType = obsConnector.state.type;
-    prevOBSStateTypeRef.current = currType;
-
-    if (prevType !== "obs-recording" && currType === "obs-recording") {
+    prevOBSStateTypeRef.current = obs.type;
+    if (prevType !== "obs-recording" && obs.type === "obs-recording") {
       dispatch({
         type: "recording-started",
-        outputPath:
-          obsConnector.state.type === "obs-recording"
-            ? obsConnector.state.latestOutputPath
-            : "",
+        outputPath: obs.latestOutputPath,
         silenceLength: silenceLengthRef.current,
+        silenceThresholdDb: obs.silenceThresholdDb,
       });
-    } else if (prevType === "obs-recording" && currType !== "obs-recording") {
+    } else if (prevType === "obs-recording" && obs.type !== "obs-recording") {
       dispatch({ type: "recording-stopped" });
     }
   }, [obsConnector.state.type]);

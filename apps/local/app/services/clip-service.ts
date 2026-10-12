@@ -245,6 +245,8 @@ export interface AppendFromObsInput {
   insertionPoint: FrontendInsertionPoint;
   items: FrontendTimelineItem[];
   silenceLength?: SilenceLength;
+  /** The threshold the OBS take was recorded under; absent: the fixed default. */
+  silenceThresholdDb?: number;
 }
 
 export interface UpdateClipInput {
@@ -324,6 +326,7 @@ interface InternalAppendFromObsInput {
   filePath?: string;
   insertionPoint: InsertionPoint;
   silenceLength?: SilenceLength;
+  silenceThresholdDb?: number;
 }
 
 interface InternalCreateChapterAtInsertionPointInput {
@@ -533,6 +536,7 @@ export function createClipService(send: ClipServiceTransport): ClipService {
           filePath: input.filePath,
           insertionPoint: resolved,
           silenceLength: input.silenceLength,
+          silenceThresholdDb: input.silenceThresholdDb,
         },
       }) as Promise<Clip[]>;
     },

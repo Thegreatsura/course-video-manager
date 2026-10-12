@@ -506,6 +506,15 @@ export const recordingSessions = createTable(
      * `screenFilePath` names no file and nothing opens it.
      */
     screenCaptured: boolean("screen_captured").notNull().default(true),
+    /**
+     * The Audio Calibration it was recorded under: the latest passed one when
+     * recording started, whose threshold its silencedetect cut with. Null for
+     * one from before Audio Calibration, or recorded before any had passed
+     * (the fixed default threshold).
+     */
+    audioCalibrationId: varchar("audio_calibration_id", {
+      length: 255,
+    }).references(() => audioCalibrations.id, { onDelete: "set null" }),
   },
   (table) => [
     index("recording_session_video_id_idx").on(table.videoId),

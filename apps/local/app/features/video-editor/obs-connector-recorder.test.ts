@@ -29,17 +29,22 @@ const connected = {
 } as const;
 
 describe("the OBS connector and the Video's Recorder", () => {
-  it("an OBS Video connects to OBS and follows its recording, as today", () => {
+  it("an OBS Video connects to OBS and follows its recording, the take keeping the threshold it started with", () => {
     const obs = start(true);
     expect(obs.effects).toEqual([{ type: "attempt-to-connect" }]);
     obs.send(connected);
     expect(
-      obs.send({ type: "recording-started", outputPath: "/a.mkv" })
+      obs.send({
+        type: "recording-started",
+        outputPath: "/a.mkv",
+        silenceThresholdDb: -36.5,
+      })
     ).toEqual({
       type: "obs-recording",
       profile: "Landscape Recording",
       scene: "Camera",
       latestOutputPath: "/a.mkv",
+      silenceThresholdDb: -36.5,
     });
   });
 
@@ -47,7 +52,11 @@ describe("the OBS connector and the Video's Recorder", () => {
     const cvmRecorder = start(false);
     expect(cvmRecorder.effects).toEqual([]);
     cvmRecorder.send({ type: "connection-closed" });
-    cvmRecorder.send({ type: "recording-started", outputPath: "/a.mkv" });
+    cvmRecorder.send({
+      type: "recording-started",
+      outputPath: "/a.mkv",
+      silenceThresholdDb: -38,
+    });
     expect(cvmRecorder.state()).toEqual({ type: "obs-not-used" });
     expect(cvmRecorder.effects).toEqual([]);
   });

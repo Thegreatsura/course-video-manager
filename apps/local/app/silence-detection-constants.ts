@@ -7,11 +7,31 @@
  */
 
 /**
- * The noise level, in dBFS, as silencedetect's `n`: a sample is silent when
- * its absolute amplitude is below it. A sample peak, not an RMS level. Audio
- * Calibration will supply this value.
+ * The fixed noise level, in dBFS, as silencedetect's `n`: a sample is silent
+ * when its absolute amplitude is below it. A sample peak, not an RMS level.
+ *
+ * Only for work that is not recording: chunking or re-cutting old Footage,
+ * and recording before any Audio Calibration has passed. A Recording Session
+ * cuts with the threshold of the latest passed Audio Calibration, read once
+ * when it starts (`SilenceThreshold`).
  */
-export const SILENCE_THRESHOLD_DB = -38;
+export const DEFAULT_SILENCE_THRESHOLD_DB = -38;
+
+/**
+ * The threshold a Recording Session cuts with, and the Audio Calibration that
+ * set it: the latest passed one when recording started, or null (and
+ * `DEFAULT_SILENCE_THRESHOLD_DB`) when none has passed yet.
+ */
+export type SilenceThreshold = {
+  readonly thresholdDb: number;
+  readonly audioCalibrationId: string | null;
+};
+
+/** No Audio Calibration has passed: the fixed default. */
+export const UNCALIBRATED_SILENCE_THRESHOLD: SilenceThreshold = {
+  thresholdDb: DEFAULT_SILENCE_THRESHOLD_DB,
+  audioCalibrationId: null,
+};
 
 /** Minimum clip length (in seconds) — clips shorter than this are discarded */
 export const MINIMUM_CLIP_LENGTH_SECONDS = 1;
@@ -48,15 +68,18 @@ export const silenceLengthToSeconds = (silenceLength: SilenceLength): number =>
 
 /**
  * What counts as silence for one Recording Session: every channel's samples
- * below the noise level for at least the Silence Length.
+ * below its threshold for at least the Silence Length.
  */
 export type SilenceRule = {
   readonly thresholdDb: number;
   readonly minSilenceSeconds: number;
 };
 
-export const silenceRule = (silenceLength: SilenceLength): SilenceRule => ({
-  thresholdDb: SILENCE_THRESHOLD_DB,
+export const silenceRule = (
+  silenceLength: SilenceLength,
+  thresholdDb: number
+): SilenceRule => ({
+  thresholdDb,
   minSilenceSeconds: silenceLengthToSeconds(silenceLength),
 });
 

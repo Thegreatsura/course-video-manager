@@ -38,12 +38,15 @@ export const action = makeAction({
       const measured = yield* recorderCommand(() =>
         recorderClient().finishCalibration(MEASUREMENT_WINDOWS)
       );
-      return yield* recordAudioCalibration(yield* DrizzleService, {
+      const saved = yield* recordAudioCalibration(yield* DrizzleService, {
         calibrationId: request.calibrationId,
         measured,
         recordingsFolder: recordingFolder(),
         browserInputLabel: request.browserInputLabel,
         browserTrace: request.browserTrace ? [...request.browserTrace] : null,
       });
+      // A Stream Deck Record from now on cuts with the new threshold.
+      recorderClient().calibrationChanged();
+      return saved;
     }),
 });
