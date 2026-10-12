@@ -5,14 +5,18 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import { corsHeaders, isAllowedOrigin } from "./allowed-origin";
-import { recoverCrashedSessions, type IndexEntry } from "./crash-recovery";
+import {
+  readJsonLines,
+  recoverCrashedSessions,
+  type IndexEntry,
+} from "./crash-recovery";
 import {
   CAMERA_START_TIMEOUT_MS,
   openCamera,
   quitProcess,
   type Camera,
 } from "./camera";
-import { screenPreviewArgs } from "./capture-args";
+import { PREVIEW_TAGS, screenPreviewArgs } from "./capture-args";
 import type { LaunchedProcess, Launcher } from "./launcher";
 import {
   DEFAULT_SCENE,
@@ -135,13 +139,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   fs.mkdirSync(o.stateDir, { recursive: true });
   /** Every Recording Session the service has started, oldest first. */
   const readIndex = (): IndexEntry[] =>
-    fs.existsSync(indexFile)
-      ? fs
-          .readFileSync(indexFile, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line) as IndexEntry)
-      : [];
+    fs.existsSync(indexFile) ? readJsonLines<IndexEntry>(indexFile) : [];
   /** Where a Recording Session's event log is, from the index the service keeps. */
   const eventLogOf = (recordingSessionId: string) =>
     readIndex().find((e) => e.recordingSessionId === recordingSessionId)
@@ -274,7 +272,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const stopScreenPreview = async () => {
     const p = screenPreview;
     screenPreview = undefined;
-    if (p) await quitProcess(p);
+    if (p) await quitProcess(p, { launch: o.launch, tag: PREVIEW_TAGS.screen });
   };
 
   const onEvent = (event: RecordingSessionEvent) => {
@@ -378,9 +376,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       );
     }
     let lastSeq = 0;
-    for (const line of fs.readFileSync(eventLog, "utf8").split("\n")) {
-      if (!line) continue;
-      const event = JSON.parse(line) as RecordingSessionEvent;
+    for (const event of readJsonLines<RecordingSessionEvent>(eventLog)) {
       lastSeq = Math.max(lastSeq, event.seq);
       if (event.seq > afterSeq) send(ws, event);
     }

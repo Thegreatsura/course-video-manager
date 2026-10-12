@@ -25,7 +25,10 @@ afterEach(async () => {
 
 export const tmp = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-service-"));
-  cleanups.push(async () => fs.rmSync(dir, { recursive: true, force: true }));
+  // Retried: a Recording Session's ffmpeg log may still be flushing into it.
+  cleanups.push(async () =>
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+  );
   return dir;
 };
 

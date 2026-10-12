@@ -1,5 +1,5 @@
-import { cameraPreviewArgs } from "./capture-args";
-import type { LaunchedProcess, Launcher } from "./launcher";
+import { cameraPreviewArgs, PREVIEW_TAGS } from "./capture-args";
+import { runToEnd, type LaunchedProcess, type Launcher } from "./launcher";
 import type { PreviewFeeds } from "./preview-feeds";
 import type { CameraStatus } from "./protocol";
 
@@ -32,13 +32,43 @@ const BUSY = /Could not run graph|in use|busy/i;
 const QUIT_TIMEOUT_MS = 5_000;
 
 /**
- * Asks ffmpeg.exe to quit with `q`, killing it only if it does not: killing
- * the WSL side can leave ffmpeg.exe holding the device on Windows.
+ * Stops every ffmpeg.exe on Windows whose command line carries one of these
+ * tags (`stop-recorders.ps1`). Every tag the service puts on a process starts
+ * `cvm-recorder-`, and the script refuses any other, so nothing CVM did not
+ * start is ever touched.
  */
-export const quitProcess = (p: LaunchedProcess) => {
+export const stopTagged = async (launch: Launcher, tags: string[]) => {
+  const stopped = await runToEnd(
+    launch({
+      tool: "powershell",
+      script: "stop-recorders.ps1",
+      args: ["-Tags", tags.join(",")],
+    })
+  );
+  if (stopped.code !== 0)
+    console.error(`recorder: stop-recorders.ps1 failed: ${stopped.stderr}`);
+};
+
+/**
+ * Asks ffmpeg.exe to quit with `q`, killing it only if it does not. ffmpeg
+ * reads `q` only once every input is open, so a Cam Link stuck opening never
+ * hears it. Killing the WSL side can leave ffmpeg.exe holding the device on
+ * Windows, so a kill also stops the Windows process by its tag.
+ */
+export const quitProcess = (
+  p: LaunchedProcess,
+  o: { launch: Launcher; tag: string; timeoutMs?: number }
+) => {
   p.writeStdin("q");
-  const timer = setTimeout(() => p.kill(), QUIT_TIMEOUT_MS);
-  return p.exited.then(() => clearTimeout(timer));
+  let killed = false;
+  const timer = setTimeout(() => {
+    killed = true;
+    p.kill();
+  }, o.timeoutMs ?? QUIT_TIMEOUT_MS);
+  return p.exited.then(async () => {
+    clearTimeout(timer);
+    if (killed) await stopTagged(o.launch, [o.tag]);
+  });
 };
 
 export type CameraOptions = {
@@ -62,6 +92,7 @@ export const openCamera = (o: CameraOptions): Camera => {
   let status: CameraStatus = { kind: "opening", attempt: 1 };
   let current: LaunchedProcess | undefined;
   let released = false;
+  const quitting = { launch: o.launch, tag: PREVIEW_TAGS.camera };
 
   const set = (next: CameraStatus) => {
     if (released) return;
@@ -108,7 +139,7 @@ export const openCamera = (o: CameraOptions): Camera => {
         });
         return;
       }
-      await quitProcess(p);
+      await quitProcess(p, quitting);
       if (released) return;
       if (BUSY.test(stderr)) {
         return set({ kind: "busy", message: CAM_LINK_BUSY });
@@ -134,7 +165,7 @@ export const openCamera = (o: CameraOptions): Camera => {
     },
     release: async () => {
       released = true;
-      if (current) await quitProcess(current);
+      if (current) await quitProcess(current, quitting);
     },
   };
 };
