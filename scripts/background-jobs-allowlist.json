@@ -9,6 +9,11 @@
       "file": "apps/local/app/routes/api.videos.$videoId.recorder.events.ts",
       "count": 1,
       "reason": "A live Recording Session, not background work: the CVM recorder's events for the editor open on that Video. Its listening keeps the recorder open for that Video (the Cam Link and the previews); the recorder service records and the app server's recorder client saves whether or not anyone listens, so closing it cancels no recording."
+    },
+    {
+      "file": "apps/local/app/routes/api.audio-calibration.meter.ts",
+      "count": 1,
+      "reason": "Live, not background work: the Audio Calibration page's level meter (#2078). Listening is what runs the recorder service's mic-only ffmpeg.exe, and the last listener going stops it, so it must end with the tab, the opposite of a Job. Stays."
     }
   ],
   "browser-driver": [
@@ -31,6 +36,11 @@
       "file": "apps/local/app/features/video-editor/use-cvm-recorder.ts",
       "count": 1,
       "reason": "A live Recording Session, not background work: the editor hears the CVM recorder's events (saved Clips) while it is open. Its listening keeps the recorder (and the Cam Link) open for that Video; it cancels no recording."
+    },
+    {
+      "file": "apps/local/app/features/audio-calibration/use-level-meter.ts",
+      "count": 1,
+      "reason": "Live, not background work: the Audio Calibration page listens to the level meter while it is open (#2078). Closing the stream is what stops the meter and lets the mic go, so it must end with the tab, the opposite of a Job. Stays."
     }
   ],
   "spawn": [

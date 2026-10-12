@@ -123,6 +123,10 @@ const DEVICE_LISTING = [
   "Error opening input file dummy.",
 ].join("\r\n");
 
+/** One reading as ffmpeg 8's ebur128 logs it at `-loglevel level+info`. */
+export const ebur128Line = (seconds: number, m: number, s: number) =>
+  `[Parsed_ebur128_0 @ 000001d2] [info] t: ${seconds.toFixed(4)}   TARGET:-23 LUFS    M: ${m.toFixed(1)} S: ${s.toFixed(1)}     I: ${s.toFixed(1)} LUFS       LRA:   0.0 LU`;
+
 const TINY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 
 /** What the camera preview process sends to the still feed (its second output). */
@@ -184,6 +188,12 @@ export const fakeWindows = (
      */
     spacedesk?: { width: number; height: number; awake?: boolean };
     wakeFails?: string;
+    /**
+     * A synthetic mic for the level meter: its short-term loudness (LUFS) at
+     * each second, printed as ebur128 would every 100 ms. Absent, the meter
+     * prints only what a test tells it to.
+     */
+    micLoudness?: (seconds: number) => number;
   } = {}
 ) => {
   const spacedesk: {
@@ -290,6 +300,21 @@ export const fakeWindows = (
       sendFrames(p, l.args, [o.jpeg?.screen ?? TINY_JPEG]);
       return p;
     }
+    if (l.args.some((a) => a.startsWith("ebur128"))) {
+      const loudness = o.micLoudness;
+      if (loudness) {
+        let t = 0;
+        const timer = setInterval(() => {
+          t += 0.1;
+          const s = loudness(t).toFixed(1);
+          p.stderr(
+            `${ebur128Line(t, Number(s) + (Math.random() - 0.5) * 3, Number(s))}\r\n`
+          );
+        }, 100);
+        void p.exited.then(() => clearInterval(timer));
+      }
+      return p;
+    }
     // `-i <file>` and nothing else: reading its duration.
     if (l.args.at(-2) === "-i")
       return answer(p, probeAnswer(path.join(l.cwd, l.args.at(-1) ?? "")));
@@ -300,6 +325,14 @@ export const fakeWindows = (
       );
     return p;
   };
+  /** The level meter's ffmpeg.exe, while one runs. */
+  const meter = () =>
+    launchedProcesses.find(
+      (p) =>
+        p.running &&
+        p.launch.tool === "ffmpeg" &&
+        p.launch.args.some((a) => a.startsWith("ebur128"))
+    );
   const recorder = (kind: "screen" | "camera") => {
     const p = recorders.find(
       (r) => r.launch.tool === "ffmpeg" && r.launch.args.includes(`${kind}.mkv`)
@@ -328,6 +361,7 @@ export const fakeWindows = (
     cameraPreviews,
     screenPreviews,
     camerasRunning,
+    meter,
     wakeSpacedesk,
     /** How many times the service woke Spacedesk. */
     wakes: () => wakes,

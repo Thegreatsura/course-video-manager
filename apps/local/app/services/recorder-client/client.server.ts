@@ -17,8 +17,10 @@ import type { IngestResult } from "./ingest.server";
 import {
   RecorderRefusedError,
   RecorderUnavailableError,
+  NOT_RUNNING,
 } from "./recorder-command";
 import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
+import { meterRelay, isMeterMessage } from "./meter-relay";
 
 /**
  * THE RECORDER CLIENT: the app server's one WebSocket to the recorder service
@@ -175,6 +177,10 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     if (socket?.readyState === WebSocket.OPEN)
       socket.send(JSON.stringify(command));
   };
+  const meter = meterRelay({
+    send,
+    unavailable: () => (reachable ? problem : NOT_RUNNING),
+  });
 
   /** Tells the open recorder what a Stream Deck Record on its Video records with. */
   const prepare = () => {
@@ -314,6 +320,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   };
 
   const onMessage = (message: RecorderMessage) => {
+    if (isMeterMessage(message)) return meter.hear(message);
     for (const waiter of waiters.slice()) {
       if (message.type === "refused" && message.command === waiter.command) {
         waiters = waiters.filter((w) => w !== waiter);
@@ -333,6 +340,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         reconcile();
         prepare();
         catchUp(message.recovered, message.recent);
+        meter.restart();
         return publishStatus();
       case "state":
         state = message.state;
@@ -347,6 +355,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
           });
         return;
       case "refused":
+        meter.hear(message);
         // An open or close of our own was refused: ask again on the next state.
         if (message.command === "open" || message.command === "close") {
           asked = undefined;
@@ -395,6 +404,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       if (reachable) {
         reachable = false;
         publishStatus();
+        meter.restart();
       }
       for (const waiter of waiters)
         waiter.reject(
@@ -413,11 +423,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   ) =>
     new Promise<void>((resolve, reject) => {
       if (!reachable || socket?.readyState !== WebSocket.OPEN) {
-        reject(
-          new RecorderUnavailableError(
-            "The recorder service is not running. `pnpm dev` starts it from the main checkout."
-          )
-        );
+        reject(new RecorderUnavailableError(NOT_RUNNING));
         return;
       }
       const timer = setTimeout(() => {
@@ -603,6 +609,8 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     setInsertionPoint(videoId: string, insertionPoint: InsertionPoint) {
       insertionPoints.set(videoId, insertionPoint);
     },
+
+    subscribeMeter: meter.subscribe,
 
     /** Waits for every event heard so far to be saved (tests). */
     settled: () => ingesting,
