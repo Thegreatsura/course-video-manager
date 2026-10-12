@@ -16,7 +16,6 @@ import {
   type PostedPlatforms,
 } from "@/lib/short-status";
 import { SiYoutube, SiTiktok } from "@icons-pack/react-simple-icons";
-import { readLastRecorderChoice } from "@/features/video-editor/last-recorder-choice";
 import { formatDuration } from "@/lib/format-duration";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
@@ -73,8 +72,7 @@ function RecordTile() {
         const formData = new FormData();
         formData.set("title", `Short ${new Date().toLocaleDateString()}`);
         formData.set("format", "short");
-        // A new Short starts with the Recorder chosen last, as any Video does.
-        formData.set("recorder", readLastRecorderChoice() ?? "");
+        // No Recorder: a Short records with the CVM recorder only (ADR 0037).
         formData.set("redirectTo", "/videos/{id}/edit");
         fetcher.submit(formData, {
           method: "post",

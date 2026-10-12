@@ -1,25 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LiveMediaStream } from "./live-media-stream";
 import { LivePreviewFrame } from "./live-preview-frame";
 import { CvmRecorderControls } from "./cvm-recorder-controls";
-import { RecorderPicker } from "./recorder-picker";
-import { showsCvmRecorderControls } from "../recorder-choice-reducer";
 import { getHasLivePreview } from "../live-preview";
-import { SilenceLengthToggle } from "./silence-length-toggle";
-import { RecordingSignalIndicator } from "./timeline-indicators";
 import { ActionsDropdown } from "./actions-dropdown";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { useEditorVideoActions } from "../editor-video-menu";
 import { MissingWordTimingBadge } from "./transcript-word-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
 import type { ClipOverlay } from "../overlay-preview";
-import {
-  getIsOBSActive as getIsOBSActiveSelector,
-  getShowCenterLine as getShowCenterLineSelector,
-  getShowRecordingSignal as getShowRecordingSignalSelector,
-  getShowScrubSlider as getShowScrubSliderSelector,
-} from "../video-editor-selectors";
+import { getShowScrubSlider as getShowScrubSliderSelector } from "../video-editor-selectors";
 import { formatDuration } from "@/lib/format-duration";
 import { SendIcon, VideoOffIcon } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
@@ -46,26 +36,6 @@ export const PortraitStudioPanel = () => {
   const showVideoPlayer = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.showVideoPlayer
-  );
-  const showLiveStream = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.showLiveStream
-  );
-  const obsConnectorState = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.obsConnectorState
-  );
-  const speechDetectorState = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.speechDetectorState
-  );
-  const isTeleprompterConnected = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isTeleprompterConnected
-  );
-  const isRecordingActive = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isRecordingActive
   );
   const clipsToAggressivelyPreload = useContextSelector(
     VideoEditorContext,
@@ -121,12 +91,8 @@ export const PortraitStudioPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.cvmRecorder.state
   );
-  const recorder = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.recorderPicker.recorder
-  );
-  // A Short on the CVM recorder: its 9:16 composite and controls, not OBS's.
-  const usesCvmRecorder = showsCvmRecorderControls({ recorder });
+  // A Short records with the CVM recorder only (ADR 0037): its 9:16
+  // composite and controls, never OBS's.
   const hasLivePreview = getHasLivePreview(liveMediaStream, cvmRecorderState);
 
   const [isPostingModalOpen, setIsPostingModalOpen] = useState(false);
@@ -145,12 +111,6 @@ export const PortraitStudioPanel = () => {
     postToTikTok: () => openPostingModal("tiktok"),
   });
 
-  const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
-  const showCenterLine = getShowCenterLineSelector(obsConnectorState);
-  const showRecordingSignal = getShowRecordingSignalSelector(
-    isRecordingActive,
-    isTeleprompterConnected
-  );
   const showScrubSlider = getShowScrubSliderSelector(
     currentClip?.type,
     showVideoPlayer
@@ -164,35 +124,12 @@ export const PortraitStudioPanel = () => {
           <div className="h-full aspect-[9/16] bg-card rounded-lg flex flex-col items-center justify-center gap-3">
             <VideoOffIcon className="size-10 text-muted-foreground" />
             <p className="text-muted-foreground text-sm text-center px-4">
-              {usesCvmRecorder
-                ? "No clips yet. This Short records with the CVM recorder."
-                : "No video stream or clips yet. Connect OBS to start recording."}
+              No clips yet. This Short records with the CVM recorder.
             </p>
           </div>
         ) : (
           <div className="h-full flex flex-col items-center max-h-full">
-            {liveMediaStream && (
-              <div
-                className={cn(
-                  "flex-1 min-h-0 aspect-[9/16] relative",
-                  "hidden",
-                  !showVideoPlayer && showLiveStream && "block"
-                )}
-              >
-                {showRecordingSignal && <RecordingSignalIndicator />}
-
-                {isOBSActive && (
-                  <LiveMediaStream
-                    mediaStream={liveMediaStream}
-                    obsConnectorState={obsConnectorState}
-                    speechDetectorState={speechDetectorState}
-                    showCenterLine={showCenterLine}
-                    showCaptureStatus={!isTeleprompterConnected}
-                  />
-                )}
-              </div>
-            )}
-            {usesCvmRecorder && <LivePreviewFrame />}
+            <LivePreviewFrame />
             <div
               className={cn(
                 "flex-1 min-h-0 aspect-[9/16]",
@@ -220,12 +157,6 @@ export const PortraitStudioPanel = () => {
               />
             </div>
 
-            {isOBSActive && (
-              <div className="mt-2 flex justify-center shrink-0">
-                <SilenceLengthToggle />
-              </div>
-            )}
-
             {showScrubSlider && currentClip?.type === "on-database" && (
               <input
                 type="range"
@@ -246,11 +177,9 @@ export const PortraitStudioPanel = () => {
         )}
       </div>
 
-      {usesCvmRecorder && (
-        <div className="shrink-0">
-          <CvmRecorderControls />
-        </div>
-      )}
+      <div className="shrink-0">
+        <CvmRecorderControls />
+      </div>
 
       {/* Compact actions bar */}
       <div className="flex items-center justify-between mt-1 shrink-0">
@@ -260,7 +189,6 @@ export const PortraitStudioPanel = () => {
         </span>
         <MissingWordTimingBadge />
         <div className="flex items-center gap-1 shrink-0">
-          <RecorderPicker />
           <ActionsDropdown
             videoId={videoId}
             groups={menuGroups}

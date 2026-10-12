@@ -474,7 +474,7 @@ const reduceClipState = (
     case "restore-clip":
       return handleRestoreClip(state, action, exec);
     case "clip-restore-failed":
-      return handleClipRestoreFailed(state, action, exec);
+      return handleClipRestoreFailed(state, action);
     case "permanently-remove-archived": {
       const isDeletedClipsPanel = action.sessionId === DELETED_CLIPS_SESSION_ID;
 

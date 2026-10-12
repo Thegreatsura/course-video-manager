@@ -15,7 +15,6 @@ import {
   getIsClipPortrait,
   getIsClipDangerous,
   getLastTranscribedClipId,
-  getIsLiveStreamPortrait,
   getShouldShowLastFrameOverlay,
   getBackButtonUrl,
   getShowCenterLine,
@@ -269,22 +268,6 @@ const obsRecording: OBSConnectionOuterState = {
   scene: "Camera",
   latestOutputPath: "/output/path",
 };
-
-describe("getIsLiveStreamPortrait", () => {
-  it("returns true when OBS is active with TikTok profile", () => {
-    expect(
-      getIsLiveStreamPortrait({ ...obsConnected, profile: "TikTok" })
-    ).toBe(true);
-  });
-
-  it("returns false when OBS is active with non-TikTok profile", () => {
-    expect(getIsLiveStreamPortrait(obsConnected)).toBe(false);
-  });
-
-  it("returns false when OBS is not running", () => {
-    expect(getIsLiveStreamPortrait(obsNotRunning)).toBe(false);
-  });
-});
 
 describe("getShouldShowLastFrameOverlay", () => {
   const clip = makeClipOnDatabase({

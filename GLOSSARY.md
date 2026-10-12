@@ -128,7 +128,7 @@ The **Video Format** of a horizontal, long-form video. The default.
 _Avoid_: Standard (the old value name)
 
 **Short**:
-The **Video Format** of a vertical, short-form video (the kind posted to YouTube Shorts, TikTok and similar). "Short" is the name to use everywhere.
+The **Video Format** of a vertical, short-form video (the kind posted to YouTube Shorts, TikTok and similar). "Short" is the name to use everywhere. A Short records with the CVM recorder only (ADR 0037); its older OBS Clips still export.
 _Avoid_: TikTok (reserved for the actual TikTok platform, and NOT the name for a Short)
 
 **Clip**:
@@ -258,11 +258,11 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 ### Recording
 
 **Recording Session**:
-A period of time, from start to stop, during which clips are captured for one **Video**. In the editor it groups Optimistic Clips before they are saved. On a Video whose **Recorder** is the CVM recorder it is also stored: three **Footage** files (camera, screen and mic, on one shared clock), its scene timeline (which scene was live from each moment), its speech events, its mic offset (how much later the mic's sound is played at export, 150 ms by default), its **Silence Length** and whether it stopped cleanly or crashed. It is filmed in its Video's **Video Format**, which it remembers (the Video's format can change later): its Clips' picture is drawn in that format's layout. A **Short**'s may be camera-only (no screen file), when the screen could not be captured. Its Clips point at it, and their picture is drawn from its files and scene timeline at export instead of being baked into the Footage. An OBS Recording Session is not stored. Getting the camera ready before a Recording Session starts is "opening the recorder for a Video", not opening a Recording Session.
+A period of time, from start to stop, during which clips are captured for one **Video**. In the editor it groups Optimistic Clips before they are saved. Filmed with the CVM **Recorder** it is also stored: three **Footage** files (camera, screen and mic, on one shared clock), its scene timeline (which scene was live from each moment), its speech events, its mic offset (how much later the mic's sound is played at export, 150 ms by default), its **Silence Length** and whether it stopped cleanly or crashed. It is filmed in its Video's **Video Format**, which it remembers (the Video's format can change later): its Clips' picture is drawn in that format's layout. A **Short**'s may be camera-only (no screen file), when the screen could not be captured. Its Clips point at it, and their picture is drawn from its files and scene timeline at export instead of being baked into the Footage. An OBS Recording Session is not stored. Getting the camera ready before a Recording Session starts is "opening the recorder for a Video", not opening a Recording Session.
 _Avoid_: Session, Take session, Recording (a Video's _Avoid_)
 
 **Recorder**:
-What films a **Video**, chosen per Video: **OBS** (one Footage file with the scene baked in) or the **CVM recorder** (CVM's own, which stores a **Recording Session** of separate camera, screen and mic Footage). A Video filmed before the choice existed uses OBS. The choice is locked once the Video has Footage.
+What films a **Clip**: **OBS** (one Footage file with the scene baked in) or the **CVM recorder** (CVM's own, which stores a **Recording Session** of separate camera, screen and mic Footage). A Clip's Recorder is its own (a Clip with a Recording Session was filmed with the CVM recorder), so one **Video** may hold both, and each Clip exports from its own Footage. A Video's Recorder only says which Recorder opens next in the editor; it can be switched at any time except while capturing. A **Landscape** Video defaults to OBS; a **Short** records with the CVM recorder only (ADRs 0036, 0037).
 _Avoid_: Recording mode, Capture backend, New recorder (its old name; stored as `cvm`, formerly `new-recorder`)
 
 **Scene Override**:

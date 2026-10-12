@@ -52,7 +52,7 @@ export const loader = makeLoader({
       return {
         videoId,
         thumbnails,
-        recorder: resolveVideoRecorder(video.recorder),
+        recorder: resolveVideoRecorder(video),
       };
     }),
 });

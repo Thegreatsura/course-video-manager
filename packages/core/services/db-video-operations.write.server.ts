@@ -1,5 +1,5 @@
 import { type Database } from "./drizzle-service.server.js";
-import { clips, lessons, recordingSessions, videos } from "../db/schema.js";
+import { lessons, recordingSessions, videos } from "../db/schema.js";
 import {
   NotFoundError,
   UnknownDBServiceError,
@@ -11,7 +11,8 @@ import { Effect } from "effect";
 import type { VideoFormat } from "../features/videos/video-format.js";
 import {
   recordersForFormat,
-  resolveVideoRecorder,
+  parseVideoRecorder,
+  recorderForNewVideo,
   type VideoRecorder,
 } from "../features/videos/recorder.js";
 import {
@@ -317,15 +318,12 @@ export const createVideoWriteOps = (db: Database) => {
   }) {
     yield* requireDraftVersionForVideo(db, opts.videoId);
     const current = yield* getVideoRowById(opts.videoId);
-    // A format that cannot record with the Video's Recorder drops it back to
-    // OBS (null), so `video.recorder` never holds a Recorder the format bars.
-    const recorder =
-      current.recorder &&
-      !recordersForFormat(opts.format).includes(
-        resolveVideoRecorder(current.recorder)
-      )
-        ? null
-        : current.recorder;
+    // A format that cannot open the Video's Recorder drops it to the
+    // format's default (`recorderForNewVideo`): a Short opens the CVM recorder.
+    const recorder = recorderForNewVideo(
+      opts.format,
+      parseVideoRecorder(current.recorder)
+    );
     const [updated] = yield* makeDbCall(() =>
       db
         .update(videos)
@@ -350,11 +348,10 @@ export const createVideoWriteOps = (db: Database) => {
   });
 
   /**
-   * Choose the Recorder a Video records with. Refused once the Video has a
-   * live (non-archived) Clip, and while one of its Recording Sessions is
-   * still recording, so one Video never mixes OBS and CVM-recorder Clips; and
-   * for a format that cannot record with it (`recordersForFormat`). A Video
-   * whose Clips are all archived counts as having no Footage, so it unlocks.
+   * Choose the Recorder a Video opens next. Any time except while one of its
+   * Recording Sessions is still recording, and only one the format may record
+   * with (`recordersForFormat`). Its Clips keep their own Recorders (ADR
+   * 0036), so a Video with Clips may switch.
    */
   const updateVideoRecorder = Effect.fn("updateVideoRecorder")(
     function* (opts: { videoId: string; recorder: VideoRecorder }) {
@@ -365,22 +362,6 @@ export const createVideoWriteOps = (db: Database) => {
         return yield* new VideoRecorderLockedError({
           videoId: opts.videoId,
           message: `A ${video.format} Video cannot record with ${opts.recorder}`,
-        });
-      }
-
-      const clip = yield* makeDbCall(() =>
-        db.query.clips.findFirst({
-          columns: { id: true },
-          where: and(
-            eq(clips.videoId, opts.videoId),
-            eq(clips.archived, false)
-          ),
-        })
-      );
-      if (clip) {
-        return yield* new VideoRecorderLockedError({
-          videoId: opts.videoId,
-          message: "The Recorder is locked once the Video has Clips",
         });
       }
 

@@ -14,7 +14,7 @@ import {
 import type { PauseType } from "@/services/video-processing-service";
 import { resolveClipZoomType } from "@/features/videos/clip-zoom";
 import { useOBSConnector } from "@/features/video-editor/obs-connector";
-import { targetProfileForFormat } from "@/features/video-editor/ensure-obs-profile";
+import { OBS_PROFILE_LANDSCAPE } from "@/features/video-editor/ensure-obs-profile";
 import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
 import { useCvmRecorder } from "@/features/video-editor/use-cvm-recorder";
@@ -374,9 +374,8 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       });
     },
     silenceLength,
-    targetProfile: targetProfileForFormat(
-      props.loaderData.video.format as "landscape" | "short"
-    ),
+    // Only a Landscape Video records with OBS (ADR 0037).
+    targetProfile: OBS_PROFILE_LANDSCAPE,
   });
 
   const capture = captureProps(recorderChoice, obsConnector, cvmRecorder);
@@ -455,11 +454,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         dispatch({ type: "add-effect-clip-at", effectType, position, itemId });
       }}
       onRestoreClip={(clipId) => {
-        dispatch({
-          type: "restore-clip",
-          clipId,
-          videoRecorder: recorderChoice.state.recorder,
-        });
+        dispatch({ type: "restore-clip", clipId });
       }}
       onPermanentlyRemoveArchived={(scope) => {
         dispatch(

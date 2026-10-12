@@ -35,15 +35,6 @@ export class ObsClipDetectionError extends Data.TaggedError(
   "ObsClipDetectionError"
 )<{ cause: unknown }> {}
 
-/**
- * Restoring an archived Clip filmed with the other Recorder was refused
- * (`clipRestoreRefusal`). Serialized as the 409 body; the editor matches on
- * it to roll the restore back and show why.
- */
-export class ClipRestoreRefusedError extends Data.TaggedError(
-  "ClipRestoreRefusedError"
-)<{ message: string }> {}
-
 // ============================================================================
 // Types
 // ============================================================================
