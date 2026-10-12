@@ -69,7 +69,6 @@ export interface VideoMenuActions {
   // run
   export?: VideoAction;
   renderVerticalShort?: VideoAction;
-  exportToDavinciResolve?: VideoAction;
   retranscribeAllClips?: VideoAction;
   postShort?: VideoAction;
   postToYouTube?: VideoAction;
@@ -196,10 +195,6 @@ export function videoMenuGroups(a: VideoMenuActions): ActionMenuGroups {
       leaf(
         { label: "Render Vertical Short", icon: FilmIcon },
         a.renderVerticalShort
-      ),
-      leaf(
-        { label: "Export to DaVinci Resolve", icon: FilmIcon },
-        a.exportToDavinciResolve
       ),
       leaf(
         { label: "Re-transcribe All Clips", icon: RefreshCwIcon },
