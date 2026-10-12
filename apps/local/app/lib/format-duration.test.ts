@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration } from "./format-duration";
+import { formatDuration, formatHoursMinutes } from "./format-duration";
 
 describe("formatDuration", () => {
   it("reads as m:ss under an hour", () => {
@@ -26,5 +26,16 @@ describe("formatDuration", () => {
 
   it("clamps negative input to zero", () => {
     expect(formatDuration(-5)).toBe("0:00");
+  });
+});
+
+describe("formatHoursMinutes", () => {
+  it("shows hours only from one hour, flooring the minutes", () => {
+    expect(formatHoursMinutes(0)).toBe("0m");
+    expect(formatHoursMinutes(59)).toBe("0m");
+    expect(formatHoursMinutes(42 * 60 + 59)).toBe("42m");
+    expect(formatHoursMinutes(3600)).toBe("1h 0m");
+    expect(formatHoursMinutes(3600 + 3 * 60 + 30)).toBe("1h 3m");
+    expect(formatHoursMinutes(24 * 3600 + 3 * 60)).toBe("24h 3m");
   });
 });

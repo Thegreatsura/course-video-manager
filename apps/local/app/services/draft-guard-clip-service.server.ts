@@ -144,6 +144,7 @@ export const requireDraftForClipServiceEvent = Effect.fn(
     // A read, a Video created standalone, and the mic EQ (a setting, not
     // any one Version's content) have no owning Version to guard.
     case "get-timeline":
+    case "get-footage-stats":
     case "create-video":
     case "update-mic-eq":
       return;
@@ -171,6 +172,7 @@ export const withClipServiceWriteClosure = <A, E>(
   switch (event.type) {
     case "create-video":
     case "get-timeline":
+    case "get-footage-stats":
     case "append-from-obs":
     case "update-mic-eq":
       return run(db);

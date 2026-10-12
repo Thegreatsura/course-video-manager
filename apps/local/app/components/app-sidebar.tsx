@@ -1,5 +1,7 @@
 import { AddCourseModal } from "@/components/add-course-modal";
 import { AddStandaloneVideoModal } from "@/components/add-standalone-video-modal";
+import { FootageStats } from "@/components/footage-stats";
+import type { FootageStats as FootageStatsData } from "@cvm/core/services/db-footage-stats.server";
 import { SpacedeskModal } from "@/components/spacedesk-modal";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -50,6 +52,7 @@ export interface SidebarCourse {
 
 export interface AppSidebarData {
   topCourses: SidebarCourse[];
+  footageStats: FootageStatsData | null;
 }
 
 interface AppSidebarProps {
@@ -59,6 +62,7 @@ interface AppSidebarProps {
 export function AppSidebar({ variant }: AppSidebarProps) {
   const data = useRouteLoaderData("routes/_app") as AppSidebarData | undefined;
   const topCourses = data?.topCourses ?? [];
+  const footageStats = data?.footageStats;
 
   const location = useLocation();
 
@@ -250,6 +254,9 @@ export function AppSidebar({ variant }: AppSidebarProps) {
     </div>
   );
 
+  // Pinned below the nav list, which scrolls on its own.
+  const footer = data && <FootageStats stats={footageStats ?? null} />;
+
   return (
     <>
       {/*
@@ -262,7 +269,10 @@ export function AppSidebar({ variant }: AppSidebarProps) {
       */}
       {variant === "rail" && (
         <div className="hidden md:flex w-80 border-r bg-muted/30 flex-col shrink-0 sticky top-0 self-start h-screen">
-          <div className="p-4 flex-1 flex flex-col min-h-0">{content}</div>
+          <div className="p-4 flex-1 flex flex-col min-h-0">
+            {content}
+            {footer}
+          </div>
         </div>
       )}
 
@@ -286,7 +296,10 @@ export function AppSidebar({ variant }: AppSidebarProps) {
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation</SheetTitle>
             </SheetHeader>
-            <div className="p-4 flex-1 flex flex-col min-h-0">{content}</div>
+            <div className="p-4 flex-1 flex flex-col min-h-0">
+              {content}
+              {footer}
+            </div>
           </SheetContent>
         </Sheet>
       </div>

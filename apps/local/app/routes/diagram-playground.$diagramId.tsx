@@ -26,6 +26,7 @@ import { PlaygroundStatusArea } from "@/features/diagrams/head-load-status";
 import { PlaygroundStatusProvider } from "@/features/diagrams/playground-status";
 import { useFocusRevalidate } from "@/hooks/use-focus-revalidate";
 import { useDiagramPlaygroundReducer } from "@/features/diagrams/use-diagram-playground-reducer";
+import { activeSnapshotHash } from "@/features/diagrams/diagram-playground-selectors";
 
 export const handle = NO_TOASTS;
 
@@ -349,6 +350,7 @@ export default function DiagramPlaygroundActive({
                     diagramId={diagramId}
                     onRestoreRequest={requestRestore}
                     refreshKey={`${state.timelineVersion}:${activeHead?.timelineHash ?? ""}`}
+                    activeContentHash={activeSnapshotHash(state)}
                   />
                 </div>
               </div>

@@ -16,3 +16,15 @@ export function formatDuration(totalSeconds: number): string {
     ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`
     : `${minutes}:${seconds}`;
 }
+
+/**
+ * A rounded total, not a timecode: `1h 3m` from an hour, else `42m` (`0m` for
+ * nothing). Minutes are floored. For running totals where seconds are noise,
+ * such as the footage filmed this week at the foot of the sidebar.
+ */
+export function formatHoursMinutes(totalSeconds: number): string {
+  const totalMinutes = Math.max(0, Math.floor(totalSeconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes - hours * 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}

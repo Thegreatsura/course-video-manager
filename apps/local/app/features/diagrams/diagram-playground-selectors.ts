@@ -42,3 +42,18 @@ export const leaveMustWaitFor = (
   }
   return null;
 };
+
+/**
+ * The content hash of the snapshot the canvas is showing, if it is one: the
+ * stored head this tab last loaded or saved, while nothing has been edited
+ * since. A snapshot whose `contentHash` equals it is the one on screen, so
+ * the timeline marks it. An edit makes the canvas no snapshot at all, so it
+ * gives `null` from the moment its save starts: a "modified" mark would still
+ * point at a snapshot that is no longer what's on screen.
+ */
+export const activeSnapshotHash = (state: State): string | null => {
+  const head = state.head;
+  if (head?.status !== "ready" || head.saving || head.changedElsewhere)
+    return null;
+  return head.seen?.hash ?? null;
+};

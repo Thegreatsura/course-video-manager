@@ -18,6 +18,7 @@ import {
 } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { clipRestoreRefusal } from "@cvm/core/features/videos/recorder";
+import { getFootageStats } from "@cvm/core/services/db-footage-stats.server";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
@@ -111,6 +112,13 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         });
 
         return timeline;
+      }
+
+      case "get-footage-stats": {
+        return yield* getFootageStats(db, {
+          now: new Date(event.now),
+          timeZone: event.timeZone,
+        });
       }
 
       case "append-clips": {
