@@ -4,6 +4,10 @@ import { Effect, Stream } from "effect";
 import { FFmpegError, type FfmpegLogInfo } from "./ffmpeg-error";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { clipFrameFfmpegArgs, type ClipFrame } from "@/packages/clip-source";
+import {
+  silencedetectFilter,
+  type SilenceRule,
+} from "@/silence-detection-constants";
 
 export type { FfmpegLogInfo };
 
@@ -16,8 +20,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
       const detectSilence = Effect.fn("detectSilence")(function* (
         inputVideo: string,
         opts: {
-          threshold: number | string;
-          silenceDuration: number | string;
+          rule: SilenceRule;
           startTime?: number;
         }
       ) {
@@ -29,7 +32,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
           "-i",
           inputVideo,
           "-af",
-          `silencedetect=n=${opts.threshold}dB:d=${opts.silenceDuration}`,
+          silencedetectFilter(opts.rule),
           "-f",
           "null",
           "-"

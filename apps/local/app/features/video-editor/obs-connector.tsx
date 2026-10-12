@@ -8,6 +8,7 @@ import {
   useWatchForSpeechDetected,
 } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
+import { isMicDevice, MIC_NAME } from "@/mic-device";
 import { ensureOBSProfile } from "./ensure-obs-profile";
 import { useEnsureOBSProfile } from "./use-ensure-obs-profile";
 
@@ -157,6 +158,21 @@ export const useConnectToOBSVirtualCamera = (props: {
 
       if (unmounted) return;
 
+      // The silence detector hears the Recorders' own mic, raw: Chrome's
+      // processing off, every channel, so it measures as silencedetect does
+      // on what the Recorders write (ADR 0034 §5).
+      const micDevice = devices.find(
+        (device) => device.kind === "audioinput" && isMicDevice(device.label)
+      );
+      if (!micDevice) {
+        console.error(
+          `${MIC_NAME} is not among the audio inputs, so no speech will be detected. Found: ${devices
+            .filter((d) => d.kind === "audioinput")
+            .map((d) => d.label)
+            .join(", ")}`
+        );
+      }
+
       if (obsVirtualcamDevice) {
         while (!unmounted) {
           try {
@@ -165,7 +181,15 @@ export const useConnectToOBSVirtualCamera = (props: {
                 deviceId: obsVirtualcamDevice.deviceId,
                 width: 1280,
               },
-              audio: true,
+              audio: micDevice
+                ? {
+                    deviceId: { exact: micDevice.deviceId },
+                    autoGainControl: false,
+                    noiseSuppression: false,
+                    echoCancellation: false,
+                    channelCount: 2,
+                  }
+                : false,
             });
 
             setMediaStream(obsStream);
