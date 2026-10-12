@@ -3,6 +3,7 @@ import {
   createInitialRecorderChoiceState,
   isRecorderLocked,
   recorderChoiceReducer,
+  showsNewRecorderControls,
   showsOBSChecks,
 } from "./recorder-choice-reducer";
 import type { TimelineItem } from "./clip-state-reducer";
@@ -49,6 +50,7 @@ describe("recorder choice", () => {
     const state = landscape(null);
     expect(state.recorder).toBe("obs");
     expect(showsOBSChecks(state)).toBe(true);
+    expect(showsNewRecorderControls(state)).toBe(false);
   });
 
   it("picking the New recorder saves it, hides the OBS checks, and remembers it as the last choice once saved", () => {
@@ -59,6 +61,8 @@ describe("recorder choice", () => {
     });
     expect(picked.state.recorder).toBe("new-recorder");
     expect(showsOBSChecks(picked.state)).toBe(false);
+    // Record, the scene buttons and the composite preview.
+    expect(showsNewRecorderControls(picked.state)).toBe(true);
     expect(picked.effects).toEqual([
       { type: "save-recorder", recorder: "new-recorder" },
     ]);
