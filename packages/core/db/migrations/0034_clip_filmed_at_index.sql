@@ -1,0 +1,1 @@
+CREATE INDEX "clip_filmed_at_idx" ON "course-video-manager_clip" USING btree (least("created_at", "transcribed_at"));
