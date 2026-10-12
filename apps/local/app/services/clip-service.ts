@@ -14,6 +14,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import type { clips, chapters, videos } from "@/db/schema";
 import { parse409Message } from "@/services/version-not-draft-message";
 import type { SilenceLength } from "@/silence-detection-constants";
+import type { RecordingSessionScene } from "@cvm/core/features/videos/recorder";
 // ============================================================================
 // Database Types
 // ============================================================================
@@ -350,10 +351,19 @@ export interface ClipService {
   updateClips(clips: UpdateClipInput[]): Promise<void>;
   updatePause(clipId: string, pauseType: string): Promise<void>;
   /**
-   * Set a Clip's Clip Zoom. Rejects any clip whose recorded scene is not a
-   * camera scene — see canZoomClip in features/videos/clip-zoom.
+   * Set a Clip's Clip Zoom. Rejects any clip whose effective scene (Scene
+   * Override, else recorded scene) is not a camera scene — see canZoomClip.
    */
   updateZoom(clipId: string, zoomType: string): Promise<void>;
+  /**
+   * Set (or clear, with null) a New-recorder Clip's Scene Override. Refused on
+   * an OBS Clip. Drops the Clip Zoom when the effective scene is not a camera
+   * scene.
+   */
+  updateSceneOverride(
+    clipId: string,
+    sceneOverride: RecordingSessionScene | null
+  ): Promise<void>;
   reorderClip(clipId: string, direction: ReorderDirection): Promise<void>;
 
   // Chapter operations
@@ -399,6 +409,11 @@ export type ClipServiceEvent =
   | { type: "update-clips"; clips: readonly UpdateClipInput[] }
   | { type: "update-pause"; clipId: string; pauseType: string }
   | { type: "update-zoom"; clipId: string; zoomType: string }
+  | {
+      type: "update-scene-override";
+      clipId: string;
+      sceneOverride: RecordingSessionScene | null;
+    }
   | { type: "reorder-clip"; clipId: string; direction: ReorderDirection }
   | {
       type: "create-chapter-at-insertion-point";
@@ -503,6 +518,10 @@ export function createClipService(send: ClipServiceTransport): ClipService {
 
     async updateZoom(clipId, zoomType) {
       await send({ type: "update-zoom", clipId, zoomType });
+    },
+
+    async updateSceneOverride(clipId, sceneOverride) {
+      await send({ type: "update-scene-override", clipId, sceneOverride });
     },
 
     async reorderClip(clipId, direction) {

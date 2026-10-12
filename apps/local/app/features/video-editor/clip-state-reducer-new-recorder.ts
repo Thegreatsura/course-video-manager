@@ -130,16 +130,21 @@ export const handleNewRecorderMessage = (
         )
       );
       const fresh = message.clips.filter((c) => !known.has(c.id as DatabaseId));
+      if (fresh.length === 0) return state;
+      // Placed after an item this editor never heard of: a Clip whose
+      // clips-saved it missed (before it subscribed, or while reconnecting),
+      // saved where the editor pointed. Show these where the editor points,
+      // so every later Clip, placed after these, has somewhere to go.
       const placedAt = toFrontendPoint(state.items, message.placedAt);
-      if (fresh.length === 0 || !placedAt) return state;
       // The editor's insertion point follows the new Clips only when they
       // went where it pointed; one moved meanwhile stays where it was moved.
-      const followsEditor = samePoint(savedItemBefore(state), message.placedAt);
+      const followsEditor =
+        !placedAt || samePoint(savedItemBefore(state), message.placedAt);
       const session = state.sessions.find(
         (s) => s.id === message.recordingSessionId
       );
       let items = state.items;
-      let point = placedAt;
+      let point = placedAt ?? state.insertionPoint;
       let insertionOrder = state.insertionOrder;
       for (const clip of fresh) {
         insertionOrder += 1;
@@ -172,6 +177,7 @@ export const handleNewRecorderMessage = (
       );
     }
     case "recorder-status":
+      return joinRecordingInProgress(state, action, message, exec);
     case "camera-lost":
     case "camera-opening":
     case "camera-went-live":
@@ -184,6 +190,51 @@ export const handleNewRecorderMessage = (
     case "recorder-failed":
       return state;
   }
+};
+
+/**
+ * An editor opened (or reconnected) mid-take hears the take only through
+ * `recorder-status`: it missed `recording-started`, and may miss
+ * `recording-stopped`. It joins the take, so the Recorder stays locked, and
+ * leaves it once no take is recording. Every `recorder-status` naming a take
+ * re-sends the insertion point: a restarted app server has forgotten it.
+ */
+const joinRecordingInProgress = (
+  state: ClipReducerState,
+  action: NewRecorderAction,
+  message: Extract<NewRecorderAction["message"], { type: "recorder-status" }>,
+  exec: ClipReducerExec
+): ClipReducerState => {
+  const recording = message.recordingSessionId as SessionId | null;
+  const sessions = state.sessions.map((s) =>
+    s.newRecorder && s.status === "recording" && s.id !== recording
+      ? { ...s, status: "done" as const }
+      : s
+  );
+  if (recording) {
+    exec({
+      type: "send-recorder-insertion-point",
+      insertionPoint: savedItemBefore(state),
+    });
+  }
+  if (!recording || sessions.some((s) => s.id === recording)) {
+    return sessions.some((s, i) => s !== state.sessions[i])
+      ? { ...state, sessions }
+      : state;
+  }
+  return {
+    ...state,
+    sessions: [
+      ...sessions,
+      {
+        id: recording,
+        displayNumber: Math.max(0, ...sessions.map((s) => s.displayNumber)) + 1,
+        status: "recording",
+        startedAt: action.receivedAt,
+        newRecorder: true,
+      },
+    ],
+  };
 };
 
 /**

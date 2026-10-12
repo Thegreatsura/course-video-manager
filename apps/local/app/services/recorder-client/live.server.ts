@@ -50,11 +50,11 @@ export const recorderClient = (): RecorderClient => {
           return yield* ingestRecorderEvent(db, event, insertionPointFor);
         })
       ),
-    unfinishedRecordingSessions: () =>
+    unfinishedRecordingSessions: (candidates) =>
       runtimeLive.runPromise(
         Effect.gen(function* () {
           const db = yield* DrizzleService;
-          return yield* unfinishedRecordingSessions(db);
+          return yield* unfinishedRecordingSessions(db, candidates);
         })
       ),
     reconnectMs: 2_000,

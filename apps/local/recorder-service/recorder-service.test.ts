@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import http from "node:http";
+import net from "node:net";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
@@ -146,6 +147,25 @@ describe("the Cam Link", () => {
     await client.next("state", (m) => m.state.kind === "closed");
     await vi.waitFor(() => expect(windows.camerasRunning()).toBe(0));
     expect(windows.screenPreviews.every((p) => !p.running)).toBe(true);
+  });
+});
+
+describe("its clients", () => {
+  it("survives a client that breaks the WebSocket protocol", async () => {
+    const { port } = await start();
+    // A raw socket upgrades, then sends an unmasked frame, which no client
+    // may send; ws raises an error on that socket.
+    const raw = net.connect(port, "127.0.0.1");
+    await new Promise((r) => raw.once("connect", r));
+    raw.write(
+      "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    );
+    await new Promise((r) => raw.once("data", r));
+    raw.write(Buffer.from([0x81, 0x02, 0x68, 0x69]));
+    await new Promise((r) => raw.once("close", r));
+
+    const client = await connect(port);
+    expect((await client.next("hello")).ffmpeg.ok).toBe(true);
   });
 });
 

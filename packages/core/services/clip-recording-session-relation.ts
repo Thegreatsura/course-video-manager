@@ -6,6 +6,11 @@ import { recordingSessionSceneEvents } from "../db/schema.js";
  * is shown: a new-recorder Clip's Recording Session files, mic offset and
  * scene timeline — what the Clip Source module (`@/packages/clip-source`,
  * `ClipRecordingSession`) composites it from. Null on an OBS Clip.
+ *
+ * Every query whose Clips are exported or hashed (`toExportClips`) must load
+ * it beside `overlayExportRelation` — the type of `toExportClips` insists:
+ * without it a new-recorder Clip would be addressed and exported as a single
+ * file.
  */
 export const clipRecordingSessionRelation = {
   columns: {

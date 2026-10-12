@@ -164,14 +164,17 @@ export type RecordingSessionEvent = Logged<
       type: "recording-stopped";
       /**
        * `ffmpeg-exited`: the screen process quit on its own and the camera's
-       * was stopped. `camera-lost`: see `camera-lost`.
+       * was stopped. `camera-lost`: see `camera-lost`. `event-log-failed`:
+       * `events.jsonl` could not be written, so both were stopped rather than
+       * record what a replay could never send.
        */
-      reason: "requested" | "ffmpeg-exited" | "camera-lost";
+      reason:
+        "requested" | "ffmpeg-exited" | "camera-lost" | "event-log-failed";
       fileTime: number;
       files: RecordingSessionFiles;
       exitCodes: { screen: number | null; camera: number | null };
       framesLost: FramesLost;
-      /** The last error lines of a process that quit on its own. */
+      /** Why the event log failed, and the last error lines of a process that quit on its own. */
       errors: string[];
     }
   /**
@@ -198,6 +201,9 @@ export type RecorderState =
       lastSeq: number;
     };
 
+/** How many of its latest Recording Sessions the service names in `hello`. */
+export const RECENT_SESSIONS = 20;
+
 export type FfmpegCheck =
   { ok: true; version: string } | { ok: false; message: string };
 
@@ -213,6 +219,12 @@ export type RecorderStatusMessage =
        * `recording-crashed` for. A client replays each to catch up.
        */
       recovered: string[];
+      /**
+       * The last `RECENT_SESSIONS` Recording Sessions the service started,
+       * oldest first. A take filmed from the Stream Deck while no app server
+       * listened is among them; a client replays any it has not seen finish.
+       */
+      recent: string[];
     }
   | { type: "state"; state: RecorderState }
   | { type: "refused"; command: RecorderCommand["type"]; message: string }

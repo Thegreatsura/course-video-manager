@@ -113,6 +113,11 @@ export const startRecordingSession = (
   const eventLog = path.join(dir, EVENT_LOG_NAME);
 
   let seq = 0;
+  /** Why the event log could not be written, once it could not. */
+  let logFailure: string | undefined;
+  // `log` runs inside ffmpeg's stderr listener and promise callbacks, where a
+  // throw would kill the service and leave ffmpeg.exe recording. A failed
+  // append (a full or missing drive) stops the Recording Session instead.
   const log = (event: Unlogged) => {
     seq += 1;
     const logged = {
@@ -120,7 +125,18 @@ export const startRecordingSession = (
       seq,
       recordingSessionId: id,
     } as RecordingSessionEvent;
-    fs.appendFileSync(eventLog, `${JSON.stringify(logged)}\n`);
+    try {
+      fs.appendFileSync(eventLog, `${JSON.stringify(logged)}\n`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`recorder: could not write ${eventLog}`, e);
+      if (!logFailure) {
+        logFailure = `Could not write the event log: ${message}`;
+        // `recording-stopped` reports the failure; nothing else waits on it.
+        void stopWith("event-log-failed");
+      }
+    }
+    // Still sent: a live client should hear that speech, and the stop.
     o.emit(logged);
   };
 
@@ -276,10 +292,12 @@ export const startRecordingSession = (
         files,
         exitCodes: { screen: screenCode, camera: cameraCode },
         framesLost: { camera: cameraBufferDrops, screen: null },
-        errors:
-          reason === "ffmpeg-exited"
+        errors: [
+          ...(logFailure ? [logFailure] : []),
+          ...(reason === "ffmpeg-exited"
             ? [...screen.errors(), ...camera.errors()]
-            : [],
+            : []),
+        ],
       });
       ended = true;
       screen.closeLog();

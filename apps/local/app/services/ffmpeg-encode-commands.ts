@@ -17,6 +17,7 @@ import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { SidecarContext } from "./sidecar-context";
 import { clipZoomCropFilter } from "@/features/videos/clip-zoom";
 import { clipExportDurationInSeconds } from "./export-duration-check";
+import { makeConcatenateClipSegments } from "./ffmpeg-encode-segments";
 import {
   buildOverlayCompositeArgs,
   type RenderedOverlay,
@@ -417,6 +418,11 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
 
       return {
         createAndConcatenateVideoClipsSinglePass,
+        // A Video with a new-recorder Clip: per-Clip segments, joined by copy.
+        concatenateClipSegments: makeConcatenateClipSegments({
+          fs,
+          runEncode,
+        }),
         normalizeAudio,
         compositeOverlay,
         compositeOverlaysAtOffsets,
