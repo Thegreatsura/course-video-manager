@@ -18,6 +18,17 @@ scoping. 'list'/'get' default to ACTIVE clips only, but unlike most other archiv
 archive is a REVIEW SURFACE, not a one-way trapdoor: pass --archived to either verb to reveal
 soft-deleted clips (so a wrongly-deleted one can be found), and 'clip restore' undoes 'clip delete'.
 
+Recorder and scenes: each Video's Recorder is OBS or the New recorder. An OBS Clip is cut from one
+Footage file with the scene baked in; its 'scene' is the scene OBS reported. A New-recorder Clip
+points at a Recording Session ('recordingSessionId'; 'clip list' also carries the session's files,
+mic offset and scene timeline as 'recordingSession'): its camera, screen and mic Footage on one
+shared clock, plus which scene was live from each moment. Its picture is drawn at export from those
+files and that timeline, so a scene change in the middle of the Clip changes the picture there; its
+'videoFilename' is the session's mic file and its 'scene' is the scene live at its start. A Scene
+Override ('sceneOverride': "Camera", "Code" or "No Face", set from the editor) draws the whole Clip
+in one scene instead; null follows the timeline. An OBS Clip cannot have one. 'effectiveScene' is
+sceneOverride ?? scene — the scene every rule (Clip Zoom) is judged on; filter on it, not 'scene'.
+
 Verbs:
   clip list --video <videoId> [--archived]   clips on a Video, in timeline order (NDJSON)
   clip get [--archived] <id...>              fetch one or more clips by id (variadic)
@@ -40,9 +51,10 @@ At least one of --zoom / --start / --end is required.
 
 --zoom <t>: "none" (as filmed) or "subtle", rendering the clip slightly tighter so a run of
 face-only camera clips has some visual change across its cuts. Only camera scenes can be zoomed —
-'Camera' and 'TikTok Face'. Anything else (a 'Code' clip, or a clip filmed before CVM recorded
-scenes) is refused with exit 3. Reaches the Export Hash, so setting it marks the Video for
-re-export.
+'Camera' and 'TikTok Face' — judged on the clip's 'effectiveScene' (its Scene Override if it has
+one, else its recorded scene). Anything else (a 'Code' clip, or a clip filmed before CVM recorded
+scenes) is refused with exit 3. A Scene Override that moves a zoomed clip off a camera scene drops
+its zoom. Reaches the Export Hash, so setting it marks the Video for re-export.
 
 --start / --end <seconds>: move the in/out point into the source file. Either can be passed alone
 (the other keeps its current value) or both together. Rejected with exit 3 if the resulting range
@@ -76,7 +88,7 @@ Examples:
 
   # Zoom every camera clip on a video:
   cvm clip list --video vid_123 \
-    | jq -r 'select(.scene == "Camera") | .id' \
+    | jq -r 'select(.effectiveScene == "Camera") | .id' \
     | xargs -n1 -I{} cvm clip update {} --zoom subtle`;
 
 export const MOVE_HELP = `Reposition a Clip within its Video's timeline, or move it onto another Video.

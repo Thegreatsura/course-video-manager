@@ -4,6 +4,7 @@
  */
 
 import { Schema } from "effect";
+import { RECORDING_SESSION_SCENES } from "@cvm/core/features/videos/recorder";
 
 export const InsertionPointSchema = Schema.Union(
   Schema.Struct({
@@ -153,6 +154,11 @@ export const ClipServiceEventSchema = Schema.Union(
     type: Schema.Literal("update-zoom"),
     clipId: Schema.String,
     zoomType: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("update-scene-override"),
+    clipId: Schema.String,
+    sceneOverride: Schema.NullOr(Schema.Literal(...RECORDING_SESSION_SCENES)),
   }),
   Schema.Struct({
     type: Schema.Literal("reorder-clip"),

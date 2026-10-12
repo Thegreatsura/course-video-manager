@@ -164,14 +164,17 @@ export type RecordingSessionEvent = Logged<
       type: "recording-stopped";
       /**
        * `ffmpeg-exited`: the screen process quit on its own and the camera's
-       * was stopped. `camera-lost`: see `camera-lost`.
+       * was stopped. `camera-lost`: see `camera-lost`. `event-log-failed`:
+       * `events.jsonl` could not be written, so both were stopped rather than
+       * record what a replay could never send.
        */
-      reason: "requested" | "ffmpeg-exited" | "camera-lost";
+      reason:
+        "requested" | "ffmpeg-exited" | "camera-lost" | "event-log-failed";
       fileTime: number;
       files: RecordingSessionFiles;
       exitCodes: { screen: number | null; camera: number | null };
       framesLost: FramesLost;
-      /** The last error lines of a process that quit on its own. */
+      /** Why the event log failed, and the last error lines of a process that quit on its own. */
       errors: string[];
     }
   /**

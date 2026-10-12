@@ -21,12 +21,20 @@ type Section = BuildCourseJsonInput["sections"][0];
 type Lesson = Section["lessons"][0];
 type Video = Lesson["videos"][0];
 
+/** The Clip Source columns of an OBS Clip: no Recording Session. */
+export const OBS_CLIP = {
+  recordingSessionId: null,
+  sceneOverride: null,
+  recordingSession: null,
+};
+
 /** Two clips, so a Video has an Export Hash and a non-zero timeline. */
 export const CLIPS = [
   {
     videoFilename: "rec.mp4",
     sourceStartTime: 0,
     sourceEndTime: 10,
+    ...OBS_CLIP,
     pauseType: "none",
     zoomType: "none",
     order: "a0",
@@ -36,6 +44,7 @@ export const CLIPS = [
     videoFilename: "rec.mp4",
     sourceStartTime: 15,
     sourceEndTime: 25,
+    ...OBS_CLIP,
     pauseType: "none",
     zoomType: "none",
     order: "a1",

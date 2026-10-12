@@ -2,7 +2,7 @@ import path from "node:path";
 import { Config, Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
-import { computeExportHash } from "@/services/export-hash";
+import { computeExportHash, toExportClips } from "@/services/export-hash";
 import { SIDECAR_SUFFIX } from "@/services/export-sha256-sidecar";
 import { assertUnderEffect } from "@/services/assert-under";
 
@@ -29,7 +29,10 @@ export const garbageCollect = (courseId: string) =>
       for (const section of version.sections) {
         for (const lesson of section.lessons) {
           for (const video of lesson.videos) {
-            const hash = computeExportHash(video.clips, video.format);
+            const hash = computeExportHash(
+              toExportClips(video.clips),
+              video.format
+            );
             if (hash) allValidHashes.add(hash);
           }
         }

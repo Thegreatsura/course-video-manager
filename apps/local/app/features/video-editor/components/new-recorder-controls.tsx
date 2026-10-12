@@ -9,6 +9,7 @@ import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { SCENES } from "@/packages/scene-layout";
 import { CompositePreview } from "./composite-preview";
+import { clipStillUrl } from "../clip-still-url";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 
 /** What the New recorder is doing, in a few words. */
@@ -74,7 +75,7 @@ const ScenePreview = () => {
       cameraKey={state.camera.kind}
       overlay={
         showLastFrame && lastFrameClip
-          ? `/clips/${lastFrameClip.databaseId}/last-frame`
+          ? clipStillUrl(lastFrameClip, "last")
           : null
       }
     />

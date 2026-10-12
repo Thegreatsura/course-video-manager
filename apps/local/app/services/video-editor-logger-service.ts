@@ -50,6 +50,11 @@ export type LogEvent =
       zoomType: string;
     }
   | {
+      type: "scene-override-updated";
+      clipId: string;
+      sceneOverride: string | null;
+    }
+  | {
       type: "clip-reordered";
       clipId: string;
       direction: "up" | "down";

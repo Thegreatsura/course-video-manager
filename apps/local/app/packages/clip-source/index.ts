@@ -10,7 +10,9 @@
 // and end time (an OBS Clip), or a Recording Session's camera, screen and mic
 // files with the scene segments the layout module draws and the mic offset (a
 // new-recorder Clip, when the row is loaded with its `recordingSession`).
+// `clipComposite` says what the export draws for a new-recorder Clip.
 export {
+  clipComposite,
   clipCompositePicture,
   clipFfmpegInput,
   clipFrame,
@@ -21,6 +23,7 @@ export {
   clipSource,
   clipSourceColumns,
   clipSourceHashFields,
+  type ClipComposite,
   type ClipFfmpegInput,
   type ClipFrame,
   type ClipRecordingSession,

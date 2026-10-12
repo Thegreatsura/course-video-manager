@@ -117,6 +117,20 @@ export function createEditEffectHandlers(
         });
       });
     },
+    "update-scene-override": (_state, effect, dispatch) => {
+      clipService
+        .updateSceneOverride(effect.clipId, effect.sceneOverride)
+        .catch((error) => {
+          dispatch({
+            type: "effect-failed",
+            effectType: "update-scene-override",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to update the Scene Override",
+          });
+        });
+    },
     "update-pause": (_state, effect, dispatch) => {
       clipService
         .updatePause(effect.clipId, effect.pauseType)
