@@ -1,5 +1,6 @@
-import { Effect, Config } from "effect";
-import { FileSystem } from "@effect/platform";
+import { Effect, Config, Option } from "effect";
+import { findExportedVideo } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { BufferApiService } from "@/services/buffer-api-service.server";
 import { ObjectStoreService } from "@/services/object-store-service.server";
@@ -18,21 +19,20 @@ export const bufferPostProgram = (opts: {
 }) =>
   Effect.gen(function* () {
     yield* SidecarContext;
-    const finishedDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");
+    const storageRoots = yield* storageRootsConfig;
     const channelId = yield* Config.string("BUFFER_CHANNEL_ID");
-    const fs = yield* FileSystem.FileSystem;
     const videoPostOps = yield* VideoPostOperationsService;
     const bufferApi = yield* BufferApiService;
     const objectStore = yield* ObjectStoreService;
 
-    const filePath = `${finishedDir}/${opts.videoId}.mp4`;
-    const exists = yield* fs.exists(filePath);
-    if (!exists) {
+    const found = yield* findExportedVideo(storageRoots, `${opts.videoId}.mp4`);
+    if (Option.isNone(found)) {
       opts.sendEvent("error", {
         message: "Exported vertical video not found. Export it first.",
       });
       return;
     }
+    const filePath = found.value;
 
     // A dead key used to surface only after the whole video had uploaded.
     // Check it first, before any upload or row, so it fails in seconds.

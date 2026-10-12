@@ -38,7 +38,8 @@ const withOverlays = (...overlays: ExportOverlay[]) =>
         overlays,
       } satisfies ExportClip,
     ],
-    "landscape"
+    "landscape",
+    []
   );
 
 describe("an Overlay's animation toggles", () => {

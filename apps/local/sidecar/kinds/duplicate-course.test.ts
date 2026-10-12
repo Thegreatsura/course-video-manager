@@ -34,7 +34,8 @@ let dbLayer: Layer.Layer<
 let frames: { dir: string };
 let filesDir: string;
 const previousFilesDir = process.env.VIDEO_FILES_DIR;
-const previousMockupDir = process.env.CLIP_MOCKUP_DIR;
+const previousRoots = process.env.STORAGE_ROOTS;
+let storageRoot: string;
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
@@ -43,17 +44,18 @@ beforeAll(async () => {
     ClipMockupOperationsService.Default,
     JobOperationsService.Default
   ).pipe(Layer.provide(Layer.succeed(DrizzleService, testDb as never)));
-  frames = {
-    dir: fs.mkdtempSync(path.join(os.tmpdir(), "duplicate-mockups-")),
-  };
-  process.env.CLIP_MOCKUP_DIR = frames.dir;
+  storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "duplicate-mockups-"));
+  frames = { dir: path.join(storageRoot, "clip-mockups") };
+  fs.mkdirSync(frames.dir);
+  process.env.STORAGE_ROOTS = storageRoot;
   filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "duplicate-course-"));
   process.env.VIDEO_FILES_DIR = filesDir;
 });
 
 afterAll(() => {
-  process.env.CLIP_MOCKUP_DIR = previousMockupDir;
-  fs.rmSync(frames.dir, { recursive: true, force: true });
+  if (previousRoots === undefined) delete process.env.STORAGE_ROOTS;
+  else process.env.STORAGE_ROOTS = previousRoots;
+  fs.rmSync(storageRoot, { recursive: true, force: true });
   process.env.VIDEO_FILES_DIR = previousFilesDir;
   fs.rmSync(filesDir, { recursive: true, force: true });
 });

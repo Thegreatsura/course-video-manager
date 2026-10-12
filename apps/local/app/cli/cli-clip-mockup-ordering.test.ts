@@ -28,7 +28,7 @@ import {
 //
 // The second half of the noun, split out of ./cli-clip-mockup-writes.test.ts
 // only because the one file outgrew the repo's per-file token budget. Same
-// scaffolding, same contract: CLIP_MOCKUP_DIR points at a temp dir and the
+// scaffolding, same contract: STORAGE_ROOTS points at a temp root and the
 // suite declares the machine local, because every clip-mockup verb is
 // local-only.
 //

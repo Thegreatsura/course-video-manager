@@ -4,7 +4,6 @@ import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import {
   computeExportHash,
-  isExported,
   type ExportClip,
   type ExportOverlay,
 } from "@/services/export-hash";
@@ -23,7 +22,7 @@ const makeClip = (
 describe("export-hash", () => {
   describe("computeExportHash", () => {
     it("returns null for empty clips", () => {
-      expect(computeExportHash([], "landscape")).toBeNull();
+      expect(computeExportHash([], "landscape", [])).toBeNull();
     });
 
     it("changing the video format changes the hash", () => {
@@ -34,8 +33,8 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      expect(computeExportHash(clips, "landscape")).not.toBe(
-        computeExportHash(clips, "short")
+      expect(computeExportHash(clips, "landscape", [])).not.toBe(
+        computeExportHash(clips, "short", [])
       );
     });
 
@@ -47,10 +46,10 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      const landscape = computeExportHash(clips, "landscape");
-      expect(computeExportHash(clips, undefined)).toBe(landscape);
-      expect(computeExportHash(clips, null)).toBe(landscape);
-      expect(computeExportHash(clips, "bogus")).toBe(landscape);
+      const landscape = computeExportHash(clips, "landscape", []);
+      expect(computeExportHash(clips, undefined, [])).toBe(landscape);
+      expect(computeExportHash(clips, null, [])).toBe(landscape);
+      expect(computeExportHash(clips, "bogus", [])).toBe(landscape);
     });
 
     it("hashes clips in the given array order, not a re-sorted one", () => {
@@ -66,8 +65,8 @@ describe("export-hash", () => {
       });
       // Clip sequence lives in the array itself — reordering the same clips is a
       // different edit and must produce a different hash (and thus re-export).
-      expect(computeExportHash([a, b], "landscape")).not.toBe(
-        computeExportHash([b, a], "landscape")
+      expect(computeExportHash([a, b], "landscape", [])).not.toBe(
+        computeExportHash([b, a], "landscape", [])
       );
     });
 
@@ -80,7 +79,8 @@ describe("export-hash", () => {
             sourceEndTime: 10,
           }),
         ],
-        "landscape"
+        "landscape",
+        []
       );
       const hash2 = computeExportHash(
         [
@@ -90,7 +90,8 @@ describe("export-hash", () => {
             sourceEndTime: 11,
           }),
         ],
-        "landscape"
+        "landscape",
+        []
       );
       expect(hash1).not.toBe(hash2);
     });
@@ -109,7 +110,8 @@ describe("export-hash", () => {
               pauseType,
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         );
 
       expect(at("long")).not.toBe(at("none"));
@@ -128,7 +130,8 @@ describe("export-hash", () => {
               pauseType,
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         );
 
       expect(at("short")).toBe(at("none"));
@@ -152,7 +155,8 @@ describe("export-hash", () => {
               zoomType: "none",
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         )
       ).toBe("ae5332862e6c002c82e975dceadd3cab");
     });
@@ -171,7 +175,8 @@ describe("export-hash", () => {
               zoomType,
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         );
 
       expect(at("subtle")).not.toBe(at("none"));
@@ -188,7 +193,8 @@ describe("export-hash", () => {
               zoomType,
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         );
 
       expect(at("wildly-zoomed")).toBe(at("none"));
@@ -219,7 +225,8 @@ describe("export-hash", () => {
             overlays,
           }),
         ],
-        "landscape"
+        "landscape",
+        []
       );
 
     it("changing a Definition Card's title changes the address", () => {
@@ -290,7 +297,8 @@ describe("export-hash", () => {
               overlays: second,
             }),
           ],
-          "landscape"
+          "landscape",
+          []
         );
 
       expect(twoClips([card()], [])).not.toBe(twoClips([], [card()]));
@@ -302,80 +310,6 @@ describe("export-hash", () => {
       const a = card({ at: 1, title: "A" });
       const b = card({ at: 6, title: "B" });
       expect(withOverlays(a, b)).toBe(withOverlays(b, a));
-    });
-  });
-
-  describe("isExported", () => {
-    it("returns true when the file exists on disk", async () => {
-      const hash = computeExportHash(
-        [
-          makeClip({
-            videoFilename: "rec.mp4",
-            sourceStartTime: 0,
-            sourceEndTime: 10,
-          }),
-        ],
-        "landscape"
-      )!;
-
-      const fsLayer = FileSystem.layerNoop({
-        exists: (filePath) =>
-          Effect.succeed(filePath === `/output/course-1-${hash}.mp4`),
-      });
-
-      const result = await Effect.runPromise(
-        isExported(
-          "/output",
-          "course-1",
-          [
-            makeClip({
-              videoFilename: "rec.mp4",
-              sourceStartTime: 0,
-              sourceEndTime: 10,
-            }),
-          ],
-          "landscape"
-        ).pipe(Effect.provide(fsLayer))
-      );
-
-      expect(result).toBe(true);
-    });
-
-    it("returns false when the file does not exist", async () => {
-      const fsLayer = FileSystem.layerNoop({
-        exists: () => Effect.succeed(false),
-      });
-
-      const result = await Effect.runPromise(
-        isExported(
-          "/output",
-          "course-1",
-          [
-            makeClip({
-              videoFilename: "rec.mp4",
-              sourceStartTime: 0,
-              sourceEndTime: 10,
-            }),
-          ],
-          "landscape"
-        ).pipe(Effect.provide(fsLayer))
-      );
-
-      expect(result).toBe(false);
-    });
-
-    it("returns false for videos with no clips", async () => {
-      const fsLayer = FileSystem.layerNoop({
-        exists: () => Effect.succeed(true),
-      });
-
-      const result = await Effect.runPromise(
-        isExported("/output", "course-1", [], "landscape").pipe(
-          Effect.provide(fsLayer)
-        )
-      );
-
-      expect(result).toBe(false);
     });
   });
 
@@ -429,6 +363,8 @@ describe("export-hash", () => {
       } as any);
 
       const removedFiles: string[] = [];
+      // `exists` is true for everything, the rename's completion marker
+      // included: these tests are about what GC keeps once it may run.
       const fsLayer = FileSystem.layerNoop({
         exists: () => Effect.succeed(true),
         readDirectory: () => Effect.succeed(opts.filesOnDisk),
@@ -439,9 +375,7 @@ describe("export-hash", () => {
       });
 
       const configLayer = Layer.setConfigProvider(
-        ConfigProvider.fromMap(
-          new Map([["FINISHED_VIDEOS_DIRECTORY", "/output"]])
-        )
+        ConfigProvider.fromMap(new Map([["STORAGE_ROOTS", "/output"]]))
       );
 
       return {
@@ -458,7 +392,7 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      const validHash = computeExportHash(validClips, "landscape")!;
+      const validHash = computeExportHash(validClips, "landscape", [])!;
 
       const { layer, removedFiles } = makeGCLayer({
         versions: [{ id: "v1", clips: validClips }],
@@ -473,7 +407,7 @@ describe("export-hash", () => {
       );
 
       expect(removedFiles).toEqual([
-        "/output/course-1-deadbeef12345678901234567890ab.mp4",
+        "/output/finished-videos/course-1-deadbeef12345678901234567890ab.mp4",
       ]);
     });
 
@@ -485,7 +419,7 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      const hash = computeExportHash(clips, "landscape")!;
+      const hash = computeExportHash(clips, "landscape", [])!;
 
       const { layer, removedFiles } = makeGCLayer({
         versions: [{ id: "v1", clips }],
@@ -507,7 +441,7 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      const validHash = computeExportHash(validClips, "landscape")!;
+      const validHash = computeExportHash(validClips, "landscape", [])!;
       const staleHash = "deadbeef12345678901234567890abcd";
 
       const { layer, removedFiles } = makeGCLayer({
@@ -527,8 +461,8 @@ describe("export-hash", () => {
       // The sidecar shares the export's Export Hash, so it shares its fate —
       // otherwise every collected export would leave one behind forever.
       expect(removedFiles.sort()).toEqual([
-        `/output/course-1-${staleHash}.mp4`,
-        `/output/course-1-${staleHash}.mp4.sha256`,
+        `/output/finished-videos/course-1-${staleHash}.mp4`,
+        `/output/finished-videos/course-1-${staleHash}.mp4.sha256`,
       ]);
     });
 
@@ -540,7 +474,7 @@ describe("export-hash", () => {
           sourceEndTime: 10,
         }),
       ];
-      const hash = computeExportHash(clips, "landscape")!;
+      const hash = computeExportHash(clips, "landscape", [])!;
 
       const { layer, removedFiles } = makeGCLayer({
         versions: [{ id: "v1", clips }],
@@ -570,7 +504,7 @@ describe("export-hash", () => {
 
       // Only the course-1 prefixed file should be considered for deletion
       expect(removedFiles).toEqual([
-        "/output/course-1-stale12345678901234567890abcd.mp4",
+        "/output/finished-videos/course-1-stale12345678901234567890abcd.mp4",
       ]);
     });
 
@@ -589,8 +523,8 @@ describe("export-hash", () => {
           sourceEndTime: 20,
         }),
       ];
-      const hash1 = computeExportHash(clips1, "landscape")!;
-      const hash2 = computeExportHash(clips2, "landscape")!;
+      const hash1 = computeExportHash(clips1, "landscape", [])!;
+      const hash2 = computeExportHash(clips2, "landscape", [])!;
 
       const { layer, removedFiles } = makeGCLayer({
         versions: [
@@ -610,7 +544,7 @@ describe("export-hash", () => {
 
       // Only the stale file should be deleted
       expect(removedFiles).toEqual([
-        "/output/course-1-oldstale1234567890123456789012.mp4",
+        "/output/finished-videos/course-1-oldstale1234567890123456789012.mp4",
       ]);
     });
   });

@@ -36,6 +36,8 @@ import {
   DrizzleService,
   type Database,
 } from "@/services/drizzle-service.server";
+import { storageRootsConfig } from "./storage-roots";
+import { resolveStoragePath } from "@/packages/storage/server";
 
 /** Beside a calibration's mic file: the browser's level trace and the prompt schedule. */
 export const BROWSER_TRACE_FILE = "browser-trace.json";
@@ -199,11 +201,24 @@ export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
         message: `No AV Calibration ${calibrationId}.`,
       });
     const fs = yield* FileSystem.FileSystem;
+    // Stored root-relative once the files are under a Storage Root; a run
+    // in ~/Videos is read where it is.
+    const storageRoots = yield* storageRootsConfig;
+    const tracePath = yield* resolveStoragePath(
+      row.browserTracePath,
+      storageRoots,
+      "AV Calibration trace"
+    );
+    const micPath = yield* resolveStoragePath(
+      row.micFilePath,
+      storageRoots,
+      "AV Calibration mic recording"
+    );
     const traceFile = yield* Schema.decodeUnknown(TraceFileSchema)(
-      yield* fs.readFileString(row.browserTracePath)
+      yield* fs.readFileString(tracePath)
     );
     const ffmpeg = yield* FFmpegCommandsService;
-    const silencedetectOutput = yield* ffmpeg.detectSilence(row.micFilePath, {
+    const silencedetectOutput = yield* ffmpeg.detectSilence(micPath, {
       rule: calibrationDetectorRule(row.thresholdDb),
     });
     return buildCalibrationTimeline({

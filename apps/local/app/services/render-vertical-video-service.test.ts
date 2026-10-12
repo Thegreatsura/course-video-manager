@@ -115,7 +115,7 @@ describe("RenderVerticalVideoService", () => {
 
     const configLayer = Layer.setConfigProvider(
       ConfigProvider.fromMap(
-        new Map([["FINISHED_VIDEOS_DIRECTORY", "/tmp/test-finished-videos"]])
+        new Map([["STORAGE_ROOTS", "/tmp/test-storage-root"]])
       )
     );
 
@@ -200,7 +200,7 @@ describe("RenderVerticalVideoService", () => {
         } as any),
         Layer.setConfigProvider(
           ConfigProvider.fromMap(
-            new Map([["FINISHED_VIDEOS_DIRECTORY", "/tmp/test-finished"]])
+            new Map([["STORAGE_ROOTS", "/tmp/test-storage-root"]])
           )
         ),
         NodeContext.layer
@@ -220,7 +220,7 @@ describe("RenderVerticalVideoService", () => {
         yield* Effect.promise(() =>
           testDb.insert(schema.clips).values({
             videoId: video!.id,
-            videoFilename: "a.mp4",
+            videoFilename: "/footage/a.mp4",
             sourceStartTime: 0,
             sourceEndTime: 10,
             order: "0001",
@@ -285,7 +285,7 @@ describe("RenderVerticalVideoService", () => {
         } as any),
         Layer.setConfigProvider(
           ConfigProvider.fromMap(
-            new Map([["FINISHED_VIDEOS_DIRECTORY", "/tmp/test-finished"]])
+            new Map([["STORAGE_ROOTS", "/tmp/test-storage-root"]])
           )
         ),
         NodeContext.layer

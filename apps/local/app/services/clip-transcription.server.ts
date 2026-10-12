@@ -1,4 +1,6 @@
 import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
+import { resolveClipSourceFiles } from "@/services/clip-source-files.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { Effect } from "effect";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
@@ -27,6 +29,7 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
   ) {
     const clipOps = yield* ClipOperationsService;
     const whisper = yield* WhisperTranscriptionService;
+    const storageRoots = yield* storageRootsConfig;
     const onClipSettled = opts.onClipSettled ?? (() => Effect.void);
 
     // With each Clip's Recording Session, so a CVM-recorder Clip is heard from
@@ -50,8 +53,10 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
           // A Clip that starts within the mic offset of its Recording
           // Session's start has no mic for its first moments: only the rest
           // is read, and its words are moved back into the Clip's clock.
+          // Its file found on a Storage Root; a Clip whose Footage is on
+          // none is marked `failed`, like any other Clip that fails.
           const { leadingSilenceSeconds, ...input } = clipFfmpegInput(
-            clipSource(clip)
+            yield* resolveClipSourceFiles(clipSource(clip), storageRoots)
           );
           const [transcribedClip] = yield* whisper.transcribeClips([
             {

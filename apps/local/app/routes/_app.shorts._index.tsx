@@ -20,8 +20,9 @@ import { formatDuration } from "@/lib/format-duration";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { makeLoader } from "@/services/route-action.server";
-import { Effect, Config } from "effect";
-import { FileSystem } from "@effect/platform";
+import { Effect, Option } from "effect";
+import { findExportedVideo } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { Clapperboard, Plus, VideoIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useFetcher } from "react-router";
@@ -36,8 +37,7 @@ export const loader = makeLoader({
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const videoPostOps = yield* VideoPostOperationsService;
-      const fs = yield* FileSystem.FileSystem;
-      const finishedDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");
+      const storageRoots = yield* storageRootsConfig;
 
       const shorts = yield* videoOps.getAllStandaloneVideos({
         format: "short",
@@ -47,8 +47,9 @@ export const loader = makeLoader({
       const postedMap: Record<string, PostedPlatforms> = {};
       yield* Effect.forEach(shorts, (video) =>
         Effect.gen(function* () {
-          const mp4Path = `${finishedDir}/${video.id}.mp4`;
-          exportedMap[video.id] = yield* fs.exists(mp4Path);
+          exportedMap[video.id] = Option.isSome(
+            yield* findExportedVideo(storageRoots, `${video.id}.mp4`)
+          );
 
           const posts = yield* videoPostOps.listByVideoId(video.id);
           postedMap[video.id] = getPostedPlatforms(posts);

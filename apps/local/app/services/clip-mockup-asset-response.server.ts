@@ -5,7 +5,7 @@ import { webFileStream } from "./web-file-stream.server";
 /**
  * Serving a Clip Mockup's frame and its speech to the browser.
  *
- * The frame and the WAV live under `{CLIP_MOCKUP_DIR}/{lineageId}/`, which is
+ * The frame and the WAV live under `clip-mockups/{lineageId}/ on a Storage Root`, which is
  * outside anything Vite serves, so the only way a `<img>` or a Remotion
  * `<Audio>` can reach them is a resource route that streams the bytes back.
  *

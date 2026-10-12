@@ -286,7 +286,9 @@ describe("buildCourseJson", () => {
 
     const lesson = result.sections[0]!.lessons[0]!;
     if (lesson.type === "explainer") {
-      expect(lesson.explainer.hash).toBe(computeExportHash(CLIPS, "landscape"));
+      expect(lesson.explainer.hash).toBe(
+        computeExportHash(CLIPS, "landscape", [])
+      );
       expect(lesson.explainer.hash).not.toBeNull();
     }
   });

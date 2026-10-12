@@ -30,7 +30,7 @@ import {
  *
  * COMPUTED LOCALLY, NOT VIA THE SERVER. Whether a Video is exported is
  * filesystem-derived (an Export Hash matched against
- * `{courseId}-{exportHash}.mp4` in FINISHED_VIDEOS_DIRECTORY — see GLOSSARY.md),
+ * `{courseId}-{exportHash}.mp4` in finished-videos/ on a Storage Root — see GLOSSARY.md),
  * so this needs a filesystem, not an HTTP round-trip, and `cvm` must keep
  * working with the dev server stopped. The computation lives in
  * CoursePublishService's readiness module, so the CLI and the publish gate can
@@ -300,7 +300,7 @@ export const readinessCmd = Command.make(
       });
     });
 
-    // FINISHED_VIDEOS_DIRECTORY comes from the repo .env, and the export-hash
+    // STORAGE_ROOTS comes from the repo .env, and the export-hash
     // existence checks need a real filesystem — hence NodeContext here rather
     // than in the shared cliLayer. Like `course publish`, this builds no
     // WhisperTranscriptionService and no ffmpeg.

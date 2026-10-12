@@ -4,16 +4,25 @@ import {
   clipSource,
 } from "@/packages/clip-source";
 import path from "node:path";
-import { assertUnder } from "@/services/assert-under";
 import { Cause, Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VideoExportService } from "./video-export-service";
 import {
   computeExportHash,
-  resolveExportPath as resolveExportPathPure,
+  exportFilename,
   toExportClips,
 } from "./export-hash";
+import {
+  STORAGE_FOLDERS,
+  writeFolder,
+  type StorageRoots,
+} from "@/packages/storage";
+import {
+  assertUnderFinishedVideos,
+  locateExportedVideo,
+} from "./finished-videos.server";
+import { resolveClipSourceFiles } from "./clip-source-files.server";
 import {
   ensureExportDigest,
   ensureExportDuration,
@@ -58,12 +67,20 @@ export type ExportStage = "concatenating-clips" | "normalizing-audio";
 export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
   function* (opts: {
     videoId: string;
-    finishedVideosDirectory: string;
+    /**
+     * The Storage Roots: the export is found on any of them, and written to
+     * `finished-videos/` on the first.
+     */
+    storageRoots: StorageRoots;
     onStage?: (stage: ExportStage) => void;
     onProgress?: (info: { stage: ExportStage; percent: number }) => void;
   }) {
     const { videoId, onStage, onProgress } = opts;
-    const FINISHED_VIDEOS_DIRECTORY = opts.finishedVideosDirectory;
+    const roots = opts.storageRoots;
+    const FINISHED_VIDEOS_DIRECTORY = writeFolder(
+      roots,
+      STORAGE_FOLDERS.finishedVideos
+    );
     const videoOps = yield* VideoOperationsService;
     const videoExport = yield* VideoExportService;
     const overlayRenderCache = yield* OverlayRenderCacheService;
@@ -72,10 +89,17 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
     /** Deleting a file we are replacing is never a reason to fail. */
     const removeQuietly = (filePath: string) =>
-      Effect.suspend(() => {
-        const guarded = assertUnder(FINISHED_VIDEOS_DIRECTORY, filePath);
-        return effectFs.remove(guarded);
-      }).pipe(Effect.catchAllDefect(() => Effect.void));
+      Effect.gen(function* () {
+        const guarded = yield* assertUnderFinishedVideos(roots, filePath);
+        yield* effectFs.remove(guarded);
+      }).pipe(
+        // A path outside finished-videos/ is never deleted; say so and go on,
+        // as the throwing guard this replaced did.
+        Effect.catchTag("PathOutsideBaseDirError", (error) =>
+          Effect.logWarning(`export: not removing ${filePath}`, error.message)
+        ),
+        Effect.catchAllDefect(() => Effect.void)
+      );
 
     /**
      * The stage the export is in, so a failure can say where it broke. Named
@@ -136,7 +160,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       const namespace = courseId ?? videoId;
 
       const exportClips = toExportClips(video.clips);
-      const hash = computeExportHash(exportClips, video.format);
+      const hash = computeExportHash(exportClips, video.format, roots);
       if (!hash) {
         return yield* Effect.fail(
           new ExportError({
@@ -146,31 +170,39 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
         );
       }
 
-      const targetPath = resolveExportPathPure(
-        FINISHED_VIDEOS_DIRECTORY,
-        namespace,
-        hash
-      );
+      // Where the export is, on whichever root has it; where a new one is
+      // written (the first root) when none does.
+      const filename = exportFilename(namespace, hash);
+      const existingPath = yield* locateExportedVideo(roots, filename);
+      const targetPath = path.join(FINISHED_VIDEOS_DIRECTORY, filename);
 
       // What the Clips ask for, and what the renderer is told to make: one
       // list of padded durations, used for both, so the file asked for and
       // the file checked for cannot differ.
       const clipDurations = paddedClipDurationsInSeconds(video.clips);
-      const renderClips = video.clips.map((clip, index) => {
-        const source = clipSource(clip);
-        const input = clipFfmpegInput(source);
-        const asked = clipDurations[index]!;
-        return {
-          ...input,
-          duration: asked.duration,
-          pauseType: asked.pauseType,
-          zoomType: clip.zoomType,
-          // Drawn over everything the Clip outputs, long Pause included.
-          composite: clipComposite(source, {
-            durationSeconds: clipExportDurationInSeconds(asked),
-          }),
-        };
-      });
+      // Each Clip's files found on a Storage Root. One that is on none
+      // fails the export with "Footage not found (E: offline?)".
+      const renderClips = yield* Effect.forEach(video.clips, (clip, index) =>
+        Effect.gen(function* () {
+          const source = yield* resolveClipSourceFiles(clipSource(clip), roots);
+          const input = clipFfmpegInput(source);
+          const asked = clipDurations[index]!;
+          return {
+            ...input,
+            duration: asked.duration,
+            pauseType: asked.pauseType,
+            zoomType: clip.zoomType,
+            // Drawn over everything the Clip outputs, long Pause included.
+            composite: clipComposite(source, {
+              durationSeconds: clipExportDurationInSeconds(asked),
+            }),
+          };
+        })
+      ).pipe(
+        Effect.mapError(
+          (error) => new ExportError({ message: error.message, cause: error })
+        )
+      );
 
       const expectedDurationInSeconds =
         expectedExportDurationInSeconds(clipDurations);
@@ -182,14 +214,14 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       // re-encoded, which repairs the backlog without touching the exports
       // that are sound.
       stage = "checking-existing-export";
-      if (yield* effectFs.exists(targetPath)) {
+      if (yield* effectFs.exists(existingPath)) {
         const durationInSeconds = yield* ensureExportDuration(
           effectFs,
-          targetPath,
+          existingPath,
           // An export that cannot be probed at all is no more trustworthy
           // than one measured short, and is refused the same way.
           videoExport
-            .getVideoDurationInSeconds(targetPath)
+            .getVideoDurationInSeconds(existingPath)
             .pipe(Effect.orElseSucceed(() => Number.NaN))
         );
         if (
@@ -198,10 +230,10 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
             actualDurationInSeconds: durationInSeconds,
           })
         ) {
-          return { targetPath, owner };
+          return { targetPath: existingPath, owner };
         }
-        yield* removeQuietly(targetPath);
-        yield* removeQuietly(sidecarPath(targetPath));
+        yield* removeQuietly(existingPath);
+        yield* removeQuietly(sidecarPath(existingPath));
       }
 
       // Where every Overlay on this Video lands on the flattened timeline. The
@@ -226,8 +258,8 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       });
       stage = "checking-duration";
 
-      const videoIdPath = assertUnder(
-        FINISHED_VIDEOS_DIRECTORY,
+      const videoIdPath = yield* assertUnderFinishedVideos(
+        roots,
         path.join(FINISHED_VIDEOS_DIRECTORY, `${videoId}.mp4`)
       );
 
@@ -310,8 +342,8 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
       // Move from {videoId}.mp4 to content-addressed path
       stage = "finalizing";
-      const guardedTargetPath = assertUnder(
-        FINISHED_VIDEOS_DIRECTORY,
+      const guardedTargetPath = yield* assertUnderFinishedVideos(
+        roots,
         targetPath
       );
       yield* effectFs.rename(videoIdPath, guardedTargetPath);

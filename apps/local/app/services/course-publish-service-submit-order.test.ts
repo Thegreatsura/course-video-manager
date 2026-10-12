@@ -39,7 +39,7 @@ describe("CoursePublishService — Submit before export", () => {
           return withSections.sections.flatMap((section) =>
             section.lessons.flatMap((lesson) =>
               lesson.videos.map((v) =>
-                computeExportHash(toExportClips(v.clips), v.format)
+                computeExportHash(toExportClips(v.clips), v.format, [])
               )
             )
           );

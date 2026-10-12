@@ -5,6 +5,7 @@ import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operation
 import { assertUnderEffect } from "./assert-under";
 import {
   getClipMockupBaseDir,
+  locateClipMockupFile,
   resolveClipMockupPath,
 } from "./clip-mockup-files";
 import type { DuplicatedVideo } from "./clip-mockup-copy-forward.server";
@@ -82,7 +83,7 @@ export const planDuplicatedVideoFiles = Effect.fn("planDuplicatedVideoFiles")(
       )
     );
     for (const relativePath of mockupPaths) {
-      const from = yield* resolveClipMockupPath(
+      const from = yield* locateClipMockupFile(
         video.sourceLineageId,
         relativePath
       );

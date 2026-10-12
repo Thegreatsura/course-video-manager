@@ -1,6 +1,7 @@
 import path from "node:path";
 import { assertUnder } from "@/services/assert-under";
-import { Config, Effect } from "effect";
+import { Effect } from "effect";
+import { finishedVideosWriteDirectory } from "./storage-roots";
 import type { FileSystem } from "@effect/platform";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
 import type { FFmpegEncodeService } from "./ffmpeg-encode-commands";
@@ -63,9 +64,7 @@ export const makeVideoExportPasses = (deps: {
       percent: number;
     }) => void;
   }) {
-    const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-      "FINISHED_VIDEOS_DIRECTORY"
-    );
+    const FINISHED_VIDEOS_DIRECTORY = yield* finishedVideosWriteDirectory;
 
     // Every ffmpeg invocation for this export is teed into
     // `.data/logs/{videoId}.log` (fetch its path via VideoEditorLoggerService
@@ -169,9 +168,7 @@ export const makeVideoExportPasses = (deps: {
     }) {
       // ffmpeg cannot read and write one file at once, so the pass writes
       // beside the export and the finished file is moved over it.
-      const finishedVideosDir = yield* Config.string(
-        "FINISHED_VIDEOS_DIRECTORY"
-      );
+      const finishedVideosDir = yield* finishedVideosWriteDirectory;
       const videoPath = assertUnder(finishedVideosDir, opts.videoPath);
       const compositedPath = assertUnder(
         finishedVideosDir,

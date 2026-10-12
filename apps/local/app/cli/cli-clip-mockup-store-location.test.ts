@@ -37,7 +37,7 @@ import {
 // ===========================================================================
 // WHICH DIRECTORY A CLIP MOCKUP FRAME LANDS IN
 //
-// Every other clip-mockup suite pins CLIP_MOCKUP_DIR as a real environment
+// Every other clip-mockup suite pins STORAGE_ROOTS as a real environment
 // variable, so none of them could see this: on the author's machine the
 // setting lives ONLY in the repo-root `.env`, and `.env` is not loaded by tsx.
 // `add` got away with it because `resolveClipMockupSpeech` called loadRepoEnv()
@@ -47,7 +47,7 @@ import {
 // the fallback store inside the checkout while the row pointed at a name the
 // real store did not have.
 //
-// So this suite is the one that runs with CLIP_MOCKUP_DIR ABSENT from the
+// So this suite is the one that runs with STORAGE_ROOTS ABSENT from the
 // environment and present only in a `.env`: repo-env is mocked to name a temp
 // `.env` (and loadRepoEnv is a no-op, so the author's REAL `.env` can never be
 // read into a test run). The assertion is the user-visible one — after the
@@ -68,7 +68,7 @@ const fixture = vi.hoisted(async () => {
   // The two settings `cvm clip-mockup` needs, in a file and NOWHERE else.
   fs.writeFileSync(
     envPath,
-    `CVM_LOCAL_MACHINE="true"\nCLIP_MOCKUP_DIR="${storeDir}"\n`
+    `CVM_LOCAL_MACHINE="true"\nSTORAGE_ROOTS="${root}"\n`
   );
 
   return { root, storeDir, sourceDir, envPath };
@@ -120,7 +120,7 @@ let s: WriteSeed;
 let storeDir: string;
 let sourceDir: string;
 let root: string;
-const originalStore = process.env.CLIP_MOCKUP_DIR;
+const originalStore = process.env.STORAGE_ROOTS;
 
 interface Mockup {
   id: string;
@@ -138,7 +138,7 @@ beforeAll(async () => {
   sourceDir = paths.sourceDir;
   // THE CONDITION UNDER TEST: the setting is in the `.env` and not in the
   // environment, which is how the author's own machine is configured.
-  delete process.env.CLIP_MOCKUP_DIR;
+  delete process.env.STORAGE_ROOTS;
 
   const result = await createTestDb();
   testDb = result.testDb;
@@ -159,9 +159,9 @@ beforeAll(async () => {
 afterAll(() => {
   nodeFs.rmSync(root, { recursive: true, force: true });
   if (originalStore === undefined) {
-    delete process.env.CLIP_MOCKUP_DIR;
+    delete process.env.STORAGE_ROOTS;
   } else {
-    process.env.CLIP_MOCKUP_DIR = originalStore;
+    process.env.STORAGE_ROOTS = originalStore;
   }
 });
 
@@ -172,7 +172,7 @@ beforeEach(async () => {
   capture.calls.length = 0;
 });
 
-describe("cvm clip-mockup with CLIP_MOCKUP_DIR only in the repo .env", () => {
+describe("cvm clip-mockup with STORAGE_ROOTS only in the repo .env", () => {
   const sourceFile = (name: string, contents: string): string => {
     const full = nodePath.join(sourceDir, name);
     nodeFs.writeFileSync(full, contents);

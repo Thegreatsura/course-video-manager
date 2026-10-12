@@ -22,10 +22,12 @@ import { SidecarContextTest } from "@/services/sidecar-context";
 
 const cacheDirs: string[] = [];
 
+/** `overlay-renders/` on a fresh Storage Root. */
 const makeCacheDir = async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cvm-overlay-cache-"));
   cacheDirs.push(dir);
-  return dir;
+  await fs.mkdir(path.join(dir, "overlay-renders"));
+  return path.join(dir, "overlay-renders");
 };
 
 afterEach(async () => {
@@ -66,7 +68,8 @@ const fakeRenderer = () => {
 const renderCard = (
   cacheDir: string,
   rendererLayer: Layer.Layer<OverlayContentRendererService>,
-  opts: { courseId: string; content: OverlayContent }
+  opts: { courseId: string; content: OverlayContent },
+  extraRoots: string[] = []
 ) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -83,7 +86,12 @@ const renderCard = (
       Effect.provide(
         Layer.setConfigProvider(
           ConfigProvider.fromMap(
-            new Map([["OVERLAY_RENDER_CACHE_DIRECTORY", cacheDir]])
+            new Map([
+              [
+                "STORAGE_ROOTS",
+                [path.dirname(cacheDir), ...extraRoots].join(","),
+              ],
+            ])
           )
         )
       )
@@ -111,7 +119,12 @@ describe("OverlayRenderCacheService", () => {
   });
 
   it("creates the cache directory if it does not exist yet", async () => {
-    const cacheDir = path.join(await makeCacheDir(), "not", "created", "yet");
+    const cacheDir = path.join(
+      path.dirname(await makeCacheDir()),
+      "not",
+      "created",
+      "overlay-renders"
+    );
     const renderer = fakeRenderer();
 
     const renderedPath = await renderCard(cacheDir, renderer.layer, {
@@ -136,6 +149,26 @@ describe("OverlayRenderCacheService", () => {
     });
 
     expect(second).toBe(first);
+    expect(renderer.renders).toHaveLength(1);
+  });
+
+  it("reuses a render cached on a later Storage Root (moved to E:)", async () => {
+    const onE = await makeCacheDir();
+    const renderer = fakeRenderer();
+    const cached = await renderCard(onE, renderer.layer, {
+      courseId: "course-1",
+      content: card(),
+    });
+
+    // D: is first and lacks it; E: has it.
+    const found = await renderCard(
+      await makeCacheDir(),
+      renderer.layer,
+      { courseId: "course-1", content: card() },
+      [path.dirname(onE)]
+    );
+
+    expect(found).toBe(cached);
     expect(renderer.renders).toHaveLength(1);
   });
 

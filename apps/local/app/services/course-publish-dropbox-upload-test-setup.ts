@@ -46,6 +46,7 @@ import {
   type PlaceholderFloor,
 } from "@/packages/course-json";
 import { eq } from "drizzle-orm";
+import { EXPORT_HASH_RENAME_MARKER } from "./export-hash-rename";
 
 export let testDb: TestDb;
 let finishedVideosDir: string;
@@ -93,8 +94,16 @@ export const setupUploads = async (opts?: {
   fakeDropbox = createFakeDropbox();
   fakeDropbox.install();
 
-  finishedVideosDir = fs.mkdtempSync(
-    path.join(tmpdir(), "upload-test-videos-")
+  // `finished-videos/` on a temp Storage Root, with the Exported Video
+  // rename recorded so export GC runs as it does after the switch (#2104).
+  finishedVideosDir = path.join(
+    fs.mkdtempSync(path.join(tmpdir(), "upload-test-videos-")),
+    "finished-videos"
+  );
+  fs.mkdirSync(finishedVideosDir);
+  fs.writeFileSync(
+    path.join(finishedVideosDir, EXPORT_HASH_RENAME_MARKER),
+    "{}"
   );
 
   await testDb.insert(dropboxAuth).values({
@@ -181,7 +190,7 @@ export const setupUploads = async (opts?: {
     // Unique clip timings per Video → unique Export Hash → unique file.
     const clipData = [
       {
-        videoFilename: "recording.mp4",
+        videoFilename: "/footage/recording.mp4",
         sourceStartTime: 0,
         sourceEndTime: 10 + number,
         order: "a0",
@@ -201,7 +210,7 @@ export const setupUploads = async (opts?: {
       zoomType: "none",
       overlays: [],
     }));
-    const exportHash = computeExportHash(clips, "landscape")!;
+    const exportHash = computeExportHash(clips, "landscape", [])!;
     const exportPath = resolveExportPath(
       finishedVideosDir,
       course.id,
@@ -229,7 +238,7 @@ export const setupUploads = async (opts?: {
   const configLayer = Layer.setConfigProvider(
     ConfigProvider.fromMap(
       new Map([
-        ["FINISHED_VIDEOS_DIRECTORY", finishedVideosDir],
+        ["STORAGE_ROOTS", path.dirname(finishedVideosDir)],
         ["DROPBOX_REMOTE_PATH", DROPBOX_REMOTE_PATH],
         ["DROPBOX_APP_KEY", "test-dropbox-app-key"],
         ["DROPBOX_APP_SECRET", "test-dropbox-app-secret"],

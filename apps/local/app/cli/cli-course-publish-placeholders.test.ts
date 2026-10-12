@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect, Layer } from "effect";
@@ -39,23 +39,25 @@ import {
 let testDb: TestDb;
 let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
 let finishedDir: string;
-const originalFinishedDir = process.env.FINISHED_VIDEOS_DIRECTORY;
+const originalRoots = process.env.STORAGE_ROOTS;
 const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
   run = makeReadRun(buildReadLayer(testDb));
-  finishedDir = mkdtempSync(path.join(tmpdir(), "cvm-publish-floor-"));
-  process.env.FINISHED_VIDEOS_DIRECTORY = finishedDir;
+  const root = mkdtempSync(path.join(tmpdir(), "cvm-publish-floor-"));
+  finishedDir = path.join(root, "finished-videos");
+  mkdirSync(finishedDir);
+  process.env.STORAGE_ROOTS = root;
   process.env[LOCAL_MACHINE_ENV_KEY] = "true";
 });
 
 afterAll(() => {
-  if (originalFinishedDir === undefined) {
-    delete process.env.FINISHED_VIDEOS_DIRECTORY;
+  if (originalRoots === undefined) {
+    delete process.env.STORAGE_ROOTS;
   } else {
-    process.env.FINISHED_VIDEOS_DIRECTORY = originalFinishedDir;
+    process.env.STORAGE_ROOTS = originalRoots;
   }
   if (originalLocalMachine === undefined) {
     delete process.env[LOCAL_MACHINE_ENV_KEY];
@@ -163,6 +165,7 @@ describe("the manifest a floor produces, against what readiness reported", () =>
           videoAssets,
           includeTodoLessons: true,
           placeholderFloor: placeholderFloorFromBand(band),
+          storageRoots: [],
         });
       }).pipe(Effect.provide(dbLayer()))
     );

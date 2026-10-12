@@ -1,4 +1,4 @@
-import { Cause, Config, Deferred, Effect, Exit, Schedule } from "effect";
+import { Cause, Deferred, Effect, Exit, Schedule } from "effect";
 import { SidecarContext } from "./sidecar-context";
 import { makeCoursePublishReads } from "./course-publish-reads";
 import { dropboxAppCredentials } from "./dropbox-auth-service";
@@ -9,6 +9,7 @@ import { VideoExportService } from "./video-export-service";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { OverlayRenderCacheService } from "./overlay-render-cache.server";
 import { garbageCollect } from "./export-hash.server";
+import { storageRootsConfig } from "./storage-roots";
 import {
   exportVideoToItsAddress,
   type ExportStage,
@@ -61,9 +62,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
       // this service adds the work only the Sidecar may run.
       const reads = yield* makeCoursePublishReads;
       const { validatePublishability } = reads;
-      const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-        "FINISHED_VIDEOS_DIRECTORY"
-      );
+      const storageRoots = yield* storageRootsConfig;
 
       // The export step itself lives in ./course-publish-export-video so it
       // can be read — and grown — on its own. Its deps are closed over here so
@@ -82,7 +81,7 @@ export class CoursePublishService extends Effect.Service<CoursePublishService>()
       ) {
         return yield* exportVideoToItsAddress({
           videoId,
-          finishedVideosDirectory: FINISHED_VIDEOS_DIRECTORY,
+          storageRoots,
           onStage,
           onProgress,
         }).pipe(Effect.provide(exportContext));

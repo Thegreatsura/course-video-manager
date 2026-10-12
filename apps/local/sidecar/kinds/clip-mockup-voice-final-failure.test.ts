@@ -11,7 +11,7 @@ import { JobOperationsService } from "@cvm/core/services/db-job-operations.serve
 import { DrizzleService } from "@cvm/core/services/drizzle-service.server";
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
-import { CLIP_MOCKUP_DIR_ENV_KEY } from "@/services/clip-mockup-files";
+import { STORAGE_ROOTS_ENV_KEY } from "@/services/storage-roots";
 import {
   ClipMockupSpeechService,
   SpeechSynthesisError,
@@ -49,7 +49,7 @@ const TIMING: SidecarTiming = {
 
 let testDb: TestDb;
 let dir: string;
-const originalStore = process.env[CLIP_MOCKUP_DIR_ENV_KEY];
+const originalStore = process.env[STORAGE_ROOTS_ENV_KEY];
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
@@ -58,7 +58,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await truncateAllTables(testDb);
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cvm-voice-final-"));
-  process.env[CLIP_MOCKUP_DIR_ENV_KEY] = dir;
+  process.env[STORAGE_ROOTS_ENV_KEY] = dir;
   await testDb.insert(schema.videos).values({
     id: "video-1",
     lineageId: "lineage-1",
@@ -72,8 +72,8 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  if (originalStore === undefined) delete process.env[CLIP_MOCKUP_DIR_ENV_KEY];
-  else process.env[CLIP_MOCKUP_DIR_ENV_KEY] = originalStore;
+  if (originalStore === undefined) delete process.env[STORAGE_ROOTS_ENV_KEY];
+  else process.env[STORAGE_ROOTS_ENV_KEY] = originalStore;
 });
 
 const layer = () => {

@@ -32,6 +32,7 @@ import {
   type VideoEntry,
 } from "./course-publish-ship-video";
 import { ensureExportDigest } from "./export-sha256-sidecar";
+import { storageRootsConfig } from "./storage-roots";
 
 /** Where a Course's Bundles live. */
 const resolveDropboxCourseDir = (courseName: string) =>
@@ -73,9 +74,7 @@ export const syncFrozenCourseVersionToDropbox = Effect.fn(
 }) {
   const effectFs = yield* FileSystem.FileSystem;
   const versionOps = yield* VersionOperationsService;
-  const finishedVideosDirectory = yield* Config.string(
-    "FINISHED_VIDEOS_DIRECTORY"
-  );
+  const storageRoots = yield* storageRootsConfig;
   // Resolved here, beside the other config this sync needs, rather than only
   // inside the token refresh — which runs on the rare branch where the stored
   // token has just expired.
@@ -111,10 +110,10 @@ export const syncFrozenCourseVersionToDropbox = Effect.fn(
     repoWithSections.name
   );
 
-  const videoEntries = toVideoEntries({
+  const videoEntries = yield* toVideoEntries({
     sections: shippingSections,
     courseId: input.courseId,
-    finishedVideosDirectory,
+    storageRoots,
   });
 
   const schemaJson = JSON.stringify(buildCourseJsonSchema(), null, 2);
@@ -477,6 +476,7 @@ export const syncFrozenCourseVersionToDropbox = Effect.fn(
     videoAssets,
     includeTodoLessons: input.includeTodoLessons,
     placeholderFloor: input.placeholderFloor,
+    storageRoots,
   });
   const manifestJson = JSON.stringify(courseJsonDoc, null, 2);
 

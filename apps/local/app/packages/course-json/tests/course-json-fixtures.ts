@@ -111,6 +111,7 @@ export const makeInput = (
     videoAssets,
     includeTodoLessons,
     placeholderFloor,
+    storageRoots: [],
   };
 };
 

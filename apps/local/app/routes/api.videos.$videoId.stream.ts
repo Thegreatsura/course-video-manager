@@ -4,8 +4,9 @@ import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { runtimeLive } from "@/services/layer.server";
 import { makeAction } from "@/services/route-action.server";
 import { FileSystem } from "@effect/platform";
-import { Config, Effect } from "effect";
-import { assertUnderEffect } from "@/services/assert-under";
+import { Effect } from "effect";
+import { assertUnderFinishedVideos } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { statSync } from "fs";
 import type { Route } from "./+types/api.videos.$videoId.stream";
 
@@ -79,8 +80,8 @@ const innerAction = makeAction({
         return { success: true, deletedPath: null };
       }
 
-      const videoPath = yield* assertUnderEffect(
-        yield* Config.string("FINISHED_VIDEOS_DIRECTORY"),
+      const videoPath = yield* assertUnderFinishedVideos(
+        yield* storageRootsConfig,
         exportPath
       );
 

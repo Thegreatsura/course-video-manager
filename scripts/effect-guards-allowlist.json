@@ -85,7 +85,7 @@
     {
       "file": "apps/local/app/routes/api.videos.$videoId.vertical-export-exists.ts",
       "count": 1,
-      "reason": "UI status probe: any failure (including an unset FINISHED_VIDEOS_DIRECTORY) shows as 'not exported'."
+      "reason": "UI status probe: any failure (including an unset STORAGE_ROOTS) shows as 'not exported'."
     },
     {
       "file": "apps/local/app/services/export-sha256-sidecar.ts",
