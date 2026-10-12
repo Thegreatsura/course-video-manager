@@ -139,11 +139,19 @@ export type ClipFrame =
       readonly time: number;
     };
 
-/** One Clip as an input to the ffmpeg encode/transcribe pipelines. */
+/**
+ * One Clip as an input to the ffmpeg encode/transcribe pipelines.
+ *
+ * `startTime` is never negative. When a new-recorder Clip starts within the
+ * mic offset of its Recording Session's start, the mic is read from 0 and
+ * `leadingSilenceSeconds` says how much of the Clip's start it has no sound
+ * for; `duration` stays the Clip's own, in the picture's clock.
+ */
 export type ClipFfmpegInput = {
   readonly inputVideo: string;
   readonly startTime: number;
   readonly duration: number;
+  readonly leadingSilenceSeconds: number;
 };
 
 /**
@@ -393,20 +401,26 @@ export const clipFrameFfmpegArgs = (
 /**
  * A Clip's sound as an ffmpeg input: its Footage file, or a new-recorder
  * Clip's mic, read the mic offset earlier (compositing its picture is the
- * export's business).
+ * export's business). A mic read that would start before the file does
+ * starts at 0 instead, the gap stated as `leadingSilenceSeconds`.
  */
-export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput =>
-  source.kind === "footage"
-    ? {
-        inputVideo: source.footagePath,
-        startTime: source.start,
-        duration: source.end - source.start,
-      }
-    : {
-        inputVideo: source.files.mic,
-        startTime: tidy(source.start - source.micOffsetSeconds),
-        duration: source.end - source.start,
-      };
+export const clipFfmpegInput = (source: ClipSource): ClipFfmpegInput => {
+  if (source.kind === "footage") {
+    return {
+      inputVideo: source.footagePath,
+      startTime: source.start,
+      duration: source.end - source.start,
+      leadingSilenceSeconds: 0,
+    };
+  }
+  const micStart = tidy(source.start - source.micOffsetSeconds);
+  return {
+    inputVideo: source.files.mic,
+    startTime: Math.max(0, micStart),
+    duration: source.end - source.start,
+    leadingSilenceSeconds: Math.max(0, -micStart),
+  };
+};
 
 /**
  * What the source contributes to the Export Hash payload. The keys and their

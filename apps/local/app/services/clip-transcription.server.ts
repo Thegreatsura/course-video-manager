@@ -4,6 +4,9 @@ import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import type { TranscribedClip } from "@/features/video-editor/transcribe-clips-response";
 
+/** Seconds to the microsecond, so float sums don't store as 0.6000000000000001. */
+const tidy = (seconds: number) => Math.round(seconds * 1e6) / 1e6;
+
 /**
  * **Clip transcription** (#12 in docs/plans/background-jobs-sidecar.md): the
  * named Clips go `transcribing`, then each is transcribed through Whisper on
@@ -44,8 +47,21 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
       clips,
       (clip) =>
         Effect.gen(function* () {
+          // A Clip that starts within the mic offset of its Recording
+          // Session's start has no mic for its first moments: only the rest
+          // is read, and its words are moved back into the Clip's clock.
+          const { leadingSilenceSeconds, ...input } = clipFfmpegInput(
+            clipSource(clip)
+          );
           const [transcribedClip] = yield* whisper.transcribeClips([
-            { id: clip.id, ...clipFfmpegInput(clipSource(clip)) },
+            {
+              id: clip.id,
+              ...input,
+              duration:
+                leadingSilenceSeconds > 0
+                  ? tidy(input.duration - leadingSilenceSeconds)
+                  : input.duration,
+            },
           ]);
 
           const updated = yield* clipOps.updateClip(clip.id, {
@@ -57,13 +73,20 @@ export const transcribeAndStoreClips = Effect.fn("transcribeAndStoreClips")(
           });
 
           // Whisper's word timing is CLIP-RELATIVE here already (the audio
-          // was extracted for this clip's range), so it is stored as-is.
+          // was extracted for this clip's range), so it is stored as-is but
+          // for any leading silence the mic read skipped.
           // Every transcription replaces the clip's Transcript Words
           // wholesale, so a re-transcribe never leaves words from the
           // previous take behind.
           const words = yield* clipOps.replaceTranscriptWords(
             clip.id,
-            transcribedClip?.words ?? []
+            leadingSilenceSeconds > 0
+              ? (transcribedClip?.words ?? []).map((word) => ({
+                  ...word,
+                  start: tidy(word.start + leadingSilenceSeconds),
+                  end: tidy(word.end + leadingSilenceSeconds),
+                }))
+              : (transcribedClip?.words ?? [])
           );
 
           // The editor's "missing word timing" warning needs to know whether
