@@ -243,6 +243,8 @@ describe("a Recording Session", () => {
     );
     camera.stdout("out_time_us=15000000\nprogress=continue\n");
 
+    // The opening silence, before any speech, is the take warming up.
+    expect(await client.next("warmed-up")).toMatchObject({ fileTime: 0 });
     expect(await client.next("speech-started")).toMatchObject({
       fileTime: 3.52,
     });
@@ -260,11 +262,14 @@ describe("a Recording Session", () => {
     expect(logged.map((e) => e.type)).toEqual(
       expect.arrayContaining([
         "recording-started",
+        "warmed-up",
         "speech-started",
         "speech-ended",
         "recording-stopped",
       ])
     );
+    // Once per take: the silence after a speech is its end, not a warm-up.
+    expect(logged.filter((e) => e.type === "warmed-up")).toHaveLength(1);
     expect(logged.map((e) => e.seq)).toEqual(logged.map((_, i) => i + 1));
   });
 

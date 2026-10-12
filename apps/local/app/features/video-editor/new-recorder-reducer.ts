@@ -4,6 +4,7 @@ import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost } from "recorder-service/protocol";
 import type { NewRecorderMessage } from "./new-recorder-wire";
+import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 
 /**
  * The New recorder's Record and Stop in the editor. The recorder service
@@ -24,6 +25,14 @@ import type { NewRecorderMessage } from "./new-recorder-wire";
  * follows them the same way. For a Stream Deck Record to use the editor's
  * Silence Length, the editor tells the app server its choice whenever it
  * changes and whenever the recorder reports in.
+ *
+ * Speech: the recorder's silence detection, in the OBS path's vocabulary
+ * (`FrontendSpeechDetectorState`), so the editor and the teleprompter show a
+ * take the same whichever Recorder films it. Record warms up until the
+ * recorder hears the first silence (`warmed-up`); speech shows as speaking,
+ * then as long enough for a Clip once it has lasted the minimum Clip length
+ * (timed here, as the OBS path's browser detector times it); a silence as
+ * long as the Silence Length (`speech-ended`) closes it.
  */
 export namespace newRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
@@ -46,7 +55,10 @@ export namespace newRecorderReducer {
     retrying: boolean;
     /** Where the browser watches the raw camera and screen. */
     previews: { camera: string; screen: string } | null;
-    speaking: boolean;
+    /** What the recorder's silence detection hears; read while recording. */
+    speech: FrontendSpeechDetectorState;
+    /** Speeches heard so far, so a stale long-enough timer is ignored. */
+    speechCount: number;
     /** The scene the recorder draws; null while it is not open for this Video. */
     scene: Scene | null;
     /** The last thing that went wrong, until the next Record. */
@@ -72,6 +84,8 @@ export namespace newRecorderReducer {
       }
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
+    /** A speech has lasted the minimum Clip length. */
+    | { type: "speech-long-enough"; speechCount: number }
     | { type: "press-retry" }
     | { type: "press-scene"; scene: Scene }
     | { type: "switch-scene-failed"; message: string }
@@ -88,6 +102,8 @@ export namespace newRecorderReducer {
     | { type: "stop-recording" }
     | { type: "send-silence-length"; silenceLength: SilenceLength }
     | { type: "retry-camera" }
+    /** Report `speech-long-enough` once the minimum Clip length has passed. */
+    | { type: "time-speech"; speechCount: number }
     | { type: "switch-scene"; scene: Scene };
 }
 
@@ -98,7 +114,8 @@ export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
   camera: { kind: "closed" },
   retrying: false,
   previews: null,
-  speaking: false,
+  speech: { type: "warming-up" },
+  speechCount: 0,
   scene: null,
   error: null,
   alert: null,
@@ -133,6 +150,13 @@ const cameraHeard = (
 export const canStop = (state: newRecorderReducer.State) =>
   state.phase === "recording";
 
+/** Whether a take is being recorded, as OBS reports "recording". */
+export const isNewRecorderRecording = (state: newRecorderReducer.State) =>
+  state.phase === "recording" || state.phase === "stopping";
+
+const WARMING_UP: FrontendSpeechDetectorState = { type: "warming-up" };
+const SILENCE: FrontendSpeechDetectorState = { type: "silence" };
+
 const heard = (
   state: newRecorderReducer.State,
   message: NewRecorderMessage
@@ -154,7 +178,8 @@ const heard = (
           : state.phase === "starting"
             ? "starting"
             : "idle",
-        speaking: recording && state.speaking,
+        // Joined mid-take, nothing is known until the recorder next hears.
+        speech: recording && state.phase !== "idle" ? state.speech : WARMING_UP,
       };
     }
     case "camera-opening":
@@ -173,16 +198,22 @@ const heard = (
     case "scene-changed":
       return { ...state, scene: message.scene };
     case "recording-started":
-      return { ...state, phase: "recording", speaking: false, error: null };
+      return { ...state, phase: "recording", speech: WARMING_UP, error: null };
+    case "warmed-up":
+      return { ...state, speech: SILENCE };
     case "speech-started":
-      return { ...state, speaking: true };
+      return {
+        ...state,
+        speech: { type: "speaking-detected" },
+        speechCount: state.speechCount + 1,
+      };
     case "speech-ended":
-      return { ...state, speaking: false };
+      return { ...state, speech: SILENCE };
     case "camera-lost":
       return {
         ...state,
         phase: "idle",
-        speaking: false,
+        speech: WARMING_UP,
         // Gone until the recorder reopens it and it goes live again.
         camera: { kind: "closed" },
         alert: CAMERA_LOST_ALERT,
@@ -192,7 +223,7 @@ const heard = (
       return {
         ...state,
         phase: "idle",
-        speaking: false,
+        speech: WARMING_UP,
         error:
           message.errors.length > 0 ? message.errors.join("\n") : state.error,
         alert: message.crashed ? CRASHED_ALERT : state.alert,
@@ -213,6 +244,8 @@ export const newRecorderReducer: EffectReducer<
   switch (action.type) {
     case "recorder-message-heard": {
       const next = heard(state, action.message);
+      if (action.message.type === "speech-started")
+        exec({ type: "time-speech", speechCount: next.speechCount });
       // A new or restarted app server knows nothing of the editor's choice.
       if (
         action.message.type === "recorder-status" &&
@@ -252,6 +285,19 @@ export const newRecorderReducer: EffectReducer<
       };
     case "dismiss-alert":
       return { ...state, alert: null };
+    case "speech-long-enough":
+      if (
+        action.speechCount !== state.speechCount ||
+        state.speech.type !== "speaking-detected"
+      )
+        return state;
+      return {
+        ...state,
+        speech: {
+          type: "long-enough-speaking-for-clip-detected",
+          soundDetectionId: `new-recorder-speech-${action.speechCount}`,
+        },
+      };
     case "press-stop":
       if (!canStop(state)) return state;
       exec({ type: "stop-recording" });

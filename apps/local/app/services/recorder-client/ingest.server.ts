@@ -167,6 +167,12 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           .onConflictDoNothing()
       );
       return nothing;
+    case "warmed-up":
+      return {
+        videoId,
+        messages: [{ type: "warmed-up", recordingSessionId }],
+        insertionPoint: null,
+      } satisfies IngestResult;
     case "speech-started":
       return {
         videoId,

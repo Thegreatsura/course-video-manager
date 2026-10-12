@@ -20,6 +20,7 @@ import { getHasLivePreview } from "./live-preview";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
 import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
+import { toCaptureStatus } from "./recorder-capture";
 import { useTeleprompterConnected } from "./hooks/use-teleprompter-connected";
 import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
@@ -329,9 +330,10 @@ export const VideoEditor = (props: {
   // these are hooks.
   useTeleprompterEditorMode({
     videoId: props.videoId,
-    capture: props.isRecordingActive
-      ? props.speechDetectorState.type
-      : "not-recording",
+    capture: toCaptureStatus({
+      isRecording: props.isRecordingActive,
+      speech: props.speechDetectorState,
+    }),
     tab: activeTab,
     items: props.items,
     sessions: props.sessions,

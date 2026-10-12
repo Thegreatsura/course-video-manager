@@ -36,7 +36,10 @@ const statusText = (
     case "starting":
       return "Starting…";
     case "recording":
-      return state.speaking ? "Recording · speaking" : "Recording";
+      return state.speech.type === "speaking-detected" ||
+        state.speech.type === "long-enough-speaking-for-clip-detected"
+        ? "Recording · speaking"
+        : "Recording";
     case "stopping":
       return "Stopping…";
   }

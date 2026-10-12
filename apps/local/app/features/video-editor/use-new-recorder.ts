@@ -2,7 +2,10 @@ import { useEffect, useRef, type RefObject } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
 import type { MicEq } from "@cvm/core/features/videos/recorder";
-import type { SilenceLength } from "@/silence-detection-constants";
+import {
+  MINIMUM_CLIP_LENGTH_SECONDS,
+  type SilenceLength,
+} from "@/silence-detection-constants";
 import { savedItemBefore } from "./clip-state-reducer-new-recorder";
 import type {
   ClipReducerAction,
@@ -130,6 +133,17 @@ export const useNewRecorder = (o: {
               error
             )
           );
+      },
+      "time-speech": (_state, effect, dispatch) => {
+        const timer = setTimeout(
+          () =>
+            dispatch({
+              type: "speech-long-enough",
+              speechCount: effect.speechCount,
+            }),
+          MINIMUM_CLIP_LENGTH_SECONDS * 1000
+        );
+        return () => clearTimeout(timer);
       },
       "retry-camera": (_state, _effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/retry-camera`, {

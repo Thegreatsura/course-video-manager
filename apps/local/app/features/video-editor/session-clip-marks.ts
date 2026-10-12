@@ -17,6 +17,7 @@
  */
 import { useMemo } from "react";
 import type {
+  CaptureStatus,
   ClipMarkIds,
   ClipMarks,
   ClipMarkState,
@@ -32,19 +33,44 @@ export type SessionClipMark = { clipId: FrontendId; state: ClipMarkState };
 
 export function getSessionClipMarks(
   items: TimelineItem[],
-  sessions: RecordingSession[]
+  sessions: RecordingSession[],
+  capture: CaptureStatus = "not-recording"
 ): ClipMarks {
-  return getSessionClipMarksWithIds(items, sessions).map((mark) => mark.state);
+  return getSessionClipMarksWithIds(items, sessions, capture).map(
+    (mark) => mark.state
+  );
 }
+
+/**
+ * A New recorder take has no Optimistic Clip: its Clips are saved by the app
+ * server once the speech ends. So the speech the recorder is hearing, once it
+ * is long enough for a Clip, is shown as a pending mark, as OBS's Optimistic
+ * Clip is, until the saved Clip lands in its place. Never orphaned: the one
+ * silence detection that heard it is the one that saves it.
+ */
+const newRecorderSpeechMark = (
+  session: RecordingSession,
+  capture: CaptureStatus
+): SessionClipMark | null =>
+  session.newRecorder &&
+  session.status === "recording" &&
+  capture === "long-enough-speaking-for-clip-detected"
+    ? {
+        clipId: `new-recorder-speech:${session.id}` as FrontendId,
+        state: "pending",
+      }
+    : null;
 
 export function getSessionClipMarksWithIds(
   items: TimelineItem[],
-  sessions: RecordingSession[]
+  sessions: RecordingSession[],
+  capture: CaptureStatus = "not-recording"
 ): SessionClipMark[] {
   // The newest session is the one being filmed. Until there is one, there is
   // nothing to report.
-  const currentSessionId = sessions.at(-1)?.id ?? null;
-  if (currentSessionId === null) return [];
+  const currentSession = sessions.at(-1);
+  if (!currentSession) return [];
+  const currentSessionId = currentSession.id;
 
   const marks: (SessionClipMark & { insertionOrder: number })[] = [];
 
@@ -79,20 +105,23 @@ export function getSessionClipMarksWithIds(
     }
   }
 
-  return marks
+  const sorted = marks
     .sort((a, b) => a.insertionOrder - b.insertionOrder)
     .map(({ clipId, state }) => ({ clipId, state }));
+  const speech = newRecorderSpeechMark(currentSession, capture);
+  return speech ? [...sorted, speech] : sorted;
 }
 
 export function useSessionClipMarks(
   items: TimelineItem[],
-  sessions: RecordingSession[]
+  sessions: RecordingSession[],
+  capture: CaptureStatus
 ): { marks: ClipMarks; markClipIds: ClipMarkIds } {
   return useMemo(() => {
-    const withIds = getSessionClipMarksWithIds(items, sessions);
+    const withIds = getSessionClipMarksWithIds(items, sessions, capture);
     return {
       marks: withIds.map((mark) => mark.state),
       markClipIds: withIds.map((mark) => mark.clipId),
     };
-  }, [items, sessions]);
+  }, [items, sessions, capture]);
 }
