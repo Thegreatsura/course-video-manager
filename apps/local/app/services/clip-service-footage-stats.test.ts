@@ -52,6 +52,10 @@ describe("ClipService.getFootageStats", () => {
       last30DaysSeconds: 0,
       todayClips: 0,
       todayKeptClips: 0,
+      last7DaysClips: 0,
+      last7DaysKeptClips: 0,
+      last30DaysClips: 0,
+      last30DaysKeptClips: 0,
     });
   });
 
@@ -73,6 +77,10 @@ describe("ClipService.getFootageStats", () => {
       last30DaysSeconds: 60 + 120 + 240 + 480 + 960,
       todayClips: 1,
       todayKeptClips: 1,
+      last7DaysClips: 3,
+      last7DaysKeptClips: 3,
+      last30DaysClips: 5,
+      last30DaysKeptClips: 5,
     });
   });
 
@@ -151,10 +159,14 @@ describe("ClipService.getFootageStats", () => {
       last30DaysSeconds: 45,
       todayClips: 1,
       todayKeptClips: 1,
+      last7DaysClips: 1,
+      last7DaysKeptClips: 1,
+      last30DaysClips: 1,
+      last30DaysKeptClips: 1,
     });
   });
 
-  it("counts today's efficiency by Clip, archived Clips included", async () => {
+  it("counts each window's efficiency by Clip, archived Clips included", async () => {
     const now = "2026-10-12T09:00:00Z";
     const { videoId } = await film("take.mp4", "2026-10-12T08:00:00Z", 600);
     const short = { videoId, startTime: 600 };
@@ -172,15 +184,21 @@ describe("ClipService.getFootageStats", () => {
       videoId,
       startTime: 610,
     });
-    // Archived yesterday's take: not today, so not in either count.
+    // Archived yesterday's take: in 7D and 30D, not today.
     const { clip: old } = await film("old.mp4", "2026-10-11T12:00:00Z", 5);
+    // Kept take from 11 days ago: in 30D only.
+    await film("older.mp4", "2026-10-01T12:00:00Z", 5);
     await clipService.archiveClips([dud1.id, dud2.id, old.id]);
 
-    // 2 of 4 Clips kept, though they hold 605 of the 615 seconds.
+    // Today 2 of 4 Clips kept, though they hold 605 of the 615 seconds.
     expect(await stats(now)).toMatchObject({
       todaySeconds: 605,
       todayClips: 4,
       todayKeptClips: 2,
+      last7DaysClips: 5,
+      last7DaysKeptClips: 2,
+      last30DaysClips: 6,
+      last30DaysKeptClips: 3,
     });
   });
 });
