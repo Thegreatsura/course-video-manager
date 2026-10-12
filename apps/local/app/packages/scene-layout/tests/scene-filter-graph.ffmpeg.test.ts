@@ -26,7 +26,6 @@ const GREEN = [0, 255, 0] as const;
 const BLACK = [0, 0, 0] as const;
 
 const SCREEN = ["-f", "lavfi", "-i", "color=c=red:s=320x180:r=60:d=1"];
-const PORTRAIT_SCREEN = ["-f", "lavfi", "-i", "color=c=red:s=180x320:r=60:d=1"];
 const CAMERA = ["-f", "lavfi", "-i", "color=c=lime:s=384x216:r=30000/1001:d=1"];
 
 interface Frame {
@@ -129,10 +128,7 @@ describe.skipIf(!hasFfmpeg)("the scene filter graph in ffmpeg", () => {
   it("draws a Short Code as the screen above the camera band on 1080x1920", () => {
     const frames = render(
       [{ scene: "Code", startSeconds: 0, endSeconds: 0.1 }],
-      {
-        format: "short",
-        inputArgs: [...PORTRAIT_SCREEN, ...CAMERA],
-      }
+      { format: "short" }
     );
     expect(frames).toHaveLength(6);
     expect(near(pixel(frames[3]!, 540, 500), RED)).toBe(true);

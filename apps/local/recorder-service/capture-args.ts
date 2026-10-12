@@ -217,19 +217,15 @@ export const cameraPreviewArgs = (o: {
 /**
  * The screen preview: a second Desktop Duplication session (Windows allows
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
- * without touching the screen recorder. 960x540 by default; a Short's
- * portrait display is previewed 540x960.
+ * without touching the screen recorder, at 960x540: the DELL and a Short's
+ * Spacedesk display are both 16:9.
  */
-export const screenPreviewArgs = (o: {
-  screenIndex: number;
-  port: number;
-  size?: { width: number; height: number };
-}) => [
+export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=${o.size?.width ?? 960}:${o.size?.height ?? 540},format=yuvj420p`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=960:540,format=yuvj420p`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),

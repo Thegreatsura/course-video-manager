@@ -30,7 +30,7 @@ const openShort = async (windows = fakeWindows()) => {
 };
 
 describe("a Short", () => {
-  it("wakes Spacedesk when its display is not listed, previews it portrait, and records its output as the screen", async () => {
+  it("wakes Spacedesk when its display is not listed, previews it 16:9 like any screen, and records its output as the screen", async () => {
     const { windows, client, screen } = await openShort();
     // Waking first, while the camera opens beside it.
     expect(
@@ -44,7 +44,7 @@ describe("a Short", () => {
     expect(screen).toEqual({ kind: "ready" });
     expect(windows.wakes()).toBe(1);
     expect(argsOf(windows.screenPreviews.at(-1)!.launch)).toMatch(
-      /ddagrab=output_idx=2:.*scale=540:960/
+      /ddagrab=output_idx=2:.*scale=960:540/
     );
 
     client.send({ type: "record", silenceLength: "long", folder: tmp() });
@@ -62,20 +62,20 @@ describe("a Short", () => {
 
   it("does not wake Spacedesk when its display is already listed", async () => {
     const { windows, screen } = await openShort(
-      fakeWindows({ spacedesk: { width: 1080, height: 1920, awake: true } })
+      fakeWindows({ spacedesk: { width: 1920, height: 1080, awake: true } })
     );
     expect(screen).toEqual({ kind: "ready" });
     expect(windows.wakes()).toBe(0);
   });
 
-  it("with a landscape-shaped display: unavailable naming its size, scenes that show the screen refused, Camera records camera and mic only", async () => {
+  it("with a display that is not 16:9: unavailable naming its size, scenes that show the screen refused, Camera records camera and mic only", async () => {
     const { windows, client, screen } = await openShort(
-      fakeWindows({ spacedesk: { width: 1920, height: 1080, awake: true } })
+      fakeWindows({ spacedesk: { width: 1080, height: 1920, awake: true } })
     );
     expect(screen).toMatchObject({ kind: "unavailable" });
     const message = screen?.kind === "unavailable" ? screen.message : "";
-    expect(message).toContain("1920x1080");
-    expect(message).toContain("set Spacedesk to 1080x1920");
+    expect(message).toContain("1080x1920");
+    expect(message).toContain("set Spacedesk back to 1920x1080");
     expect(windows.screenPreviews).toEqual([]);
 
     // The service starts in Code, which shows the screen.
@@ -84,14 +84,14 @@ describe("a Short", () => {
     client.send({ type: "switch-scene", scene: "No Face" });
     expect(await client.next("refused")).toMatchObject({
       command: "switch-scene",
-      message: expect.stringContaining("1920x1080"),
+      message: expect.stringContaining("1080x1920"),
     });
     client.send({
       type: "stream-deck",
       press: { action: "switch-scene", scene: "Code" },
     });
     expect((await client.next("stream-deck-ignored")).message).toContain(
-      "1920x1080"
+      "1080x1920"
     );
 
     client.send({ type: "switch-scene", scene: "Camera" });

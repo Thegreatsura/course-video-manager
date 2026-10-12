@@ -179,7 +179,7 @@ export const fakeWindows = (
     recordingCamera?: "frames" | "silent";
     /**
      * The Spacedesk display: its size, and whether it is listed before any
-     * wake (default: asleep, 1080x1920). A wake lists it, or fails with
+     * wake (default: asleep, 1920x1080). A wake lists it, or fails with
      * `wakeFails`.
      */
     spacedesk?: { width: number; height: number; awake?: boolean };
@@ -192,8 +192,8 @@ export const fakeWindows = (
     awake: boolean;
     wakeFails: string | undefined;
   } = {
-    width: 1080,
-    height: 1920,
+    width: 1920,
+    height: 1080,
     awake: false,
     wakeFails: o.wakeFails,
     ...o.spacedesk,
