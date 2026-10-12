@@ -163,6 +163,24 @@ const readSession = () =>
   });
 
 describe("recorder ingest", () => {
+  it("tells the editor the take warmed up, for the glass, and saves nothing for it", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+
+    await ingest.feed(started(video.id), {
+      type: "warmed-up",
+      seq: 2,
+      recordingSessionId: SESSION,
+      fileTime: 2,
+    });
+
+    expect(ingest.messages).toContainEqual({
+      type: "warmed-up",
+      recordingSessionId: SESSION,
+    });
+    expect(await savedClips(video.id)).toEqual([]);
+  });
+
   it("saves the Recording Session and each take as a Clip on the mic file, in picture time", async () => {
     const video = await clipService.createVideo("new recorder");
     const ingest = recorderIngest();

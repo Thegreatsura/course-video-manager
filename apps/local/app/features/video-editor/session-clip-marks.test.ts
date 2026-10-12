@@ -43,6 +43,54 @@ const onDatabase = (
   });
 
 describe("getSessionClipMarks", () => {
+  describe("a New recorder take", () => {
+    const newRecorderSession = (status: "recording" | "done") =>
+      fromPartial<RecordingSession>({
+        id: SESSION,
+        displayNumber: 1,
+        status,
+        newRecorder: true,
+      });
+
+    it("shows speech long enough for a Clip as a pending mark after the landed ones, as OBS's Optimistic Clip", () => {
+      expect(
+        getSessionClipMarks(
+          [onDatabase(1)],
+          [newRecorderSession("recording")],
+          "long-enough-speaking-for-clip-detected"
+        )
+      ).toEqual(["landed", "pending"]);
+    });
+
+    it("shows no pending mark for speech too short for a Clip, in silence, or after the take", () => {
+      for (const capture of ["speaking-detected", "silence"] as const)
+        expect(
+          getSessionClipMarks(
+            [onDatabase(1)],
+            [newRecorderSession("recording")],
+            capture
+          )
+        ).toEqual(["landed"]);
+      expect(
+        getSessionClipMarks(
+          [onDatabase(1)],
+          [newRecorderSession("done")],
+          "long-enough-speaking-for-clip-detected"
+        )
+      ).toEqual(["landed"]);
+    });
+
+    it("leaves an OBS take's marks to its Optimistic Clips", () => {
+      expect(
+        getSessionClipMarks(
+          [optimistic(1)],
+          [session(SESSION, 1)],
+          "long-enough-speaking-for-clip-detected"
+        )
+      ).toEqual(["pending"]);
+    });
+  });
+
   it("reports nothing before the first recording session", () => {
     expect(getSessionClipMarks([optimistic(1)], [])).toEqual([]);
   });

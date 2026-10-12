@@ -51,6 +51,8 @@ export type NewRecorderMessage =
       /** The Recording Session's mic file: each of its Clips' Footage path. */
       micFile: string;
     }
+  /** The take's first silence: ready for speech (speech-detector.ts). */
+  | { type: "warmed-up"; recordingSessionId: string }
   | { type: "speech-started"; recordingSessionId: string }
   | { type: "speech-ended"; recordingSessionId: string }
   | {
@@ -102,6 +104,7 @@ export const NEW_RECORDER_MESSAGE_TYPES = [
   "camera-closed",
   "scene-changed",
   "recording-started",
+  "warmed-up",
   "speech-started",
   "speech-ended",
   "clips-saved",
