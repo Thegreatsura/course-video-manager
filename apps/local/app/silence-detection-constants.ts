@@ -1,11 +1,16 @@
 /**
- * Shared silence detection constants used by both the backend (ffmpeg-based)
- * and frontend (Web Audio API-based) silence/speech detection.
- *
- * The backend values are the source of truth.
+ * The one definition of silence (ADR 0034 §5), read by every silence detector:
+ * ffmpeg's silencedetect on OBS files and in the CVM recorder's camera+mic
+ * process, and the browser's detector on the OBS path (`silence-scan.ts`), which
+ * measures exactly as silencedetect does. Change a value here and all of them
+ * move together.
  */
 
-/** dB threshold below which audio is considered silence */
+/**
+ * The noise level, in dBFS, as silencedetect's `n`: a sample is silent when
+ * its absolute amplitude is below it. A sample peak, not an RMS level. Audio
+ * Calibration will supply this value.
+ */
 export const SILENCE_THRESHOLD_DB = -38;
 
 /** Minimum clip length (in seconds) — clips shorter than this are discarded */
@@ -40,3 +45,25 @@ export const silenceLengthToSeconds = (silenceLength: SilenceLength): number =>
   silenceLength === "short"
     ? SILENCE_LENGTH_SHORT_SECONDS
     : SILENCE_LENGTH_LONG_SECONDS;
+
+/**
+ * What counts as silence for one Recording Session: every channel's samples
+ * below the noise level for at least the Silence Length.
+ */
+export type SilenceRule = {
+  readonly thresholdDb: number;
+  readonly minSilenceSeconds: number;
+};
+
+export const silenceRule = (silenceLength: SilenceLength): SilenceRule => ({
+  thresholdDb: SILENCE_THRESHOLD_DB,
+  minSilenceSeconds: silenceLengthToSeconds(silenceLength),
+});
+
+/** The rule as ffmpeg's filter (mono=0: every channel must be silent). */
+export const silencedetectFilter = (rule: SilenceRule): string =>
+  `silencedetect=n=${rule.thresholdDb}dB:d=${rule.minSilenceSeconds}`;
+
+/** The noise level as a linear amplitude, the value silencedetect compares samples with. */
+export const silenceThresholdAmplitude = (rule: SilenceRule): number =>
+  10 ** (rule.thresholdDb / 20);

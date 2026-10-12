@@ -43,6 +43,7 @@ import {
   listDshowDevices,
 } from "./windows-devices";
 import { findByName, Refusal } from "./refusal";
+import { MIC_NAME } from "../app/mic-device";
 import {
   createScreenSide,
   refuseScreenlessScene,
@@ -74,7 +75,6 @@ import {
 
 /** The devices the rig proved, found by name. */
 export const CAMERA_NAME = "Cam Link 4K";
-export const MIC_NAME = "Voicemeeter Out B1";
 
 /** A still older than this is not the camera now: the preview process stalled or quit. */
 const STILL_MAX_AGE_MS = 2_000;

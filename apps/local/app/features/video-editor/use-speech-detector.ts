@@ -1,203 +1,85 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
+import { silenceRule, type SilenceLength } from "@/silence-detection-constants";
+import { createSilenceScanState, scanForSilence } from "./silence-scan";
 import {
-  SILENCE_THRESHOLD_DB,
-  MINIMUM_CLIP_LENGTH_SECONDS,
-  silenceLengthToSeconds,
-  type SilenceLength,
-} from "@/silence-detection-constants";
+  createInitialSpeechDetectorState,
+  isAwaitingLongEnoughSpeech,
+  speechDetectorReducer,
+  toFrontendSpeechDetectorState,
+  type FrontendSpeechDetectorState,
+} from "./speech-detector-reducer";
 
-export type SpeechDetectorState =
-  | {
-      type: "initial-silence-detected";
-      silenceStartTime: number;
-      lastLongEnoughSilenceEndTime: number | null;
-      isLongEnoughSpeech: boolean;
-      soundDetectionId: string | null;
-    }
-  | {
-      type: "long-enough-silence-detected";
-      silenceStartTime: number;
-    }
-  | {
-      type: "no-silence-detected";
-      lastLongEnoughSilenceEndTime: number | null;
-      isLongEnoughSpeech: boolean;
-      soundDetectionId: string | null;
-    };
+export type { FrontendSpeechDetectorState };
 
-export type FrontendSpeechDetectorState =
-  | { type: "warming-up" }
-  | { type: "speaking-detected" }
-  | { type: "long-enough-speaking-for-clip-detected"; soundDetectionId: string }
-  | { type: "silence" };
-
-const SPEAKING_THRESHOLD = SILENCE_THRESHOLD_DB;
-const LONG_ENOUGH_SPEECH_TIME_IN_MILLISECONDS =
-  MINIMUM_CLIP_LENGTH_SECONDS * 1000;
-
-const resolveFrontendSpeechDetectorState = (
-  state: SpeechDetectorState
-): FrontendSpeechDetectorState => {
-  if (
-    state.type === "initial-silence-detected" ||
-    state.type === "no-silence-detected"
-  ) {
-    if (state.lastLongEnoughSilenceEndTime === null) {
-      return { type: "warming-up" };
-    }
-    if (state.isLongEnoughSpeech && state.soundDetectionId) {
-      return {
-        type: "long-enough-speaking-for-clip-detected",
-        soundDetectionId: state.soundDetectionId,
-      };
-    }
-    return {
-      type: "speaking-detected",
-    };
-  }
-
-  if (state.type === "long-enough-silence-detected") {
-    return { type: "silence" };
-  }
-
-  state satisfies never;
-
-  throw new Error("Invalid speech detector state");
-};
-
+/**
+ * The OBS path's live speech detector. The mic stream is the Recorders' own
+ * mic, opened raw (`useConnectToOBSVirtualCamera`); every channel goes through
+ * the silencedetect-equivalent scan, and what it hears is dispatched to
+ * `speechDetectorReducer` as facts. This hook only bridges the Web Audio API.
+ */
 export const useSpeechDetector = (opts: {
   mediaStream: MediaStream | null;
   isRecording: boolean;
   silenceLength: SilenceLength;
 }) => {
-  const longEnoughTimeInMs = silenceLengthToSeconds(opts.silenceLength) * 1000;
-  const [state, setState] = useState<SpeechDetectorState>({
-    type: "no-silence-detected",
-    lastLongEnoughSilenceEndTime: null,
-    isLongEnoughSpeech: false,
-    soundDetectionId: null,
-  });
+  const [state, dispatch] = useReducer(
+    speechDetectorReducer,
+    undefined,
+    createInitialSpeechDetectorState
+  );
 
-  const recordingStartTime = useRef<number | null>(null);
+  // Read from the audio callback, which outlives a render.
+  const awaitingLongEnoughSpeech = useRef(false);
+  awaitingLongEnoughSpeech.current = isAwaitingLongEnoughSpeech(state);
 
   useEffect(() => {
-    if (opts.isRecording) {
-      recordingStartTime.current = Date.now();
-      setState({
-        type: "no-silence-detected",
-        lastLongEnoughSilenceEndTime: null,
-        isLongEnoughSpeech: false,
-        soundDetectionId: null,
-      });
-    }
+    if (opts.isRecording) dispatch({ type: "recording-started" });
   }, [opts.isRecording]);
 
   useEffect(() => {
-    if (!opts.mediaStream) return;
+    const track = opts.mediaStream?.getAudioTracks()[0];
+    if (!opts.mediaStream || !track) return;
 
+    const rule = silenceRule(opts.silenceLength);
+    const channelCount = track.getSettings().channelCount ?? 2;
     const audioContext = new AudioContext();
     const source = audioContext.createMediaStreamSource(opts.mediaStream);
-    const processor = audioContext.createScriptProcessor(1024, 1, 1);
-
+    const processor = audioContext.createScriptProcessor(1024, channelCount, 1);
     source.connect(processor);
     processor.connect(audioContext.destination);
 
+    let scan = createSilenceScanState();
     processor.onaudioprocess = (e) => {
-      const inputBuffer = e.inputBuffer;
-      const inputData = inputBuffer.getChannelData(0); // Get the first channel
-
-      // Calculate RMS (Root Mean Square) volume
-      let sum = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        sum += inputData[i]! * inputData[i]!;
+      const input = e.inputBuffer;
+      const channels = Array.from({ length: input.numberOfChannels }, (_, c) =>
+        input.getChannelData(c)
+      );
+      const result = scanForSilence(scan, channels, rule, input.sampleRate);
+      scan = result.state;
+      for (const event of result.events) {
+        dispatch(
+          event.type === "silence-started"
+            ? { type: "silence-started", heardAtSeconds: event.heardAtSeconds }
+            : { type: "silence-ended", endSeconds: event.endSeconds }
+        );
       }
-      const rms = Math.sqrt(sum / inputData.length);
-
-      // Convert to decibels (dB)
-      const volumeDb = 20 * Math.log10(rms + 1e-10); // Add small value to avoid log(0)
-
-      switch (state.type) {
-        case "no-silence-detected": {
-          if (volumeDb < SPEAKING_THRESHOLD) {
-            setState({
-              type: "initial-silence-detected",
-              silenceStartTime: e.timeStamp,
-              lastLongEnoughSilenceEndTime: state.lastLongEnoughSilenceEndTime,
-              isLongEnoughSpeech: state.isLongEnoughSpeech,
-              soundDetectionId: state.soundDetectionId,
-            });
-          } else if (
-            typeof state.lastLongEnoughSilenceEndTime === "number" &&
-            !state.isLongEnoughSpeech
-          ) {
-            const speakingTime =
-              e.timeStamp - state.lastLongEnoughSilenceEndTime;
-            if (speakingTime > LONG_ENOUGH_SPEECH_TIME_IN_MILLISECONDS) {
-              setState({
-                ...state,
-                isLongEnoughSpeech: true,
-                soundDetectionId: crypto.randomUUID(),
-              });
-            }
-          }
-
-          break;
-        }
-        case "initial-silence-detected": {
-          if (volumeDb > SPEAKING_THRESHOLD) {
-            setState({
-              type: "no-silence-detected",
-              lastLongEnoughSilenceEndTime: state.lastLongEnoughSilenceEndTime,
-              isLongEnoughSpeech: state.isLongEnoughSpeech,
-              soundDetectionId: state.soundDetectionId,
-            });
-          } else if (
-            e.timeStamp - state.silenceStartTime >
-            longEnoughTimeInMs
-          ) {
-            setState({
-              type: "long-enough-silence-detected",
-              silenceStartTime: e.timeStamp,
-            });
-          } else if (
-            typeof state.lastLongEnoughSilenceEndTime === "number" &&
-            !state.isLongEnoughSpeech
-          ) {
-            const speakingTime =
-              e.timeStamp - state.lastLongEnoughSilenceEndTime;
-            if (speakingTime > LONG_ENOUGH_SPEECH_TIME_IN_MILLISECONDS) {
-              setState({
-                ...state,
-                isLongEnoughSpeech: true,
-                soundDetectionId: crypto.randomUUID(),
-              });
-            }
-          }
-
-          break;
-        }
-        case "long-enough-silence-detected": {
-          if (volumeDb > SPEAKING_THRESHOLD) {
-            setState({
-              type: "no-silence-detected",
-              lastLongEnoughSilenceEndTime: e.timeStamp,
-              isLongEnoughSpeech: false,
-              soundDetectionId: null,
-            });
-          }
-          break;
-        }
+      if (awaitingLongEnoughSpeech.current) {
+        dispatch({
+          type: "audio-heard",
+          atSeconds: scan.frames / input.sampleRate,
+          soundDetectionId: crypto.randomUUID(),
+        });
       }
     };
 
     return () => {
       source.disconnect();
       processor.disconnect();
-      audioContext.close();
+      void audioContext.close();
     };
-  }, [opts.mediaStream, state, longEnoughTimeInMs]);
+  }, [opts.mediaStream, opts.silenceLength]);
 
-  return resolveFrontendSpeechDetectorState(state);
+  return useMemo(() => toFrontendSpeechDetectorState(state), [state]);
 };
 
 export const useWatchForSpeechDetected = (opts: {

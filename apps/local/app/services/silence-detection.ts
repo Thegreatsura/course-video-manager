@@ -1,9 +1,8 @@
 import { Effect } from "effect";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
 import {
-  SILENCE_THRESHOLD_DB,
   MINIMUM_CLIP_LENGTH_SECONDS,
-  silenceLengthToSeconds,
+  silenceRule,
   DEFAULT_SILENCE_LENGTH,
   AUTO_EDITED_END_PADDING_SECONDS,
   type SilenceLength,
@@ -92,10 +91,7 @@ export function findSilenceInVideo(
     const fps = yield* ffmpeg.getFPS(inputVideo);
 
     const rawOutput = yield* ffmpeg.detectSilence(inputVideo, {
-      threshold: SILENCE_THRESHOLD_DB,
-      silenceDuration: silenceLengthToSeconds(
-        opts?.silenceLength ?? DEFAULT_SILENCE_LENGTH
-      ),
+      rule: silenceRule(opts?.silenceLength ?? DEFAULT_SILENCE_LENGTH),
       startTime: opts?.startTime,
     });
 
