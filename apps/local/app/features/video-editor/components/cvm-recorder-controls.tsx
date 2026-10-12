@@ -11,7 +11,7 @@ import { SCENES } from "@/packages/scene-layout";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { ShortScreenStatus } from "./short-screen-status";
 import { CalibrationGateBanner } from "./calibration-gate-banner";
-import { isCalibrationRefusal } from "@/audio-calibration-constants";
+import { isCalibrationRefusal } from "@/av-calibration-constants";
 
 /** What the CVM recorder is doing, in a few words. */
 const statusText = (
@@ -167,7 +167,7 @@ export const CvmRecorderControls = () => {
             type="button"
             size="sm"
             variant="destructive"
-            // The Audio Calibration gate (ADR 0038): no skip.
+            // The AV Calibration gate (ADR 0038): no skip.
             disabled={!controls.canRecord || !gate.valid}
             onClick={controls.onRecord}
           >

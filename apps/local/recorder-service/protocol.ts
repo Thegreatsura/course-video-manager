@@ -1,7 +1,7 @@
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
-import type { LastPassedCalibration } from "../app/audio-calibration-constants";
+import type { LastPassedCalibration } from "../app/av-calibration-constants";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -39,14 +39,15 @@ export const RECORDER_SERVICE_PORT = 5177;
 
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
- * (2: a Short's `format` and `screen`; 3: the level meter; 4: the Audio
+ * (2: a Short's `format` and `screen`; 3: the level meter; 4: the AV
  * Calibration run; 5: Record's silence threshold; 6: the calibration's true
- * peak; 7: Record carries its Audio Calibration, and is gated on it). The app server reloads on a change
- * and the service does not (ADR 0035), so after a pull mid-session the app may
- * meet a service started from older code; `hello` says which wire it speaks
- * (none before 2).
+ * peak; 7: Record carries its AV Calibration, and is gated on it; 8: the
+ * recording-started event's `avCalibrationId`, renamed from Audio
+ * Calibration). The app server reloads on a change and the service does not
+ * (ADR 0035), so after a pull mid-session the app may meet a service started
+ * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 7;
+export const RECORDER_PROTOCOL_VERSION = 8;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -125,7 +126,7 @@ export type RecorderCommand =
   /**
    * Start a Recording Session in a new folder under `folder` (a WSL path),
    * its silencedetect cutting with the threshold of `calibration`, the
-   * latest Audio Calibration passed under today's rules (null: none). THE
+   * latest AV Calibration passed under today's rules (null: none). THE
    * GATE (ADR 0038): refused unless that calibration is less than 7 days old
    * by the service's clock and was taken on the mic the service records
    * now (`calibrationValidity`). Refused without the field at all
@@ -142,7 +143,7 @@ export type RecorderCommand =
   | { type: "close" }
   /**
    * What a Stream Deck Record records with on this Video: the editor's
-   * Silence Length, the recordings folder, and the Audio Calibration. Kept
+   * Silence Length, the recordings folder, and the AV Calibration. Kept
    * until the recorder closes or opens for another Video; the press is
    * gated as `record` is, when it is pressed. Refused without the
    * calibration field, as `record` is.
@@ -167,7 +168,7 @@ export type RecorderCommand =
   /** Stops the meter; a calibration run in progress is discarded with it. */
   | { type: "stop-meter" }
   /**
-   * Start an Audio Calibration's run (`calibration-run.ts`): the meter's
+   * Start an AV Calibration's run (`calibration-run.ts`): the meter's
    * process, which also writes the mic to a file in a new folder under
    * `folder` (a WSL path), its readings timed in that file's seconds. Refused
    * while recording, as Record is refused while it runs.
@@ -191,20 +192,20 @@ export type CalibrationWindow = { startSeconds: number; endSeconds: number };
 
 /**
  * Why a `record` or `prepare-record` with no `calibration` field is refused:
- * the app server that sent it is older than the Audio Calibration gate.
+ * the app server that sent it is older than the AV Calibration gate.
  */
 export const CALIBRATION_REQUIRED =
-  "Record needs its Audio Calibration, which this app server does not send: reload the app.";
+  "Record needs its AV Calibration, which this app server does not send: reload the app.";
 
 /** Why the meter will not start while recording. */
 export const METER_WHILE_RECORDING =
   "The recorder is recording: stop recording before you check your mic level.";
 /** Why a calibration run will not start while recording. */
 export const CALIBRATION_WHILE_RECORDING =
-  "The recorder is recording: stop recording before you run an Audio Calibration.";
+  "The recorder is recording: stop recording before you run an AV Calibration.";
 /** Why Record is refused while the meter (or a calibration run) runs. */
 export const RECORD_WHILE_METERING =
-  "The Audio Calibration page is measuring your mic: close it before you record.";
+  "The AV Calibration page is measuring your mic: close it before you record.";
 
 /**
  * One ebur128 reading of the mic, in LUFS. `seconds` is since the meter
@@ -257,11 +258,11 @@ export type RecordingSessionEvent = Logged<
       screenCaptured?: boolean;
       /**
        * The silence threshold its silencedetect cuts with. Absent in logs
-       * written before Audio Calibration: the fixed default.
+       * written before AV Calibration: the fixed default.
        */
       thresholdDb?: number;
-      /** The Audio Calibration that set it; null or absent: none. */
-      audioCalibrationId?: string | null;
+      /** The AV Calibration that set it; null or absent: none. */
+      avCalibrationId?: string | null;
     }
   /**
    * The scene from here on, in picture file time. Every Recording Session
@@ -373,7 +374,7 @@ export type RecorderStatusMessage =
   /** `message`: why, when it quit without being asked; null when asked. */
   | { type: "meter-stopped"; message: string | null }
   /**
-   * An Audio Calibration's run started: from here on, `meter-reading`s are
+   * An AV Calibration's run started: from here on, `meter-reading`s are
    * timed in seconds of `micFile` (a WSL path), until it ends. Broadcast.
    */
   | {

@@ -7,7 +7,7 @@ import {
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
-import type { LastPassedCalibration } from "@/audio-calibration-constants";
+import type { LastPassedCalibration } from "@/av-calibration-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
 import {
@@ -54,7 +54,7 @@ import { streamDeckPreparation } from "./stream-deck-prepare";
  * The Stream Deck presses Record, Stop and the scenes on the recorder
  * service itself; this client tells the service what a Stream Deck Record on
  * the open Video records with (`stream-deck-prepare.ts`), and hears its
- * events as for any Record. Every Record carries its Audio Calibration.
+ * events as for any Record. Every Record carries its AV Calibration.
  */
 
 /** How many times one event that will not save is asked for again. */
@@ -582,7 +582,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       await command({ type: "stop" }, (m) => isState(m, "open", videoId));
     },
 
-    /** An Audio Calibration was stored: the next Stream Deck Record cuts with it. */
+    /** An AV Calibration was stored: the next Stream Deck Record cuts with it. */
     calibrationChanged() {
       deck.forget();
       prepare();

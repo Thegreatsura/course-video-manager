@@ -5,7 +5,7 @@ import { DEAD_DESK_URL, isMainCheckout } from "live-desk/live-desk";
 import { RECORDER_SERVICE_PORT } from "recorder-service/protocol";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { runtimeLive } from "@/services/layer.server";
-import { lastPassedCalibrationNow } from "@/services/audio-calibration.server";
+import { lastPassedCalibrationNow } from "@/services/av-calibration.server";
 import { createRecorderClient, type RecorderClient } from "./client.server";
 import {
   ingestRecorderEvent,

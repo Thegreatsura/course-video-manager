@@ -15,7 +15,7 @@ import {
   calibrationValidity,
   describeCalibrationRefusal,
   type LastPassedCalibration,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
 import { ensureOBSProfile } from "./ensure-obs-profile";
 import { useEnsureOBSProfile } from "./use-ensure-obs-profile";
@@ -34,7 +34,7 @@ export type OBSConnectedState = {
   scene: string;
   latestOutputPath: string | null;
   /**
-   * Why CVM stopped the recording OBS last started (the Audio Calibration
+   * Why CVM stopped the recording OBS last started (the AV Calibration
    * gate, ADR 0038), until a recording is let through.
    */
   calibrationRefusal?: string;
@@ -47,7 +47,7 @@ export type OBSRecordingState = {
   latestOutputPath: string;
   /**
    * The silence threshold this take cuts with, fixed when it started (that
-   * of the Audio Calibration it was let through under): the browser detector
+   * of the AV Calibration it was let through under): the browser detector
    * and the after-recording FFmpeg pass both use it, whatever is calibrated
    * since.
    */
@@ -411,7 +411,7 @@ export const obsConnectorReducer: EffectReducer<
     }
     case "recording-started": {
       if (state.type === "obs-connected") {
-        // THE GATE (ADR 0038): a take OBS started without a fresh Audio
+        // THE GATE (ADR 0038): a take OBS started without a fresh AV
         // Calibration on this mic is stopped at once, and the editor says
         // why. Only here, at its start: a take let through runs to its end.
         const gate = calibrationValidity(
@@ -483,7 +483,7 @@ export const useOBSConnector = (props: {
   onClipAudioWindowClosed: () => void;
   silenceLength: SilenceLength;
   /**
-   * The latest Audio Calibration passed under today's rules: a take OBS
+   * The latest AV Calibration passed under today's rules: a take OBS
    * starts is let through only under it (ADR 0038), and cuts with its
    * threshold.
    */

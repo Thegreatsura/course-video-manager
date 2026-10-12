@@ -1,4 +1,4 @@
-import type { ScriptStep, TimeWindow } from "@/audio-calibration-constants";
+import type { ScriptStep, TimeWindow } from "@/av-calibration-constants";
 import {
   SILENCE_LENGTH_SHORT_SECONDS,
   type SilenceRule,
@@ -6,7 +6,7 @@ import {
 import type { BrowserTracePoint } from "./calibration-wire";
 
 /**
- * AN AUDIO CALIBRATION'S REVIEW TIMELINE (#2081): three rows on one time
+ * AN AV CALIBRATION'S REVIEW TIMELINE (#2081): three rows on one time
  * axis, the seconds of the calibration's mic file (the recorder service's
  * clock), for Matt to judge by eye whether the detectors heard his speech and
  * his pauses where the prompts put them. Review only: nothing here decides

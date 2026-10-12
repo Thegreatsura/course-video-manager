@@ -29,7 +29,7 @@ import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
-import { lastPassedCalibrationNow } from "@/services/audio-calibration.server";
+import { lastPassedCalibrationNow } from "@/services/av-calibration.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";

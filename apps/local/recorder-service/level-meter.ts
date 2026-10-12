@@ -19,7 +19,7 @@ import { listDshowDevices } from "./windows-devices";
 import { MIC_NAME } from "../app/mic-device";
 
 /**
- * THE LEVEL METER (#2078): the Audio Calibration page's live loudness of the
+ * THE LEVEL METER (#2078): the AV Calibration page's live loudness of the
  * mic. A mic-only ffmpeg.exe on the mic the CVM recorder records, opened as
  * the recording opens it (`micInput`: raw, pre-EQ), through ffmpeg's ebur128,
  * which logs momentary (400 ms) and short-term (3 s) loudness every 100 ms.
@@ -122,7 +122,7 @@ type CalibrationRun = { id: string; dir: string; micFile: string };
  * leaves the mic open and Record refused. Whether it may start at all (not
  * while recording) is the service's to decide.
  *
- * An Audio Calibration's run takes the meter's place for a while: the same
+ * An AV Calibration's run takes the meter's place for a while: the same
  * mic, one process, now also writing a file (`calibration-run.ts`). Finished
  * or cancelled, the plain meter comes back for the same client; stopped, or
  * its client gone, the run is discarded with the meter. A discarded run
@@ -190,7 +190,7 @@ export const createMeterSide = <Owner>(o: {
   /** Ends a run's process; the caller brings the plain meter back. */
   const endRun = async () => {
     const ending = current;
-    if (!ending?.run) throw new Refusal("No Audio Calibration is running.");
+    if (!ending?.run) throw new Refusal("No AV Calibration is running.");
     current = undefined;
     await ending.meter.stop();
     return ending as typeof ending & { run: CalibrationRun };
@@ -225,7 +225,7 @@ export const createMeterSide = <Owner>(o: {
     },
     startCalibration: async (owner: Owner, folder: string) => {
       if (current?.run)
-        throw new Refusal("An Audio Calibration is already running.");
+        throw new Refusal("An AV Calibration is already running.");
       if (!path.isAbsolute(folder))
         throw new Refusal(`The folder must be an absolute path: ${folder}`);
       const mic = current?.mic ?? (await findMic());
@@ -302,4 +302,4 @@ export const createMeterSide = <Owner>(o: {
 };
 
 /** Where calibration runs go, under the recordings folder. */
-export const CALIBRATIONS_FOLDER = "audio-calibrations";
+export const CALIBRATIONS_FOLDER = "av-calibrations";

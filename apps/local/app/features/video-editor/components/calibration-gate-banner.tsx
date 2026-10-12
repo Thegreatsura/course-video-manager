@@ -1,14 +1,14 @@
 import { Link } from "react-router";
 import { MicOffIcon } from "lucide-react";
 import {
-  AUDIO_CALIBRATION_PATH,
+  AV_CALIBRATION_PATH,
   describeCalibrationRefusal,
   type CalibrationValidity,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 
 /**
  * THE GATE's banner on a Recorder's Record controls (ADR 0038): why recording
- * will not start, and the way to the Audio Calibration page. `refusal` is a
+ * will not start, and the way to the AV Calibration page. `refusal` is a
  * refusal already met (OBS stopped, the recorder service said no), shown even
  * when the gate looks open from here (the recorder's mic changed).
  */
@@ -30,10 +30,10 @@ export const CalibrationGateBanner = (props: {
       <p className="flex-1">
         {message} Recording is blocked until one passes.{" "}
         <Link
-          to={AUDIO_CALIBRATION_PATH}
+          to={AV_CALIBRATION_PATH}
           className="font-semibold underline underline-offset-2"
         >
-          Run an Audio Calibration
+          Run an AV Calibration
         </Link>
       </p>
     </div>

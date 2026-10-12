@@ -60,8 +60,8 @@ export type RecordingSessionOptions = {
   silenceLength: SilenceLength;
   /** The silence threshold its silencedetect cuts with, in dB. */
   thresholdDb: number;
-  /** The Audio Calibration that set it; null: none had passed. */
-  audioCalibrationId: string | null;
+  /** The AV Calibration that set it; null: none had passed. */
+  avCalibrationId: string | null;
   camera: string;
   mic: string;
   /** ddagrab's output_idx for the screen; null records camera and mic only. */
@@ -250,7 +250,7 @@ export const startRecordingSession = (
     format: o.format,
     screenCaptured: screen !== null,
     thresholdDb: o.thresholdDb,
-    audioCalibrationId: o.audioCalibrationId,
+    avCalibrationId: o.avCalibrationId,
   });
   log({ type: "scene-changed", scene: o.scene, fileTime: 0 });
 

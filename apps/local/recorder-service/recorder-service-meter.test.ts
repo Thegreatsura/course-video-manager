@@ -72,7 +72,7 @@ describe("the level meter", () => {
     expect(windows.meter()).toBeUndefined();
   });
 
-  it("runs an Audio Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows and the whole take's true peak; a cancelled run keeps nothing", async () => {
+  it("runs an AV Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows and the whole take's true peak; a cancelled run keeps nothing", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
@@ -83,7 +83,7 @@ describe("the level meter", () => {
     client.send({ type: "start-calibration", folder });
     const started = await client.next("calibration-started");
     expect(started.micFile).toMatch(
-      new RegExp(`^${folder}/audio-calibrations/[^/]+/mic\\.wav$`)
+      new RegExp(`^${folder}/av-calibrations/[^/]+/mic\\.wav$`)
     );
     expect(fs.existsSync(path.dirname(started.micFile))).toBe(true);
     // One process holds the mic: the run's, writing the file.

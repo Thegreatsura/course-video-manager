@@ -190,7 +190,7 @@ describe("a Recording Session", () => {
     expect((await client.next("refused")).command).toBe("record");
   });
 
-  it("cuts with its Audio Calibration's threshold, and refuses a Record or prepare-record that carries none", async () => {
+  it("cuts with its AV Calibration's threshold, and refuses a Record or prepare-record that carries none", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     client.send({ type: "open", videoId: "video-1" });
@@ -223,7 +223,7 @@ describe("a Recording Session", () => {
     });
     expect(await client.next("recording-started")).toMatchObject({
       thresholdDb: -36.5,
-      audioCalibrationId: "calibration-1",
+      avCalibrationId: "calibration-1",
     });
     expect(windows.recorder("camera").launch.args.join(" ")).toContain(
       "silencedetect=n=-36.5dB:d=0.8"

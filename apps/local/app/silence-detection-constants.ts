@@ -11,27 +11,27 @@
  * when its absolute amplitude is below it. A sample peak, not an RMS level.
  *
  * Only for work that is not recording: chunking or re-cutting old Footage,
- * and the OBS browser detector's level before any Audio Calibration has
+ * and the OBS browser detector's level before any AV Calibration has
  * passed (nothing records then: ADR 0038). A Recording Session cuts with the
- * threshold of the Audio Calibration it started under, read once when it
+ * threshold of the AV Calibration it started under, read once when it
  * starts (`SilenceThreshold`).
  */
 export const DEFAULT_SILENCE_THRESHOLD_DB = -38;
 
 /**
- * The threshold a Recording Session cuts with, and the Audio Calibration that
+ * The threshold a Recording Session cuts with, and the AV Calibration that
  * set it: the latest passed one when recording started, or null (and
  * `DEFAULT_SILENCE_THRESHOLD_DB`) when none has passed yet.
  */
 export type SilenceThreshold = {
   readonly thresholdDb: number;
-  readonly audioCalibrationId: string | null;
+  readonly avCalibrationId: string | null;
 };
 
-/** No Audio Calibration has passed: the fixed default. */
+/** No AV Calibration has passed: the fixed default. */
 export const UNCALIBRATED_SILENCE_THRESHOLD: SilenceThreshold = {
   thresholdDb: DEFAULT_SILENCE_THRESHOLD_DB,
-  audioCalibrationId: null,
+  avCalibrationId: null,
 };
 
 /** Minimum clip length (in seconds) — clips shorter than this are discarded */

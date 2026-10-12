@@ -2,11 +2,11 @@ import { useRevalidator } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
 import {
-  audioCalibrationReducer,
-  createInitialAudioCalibrationState,
-} from "./audio-calibration-reducer";
+  avCalibrationReducer,
+  createInitialAVCalibrationState,
+} from "./av-calibration-reducer";
 import type { CalibrationTimeline } from "./calibration-timeline";
-import type { SavedAudioCalibration } from "./calibration-wire";
+import type { SavedAVCalibration } from "./calibration-wire";
 import { listenToMeter } from "./use-level-meter";
 
 const json = (body: unknown = {}): RequestInit => ({
@@ -43,7 +43,7 @@ const BLOCK_FRAMES = 1024;
  * across the channels, in dBFS, a few times a second.
  */
 const captureBrowserLevels = (
-  dispatch: (action: audioCalibrationReducer.Action) => void
+  dispatch: (action: avCalibrationReducer.Action) => void
 ) => {
   let stopped = false;
   let cleanup = () => {};
@@ -133,32 +133,32 @@ const captureBrowserLevels = (
   };
 };
 
-/** The effect runner for `audioCalibrationReducer`. */
-export const useAudioCalibration = () => {
+/** The effect runner for `avCalibrationReducer`. */
+export const useAVCalibration = () => {
   const revalidator = useRevalidator();
   return useEffectReducer(
-    audioCalibrationReducer,
-    createInitialAudioCalibrationState,
+    avCalibrationReducer,
+    createInitialAVCalibrationState,
     {
       "listen-to-meter": (_state, _effect, dispatch) => listenToMeter(dispatch),
       "start-calibration": (_state, _effect, dispatch) => {
-        fetch("/api/audio-calibration/start", json())
+        fetch("/api/av-calibration/start", json())
           .then(answer)
           .catch((error: unknown) =>
             dispatch({ type: "start-refused", message: messageOf(error) })
           );
       },
       "cancel-calibration": () => {
-        fetch("/api/audio-calibration/cancel", json())
+        fetch("/api/av-calibration/cancel", json())
           .then(answer)
           .catch((error: unknown) =>
-            console.error("Could not cancel the Audio Calibration", error)
+            console.error("Could not cancel the AV Calibration", error)
           );
       },
       "finish-calibration": (_state, effect, dispatch) => {
         const { calibrationId, browserInputLabel, browserTrace } = effect;
         fetch(
-          "/api/audio-calibration/finish",
+          "/api/av-calibration/finish",
           json({ calibrationId, browserInputLabel, browserTrace })
         )
           .then(answer)
@@ -166,7 +166,7 @@ export const useAudioCalibration = () => {
             dispatch({
               type: "calibration-saved",
               calibrationId,
-              calibration: (await response.json()) as SavedAudioCalibration,
+              calibration: (await response.json()) as SavedAVCalibration,
             })
           )
           .catch((error: unknown) =>
@@ -181,7 +181,7 @@ export const useAudioCalibration = () => {
         captureBrowserLevels(dispatch),
       "load-timeline": (_state, { calibrationId }, dispatch) => {
         fetch(
-          `/api/audio-calibration/${encodeURIComponent(calibrationId)}/timeline`
+          `/api/av-calibration/${encodeURIComponent(calibrationId)}/timeline`
         )
           .then(answer)
           .then(async (response) =>

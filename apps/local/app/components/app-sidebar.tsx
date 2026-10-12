@@ -246,9 +246,9 @@ export function AppSidebar({ variant }: AppSidebarProps) {
 
       <EntityCard
         icon={<Mic className="w-4 h-4 text-muted-foreground" />}
-        label="Audio Calibration"
-        href="/audio-calibration"
-        active={location.pathname.startsWith("/audio-calibration")}
+        label="AV Calibration"
+        href="/av-calibration"
+        active={location.pathname.startsWith("/av-calibration")}
       />
 
       <EntityCard

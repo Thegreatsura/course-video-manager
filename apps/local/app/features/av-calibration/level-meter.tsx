@@ -3,7 +3,7 @@ import {
   TARGET_BAND,
   TARGET_LOUDNESS_LUFS,
   TARGET_TOLERANCE_DB,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import { cn } from "@/lib/utils";
 import { Mic } from "lucide-react";
 import {

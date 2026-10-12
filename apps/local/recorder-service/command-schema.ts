@@ -15,7 +15,7 @@ const CalibrationWindowSchema = Schema.Struct({
   endSeconds: Schema.Number,
 });
 
-/** Record's Audio Calibration (none: null): the gate's, and its threshold. */
+/** Record's AV Calibration (none: null): the gate's, and its threshold. */
 const calibration = {
   calibration: Schema.NullOr(
     Schema.Struct({
@@ -89,7 +89,7 @@ export const decodeCommand = Schema.decodeUnknownEither(
 /**
  * A command that did not decode but must be answered, not dropped: a Record
  * (or the Stream Deck's prepare-record) with no `calibration`, from an app
- * server older than the Audio Calibration gate. Its sender hears why.
+ * server older than the AV Calibration gate. Its sender hears why.
  */
 export const refusalOfUndecodable = (
   raw: string

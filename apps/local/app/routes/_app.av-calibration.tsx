@@ -1,31 +1,31 @@
 import { Effect } from "effect";
-import { CalibrationHistory } from "@/features/audio-calibration/calibration-history";
-import { CalibrationSession } from "@/features/audio-calibration/calibration-session";
-import { LevelMeter } from "@/features/audio-calibration/level-meter";
-import { useAudioCalibration } from "@/features/audio-calibration/use-audio-calibration";
+import { CalibrationHistory } from "@/features/av-calibration/calibration-history";
+import { CalibrationSession } from "@/features/av-calibration/calibration-session";
+import { LevelMeter } from "@/features/av-calibration/level-meter";
+import { useAVCalibration } from "@/features/av-calibration/use-av-calibration";
 import {
   lastPassedCalibration,
-  listAudioCalibrations,
-} from "@/services/audio-calibration.server";
+  listAVCalibrations,
+} from "@/services/av-calibration.server";
 import {
   calibrationExpiresAtMs,
   formatCalibrationTime,
   type LastPassedCalibration,
-} from "@/audio-calibration-constants";
+} from "@/av-calibration-constants";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { makeLoader } from "@/services/route-action.server";
-import type { Route } from "./+types/_app.audio-calibration";
+import type { Route } from "./+types/_app.av-calibration";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "CVM - Audio Calibration" },
+  { title: "CVM - AV Calibration" },
 ];
 
 /**
- * The Audio Calibration page (#2077). The level meter: the mic's loudness,
+ * The AV Calibration page (#2077). The level meter: the mic's loudness,
  * live, against the target band, so Matt sets his level by hand on the
  * Scarlett's gain knob or the Voicemeeter fader. Then the scripted session
  * (#2079), which measures the mic, sets the silence threshold and stores the
- * Audio Calibration, passed or failed, and its review timeline (#2081),
+ * AV Calibration, passed or failed, and its review timeline (#2081),
  * which opens again for any past calibration. CVM only listens; it never changes a
  * Windows, OBS or Voicemeeter setting. Recording is gated on it (ADR 0038):
  * the page says when the last pass expires.
@@ -35,23 +35,23 @@ export const loader = makeLoader({
     Effect.gen(function* () {
       const db = yield* DrizzleService;
       return {
-        calibrations: yield* listAudioCalibrations(db),
+        calibrations: yield* listAVCalibrations(db),
         lastPassed: yield* lastPassedCalibration(db),
         checkedAtMs: Date.now(),
       };
     }),
 });
 
-export default function AudioCalibrationPage({
+export default function AVCalibrationPage({
   loaderData,
 }: Route.ComponentProps) {
-  const [state, dispatch] = useAudioCalibration();
+  const [state, dispatch] = useAVCalibration();
   const { session } = state;
   return (
     <div className="flex-1 overflow-y-auto bg-background text-foreground">
       <div className="p-8 max-w-4xl space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Audio Calibration</h1>
+          <h1 className="text-3xl font-bold mb-2">AV Calibration</h1>
           <p className="text-muted-foreground">
             Talk as you would on camera, and set your level by hand, on the
             Scarlett&apos;s gain knob or the Voicemeeter fader, until the meter
@@ -101,7 +101,7 @@ const GateStatus = (props: {
         data-testid="calibration-gate-status"
         className="text-sm font-semibold text-amber-500"
       >
-        No Audio Calibration has passed under the current rules: recording is
+        No AV Calibration has passed under the current rules: recording is
         blocked on both Recorders until one does.
       </p>
     );

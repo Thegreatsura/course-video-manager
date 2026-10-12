@@ -3,7 +3,7 @@ import { recorderClient } from "@/services/recorder-client/live.server";
 import { makeLoader } from "@/services/route-action.server";
 
 /**
- * The Audio Calibration page's level meter (`LevelMeterMessage`, one SSE
+ * The AV Calibration page's level meter (`LevelMeterMessage`, one SSE
  * event each, named by its `type`). Listening runs the meter on the recorder
  * service; the last listener closing stops it, and lets the mic go.
  */

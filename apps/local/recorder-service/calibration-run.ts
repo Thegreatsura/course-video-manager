@@ -2,7 +2,7 @@ import { runToEnd, type Launcher } from "./launcher";
 import type { CalibrationMeasurement, CalibrationWindow } from "./protocol";
 
 /**
- * AN AUDIO CALIBRATION'S RUN (#2079): the level meter's process
+ * AN AV CALIBRATION'S RUN (#2079): the level meter's process
  * (`level-meter.ts`), which also writes the mic to `mic.wav` in a folder of
  * its own, so the meter's readings are timed in that file's seconds (ebur128
  * counts the samples it passes on, and the file gets every one). When the

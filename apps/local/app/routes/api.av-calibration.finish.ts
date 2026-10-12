@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
-import { MEASUREMENT_WINDOWS } from "@/audio-calibration-constants";
-import { recordAudioCalibration } from "@/services/audio-calibration.server";
+import { MEASUREMENT_WINDOWS } from "@/av-calibration-constants";
+import { recordAVCalibration } from "@/services/av-calibration.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { recorderCommand } from "@/services/recorder-client/recorder-command";
 import {
@@ -21,9 +21,9 @@ const finishSchema = Schema.Struct({
 
 /**
  * The script is done: the recorder service ends the run and measures its mic
- * file over the measurement windows, and the Audio Calibration is stored,
+ * file over the measurement windows, and the AV Calibration is stored,
  * passed or failed, with the browser's level trace beside the file. Answers
- * the stored calibration (`SavedAudioCalibration`).
+ * the stored calibration (`SavedAVCalibration`).
  */
 export const action = makeAction({
   input: "json",
@@ -38,7 +38,7 @@ export const action = makeAction({
       const measured = yield* recorderCommand(() =>
         recorderClient().finishCalibration(MEASUREMENT_WINDOWS)
       );
-      const saved = yield* recordAudioCalibration(yield* DrizzleService, {
+      const saved = yield* recordAVCalibration(yield* DrizzleService, {
         calibrationId: request.calibrationId,
         measured,
         recordingsFolder: recordingFolder(),

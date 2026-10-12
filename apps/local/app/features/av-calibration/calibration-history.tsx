@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { SavedAudioCalibration } from "./calibration-wire";
+import type { SavedAVCalibration } from "./calibration-wire";
 
 /**
- * The past Audio Calibrations, newest first, passed and failed. Opening one
+ * The past AV Calibrations, newest first, passed and failed. Opening one
  * shows its result and its review timeline again.
  */
 export const CalibrationHistory = ({
@@ -12,12 +12,12 @@ export const CalibrationHistory = ({
   disabled,
   onOpen,
 }: {
-  calibrations: SavedAudioCalibration[];
+  calibrations: SavedAVCalibration[];
   /** The calibration whose result is showing, if any. */
   openId: string | null;
   /** True while a session runs: nothing else may open. */
   disabled: boolean;
-  onOpen: (calibration: SavedAudioCalibration) => void;
+  onOpen: (calibration: SavedAVCalibration) => void;
 }) => (
   <div className="rounded-lg border p-6 space-y-3">
     <div className="text-xl font-semibold">Past calibrations</div>

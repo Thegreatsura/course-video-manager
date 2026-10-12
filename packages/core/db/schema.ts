@@ -507,14 +507,14 @@ export const recordingSessions = createTable(
      */
     screenCaptured: boolean("screen_captured").notNull().default(true),
     /**
-     * The Audio Calibration it was recorded under: the latest passed one when
+     * The AV Calibration it was recorded under: the latest passed one when
      * recording started, whose threshold its silencedetect cut with. Null for
-     * one from before Audio Calibration, or recorded before any had passed
+     * one from before AV Calibration, or recorded before any had passed
      * (the fixed default threshold).
      */
-    audioCalibrationId: varchar("audio_calibration_id", {
+    avCalibrationId: varchar("av_calibration_id", {
       length: 255,
-    }).references(() => audioCalibrations.id, { onDelete: "set null" }),
+    }).references(() => avCalibrations.id, { onDelete: "set null" }),
   },
   (table) => [
     index("recording_session_video_id_idx").on(table.videoId),
@@ -534,13 +534,13 @@ export const recordingSessions = createTable(
 );
 
 /**
- * An Audio Calibration (GLOSSARY.md): one scripted check of Matt's mic, kept
+ * An AV Calibration (GLOSSARY.md): one scripted check of Matt's mic, kept
  * whether it passed or failed; a cancelled one is never stored. Its mic file
  * and the browser detector's level trace stay beside each other in the
- * recordings area (`audio-calibrations/<stamp> <id>/`), named here.
+ * recordings area (`av-calibrations/<stamp> <id>/`), named here.
  */
-export const audioCalibrations = createTable(
-  "audio_calibration",
+export const avCalibrations = createTable(
+  "av_calibration",
   {
     id: varchar("id", { length: 255 })
       .notNull()
@@ -573,9 +573,9 @@ export const audioCalibrations = createTable(
     browserTracePath: text("browser_trace_path").notNull(),
   },
   (table) => [
-    index("audio_calibration_created_at_idx").on(table.createdAt),
+    index("av_calibration_created_at_idx").on(table.createdAt),
     check(
-      "audio_calibration_outcome_valid",
+      "av_calibration_outcome_valid",
       sql`${table.outcome} IN ('passed', 'failed')`
     ),
   ]

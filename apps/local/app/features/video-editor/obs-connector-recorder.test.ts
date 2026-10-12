@@ -8,7 +8,7 @@ import {
   obsConnectorReducer,
   type useOBSConnector,
 } from "./obs-connector";
-import { CALIBRATION_VALIDITY_MS } from "@/audio-calibration-constants";
+import { CALIBRATION_VALIDITY_MS } from "@/av-calibration-constants";
 
 const start = (usesObs: boolean) => {
   const effects: useOBSConnector.Effect[] = [];
