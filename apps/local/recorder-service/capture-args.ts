@@ -157,6 +157,9 @@ export const PREVIEW_TAGS = {
   screen: "cvm-recorder-preview-screen",
 } as const;
 
+/** In the level meter's command line, for the same reason: it never exits by itself. */
+export const METER_TAG = "cvm-recorder-meter";
+
 const tagged = (tag: string) => ["-metadata", `comment=${tag}`];
 
 const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
@@ -179,6 +182,25 @@ const camLinkInput = (camera: string) => [
   "nv12",
   "-i",
   `video=${camera}`,
+];
+
+/**
+ * The mic as DirectShow opens it (`MIC_NAME`, Voicemeeter Out B1), raw: no
+ * filters, and a 20 ms device buffer keeps the stamp close to capture. The
+ * recording and the level meter open it the same way, so the meter reads the
+ * very signal mic.mkv gets.
+ */
+export const micInput = (mic: string) => [
+  "-f",
+  "dshow",
+  "-audio_buffer_size",
+  "20",
+  "-sample_rate",
+  "48000",
+  "-channels",
+  "2",
+  "-i",
+  `audio=${mic}`,
 ];
 
 /**
@@ -279,20 +301,7 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   // The Cam Link 4K offers only 2160p29.97 or 1080p59.94 raw, so open 4K NV12
   // and scale to 1440p on the GPU: no 4K reaches the disk.
   const cameraIn = [...WALLCLOCK, ...camLinkInput(o.camera)];
-  // The mic raw: no filters, a 20 ms device buffer keeps the stamp close to capture.
-  const micIn = [
-    ...WALLCLOCK,
-    "-f",
-    "dshow",
-    "-audio_buffer_size",
-    "20",
-    "-sample_rate",
-    "48000",
-    "-channels",
-    "2",
-    "-i",
-    `audio=${o.mic}`,
-  ];
+  const micIn = [...WALLCLOCK, ...micInput(o.mic)];
   // Audio queued while the camera was opening arrives in one burst stamped
   // "now": dropping the first 1.5 s (padded back with silence by first_pts=0)
   // keeps it from becoming an offset. async=50 then follows the system clock.

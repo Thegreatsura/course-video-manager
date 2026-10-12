@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cameraPreviewArgs, PREVIEW_TAGS } from "./capture-args";
+import { cameraPreviewArgs, METER_TAG, PREVIEW_TAGS } from "./capture-args";
 import { quitProcess } from "./camera";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import { connect, recordOnce, start, tmp } from "./test-utils/service-harness";
@@ -55,7 +55,7 @@ describe("crash recovery", () => {
         script: "stop-recorders.ps1",
         args: [
           "-Tags",
-          `${PREVIEW_TAGS.camera},${PREVIEW_TAGS.screen},cvm-recorder-${recordingSessionId}`,
+          `${PREVIEW_TAGS.camera},${PREVIEW_TAGS.screen},${METER_TAG},cvm-recorder-${recordingSessionId}`,
         ],
       })
     );

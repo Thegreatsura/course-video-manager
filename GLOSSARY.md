@@ -273,6 +273,10 @@ _Avoid_: Scene change (a live switch during a Recording Session), Layout
 A setting of each Recording Session (short or long) for how long a silence must be to end a clip: short (the default) cuts on brief pauses in a sentence, long only on long ones. It is fixed when recording starts.
 _Avoid_: Pause Length (former name — reused "Pause", now the clip-level held pause), Silence mode, Silence sensitivity, Pause threshold
 
+**Audio Calibration**:
+A check of Matt's mic before he records: its speech loudness against the target band (-21 LUFS ± 2), measured from the mic the CVM recorder records (Voicemeeter Out B1, raw, before the **Mic EQ**), never from the browser. Its first step is the level meter on the Audio Calibration page, a live reading he sets his level by, by hand, on the Scarlett's gain knob or the Voicemeeter fader; CVM reads levels and never writes a Windows, OBS or Voicemeeter setting. The meter and a recording never run together. The scripted session that measures his noise floor and speech, sets the silence threshold both detectors cut with and gates recording is planned (#2077), not built.
+_Avoid_: Mic check, Level check (that is the meter step, part of an Audio Calibration), Sound check, Calibration (unqualified)
+
 **Pause**:
 A marker on a **Clip** (none or long) that adds a short held pause after it in the edit. It has values rather than on/off, so more lengths can be added later. Different from **Silence Length** (the recording cut setting).
 _Avoid_: Beat (former name), Silence Length, Gap, Hold

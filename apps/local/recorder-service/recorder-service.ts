@@ -19,7 +19,10 @@ import {
   type Scene,
 } from "../app/packages/scene-layout";
 import { startPreviewFeeds } from "./preview-feeds";
+import { createMeterSide } from "./level-meter";
 import {
+  METER_WHILE_RECORDING,
+  RECORD_WHILE_METERING,
   STILL_NO_PICTURE,
   STILL_PATH,
   STILL_RECORDER_CLOSED,
@@ -71,6 +74,10 @@ import {
  * and outside the command queue, and the state says how that went
  * (`ScreenStatus`, `screen-side.ts`). With it unavailable a Short records camera and mic only,
  * and refuses the scenes that draw the screen.
+ *
+ * The level meter (`level-meter.ts`) holds only the mic, and needs no Video:
+ * it runs whether the recorder is closed or open, for the client that started
+ * it, until it asks to stop or goes. It and a recording never run together.
  */
 
 /** The devices the rig proved, found by name. */
@@ -137,7 +144,8 @@ const Command = Schema.Union(
     type: Schema.Literal("replay"),
     recordingSessionId: Schema.String,
     afterSeq: Schema.Number,
-  })
+  }),
+  Schema.Struct({ type: Schema.Literal("start-meter", "stop-meter") })
 );
 const decodeCommand = Schema.decodeUnknownEither(Schema.parseJson(Command));
 
@@ -256,6 +264,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     return camera.status();
   };
 
+  const meter = createMeterSide<WebSocket>({ launch: o.launch, broadcast });
+
   const releaseCamera = async () => {
     const released = camera;
     camera = undefined;
@@ -301,6 +311,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     if (state.kind === "closed")
       throw new Refusal("Open the recorder for a Video first.");
     if (state.kind === "recording") throw new Refusal("Already recording.");
+    if (meter.running()) throw new Refusal(RECORD_WHILE_METERING);
     if (state.camera.kind !== "live")
       throw new Refusal("The camera is not live yet.");
     if (!path.isAbsolute(command.folder)) {
@@ -493,6 +504,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
             message,
           });
         });
+      case "start-meter":
+        if (state.kind === "recording")
+          throw new Refusal(METER_WHILE_RECORDING);
+        return meter.start(ws);
+      case "stop-meter":
+        return meter.stop();
       case "close":
         if (state.kind === "recording")
           throw new Refusal("Stop recording before closing the recorder.");
@@ -540,6 +557,11 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       console.error("recorder: dropping a client that broke the protocol", e);
       ws.terminate();
     });
+    // The meter runs for the client that started it: one that goes (the app
+    // server stopped) must not leave the mic open and Record refused.
+    ws.on("close", () => {
+      queue = queue.then(() => meter.ownerWent(ws).catch(() => {}));
+    });
     void recovering.then(() =>
       send(ws, {
         type: "hello",
@@ -585,7 +607,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     close: async () => {
       await queue;
       if (session) await session.stop();
-      await Promise.all([releaseCamera(), screenSide.close()]);
+      await Promise.all([releaseCamera(), screenSide.close(), meter.stop()]);
       await feeds.close();
       for (const ws of wss.clients) ws.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));

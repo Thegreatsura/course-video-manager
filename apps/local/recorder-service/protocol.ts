@@ -38,12 +38,12 @@ export const RECORDER_SERVICE_PORT = 5177;
 
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
- * (2: a Short's `format` and `screen`). The app server reloads on a change
+ * (2: a Short's `format` and `screen`; 3: the level meter). The app server reloads on a change
  * and the service does not (ADR 0035), so after a pull mid-session the app may
  * meet a service started from older code; `hello` says which wire it speaks
  * (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 2;
+export const RECORDER_PROTOCOL_VERSION = 3;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -136,7 +136,32 @@ export type RecorderCommand =
     }
   | { type: "stream-deck"; press: StreamDeckPress }
   /** Send this Recording Session's logged events with `seq > afterSeq`. */
-  | { type: "replay"; recordingSessionId: string; afterSeq: number };
+  | { type: "replay"; recordingSessionId: string; afterSeq: number }
+  /**
+   * Start the level meter (`level-meter.ts`): the mic's loudness, streamed as
+   * `meter-reading`s until `stop-meter` or until the client that started it
+   * goes. Refused while recording, as Record is refused while it runs.
+   * Started already, it carries on.
+   */
+  | { type: "start-meter" }
+  | { type: "stop-meter" };
+
+/** Why the meter will not start while recording. */
+export const METER_WHILE_RECORDING =
+  "The recorder is recording: stop recording before you check your mic level.";
+/** Why Record is refused while the meter runs. */
+export const RECORD_WHILE_METERING =
+  "The Audio Calibration page is measuring your mic: close it before you record.";
+
+/**
+ * One ebur128 reading of the mic, in LUFS. `seconds` is since the meter
+ * started. Momentary is the last 400 ms, short-term the last 3 s.
+ */
+export type MeterReading = {
+  seconds: number;
+  momentaryLufs: number;
+  shortTermLufs: number;
+};
 
 export type RecordingSessionFiles = {
   camera: string;
@@ -281,6 +306,11 @@ export type RecorderStatusMessage =
   | { type: "refused"; command: RecorderCommand["type"]; message: string }
   /** A Stream Deck press the recorder did nothing about, and why. Broadcast. */
   | { type: "stream-deck-ignored"; press: StreamDeckPress; message: string }
-  | { type: "replay-done"; recordingSessionId: string; lastSeq: number };
+  | { type: "replay-done"; recordingSessionId: string; lastSeq: number }
+  /** The level meter: started (on this mic), a reading, stopped. Broadcast. */
+  | { type: "meter-started"; mic: string }
+  | ({ type: "meter-reading" } & MeterReading)
+  /** `message`: why, when it quit without being asked; null when asked. */
+  | { type: "meter-stopped"; message: string | null };
 
 export type RecorderMessage = RecordingSessionEvent | RecorderStatusMessage;
