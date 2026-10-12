@@ -45,6 +45,10 @@ import {
 import { findByName, Refusal } from "./refusal";
 import { MIC_NAME } from "../app/mic-device";
 import {
+  calibrationValidity,
+  describeCalibrationRefusal,
+} from "../app/audio-calibration-constants";
+import {
   createScreenSide,
   refuseScreenlessScene,
   refuseWakingScene,
@@ -289,6 +293,14 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         `${missing} is not among the DirectShow devices. Found: ${devices.map((d) => `${d.name} (${d.kind})`).join(", ") || `none. ffmpeg said: ${raw.slice(0, 500)}`}`
       );
     }
+    // THE GATE (ADR 0038), at the one moment it applies: the start. The mic
+    // is compared here because only the service knows which one it records.
+    const gate = calibrationValidity(
+      command.calibration,
+      { recorderMic: mic },
+      o.now()
+    );
+    if (!gate.valid) throw new Refusal(describeCalibrationRefusal(gate.reason));
     const { videoId, format } = state;
     const screenIndex = await screenSide.recordIndex(
       format,
@@ -305,8 +317,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         videoId,
         folder: command.folder,
         silenceLength: command.silenceLength,
-        thresholdDb: command.thresholdDb,
-        audioCalibrationId: command.audioCalibrationId,
+        thresholdDb: gate.calibration.thresholdDb,
+        audioCalibrationId: gate.calibration.id,
         camera,
         mic,
         screenIndex,
@@ -380,8 +392,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
           type: "record",
           silenceLength: recordWith.silenceLength,
           folder: recordWith.folder,
-          thresholdDb: recordWith.thresholdDb,
-          audioCalibrationId: recordWith.audioCalibrationId,
+          calibration: recordWith.calibration,
         });
       case "stop":
         return handle(ws, { type: "stop" });

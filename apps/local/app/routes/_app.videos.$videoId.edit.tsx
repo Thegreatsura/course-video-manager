@@ -4,9 +4,9 @@ import type {
   ClipOnDatabase,
   ChapterOnDatabase,
   DatabaseId,
-  FrontendInsertionPoint,
   TimelineItem,
 } from "@/features/video-editor/clip-state-reducer";
+import { defaultInsertionPoint } from "@/features/video-editor/insert-at-point";
 import {
   clipStateReducer,
   createFrontendId,
@@ -18,6 +18,7 @@ import { OBS_PROFILE_LANDSCAPE } from "@/features/video-editor/ensure-obs-profil
 import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
 import { useCvmRecorder } from "@/features/video-editor/use-cvm-recorder";
+import { useCalibrationGate } from "@/features/video-editor/use-calibration-gate";
 import { captureProps } from "@/features/video-editor/recorder-capture";
 import { useDiagramRecordingStatus } from "@/features/video-editor/use-diagram-recording-status";
 import { VideoEditor } from "@/features/video-editor/video-editor";
@@ -28,7 +29,7 @@ import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
-import { silenceThresholdNow } from "@/services/audio-calibration.server";
+import { lastPassedCalibrationNow } from "@/services/audio-calibration.server";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
@@ -188,42 +189,13 @@ export const loader = makeLoader({
         beats,
         animatic,
         overlays,
-        threshold: yield* silenceThresholdNow,
+        lastPassedCalibration: yield* lastPassedCalibrationNow,
+        checkedAtMs: Date.now(),
       };
     }),
 });
 
 const clipService = createHttpClipService();
-
-/**
- * Returns the default insertion point: below the first section that has no
- * clips after it (before the next section or end of list). Falls back to "end".
- */
-function getDefaultInsertionPoint(
-  items: TimelineItem[]
-): FrontendInsertionPoint {
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]!;
-    if (
-      item.type === "chapter-on-database" ||
-      item.type === "chapter-optimistically-added"
-    ) {
-      const nextItem = items[i + 1];
-      // Section is "empty" if the next item is another section or there's nothing after it
-      const isEmpty =
-        !nextItem ||
-        nextItem.type === "chapter-on-database" ||
-        nextItem.type === "chapter-optimistically-added";
-      if (isEmpty) {
-        return {
-          type: "after-chapter",
-          frontendChapterId: item.frontendId,
-        };
-      }
-    }
-  }
-  return { type: "end" };
-}
 
 export default function Component(props: Route.ComponentProps) {
   return <ComponentInner {...props} key={props.loaderData.video.id} />;
@@ -294,7 +266,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       props.loaderData.clipIdsWithTranscriptWords as DatabaseId[]
     ),
     insertionOrder: 0,
-    insertionPoint: getDefaultInsertionPoint(initialItems),
+    insertionPoint: defaultInsertionPoint(initialItems),
     error: null,
     sessions: [],
     clipTranscriptionJobs: {},
@@ -376,9 +348,15 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       });
     },
     silenceLength,
-    silenceThreshold: props.loaderData.threshold,
+    lastPassedCalibration: props.loaderData.lastPassedCalibration,
     // Only a Landscape Video records with OBS (ADR 0037).
     targetProfile: OBS_PROFILE_LANDSCAPE,
+  });
+
+  const calibrationGate = useCalibrationGate({
+    lastPassed: props.loaderData.lastPassedCalibration,
+    checkedAtMs: props.loaderData.checkedAtMs,
+    browserInputLabel: obsConnector.browserInputLabel,
   });
 
   const capture = captureProps(recorderChoice, obsConnector, cvmRecorder);
@@ -466,6 +444,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       obsConnectorState={obsConnector.state}
       recorderChoice={recorderChoice}
       cvmRecorder={cvmRecorder}
+      calibrationGate={calibrationGate}
       items={clipState.items}
       sessions={clipState.sessions}
       repoId={props.loaderData.video.lesson?.section.repoVersion.repo.id}

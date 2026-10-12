@@ -11,9 +11,10 @@
  * when its absolute amplitude is below it. A sample peak, not an RMS level.
  *
  * Only for work that is not recording: chunking or re-cutting old Footage,
- * and recording before any Audio Calibration has passed. A Recording Session
- * cuts with the threshold of the latest passed Audio Calibration, read once
- * when it starts (`SilenceThreshold`).
+ * and the OBS browser detector's level before any Audio Calibration has
+ * passed (nothing records then: ADR 0038). A Recording Session cuts with the
+ * threshold of the Audio Calibration it started under, read once when it
+ * starts (`SilenceThreshold`).
  */
 export const DEFAULT_SILENCE_THRESHOLD_DB = -38;
 

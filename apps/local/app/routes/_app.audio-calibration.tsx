@@ -3,7 +3,15 @@ import { CalibrationHistory } from "@/features/audio-calibration/calibration-his
 import { CalibrationSession } from "@/features/audio-calibration/calibration-session";
 import { LevelMeter } from "@/features/audio-calibration/level-meter";
 import { useAudioCalibration } from "@/features/audio-calibration/use-audio-calibration";
-import { listAudioCalibrations } from "@/services/audio-calibration.server";
+import {
+  lastPassedCalibration,
+  listAudioCalibrations,
+} from "@/services/audio-calibration.server";
+import {
+  calibrationExpiresAtMs,
+  formatCalibrationTime,
+  type LastPassedCalibration,
+} from "@/audio-calibration-constants";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { makeLoader } from "@/services/route-action.server";
 import type { Route } from "./+types/_app.audio-calibration";
@@ -19,13 +27,17 @@ export const meta: Route.MetaFunction = () => [
  * (#2079), which measures the mic, sets the silence threshold and stores the
  * Audio Calibration, passed or failed, and its review timeline (#2081),
  * which opens again for any past calibration. CVM only listens; it never changes a
- * Windows, OBS or Voicemeeter setting.
+ * Windows, OBS or Voicemeeter setting. Recording is gated on it (ADR 0038):
+ * the page says when the last pass expires.
  */
 export const loader = makeLoader({
   effect: () =>
     Effect.gen(function* () {
+      const db = yield* DrizzleService;
       return {
-        calibrations: yield* listAudioCalibrations(yield* DrizzleService),
+        calibrations: yield* listAudioCalibrations(db),
+        lastPassed: yield* lastPassedCalibration(db),
+        checkedAtMs: Date.now(),
       };
     }),
 });
@@ -47,6 +59,10 @@ export default function AudioCalibrationPage({
             it never changes a Windows, OBS or Voicemeeter setting.
           </p>
         </div>
+        <GateStatus
+          lastPassed={loaderData.lastPassed}
+          checkedAtMs={loaderData.checkedAtMs}
+        />
         <CalibrationSession
           state={state}
           onStart={() => dispatch({ type: "start-clicked" })}
@@ -73,3 +89,34 @@ export default function AudioCalibrationPage({
     </div>
   );
 }
+
+/** When the last pass (under today's rules) expires, and so recording with it. */
+const GateStatus = (props: {
+  lastPassed: LastPassedCalibration | null;
+  checkedAtMs: number;
+}) => {
+  if (!props.lastPassed)
+    return (
+      <p
+        data-testid="calibration-gate-status"
+        className="text-sm font-semibold text-amber-500"
+      >
+        No Audio Calibration has passed under the current rules: recording is
+        blocked on both Recorders until one does.
+      </p>
+    );
+  const expiresAtMs = calibrationExpiresAtMs(props.lastPassed);
+  const expired = props.checkedAtMs >= expiresAtMs;
+  return (
+    <p
+      data-testid="calibration-gate-status"
+      className={`text-sm ${expired ? "font-semibold text-amber-500" : "text-muted-foreground"}`}
+    >
+      Last passed {formatCalibrationTime(props.lastPassed.createdAtMs)}, on{" "}
+      {props.lastPassed.recorderMic}.{" "}
+      {expired
+        ? `It expired ${formatCalibrationTime(expiresAtMs)}: recording is blocked until one passes.`
+        : `Recording is allowed until ${formatCalibrationTime(expiresAtMs)}, on the same mic.`}
+    </p>
+  );
+};

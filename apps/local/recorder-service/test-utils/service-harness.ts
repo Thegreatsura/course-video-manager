@@ -6,7 +6,8 @@ import { WebSocket } from "ws";
 import { fakeWindows } from "./fake-windows";
 import type { RecorderCommand, RecorderMessage } from "../protocol";
 import { startRecorderService } from "../recorder-service";
-import { UNCALIBRATED_SILENCE_THRESHOLD } from "../../app/silence-detection-constants";
+import { DEFAULT_SILENCE_THRESHOLD_DB } from "../../app/silence-detection-constants";
+import type { LastPassedCalibration } from "../../app/audio-calibration-constants";
 
 /**
  * The recorder service driven through its WebSocket, with the process
@@ -19,8 +20,23 @@ import { UNCALIBRATED_SILENCE_THRESHOLD } from "../../app/silence-detection-cons
 
 export const T0_MS = 1_760_000_000_000;
 
-/** What a Record carries when no Audio Calibration has passed: the fixed default. */
-export const THRESHOLD = UNCALIBRATED_SILENCE_THRESHOLD;
+/** The scripted Windows' mic, as the service finds it among its devices. */
+export const FAKE_MIC = "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)";
+
+/**
+ * An Audio Calibration that lets a Record through (ADR 0038): taken a day
+ * before the service's clock, on its mic, at the fixed default threshold.
+ */
+export const CALIBRATION: LastPassedCalibration = {
+  id: "calibration-ok",
+  createdAtMs: T0_MS - 24 * 60 * 60 * 1000,
+  thresholdDb: DEFAULT_SILENCE_THRESHOLD_DB,
+  recorderMic: FAKE_MIC,
+  browserInputLabel: FAKE_MIC,
+};
+
+/** What a Record carries to be let through the gate. */
+export const CALIBRATED = { calibration: CALIBRATION };
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -124,7 +140,7 @@ export const recordOnce = async (
   await client.next("hello");
   client.send({ type: "open", videoId: "video-1" });
   await client.camera("live");
-  client.send({ type: "record", silenceLength: "long", folder, ...THRESHOLD });
+  client.send({ type: "record", silenceLength: "long", folder, ...CALIBRATED });
   const started = await client.next("recording-started");
   return { ...s, client, started, folder };
 };

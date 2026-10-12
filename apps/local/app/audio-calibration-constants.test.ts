@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CALIBRATION_VALIDITY_MS,
+  calibrationValidity,
   deriveThreshold,
   judgeCalibration,
+  passesCurrentRules,
+  type CurrentInputDevice,
+  type LastPassedCalibration,
 } from "./audio-calibration-constants";
 
 describe("judging an Audio Calibration", () => {
@@ -47,5 +52,80 @@ describe("judging an Audio Calibration", () => {
 
   it("sets the threshold 16 dB under the speech, unclamped across the whole band", () => {
     expect([-29, -27, -25].map(deriveThreshold)).toEqual([-45, -43, -41]);
+  });
+});
+
+const AT = Date.UTC(2026, 9, 12, 9);
+const MIC = "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)";
+const lastPassed: LastPassedCalibration = {
+  id: "c1",
+  createdAtMs: AT,
+  thresholdDb: -43,
+  recorderMic: MIC,
+  browserInputLabel: MIC,
+};
+
+describe("whether a Recorder may start (the gate)", () => {
+  it.each<
+    [string, LastPassedCalibration | null, CurrentInputDevice, number, unknown]
+  >([
+    ["none yet", null, {}, AT, { kind: "none" }],
+    ["a minute old", lastPassed, { recorderMic: MIC }, AT + 60_000, null],
+    [
+      "a millisecond under 7 days",
+      lastPassed,
+      { browserInputLabel: MIC },
+      AT + CALIBRATION_VALIDITY_MS - 1,
+      null,
+    ],
+    [
+      "exactly 7 days old",
+      lastPassed,
+      {},
+      AT + CALIBRATION_VALIDITY_MS,
+      { kind: "expired", expiredAtMs: AT + CALIBRATION_VALIDITY_MS },
+    ],
+    [
+      "the recorder's mic changed",
+      lastPassed,
+      { recorderMic: "Scarlett Solo USB" },
+      AT,
+      {
+        kind: "device-changed",
+        device: "recorder-mic",
+        from: MIC,
+        to: "Scarlett Solo USB",
+      },
+    ],
+    [
+      "the browser has no mic open",
+      lastPassed,
+      { browserInputLabel: null },
+      AT,
+      { kind: "device-changed", device: "browser-input", from: MIC, to: null },
+    ],
+  ])("%s", (_, last, device, now, reason) => {
+    const validity = calibrationValidity(last, device, now);
+    expect(validity).toEqual(
+      reason === null
+        ? {
+            valid: true,
+            calibration: last,
+            expiresAtMs: AT + CALIBRATION_VALIDITY_MS,
+          }
+        : { valid: false, reason }
+    );
+  });
+
+  it("counts only a pass under today's rules: not an old -21 LUFS pass, nor one with no peak measured", () => {
+    const pass = {
+      outcome: "passed" as const,
+      speechLufs: -27,
+      truePeakDb: -9,
+    };
+    expect(passesCurrentRules(pass)).toBe(true);
+    expect(passesCurrentRules({ ...pass, speechLufs: -21 })).toBe(false);
+    expect(passesCurrentRules({ ...pass, truePeakDb: null })).toBe(false);
+    expect(passesCurrentRules({ ...pass, outcome: "failed" })).toBe(false);
   });
 });

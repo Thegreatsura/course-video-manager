@@ -207,3 +207,145 @@ export const MEASUREMENT_WINDOWS: {
     endSeconds: s.endSeconds + REACTION_MARGIN_SECONDS,
   })),
 };
+
+/**
+ * THE GATE (ADR 0038). A Recorder starts only under a passed Audio
+ * Calibration less than this old, taken on the current audio input device.
+ */
+export const CALIBRATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a stored calibration passed under TODAY's rules: its own outcome
+ * was a pass, its true peak was measured, and its stored measurements still
+ * pass `judgeCalibration` now. So a rule change (the target moving from -21
+ * to -27 LUFS, the peak check) takes old passes out of the gate by itself,
+ * with no rules version to remember to bump.
+ */
+export const passesCurrentRules = (c: {
+  outcome: CalibrationOutcome;
+  speechLufs: number;
+  truePeakDb: number | null;
+}): boolean =>
+  c.outcome === "passed" &&
+  c.truePeakDb !== null &&
+  judgeCalibration(c).outcome === "passed";
+
+/**
+ * The latest Audio Calibration that passes under today's rules
+ * (`passesCurrentRules`), as the gate and a Record need it: when it was
+ * taken, on which input device, and the threshold it set.
+ */
+export type LastPassedCalibration = {
+  id: string;
+  /** When it was taken, in epoch ms. */
+  createdAtMs: number;
+  thresholdDb: number;
+  /** The recorder service's mic (its DirectShow name) it was taken on. */
+  recorderMic: string;
+  /** The browser's audio input label it was taken on; null: none opened. */
+  browserInputLabel: string | null;
+};
+
+/**
+ * The audio input device now, as far as the asker knows it: the recorder
+ * service its mic (CVM recorder), the editor its getUserMedia audio track's
+ * label (OBS; null when it has none open). A device left out is not compared.
+ */
+export type CurrentInputDevice = {
+  recorderMic?: string;
+  browserInputLabel?: string | null;
+};
+
+export type CalibrationInvalidReason =
+  | { kind: "none" }
+  | { kind: "expired"; expiredAtMs: number }
+  | {
+      kind: "device-changed";
+      device: "recorder-mic" | "browser-input";
+      from: string | null;
+      to: string | null;
+    };
+
+export type CalibrationValidity =
+  | { valid: true; calibration: LastPassedCalibration; expiresAtMs: number }
+  | { valid: false; reason: CalibrationInvalidReason };
+
+export const calibrationExpiresAtMs = (c: LastPassedCalibration): number =>
+  c.createdAtMs + CALIBRATION_VALIDITY_MS;
+
+/**
+ * Whether a Recorder may start now: the latest calibration passed under
+ * today's rules exists, is less than 7 days old (exactly 7 days is expired),
+ * and was taken on every input device `current` names.
+ */
+export const calibrationValidity = (
+  lastPassed: LastPassedCalibration | null,
+  current: CurrentInputDevice,
+  nowMs: number
+): CalibrationValidity => {
+  if (!lastPassed) return { valid: false, reason: { kind: "none" } };
+  const expiresAtMs = calibrationExpiresAtMs(lastPassed);
+  if (nowMs >= expiresAtMs)
+    return {
+      valid: false,
+      reason: { kind: "expired", expiredAtMs: expiresAtMs },
+    };
+  if (
+    current.recorderMic !== undefined &&
+    current.recorderMic !== lastPassed.recorderMic
+  )
+    return {
+      valid: false,
+      reason: {
+        kind: "device-changed",
+        device: "recorder-mic",
+        from: lastPassed.recorderMic,
+        to: current.recorderMic,
+      },
+    };
+  if (
+    current.browserInputLabel !== undefined &&
+    current.browserInputLabel !== lastPassed.browserInputLabel
+  )
+    return {
+      valid: false,
+      reason: {
+        kind: "device-changed",
+        device: "browser-input",
+        from: lastPassed.browserInputLabel,
+        to: current.browserInputLabel,
+      },
+    };
+  return { valid: true, calibration: lastPassed, expiresAtMs };
+};
+
+/** Where Matt runs an Audio Calibration. */
+export const AUDIO_CALIBRATION_PATH = "/audio-calibration";
+
+/** Every gate refusal starts with this, so the editor can link the page. */
+export const CALIBRATION_REFUSAL_PREFIX =
+  "Recording needs a fresh Audio Calibration: ";
+
+/** A moment as Matt reads it, the same on every machine (UTC). */
+export const formatCalibrationTime = (ms: number): string =>
+  `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
+const deviceName = (device: "recorder-mic" | "browser-input") =>
+  device === "recorder-mic" ? "The recorder's mic" : "The browser's mic input";
+
+/** Why a Recorder will not start, in a sentence, with the refusal prefix. */
+export const describeCalibrationRefusal = (
+  reason: CalibrationInvalidReason
+): string => {
+  switch (reason.kind) {
+    case "none":
+      return `${CALIBRATION_REFUSAL_PREFIX}none has passed under the current rules (${TARGET_LOUDNESS_LUFS} LUFS ± ${TARGET_TOLERANCE_DB}, peak at most ${MAX_TRUE_PEAK_DBTP} dBTP) yet.`;
+    case "expired":
+      return `${CALIBRATION_REFUSAL_PREFIX}the last one expired on ${formatCalibrationTime(reason.expiredAtMs)} (they last 7 days).`;
+    case "device-changed":
+      return `${CALIBRATION_REFUSAL_PREFIX}${deviceName(reason.device)} changed from "${reason.from ?? "none"}" to "${reason.to ?? "none"}" since the last one.`;
+  }
+};
+
+export const isCalibrationRefusal = (message: string | null): boolean =>
+  message?.includes(CALIBRATION_REFUSAL_PREFIX) ?? false;

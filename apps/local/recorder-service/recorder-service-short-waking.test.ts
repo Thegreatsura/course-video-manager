@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fakeWindows } from "./test-utils/fake-windows";
-import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
+import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
 
 /**
  * A Short's screen while Spacedesk wakes, and screen-side restarts that
@@ -63,7 +63,7 @@ describe("a Short's screen", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect(await answerTo(client)).toBe(
       "refused: Spacedesk is still waking: wait for the screen before recording."
@@ -96,7 +96,7 @@ describe("a Short's screen", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect(await answerTo(client)).toMatch(/Spacedesk is still waking/);
   });

@@ -6,10 +6,8 @@ import {
 } from "recorder-service/protocol";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
-import type {
-  SilenceLength,
-  SilenceThreshold,
-} from "@/silence-detection-constants";
+import type { SilenceLength } from "@/silence-detection-constants";
+import type { LastPassedCalibration } from "@/audio-calibration-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
 import {
@@ -56,7 +54,7 @@ import { streamDeckPreparation } from "./stream-deck-prepare";
  * The Stream Deck presses Record, Stop and the scenes on the recorder
  * service itself; this client tells the service what a Stream Deck Record on
  * the open Video records with (`stream-deck-prepare.ts`), and hears its
- * events as for any Record. Every Record carries the silence threshold.
+ * events as for any Record. Every Record carries its Audio Calibration.
  */
 
 /** How many times one event that will not save is asked for again. */
@@ -86,8 +84,8 @@ export type RecorderClientOptions = {
   retryMs: number;
   /** The folder (WSL path) a Stream Deck Record's Recording Session goes in. */
   folder: string;
-  /** What a Recording Session started now cuts with (`currentSilenceThreshold`). */
-  silenceThreshold: () => Promise<SilenceThreshold>;
+  /** What a Record goes by (ADR 0038): `lastPassedCalibration`. */
+  calibration: () => Promise<LastPassedCalibration | null>;
 };
 
 type Listener = (message: CvmRecorderMessage) => void;
@@ -185,7 +183,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
 
   const deck = streamDeckPreparation({
     send,
-    silenceThreshold: o.silenceThreshold,
+    calibration: o.calibration,
     folder: o.folder,
   });
   /** Tells the open recorder what a Stream Deck Record on its Video records with. */
@@ -527,13 +525,12 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       await command({ type: "open", videoId, format }, (m) =>
         isState(m, "open", videoId, format)
       );
-      const threshold = await o.silenceThreshold();
       await command(
         {
           type: "record",
           silenceLength: request.silenceLength,
           folder: request.folder,
-          ...threshold,
+          calibration: await o.calibration(),
         },
         (m) => isState(m, "recording", videoId)
       );

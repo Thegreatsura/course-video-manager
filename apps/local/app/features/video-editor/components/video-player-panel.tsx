@@ -4,6 +4,7 @@ import { LivePreviewFrame } from "./live-preview-frame";
 import { getHasLivePreview } from "../live-preview";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { CvmRecorderControls } from "./cvm-recorder-controls";
+import { CalibrationGateBanner } from "./calibration-gate-banner";
 import { showsCvmRecorderControls } from "../recorder-choice-reducer";
 import { TableOfContents } from "./table-of-contents";
 import {
@@ -77,6 +78,10 @@ export const VideoPlayerPanel = () => {
   const recorder = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.recorderPicker.recorder
+  );
+  const obsGate = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.calibrationGate.obs
   );
   const clipsToAggressivelyPreload = useContextSelector(
     VideoEditorContext,
@@ -355,7 +360,13 @@ export const VideoPlayerPanel = () => {
           )}
 
           {isOBSActive && (
-            <div className="mt-2 flex justify-center">
+            <div className="mt-2 flex flex-col items-center gap-2">
+              {obsConnectorState.type === "obs-connected" && (
+                <CalibrationGateBanner
+                  gate={obsGate}
+                  refusal={obsConnectorState.calibrationRefusal}
+                />
+              )}
               <SilenceLengthToggle />
             </div>
           )}

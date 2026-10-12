@@ -1,7 +1,18 @@
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { fakeFootage } from "recorder-service/test-utils/fake-windows";
-import { connect } from "recorder-service/test-utils/service-harness";
+import { Effect } from "effect";
+import {
+  connect,
+  FAKE_MIC,
+  T0_MS,
+} from "recorder-service/test-utils/service-harness";
+import {
+  CALIBRATION_REFUSAL_PREFIX,
+  CALIBRATION_VALIDITY_MS,
+  deriveThreshold,
+} from "@/audio-calibration-constants";
+import { requireFreshAudioCalibration } from "../audio-calibration.server";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import {
@@ -21,7 +32,9 @@ import {
   startService,
   STREAM_DECK_FOLDER,
   tmp,
+  calibrationFromDatabase,
   type Ingest,
+  type LastPassed,
 } from "./recorder-client-test-harness";
 
 /**
@@ -31,9 +44,14 @@ import {
 
 setupClipServiceTests();
 
-const setup = async (ingest?: Ingest) => {
+const setup = async (ingest?: Ingest, lastPassed?: LastPassed) => {
   const { windows, port, stateDir } = await startService();
-  return { windows, client: connectClient(port, ingest), port, stateDir };
+  return {
+    windows,
+    client: connectClient(port, ingest, lastPassed),
+    port,
+    stateDir,
+  };
 };
 
 describe("the recorder client", () => {
@@ -167,7 +185,7 @@ describe("the recorder client", () => {
       url: "ws://127.0.0.1:9",
       ingest: () => Promise.reject(new Error("unused")),
       unfinishedRecordingSessions: () => Promise.resolve([]),
-      silenceThreshold: () => Promise.reject(new Error("unused")),
+      calibration: () => Promise.reject(new Error("unused")),
       reconnectMs: 1_000,
       commandTimeoutMs: 1_000,
       closeGraceMs: 0,
@@ -386,39 +404,116 @@ describe("the recorder client", () => {
   });
 });
 
-/** A stored Audio Calibration, taken at `minute` past 9. */
+/**
+ * A stored Audio Calibration, taken `minutesBefore` the recorder service's
+ * clock, on its mic, passing today's rules unless told otherwise.
+ */
 const calibrated = (
   id: string,
-  outcome: "passed" | "failed",
-  thresholdDb: number,
-  minute: number
-) =>
-  testDb.insert(audioCalibrations).values({
+  o: {
+    minutesBefore: number;
+    outcome?: "passed" | "failed";
+    speechLufs?: number;
+    truePeakDb?: number | null;
+    recorderMic?: string;
+  }
+) => {
+  const speechLufs = o.speechLufs ?? -27;
+  return testDb.insert(audioCalibrations).values({
     id,
-    createdAt: new Date(2026, 9, 12, 9, minute),
-    outcome,
+    createdAt: new Date(T0_MS - o.minutesBefore * 60_000),
+    outcome: o.outcome ?? "passed",
     noiseFloorDb: -80,
-    speechLufs: thresholdDb + 16,
-    thresholdDb,
-    recorderMic: "Voicemeeter Out B1",
-    scriptVersion: 1,
+    speechLufs,
+    truePeakDb: o.truePeakDb === undefined ? -10 : o.truePeakDb,
+    thresholdDb: deriveThreshold(speechLufs),
+    recorderMic: o.recorderMic ?? FAKE_MIC,
+    scriptVersion: 2,
     micFilePath: `/calibrations/${id}/mic.mkv`,
     browserTracePath: `/calibrations/${id}/browser-trace.json`,
   });
+};
 
-describe("the recorder client, cutting with the Audio Calibration's threshold", () => {
-  it("records under the latest passed one, keeps it for the whole Recording Session, and a Stream Deck Record after a new one cuts with that", async () => {
-    const { windows, client, port } = await setup();
-    await calibrated("passed-earlier", "passed", -37, 0);
-    await calibrated("failed-later", "failed", -44, 5);
+const guard = (now: number) =>
+  Effect.runPromise(
+    Effect.either(requireFreshAudioCalibration(testDb as never, new Date(now)))
+  );
+
+describe("the recorder client, gated on the Audio Calibration (ADR 0038)", () => {
+  it("refuses Record with no calibration passed under today's rules (an old -21 LUFS pass does not count), or an expired one; allows a fresh one", async () => {
+    expect(await guard(T0_MS)).toMatchObject({
+      _tag: "Left",
+      left: {
+        _tag: "AudioCalibrationRequiredError",
+        reason: { kind: "none" },
+      },
+    });
+
+    // Passed under the old -21 LUFS target, before the peak check.
+    await calibrated("old-rules", {
+      minutesBefore: 5,
+      speechLufs: -21,
+      truePeakDb: null,
+    });
+    expect(await guard(T0_MS)).toMatchObject({
+      left: { reason: { kind: "none" } },
+    });
+
+    await calibrated("fresh", { minutesBefore: 60 });
+    expect(await guard(T0_MS)).toMatchObject({
+      _tag: "Right",
+      right: { id: "fresh", thresholdDb: -43 },
+    });
+    const sevenDaysOn = T0_MS - 60 * 60_000 + CALIBRATION_VALIDITY_MS;
+    expect(await guard(sevenDaysOn)).toMatchObject({
+      left: { reason: { kind: "expired", expiredAtMs: sevenDaysOn } },
+    });
+  });
+
+  it("is refused by the recorder service when the calibration was taken on another mic", async () => {
+    const { client } = await setup(undefined, calibrationFromDatabase);
+    await calibrated("other-mic", {
+      minutesBefore: 60,
+      recorderMic: "Scarlett Solo USB",
+    });
+    const video = await clipService.createVideo("CVM recorder");
+    client.subscribe(video.id, () => {});
+    await vi.waitFor(() =>
+      expect(
+        client.startRecording(video.id, {
+          silenceLength: "short",
+          insertionPoint: { type: "start" },
+          folder: tmp(),
+        })
+      ).rejects.toThrow(
+        `${CALIBRATION_REFUSAL_PREFIX}The recorder's mic changed from "Scarlett Solo USB" to "${FAKE_MIC}"`
+      )
+    );
+    expect(await readSession()).toBeUndefined();
+  });
+
+  it("records under the latest one, keeps it for the whole Recording Session, and a Stream Deck Record after a new one cuts with that", async () => {
+    const { windows, client, port } = await setup(
+      undefined,
+      calibrationFromDatabase
+    );
+    await calibrated("passed-earlier", { minutesBefore: 60 });
+    await calibrated("failed-later", {
+      minutesBefore: 50,
+      outcome: "failed",
+      speechLufs: -32,
+    });
 
     const video = await recordOn(client);
     expect(windows.recorder("camera").launch.args.join(" ")).toContain(
-      "silencedetect=n=-37dB:d=0.8"
+      "silencedetect=n=-43dB:d=0.8"
     );
 
     // Calibrating again mid-session changes nothing for it.
-    await calibrated("passed-mid-session", "passed", -35, 10);
+    await calibrated("passed-mid-session", {
+      minutesBefore: 40,
+      speechLufs: -26,
+    });
     client.calibrationChanged();
     await client.stopRecording(video.id);
     await vi.waitFor(async () =>

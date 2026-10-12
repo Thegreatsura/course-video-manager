@@ -52,3 +52,33 @@ export const insertAtPoint = (
     insertionPoint: afterItem(newItem),
   };
 };
+
+/**
+ * Returns the default insertion point: below the first section that has no
+ * clips after it (before the next section or end of list). Falls back to "end".
+ */
+export function defaultInsertionPoint(
+  items: TimelineItem[]
+): FrontendInsertionPoint {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    if (
+      item.type === "chapter-on-database" ||
+      item.type === "chapter-optimistically-added"
+    ) {
+      const nextItem = items[i + 1];
+      // Section is "empty" if the next item is another section or there's nothing after it
+      const isEmpty =
+        !nextItem ||
+        nextItem.type === "chapter-on-database" ||
+        nextItem.type === "chapter-optimistically-added";
+      if (isEmpty) {
+        return {
+          type: "after-chapter",
+          frontendChapterId: item.frontendId,
+        };
+      }
+    }
+  }
+  return { type: "end" };
+}

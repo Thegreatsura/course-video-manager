@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
-import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
+import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
 
 /**
  * A Short, through the recorder service's WebSocket on a scripted Windows:
@@ -51,7 +51,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     const started = await client.next("recording-started");
     expect(started).toMatchObject({ format: "short", screenCaptured: true });
@@ -88,7 +88,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect((await client.next("refused")).message).toContain(message);
     client.send({ type: "switch-scene", scene: "No Face" });
@@ -113,7 +113,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     const started = await client.next("recording-started");
     expect(started).toMatchObject({ format: "short", screenCaptured: false });
@@ -176,7 +176,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect(await client.next("recording-started")).toMatchObject({
       format: "landscape",
@@ -194,7 +194,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     const { files, recordingSessionId } =
       await crashed.client.next("recording-started");

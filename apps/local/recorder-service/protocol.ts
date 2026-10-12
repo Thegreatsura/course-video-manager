@@ -1,9 +1,7 @@
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
-import type {
-  SilenceLength,
-  SilenceThreshold,
-} from "../app/silence-detection-constants";
+import type { SilenceLength } from "../app/silence-detection-constants";
+import type { LastPassedCalibration } from "../app/audio-calibration-constants";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -43,12 +41,12 @@ export const RECORDER_SERVICE_PORT = 5177;
  * Bumped whenever the wire changes in a way an older service cannot follow
  * (2: a Short's `format` and `screen`; 3: the level meter; 4: the Audio
  * Calibration run; 5: Record's silence threshold; 6: the calibration's true
- * peak). The app server reloads on a change
+ * peak; 7: Record carries its Audio Calibration, and is gated on it). The app server reloads on a change
  * and the service does not (ADR 0035), so after a pull mid-session the app may
  * meet a service started from older code; `hello` says which wire it speaks
  * (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 6;
+export const RECORDER_PROTOCOL_VERSION = 7;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -126,29 +124,36 @@ export type RecorderCommand =
   | { type: "switch-scene"; scene: Scene }
   /**
    * Start a Recording Session in a new folder under `folder` (a WSL path),
-   * its silencedetect cutting with `thresholdDb`, the threshold of the Audio
-   * Calibration `audioCalibrationId` (null: none has passed, the fixed
-   * default). Refused without a threshold (`THRESHOLD_REQUIRED`).
+   * its silencedetect cutting with the threshold of `calibration`, the
+   * latest Audio Calibration passed under today's rules (null: none). THE
+   * GATE (ADR 0038): refused unless that calibration is less than 7 days old
+   * by the service's clock and was taken on the mic the service records
+   * now (`calibrationValidity`). Refused without the field at all
+   * (`CALIBRATION_REQUIRED`). Checked only here, at the start: a Recording
+   * Session already running is never stopped by it.
    */
-  | ({
+  | {
       type: "record";
       silenceLength: SilenceLength;
       folder: string;
-    } & SilenceThreshold)
+      calibration: LastPassedCalibration | null;
+    }
   | { type: "stop" }
   | { type: "close" }
   /**
    * What a Stream Deck Record records with on this Video: the editor's
-   * Silence Length, the recordings folder, and the silence threshold and its
-   * Audio Calibration. Kept until the recorder closes or opens for another
-   * Video. Refused without a threshold, as `record` is.
+   * Silence Length, the recordings folder, and the Audio Calibration. Kept
+   * until the recorder closes or opens for another Video; the press is
+   * gated as `record` is, when it is pressed. Refused without the
+   * calibration field, as `record` is.
    */
-  | ({
+  | {
       type: "prepare-record";
       videoId: string;
       silenceLength: SilenceLength;
       folder: string;
-    } & SilenceThreshold)
+      calibration: LastPassedCalibration | null;
+    }
   | { type: "stream-deck"; press: StreamDeckPress }
   /** Send this Recording Session's logged events with `seq > afterSeq`. */
   | { type: "replay"; recordingSessionId: string; afterSeq: number }
@@ -185,11 +190,11 @@ export type RecorderCommand =
 export type CalibrationWindow = { startSeconds: number; endSeconds: number };
 
 /**
- * Why a `record` or `prepare-record` with no silence threshold is refused:
- * the app server that sent it is older than Audio Calibration.
+ * Why a `record` or `prepare-record` with no `calibration` field is refused:
+ * the app server that sent it is older than the Audio Calibration gate.
  */
-export const THRESHOLD_REQUIRED =
-  "Record needs the silence threshold to cut with, from the latest Audio Calibration: reload the app so it sends one.";
+export const CALIBRATION_REQUIRED =
+  "Record needs its Audio Calibration, which this app server does not send: reload the app.";
 
 /** Why the meter will not start while recording. */
 export const METER_WHILE_RECORDING =

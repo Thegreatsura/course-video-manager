@@ -8,8 +8,13 @@ import {
   type SilenceThreshold,
 } from "@/silence-detection-constants";
 import {
+  calibrationValidity,
   deriveThreshold,
+  describeCalibrationRefusal,
   judgeCalibration,
+  passesCurrentRules,
+  type CalibrationInvalidReason,
+  type LastPassedCalibration,
   MEASUREMENT_WINDOWS,
   SCRIPT_SCHEDULE,
   SCRIPT_VERSION,
@@ -213,29 +218,79 @@ export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
 );
 
 /**
- * The silence threshold a Recording Session that starts now cuts with: the
- * latest passed Audio Calibration's, or the fixed default while none has
- * passed. Read once, when recording starts; the Recording Session keeps it.
+ * How many recent passed calibrations are re-judged to find the latest one
+ * that passes under today's rules. A pass that no longer passes is history,
+ * so a handful is plenty.
  */
-export const currentSilenceThreshold = Effect.fn("currentSilenceThreshold")(
+const LAST_PASSED_SCAN = 50;
+
+/**
+ * The latest Audio Calibration that passes under today's rules
+ * (`passesCurrentRules`: an old -21 LUFS pass, or one from before the peak
+ * check, does not), or null. What the gate and every Record go by.
+ */
+export const lastPassedCalibration = Effect.fn("lastPassedCalibration")(
   function* (db: Database) {
-    const latest = yield* dbCall(() =>
-      db.query.audioCalibrations.findFirst({
-        where: eq(audioCalibrations.outcome, "passed"),
-        orderBy: desc(audioCalibrations.createdAt),
-        columns: { id: true, thresholdDb: true },
-      })
+    const rows = yield* dbCall(() =>
+      db
+        .select()
+        .from(audioCalibrations)
+        .where(eq(audioCalibrations.outcome, "passed"))
+        .orderBy(desc(audioCalibrations.createdAt))
+        .limit(LAST_PASSED_SCAN)
     );
-    return latest
+    const row = rows.find(passesCurrentRules);
+    return row
       ? ({
-          thresholdDb: latest.thresholdDb,
-          audioCalibrationId: latest.id,
-        } satisfies SilenceThreshold)
-      : UNCALIBRATED_SILENCE_THRESHOLD;
+          id: row.id,
+          createdAtMs: row.createdAt.getTime(),
+          thresholdDb: row.thresholdDb,
+          recorderMic: row.recorderMic,
+          browserInputLabel: row.browserInputLabel,
+        } satisfies LastPassedCalibration)
+      : null;
   }
 );
 
-/** `currentSilenceThreshold` on the app's database. */
-export const silenceThresholdNow = Effect.gen(function* () {
-  return yield* currentSilenceThreshold(yield* DrizzleService);
+/** `lastPassedCalibration` on the app's database. */
+export const lastPassedCalibrationNow = Effect.gen(function* () {
+  return yield* lastPassedCalibration(yield* DrizzleService);
+});
+
+/**
+ * The silence threshold a take cuts with under `lastPassed` (or the fixed
+ * default with none: the gate refuses that take anyway).
+ */
+export const silenceThresholdOf = (
+  lastPassed: LastPassedCalibration | null
+): SilenceThreshold =>
+  lastPassed
+    ? { thresholdDb: lastPassed.thresholdDb, audioCalibrationId: lastPassed.id }
+    : UNCALIBRATED_SILENCE_THRESHOLD;
+
+/** Record refused by the gate: no fresh Audio Calibration (ADR 0038). */
+export class AudioCalibrationRequiredError extends Data.TaggedError(
+  "AudioCalibrationRequiredError"
+)<{ readonly message: string; readonly reason: CalibrationInvalidReason }> {}
+
+/**
+ * THE GATE, on the app server: Record needs a calibration passed under
+ * today's rules and less than 7 days old at `now`. The input device is the
+ * recorder service's to check (it alone knows its mic), at the moment it
+ * starts recording. Answers the calibration Record goes by.
+ */
+export const requireFreshAudioCalibration = Effect.fn(
+  "requireFreshAudioCalibration"
+)(function* (db: Database, now: Date) {
+  const validity = calibrationValidity(
+    yield* lastPassedCalibration(db),
+    {},
+    now.getTime()
+  );
+  if (!validity.valid)
+    return yield* new AudioCalibrationRequiredError({
+      message: describeCalibrationRefusal(validity.reason),
+      reason: validity.reason,
+    });
+  return validity.calibration;
 });

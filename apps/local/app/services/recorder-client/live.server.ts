@@ -5,7 +5,7 @@ import { DEAD_DESK_URL, isMainCheckout } from "live-desk/live-desk";
 import { RECORDER_SERVICE_PORT } from "recorder-service/protocol";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { runtimeLive } from "@/services/layer.server";
-import { silenceThresholdNow } from "@/services/audio-calibration.server";
+import { lastPassedCalibrationNow } from "@/services/audio-calibration.server";
 import { createRecorderClient, type RecorderClient } from "./client.server";
 import {
   ingestRecorderEvent,
@@ -58,7 +58,7 @@ export const recorderClient = (): RecorderClient => {
           return yield* unfinishedRecordingSessions(db, candidates);
         })
       ),
-    silenceThreshold: () => runtimeLive.runPromise(silenceThresholdNow),
+    calibration: () => runtimeLive.runPromise(lastPassedCalibrationNow),
     reconnectMs: 2_000,
     commandTimeoutMs: 30_000,
     // Long enough for a page reload not to close the camera and reopen it.
