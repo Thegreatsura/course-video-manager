@@ -3,7 +3,6 @@ import path from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { resolveVideoFormat } from "@/features/videos/video-format";
-import type { MicEq } from "@cvm/core/features/videos/recorder";
 import {
   clipSource,
   clipSourceColumns,
@@ -208,15 +207,14 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
  * had been lying about their contents.
  *
  * A new-recorder Clip's composite is drawn from more than its file and range:
- * its Recording Session, scene segments, Scene Override, mic offset, the mic
- * EQ setting and the layout version join its entry (see
+ * its Recording Session, scene segments, Scene Override, mic offset, the
+ * saved mic EQ (loaded with its Recording Session) and the layout version
+ * join its entry (see
  * `clipSourceHashFields`). An OBS Clip's entry is untouched.
  */
 export const computeExportHash = (
   clips: ExportClip[],
-  format: string | null | undefined,
-  /** The saved mic EQ setting new-recorder Clips are exported with. */
-  settings: { readonly micEq?: MicEq } = {}
+  format: string | null | undefined
 ): string | null => {
   if (clips.length === 0) return null;
 
@@ -224,7 +222,7 @@ export const computeExportHash = (
     v: EXPORT_VERSION,
     fmt: resolveVideoFormat(format),
     clips: clips.map((c) => ({
-      ...clipSourceHashFields(clipSource(c, settings)),
+      ...clipSourceHashFields(clipSource(c)),
       ...(c.pauseType === LONG_PAUSE ? { p: LONG_PAUSE } : {}),
       ...(resolveClipZoomType(c.zoomType) === DEFAULT_CLIP_ZOOM_TYPE
         ? {}

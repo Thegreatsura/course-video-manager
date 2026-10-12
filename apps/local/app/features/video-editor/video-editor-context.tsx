@@ -163,6 +163,8 @@ export type VideoEditorContextType = {
 
   // From editorModalsReducer: the open dialog and the inline suggestion
   openModal: editorModalsReducer.Modal | null;
+  /** The New-recorder Clip the Mic Settings dialog is open on. */
+  micSettingsClipId: FrontendId | null;
   modalDispatch: (action: editorModalsReducer.Action) => void;
   /** Each dialog's `onOpenChange`; stable, so a dialog may list it in an effect. */
   onModalOpenChange: Record<editorModalsReducer.Modal, (open: boolean) => void>;

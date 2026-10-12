@@ -153,9 +153,11 @@ describe("a new-recorder Clip's source", () => {
       ],
     });
     const micEq = { lowDb: 1, midDb: 0, highDb: 0 };
-    expect(clipComposite(clipSource(newRecorderClip, { micEq }))?.eq).toBe(
-      micEq
-    );
+    const saved = clipSource({
+      ...newRecorderClip,
+      recordingSession: { ...newRecorderClip.recordingSession, micEq },
+    });
+    expect(clipComposite(saved)?.eq).toEqual(micEq);
   });
 
   it("composites past its end when its output runs longer (a long Pause)", () => {

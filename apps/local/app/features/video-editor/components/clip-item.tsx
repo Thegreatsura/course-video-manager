@@ -11,6 +11,7 @@ import {
   LayersIcon,
   Link2Icon,
   Loader2,
+  MicIcon,
   PauseIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -458,6 +459,18 @@ const ClipMenuContent = (props: {
           // Code scene, and a greyed-out entry on each would be noise. Until
           // the Clip is saved it applies but cannot run yet.
           clipScenePicker(clip, onSetSceneOverride),
+          // A New-recorder Clip's mic is its own file: its Recording
+          // Session's offset and the shared EQ are applied at export.
+          !!onDatabase?.recordingSession && {
+            label: "Mic Settings",
+            icon: MicIcon,
+            opensDialog: true,
+            onSelect: () =>
+              modalDispatch({
+                type: "mic-settings-clicked",
+                clipId: clip.frontendId,
+              }),
+          },
           canZoomClip(effectiveClipScene(clip)) && {
             label:
               onDatabase && onDatabase.zoomType !== "none"

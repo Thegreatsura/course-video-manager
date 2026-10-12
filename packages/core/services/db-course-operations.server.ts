@@ -25,7 +25,7 @@ import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
 import { attachDerivedPaths } from "./path-projection.js";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
 import {
-  loadSceneEvents,
+  loadRecordingSessionRelations,
   recordingSessionExportColumns,
 } from "./db-recording-session-relations.server.js";
 import { toSlug } from "./lesson-path-service.js";
@@ -361,18 +361,18 @@ const createCourseOperations = (db: Database) => {
         });
       }
 
-      // A new-recorder Clip's scene events, loaded apart: nested here they
-      // would pass Postgres's identifier limit (see
+      // A new-recorder Clip's scene events and mic EQ, loaded apart: nested
+      // here they would pass Postgres's identifier limit (see
       // recordingSessionExportColumns).
       const withEvents = yield* makeDbCall(() =>
-        loadSceneEvents(
+        loadRecordingSessionRelations(
           db,
           course.versions.flatMap((v) =>
             v.sections.flatMap((s) =>
               s.lessons.flatMap((l) =>
                 l.videos.flatMap((vid) =>
                   vid.clips.flatMap((c) =>
-                    c.recordingSession ? [c.recordingSession.id] : []
+                    c.recordingSession ? [c.recordingSession] : []
                   )
                 )
               )

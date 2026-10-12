@@ -225,6 +225,13 @@
       "when": 1791749948134,
       "tag": "0031_recording_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791790212894,
+      "tag": "0032_mic_eq_setting",
+      "breakpoints": true
     }
   ]
 }

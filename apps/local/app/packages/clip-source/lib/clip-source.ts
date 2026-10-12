@@ -9,8 +9,9 @@ import {
 
 /**
  * A new-recorder Clip's Recording Session, as loaded with the Clip (the
- * `recordingSession` relation with its `sceneEvents`). Scene event times are
- * the picture's file time.
+ * `recordingSession` relation with its `sceneEvents` and `micEq`). Scene
+ * event times are the picture's file time. `micEq` is the saved Mic EQ
+ * Setting, null until it is first saved ({@link DEFAULT_MIC_EQ}).
  */
 export type ClipRecordingSession = {
   readonly id: string;
@@ -18,11 +19,19 @@ export type ClipRecordingSession = {
   readonly screenFilePath: string;
   readonly micFilePath: string;
   readonly micOffsetMs: number;
+  readonly micEq: MicEq | null;
   readonly sceneEvents: readonly {
     readonly fileTime: number;
     readonly scene: Scene;
   }[];
 };
+
+/**
+ * A Recording Session as a reader that only shows the Clip loads it: the EQ
+ * may be left off, since only the export hears it.
+ */
+type ShownRecordingSession = Omit<ClipRecordingSession, "micEq"> &
+  Partial<Pick<ClipRecordingSession, "micEq">>;
 
 /**
  * The persisted columns a Clip's picture and sound are read from — what the
@@ -52,12 +61,9 @@ export type ClipSourceRow = Pick<
   ClipSourceColumns,
   "videoFilename" | "sourceStartTime" | "sourceEndTime"
 > &
-  Partial<
-    Pick<
-      ClipSourceColumns,
-      "recordingSessionId" | "sceneOverride" | "recordingSession"
-    >
-  >;
+  Partial<Pick<ClipSourceColumns, "recordingSessionId" | "sceneOverride">> & {
+    readonly recordingSession?: ShownRecordingSession | null;
+  };
 
 /**
  * Where a Clip's picture and sound come from. The variants are this package's
@@ -160,6 +166,11 @@ export const clipSourceColumns = (
     screenFilePath: row.recordingSession.screenFilePath,
     micFilePath: row.recordingSession.micFilePath,
     micOffsetMs: row.recordingSession.micOffsetMs,
+    micEq: row.recordingSession.micEq && {
+      lowDb: row.recordingSession.micEq.lowDb,
+      midDb: row.recordingSession.micEq.midDb,
+      highDb: row.recordingSession.micEq.highDb,
+    },
     sceneEvents: row.recordingSession.sceneEvents.map((e) => ({
       fileTime: e.fileTime,
       scene: e.scene,
@@ -168,13 +179,11 @@ export const clipSourceColumns = (
 });
 
 /**
- * The Clip's source. `micEq` is the saved mic EQ setting a new-recorder Clip
- * is exported with (default: Matt's OBS EQ, {@link DEFAULT_MIC_EQ}).
+ * The Clip's source. A new-recorder Clip is exported with its Recording
+ * Session's saved mic EQ, or Matt's OBS EQ ({@link DEFAULT_MIC_EQ}) until one
+ * is saved.
  */
-export const clipSource = (
-  row: ClipSourceRow,
-  settings: { readonly micEq?: MicEq } = {}
-): ClipSource => {
+export const clipSource = (row: ClipSourceRow): ClipSource => {
   const start = row.sourceStartTime;
   const end = row.sourceEndTime;
   const session = row.recordingSession;
@@ -196,7 +205,7 @@ export const clipSource = (
     },
     micOffsetSeconds: session.micOffsetMs / 1000,
     micOffsetMs: session.micOffsetMs,
-    micEq: settings.micEq ?? DEFAULT_MIC_EQ,
+    micEq: session.micEq ?? DEFAULT_MIC_EQ,
     sceneEvents,
     sceneOverride,
     segments: sceneSegments({

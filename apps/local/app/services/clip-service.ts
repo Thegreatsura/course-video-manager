@@ -14,7 +14,10 @@ import type { InferSelectModel } from "drizzle-orm";
 import type { clips, chapters, videos } from "@/db/schema";
 import { parse409Message } from "@/services/version-not-draft-message";
 import type { SilenceLength } from "@/silence-detection-constants";
-import type { RecordingSessionScene } from "@cvm/core/features/videos/recorder";
+import type {
+  MicEq,
+  RecordingSessionScene,
+} from "@cvm/core/features/videos/recorder";
 // ============================================================================
 // Database Types
 // ============================================================================
@@ -364,6 +367,17 @@ export interface ClipService {
     clipId: string,
     sceneOverride: RecordingSessionScene | null
   ): Promise<void>;
+  /**
+   * Set the mic offset of the Recording Session a New-recorder Clip was cut
+   * from — every Clip of that Session moves its sound, none moves its
+   * picture. Refused on an OBS Clip.
+   */
+  updateMicOffset(clipId: string, micOffsetMs: number): Promise<void>;
+  /**
+   * Save the mic EQ every New-recorder Video is exported with. Every such
+   * Video needs a new export; OBS Videos are untouched.
+   */
+  updateMicEq(micEq: MicEq): Promise<void>;
   reorderClip(clipId: string, direction: ReorderDirection): Promise<void>;
 
   // Chapter operations
@@ -414,6 +428,8 @@ export type ClipServiceEvent =
       clipId: string;
       sceneOverride: RecordingSessionScene | null;
     }
+  | { type: "update-mic-offset"; clipId: string; micOffsetMs: number }
+  | { type: "update-mic-eq"; micEq: MicEq }
   | { type: "reorder-clip"; clipId: string; direction: ReorderDirection }
   | {
       type: "create-chapter-at-insertion-point";
@@ -522,6 +538,14 @@ export function createClipService(send: ClipServiceTransport): ClipService {
 
     async updateSceneOverride(clipId, sceneOverride) {
       await send({ type: "update-scene-override", clipId, sceneOverride });
+    },
+
+    async updateMicOffset(clipId, micOffsetMs) {
+      await send({ type: "update-mic-offset", clipId, micOffsetMs });
+    },
+
+    async updateMicEq(micEq) {
+      await send({ type: "update-mic-eq", micEq });
     },
 
     async reorderClip(clipId, direction) {

@@ -131,6 +131,32 @@ export function createEditEffectHandlers(
           });
         });
     },
+    "update-mic-offset": (_state, effect, dispatch) => {
+      clipService
+        .updateMicOffset(effect.clipId, effect.micOffsetMs)
+        .catch((error) => {
+          dispatch({
+            type: "effect-failed",
+            effectType: "update-mic-offset",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to update the mic offset",
+          });
+        });
+    },
+    "update-mic-eq": (_state, effect, dispatch) => {
+      clipService.updateMicEq(effect.micEq).catch((error) => {
+        dispatch({
+          type: "effect-failed",
+          effectType: "update-mic-eq",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to update the mic EQ",
+        });
+      });
+    },
     "update-pause": (_state, effect, dispatch) => {
       clipService
         .updatePause(effect.clipId, effect.pauseType)

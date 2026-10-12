@@ -55,6 +55,11 @@ export type LogEvent =
       sceneOverride: string | null;
     }
   | {
+      type: "mic-offset-updated";
+      recordingSessionId: string;
+      micOffsetMs: number;
+    }
+  | {
       type: "clip-reordered";
       clipId: string;
       direction: "up" | "down";
