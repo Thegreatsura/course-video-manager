@@ -26,7 +26,7 @@ import { useClipboardOperations } from "./hooks/use-clipboard-operations";
 import { useCallback, type ReactNode, useEffect, useMemo } from "react";
 import { enableVideoEditorMode } from "@/lib/diagram-window";
 import { useLocalStorage } from "@/hooks/use-local-storage";
-import { useFetcher, useSubmit } from "react-router";
+import { useSubmit } from "react-router";
 import type {
   DatabaseId,
   EditorError,
@@ -204,7 +204,6 @@ export const VideoEditor = (props: {
 
   const currentClipId = state.currentClipId;
 
-  const exportToDavinciResolveFetcher = useFetcher();
   const {
     state: modalsState,
     dispatch: modalDispatch,
@@ -489,8 +488,6 @@ export const VideoEditor = (props: {
       isCopied,
       isChaptersCopied,
 
-      exportToDavinciResolveFetcher,
-
       // From editorModalsReducer
       openModal: modalsState.openModal,
       micSettingsClipId: modalsState.micSettingsClipId,
@@ -564,7 +561,6 @@ export const VideoEditor = (props: {
       youtubeChapters,
       isCopied,
       isChaptersCopied,
-      exportToDavinciResolveFetcher,
       modalsState,
       modalDispatch,
       onModalOpenChange,

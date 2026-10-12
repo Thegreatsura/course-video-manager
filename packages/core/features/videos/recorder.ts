@@ -61,22 +61,6 @@ export function clipRecorder(clip: {
 }
 
 /**
- * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
- * The export hands DaVinci one Footage file per Clip, so every Clip must be
- * an OBS Clip: a CVM-recorder Clip's picture is a composite of three files
- * drawn at export (#2011; Matt never uses this export). Which Recorder the
- * Video opens next does not matter, only the Clips it holds.
- */
-export function davinciResolveRefusal(video: {
-  readonly clips: readonly { readonly recordingSessionId: string | null }[];
-}): string | null {
-  if (video.clips.some((clip) => clipRecorder(clip) === "cvm")) {
-    return "Export to DaVinci Resolve works on OBS Clips only: this Video holds CVM-recorder Clips.";
-  }
-  return null;
-}
-
-/**
  * Where a Recording Session stands (`recording_session.status`):
  * `recording` while the recorder is writing its files, `stopped` once it
  * finished them cleanly, `crashed` when the recorder found it still

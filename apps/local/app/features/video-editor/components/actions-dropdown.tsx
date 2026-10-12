@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { usePublishEditorVideoMenu } from "../editor-video-menu";
 
 /**
@@ -23,8 +23,6 @@ export const ActionsDropdown = (props: {
   groups: ActionMenuGroups;
   /** Whether silence detection has completed for all clips */
   allClipsHaveSilenceDetected: boolean;
-  /** A long-running action (DaVinci Resolve export) is in flight. */
-  isPending?: boolean;
 }) => {
   usePublishEditorVideoMenu(props.groups);
 
@@ -38,9 +36,6 @@ export const ActionsDropdown = (props: {
                 variant="secondary"
                 disabled={!props.allClipsHaveSilenceDetected}
               >
-                {props.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                ) : null}
                 Actions
                 <ChevronDown className="w-4 h-4 ml-1" />
               </Button>

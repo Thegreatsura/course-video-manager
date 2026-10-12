@@ -20,7 +20,6 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { ClipComputedProps } from "./types";
 import type { ReferenceCandidate } from "./components/reference-panel";
-import type { FetcherWithComponents } from "react-router";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { ClipOverlay } from "./overlay-preview";
 
@@ -161,8 +160,6 @@ export type VideoEditorContextType = {
   youtubeChapters: { timestamp: string; name: string }[];
   isCopied: boolean;
   isChaptersCopied: boolean;
-
-  exportToDavinciResolveFetcher: FetcherWithComponents<unknown>;
 
   // From editorModalsReducer: the open dialog and the inline suggestion
   openModal: editorModalsReducer.Modal | null;

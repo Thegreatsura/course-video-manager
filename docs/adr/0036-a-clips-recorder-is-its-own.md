@@ -17,7 +17,7 @@ The lock was policy only. Everything that reads Footage already works per Clip, 
 1. **A Clip's Recorder is its own** (`clipRecorder`: a Recording Session means the CVM recorder). One Video may hold OBS and CVM-recorder Clips, and its export draws each from its own Footage.
 2. **The Video's Recorder only says which Recorder opens next** in the editor. It can be switched at any time except while capturing: the editor disables the picker mid-capture, and `updateVideoRecorder` refuses while one of the Video's Recording Sessions is still recording. A Video with Clips may switch.
 3. **Deleted:** the Footage lock (`isRecorderLocked` and the "locked once the Video has Clips" refusal) and `clipRestoreRefusal`: any archived Clip restores.
-4. **Export to DaVinci Resolve** still refuses a Video holding any CVM-recorder Clip, because it hands DaVinci one Footage file per Clip and a CVM-recorder Clip's picture is a composite of three files. It no longer looks at the Video's Recorder.
+4. ~~**Export to DaVinci Resolve** still refuses a Video holding any CVM-recorder Clip, because it hands DaVinci one Footage file per Clip and a CVM-recorder Clip's picture is a composite of three files. It no longer looks at the Video's Recorder.~~ Superseded by ADR 0039: the export is deleted.
 5. **No schema change.** `video.recorder` keeps its column and values.
 
 ## Consequences
