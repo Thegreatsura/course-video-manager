@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { CANVAS, type Scene } from "@/packages/scene-layout";
+import type { VideoFormat } from "@/features/videos/video-format";
+import { CANVASES, type Scene } from "@/packages/scene-layout";
 import { drawComposite, type CompositeSourceFrame } from "../draw-composite";
 
 /** A feed's frame once it has shown one, else undefined. */
@@ -19,11 +20,13 @@ const frameOf = (
  * scene the recorder is in. The feeds load in `<img>`s kept out of sight;
  * the canvas redraws them every animation frame. A feed with no frame yet
  * is left out (black). It fills the editor's live frame, where OBS's
- * Virtual Camera would be (`LivePreviewFrame`).
+ * Virtual Camera would be (`LivePreviewFrame`). A Short is drawn in its own
+ * 9:16 layout.
  */
 export const CompositePreview = (props: {
   previews: { camera: string; screen: string };
   scene: Scene;
+  format: VideoFormat;
   /** Whether the camera feed has anything to show (the Cam Link is live or recording). */
   cameraShowing: boolean;
   /** Changes when the camera comes back, so its stream reconnects. */
@@ -32,7 +35,8 @@ export const CompositePreview = (props: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<HTMLImageElement>(null);
   const screenRef = useRef<HTMLImageElement>(null);
-  const { scene } = props;
+  const { scene, format } = props;
+  const canvas = CANVASES[format];
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
@@ -40,14 +44,19 @@ export const CompositePreview = (props: {
     let frame = 0;
     const draw = () => {
       frame = requestAnimationFrame(draw);
-      drawComposite(ctx, scene, {
-        camera: frameOf(cameraRef.current),
-        screen: frameOf(screenRef.current),
-      });
+      drawComposite(
+        ctx,
+        scene,
+        {
+          camera: frameOf(cameraRef.current),
+          screen: frameOf(screenRef.current),
+        },
+        format
+      );
     };
     draw();
     return () => cancelAnimationFrame(frame);
-  }, [scene]);
+  }, [scene, format]);
 
   const hidden = "pointer-events-none absolute size-px opacity-0";
   return (
@@ -55,11 +64,12 @@ export const CompositePreview = (props: {
       className="relative w-full h-full overflow-hidden rounded-lg bg-black"
       data-testid="cvm-recorder-composite"
       data-scene={scene}
+      data-format={format}
     >
       <canvas
         ref={canvasRef}
-        width={CANVAS.width}
-        height={CANVAS.height}
+        width={canvas.width}
+        height={canvas.height}
         className="h-full w-full"
       />
       {props.cameraShowing && (

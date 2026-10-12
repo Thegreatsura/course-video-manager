@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, afterEach, vi } from "vitest";
 import { Effect, Layer } from "effect";
 import { start, tmp } from "recorder-service/test-utils/service-harness";
+import { fakeWindows } from "recorder-service/test-utils/fake-windows";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { clipService, testDb } from "../clip-service-test-setup";
@@ -33,8 +34,12 @@ afterEach(() => {
   for (const c of clients.splice(0)) c.close();
 });
 
-export const startService = async (stateDir = tmp()) => {
-  const { windows, port } = await start(undefined, stateDir);
+/** The recorder service on a scripted Windows (`fakeWindows`, never the real Spacedesk). */
+export const startService = async (
+  stateDir = tmp(),
+  windows = fakeWindows()
+) => {
+  const { port } = await start(windows, stateDir);
   return { windows, port, stateDir };
 };
 

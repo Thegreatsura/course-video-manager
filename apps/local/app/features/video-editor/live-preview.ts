@@ -1,4 +1,5 @@
-import type { Scene } from "@/packages/scene-layout";
+import { CANVASES, type Scene } from "@/packages/scene-layout";
+import type { VideoFormat } from "@/features/videos/video-format";
 import type { cvmRecorderReducer } from "./cvm-recorder-reducer";
 
 /**
@@ -13,6 +14,9 @@ import type { cvmRecorderReducer } from "./cvm-recorder-reducer";
 export type CvmRecorderLivePreview = {
   previews: { camera: string; screen: string };
   scene: Scene;
+  /** The layout drawn: a Short's is 9:16, in a portrait frame. */
+  format: VideoFormat;
+  canvas: { width: number; height: number };
   /** Whether the camera feed has anything to show (the Cam Link is live or recording). */
   cameraShowing: boolean;
   /** Changes when the camera comes back, so its stream reconnects. */
@@ -32,6 +36,8 @@ export const getCvmRecorderLivePreview = (
   return {
     previews: state.previews,
     scene: state.scene,
+    format: state.format,
+    canvas: CANVASES[state.format],
     cameraShowing: state.camera.kind === "live" || state.phase !== "idle",
     cameraKey: state.camera.kind,
     showCenterLine: state.scene === "Camera",

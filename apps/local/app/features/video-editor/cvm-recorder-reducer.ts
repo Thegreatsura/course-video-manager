@@ -2,7 +2,9 @@ import type { EffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
-import type { FramesLost } from "recorder-service/protocol";
+import type { VideoFormat } from "@/features/videos/video-format";
+import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
+import { isSceneAvailable } from "./cvm-recorder-screen";
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 
@@ -19,6 +21,11 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * Scenes: the preview draws the scene the recorder says it is in
  * (`scene-changed`); a scene button asks the recorder to switch, and the
  * preview follows once it has.
+ *
+ * A Short's screen is the Spacedesk display, which the recorder wakes when it
+ * opens (`screen-changed`): until it is ready, only scenes that do not draw
+ * the screen (Camera) may be switched to or recorded in, and once it is
+ * unavailable Matt may wake Spacedesk again (`cvm-recorder-screen.ts`).
  *
  * The Stream Deck records, stops and switches scenes on the recorder service
  * directly: the editor hears the same messages as for its own buttons, so it
@@ -45,6 +52,8 @@ export namespace cvmRecorderReducer {
     | { kind: "busy"; message: string };
 
   export type State = {
+    /** The Video's format: a Short is drawn, and recorded, 9:16. */
+    format: VideoFormat;
     /** Null until the app server first says. */
     reachable: boolean | null;
     /** Why the recorder cannot record at all (a wrong ffmpeg). */
@@ -61,6 +70,10 @@ export namespace cvmRecorderReducer {
     speechCount: number;
     /** The scene the recorder draws; null while it is not open for this Video. */
     scene: Scene | null;
+    /** A Short's screen; null while not open for this Video, and for Landscape. */
+    screen: ScreenStatus | null;
+    /** Wake Spacedesk again was pressed and the recorder is not waking it yet. */
+    wakingAgain: boolean;
     /** The last thing that went wrong, until the next Record. */
     error: string | null;
     /**
@@ -88,6 +101,8 @@ export namespace cvmRecorderReducer {
     | { type: "speech-long-enough"; speechCount: number }
     | { type: "press-retry" }
     | { type: "press-scene"; scene: Scene }
+    | { type: "press-wake-spacedesk" }
+    | { type: "retry-screen-failed"; message: string }
     | { type: "switch-scene-failed"; message: string }
     | { type: "retry-camera-failed"; message: string }
     | { type: "start-recording-failed"; message: string }
@@ -102,12 +117,16 @@ export namespace cvmRecorderReducer {
     | { type: "stop-recording" }
     | { type: "send-silence-length"; silenceLength: SilenceLength }
     | { type: "retry-camera" }
+    | { type: "retry-screen" }
     /** Report `speech-long-enough` once the minimum Clip length has passed. */
     | { type: "time-speech"; speechCount: number }
     | { type: "switch-scene"; scene: Scene };
 }
 
-export const createInitialCvmRecorderState = (): cvmRecorderReducer.State => ({
+export const createInitialCvmRecorderState = (
+  format: VideoFormat = "landscape"
+): cvmRecorderReducer.State => ({
+  format,
   reachable: null,
   problem: null,
   phase: "idle",
@@ -117,6 +136,8 @@ export const createInitialCvmRecorderState = (): cvmRecorderReducer.State => ({
   speech: { type: "warming-up" },
   speechCount: 0,
   scene: null,
+  screen: null,
+  wakingAgain: false,
   error: null,
   alert: null,
   framesLost: null,
@@ -133,7 +154,8 @@ export const canRecord = (state: cvmRecorderReducer.State) =>
   state.reachable === true &&
   state.problem === null &&
   state.phase === "idle" &&
-  state.camera.kind === "live";
+  state.camera.kind === "live" &&
+  (state.scene === null || isSceneAvailable(state, state.scene));
 
 export const canSwitchScene = (state: cvmRecorderReducer.State) =>
   state.reachable === true && state.scene !== null;
@@ -141,6 +163,13 @@ export const canSwitchScene = (state: cvmRecorderReducer.State) =>
 export const canRetryCamera = (state: cvmRecorderReducer.State) =>
   !state.retrying &&
   (state.camera.kind === "not-starting" || state.camera.kind === "busy");
+
+/** A Short's screen is unavailable: Matt may ask the recorder to wake Spacedesk again. */
+export const canWakeSpacedeskAgain = (state: cvmRecorderReducer.State) =>
+  state.format === "short" &&
+  state.screen?.kind === "unavailable" &&
+  state.phase === "idle" &&
+  !state.wakingAgain;
 
 const cameraHeard = (
   state: cvmRecorderReducer.State,
@@ -171,6 +200,7 @@ const heard = (
         previews: message.previews,
         camera: message.reachable ? state.camera : { kind: "closed" },
         scene: message.reachable ? state.scene : null,
+        screen: message.reachable ? state.screen : null,
         phase: recording
           ? state.phase === "stopping"
             ? "stopping"
@@ -194,9 +224,15 @@ const heard = (
     case "cam-link-busy":
       return cameraHeard(state, { kind: "busy", message: message.message });
     case "camera-closed":
-      return { ...cameraHeard(state, { kind: "closed" }), scene: null };
+      return {
+        ...cameraHeard(state, { kind: "closed" }),
+        scene: null,
+        screen: null,
+      };
     case "scene-changed":
       return { ...state, scene: message.scene };
+    case "screen-changed":
+      return { ...state, screen: message.screen, wakingAgain: false };
     case "recording-started":
       return { ...state, phase: "recording", speech: WARMING_UP, error: null };
     case "warmed-up":
@@ -307,11 +343,22 @@ export const cvmRecorderReducer: EffectReducer<
       exec({ type: "retry-camera" });
       return { ...state, retrying: true, error: null };
     case "press-scene":
-      if (!canSwitchScene(state) || action.scene === state.scene) return state;
+      if (
+        !canSwitchScene(state) ||
+        action.scene === state.scene ||
+        !isSceneAvailable(state, action.scene)
+      )
+        return state;
       exec({ type: "switch-scene", scene: action.scene });
       return { ...state, error: null };
     case "switch-scene-failed":
       return { ...state, error: action.message };
+    case "press-wake-spacedesk":
+      if (!canWakeSpacedeskAgain(state)) return state;
+      exec({ type: "retry-screen" });
+      return { ...state, wakingAgain: true, error: null };
+    case "retry-screen-failed":
+      return { ...state, wakingAgain: false, error: action.message };
     case "retry-camera-failed":
       return { ...state, retrying: false, error: action.message };
     case "start-recording-failed":

@@ -12,7 +12,7 @@ const LABELS: Record<VideoRecorder, string> = {
 
 /**
  * Which Recorder this Video records with, and the choice between them while
- * the Video has no Clips. A Short offers OBS only, so it just says OBS.
+ * the Video has no Clips.
  */
 export const RecorderPicker = () => {
   const picker = useContextSelector(
