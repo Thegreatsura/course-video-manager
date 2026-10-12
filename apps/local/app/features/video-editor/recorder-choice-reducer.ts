@@ -4,18 +4,18 @@ import {
   resolveVideoRecorder,
   type VideoRecorder,
 } from "@cvm/core/features/videos/recorder";
-import type { RecordingSession, TimelineItem } from "./clip-state-reducer";
-import type { OBSConnectionOuterState } from "./obs-connector";
-import { isCaptureInProgress } from "./video-editor-selectors";
 
 /**
- * The editor's choice of Recorder (OBS or CVM recorder) for one Video. The
- * choice is saved on the Video and, once saved, remembered as the last
- * choice, which a new Video then starts with (`last-recorder-choice.ts`).
+ * The editor's choice of which Recorder (OBS or CVM recorder) opens next on
+ * one Video. It switches at any time except while capturing; the Video's
+ * Clips keep the Recorders that filmed them (ADR 0036). The choice is saved
+ * on the Video and, once saved, remembered as the last choice, which a new
+ * Video then starts with (`last-recorder-choice.ts`). A Short has one option,
+ * the CVM recorder (ADR 0037).
  */
 export namespace recorderChoiceReducer {
   export type State = {
-    /** The Recorders this Video may record with (`recordersForFormat`). */
+    /** The Recorders this Video may open (`recordersForFormat`). */
     options: readonly VideoRecorder[];
     /** The Recorder shown, and the one the editor records with. */
     recorder: VideoRecorder;
@@ -28,8 +28,8 @@ export namespace recorderChoiceReducer {
     | {
         type: "recorder-picked";
         recorder: VideoRecorder;
-        /** `isRecorderLocked` when the pick was made. */
-        locked: boolean;
+        /** Whether a capture was in progress when the pick was made. */
+        capturing: boolean;
       }
     | { type: "recorder-saved"; recorder: VideoRecorder }
     | {
@@ -48,8 +48,7 @@ export const createInitialRecorderChoiceState = (video: {
   recorder: string | null;
 }): recorderChoiceReducer.State => {
   const options = recordersForFormat(video.format);
-  const resolved = resolveVideoRecorder(video.recorder);
-  const recorder = options.includes(resolved) ? resolved : "obs";
+  const recorder = resolveVideoRecorder(video);
   return { options, recorder, saved: recorder, error: null };
 };
 
@@ -61,7 +60,7 @@ export const recorderChoiceReducer: EffectReducer<
   switch (action.type) {
     case "recorder-picked": {
       if (
-        action.locked ||
+        action.capturing ||
         action.recorder === state.recorder ||
         !state.options.includes(action.recorder)
       ) {
@@ -89,27 +88,9 @@ export const showsOBSChecks = (state: recorderChoiceReducer.State): boolean =>
   state.recorder === "obs";
 
 /**
- * Record, the scene buttons and the composite preview: only on a New
- * recorder Video.
+ * Record, the scene buttons and the composite preview: only while the CVM
+ * recorder opens next.
  */
 export const showsCvmRecorderControls = (
   state: Pick<recorderChoiceReducer.State, "recorder">
 ): boolean => state.recorder === "cvm";
-
-/**
- * The Recorder is locked once the Video has a live Clip, so one Video never
- * mixes OBS and CVM-recorder Clips, and while a capture is still in progress
- * (its first Clip may not have landed yet). Archived Clips do not count: a
- * Video whose Clips are all archived has no Footage.
- */
-export const isRecorderLocked = (
-  obsConnectorState: OBSConnectionOuterState,
-  items: TimelineItem[],
-  sessions: RecordingSession[]
-): boolean =>
-  items.some(
-    (item) =>
-      item.type !== "chapter-on-database" &&
-      item.type !== "chapter-optimistically-added" &&
-      !("shouldArchive" in item && item.shouldArchive)
-  ) || isCaptureInProgress(obsConnectorState, items, sessions);

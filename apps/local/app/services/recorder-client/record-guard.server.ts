@@ -30,7 +30,7 @@ export const requireRecordableVideo = Effect.fn("requireRecordableVideo")(
     );
     if (!video)
       return yield* new NotFoundError({ type: "video", params: { videoId } });
-    if (resolveVideoRecorder(video.recorder) !== "cvm")
+    if (resolveVideoRecorder(video) !== "cvm")
       return yield* new RecordOnOBSVideoError({
         message: "This Video records with OBS. Reload to see its Recorder.",
       });

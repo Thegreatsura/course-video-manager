@@ -1,5 +1,5 @@
 /**
- * The Recorder a Video is filmed with, chosen per Video (`video.recorder`):
+ * A Recorder: what films a Clip.
  *
  * - `obs` — OBS records one file with the scene baked in, and the editor makes
  *   Clips from it as it always has.
@@ -7,14 +7,15 @@
  *   screen and mic as three Footage files plus a scene timeline, so the
  *   picture is drawn at export and a Clip can carry a Scene Override.
  *
- * Every Video filmed before the choice existed has a null column, which reads
- * as OBS.
+ * A Recorder belongs to each Clip (`clipRecorder`), so one Video may hold
+ * both. The Video's Recorder (`video.recorder`) only says which Recorder
+ * opens next in the editor; it can be switched at any time except while
+ * capturing (ADR 0036). A null column reads as the format's default: OBS for
+ * a Landscape Video, the CVM recorder for a Short.
  */
 export const VIDEO_RECORDERS = ["obs", "cvm"] as const;
 
 export type VideoRecorder = (typeof VIDEO_RECORDERS)[number];
-
-export const DEFAULT_VIDEO_RECORDER: VideoRecorder = "obs";
 
 /**
  * The CVM recorder's old stored value, from when it was called the "New
@@ -37,11 +38,19 @@ export function parseVideoRecorder(
     : null;
 }
 
-/** Read `video.recorder`: null (or anything unknown) is OBS. */
-export function resolveVideoRecorder(
-  recorder: string | null | undefined
-): VideoRecorder {
-  return parseVideoRecorder(recorder) ?? DEFAULT_VIDEO_RECORDER;
+/**
+ * The Recorder a Video opens next (`video.recorder`), read for its format: a
+ * stored Recorder the format may record with, else the format's default (the
+ * first of `recordersForFormat`) — OBS for a Landscape Video, the CVM recorder
+ * for a Short, whatever a Short stored before Shorts went CVM-only.
+ */
+export function resolveVideoRecorder(video: {
+  readonly format: string;
+  readonly recorder: string | null | undefined;
+}): VideoRecorder {
+  const options = recordersForFormat(video.format);
+  const parsed = parseVideoRecorder(video.recorder);
+  return parsed && options.includes(parsed) ? parsed : options[0]!;
 }
 
 /** The Recorder a Clip was filmed with: a Recording Session means the CVM recorder. */
@@ -52,55 +61,17 @@ export function clipRecorder(clip: {
 }
 
 /**
- * Why an archived Clip may not be restored onto its Video, or null when it
- * may. Archiving every Clip unlocks the Video's Recorder; once it has
- * switched, restoring a Clip filmed with the other Recorder would mix OBS
- * and CVM-recorder Clips on one Video, so it is refused.
- */
-export function clipRestoreRefusal(
-  videoRecorder: string | null,
-  clip: { readonly recordingSessionId: string | null }
-): string | null {
-  const video = resolveVideoRecorder(videoRecorder);
-  const filmed = clipRecorder(clip);
-  if (video === filmed) return null;
-  const label = (r: VideoRecorder) =>
-    r === "obs" ? "OBS" : "the CVM recorder";
-  return `This Clip was filmed with ${label(filmed)}, but the Video now records with ${label(video)}. Switch the Recorder back to restore it.`;
-}
-
-/**
- * Whether an error message is a `clipRestoreRefusal`, as the server sends it
- * back: the editor rolls a refused restore back and shows why, rather than
- * treating it as a fatal error.
- */
-export function isClipRestoreRefusal(message: string): boolean {
-  return (["obs", "cvm"] as const).some(
-    (videoRecorder) =>
-      message ===
-      clipRestoreRefusal(videoRecorder, {
-        recordingSessionId: videoRecorder === "obs" ? "session" : null,
-      })
-  );
-}
-
-/**
  * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
- * The export hands DaVinci one Footage file per Clip, so it stays OBS-only: a
- * CVM-recorder Clip's picture is a composite of three files (#2011; Matt
- * never uses this export). The editor hides it on a CVM recorder Video; this
- * also covers an OBS Video a CVM-recorder Clip was moved or copied onto.
+ * The export hands DaVinci one Footage file per Clip, so every Clip must be
+ * an OBS Clip: a CVM-recorder Clip's picture is a composite of three files
+ * drawn at export (#2011; Matt never uses this export). Which Recorder the
+ * Video opens next does not matter, only the Clips it holds.
  */
 export function davinciResolveRefusal(video: {
-  readonly recorder: string | null;
   readonly clips: readonly { readonly recordingSessionId: string | null }[];
 }): string | null {
-  const only = "Export to DaVinci Resolve works on OBS Videos only";
-  if (resolveVideoRecorder(video.recorder) !== "obs") {
-    return `${only}: this Video records with the CVM recorder.`;
-  }
-  if (video.clips.some((clip) => clip.recordingSessionId !== null)) {
-    return `${only}: this Video holds CVM-recorder Clips.`;
+  if (video.clips.some((clip) => clipRecorder(clip) === "cvm")) {
+    return "Export to DaVinci Resolve works on OBS Clips only: this Video holds CVM-recorder Clips.";
   }
   return null;
 }
@@ -168,25 +139,29 @@ export const MIC_EQ_SETTING_ID = "default";
 /** The gain each band of the mic EQ may be set to, in dB. */
 export const MIC_EQ_DB_RANGE = { min: -24, max: 24 } as const;
 
+const SHORT_RECORDERS: readonly VideoRecorder[] = ["cvm"];
+
 /**
- * The Recorders a Video of this format may record with: every format may
- * record with either. A Short on the CVM recorder films the Spacedesk display
- * as its screen; on OBS it records with OBS's TikTok profile, as it always
- * has.
+ * The Recorders a Video of this format may open next, its default first. A
+ * Landscape Video may record with either and defaults to OBS. A Short records
+ * with the CVM recorder only, filming the Spacedesk display as its screen
+ * (ADR 0037); OBS-filmed Short Clips still export, as every Clip exports by
+ * its own Recorder.
  */
-export function recordersForFormat(_format: string): readonly VideoRecorder[] {
-  return VIDEO_RECORDERS;
+export function recordersForFormat(format: string): readonly VideoRecorder[] {
+  return format === "short" ? SHORT_RECORDERS : VIDEO_RECORDERS;
 }
 
 /**
  * The `video.recorder` a new Video is stored with: the Recorder it was
- * created with (the editor's last choice), or null (OBS) when none was given
- * or the format cannot record with it.
+ * created with (the editor's last choice) when the format may record with
+ * it; else the CVM recorder for a Short, or null (OBS) for a Landscape Video.
  */
 export function recorderForNewVideo(
   format: string,
   recorder: VideoRecorder | null | undefined
 ): VideoRecorder | null {
-  if (!recorder) return null;
-  return recordersForFormat(format).includes(recorder) ? recorder : null;
+  const options = recordersForFormat(format);
+  if (recorder && options.includes(recorder)) return recorder;
+  return options.length === 1 ? options[0]! : null;
 }

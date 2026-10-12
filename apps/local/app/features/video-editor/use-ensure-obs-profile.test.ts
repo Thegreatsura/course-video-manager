@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { resolveProfileGateAction } from "./use-ensure-obs-profile";
-import {
-  OBS_PROFILE_LANDSCAPE,
-  OBS_PROFILE_TIKTOK,
-} from "./ensure-obs-profile";
+import { OBS_PROFILE_LANDSCAPE } from "./ensure-obs-profile";
+
+const OTHER_PROFILE = "Some Other Profile";
 
 describe("resolveProfileGateAction", () => {
   it("switches when the active profile is not the one we want", () => {
     expect(
       resolveProfileGateAction({
         obsStateType: "obs-connected",
-        currentProfile: OBS_PROFILE_TIKTOK,
+        currentProfile: OTHER_PROFILE,
         targetProfile: OBS_PROFILE_LANDSCAPE,
         hasEnsured: false,
       })
@@ -59,7 +58,7 @@ describe("resolveProfileGateAction", () => {
     expect(
       resolveProfileGateAction({
         obsStateType: "obs-recording",
-        currentProfile: OBS_PROFILE_TIKTOK,
+        currentProfile: OTHER_PROFILE,
         targetProfile: OBS_PROFILE_LANDSCAPE,
         hasEnsured: true,
       })
@@ -70,7 +69,7 @@ describe("resolveProfileGateAction", () => {
     expect(
       resolveProfileGateAction({
         obsStateType: "obs-recording",
-        currentProfile: OBS_PROFILE_TIKTOK,
+        currentProfile: OTHER_PROFILE,
         targetProfile: OBS_PROFILE_LANDSCAPE,
         hasEnsured: false,
       })
@@ -83,7 +82,7 @@ describe("resolveProfileGateAction", () => {
     expect(
       resolveProfileGateAction({
         obsStateType: "obs-connected",
-        currentProfile: OBS_PROFILE_TIKTOK,
+        currentProfile: OTHER_PROFILE,
         targetProfile: OBS_PROFILE_LANDSCAPE,
         hasEnsured: false,
       })

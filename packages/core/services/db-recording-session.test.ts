@@ -71,7 +71,7 @@ describe("Recording Session schema", () => {
       },
     });
 
-    expect(resolveVideoRecorder(readBack!.video!.recorder)).toBe("cvm");
+    expect(resolveVideoRecorder(readBack!.video!)).toBe("cvm");
     expect(readBack).toMatchObject({
       micOffsetMs: DEFAULT_MIC_OFFSET_MS,
       status: "recording",
@@ -109,7 +109,7 @@ describe("Recording Session schema", () => {
     });
 
     expect(readBack!.recorder).toBeNull();
-    expect(resolveVideoRecorder(readBack!.recorder)).toBe("obs");
+    expect(resolveVideoRecorder(readBack!)).toBe("obs");
     expect(readBack!.clips).toMatchObject([
       { recordingSessionId: null, sceneOverride: null },
     ]);

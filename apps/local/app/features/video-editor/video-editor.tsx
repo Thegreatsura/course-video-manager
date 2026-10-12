@@ -42,7 +42,6 @@ import {
   toRecorderPicker,
   type useRecorderChoice,
 } from "./use-recorder-choice";
-import { isRecorderLocked } from "./recorder-choice-reducer";
 import { type FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import {
@@ -446,7 +445,8 @@ export const VideoEditor = (props: {
       obsConnectorState: props.obsConnectorState,
       recorderPicker: toRecorderPicker(
         props.recorderChoice,
-        isRecorderLocked(props.obsConnectorState, props.items, props.sessions)
+        // Switchable any time but mid-capture (ADR 0036).
+        captureInProgress || props.isRecordingActive
       ),
       cvmRecorder: props.cvmRecorder,
       liveMediaStream: props.liveMediaStream,

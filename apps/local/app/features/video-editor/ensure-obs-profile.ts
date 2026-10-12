@@ -1,12 +1,11 @@
 import type { OBSWebSocket } from "obs-websocket-js";
-import type { VideoFormat } from "@/features/videos/video-format";
 
+/**
+ * The OBS profile the editor keeps OBS on. Only a Landscape Video records
+ * with OBS: a Short records with the CVM recorder only (ADR 0037), so the
+ * editor never switches OBS to a portrait profile.
+ */
 export const OBS_PROFILE_LANDSCAPE = "Landscape Recording";
-export const OBS_PROFILE_TIKTOK = "TikTok";
-
-export function targetProfileForFormat(format: VideoFormat): string {
-  return format === "short" ? OBS_PROFILE_TIKTOK : OBS_PROFILE_LANDSCAPE;
-}
 
 export type EnsureProfileResult =
   | { type: "already-active" }

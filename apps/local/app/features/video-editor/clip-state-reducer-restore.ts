@@ -1,7 +1,3 @@
-import {
-  clipRestoreRefusal,
-  isClipRestoreRefusal,
-} from "@cvm/core/features/videos/recorder";
 import type { clipStateReducer } from "./clip-state-reducer";
 import type {
   ClipOnDatabase,
@@ -15,9 +11,8 @@ type ClipRestoreFailed = Extract<
 >;
 
 /**
- * Restore an archived Clip, optimistically. A Clip filmed with the other
- * Recorder than the Video's is refused up front (#2043), the same rule the
- * server enforces: one Video never mixes OBS and CVM-recorder Clips.
+ * Restore an archived Clip, optimistically. Any Clip restores, whichever
+ * Recorder filmed it: a Clip's Recorder is its own (ADR 0036).
  */
 export const handleRestoreClip = (
   state: clipStateReducer.State,
@@ -35,13 +30,6 @@ export const handleRestoreClip = (
   }
 
   if (item.type === "on-database") {
-    const refusal = clipRestoreRefusal(action.videoRecorder, {
-      recordingSessionId: item.recordingSession?.id ?? null,
-    });
-    if (refusal) {
-      exec({ type: "show-clip-restore-refused-toast", message: refusal });
-      return state;
-    }
     exec({ type: "unarchive-clips", clipIds: [item.databaseId] });
   }
 
@@ -60,13 +48,11 @@ export const handleRestoreClip = (
 
 /**
  * The server did not restore these Clips: archive them again so the editor
- * matches the database. A Recorder refusal (`clipRestoreRefusal`) is shown
- * and editing carries on; any other failure is fatal, like every other.
+ * matches the database. The failure is fatal, like every other.
  */
 export const handleClipRestoreFailed = (
   state: clipStateReducer.State,
-  action: ClipRestoreFailed,
-  exec: Parameters<typeof clipStateReducer>[2]
+  action: ClipRestoreFailed
 ): clipStateReducer.State => {
   const failed = new Set<string>(action.clipIds);
   const items = state.items.map((item) =>
@@ -74,11 +60,6 @@ export const handleClipRestoreFailed = (
       ? { ...item, shouldArchive: true }
       : item
   );
-
-  if (isClipRestoreRefusal(action.message)) {
-    exec({ type: "show-clip-restore-refused-toast", message: action.message });
-    return { ...state, items };
-  }
 
   return {
     ...state,

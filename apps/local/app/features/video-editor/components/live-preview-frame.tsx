@@ -5,7 +5,6 @@ import { clipStillUrl } from "../clip-still-url";
 import { getCvmRecorderLivePreview } from "../live-preview";
 import {
   getIsOBSActive,
-  getIsLiveStreamPortrait,
   getShouldShowLastFrameOverlay,
   getShowCenterLine,
   getShowRecordingSignal,
@@ -19,8 +18,8 @@ import { RecordingSignalIndicator } from "./timeline-indicators";
  * Clip's last frame over it at half opacity to match position between takes.
  * OBS fills it with its Virtual Camera; the CVM recorder with its composite.
  * Both get the same capture badge, ring, recording signal and centre line.
- * A Short's frame is portrait 9:16: OBS's TikTok profile, or the CVM
- * recorder's Short layout.
+ * A Short's frame is portrait 9:16, the CVM recorder's Short layout (a
+ * Short never records with OBS, ADR 0037).
  * Renders nothing while there is no live picture (the Clip player shows).
  */
 export const LivePreviewFrame = () => {
@@ -82,9 +81,7 @@ export const LivePreviewFrame = () => {
     <div
       className={cn(
         "w-full relative aspect-[16/9]",
-        (composite
-          ? composite.format === "short"
-          : getIsLiveStreamPortrait(obsConnectorState)) && "w-92 aspect-[9/16]",
+        composite?.format === "short" && "w-92 aspect-[9/16]",
         "hidden",
         !showVideoPlayer && (showLiveStream || showLastFrame) && "block"
       )}

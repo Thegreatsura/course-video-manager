@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  ensureOBSProfile,
-  targetProfileForFormat,
-  OBS_PROFILE_LANDSCAPE,
-  OBS_PROFILE_TIKTOK,
-} from "./ensure-obs-profile";
+import { ensureOBSProfile } from "./ensure-obs-profile";
 
 function createMockWebSocket(opts: {
   currentProfileName: string;
@@ -86,12 +81,5 @@ describe("ensureOBSProfile", () => {
     expect(result.type).toBe("error");
     expect((result as any).message).toContain("Default");
     expect((result as any).message).toContain("Landscape Recording");
-  });
-});
-
-describe("targetProfileForFormat", () => {
-  it("records a Short on the TikTok profile and anything else on Landscape", () => {
-    expect(targetProfileForFormat("short")).toBe(OBS_PROFILE_TIKTOK);
-    expect(targetProfileForFormat("landscape")).toBe(OBS_PROFILE_LANDSCAPE);
   });
 });

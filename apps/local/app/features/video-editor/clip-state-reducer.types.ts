@@ -9,7 +9,7 @@ import type { InsertionPoint } from "@/services/clip-service";
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { Scene } from "@/packages/scene-layout";
-import type { MicEq, VideoRecorder } from "@cvm/core/features/videos/recorder";
+import type { MicEq } from "@cvm/core/features/videos/recorder";
 
 /**
  * The schema is typed in terms of `DatabaseId`, so it is declared in
@@ -443,8 +443,6 @@ export type ClipReducerAction =
   | {
       type: "restore-clip";
       clipId: FrontendId;
-      /** The Recorder the Video records with as the editor shows it. */
-      videoRecorder: VideoRecorder;
     }
   | {
       /** Restoring these Clips failed on the server (`unarchive-clips`). */
@@ -612,11 +610,6 @@ export type ClipReducerEffect =
   | {
       type: "unarchive-clips";
       clipIds: DatabaseId[];
-    }
-  | {
-      /** Say why a Clip could not be restored (`clipRestoreRefusal`). */
-      type: "show-clip-restore-refused-toast";
-      message: string;
     }
   | {
       type: "start-session-polling";

@@ -11,7 +11,8 @@ import { rememberRecorderChoice } from "./last-recorder-choice";
 export type RecorderPicker = {
   recorder: VideoRecorder;
   options: readonly VideoRecorder[];
-  locked: boolean;
+  /** A capture is in progress, so the Recorder cannot switch. */
+  capturing: boolean;
   error: string | null;
   onPick: (recorder: VideoRecorder) => void;
 };
@@ -57,12 +58,12 @@ export const useRecorderChoice = (video: {
 
 export const toRecorderPicker = (
   choice: ReturnType<typeof useRecorderChoice>,
-  locked: boolean
+  capturing: boolean
 ): RecorderPicker => ({
   recorder: choice.state.recorder,
   options: choice.state.options,
-  locked,
+  capturing,
   error: choice.state.error,
   onPick: (recorder) =>
-    choice.dispatch({ type: "recorder-picked", recorder, locked }),
+    choice.dispatch({ type: "recorder-picked", recorder, capturing }),
 });
