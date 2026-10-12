@@ -57,14 +57,14 @@ const INTERACTIVE_CHILD_PROCESS = [
   // Starts the Clip Mockup daemon (ADR 0031): a long-lived process of its
   // own that the CLI restarts on demand — not a Job, and not run by a request.
   "^app/services/clip-mockup-daemon/client\\.ts$",
-  // The recorder service (ADR 0034): its own long-lived process that spawns
+  // The recorder service (ADR 0034, 0035): its own process that spawns
   // ffmpeg.exe, nvidia-smi.exe and PowerShell on Windows for a live Recording
   // Session — not a Job, and no route or Job reaches it. Its launcher, its
-  // Windows clock, and the `pnpm dev` / `pnpm start` hook that starts it
-  // detached.
+  // Windows clock, and the `pnpm dev` / `pnpm start` script that runs it for
+  // as long as they run.
   "^recorder-service/windows-launcher\\.ts$",
   "^recorder-service/windows-clock\\.ts$",
-  "^recorder-service/ensure-recorder-service\\.ts$",
+  "^recorder-service/start-recorder-service\\.ts$",
   // Matt's live desk: one `git rev-parse` to tell the main checkout, so only
   // it starts the Stream Deck forwarder or the recorder service.
   "^live-desk/live-desk\\.ts$",

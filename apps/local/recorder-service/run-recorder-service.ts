@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { wakeSpacedesk } from "../app/spacedesk-wake";
 import { RECORDER_SERVICE_PORT } from "./protocol";
@@ -6,21 +7,82 @@ import { startWindowsClock } from "./windows-clock";
 import { windowsLauncher } from "./windows-launcher";
 
 /**
- * The recorder service's process. Started detached by
- * `ensure-recorder-service.ts` (from `pnpm dev` / `pnpm start`), so stopping
- * or restarting the app never stops a recording; see ADR 0034.
+ * The recorder service's process (`service-process.ts`), started by
+ * `start-recorder-service.ts` under `pnpm dev` / `pnpm start` and stopped
+ * with them (ADR 0035).
  */
 
 /** `.data/` at the repository root: gitignored, beside the app's own logs. */
-const STATE_DIR = path.resolve(
-  import.meta.dirname,
-  "../../../.data/recorder-service"
+const DATA_DIR = path.resolve(import.meta.dirname, "../../../.data");
+const STATE_DIR = path.join(DATA_DIR, "recorder-service");
+/**
+ * Its own lines also go here: a take can still be closing its files after
+ * `pnpm dev` (and the terminal's copy of its output) has gone.
+ */
+export const RECORDER_SERVICE_LOG = path.join(
+  DATA_DIR,
+  "logs/recorder-service.log"
 );
 
-const log = (message: string) =>
-  process.stdout.write(`${new Date().toISOString()} ${message}\n`);
+const log = (message: string) => {
+  const line = `${new Date().toISOString()} ${message}\n`;
+  process.stdout.write(line);
+  try {
+    fs.mkdirSync(path.dirname(RECORDER_SERVICE_LOG), { recursive: true });
+    fs.appendFileSync(RECORDER_SERVICE_LOG, line);
+  } catch {
+    // A log line is never worth a take.
+  }
+};
+
+/** Why the service is stopping: a signal, or `pnpm dev` gone from under it. */
+export const STOP_EVENTS = ["SIGINT", "SIGTERM", "disconnect"] as const;
+
+/**
+ * Waits for the first of `STOP_EVENTS`, then stops the service cleanly: any
+ * take is stopped (ffmpeg.exe gets its `q` and finishes its files) before the
+ * sockets close. Resolves once that is done, with what stopped it.
+ *
+ * The handlers stay on until then, so a second Ctrl-C (or a SIGTERM after a
+ * SIGINT) is only logged: with no handler left it would kill the process
+ * mid-finalise, and with it the only thing that can send ffmpeg.exe its `q`.
+ */
+export const stopCleanlyOn = (
+  service: { close: () => Promise<void> },
+  events: Pick<NodeJS.EventEmitter, "on" | "off">,
+  logLine: (message: string) => void = log
+) =>
+  new Promise<string>((resolve, reject) => {
+    let stopping = false;
+    const onStop = (event: string) => () => {
+      if (stopping) {
+        logLine(`${event}: already stopping, still closing the files`);
+        return;
+      }
+      stopping = true;
+      logLine(`${event}: stopping (any take is stopped and its files closed)`);
+      service.close().then(
+        () => {
+          for (const [e, h] of handlers) events.off(e, h);
+          logLine("stopped cleanly");
+          resolve(event);
+        },
+        (error: unknown) => {
+          for (const [e, h] of handlers) events.off(e, h);
+          reject(error);
+        }
+      );
+    };
+    const handlers = STOP_EVENTS.map((e) => [e, onStop(e)] as const);
+    for (const [e, h] of handlers) events.on(e, h);
+  });
 
 export const runRecorderService = async () => {
+  // Once `pnpm dev` has gone, nothing reads this process's stdout: a write
+  // fails with EPIPE, which unhandled would kill it mid-take.
+  process.stdout.on("error", () => {});
+  process.stderr.on("error", () => {});
+
   const clock = await startWindowsClock();
   const service = await startRecorderService({
     port: RECORDER_SERVICE_PORT,
@@ -32,18 +94,9 @@ export const runRecorderService = async () => {
   log(
     `recorder service listening on ws://127.0.0.1:${service.port} (pid ${process.pid})`
   );
-
-  // A deliberate stop (kill, Ctrl-C in its own terminal) closes the files
-  // with `q` first, so a stopped service never leaves a half-written file.
-  await new Promise<void>((resolve) => {
-    const stop = (signal: string) => {
-      log(`${signal}: stopping`);
-      void service.close().finally(() => {
-        clock.stop();
-        resolve();
-      });
-    };
-    process.once("SIGINT", () => stop("SIGINT"));
-    process.once("SIGTERM", () => stop("SIGTERM"));
-  });
+  try {
+    await stopCleanlyOn(service, process);
+  } finally {
+    clock.stop();
+  }
 };
