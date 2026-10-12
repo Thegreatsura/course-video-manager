@@ -347,11 +347,11 @@ export const createVideoWriteOps = (db: Database) => {
   });
 
   /**
-   * Choose the Recorder a Video records with. Refused once the Video has any
-   * Clip, archived or not (a restore would bring it back), and while one of
-   * its Recording Sessions is still recording, so one Video never mixes OBS
-   * and new-recorder Clips; and for a format that cannot record with it
-   * (Shorts are OBS only).
+   * Choose the Recorder a Video records with. Refused once the Video has a
+   * live (non-archived) Clip, and while one of its Recording Sessions is
+   * still recording, so one Video never mixes OBS and new-recorder Clips; and
+   * for a format that cannot record with it (Shorts are OBS only). A Video
+   * whose Clips are all archived counts as having no Footage, so it unlocks.
    */
   const updateVideoRecorder = Effect.fn("updateVideoRecorder")(
     function* (opts: { videoId: string; recorder: VideoRecorder }) {
@@ -368,7 +368,10 @@ export const createVideoWriteOps = (db: Database) => {
       const clip = yield* makeDbCall(() =>
         db.query.clips.findFirst({
           columns: { id: true },
-          where: eq(clips.videoId, opts.videoId),
+          where: and(
+            eq(clips.videoId, opts.videoId),
+            eq(clips.archived, false)
+          ),
         })
       );
       if (clip) {

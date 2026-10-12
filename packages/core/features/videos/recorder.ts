@@ -25,6 +25,31 @@ export function resolveVideoRecorder(
     : DEFAULT_VIDEO_RECORDER;
 }
 
+/** The Recorder a Clip was filmed with: a Recording Session means the New recorder. */
+export function clipRecorder(clip: {
+  readonly recordingSessionId: string | null;
+}): VideoRecorder {
+  return clip.recordingSessionId !== null ? "new-recorder" : "obs";
+}
+
+/**
+ * Why an archived Clip may not be restored onto its Video, or null when it
+ * may. Archiving every Clip unlocks the Video's Recorder; once it has
+ * switched, restoring a Clip filmed with the other Recorder would mix OBS
+ * and new-recorder Clips on one Video, so it is refused.
+ */
+export function clipRestoreRefusal(
+  videoRecorder: string | null,
+  clip: { readonly recordingSessionId: string | null }
+): string | null {
+  const video = resolveVideoRecorder(videoRecorder);
+  const filmed = clipRecorder(clip);
+  if (video === filmed) return null;
+  const label = (r: VideoRecorder) =>
+    r === "obs" ? "OBS" : "the New recorder";
+  return `This Clip was filmed with ${label(filmed)}, but the Video now records with ${label(video)}. Switch the Recorder back to restore it.`;
+}
+
 /**
  * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
  * The export hands DaVinci one Footage file per Clip, so it stays OBS-only: a

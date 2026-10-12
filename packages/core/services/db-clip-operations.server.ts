@@ -9,7 +9,12 @@ import {
   sections,
   videos,
 } from "../db/schema.js";
-import { NotFoundError, UnknownDBServiceError } from "./db-service-errors.js";
+import {
+  NotFoundError,
+  UnknownDBServiceError,
+  VideoRecorderLockedError,
+} from "./db-service-errors.js";
+import { clipRestoreRefusal } from "../features/videos/recorder.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { generateNKeysBetween } from "fractional-indexing";
@@ -252,6 +257,22 @@ const createClipOperationsUnwrapped = (db: Database) => {
         type: "restoreClip",
         params: { clipId },
       });
+    }
+
+    if (clipExists.archived) {
+      const video = yield* makeDbCall(() =>
+        db.query.videos.findFirst({
+          columns: { recorder: true },
+          where: eq(videos.id, clipExists.videoId),
+        })
+      );
+      const refusal = clipRestoreRefusal(video?.recorder ?? null, clipExists);
+      if (refusal) {
+        return yield* new VideoRecorderLockedError({
+          videoId: clipExists.videoId,
+          message: refusal,
+        });
+      }
     }
 
     const clip = yield* makeDbCall(() =>
