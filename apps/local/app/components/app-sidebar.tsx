@@ -2,7 +2,6 @@ import { AddCourseModal } from "@/components/add-course-modal";
 import { AddStandaloneVideoModal } from "@/components/add-standalone-video-modal";
 import { FootageStats } from "@/components/footage-stats";
 import type { FootageStats as FootageStatsData } from "@cvm/core/services/db-footage-stats.server";
-import { SpacedeskModal } from "@/components/spacedesk-modal";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
@@ -108,8 +107,8 @@ export function AppSidebar({ variant }: AppSidebarProps) {
     dispatch({ type: "location-changed" });
   }, [location.pathname, location.search, dispatch]);
 
-  // Stable per dialog: SpacedeskModal closes itself from an effect that lists
-  // its onOpenChange as a dependency.
+  // Stable per dialog, so a dialog may list its onOpenChange as an effect
+  // dependency.
   const dismiss = useMemo(() => {
     const onOpenChange = (modal: AppSidebarModal) => (open: boolean) => {
       if (!open) dispatch({ type: "modal-dismissed", modal });
@@ -117,7 +116,6 @@ export function AppSidebar({ variant }: AppSidebarProps) {
     return {
       "add-course": onOpenChange("add-course"),
       "add-video": onOpenChange("add-video"),
-      spacedesk: onOpenChange("spacedesk"),
     };
   }, [dispatch]);
 
@@ -311,10 +309,6 @@ export function AppSidebar({ variant }: AppSidebarProps) {
       <AddStandaloneVideoModal
         open={state.openModal === "add-video"}
         onOpenChange={dismiss["add-video"]}
-      />
-      <SpacedeskModal
-        open={state.openModal === "spacedesk"}
-        onOpenChange={dismiss["spacedesk"]}
       />
     </>
   );

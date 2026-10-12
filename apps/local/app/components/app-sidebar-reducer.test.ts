@@ -41,11 +41,35 @@ describe("appSidebarReducer", () => {
   it("opening a dialog replaces the open one, and the replaced one's late close leaves it open", () => {
     const state = sidebar()
       .send({ type: "add-course-clicked" })
-      .send({ type: "spacedesk-clicked" })
+      .send({ type: "add-video-clicked" })
       .send({ type: "modal-dismissed", modal: "add-course" })
       .getState();
 
-    expect(state.openModal).toBe("spacedesk");
+    expect(state.openModal).toBe("add-video");
+  });
+
+  it("clicking Space Desk wakes the display with no dialog, and toasts the outcome", () => {
+    const tester = sidebar()
+      .send({ type: "spacedesk-clicked" })
+      .send({ type: "spacedesk-clicked" });
+
+    expect(tester.getState()).toMatchObject({
+      openModal: null,
+      wakingSpacedesk: true,
+    });
+
+    tester
+      .send({ type: "spacedesk-woke" })
+      .send({ type: "spacedesk-clicked" })
+      .send({ type: "spacedesk-wake-failed", message: "Couldn't reach it" });
+
+    expect(tester.getState().wakingSpacedesk).toBe(false);
+    expect(tester.getEffects()).toEqual([
+      { type: "wake-spacedesk" },
+      { type: "show-message", message: "Spacedesk display is waking up…" },
+      { type: "wake-spacedesk" },
+      { type: "show-error", message: "Couldn't reach it" },
+    ]);
   });
 
   it("navigating closes the mobile sheet but not a dialog opened from it", () => {
