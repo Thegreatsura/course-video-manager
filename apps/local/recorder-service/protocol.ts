@@ -1,6 +1,6 @@
+import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
-import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -80,14 +80,29 @@ export type StreamDeckPress =
   | { action: "stop" }
   | { action: "switch-scene"; scene: Scene };
 
+/**
+ * A Short's screen: the Spacedesk virtual display. `waking` while the service
+ * looks for it and, when it is not listed, wakes Spacedesk; `ready` once it is
+ * listed and portrait 9:16; `unavailable` otherwise, saying why. Unavailable,
+ * a Short records camera and mic only, in scenes that do not draw the screen.
+ */
+export type ScreenStatus =
+  | { kind: "waking" }
+  | { kind: "ready" }
+  | { kind: "unavailable"; message: string };
+
 export type RecorderCommand =
   /**
-   * Open the recorder for a Video: opens the camera and the previews. Open
-   * already, for any Video, it keeps the camera and only changes the Video.
+   * Open the recorder for a Video of this format (absent: Landscape): opens
+   * the camera and the previews; a Short also looks for (and wakes) the
+   * Spacedesk display. Open already, for any Video, it keeps the camera and
+   * changes the Video; a different format starts the screen side again.
    */
-  | { type: "open"; videoId: string }
+  | { type: "open"; videoId: string; format?: VideoFormat }
   /** Try the camera again after `not-starting` or `busy`. */
   | { type: "retry-camera" }
+  /** A Short's screen: wake Spacedesk and check its display again. */
+  | { type: "retry-screen" }
   /**
    * Draw the picture in this scene from now on. Open, it is the scene the
    * preview shows and the next Recording Session starts in; recording, it
@@ -143,16 +158,14 @@ export type RecordingSessionEvent = Logged<
       /** Windows wall-clock ms that is file time 0 in all three files. */
       t0Ms: number;
       silenceLength: SilenceLength;
+      /**
+       * `files.screen` names where the screen would be even when it is not
+       * captured (a Short whose Spacedesk display was unavailable).
+       */
       files: RecordingSessionFiles;
-      /**
-       * The Video Format it is filmed in. Absent (a service from before
-       * Shorts): Landscape.
-       */
+      /** The Video's format. Absent in logs written before Shorts: Landscape. */
       format?: VideoFormat;
-      /**
-       * Whether a screen process records `files.screen`: false for a
-       * camera-only Short. Absent: true.
-       */
+      /** Whether a screen process recorded `files.screen`. Absent: true. */
       screenCaptured?: boolean;
     }
   /**
@@ -188,6 +201,7 @@ export type RecordingSessionEvent = Logged<
         "requested" | "ffmpeg-exited" | "camera-lost" | "event-log-failed";
       fileTime: number;
       files: RecordingSessionFiles;
+      /** `screen` is null when no screen was captured (a camera-only Short). */
       exitCodes: { screen: number | null; camera: number | null };
       framesLost: FramesLost;
       /** Why the event log failed, and the last error lines of a process that quit on its own. */
@@ -205,17 +219,26 @@ export type RecordingSessionEvent = Logged<
     }
 >;
 
+/**
+ * `scene`: what the preview draws, and what Record starts in. `format`: the
+ * Video's. `screen`: a Short's Spacedesk display; null for Landscape, whose
+ * DELL is checked at Record.
+ */
+type OpenFor = {
+  videoId: string;
+  format: VideoFormat;
+  scene: Scene;
+  screen: ScreenStatus | null;
+};
+
 export type RecorderState =
   | { kind: "closed" }
-  /** `scene`: what the preview draws, and what Record starts in. */
-  | { kind: "open"; videoId: string; camera: CameraStatus; scene: Scene }
-  | {
+  | ({ kind: "open"; camera: CameraStatus } & OpenFor)
+  | ({
       kind: "recording";
-      videoId: string;
-      scene: Scene;
       recordingSessionId: string;
       lastSeq: number;
-    };
+    } & OpenFor);
 
 /** How many of its latest Recording Sessions the service names in `hello`. */
 export const RECENT_SESSIONS = 20;

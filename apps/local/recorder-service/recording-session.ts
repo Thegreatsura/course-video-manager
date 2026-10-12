@@ -10,13 +10,15 @@ import {
   type LaunchedProcess,
   type Launcher,
 } from "./launcher";
+import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
 import type { RecordingSessionEvent, RecordingSessionFiles } from "./protocol";
 import { repairFile } from "./footage-repair";
 import { createSpeechDetector } from "./speech-detector";
 
 /**
- * ONE RECORDING SESSION, start to stop: the two ffmpeg.exe processes, their
+ * ONE RECORDING SESSION, start to stop: the two ffmpeg.exe processes (one,
+ * camera + mic, for a Short whose screen is unavailable), their
  * logs, and the Recording Session's event log. Everything it reports goes
  * through `log`, which numbers it, appends it to `events.jsonl` and only then
  * hands it on, so nothing is sent that a replay could not send again.
@@ -58,7 +60,10 @@ export type RecordingSessionOptions = {
   silenceLength: SilenceLength;
   camera: string;
   mic: string;
-  screenIndex: number;
+  /** ddagrab's output_idx for the screen; null records camera and mic only. */
+  screenIndex: number | null;
+  /** The Video's format, logged in `recording-started`. */
+  format: VideoFormat;
   /** The service's camera preview feed, which the camera process sends to. */
   cameraPreviewPort: number;
   /**
@@ -177,7 +182,7 @@ export const startRecordingSession = (
     };
   };
 
-  const screen = run("screen", args.screen);
+  const screen = args.screen && run("screen", args.screen);
   const camera = run("camera", args.camera);
   // FRAMES LOST. Only the Cam Link's dshow buffer drops are counted. The
   // -progress dup_frames/drop_frames cannot see a loss: `-fps_mode
@@ -237,30 +242,37 @@ export const startRecordingSession = (
     t0Ms,
     silenceLength: o.silenceLength,
     files,
+    format: o.format,
+    screenCaptured: screen !== null,
   });
   log({ type: "scene-changed", scene: o.scene, fileTime: 0 });
 
   // ddagrab skips frame slots at Windows' default 15.6 ms timer tick and
   // ffmpeg never raises it; Normal priority and power throttling cost more.
   // A screen recorder left untuned still records, so this only reports.
-  void runToEnd(
-    o.launch({
-      tool: "powershell",
-      script: "timer-resolution.ps1",
-      args: ["-Tag", tag, "-Match", FILE_NAMES.screen],
-    })
-  ).then(({ code, stdout, stderr }) => {
-    if (ended) return;
-    const detail =
-      (code === 0 ? stdout : stderr || stdout).trim().split(/\r?\n/)[0] ?? "";
-    log({ type: "screen-recorder-tuned", ok: code === 0, detail });
-  });
+  // Without a screen recorder there is nothing to tune.
+  if (screen)
+    void runToEnd(
+      o.launch({
+        tool: "powershell",
+        script: "timer-resolution.ps1",
+        args: ["-Tag", tag, "-Match", FILE_NAMES.screen],
+      })
+    ).then(({ code, stdout, stderr }) => {
+      if (ended) return;
+      const detail =
+        (code === 0 ? stdout : stderr || stdout).trim().split(/\r?\n/)[0] ?? "";
+      log({ type: "screen-recorder-tuned", ok: code === 0, detail });
+    });
 
   /** Done once it exited and, if it had to be killed, Windows stopped it too. */
   const quit = (p: LaunchedProcess) =>
     quitProcess(p, { launch: o.launch, tag, timeoutMs: STOP_TIMEOUT_MS });
 
-  const finished = Promise.all([screen.child.exited, camera.child.exited]);
+  const finished = Promise.all([
+    screen ? screen.child.exited : null,
+    camera.child.exited,
+  ]);
 
   const stopWith = (
     reason: Extract<
@@ -272,13 +284,16 @@ export const startRecordingSession = (
     stopping = true;
     clearTimeout(cameraStart);
     speech.stopRequested();
-    const quitting = Promise.all([quit(screen.child), quit(camera.child)]);
+    const quitting = Promise.all([
+      screen && quit(screen.child),
+      quit(camera.child),
+    ]);
     return quitting.then(async () => {
       const [screenCode, cameraCode] = await finished;
       // `q` closes every file with its duration. A process that quit on an
       // error or was killed may not have: its files are repaired now, so
       // every file the Recording Session leaves is readable.
-      if (screenCode !== 0) await repairFile(o.launch, files.screen);
+      if (screen && screenCode !== 0) await repairFile(o.launch, files.screen);
       if (cameraCode !== 0) {
         await repairFile(o.launch, files.camera);
         await repairFile(o.launch, files.mic);
@@ -295,12 +310,12 @@ export const startRecordingSession = (
         errors: [
           ...(logFailure ? [logFailure] : []),
           ...(reason === "ffmpeg-exited"
-            ? [...screen.errors(), ...camera.errors()]
+            ? [...(screen?.errors() ?? []), ...camera.errors()]
             : []),
         ],
       });
       ended = true;
-      screen.closeLog();
+      screen?.closeLog();
       camera.closeLog();
       o.onEnded();
     });
@@ -318,7 +333,7 @@ export const startRecordingSession = (
   // stopped so its file closes cleanly. The camera + mic process quitting is
   // the camera lost only when its errors name the Cam Link; a mic or disk
   // failure is reported as itself.
-  void screen.child.exited.then(() => {
+  void screen?.child.exited.then(() => {
     if (!stopping) void stopWith("ffmpeg-exited");
   });
   void camera.child.exited.then(() => {

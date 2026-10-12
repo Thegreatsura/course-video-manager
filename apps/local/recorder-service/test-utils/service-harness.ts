@@ -45,6 +45,7 @@ export const start = async (windows = fakeWindows(), stateDir = tmp()) => {
     now: () => clock.ms,
     stateDir,
     cameraStartTimeoutMs: 100,
+    wakeSpacedesk: windows.wakeSpacedesk,
   });
   cleanups.unshift(() => service.close());
   return { windows, stateDir, port: service.port, close: service.close };

@@ -8,7 +8,9 @@ import {
  * THE CAPTURE, AS THE RIG (#1992) PROVED IT: two ffmpeg.exe processes writing
  * three files for one Recording Session.
  *
- *   screen process:        ddagrab (the DELL, whole monitor) -> screen.mkv
+ *   screen process:        ddagrab (the DELL for Landscape, the Spacedesk
+ *                          display for a Short; whole output) -> screen.mkv
+ *                          (none for a Short whose display is unavailable)
  *   camera + mic process:  Cam Link 4K -> camera.mkv, mic -> mic.mkv,
  *                          and silencedetect on the mic audio it writes
  *
@@ -215,14 +217,19 @@ export const cameraPreviewArgs = (o: {
 /**
  * The screen preview: a second Desktop Duplication session (Windows allows
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
- * without touching the screen recorder.
+ * without touching the screen recorder. 960x540 by default; a Short's
+ * portrait display is previewed 540x960.
  */
-export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
+export const screenPreviewArgs = (o: {
+  screenIndex: number;
+  port: number;
+  size?: { width: number; height: number };
+}) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=960:540,format=yuvj420p`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=${o.size?.width ?? 960}:${o.size?.height ?? 540},format=yuvj420p`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),
@@ -233,8 +240,11 @@ export type CaptureOptions = {
   t0Ms: number;
   /** Put in each file's metadata and command line, so a process can be found by it. */
   tag: string;
-  /** ddagrab's output_idx for the DELL. */
-  screenIndex: number;
+  /**
+   * ddagrab's output_idx for the screen (the DELL, or a Short's Spacedesk
+   * display); null records no screen (`screen` is then null too).
+   */
+  screenIndex: number | null;
   /** DirectShow names, as the device listing gave them. */
   camera: string;
   mic: string;
@@ -249,23 +259,26 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   // dup_frames=1: with 0, ddagrab emits nothing while the screen is static,
   // which stalls the graph. Its pacing needs the 1 ms timer the service
   // raises right after start (timer-resolution.ps1).
-  const screen = [
-    ...HEAD,
-    ...WALLCLOCK,
-    "-f",
-    "lavfi",
-    "-i",
-    `ddagrab=output_idx=${o.screenIndex}:framerate=60:dup_frames=1:draw_mouse=1,settb=AVTB`,
-    "-filter_complex",
-    `[0:v]setpts=PTS-${t0}/TB,fps=60:start_time=0,${BT709},scale_d3d11=format=nv12[scr]`,
-    "-map",
-    "[scr]",
-    ...nvenc(120),
-    "-metadata",
-    `comment=${o.tag}`,
-    ...MKV,
-    FILE_NAMES.screen,
-  ];
+  const screen =
+    o.screenIndex === null
+      ? null
+      : [
+          ...HEAD,
+          ...WALLCLOCK,
+          "-f",
+          "lavfi",
+          "-i",
+          `ddagrab=output_idx=${o.screenIndex}:framerate=60:dup_frames=1:draw_mouse=1,settb=AVTB`,
+          "-filter_complex",
+          `[0:v]setpts=PTS-${t0}/TB,fps=60:start_time=0,${BT709},scale_d3d11=format=nv12[scr]`,
+          "-map",
+          "[scr]",
+          ...nvenc(120),
+          "-metadata",
+          `comment=${o.tag}`,
+          ...MKV,
+          FILE_NAMES.screen,
+        ];
 
   // The Cam Link 4K offers only 2160p29.97 or 1080p59.94 raw, so open 4K NV12
   // and scale to 1440p on the GPU: no 4K reaches the disk.
