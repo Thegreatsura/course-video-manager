@@ -195,6 +195,8 @@ export const appendClipsAtInsertionPoint = Effect.fn(
     text: "",
     // A fresh recording has no text until its Transcription lands.
     transcriptionStatus: "queued" as const,
+    recordingSessionId: clip.recordingSessionId ?? null,
+    scene: clip.scene ?? null,
   }));
 
   const clipsResult = yield* dbCall(() =>

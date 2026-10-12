@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LiveMediaStream } from "./live-media-stream";
 import { SilenceLengthToggle } from "./silence-length-toggle";
+import { NewRecorderControls } from "./new-recorder-controls";
+import { showsNewRecorderControls } from "../recorder-choice-reducer";
 import { RecordingSignalIndicator } from "./timeline-indicators";
 import { TableOfContents } from "./table-of-contents";
 import {
@@ -79,6 +81,10 @@ export const VideoPlayerPanel = () => {
   const obsConnectorState = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.obsConnectorState
+  );
+  const recorder = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.recorderPicker.recorder
   );
   const speechDetectorState = useContextSelector(
     VideoEditorContext,
@@ -337,7 +343,9 @@ export const VideoPlayerPanel = () => {
             <div className="w-full aspect-[16/9] bg-card rounded-lg flex flex-col items-center justify-center gap-3">
               <VideoOffIcon className="size-10 text-muted-foreground" />
               <p className="text-muted-foreground text-sm text-center px-4">
-                No video stream or clips yet. Connect OBS to start recording.
+                {recorder === "obs"
+                  ? "No video stream or clips yet. Connect OBS to start recording."
+                  : "No clips yet. This Video records with the New recorder."}
               </p>
             </div>
           ) : (
@@ -409,6 +417,7 @@ export const VideoPlayerPanel = () => {
               <SilenceLengthToggle />
             </div>
           )}
+          {showsNewRecorderControls({ recorder }) && <NewRecorderControls />}
 
           {showScrubSlider && currentClip?.type === "on-database" && (
             <input

@@ -22,6 +22,11 @@ import {
   isRecordingAction,
 } from "./clip-state-reducer-recording";
 import {
+  handleNewRecorderMessage,
+  recorderInsertionPoint,
+  tellRecorderOfInsertionPoint,
+} from "./clip-state-reducer-new-recorder";
+import {
   handleChapterAction,
   isChapterAction,
 } from "./clip-state-reducer-chapters";
@@ -38,11 +43,22 @@ export const clipStateReducer: EffectReducer<
   clipStateReducer.State,
   clipStateReducer.Action,
   clipStateReducer.Effect
-> = (
+> = (state, action, exec) => {
+  const recorderPoint = recorderInsertionPoint(state);
+  const next = reduceClipState(state, action, exec);
+  tellRecorderOfInsertionPoint(recorderPoint, next, action, exec);
+  return next;
+};
+
+const reduceClipState = (
   state: clipStateReducer.State,
   action: clipStateReducer.Action,
-  exec
+  exec: Parameters<typeof clipStateReducer>[2]
 ): clipStateReducer.State => {
+  if (action.type === "new-recorder-message-heard") {
+    return handleNewRecorderMessage(state, action, exec);
+  }
+
   if (isRecordingAction(action)) {
     return handleRecordingAction(state, action, exec);
   }

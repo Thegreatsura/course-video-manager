@@ -36,7 +36,17 @@ export type OBSRecordingState = {
 export type OBSConnectionOuterState =
   OBSNotRunningState | OBSConnectedState | OBSRecordingState;
 
+/**
+ * The Video records with the New recorder, so the editor leaves OBS alone:
+ * no connection, no profile switch, no Virtual Camera. Reads as
+ * `obs-not-running` outside the connector.
+ */
+export type OBSNotUsedState = {
+  type: "obs-not-used";
+};
+
 export type OBSConnectionInnerState =
+  | OBSNotUsedState
   | OBSNotRunningState
   | OBSCheckingConnectionStatusState
   | OBSConnectedState
@@ -227,6 +237,11 @@ export namespace useOBSConnector {
     | {
         type: "scene-changed";
         scene: string;
+      }
+    | {
+        /** The Video's Recorder is (now) OBS, or (now) not. */
+        type: "video-recorder-changed";
+        usesObs: boolean;
       };
 
   export type Effect =
@@ -248,14 +263,44 @@ export namespace useOBSConnector {
       }
     | {
         type: "run-event-listeners";
+      }
+    | {
+        type: "disconnect";
       };
 }
 
-const obsConnectorReducer: EffectReducer<
+/** OBS Videos connect at once, exactly as before the Recorder choice. */
+export const createInitialOBSConnectorState = (
+  usesObs: boolean,
+  exec: (effect: useOBSConnector.Effect) => void
+): useOBSConnector.State => {
+  if (!usesObs) return { type: "obs-not-used" };
+  exec({ type: "attempt-to-connect" });
+  return { type: "checking-obs-connection-status" };
+};
+
+export const obsConnectorReducer: EffectReducer<
   useOBSConnector.State,
   useOBSConnector.Action,
   useOBSConnector.Effect
 > = (state, action, exec): useOBSConnector.State => {
+  if (action.type === "video-recorder-changed") {
+    if (action.usesObs) {
+      return state.type === "obs-not-used"
+        ? createInitialOBSConnectorState(true, exec)
+        : state;
+    }
+    if (state.type === "obs-not-used") return state;
+    exec({ type: "disconnect" });
+    return { type: "obs-not-used" };
+  }
+
+  // A New recorder Video ignores whatever OBS still reports.
+  if (state.type === "obs-not-used") {
+    if (action.type === "obs-connected") exec({ type: "disconnect" });
+    return state;
+  }
+
   switch (action.type) {
     case "obs-connected":
       exec({
@@ -352,7 +397,10 @@ const obsConnectorReducer: EffectReducer<
 const innerToOuterState = (
   state: OBSConnectionInnerState
 ): OBSConnectionOuterState => {
-  if (state.type === "checking-obs-connection-status") {
+  if (
+    state.type === "checking-obs-connection-status" ||
+    state.type === "obs-not-used"
+  ) {
     return {
       type: "obs-not-running",
     };
@@ -370,20 +418,21 @@ export const useOBSConnector = (props: {
   onClipAudioWindowClosed: () => void;
   silenceLength: SilenceLength;
   targetProfile: string;
+  /** False for a New recorder Video: OBS is left alone. */
+  usesObs: boolean;
 }) => {
   const [websocket] = useState(() => new OBSWebSocket());
 
-  const [state] = useEffectReducer(
+  const [state, dispatch] = useEffectReducer(
     obsConnectorReducer,
-    (exec) => {
-      exec({
-        type: "attempt-to-connect",
-      });
-      return {
-        type: "checking-obs-connection-status" as const,
-      };
-    },
+    (exec) => createInitialOBSConnectorState(props.usesObs, exec),
     {
+      disconnect: () => {
+        websocket
+          .call("StopVirtualCam")
+          .catch(() => {})
+          .finally(() => websocket.disconnect());
+      },
       "wait-before-reconnecting": (_state, _effect, dispatch) => {
         const timeout = setTimeout(() => {
           dispatch({ type: "trigger-reconnect" });
@@ -477,6 +526,11 @@ export const useOBSConnector = (props: {
       },
     }
   );
+
+  // Bridges the Video's Recorder choice into the connector.
+  useEffect(() => {
+    dispatch({ type: "video-recorder-changed", usesObs: props.usesObs });
+  }, [props.usesObs]);
 
   const outerState = useMemo(() => innerToOuterState(state), [state]);
 

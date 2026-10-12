@@ -5,6 +5,10 @@ import type { TranscriptionStatus } from "@/features/videos/transcription-status
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
 import type { JobEventMessage } from "@/features/jobs/job-wire";
+import type { InsertionPoint } from "@/services/clip-service";
+import type { NewRecorderMessage } from "./new-recorder-wire";
+import type { ClipRecordingSession } from "@/packages/clip-source";
+import type { Scene } from "@/packages/scene-layout";
 
 /**
  * The schema is typed in terms of `DatabaseId`, so it is declared in
@@ -65,6 +69,13 @@ export type ClipOnDatabase = {
    * freshly-recorded clip's captured links are persisted.
    */
   webLinks: DB.ClipWebLink[];
+  /**
+   * A new-recorder Clip's Recording Session (files, mic offset, scene
+   * timeline) and Scene Override: the Clip Source plays and stills it as the
+   * composite. Absent or null on an OBS Clip.
+   */
+  recordingSession?: ClipRecordingSession | null;
+  sceneOverride?: Scene | null;
   /**
    * If true, this clip has been archived by the user (deleted from session panel).
    * The clip stays in state so it can appear in the archived sub-section of the
@@ -195,6 +206,11 @@ export type RecordingSession = {
   outputPath: string;
   startedAt: number;
   silenceLength: SilenceLength;
+  /**
+   * A New recorder Recording Session: its id is the recorder's, and its
+   * Clips arrive saved (`clips-saved`), never optimistically.
+   */
+  newRecorder?: true;
 };
 
 /**
@@ -275,6 +291,12 @@ export type ClipReducerState = {
 };
 
 export type ClipReducerAction =
+  | {
+      /** The app server told this editor about its New recorder Video. */
+      type: "new-recorder-message-heard";
+      message: NewRecorderMessage;
+      receivedAt: number;
+    }
   | {
       type: "recording-started";
       outputPath: string;
@@ -435,6 +457,11 @@ export type ClipReducerAction =
     };
 
 export type ClipReducerEffect =
+  | {
+      /** The app server places the New recorder's next Clip here. */
+      type: "send-recorder-insertion-point";
+      insertionPoint: InsertionPoint;
+    }
   | {
       type: "transcribe-clips";
       jobId: string;
