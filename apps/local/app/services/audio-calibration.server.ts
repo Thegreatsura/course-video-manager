@@ -42,7 +42,8 @@ export class CalibrationRunMismatchError extends Data.TaggedError(
 
 /**
  * Stores an Audio Calibration from its run's measurement, passed or failed:
- * judges the speech loudness against the band, derives the threshold, writes
+ * judges the speech loudness against the band and the true peak against its
+ * ceiling, derives the threshold, writes
  * the browser's trace beside the mic file (with the schedule its prompts
  * followed, in the same seconds), and saves the row.
  */
@@ -90,6 +91,7 @@ export const recordAudioCalibration = Effect.fn("recordAudioCalibration")(
           outcome: judgement.outcome,
           noiseFloorDb: measured.noiseFloorDb,
           speechLufs: measured.speechLufs,
+          truePeakDb: measured.truePeakDb,
           thresholdDb,
           recorderMic: measured.mic,
           browserInputLabel: o.browserInputLabel,
@@ -105,7 +107,11 @@ export const recordAudioCalibration = Effect.fn("recordAudioCalibration")(
 
 type AudioCalibrationRow = typeof audioCalibrations.$inferSelect;
 
-/** A stored row as the page shows it; the judgement is the stored speech loudness's. */
+/**
+ * A stored row as the page shows it; the judgement is its stored loudness and
+ * peak's, under today's rules (a row from before the -27 LUFS target may now
+ * read as too loud).
+ */
 const toSaved = (row: AudioCalibrationRow): SavedAudioCalibration => ({
   id: row.id,
   createdAt: row.createdAt.toISOString(),
@@ -113,6 +119,7 @@ const toSaved = (row: AudioCalibrationRow): SavedAudioCalibration => ({
   judgement: judgeCalibration(row),
   noiseFloorDb: row.noiseFloorDb,
   speechLufs: row.speechLufs,
+  truePeakDb: row.truePeakDb,
   thresholdDb: row.thresholdDb,
   recorderMic: row.recorderMic,
   browserInputLabel: row.browserInputLabel,
@@ -146,7 +153,7 @@ const TraceFileSchema = Schema.parseJson(
     schedule: Schema.Array(
       Schema.Union(
         Schema.Struct({
-          kind: Schema.Literal("countdown", "silence"),
+          kind: Schema.Literal("countdown", "silence", "loud"),
           ...TimeWindowSchema.fields,
         }),
         Schema.Struct({

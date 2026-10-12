@@ -72,7 +72,7 @@ describe("the level meter", () => {
     expect(windows.meter()).toBeUndefined();
   });
 
-  it("runs an Audio Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows; a cancelled run keeps nothing", async () => {
+  it("runs an Audio Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows and the whole take's true peak; a cancelled run keeps nothing", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
@@ -120,7 +120,8 @@ describe("the level meter", () => {
       mic: "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)",
       micFile: started.micFile,
       noiseFloorDb: -97.3,
-      speechLufs: -21.4,
+      speechLufs: -27.4,
+      truePeakDb: -9.2,
     });
     const analysis = windows.launched.find((l) =>
       l.args.some((a) => a.includes("astats="))
@@ -129,6 +130,10 @@ describe("the level meter", () => {
       "atrim=start=3.75:end=12.25,astats="
     );
     expect(analysis?.args.join(" ")).toContain("concat=n=2:v=0:a=1,ebur128");
+    // The true peak is over the whole take, untrimmed.
+    expect(analysis?.args.join(" ")).toContain(
+      "[p]ebur128=peak=true:framelog=quiet,anullsink"
+    );
     // The run is over and the plain meter is back, not writing a file.
     expect(run?.running).toBe(false);
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");

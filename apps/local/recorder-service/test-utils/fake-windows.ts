@@ -127,14 +127,19 @@ const DEVICE_LISTING = [
 export const ebur128Line = (seconds: number, m: number, s: number) =>
   `[Parsed_ebur128_0 @ 000001d2] [info] t: ${seconds.toFixed(4)}   TARGET:-23 LUFS    M: ${m.toFixed(1)} S: ${s.toFixed(1)}     I: ${s.toFixed(1)} LUFS       LRA:   0.0 LU`;
 
-/** The end of an Audio Calibration's analysis, as ffmpeg 8.0.1 printed it for a real file. */
+/**
+ * The end of an Audio Calibration's analysis, as ffmpeg printed it for a real
+ * file: the speech windows' Summary, then the whole take's with its true
+ * peak (in that order, though the parser does not rely on it).
+ */
 const calibrationAnalysisStderr = (a: {
   noiseFloorDb: number | "-inf";
   speechLufs: number;
+  truePeakDb: number;
 }) =>
   [
     "[info] Input #0, wav, from 'mic.wav':",
-    "[Parsed_ebur128_15 @ 000001899126b300] [info] Summary:",
+    "[Parsed_ebur128_17 @ 000001899126b300] [info] Summary:",
     "",
     "  Integrated loudness:",
     `    I:         ${a.speechLufs.toFixed(1)} LUFS`,
@@ -142,6 +147,17 @@ const calibrationAnalysisStderr = (a: {
     "",
     "  Loudness range:",
     "    LRA:         1.4 LU",
+    "[Parsed_ebur128_4 @ 000001899126b480] [info] Summary:",
+    "",
+    "  Integrated loudness:",
+    "    I:          -1.8 LUFS",
+    "    Threshold: -24.0 LUFS",
+    "",
+    "  Loudness range:",
+    "    LRA:        11.8 LU",
+    "",
+    "  True peak:",
+    `    Peak:       ${a.truePeakDb.toFixed(1)} dBFS`,
     "[Parsed_astats_2 @ 0000018990e32b00] [info] Overall",
     `[Parsed_astats_2 @ 0000018990e32b00] [info] RMS level dB: ${typeof a.noiseFloorDb === "number" ? a.noiseFloorDb.toFixed(6) : a.noiseFloorDb}`,
     "[out#0/null @ 0000018990e32280] [info] video:0KiB audio:5625KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown",
@@ -217,11 +233,17 @@ export const fakeWindows = (
     micLoudness?: (seconds: number) => number;
     /**
      * What an Audio Calibration's analysis of its mic file measures (default:
-     * a -97.3 dBFS floor, -21.4 LUFS speech), printed as ffmpeg 8.0.1 does.
+     * a -97.3 dBFS floor, -27.4 LUFS speech, a -9.2 dBTP peak), printed as
+     * ffmpeg does.
      * `failed`: it exits 1 with an error instead.
      */
     calibrationAnalysis?:
-      { noiseFloorDb: number | "-inf"; speechLufs: number } | "failed";
+      | {
+          noiseFloorDb: number | "-inf";
+          speechLufs: number;
+          truePeakDb: number;
+        }
+      | "failed";
   } = {}
 ) => {
   const spacedesk: {
@@ -332,7 +354,8 @@ export const fakeWindows = (
     if (l.args.some((a) => a.includes("astats="))) {
       const analysis = o.calibrationAnalysis ?? {
         noiseFloorDb: -97.3,
-        speechLufs: -21.4,
+        speechLufs: -27.4,
+        truePeakDb: -9.2,
       };
       if (analysis === "failed")
         return answer(p, {

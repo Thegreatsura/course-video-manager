@@ -267,6 +267,13 @@
       "when": 1791826585970,
       "tag": "0037_recording_session_audio_calibration",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791828043531,
+      "tag": "0038_audio_calibration_true_peak",
+      "breakpoints": true
     }
   ]
 }

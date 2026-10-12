@@ -35,6 +35,8 @@ export type SavedAudioCalibration = {
   judgement: CalibrationJudgement;
   noiseFloorDb: number;
   speechLufs: number;
+  /** The whole take's true peak, in dBTP; null when stored before the peak check. */
+  truePeakDb: number | null;
   thresholdDb: number;
   recorderMic: string;
   browserInputLabel: string | null;

@@ -1,0 +1,1 @@
+ALTER TABLE "course-video-manager_audio_calibration" ADD COLUMN "true_peak_db" double precision;

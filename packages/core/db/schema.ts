@@ -549,12 +549,17 @@ export const audioCalibrations = createTable(
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    /** Passed when the speech loudness was inside the target band. */
+    /**
+     * Passed when the speech loudness was inside the target band and the
+     * true peak at or under the ceiling, as the rules stood when it ran.
+     */
     outcome: text("outcome").$type<"passed" | "failed">().notNull(),
     /** The RMS level of the silence, in dBFS. */
     noiseFloorDb: doublePrecision("noise_floor_db").notNull(),
     /** The integrated loudness of the reading rounds, in LUFS. */
     speechLufs: doublePrecision("speech_lufs").notNull(),
+    /** The true peak of the whole take, in dBTP; null before the peak check. */
+    truePeakDb: doublePrecision("true_peak_db"),
     /** The silence threshold it chose (speech - 16 dB, clamped), in dB. */
     thresholdDb: doublePrecision("threshold_db").notNull(),
     /** The recorder service's mic: its DirectShow name. */

@@ -42,12 +42,13 @@ export const RECORDER_SERVICE_PORT = 5177;
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
  * (2: a Short's `format` and `screen`; 3: the level meter; 4: the Audio
- * Calibration run; 5: Record's silence threshold). The app server reloads on a change
+ * Calibration run; 5: Record's silence threshold; 6: the calibration's true
+ * peak). The app server reloads on a change
  * and the service does not (ADR 0035), so after a pull mid-session the app may
  * meet a service started from older code; `hello` says which wire it speaks
  * (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 5;
+export const RECORDER_PROTOCOL_VERSION = 6;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -395,11 +396,13 @@ export type RecorderStatusMessage =
 
 /**
  * What a calibration run measured: the noise floor (the RMS level of the
- * silence, dBFS) and the integrated loudness of the speech (LUFS).
+ * silence, dBFS), the integrated loudness of the speech (LUFS) and the true
+ * peak of the whole take (dBTP).
  */
 export type CalibrationMeasurement = {
   noiseFloorDb: number;
   speechLufs: number;
+  truePeakDb: number;
 };
 
 export type RecorderMessage = RecordingSessionEvent | RecorderStatusMessage;

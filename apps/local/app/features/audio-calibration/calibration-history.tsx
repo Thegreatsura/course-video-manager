@@ -44,6 +44,9 @@ export const CalibrationHistory = ({
             <span className="w-28 font-mono tabular-nums">
               {c.speechLufs.toFixed(1)} LUFS
             </span>
+            <span className="w-24 font-mono tabular-nums">
+              {c.truePeakDb === null ? "—" : `${c.truePeakDb.toFixed(1)} dBTP`}
+            </span>
             <span className="w-24 font-mono tabular-nums text-muted-foreground">
               {c.thresholdDb.toFixed(1)} dB
             </span>

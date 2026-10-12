@@ -18,6 +18,7 @@ const PROMPT_STYLE: Record<ScriptStep["kind"], string> = {
   silence: "bg-sky-500/30",
   read: "bg-emerald-500/40",
   pause: "bg-amber-500/30",
+  loud: "bg-red-500/40",
 };
 
 const promptLabel = (step: ScriptStep) => {
@@ -30,6 +31,8 @@ const promptLabel = (step: ScriptStep) => {
       return `Read ${step.line}`;
     case "pause":
       return `Pause ${step.line}`;
+    case "loud":
+      return "Loud";
   }
 };
 
