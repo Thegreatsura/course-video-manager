@@ -201,6 +201,9 @@ export type RecorderState =
       lastSeq: number;
     };
 
+/** How many of its latest Recording Sessions the service names in `hello`. */
+export const RECENT_SESSIONS = 20;
+
 export type FfmpegCheck =
   { ok: true; version: string } | { ok: false; message: string };
 
@@ -216,6 +219,12 @@ export type RecorderStatusMessage =
        * `recording-crashed` for. A client replays each to catch up.
        */
       recovered: string[];
+      /**
+       * The last `RECENT_SESSIONS` Recording Sessions the service started,
+       * oldest first. A take filmed from the Stream Deck while no app server
+       * listened is among them; a client replays any it has not seen finish.
+       */
+      recent: string[];
     }
   | { type: "state"; state: RecorderState }
   | { type: "refused"; command: RecorderCommand["type"]; message: string }

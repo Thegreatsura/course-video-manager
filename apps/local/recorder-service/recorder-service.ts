@@ -25,6 +25,7 @@ import {
   STILL_PATH,
   STILL_RECORDER_CLOSED,
   STILL_WHILE_RECORDING,
+  RECENT_SESSIONS,
   type CameraStatus,
   type RecorderCommand,
   type RecorderMessage,
@@ -479,6 +480,16 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   let recovered: string[] = [];
+  const recentSessions = () => {
+    try {
+      return readIndex()
+        .slice(-RECENT_SESSIONS)
+        .map((e) => e.recordingSessionId);
+    } catch (e) {
+      console.error("recorder: could not read the Recording Session index", e);
+      return [];
+    }
+  };
   // Crash recovery runs before any command and any greeting, so a client
   // hears of every Recording Session it repaired. Only once listening: a
   // second service that cannot take the port must not touch the files.
@@ -505,7 +516,14 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       ws.terminate();
     });
     void recovering.then(() =>
-      send(ws, { type: "hello", ffmpeg, warnings, state, recovered })
+      send(ws, {
+        type: "hello",
+        ffmpeg,
+        warnings,
+        state,
+        recovered,
+        recent: recentSessions(),
+      })
     );
     ws.on("message", (data) => {
       const decoded = decodeCommand(data.toString());
