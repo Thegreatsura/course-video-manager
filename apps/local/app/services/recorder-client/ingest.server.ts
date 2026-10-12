@@ -14,6 +14,8 @@ import { placeSpeechAsClips } from "@/services/clip-service-speech.server";
 import type { Database } from "@/services/drizzle-service.server";
 import { requireDraftVersionForVideo } from "@/services/draft-guard.server";
 import { withDbTransaction } from "@/services/with-db-transaction.server";
+import { pairMicOffsetMs } from "@/services/av-calibration.server";
+import { DEFAULT_MIC_OFFSET_MS } from "@cvm/core/features/videos/recorder";
 import type { SequencedEvent } from "./sequencer";
 
 /**
@@ -94,6 +96,11 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
     const refused = yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
         yield* requireDraftVersionForVideo(tx, event.videoId);
+        // It starts with its pair's Mic Offset, fixed from here on: a later
+        // AV Calibration never changes it (only Mic Settings does).
+        const micOffsetMs =
+          (event.devices ? yield* pairMicOffsetMs(tx, event.devices) : null) ??
+          DEFAULT_MIC_OFFSET_MS;
         yield* dbCall(() =>
           tx
             .insert(recordingSessions)
@@ -103,6 +110,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
               cameraFilePath: event.files.camera,
               screenFilePath: event.files.screen,
               micFilePath: event.files.mic,
+              micOffsetMs,
               status: "recording",
               startedAt: new Date(event.t0Ms),
               silenceLength: event.silenceLength,

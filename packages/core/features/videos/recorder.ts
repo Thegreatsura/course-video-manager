@@ -85,8 +85,10 @@ export const RECORDING_SESSION_SCENES = ["Camera", "Code", "No Face"] as const;
 export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
 
 /**
- * The mic offset a new Recording Session gets, in ms: the mic's sound is
- * shifted later by this much at export. 150 ms matches the sync offset OBS
+ * The mic offset a new Recording Session gets when its camera + mic pair
+ * was never measured, in ms (a measured pair's Mic Offset otherwise: see
+ * `pairMicOffsetMs`): the mic's sound is shifted later by this much at
+ * export. 150 ms matches the sync offset OBS
  * applies to the same mic, which the CVM recorder's raw files do not carry.
  */
 export const DEFAULT_MIC_OFFSET_MS = 150;
