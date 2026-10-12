@@ -36,6 +36,7 @@ import {
   appendFromObsImpl,
   createEffectClipAtPositionImpl,
   handleCreateVideoFromSelection,
+  ClipRestoreRefusedError,
 } from "./clip-service-handler.helpers";
 import type { Database } from "@/services/drizzle-service.server";
 import { withClipServiceWriteClosure } from "./draft-guard-clip-service.server";
@@ -189,7 +190,9 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
           for (const clip of toRestore) {
             if (!clip.archived) continue;
             const refusal = clipRestoreRefusal(clip.video.recorder, clip);
-            if (refusal) throw new Error(refusal);
+            if (refusal) {
+              return yield* new ClipRestoreRefusedError({ message: refusal });
+            }
           }
         }
         for (const clipId of event.clipIds) {
