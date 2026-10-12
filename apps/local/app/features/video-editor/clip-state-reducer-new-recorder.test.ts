@@ -86,6 +86,7 @@ const tester = (items: ClipOnDatabase[] = []) =>
     sessions: [],
     clipTranscriptionJobs: {},
     jobEventCursor: 0,
+    micOffsetRefusal: null,
   });
 
 const databaseIds = (t: ReturnType<typeof tester>) =>

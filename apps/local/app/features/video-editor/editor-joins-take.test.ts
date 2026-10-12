@@ -61,6 +61,7 @@ const loadEditor = (items: ClipOnDatabase[]) => {
     sessions: [],
     clipTranscriptionJobs: {},
     jobEventCursor: 0,
+    micOffsetRefusal: null,
   });
   const hear = (message: NewRecorderMessage) => {
     recorder.send({ type: "recorder-message-heard", message });

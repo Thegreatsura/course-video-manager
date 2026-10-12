@@ -97,9 +97,10 @@ export const showsNewRecorderControls = (
 ): boolean => state.recorder === "new-recorder";
 
 /**
- * The Recorder is locked once the Video has any Clip, so one Video never
+ * The Recorder is locked once the Video has a live Clip, so one Video never
  * mixes OBS and new-recorder Clips, and while a capture is still in progress
- * (its first Clip may not have landed yet).
+ * (its first Clip may not have landed yet). Archived Clips do not count: a
+ * Video whose Clips are all archived has no Footage.
  */
 export const isRecorderLocked = (
   obsConnectorState: OBSConnectionOuterState,
@@ -109,5 +110,6 @@ export const isRecorderLocked = (
   items.some(
     (item) =>
       item.type !== "chapter-on-database" &&
-      item.type !== "chapter-optimistically-added"
+      item.type !== "chapter-optimistically-added" &&
+      !("shouldArchive" in item && item.shouldArchive)
   ) || isCaptureInProgress(obsConnectorState, items, sessions);

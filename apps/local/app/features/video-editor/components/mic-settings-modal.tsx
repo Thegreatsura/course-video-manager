@@ -34,6 +34,8 @@ export function MicSettingsModal(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recordingSession: ClipRecordingSession | null;
+  /** Why the last offset saved was refused, shown under the offset. */
+  refusal: string | null;
   onSubmit: (settings: { micOffsetMs: number; micEq: MicEq }) => void;
 }) {
   const session = props.recordingSession;
@@ -88,6 +90,11 @@ export function MicSettingsModal(props: {
                 For every Clip of this Recording Session. The mic is shifted
                 later by this much; no Clip moves.
               </p>
+              {props.refusal && (
+                <p role="alert" className="text-xs text-red-400">
+                  {props.refusal}
+                </p>
+              )}
             </div>
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Mic EQ</legend>

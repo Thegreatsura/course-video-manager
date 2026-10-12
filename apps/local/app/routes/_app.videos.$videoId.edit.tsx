@@ -193,7 +193,6 @@ export const loader = makeLoader({
     }),
 });
 
-// Create ClipService instance for all clip operations
 const clipService = createHttpClipService();
 
 /**
@@ -299,6 +298,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     error: null,
     sessions: [],
     clipTranscriptionJobs: {},
+    micOffsetRefusal: null,
     jobEventCursor: props.loaderData.jobEventCursor,
   };
 
@@ -352,6 +352,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     silenceLength,
     clipStateRef,
     clipDispatch: dispatch,
+    micOffsetRefusal: clipState.micOffsetRefusal,
   });
   const obsConnector = useOBSConnector({
     usesObs: recorderChoice.usesObs,

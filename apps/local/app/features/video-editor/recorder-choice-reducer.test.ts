@@ -139,6 +139,15 @@ describe("isRecorderLocked", () => {
     expect(isRecorderLocked(notRunning, [chapter, clip], [])).toBe(true);
   });
 
+  it("is unlocked once every Clip is archived", () => {
+    const archived = {
+      type: "on-database",
+      frontendId: "k2",
+      shouldArchive: true,
+    } as TimelineItem;
+    expect(isRecorderLocked(notRunning, [chapter, archived], [])).toBe(false);
+  });
+
   it("locks while OBS is recording, before any Clip lands", () => {
     expect(isRecorderLocked(recording, [], [])).toBe(true);
   });
