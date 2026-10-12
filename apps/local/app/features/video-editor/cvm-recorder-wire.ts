@@ -3,7 +3,7 @@ import type { Scene } from "@/packages/scene-layout";
 import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
-import type { FramesLost } from "recorder-service/protocol";
+import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
 
 /**
  * What the app server's recorder client tells an editor open on a New
@@ -44,6 +44,12 @@ export type CvmRecorderMessage =
    * Video: sent when the editor starts listening and on every switch.
    */
   | { type: "scene-changed"; scene: Scene }
+  /**
+   * A Short's screen (the Spacedesk display), while the recorder is open for
+   * this Video: sent when the editor starts listening and whenever it
+   * changes. Never sent for a Landscape Video.
+   */
+  | { type: "screen-changed"; screen: ScreenStatus }
   | {
       type: "recording-started";
       recordingSessionId: string;
@@ -103,6 +109,7 @@ export const CVM_RECORDER_MESSAGE_TYPES = [
   "cam-link-busy",
   "camera-closed",
   "scene-changed",
+  "screen-changed",
   "recording-started",
   "warmed-up",
   "speech-started",

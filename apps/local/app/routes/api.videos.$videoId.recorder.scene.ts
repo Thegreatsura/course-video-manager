@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { SCENES } from "@/packages/scene-layout";
-import { recorderCommand } from "@/services/recorder-client/client.server";
+import { recorderCommand } from "@/services/recorder-client/recorder-command";
 import { recorderClient } from "@/services/recorder-client/live.server";
 import { makeAction } from "@/services/route-action.server";
 

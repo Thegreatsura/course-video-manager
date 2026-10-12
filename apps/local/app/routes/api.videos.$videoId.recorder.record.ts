@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { InsertionPointSchema } from "@/services/clip-service.schemas";
-import { recorderCommand } from "@/services/recorder-client/client.server";
+import { recorderCommand } from "@/services/recorder-client/recorder-command";
 import {
   recorderClient,
   recordingFolder,
@@ -33,9 +33,16 @@ export const action = makeAction({
         yield* Schema.decodeUnknown(startRecordingSchema)(payload);
       const folder = recordingFolder();
       const videoId = params.videoId!;
-      yield* requireRecordableVideo(yield* DrizzleService, videoId);
+      const { format } = yield* requireRecordableVideo(
+        yield* DrizzleService,
+        videoId
+      );
       yield* recorderCommand(() =>
-        recorderClient().startRecording(videoId, { ...request, folder })
+        recorderClient().startRecording(videoId, {
+          ...request,
+          folder,
+          format,
+        })
       );
       return { ok: true };
     }),

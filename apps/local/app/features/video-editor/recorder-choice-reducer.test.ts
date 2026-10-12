@@ -85,20 +85,24 @@ describe("recorder choice", () => {
     expect(effects).toEqual([]);
   });
 
-  it("a Short offers OBS only and never takes the CVM recorder", () => {
+  it("a Short offers both Recorders and is picked like a Landscape Video", () => {
     const short = createInitialRecorderChoiceState({
       format: "short",
-      recorder: "cvm",
+      recorder: null,
     });
-    expect(short.options).toEqual(["obs"]);
+    expect(short.options).toEqual(["obs", "cvm"]);
     expect(short.recorder).toBe("obs");
     const { state, effects } = run(short, {
       type: "recorder-picked",
       recorder: "cvm",
       locked: false,
     });
-    expect(state.recorder).toBe("obs");
-    expect(effects).toEqual([]);
+    expect(state.recorder).toBe("cvm");
+    expect(effects).toEqual([{ type: "save-recorder", recorder: "cvm" }]);
+    expect(
+      createInitialRecorderChoiceState({ format: "short", recorder: "cvm" })
+        .recorder
+    ).toBe("cvm");
   });
 
   it("a failed save goes back to the saved Recorder, says why and is not remembered", () => {

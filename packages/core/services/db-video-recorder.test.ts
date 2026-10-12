@@ -93,7 +93,7 @@ describe("the Video's Recorder", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("a new Short is always OBS", () =>
+  it.effect("a new Short starts with the Recorder it was created with", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const video = yield* videoOps.createStandaloneVideo({
@@ -101,7 +101,7 @@ describe("the Video's Recorder", () => {
         format: "short",
         recorder: "cvm",
       });
-      expect(video.recorder).toBeNull();
+      expect(video.recorder).toBe("cvm");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -141,20 +141,19 @@ describe("the Video's Recorder", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("a Short is never given the CVM recorder", () =>
+  it.effect("a Short may be given the CVM recorder", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const video = yield* videoOps.createStandaloneVideo({
         title: "Short",
         format: "short",
       });
-      const error = yield* Effect.flip(
-        videoOps.updateVideoRecorder({
-          videoId: video.id,
-          recorder: "cvm",
-        })
-      );
-      expect(error._tag).toBe("VideoRecorderLockedError");
+      yield* videoOps.updateVideoRecorder({
+        videoId: video.id,
+        recorder: "cvm",
+      });
+      const reread = yield* videoOps.getVideoRowById(video.id);
+      expect(reread.recorder).toBe("cvm");
     }).pipe(Effect.provide(testLayer))
   );
 
@@ -248,7 +247,7 @@ describe("the Video's Recorder", () => {
     }).pipe(Effect.provide(testLayer))
   );
 
-  it.effect("changing a Video to a Short drops the CVM recorder", () =>
+  it.effect("changing a Video to a Short keeps the CVM recorder", () =>
     Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
       const video = yield* videoOps.createStandaloneVideo({
@@ -260,7 +259,7 @@ describe("the Video's Recorder", () => {
         videoId: video.id,
         format: "short",
       });
-      expect(updated.recorder).toBeNull();
+      expect(updated.recorder).toBe("cvm");
     }).pipe(Effect.provide(testLayer))
   );
 });

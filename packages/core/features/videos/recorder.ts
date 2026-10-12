@@ -169,11 +169,13 @@ export const MIC_EQ_SETTING_ID = "default";
 export const MIC_EQ_DB_RANGE = { min: -24, max: 24 } as const;
 
 /**
- * The Recorders a Video of this format may record with. Shorts record with
- * OBS only: the CVM recorder cannot film the Spacedesk display yet.
+ * The Recorders a Video of this format may record with: every format may
+ * record with either. A Short on the CVM recorder films the Spacedesk display
+ * as its screen; on OBS it records with OBS's TikTok profile, as it always
+ * has.
  */
-export function recordersForFormat(format: string): readonly VideoRecorder[] {
-  return format === "short" ? ["obs"] : VIDEO_RECORDERS;
+export function recordersForFormat(_format: string): readonly VideoRecorder[] {
+  return VIDEO_RECORDERS;
 }
 
 /**

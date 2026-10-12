@@ -353,7 +353,7 @@ export const createVideoWriteOps = (db: Database) => {
    * Choose the Recorder a Video records with. Refused once the Video has a
    * live (non-archived) Clip, and while one of its Recording Sessions is
    * still recording, so one Video never mixes OBS and CVM-recorder Clips; and
-   * for a format that cannot record with it (Shorts are OBS only). A Video
+   * for a format that cannot record with it (`recordersForFormat`). A Video
    * whose Clips are all archived counts as having no Footage, so it unlocks.
    */
   const updateVideoRecorder = Effect.fn("updateVideoRecorder")(

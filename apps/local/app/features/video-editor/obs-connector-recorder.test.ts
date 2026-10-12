@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { resolveProfileGateAction } from "./use-ensure-obs-profile";
+import { targetProfileForFormat } from "./ensure-obs-profile";
+import {
+  createInitialRecorderChoiceState,
+  showsOBSChecks,
+} from "./recorder-choice-reducer";
 import {
   createInitialOBSConnectorState,
   obsConnectorReducer,
@@ -69,5 +75,43 @@ describe("the OBS connector and the Video's Recorder", () => {
     video.send(connected);
     expect(video.state()).toEqual({ type: "obs-not-used" });
     expect(video.effects).toEqual([{ type: "disconnect" }]);
+  });
+
+  it("a CVM-recorder Short never connects to OBS, so never switches it to the TikTok profile", () => {
+    const usesObs = showsOBSChecks(
+      createInitialRecorderChoiceState({ format: "short", recorder: "cvm" })
+    );
+    const short = start(usesObs);
+    short.send({ type: "connection-closed" });
+    expect(short.state()).toEqual({ type: "obs-not-used" });
+    expect(short.effects).toEqual([]);
+    // The profile gate sees OBS as not running: nothing to switch.
+    expect(
+      resolveProfileGateAction({
+        obsStateType: "obs-not-running",
+        currentProfile: null,
+        targetProfile: targetProfileForFormat("short"),
+        hasEnsured: false,
+      })
+    ).toEqual({ type: "reset" });
+  });
+
+  it("an OBS Short still connects and switches OBS to the TikTok profile", () => {
+    const usesObs = showsOBSChecks(
+      createInitialRecorderChoiceState({ format: "short", recorder: null })
+    );
+    const short = start(usesObs);
+    expect(short.effects).toEqual([{ type: "attempt-to-connect" }]);
+    const state = short.send(connected);
+    expect(state.type).toBe("obs-connected");
+    expect(
+      resolveProfileGateAction({
+        obsStateType: "obs-connected",
+        currentProfile: "Landscape Recording",
+        targetProfile: targetProfileForFormat("short"),
+        hasEnsured: false,
+      })
+    ).toEqual({ type: "switch-profile" });
+    expect(targetProfileForFormat("short")).toBe("TikTok");
   });
 });

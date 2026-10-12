@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { eq } from "drizzle-orm";
 import { resolveVideoRecorder } from "@cvm/core/features/videos/recorder";
 import { videos } from "@/db/schema";
+import { resolveVideoFormat } from "@/features/videos/video-format";
 import { NotFoundError } from "@/services/db-service-errors";
 import { dbCall } from "@/services/clip-service-handler.helpers";
 import { requireDraftVersionForVideo } from "@/services/draft-guard.server";
@@ -16,14 +17,15 @@ export class RecordOnOBSVideoError extends Data.TaggedError(
 /**
  * Whether Record may start on a Video: it records with the CVM recorder, and
  * its Version is the Draft (a Recording Session hangs off the Video, so the
- * Draft guard is its guard too; docs/DRAFT_GUARD.md).
+ * Draft guard is its guard too; docs/DRAFT_GUARD.md). Answers the Video's
+ * format, which the recorder records in.
  */
 export const requireRecordableVideo = Effect.fn("requireRecordableVideo")(
   function* (db: Database, videoId: string) {
     const video = yield* dbCall(() =>
       db.query.videos.findFirst({
         where: eq(videos.id, videoId),
-        columns: { id: true, recorder: true },
+        columns: { id: true, recorder: true, format: true },
       })
     );
     if (!video)
@@ -35,5 +37,6 @@ export const requireRecordableVideo = Effect.fn("requireRecordableVideo")(
     yield* withDbTransaction(db, (tx) =>
       requireDraftVersionForVideo(tx, videoId)
     );
+    return { format: resolveVideoFormat(video.format) };
   }
 );

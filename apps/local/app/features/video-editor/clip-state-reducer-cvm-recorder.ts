@@ -185,6 +185,7 @@ export const handleCvmRecorderMessage = (
     case "cam-link-busy":
     case "camera-closed":
     case "scene-changed":
+    case "screen-changed":
     case "warmed-up":
     case "speech-started":
     case "speech-ended":

@@ -15,7 +15,7 @@ import { isCaptureInProgress } from "./video-editor-selectors";
  */
 export namespace recorderChoiceReducer {
   export type State = {
-    /** The Recorders this Video may record with: OBS only for a Short. */
+    /** The Recorders this Video may record with (`recordersForFormat`). */
     options: readonly VideoRecorder[];
     /** The Recorder shown, and the one the editor records with. */
     recorder: VideoRecorder;
