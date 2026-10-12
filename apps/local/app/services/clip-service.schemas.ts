@@ -134,6 +134,11 @@ export const ClipServiceEventSchema = Schema.Union(
     videoId: Schema.String,
   }),
   Schema.Struct({
+    type: Schema.Literal("get-footage-stats"),
+    now: Schema.String,
+    timeZone: Schema.String,
+  }),
+  Schema.Struct({
     type: Schema.Literal("append-clips"),
     input: AppendClipsInputSchema,
   }),
