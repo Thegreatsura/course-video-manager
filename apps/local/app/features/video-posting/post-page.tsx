@@ -38,7 +38,7 @@ import type { CourseStructure } from "@/components/video-context-panel";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
 import { PostPageOverwriteDialog } from "./post-page-overwrite-dialog";
 import { ThumbnailSelector } from "./post-page-thumbnail-selector";
-import { validateYoutubeTitle } from "./post-page-validation";
+import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 import { getAutoSelectThumbnailId } from "./auto-select-thumbnail";
 import {
   findConvertibleAiHeroUrls,
@@ -241,7 +241,11 @@ export function PostPage({
     }
   };
 
-  const titleValidationError = validateYoutubeTitle(title);
+  // What YouTube would refuse, named, so the upload is never queued with it.
+  // A blank title is not reported: the button is already off for it.
+  const metadataProblem = title.trim()
+    ? findYouTubeMetadataProblem({ title, description })
+    : null;
 
   const [selectedThumbnailId, setSelectedThumbnailId] = useState<string | null>(
     () => getAutoSelectThumbnailId(thumbnails)
@@ -267,7 +271,7 @@ export function PostPage({
       !title.trim() ||
       !description.trim() ||
       !selectedThumbnailId ||
-      titleValidationError
+      metadataProblem
     )
       return;
 
@@ -444,8 +448,10 @@ export function PostPage({
             placeholder="Enter video title..."
             className="text-lg min-h-[60px] resize-y"
           />
-          {titleValidationError && (
-            <p className="text-sm text-destructive">{titleValidationError}</p>
+          {metadataProblem?.field === "title" && (
+            <p className="text-sm text-destructive">
+              {metadataProblem.message}
+            </p>
           )}
         </div>
 
@@ -478,6 +484,11 @@ export function PostPage({
             placeholder="Enter video description..."
             className="min-h-[300px] resize-y"
           />
+          {metadataProblem?.field === "description" && (
+            <p className="text-sm text-destructive">
+              {metadataProblem.message}
+            </p>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -536,7 +547,7 @@ export function PostPage({
               !title.trim() ||
               !description.trim() ||
               !selectedThumbnailId ||
-              !!titleValidationError
+              !!metadataProblem
             }
             className="w-full"
             size="lg"

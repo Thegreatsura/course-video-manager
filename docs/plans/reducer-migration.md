@@ -185,9 +185,9 @@ share, "generate text → confirm overwrite if there is text already → apply",
 into a `generatedFieldReducer` that batch 9 reuses. The rest of each page
 becomes a reducer of its own.
 
-- Keep `post-page-validation.test.ts`, which tests pure validation. If the
-  validation moves into the reducer, fold those cases into the reducer tests
-  and delete the file.
+- Keep `lib/youtube-metadata.test.ts`, which tests the pure YouTube metadata
+  validation both pages and the posting Jobs share. The reducer calls it; it
+  does not move into the reducer.
 
 ## Batch 6 — Small modals and forms (score 126)
 
