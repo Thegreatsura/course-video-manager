@@ -1,4 +1,5 @@
 import path from "node:path";
+import { wakeSpacedesk } from "../app/spacedesk-wake";
 import { RECORDER_SERVICE_PORT } from "./protocol";
 import { startRecorderService } from "./recorder-service";
 import { startWindowsClock } from "./windows-clock";
@@ -26,6 +27,7 @@ export const runRecorderService = async () => {
     launch: windowsLauncher,
     now: clock.now,
     stateDir: STATE_DIR,
+    wakeSpacedesk: () => wakeSpacedesk(),
   });
   log(
     `recorder service listening on ws://127.0.0.1:${service.port} (pid ${process.pid})`
