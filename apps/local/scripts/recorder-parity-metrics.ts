@@ -9,7 +9,6 @@
  * those two segment files, so a difference here is a difference a mixed
  * Video's viewer sees or hears between the two Clips.
  */
-import type { MicEq } from "@cvm/core/features/videos/recorder";
 
 /** One side's picture and sound, as measured off its rendered segment. */
 export type SideMetrics = {
@@ -213,7 +212,13 @@ export const compareSides = (input: {
   readonly obs: SideMetrics;
   readonly cvm: SideMetrics;
   readonly cvmRawMicBands: BandLevels | null;
-  readonly micEq: MicEq | null;
+  /**
+   * The same raw mic span through OBS's 3-Band Equaliser alone: what each
+   * band should move by. OBS's high band is the complement of a gentle 4-pole
+   * low-pass, so over speech a -6.1 dB high gain moves the >5 kHz band by
+   * only about -3 to -4 dB; comparing with the bare gain would fail OBS too.
+   */
+  readonly cvmObsEqMicBands: BandLevels | null;
 }): Check[] => {
   const { obs, cvm } = input;
   const same = (name: string, key: keyof PictureFields): Check => ({
@@ -326,17 +331,17 @@ export const compareSides = (input: {
       rule: `each ≤ ${THRESHOLDS.avSkewMs} ms`,
     },
   ];
-  if (input.cvmRawMicBands && input.micEq) {
+  if (input.cvmRawMicBands && input.cvmObsEqMicBands) {
     const raw = input.cvmRawMicBands;
-    const eq = input.micEq;
+    const eqd = input.cvmObsEqMicBands;
     for (const band of BANDS) {
-      const expected = eq[`${band}Db`];
+      const expected = eqd[`${band}Db`] - raw[`${band}Db`];
       const applied = cvm.bands[`${band}Db`] - raw[`${band}Db`];
       checks.push({
         area: "audio",
         name: `Mic EQ ${band} band applied (dB, export − raw mic)`,
         obs: "baked in by OBS",
-        cvm: `${fmt(applied)} (asked ${fmt(expected)})`,
+        cvm: `${fmt(applied)} (OBS's EQ: ${fmt(expected)})`,
         pass: Math.abs(applied - expected) <= THRESHOLDS.eqAppliedDb,
         rule: `|Δ| ≤ ${THRESHOLDS.eqAppliedDb} dB`,
       });

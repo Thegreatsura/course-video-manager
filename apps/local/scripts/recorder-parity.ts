@@ -31,7 +31,7 @@ import {
   clipFfmpegInput,
   clipSource,
 } from "@/packages/clip-source";
-import { clipSegmentArgs } from "@/services/clip-segment-args";
+import { clipSegmentArgs, micEqFilters } from "@/services/clip-segment-args";
 import { landscapeCpuFallbackArgs } from "@/services/ffmpeg-error";
 import {
   BANDS,
@@ -168,13 +168,16 @@ const renderSegment = (clip: typeof obsClip, name: string) => {
   return { file: out, duration, source, input };
 };
 
-const bandLevels = (inputArgs: readonly string[]): BandLevels => {
+const bandLevels = (
+  inputArgs: readonly string[],
+  before: readonly string[] = []
+): BandLevels => {
   const level = (band: (typeof BANDS)[number]) =>
     parseRmsLevel(
       ffmpeg([
         ...inputArgs,
         "-af",
-        MEASURE_FILTERS.band(band),
+        [...before, MEASURE_FILTERS.band(band)].join(","),
         "-f",
         "null",
         "-",
@@ -239,7 +242,7 @@ const obs = renderSegment(obsClip, "obs");
 const cvm = renderSegment(cvmClip, "cvm");
 const obsMetrics = measure(obs.file);
 const cvmMetrics = measure(cvm.file);
-const cvmRawMicBands = bandLevels([
+const rawMicSpan = [
   "-ss",
   String(cvm.input.startTime),
   "-t",
@@ -247,8 +250,12 @@ const cvmRawMicBands = bandLevels([
   "-i",
   session.micFilePath,
   "-vn",
-]);
+];
+const cvmRawMicBands = bandLevels(rawMicSpan);
 const micEq = cvm.source.kind === "recording-session" ? cvm.source.micEq : null;
+const cvmObsEqMicBands = micEq
+  ? bandLevels(rawMicSpan, micEqFilters(micEq))
+  : null;
 
 const stillAt = String(Math.min(obs.duration, cvm.duration) / 2);
 const still = (out: string, graph: string) =>
@@ -275,7 +282,7 @@ const checks = compareSides({
   obs: obsMetrics,
   cvm: cvmMetrics,
   cvmRawMicBands,
-  micEq,
+  cvmObsEqMicBands,
 });
 const files = [session.cameraFilePath, session.micFilePath];
 const report = renderReport({

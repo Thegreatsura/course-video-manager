@@ -30,7 +30,7 @@ describe("drawInstructions", () => {
 
   it("draws a Short on its own 1080x1920 canvas with its own version", () => {
     expect(CANVASES.short).toEqual({ width: 1080, height: 1920 });
-    expect(LAYOUT_VERSIONS.short).toBe(2);
+    expect(LAYOUT_VERSIONS.short).toBe(3);
   });
 
   it("fills the Short Camera scene with the camera's centre crop, needing no screen", () => {

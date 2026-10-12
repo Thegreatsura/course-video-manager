@@ -108,7 +108,7 @@ describe("recorder parity metrics", () => {
       obs: side,
       cvm: { ...side, lufs: -37.8 },
       cvmRawMicBands: { lowDb: -20, midDb: -30, highDb: -44 },
-      micEq: { lowDb: 0, midDb: 0, highDb: -6.1 },
+      cvmObsEqMicBands: { lowDb: -20, midDb: -30, highDb: -46 },
     });
     expect(checks.filter((c) => !c.pass).map((c) => c.name)).toEqual([
       "integrated loudness (LUFS)",
