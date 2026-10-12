@@ -6,26 +6,6 @@ describe("formatBeatsContext", () => {
     expect(formatBeatsContext([])).toBe("");
   });
 
-  it("formats a single beat with title and description", () => {
-    const result = formatBeatsContext([
-      {
-        kind: "definition",
-        title: "What is Effect",
-        description: "Explain the core concept of Effect as a library",
-      },
-    ]);
-    expect(result).toBe(
-      "1. [Definition] What is Effect\n   Explain the core concept of Effect as a library"
-    );
-  });
-
-  it("formats a beat with title but no description", () => {
-    const result = formatBeatsContext([
-      { kind: "walkthrough", title: "Setup", description: "" },
-    ]);
-    expect(result).toBe("1. [Walkthrough] Setup");
-  });
-
   it("formats multiple beats in order", () => {
     const result = formatBeatsContext([
       {

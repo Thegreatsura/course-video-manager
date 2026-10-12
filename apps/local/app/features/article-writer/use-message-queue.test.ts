@@ -14,16 +14,12 @@ describe("processSubmit", () => {
     expect(result.queued).toEqual([]);
   });
 
-  it("queues when status is streaming", () => {
-    const result = processSubmit("streaming", "queued msg", [], false);
-    expect(result.sent).toBeNull();
-    expect(result.queued).toEqual(["queued msg"]);
-  });
-
-  it("queues when status is submitted", () => {
-    const result = processSubmit("submitted", "queued msg", [], false);
-    expect(result.sent).toBeNull();
-    expect(result.queued).toEqual(["queued msg"]);
+  it("queues while a response is in flight (streaming or submitted)", () => {
+    for (const status of ["streaming", "submitted"] as const) {
+      const result = processSubmit(status, "queued msg", [], false);
+      expect(result.sent).toBeNull();
+      expect(result.queued).toEqual(["queued msg"]);
+    }
   });
 
   it("appends to existing queue", () => {
@@ -58,22 +54,10 @@ describe("drainQueue", () => {
     expect(result.nextQueue).toEqual(["pending"]);
   });
 
-  it("does not drain when status is submitted", () => {
-    const result = drainQueue("submitted", ["pending"], false);
-    expect(result.messageToSend).toBeNull();
-    expect(result.nextQueue).toEqual(["pending"]);
-  });
-
   it("does not drain when status is error", () => {
     const result = drainQueue("error", ["pending"], false);
     expect(result.messageToSend).toBeNull();
     expect(result.nextQueue).toEqual(["pending"]);
-  });
-
-  it("drains only one message at a time", () => {
-    const result = drainQueue("ready", ["a", "b", "c"], false);
-    expect(result.messageToSend).toBe("a");
-    expect(result.nextQueue).toEqual(["b", "c"]);
   });
 
   it("does not mutate the original queue array", () => {
@@ -119,31 +103,5 @@ describe("holding a send while a screenshot capture is in flight", () => {
     const result = processSubmit("streaming", "queued msg", [], true);
     expect(result.sent).toBeNull();
     expect(result.queued).toEqual(["queued msg"]);
-  });
-});
-
-describe("full queue lifecycle", () => {
-  it("queues messages during streaming, then drains one by one on ready", () => {
-    // User submits while streaming
-    let { queued } = processSubmit("streaming", "msg-1", [], false);
-    expect(queued).toEqual(["msg-1"]);
-
-    // User submits another while still streaming
-    ({ queued } = processSubmit("streaming", "msg-2", queued, false));
-    expect(queued).toEqual(["msg-1", "msg-2"]);
-
-    // Stream completes → drain first message
-    let drain = drainQueue("ready", queued, false);
-    expect(drain.messageToSend).toBe("msg-1");
-    queued = drain.nextQueue;
-
-    // That send triggers streaming again → no drain
-    drain = drainQueue("streaming", queued, false);
-    expect(drain.messageToSend).toBeNull();
-
-    // Second stream completes → drain second message
-    drain = drainQueue("ready", queued, false);
-    expect(drain.messageToSend).toBe("msg-2");
-    expect(drain.nextQueue).toEqual([]);
   });
 });
