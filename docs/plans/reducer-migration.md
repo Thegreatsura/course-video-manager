@@ -121,7 +121,8 @@ reducer declares from `create-diagram-clicked`.
 
 **Done.** `components/app-sidebar-reducer.ts` holds the sidebar's
 `openModal` (`add-course | add-video | spacedesk`), the mobile sheet and the
-in-flight Diagram create; `create-diagram-clicked` declares `create-diagram`,
+in-flight Diagram create (later, #2054: the Spacedesk dialog is gone;
+`spacedesk-clicked` declares `wake-spacedesk` and the outcome toasts); `create-diagram-clicked` declares `create-diagram`,
 and the outcome comes back as `diagram-created` (which declares
 `open-diagram`) or `diagram-create-failed` (which declares `show-error`). The
 effect runner is `components/use-app-sidebar-reducer.ts`, and the

@@ -2,11 +2,11 @@ import type { EffectReducer } from "use-effect-reducer";
 
 /**
  * The app sidebar: which of its dialogs is open, the mobile navigation sheet,
- * and creating a Diagram from its **+** button. See docs/FRONTEND_STATE.md.
+ * creating a Diagram from its **+** button, and waking the Spacedesk display. See docs/FRONTEND_STATE.md.
  */
 export namespace appSidebarReducer {
   /** The sidebar's dialogs. Only one is open at a time. */
-  export type Modal = "add-course" | "add-video" | "spacedesk";
+  export type Modal = "add-course" | "add-video";
 
   export interface State {
     openModal: Modal | null;
@@ -18,6 +18,8 @@ export namespace appSidebarReducer {
     sheetOpen: boolean;
     /** A create request is in flight; the Diagrams **+** is disabled. */
     creatingDiagram: boolean;
+    /** A Spacedesk wake is in flight; another click does nothing. */
+    wakingSpacedesk: boolean;
   }
 
   export type Action =
@@ -32,11 +34,15 @@ export namespace appSidebarReducer {
     | { type: "location-changed" }
     | { type: "create-diagram-clicked" }
     | { type: "diagram-created"; diagramId: string }
-    | { type: "diagram-create-failed" };
+    | { type: "diagram-create-failed" }
+    | { type: "spacedesk-woke" }
+    | { type: "spacedesk-wake-failed"; message: string };
 
   export type Effect =
     | { type: "create-diagram" }
     | { type: "open-diagram"; diagramId: string }
+    | { type: "wake-spacedesk" }
+    | { type: "show-message"; message: string }
     | { type: "show-error"; message: string };
 }
 
@@ -44,6 +50,7 @@ export const createInitialAppSidebarState = (): appSidebarReducer.State => ({
   openModal: null,
   sheetOpen: false,
   creatingDiagram: false,
+  wakingSpacedesk: false,
 });
 
 export const appSidebarReducer: EffectReducer<
@@ -57,7 +64,18 @@ export const appSidebarReducer: EffectReducer<
     case "add-video-clicked":
       return { ...state, openModal: "add-video" };
     case "spacedesk-clicked":
-      return { ...state, openModal: "spacedesk" };
+      if (state.wakingSpacedesk) return state;
+      exec({ type: "wake-spacedesk" });
+      return { ...state, wakingSpacedesk: true };
+    case "spacedesk-woke":
+      exec({
+        type: "show-message",
+        message: "Spacedesk display is waking up…",
+      });
+      return { ...state, wakingSpacedesk: false };
+    case "spacedesk-wake-failed":
+      exec({ type: "show-error", message: action.message });
+      return { ...state, wakingSpacedesk: false };
     case "modal-dismissed":
       // A late close from a dialog that has already been replaced must not
       // shut the one now on screen.

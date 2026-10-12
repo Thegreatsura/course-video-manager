@@ -28,6 +28,26 @@ export function useAppSidebarReducer() {
     "open-diagram": (_state, effect) => {
       openPlaygroundWithDiagram(effect.diagramId);
     },
+    "wake-spacedesk": (_state, _effect, dispatch) => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/spacedesk/open", { method: "POST" });
+          const body = (await res.json()) as
+            { success: true } | { success: false; message: string };
+          if (body.success) dispatch({ type: "spacedesk-woke" });
+          else
+            dispatch({ type: "spacedesk-wake-failed", message: body.message });
+        } catch {
+          dispatch({
+            type: "spacedesk-wake-failed",
+            message: "Couldn't reach CVM to wake Spacedesk",
+          });
+        }
+      })();
+    },
+    "show-message": (_state, effect) => {
+      toast(effect.message);
+    },
     "show-error": (_state, effect) => {
       toast.error(effect.message);
     },
