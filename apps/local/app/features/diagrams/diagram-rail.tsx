@@ -2,6 +2,7 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
+import { railRowClass } from "@/features/diagrams/rail-row-class";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
@@ -74,10 +75,8 @@ export function DiagramRail({
                 <ContextMenuTrigger asChild>
                   <div
                     className={
-                      "flex items-center gap-2 overflow-hidden rounded border border-zinc-700 " +
-                      (isActive
-                        ? "bg-zinc-700/60"
-                        : "bg-zinc-800 hover:bg-zinc-700/40")
+                      "flex items-center gap-2 overflow-hidden rounded border " +
+                      railRowClass(isActive)
                     }
                   >
                     <Link
