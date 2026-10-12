@@ -9,6 +9,7 @@ import type { InsertionPoint } from "@/services/clip-service";
 import type { NewRecorderMessage } from "./new-recorder-wire";
 import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { Scene } from "@/packages/scene-layout";
+import type { MicEq } from "@cvm/core/features/videos/recorder";
 
 /**
  * The schema is typed in terms of `DatabaseId`, so it is declared in
@@ -382,6 +383,13 @@ export type ClipReducerAction =
       sceneOverride: Scene | null;
     }
   | {
+      /** The Mic Settings dialog was saved on a New-recorder Clip. */
+      type: "mic-settings-submitted";
+      clipId: FrontendId;
+      micOffsetMs: number;
+      micEq: MicEq;
+    }
+  | {
       type: "move-clip";
       clipId: FrontendId;
       direction: "up" | "down";
@@ -510,6 +518,15 @@ export type ClipReducerEffect =
       type: "update-scene-override";
       clipId: DatabaseId;
       sceneOverride: Scene | null;
+    }
+  | {
+      type: "update-mic-offset";
+      clipId: DatabaseId;
+      micOffsetMs: number;
+    }
+  | {
+      type: "update-mic-eq";
+      micEq: MicEq;
     }
   | {
       type: "reorder-clip";

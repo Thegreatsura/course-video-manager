@@ -83,7 +83,7 @@ const markSeededVideoExported = async () => {
         where: (c, { eq }) => eq(c.archived, false),
         with: {
           overlays: true,
-          recordingSession: { with: { sceneEvents: true } },
+          recordingSession: { with: { sceneEvents: true, micEq: true } },
         },
       },
     },

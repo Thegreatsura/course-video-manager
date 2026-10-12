@@ -1,5 +1,6 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { SuggestionState } from "./video-editor-context";
+import type { FrontendId } from "./clip-state-reducer.types";
 
 /**
  * The video editor's own dialogs and the inline next-line suggestion the
@@ -13,10 +14,13 @@ export namespace editorModalsReducer {
     | "paste-file"
     | "rename-video"
     | "copy-video"
-    | "create-video-from-selection";
+    | "create-video-from-selection"
+    | "mic-settings";
 
   export interface State {
     openModal: Modal | null;
+    /** The New-recorder Clip the Mic Settings dialog is open on. */
+    micSettingsClipId: FrontendId | null;
     /** What the Suggestions panel last reported, shown under the timeline. */
     suggestion: SuggestionState;
   }
@@ -27,6 +31,7 @@ export namespace editorModalsReducer {
     | { type: "rename-video-clicked" }
     | { type: "copy-video-clicked" }
     | { type: "create-video-from-selection-clicked" }
+    | { type: "mic-settings-clicked"; clipId: FrontendId }
     /** A dialog asked to close (Escape, overlay click, Cancel, or done). */
     | { type: "modal-dismissed"; modal: Modal }
     | { type: "suggestion-changed"; suggestion: SuggestionState };
@@ -39,6 +44,7 @@ export namespace editorModalsReducer {
 export const createInitialEditorModalsState =
   (): editorModalsReducer.State => ({
     openModal: null,
+    micSettingsClipId: null,
     suggestion: {
       suggestionText: "",
       isStreaming: false,
@@ -64,6 +70,12 @@ export const editorModalsReducer: EffectReducer<
       return { ...state, openModal: "copy-video" };
     case "create-video-from-selection-clicked":
       return { ...state, openModal: "create-video-from-selection" };
+    case "mic-settings-clicked":
+      return {
+        ...state,
+        openModal: "mic-settings",
+        micSettingsClipId: action.clipId,
+      };
     case "modal-dismissed":
       // Pasting a file writes it to disk, so the file list refreshes whenever
       // the paste dialog closes, whether or not it is still the open one.
@@ -73,7 +85,7 @@ export const editorModalsReducer: EffectReducer<
       // A late close from a dialog that has already been replaced must not
       // shut the one now on screen.
       if (state.openModal !== action.modal) return state;
-      return { ...state, openModal: null };
+      return { ...state, openModal: null, micSettingsClipId: null };
     case "suggestion-changed":
       return { ...state, suggestion: action.suggestion };
   }

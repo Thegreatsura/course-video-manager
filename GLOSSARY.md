@@ -229,7 +229,7 @@ A fingerprint of everything that decides how a Video is rendered: its clips and 
 _Avoid_: Content hash (that is an encoding of the **Byte Hash**, not of this), Video hash, Byte Hash (the recipe and the result are different things)
 
 **Mic EQ**:
-The equaliser the export applies to the mic of every New-recorder **Recording Session**, one setting for all of them: OBS's 3-band EQ gains, initially Matt's OBS mic EQ (highs down 6.1 dB). It is applied with the mic offset in the same pass that draws the picture; the raw mic **Footage** is never changed. It is part of the **Export Hash** of New-recorder Clips only.
+The equaliser the export applies to the mic of every New-recorder **Recording Session**, one setting for all of them: OBS's 3-band EQ gains, initially Matt's OBS mic EQ (highs down 6.1 dB). It is applied with the mic offset in the same pass that draws the picture; the raw mic **Footage** is never changed. It is part of the **Export Hash** of New-recorder Clips only, so changing it makes every New-recorder Video need a new export. Matt sets it, and a Recording Session's mic offset, from a New-recorder Clip's Mic Settings in the editor.
 
 **Byte Hash**:
 The fingerprint of an **Exported Video**'s actual contents: the result, where the **Export Hash** is the recipe. It decides whether a **Video** is sent: a Video whose contents match a file the previous **Bundle** already holds is copied from there, and every other Video is uploaded. The two hashes must never be merged: the Bundle address must be known before any render, and a Byte Hash is known only after it (ADR 0027).
