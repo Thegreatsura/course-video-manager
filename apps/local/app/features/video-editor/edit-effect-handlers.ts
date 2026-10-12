@@ -14,6 +14,7 @@ import { VERSION_NOT_DRAFT_MESSAGE } from "@/services/version-not-draft-message"
 import type { EffectsMap } from "use-effect-reducer";
 import type React from "react";
 import { diagramChannel } from "@/lib/diagram-protocol";
+import { toast } from "@/components/ui/toast";
 
 export interface EditEffectHandlersDeps {
   videoId: string;
@@ -55,14 +56,17 @@ export function createEditEffectHandlers(
     "unarchive-clips": (_state, effect, dispatch) => {
       clipService.unarchiveClips(effect.clipIds).catch((error) => {
         dispatch({
-          type: "effect-failed",
-          effectType: "unarchive-clips",
+          type: "clip-restore-failed",
+          clipIds: effect.clipIds,
           message:
             error instanceof Error
               ? error.message
               : "Failed to unarchive clips",
         });
       });
+    },
+    "show-clip-restore-refused-toast": (_state, effect) => {
+      toast.error(effect.message);
     },
     "transcribe-clips": (_state, effect) => {
       // The Sidecar runs it as a Job; its Job Events bring each Clip back
