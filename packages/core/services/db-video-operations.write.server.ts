@@ -1,5 +1,5 @@
 import { type Database } from "./drizzle-service.server.js";
-import { clips, lessons, videos } from "../db/schema.js";
+import { clips, lessons, recordingSessions, videos } from "../db/schema.js";
 import {
   NotFoundError,
   UnknownDBServiceError,
@@ -315,10 +315,23 @@ export const createVideoWriteOps = (db: Database) => {
     format: VideoFormat;
   }) {
     yield* requireDraftVersionForVideo(db, opts.videoId);
+    const current = yield* getVideoRowById(opts.videoId);
+    // A format that cannot record with the Video's Recorder drops it back to
+    // OBS (null), so `video.recorder` never holds a Recorder the format bars.
+    const recorder =
+      current.recorder &&
+      !recordersForFormat(opts.format).includes(current.recorder)
+        ? null
+        : current.recorder;
     const [updated] = yield* makeDbCall(() =>
       db
         .update(videos)
-        .set({ format: opts.format, lessonId: null, updatedAt: new Date() })
+        .set({
+          format: opts.format,
+          recorder,
+          lessonId: null,
+          updatedAt: new Date(),
+        })
         .where(eq(videos.id, opts.videoId))
         .returning()
     );
@@ -335,8 +348,10 @@ export const createVideoWriteOps = (db: Database) => {
 
   /**
    * Choose the Recorder a Video records with. Refused once the Video has any
-   * Clip (one Video never mixes OBS and new-recorder Clips) and for a format
-   * that cannot record with it (Shorts are OBS only).
+   * Clip, archived or not (a restore would bring it back), and while one of
+   * its Recording Sessions is still recording, so one Video never mixes OBS
+   * and new-recorder Clips; and for a format that cannot record with it
+   * (Shorts are OBS only).
    */
   const updateVideoRecorder = Effect.fn("updateVideoRecorder")(
     function* (opts: { videoId: string; recorder: VideoRecorder }) {
@@ -353,16 +368,29 @@ export const createVideoWriteOps = (db: Database) => {
       const clip = yield* makeDbCall(() =>
         db.query.clips.findFirst({
           columns: { id: true },
-          where: and(
-            eq(clips.videoId, opts.videoId),
-            eq(clips.archived, false)
-          ),
+          where: eq(clips.videoId, opts.videoId),
         })
       );
       if (clip) {
         return yield* new VideoRecorderLockedError({
           videoId: opts.videoId,
           message: "The Recorder is locked once the Video has Clips",
+        });
+      }
+
+      const recording = yield* makeDbCall(() =>
+        db.query.recordingSessions.findFirst({
+          columns: { id: true },
+          where: and(
+            eq(recordingSessions.videoId, opts.videoId),
+            eq(recordingSessions.status, "recording")
+          ),
+        })
+      );
+      if (recording) {
+        return yield* new VideoRecorderLockedError({
+          videoId: opts.videoId,
+          message: "The Recorder is locked while the Video is recording",
         });
       }
 
