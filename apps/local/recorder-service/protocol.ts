@@ -168,7 +168,8 @@ export type RecordingSessionEvent = Logged<
        * `events.jsonl` could not be written, so both were stopped rather than
        * record what a replay could never send.
        */
-      reason: "requested" | "ffmpeg-exited" | "camera-lost" | "event-log-failed";
+      reason:
+        "requested" | "ffmpeg-exited" | "camera-lost" | "event-log-failed";
       fileTime: number;
       files: RecordingSessionFiles;
       exitCodes: { screen: number | null; camera: number | null };
