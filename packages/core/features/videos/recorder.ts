@@ -26,6 +26,27 @@ export function resolveVideoRecorder(
 }
 
 /**
+ * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
+ * The export hands DaVinci one Footage file per Clip, so it stays OBS-only: a
+ * new-recorder Clip's picture is a composite of three files (#2011; Matt
+ * never uses this export). The editor hides it on a New recorder Video; this
+ * also covers an OBS Video a new-recorder Clip was moved or copied onto.
+ */
+export function davinciResolveRefusal(video: {
+  readonly recorder: string | null;
+  readonly clips: readonly { readonly recordingSessionId: string | null }[];
+}): string | null {
+  const only = "Export to DaVinci Resolve works on OBS Videos only";
+  if (resolveVideoRecorder(video.recorder) !== "obs") {
+    return `${only}: this Video records with the New recorder.`;
+  }
+  if (video.clips.some((clip) => clip.recordingSessionId !== null)) {
+    return `${only}: this Video holds new-recorder Clips.`;
+  }
+  return null;
+}
+
+/**
  * Where a Recording Session stands (`recording_session.status`):
  * `recording` while the recorder is writing its files, `stopped` once it
  * finished them cleanly, `crashed` when the recorder found it still

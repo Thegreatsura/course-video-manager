@@ -7,6 +7,7 @@ import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
 import { runtimeLive } from "@/services/layer.server";
 import { runRouteEffect } from "@/services/route-action.server";
 import { data } from "react-router";
+import { davinciResolveRefusal } from "@cvm/core/features/videos/recorder";
 
 export const action = async (args: Route.ActionArgs) => {
   return Effect.gen(function* () {
@@ -18,6 +19,12 @@ export const action = async (args: Route.ActionArgs) => {
     const video = yield* videoOps.getVideoWithClipsById(videoId, {
       withArchived: false,
     });
+
+    // OBS-only: the editor hides it on a New recorder Video (#2011).
+    const refusal = davinciResolveRefusal(video);
+    if (refusal) {
+      return yield* Effect.die(data(refusal, { status: 409 }));
+    }
 
     const videoName = video.lesson
       ? [yield* versionOps.resolveLessonDir(video.lesson.id), video.title].join(

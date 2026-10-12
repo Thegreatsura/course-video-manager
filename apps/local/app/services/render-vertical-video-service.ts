@@ -1,4 +1,9 @@
-import { clipFfmpegInput, clipSource } from "@/packages/clip-source";
+import {
+  clipComposite,
+  clipFfmpegInput,
+  clipSource,
+} from "@/packages/clip-source";
+import { clipExportDurationInSeconds } from "./export-duration-check";
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import { Cause, Config, Data, Effect, Stream } from "effect";
@@ -119,18 +124,41 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // Step 1: Concatenate clips → temp file (not the final output path,
             // since the composite step will write the final .mp4)
             enterStage("concatenating-clips");
-            const rawConcatenatedPath =
-              yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
-                video.clips.map((clip) => ({
-                  ...clipFfmpegInput(clipSource(clip)),
-                  pauseType: clip.pauseType as "none" | "long",
-                  zoomType: clip.zoomType,
-                })),
-                // The vertical renderer always produces a 9:16 short — the Remotion
-                // subtitle/CTA overlay below is rendered at 1080x1920 to match.
-                VIDEO_FORMAT_DIMENSIONS.short,
-                { onLog: logCliOutput("concat") }
-              );
+            const renderClips = video.clips.map((clip) => {
+              const source = clipSource(clip);
+              const input = {
+                ...clipFfmpegInput(source),
+                pauseType: clip.pauseType as "none" | "long",
+                zoomType: clip.zoomType,
+              };
+              const duration = clipExportDurationInSeconds(input);
+              return {
+                ...input,
+                // A new-recorder Clip's picture is drawn from its Recording
+                // Session, over everything it outputs (long Pause included).
+                composite: clipComposite(source, { durationSeconds: duration }),
+              };
+            });
+            // The vertical renderer always produces a 9:16 short — the Remotion
+            // subtitle/CTA overlay below is rendered at 1080x1920 to match.
+            const dimensions = VIDEO_FORMAT_DIMENSIONS.short;
+            const concatExtras = { onLog: logCliOutput("concat") };
+            // As the export does: a Video with any new-recorder Clip is
+            // rendered Clip by Clip, each one's composite on its own.
+            const rawConcatenatedPath = renderClips.some((c) => c.composite)
+              ? yield* ffmpegEncode.concatenateClipSegments(
+                  renderClips.map((clip) => ({
+                    ...clip,
+                    duration: clipExportDurationInSeconds(clip),
+                  })),
+                  dimensions,
+                  concatExtras
+                )
+              : yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
+                  renderClips.map(({ composite: _, ...clip }) => clip),
+                  dimensions,
+                  concatExtras
+                );
             const concatenatedPath = yield* ffmpegEncode.normalizeAudio(
               rawConcatenatedPath,
               { onLog: logCliOutput("normalize-audio") }
