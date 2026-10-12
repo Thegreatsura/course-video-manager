@@ -272,15 +272,17 @@ export const VideoPlayerPanel = () => {
       : undefined,
     createConcatenatedVideo: () =>
       navigate(`/videos/concatenate?initial=${videoId}`),
-    // OBS-only (#2011): hidden on a CVM recorder Video, refused by the route.
-    exportToDavinciResolve:
-      recorder === "obs"
-        ? () =>
-            exportToDavinciResolveFetcher.submit(null, {
-              method: "post",
-              action: `/videos/${videoId}/export-to-davinci-resolve`,
-            })
-        : undefined,
+    // OBS Clips only (#2011): hidden once the Video holds a CVM-recorder
+    // Clip, refused by the route (`davinciResolveRefusal`).
+    exportToDavinciResolve: !clips.some(
+      (clip) => clip.type === "on-database" && clip.recordingSession
+    )
+      ? () =>
+          exportToDavinciResolveFetcher.submit(null, {
+            method: "post",
+            action: `/videos/${videoId}/export-to-davinci-resolve`,
+          })
+      : undefined,
   });
   const menuGroups = videoMenuGroups({
     ...editorVideoActions.common,

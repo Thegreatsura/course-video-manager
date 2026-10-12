@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   createInitialRecorderChoiceState,
-  isRecorderLocked,
   recorderChoiceReducer,
   showsCvmRecorderControls,
   showsOBSChecks,
 } from "./recorder-choice-reducer";
-import type { TimelineItem } from "./clip-state-reducer";
-import type { OBSConnectionOuterState } from "./obs-connector";
 
 type Effect = { type: string; [key: string]: unknown };
 
@@ -29,22 +26,6 @@ const run = (
 const landscape = (recorder: string | null = null) =>
   createInitialRecorderChoiceState({ format: "landscape", recorder });
 
-const notRunning: OBSConnectionOuterState = { type: "obs-not-running" };
-const recording: OBSConnectionOuterState = {
-  type: "obs-recording",
-  profile: "Landscape",
-  scene: "Camera",
-  latestOutputPath: "/out.mkv",
-};
-const chapter = {
-  type: "chapter-on-database",
-  frontendId: "c1",
-  databaseId: "c1",
-  name: "Intro",
-  insertionOrder: null,
-} as unknown as TimelineItem;
-const clip = { type: "on-database", frontendId: "k1" } as TimelineItem;
-
 describe("recorder choice", () => {
   it("every existing Video reads as OBS and shows the OBS checks", () => {
     const state = landscape(null);
@@ -57,7 +38,7 @@ describe("recorder choice", () => {
     const picked = run(landscape(), {
       type: "recorder-picked",
       recorder: "cvm",
-      locked: false,
+      capturing: false,
     });
     expect(picked.state.recorder).toBe("cvm");
     expect(showsOBSChecks(picked.state)).toBe(false);
@@ -75,48 +56,46 @@ describe("recorder choice", () => {
     ]);
   });
 
-  it("a locked choice does not change", () => {
+  it("a pick mid-capture does not change the Recorder", () => {
     const { state, effects } = run(landscape("obs"), {
       type: "recorder-picked",
       recorder: "cvm",
-      locked: true,
+      capturing: true,
     });
     expect(state.recorder).toBe("obs");
     expect(effects).toEqual([]);
   });
 
-  it("a Short offers both Recorders and is picked like a Landscape Video", () => {
+  it("a Short offers the CVM recorder only, whatever it stored", () => {
     const short = createInitialRecorderChoiceState({
       format: "short",
-      recorder: null,
+      recorder: "obs",
     });
-    expect(short.options).toEqual(["obs", "cvm"]);
-    expect(short.recorder).toBe("obs");
+    expect(short.options).toEqual(["cvm"]);
+    expect(short.recorder).toBe("cvm");
     const { state, effects } = run(short, {
       type: "recorder-picked",
-      recorder: "cvm",
-      locked: false,
+      recorder: "obs",
+      capturing: false,
     });
     expect(state.recorder).toBe("cvm");
-    expect(effects).toEqual([{ type: "save-recorder", recorder: "cvm" }]);
-    expect(
-      createInitialRecorderChoiceState({ format: "short", recorder: "cvm" })
-        .recorder
-    ).toBe("cvm");
+    expect(effects).toEqual([]);
   });
 
   it("a failed save goes back to the saved Recorder, says why and is not remembered", () => {
     const { state, effects } = run(
       landscape("obs"),
-      { type: "recorder-picked", recorder: "cvm", locked: false },
+      { type: "recorder-picked", recorder: "cvm", capturing: false },
       {
         type: "recorder-save-failed",
         recorder: "cvm",
-        message: "The Recorder is locked once the Video has Clips",
+        message: "The Recorder is locked while the Video is recording",
       }
     );
     expect(state.recorder).toBe("obs");
-    expect(state.error).toBe("The Recorder is locked once the Video has Clips");
+    expect(state.error).toBe(
+      "The Recorder is locked while the Video is recording"
+    );
     expect(effects).not.toContainEqual(
       expect.objectContaining({ type: "remember-recorder-choice" })
     );
@@ -125,34 +104,11 @@ describe("recorder choice", () => {
   it("a stale failure after a newer pick changes nothing", () => {
     const { state } = run(
       landscape("obs"),
-      { type: "recorder-picked", recorder: "cvm", locked: false },
-      { type: "recorder-picked", recorder: "obs", locked: false },
+      { type: "recorder-picked", recorder: "cvm", capturing: false },
+      { type: "recorder-picked", recorder: "obs", capturing: false },
       { type: "recorder-save-failed", recorder: "cvm", message: "x" }
     );
     expect(state.recorder).toBe("obs");
     expect(state.error).toBeNull();
-  });
-});
-
-describe("isRecorderLocked", () => {
-  it("is unlocked on a Video with no Clips", () => {
-    expect(isRecorderLocked(notRunning, [chapter], [])).toBe(false);
-  });
-
-  it("locks once the Video has a Clip", () => {
-    expect(isRecorderLocked(notRunning, [chapter, clip], [])).toBe(true);
-  });
-
-  it("is unlocked once every Clip is archived", () => {
-    const archived = {
-      type: "on-database",
-      frontendId: "k2",
-      shouldArchive: true,
-    } as TimelineItem;
-    expect(isRecorderLocked(notRunning, [chapter, archived], [])).toBe(false);
-  });
-
-  it("locks while OBS is recording, before any Clip lands", () => {
-    expect(isRecorderLocked(recording, [], [])).toBe(true);
   });
 });

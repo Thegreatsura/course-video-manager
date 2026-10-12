@@ -450,16 +450,6 @@ export const getIsOBSActive = (
   );
 };
 
-export const getIsLiveStreamPortrait = (
-  obsConnectorState: OBSConnectionOuterState
-): boolean => {
-  return (
-    getIsOBSActive(obsConnectorState) &&
-    obsConnectorState.type !== "obs-not-running" &&
-    obsConnectorState.profile === "TikTok"
-  );
-};
-
 export const getShouldShowLastFrameOverlay = (
   databaseClipToShowLastFrameOf: ClipOnDatabase | undefined,
   showLastFrame: boolean,

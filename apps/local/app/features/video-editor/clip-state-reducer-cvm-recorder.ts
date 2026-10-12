@@ -197,7 +197,7 @@ export const handleCvmRecorderMessage = (
 /**
  * An editor opened (or reconnected) mid-take hears the take only through
  * `recorder-status`: it missed `recording-started`, and may miss
- * `recording-stopped`. It joins the take, so the Recorder stays locked, and
+ * `recording-stopped`. It joins the take, so the Recorder cannot switch, and
  * leaves it once no take is recording. Every `recorder-status` naming a take
  * re-sends the insertion point: a restarted app server has forgotten it.
  */
