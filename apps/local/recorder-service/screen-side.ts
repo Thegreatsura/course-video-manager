@@ -12,7 +12,10 @@ import { listScreens, type Screen } from "./windows-devices";
  * and previewed. Landscape records the DELL, found by its EDID name and
  * checked at Record. A Short records the Spacedesk virtual display, found by
  * its display adapter's name (its monitor has no EDID name), woken only when
- * it is not listed, and usable only portrait 9:16. Unavailable, a Short
+ * it is not listed. It is landscape 1920x1080 like any screen: the Short
+ * layout shows its left square, so it is usable at any 16:9 size and refused
+ * only at another shape, which the square would come out stretched from.
+ * Its preview is 960x540, like the DELL's. Unavailable, a Short
  * records camera and mic only, and the scenes that draw the screen are
  * refused (`refuseScreenlessScene`).
  */
@@ -20,14 +23,15 @@ import { listScreens, type Screen } from "./windows-devices";
 export const SCREEN_NAME = "DELL U2424H";
 /** A Short's screen, found by its display adapter: its monitor has no EDID name. */
 export const SPACEDESK_ADAPTER = "spacedesk";
-/** A portrait display's preview size. */
-const PORTRAIT_PREVIEW = { width: 540, height: 960 };
-
-/** Why the Spacedesk display cannot be a Short's screen, if it cannot. */
-const notPortrait = (screen: Screen) =>
-  screen.height * 9 === screen.width * 16
+/**
+ * Why the Spacedesk display cannot be a Short's screen, if it cannot: the
+ * Short layout crops its left square as a fraction of a 16:9 frame, so any
+ * other shape would come out stretched.
+ */
+const unusableSize = (screen: Screen) =>
+  screen.width * 9 === screen.height * 16
     ? undefined
-    : `The Spacedesk display is ${screen.width}x${screen.height}, not portrait 9:16: set Spacedesk to 1080x1920, then wake it again.`;
+    : `The Spacedesk display is ${screen.width}x${screen.height}, not landscape 16:9: set Spacedesk back to 1920x1080, then wake it again.`;
 
 /** Refuses a scene that draws the screen while a Short's screen is unavailable. */
 export const refuseScreenlessScene = (
@@ -76,14 +80,11 @@ export const createScreenSide = (o: {
   /** Bumped whenever the screen side starts again: an older check's answer is dropped. */
   let generation = 0;
 
-  const startPreview = (
-    screenIndex: number,
-    size?: { width: number; height: number }
-  ) => {
+  const startPreview = (screenIndex: number) => {
     if (!o.format() || preview) return;
     const p = o.launch({
       tool: "ffmpeg",
-      args: screenPreviewArgs({ screenIndex, port: o.previewPort(), size }),
+      args: screenPreviewArgs({ screenIndex, port: o.previewPort() }),
       cwd: "/mnt/c",
     });
     preview = p;
@@ -128,7 +129,7 @@ export const createScreenSide = (o: {
       return unavailable(
         "Spacedesk woke, but its display is not among the screens the recorder can capture."
       );
-    const problem = notPortrait(spacedesk);
+    const problem = unusableSize(spacedesk);
     return problem
       ? unavailable(problem)
       : { kind: "ready", screen: spacedesk };
@@ -137,7 +138,7 @@ export const createScreenSide = (o: {
   /**
    * Starts the screen side again for the open recorder's format: the DELL's
    * preview for Landscape; for a Short, the Spacedesk display found (woken
-   * if need be) and its portrait preview. Not awaited by the command queue:
+   * if need be) and its preview. Not awaited by the command queue:
    * a wake takes seconds, and nothing waits on it.
    *
    * A Short is `waking` before the first await, so a command queued right
@@ -163,7 +164,7 @@ export const createScreenSide = (o: {
       if (!current()) return;
       if (found.kind === "unavailable") return o.setStatus(found);
       o.setStatus({ kind: "ready" });
-      startPreview(found.screen.index, PORTRAIT_PREVIEW);
+      startPreview(found.screen.index);
     } catch (e) {
       console.error("recorder: could not start the screen side", e);
       if (current())
@@ -204,7 +205,7 @@ export const createScreenSide = (o: {
     if (status?.kind === "ready") {
       const spacedesk = await findSpacedesk();
       const problem = spacedesk
-        ? notPortrait(spacedesk)
+        ? unusableSize(spacedesk)
         : "The Spacedesk display is no longer among the screens: wake it again.";
       if (spacedesk && !problem) return spacedesk.index;
       status = { kind: "unavailable", message: problem ?? "" };

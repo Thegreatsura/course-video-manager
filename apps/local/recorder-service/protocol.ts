@@ -92,7 +92,8 @@ export type StreamDeckPress =
 /**
  * A Short's screen: the Spacedesk virtual display. `waking` while the service
  * looks for it and, when it is not listed, wakes Spacedesk; `ready` once it is
- * listed and portrait 9:16; `unavailable` otherwise, saying why. Unavailable,
+ * listed and 16:9 (it is 1920x1080; a Short shows its left square);
+ * `unavailable` otherwise, saying why. Unavailable,
  * a Short records camera and mic only, in scenes that do not draw the screen.
  */
 export type ScreenStatus =

@@ -16,7 +16,7 @@ const answerTo = (client: Awaited<ReturnType<typeof connect>>) =>
 describe("a Short's screen", () => {
   it("is not left waking by an older restart that finishes after a newer one", async () => {
     const windows = fakeWindows({
-      spacedesk: { width: 1080, height: 1920, awake: true },
+      spacedesk: { width: 1920, height: 1080, awake: true },
     });
     const s = await start(windows);
     const client = await connect(s.port);
@@ -44,7 +44,7 @@ describe("a Short's screen", () => {
 
   it("is waking at once on retry-screen, so a Record right behind it is refused", async () => {
     const windows = fakeWindows({
-      spacedesk: { width: 1080, height: 1920, awake: true },
+      spacedesk: { width: 1920, height: 1080, awake: true },
     });
     const s = await start(windows);
     const client = await connect(s.port);

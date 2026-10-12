@@ -14,7 +14,7 @@ const landscapeSources = {
 };
 
 const shortSources = {
-  screen: { width: 1080, height: 1920 },
+  screen: { width: 1920, height: 1080 },
   camera: { width: 3840, height: 2160 },
 };
 
@@ -30,7 +30,7 @@ describe("drawInstructions", () => {
 
   it("draws a Short on its own 1080x1920 canvas with its own version", () => {
     expect(CANVASES.short).toEqual({ width: 1080, height: 1920 });
-    expect(LAYOUT_VERSIONS.short).toBe(1);
+    expect(LAYOUT_VERSIONS.short).toBe(2);
   });
 
   it("fills the Short Camera scene with the camera's centre crop, needing no screen", () => {
@@ -51,18 +51,18 @@ describe("drawInstructions", () => {
     ]);
   });
 
-  it("draws the Short Code scene as the screen full-frame with the camera band below", () => {
+  it("draws the Short Code scene as the screen's left square, 1:1, with the camera band below", () => {
     expect(drawInstructions("Code", shortSources, "short")).toEqual([
       {
         source: "screen",
         sx: 0,
         sy: 0,
         sw: 1080,
-        sh: 1920,
+        sh: 1080,
         dx: 0,
         dy: 0,
         dw: 1080,
-        dh: 1920,
+        dh: 1080,
       },
       {
         source: "camera",
@@ -78,18 +78,18 @@ describe("drawInstructions", () => {
     ]);
   });
 
-  it("draws the Short No Face scene as the screen full-frame", () => {
+  it("draws the Short No Face scene as the screen's left square, black below", () => {
     expect(drawInstructions("No Face", shortSources, "short")).toEqual([
       {
         source: "screen",
         sx: 0,
         sy: 0,
         sw: 1080,
-        sh: 1920,
+        sh: 1080,
         dx: 0,
         dy: 0,
         dw: 1080,
-        dh: 1920,
+        dh: 1080,
       },
     ]);
   });
