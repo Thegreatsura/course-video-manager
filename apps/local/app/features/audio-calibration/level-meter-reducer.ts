@@ -1,4 +1,3 @@
-import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import { bandPosition, type BandPosition } from "@/audio-calibration-constants";
 import type { LevelMeterMessage } from "./level-meter-wire";
 
@@ -6,6 +5,8 @@ import type { LevelMeterMessage } from "./level-meter-wire";
  * THE LEVEL METER on the Audio Calibration page: the mic's loudness, live,
  * from the recorder service's ffmpeg (`level-meter-wire.ts`). Opening the page
  * listens, which starts the meter; leaving it stops listening, which stops it.
+ * The page's reducer (`audio-calibration-reducer.ts`) owns the listening, and
+ * hands every meter message to this one.
  */
 export namespace levelMeterReducer {
   export type Reading = { momentaryLufs: number; shortTermLufs: number };
@@ -18,36 +19,31 @@ export namespace levelMeterReducer {
     reading: Reading | null;
     /** Why the meter is not running. */
     failure: string | null;
-    listener: EffectEntity<State, Action> | null;
   };
 
-  export type Action = LevelMeterMessage | { type: "try-again-clicked" };
-
-  /** Hear the meter until stopped (an SSE subscription). */
-  export type Effect = { type: "listen-to-meter" };
+  /** A reading carries when the page heard it, for the session's clock. */
+  export type Action =
+    | Exclude<LevelMeterMessage, { type: "meter-reading" }>
+    | (Extract<LevelMeterMessage, { type: "meter-reading" }> & {
+        receivedAtMs: number;
+      });
 }
 
 type State = levelMeterReducer.State;
 type Action = levelMeterReducer.Action;
-type Effect = levelMeterReducer.Effect;
 
-export const createInitialLevelMeterState = (
-  exec: (effect: Effect) => EffectEntity<State, Action>
-): State => ({
+/** The meter while it starts: what the page shows before the first message. */
+export const STARTING_LEVEL_METER: State = {
   status: "starting",
   mic: null,
   reading: null,
   failure: null,
-  listener: exec({ type: "listen-to-meter" }),
-});
+};
 
-export const levelMeterReducer: EffectReducer<State, Action, Effect> = (
-  state,
-  action,
-  exec
-) => {
+export const levelMeterReducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "meter-started":
+    case "calibration-started":
       return { ...state, status: "running", mic: action.mic, failure: null };
     case "meter-reading":
       return {
@@ -66,15 +62,9 @@ export const levelMeterReducer: EffectReducer<State, Action, Effect> = (
         failure: action.message,
         reading: null,
       };
-    case "try-again-clicked":
-      if (state.status !== "failed") return state;
-      if (state.listener) exec.stop(state.listener);
-      return {
-        ...state,
-        status: "starting",
-        failure: null,
-        listener: exec({ type: "listen-to-meter" }),
-      };
+    // The meter carries on after a failed run; the session says why.
+    case "calibration-failed":
+      return state;
   }
 };
 

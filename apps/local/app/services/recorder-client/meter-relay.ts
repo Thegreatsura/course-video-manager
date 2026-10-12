@@ -9,13 +9,24 @@ type MeterListener = (message: LevelMeterMessage) => void;
 /** The recorder service's messages about the meter. */
 type MeterMessage = Extract<
   RecorderMessage,
-  { type: "meter-started" | "meter-reading" | "meter-stopped" }
+  {
+    type:
+      | "meter-started"
+      | "meter-reading"
+      | "meter-stopped"
+      | "calibration-started"
+      | "calibration-measured"
+      | "calibration-ended";
+  }
 >;
 
 export const isMeterMessage = (m: RecorderMessage): m is MeterMessage =>
   m.type === "meter-started" ||
   m.type === "meter-reading" ||
-  m.type === "meter-stopped";
+  m.type === "meter-stopped" ||
+  m.type === "calibration-started" ||
+  m.type === "calibration-measured" ||
+  m.type === "calibration-ended";
 
 /**
  * The recorder client's half of the level meter: passes the recorder
@@ -53,12 +64,31 @@ export const meterRelay = (o: {
         case "meter-reading":
           return publish({
             type: "meter-reading",
+            seconds: message.seconds,
             momentaryLufs: message.momentaryLufs,
             shortTermLufs: message.shortTermLufs,
           });
         case "meter-stopped":
           if (message.message)
             publish({ type: "meter-failed", message: message.message });
+          return;
+        case "calibration-started":
+          return publish({
+            type: "calibration-started",
+            calibrationId: message.calibrationId,
+            mic: message.mic,
+          });
+        // The finish's own answer, to the recorder client's waiter.
+        case "calibration-measured":
+          return;
+        case "calibration-ended":
+          // Cancelled or stopped on purpose: nothing to say.
+          if (message.message)
+            publish({
+              type: "calibration-failed",
+              calibrationId: message.calibrationId,
+              message: message.message,
+            });
           return;
         case "refused":
           if (message.command === "start-meter")

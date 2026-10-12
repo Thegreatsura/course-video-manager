@@ -38,12 +38,13 @@ export const RECORDER_SERVICE_PORT = 5177;
 
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
- * (2: a Short's `format` and `screen`; 3: the level meter). The app server reloads on a change
+ * (2: a Short's `format` and `screen`; 3: the level meter; 4: the Audio
+ * Calibration run). The app server reloads on a change
  * and the service does not (ADR 0035), so after a pull mid-session the app may
  * meet a service started from older code; `hello` says which wire it speaks
  * (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 3;
+export const RECORDER_PROTOCOL_VERSION = 4;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -144,12 +145,38 @@ export type RecorderCommand =
    * Started already, it carries on.
    */
   | { type: "start-meter" }
-  | { type: "stop-meter" };
+  /** Stops the meter; a calibration run in progress is discarded with it. */
+  | { type: "stop-meter" }
+  /**
+   * Start an Audio Calibration's run (`calibration-run.ts`): the meter's
+   * process, which also writes the mic to a file in a new folder under
+   * `folder` (a WSL path), its readings timed in that file's seconds. Refused
+   * while recording, as Record is refused while it runs.
+   */
+  | { type: "start-calibration"; folder: string }
+  /**
+   * End the run and measure its file: the noise floor over `silence` and the
+   * integrated speech loudness over the `speech` windows, in file seconds.
+   * The meter carries on after it.
+   */
+  | {
+      type: "finish-calibration";
+      silence: CalibrationWindow;
+      speech: readonly CalibrationWindow[];
+    }
+  /** End the run and delete its file: a cancelled calibration keeps nothing. */
+  | { type: "cancel-calibration" };
+
+/** A stretch of a calibration's mic file, in its seconds. */
+export type CalibrationWindow = { startSeconds: number; endSeconds: number };
 
 /** Why the meter will not start while recording. */
 export const METER_WHILE_RECORDING =
   "The recorder is recording: stop recording before you check your mic level.";
-/** Why Record is refused while the meter runs. */
+/** Why a calibration run will not start while recording. */
+export const CALIBRATION_WHILE_RECORDING =
+  "The recorder is recording: stop recording before you run an Audio Calibration.";
+/** Why Record is refused while the meter (or a calibration run) runs. */
 export const RECORD_WHILE_METERING =
   "The Audio Calibration page is measuring your mic: close it before you record.";
 
@@ -311,6 +338,41 @@ export type RecorderStatusMessage =
   | { type: "meter-started"; mic: string }
   | ({ type: "meter-reading" } & MeterReading)
   /** `message`: why, when it quit without being asked; null when asked. */
-  | { type: "meter-stopped"; message: string | null };
+  | { type: "meter-stopped"; message: string | null }
+  /**
+   * An Audio Calibration's run started: from here on, `meter-reading`s are
+   * timed in seconds of `micFile` (a WSL path), until it ends. Broadcast.
+   */
+  | {
+      type: "calibration-started";
+      calibrationId: string;
+      mic: string;
+      micFile: string;
+    }
+  /** The run ended and its file was measured. Broadcast. */
+  | ({
+      type: "calibration-measured";
+      calibrationId: string;
+      mic: string;
+      micFile: string;
+    } & CalibrationMeasurement)
+  /**
+   * The run ended without a measurement and its folder was deleted:
+   * cancelled, its client went, or `message` says what failed. Broadcast.
+   */
+  | {
+      type: "calibration-ended";
+      calibrationId: string;
+      message: string | null;
+    };
+
+/**
+ * What a calibration run measured: the noise floor (the RMS level of the
+ * silence, dBFS) and the integrated loudness of the speech (LUFS).
+ */
+export type CalibrationMeasurement = {
+  noiseFloorDb: number;
+  speechLufs: number;
+};
 
 export type RecorderMessage = RecordingSessionEvent | RecorderStatusMessage;
