@@ -53,6 +53,7 @@ const tester = (items: ClipOnDatabase[]) =>
     sessions: [],
     clipTranscriptionJobs: {},
     jobEventCursor: 0,
+    micOffsetRefusal: null,
   });
 
 const shown = (t: ReturnType<typeof tester>) =>

@@ -40,6 +40,7 @@ describe("an old Job's failure vs a re-transcribe this tab already asked for", (
       sessions: [],
       clipTranscriptionJobs: {},
       jobEventCursor: 0,
+      micOffsetRefusal: null,
     })
       .send({
         type: "clips-retranscribing",

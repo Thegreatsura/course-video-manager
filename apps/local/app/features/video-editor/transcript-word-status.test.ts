@@ -30,6 +30,7 @@ const createState = (
   sessions: [],
   clipTranscriptionJobs: {},
   jobEventCursor: 0,
+  micOffsetRefusal: null,
   ...overrides,
 });
 

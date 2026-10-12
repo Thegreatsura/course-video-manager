@@ -1,5 +1,6 @@
 import { DEFAULT_MIC_EQ, type MicEq } from "@cvm/core/features/videos/recorder";
 import type { EffectReducerExec } from "use-effect-reducer";
+import { MIC_OFFSET_SHARED_WITH_FROZEN_VERSION_MESSAGE } from "@/services/recording-session-shared-message";
 import type { clipStateReducer } from "./clip-state-reducer";
 
 type MicSettingsSubmitted = Extract<
@@ -41,6 +42,9 @@ export const handleMicSettingsSubmitted = (
       type: "update-mic-offset",
       clipId: item.databaseId,
       micOffsetMs: action.micOffsetMs,
+      frontendClipId: item.frontendId,
+      recordingSessionId: session.id,
+      previousMicOffsetMs: session.micOffsetMs,
     });
   }
   if (eqChanged) {
@@ -62,5 +66,52 @@ export const handleMicSettingsSubmitted = (
         },
       };
     }),
+  };
+};
+
+type MicOffsetSaveFailed = Extract<
+  clipStateReducer.Action,
+  { type: "mic-offset-save-failed" }
+>;
+
+/**
+ * Saving a mic offset failed. Refused because a Version that is not a Draft
+ * shares the Recording Session (issue #2010): put the Session's offset back
+ * and reopen the Mic Settings dialog to say why. Any other failure leaves the
+ * editor out of step with the database, so it is fatal like every other.
+ */
+export const handleMicOffsetSaveFailed = (
+  state: clipStateReducer.State,
+  action: MicOffsetSaveFailed
+): clipStateReducer.State => {
+  if (action.message !== MIC_OFFSET_SHARED_WITH_FROZEN_VERSION_MESSAGE) {
+    return {
+      ...state,
+      error: {
+        message: action.message,
+        effectType: "update-mic-offset",
+        timestamp: Date.now(),
+      },
+    };
+  }
+  const { effect } = action;
+  return {
+    ...state,
+    micOffsetRefusal: {
+      clipId: effect.frontendClipId,
+      message: action.message,
+    },
+    items: state.items.map((i) =>
+      i.type === "on-database" &&
+      i.recordingSession?.id === effect.recordingSessionId
+        ? {
+            ...i,
+            recordingSession: {
+              ...i.recordingSession,
+              micOffsetMs: effect.previousMicOffsetMs,
+            },
+          }
+        : i
+    ),
   };
 };

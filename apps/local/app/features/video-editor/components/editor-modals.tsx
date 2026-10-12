@@ -56,8 +56,21 @@ export const EditorModals = (props: {
     VideoEditorContext,
     (ctx) => ctx.onModalOpenChange
   );
+  const micOffsetRefusal = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.newRecorder.micOffsetRefusal
+  );
+  const onDismissMicOffsetRefusal = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.newRecorder.onDismissMicOffsetRefusal
+  );
+  // A refused offset reopens the dialog on its Clip to say why.
   const micSettingsClip = useContextSelector(VideoEditorContext, (ctx) =>
-    ctx.clips.find((c) => c.frontendId === ctx.micSettingsClipId)
+    ctx.clips.find(
+      (c) =>
+        c.frontendId ===
+        (ctx.newRecorder.micOffsetRefusal?.clipId ?? ctx.micSettingsClipId)
+    )
   );
   const onSubmitMicSettings = useContextSelector(
     VideoEditorContext,
@@ -106,8 +119,12 @@ export const EditorModals = (props: {
         onSubmit={props.onCreateVideoFromSelection}
       />
       <MicSettingsModal
-        open={openModal === "mic-settings"}
-        onOpenChange={onModalOpenChange["mic-settings"]}
+        open={openModal === "mic-settings" || micOffsetRefusal !== null}
+        onOpenChange={(open) => {
+          onModalOpenChange["mic-settings"](open);
+          if (!open && micOffsetRefusal) onDismissMicOffsetRefusal();
+        }}
+        refusal={micOffsetRefusal?.message ?? null}
         recordingSession={
           (micSettingsClip?.type === "on-database" &&
             micSettingsClip.recordingSession) ||
