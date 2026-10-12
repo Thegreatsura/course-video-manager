@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import type { VideoFormat } from "@/features/videos/video-format";
 import { SCENES } from "../app/packages/scene-layout";
-import { THRESHOLD_REQUIRED, type RecorderCommand } from "./protocol";
+import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 
 /**
  * What the recorder service accepts on its WebSocket: every `RecorderCommand`
@@ -15,10 +15,17 @@ const CalibrationWindowSchema = Schema.Struct({
   endSeconds: Schema.Number,
 });
 
-/** Record's silence threshold and its Audio Calibration (none: null). */
-const threshold = {
-  thresholdDb: Schema.Number,
-  audioCalibrationId: Schema.NullOr(Schema.String),
+/** Record's Audio Calibration (none: null): the gate's, and its threshold. */
+const calibration = {
+  calibration: Schema.NullOr(
+    Schema.Struct({
+      id: Schema.String,
+      createdAtMs: Schema.Number,
+      thresholdDb: Schema.Number,
+      recorderMic: Schema.String,
+      browserInputLabel: Schema.NullOr(Schema.String),
+    })
+  ),
 };
 
 const Command = Schema.Union(
@@ -31,7 +38,7 @@ const Command = Schema.Union(
     type: Schema.Literal("record"),
     silenceLength: Schema.Literal("short", "long"),
     folder: Schema.String,
-    ...threshold,
+    ...calibration,
   }),
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("close") }),
@@ -46,7 +53,7 @@ const Command = Schema.Union(
     videoId: Schema.String,
     silenceLength: Schema.Literal("short", "long"),
     folder: Schema.String,
-    ...threshold,
+    ...calibration,
   }),
   Schema.Struct({
     type: Schema.Literal("stream-deck"),
@@ -81,8 +88,8 @@ export const decodeCommand = Schema.decodeUnknownEither(
 
 /**
  * A command that did not decode but must be answered, not dropped: a Record
- * (or the Stream Deck's prepare-record) with no silence threshold, from an
- * app server older than Audio Calibration. Its sender hears why.
+ * (or the Stream Deck's prepare-record) with no `calibration`, from an app
+ * server older than the Audio Calibration gate. Its sender hears why.
  */
 export const refusalOfUndecodable = (
   raw: string
@@ -94,11 +101,11 @@ export const refusalOfUndecodable = (
     return undefined;
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
-  const { type, thresholdDb } = parsed as Record<string, unknown>;
+  const { type } = parsed as Record<string, unknown>;
   if (
     (type === "record" || type === "prepare-record") &&
-    typeof thresholdDb !== "number"
+    !("calibration" in parsed)
   )
-    return { command: type, message: THRESHOLD_REQUIRED };
+    return { command: type, message: CALIBRATION_REQUIRED };
   return undefined;
 };

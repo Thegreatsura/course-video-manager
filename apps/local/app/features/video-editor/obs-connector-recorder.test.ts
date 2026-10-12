@@ -8,6 +8,7 @@ import {
   obsConnectorReducer,
   type useOBSConnector,
 } from "./obs-connector";
+import { CALIBRATION_VALIDITY_MS } from "@/audio-calibration-constants";
 
 const start = (usesObs: boolean) => {
   const effects: useOBSConnector.Effect[] = [];
@@ -22,6 +23,22 @@ const start = (usesObs: boolean) => {
   return { send, effects, state: () => state };
 };
 
+const MIC = "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)";
+const CALIBRATION_AT = Date.UTC(2026, 9, 12, 9);
+
+/** What the editor knows when OBS starts: a fresh calibration, on its mic. */
+const fresh = {
+  lastPassed: {
+    id: "calibration-1",
+    createdAtMs: CALIBRATION_AT,
+    thresholdDb: -43,
+    recorderMic: MIC,
+    browserInputLabel: MIC,
+  },
+  browserInputLabel: MIC,
+  nowMs: CALIBRATION_AT + 60_000,
+};
+
 const connected = {
   type: "obs-connected",
   profile: "Landscape Recording",
@@ -33,20 +50,58 @@ describe("the OBS connector and the Video's Recorder", () => {
     const obs = start(true);
     expect(obs.effects).toEqual([{ type: "attempt-to-connect" }]);
     obs.send(connected);
+    obs.effects.length = 0;
     expect(
-      obs.send({
-        type: "recording-started",
-        outputPath: "/a.mkv",
-        silenceThresholdDb: -36.5,
-      })
+      obs.send({ type: "recording-started", outputPath: "/a.mkv", ...fresh })
     ).toEqual({
       type: "obs-recording",
       profile: "Landscape Recording",
       scene: "Camera",
       latestOutputPath: "/a.mkv",
-      silenceThresholdDb: -36.5,
+      silenceThresholdDb: -43,
     });
+    expect(obs.effects).toEqual([]);
   });
+
+  it.each([
+    ["none has passed", { ...fresh, lastPassed: null }, "none has passed"],
+    [
+      "it is 7 days old",
+      { ...fresh, nowMs: CALIBRATION_AT + CALIBRATION_VALIDITY_MS },
+      "expired on",
+    ],
+    [
+      "the editor's mic is another",
+      { ...fresh, browserInputLabel: "MacBook Pro Microphone" },
+      'to "MacBook Pro Microphone"',
+    ],
+  ])(
+    "stops a recording OBS starts when %s, and says why, until one is let through",
+    (_, facts, why) => {
+      const obs = start(true);
+      obs.send(connected);
+      obs.effects.length = 0;
+
+      const refused = obs.send({
+        type: "recording-started",
+        outputPath: "/refused.mkv",
+        ...facts,
+      });
+      expect(obs.effects).toEqual([{ type: "stop-recording" }]);
+      expect(refused).toMatchObject({
+        type: "obs-connected",
+        calibrationRefusal: expect.stringContaining(why),
+      });
+      // OBS reports the stop: still connected, still saying why.
+      expect(
+        obs.send({ type: "recording-stopped", outputPath: "/refused.mkv" })
+      ).toMatchObject({ calibrationRefusal: expect.stringContaining(why) });
+
+      expect(
+        obs.send({ type: "recording-started", outputPath: "/b.mkv", ...fresh })
+      ).not.toHaveProperty("calibrationRefusal");
+    }
+  );
 
   it("a CVM recorder Video never connects to OBS and ignores what it reports", () => {
     const cvmRecorder = start(false);
@@ -55,7 +110,7 @@ describe("the OBS connector and the Video's Recorder", () => {
     cvmRecorder.send({
       type: "recording-started",
       outputPath: "/a.mkv",
-      silenceThresholdDb: -38,
+      ...fresh,
     });
     expect(cvmRecorder.state()).toEqual({ type: "obs-not-used" });
     expect(cvmRecorder.effects).toEqual([]);

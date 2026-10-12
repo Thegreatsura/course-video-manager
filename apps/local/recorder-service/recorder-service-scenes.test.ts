@@ -7,7 +7,7 @@ import {
   start,
   T0_MS,
   tmp,
-  THRESHOLD,
+  CALIBRATED,
 } from "./test-utils/service-harness";
 
 /** Scenes switched live, through the recorder service's WebSocket. */
@@ -31,7 +31,7 @@ describe("scenes", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     const started = await client.next("recording-started");
     // A Recording Session starts in the scene the preview was in.

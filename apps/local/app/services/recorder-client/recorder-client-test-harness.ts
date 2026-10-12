@@ -3,12 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, vi } from "vitest";
 import { Effect, Layer } from "effect";
-import { start, tmp } from "recorder-service/test-utils/service-harness";
+import {
+  CALIBRATION,
+  start,
+  tmp,
+} from "recorder-service/test-utils/service-harness";
 import { fakeWindows } from "recorder-service/test-utils/fake-windows";
 import { DrizzleService } from "@/services/drizzle-service.server";
+import { audioCalibrations } from "@/db/schema";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { clipService, testDb } from "../clip-service-test-setup";
-import { currentSilenceThreshold } from "../audio-calibration.server";
+import { lastPassedCalibration } from "../audio-calibration.server";
 import {
   createRecorderClient,
   type RecorderClientOptions,
@@ -64,8 +69,43 @@ export const STREAM_DECK_FOLDER = fs.mkdtempSync(
 );
 afterAll(() => fs.rmSync(STREAM_DECK_FOLDER, { recursive: true, force: true }));
 
+export type LastPassed = RecorderClientOptions["calibration"];
+
+/**
+ * A fresh Audio Calibration on the scripted mic, stored (a Recording Session
+ * links it): every Record is let through.
+ */
+export const freshCalibration: LastPassed = async () => {
+  await testDb
+    .insert(audioCalibrations)
+    .values({
+      id: CALIBRATION.id,
+      createdAt: new Date(CALIBRATION.createdAtMs),
+      outcome: "passed",
+      noiseFloorDb: -80,
+      speechLufs: -27,
+      truePeakDb: -10,
+      thresholdDb: CALIBRATION.thresholdDb,
+      recorderMic: CALIBRATION.recorderMic,
+      browserInputLabel: CALIBRATION.browserInputLabel,
+      scriptVersion: 2,
+      micFilePath: "/calibrations/ok/mic.mkv",
+      browserTracePath: "/calibrations/ok/browser-trace.json",
+    })
+    .onConflictDoNothing();
+  return CALIBRATION;
+};
+
+/** The latest calibration passed under today's rules, from PGlite, as the app reads it. */
+export const calibrationFromDatabase: LastPassed = () =>
+  Effect.runPromise(lastPassedCalibration(testDb as never));
+
 /** The app server's recorder client, as live.server.ts makes it. */
-export const connectClient = (port: number, ingest: Ingest = saveEvent) => {
+export const connectClient = (
+  port: number,
+  ingest: Ingest = saveEvent,
+  lastPassed: LastPassed = freshCalibration
+) => {
   const client = createRecorderClient({
     url: `ws://127.0.0.1:${port}`,
     ingest,
@@ -73,8 +113,7 @@ export const connectClient = (port: number, ingest: Ingest = saveEvent) => {
       Effect.runPromise(
         unfinishedRecordingSessions(testDb as never, candidates)
       ),
-    silenceThreshold: () =>
-      Effect.runPromise(currentSilenceThreshold(testDb as never)),
+    calibration: lastPassed,
     reconnectMs: 50,
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,

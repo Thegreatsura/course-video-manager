@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
-import { THRESHOLD_REQUIRED, type RecorderCommand } from "./protocol";
+import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import {
   connect,
@@ -14,7 +14,8 @@ import {
   start,
   T0_MS,
   tmp,
-  THRESHOLD,
+  CALIBRATED,
+  CALIBRATION,
 } from "./test-utils/service-harness";
 
 /** The recorder service through its WebSocket (test-utils/service-harness.ts). */
@@ -116,7 +117,7 @@ describe("the Cam Link", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect((await client.next("refused")).message).toBe(
       "The camera is not live yet."
@@ -184,21 +185,21 @@ describe("a Recording Session", () => {
       type: "record",
       silenceLength: "short",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect((await client.next("refused")).command).toBe("record");
   });
 
-  it("cuts with the silence threshold Record carries, and refuses a Record or prepare-record without one", async () => {
+  it("cuts with its Audio Calibration's threshold, and refuses a Record or prepare-record that carries none", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     client.send({ type: "open", videoId: "video-1" });
     await client.camera("live");
 
-    // From an app server older than Audio Calibration: no threshold.
+    // From an app server older than the gate: no calibration at all.
     const folder = tmp();
     for (const old of [
-      { type: "record", silenceLength: "short", folder },
+      { type: "record", silenceLength: "short", folder, thresholdDb: -38 },
       {
         type: "prepare-record",
         videoId: "video-1",
@@ -210,7 +211,7 @@ describe("a Recording Session", () => {
       expect(await client.next("refused")).toEqual({
         type: "refused",
         command: old.type,
-        message: THRESHOLD_REQUIRED,
+        message: CALIBRATION_REQUIRED,
       });
     }
 
@@ -218,8 +219,7 @@ describe("a Recording Session", () => {
       type: "record",
       silenceLength: "short",
       folder,
-      thresholdDb: -36.5,
-      audioCalibrationId: "calibration-1",
+      calibration: { ...CALIBRATION, id: "calibration-1", thresholdDb: -36.5 },
     });
     expect(await client.next("recording-started")).toMatchObject({
       thresholdDb: -36.5,

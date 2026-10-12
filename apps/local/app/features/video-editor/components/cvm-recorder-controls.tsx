@@ -10,6 +10,8 @@ import { VideoEditorContext } from "../video-editor-context";
 import { SCENES } from "@/packages/scene-layout";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { ShortScreenStatus } from "./short-screen-status";
+import { CalibrationGateBanner } from "./calibration-gate-banner";
+import { isCalibrationRefusal } from "@/audio-calibration-constants";
 
 /** What the CVM recorder is doing, in a few words. */
 const statusText = (
@@ -115,7 +117,12 @@ const CameraProblem = () => {
  */
 export const CvmRecorderControls = () => {
   const controls = useCvmRecorderControls();
+  const gate = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.calibrationGate.cvm
+  );
   const { state } = controls;
+  const calibrationRefusal = isCalibrationRefusal(state.error);
   return (
     <div className="mt-2 flex flex-col items-center gap-2">
       {state.alert && (
@@ -136,6 +143,12 @@ export const CvmRecorderControls = () => {
           </Button>
         </div>
       )}
+      {state.phase === "idle" && (
+        <CalibrationGateBanner
+          gate={gate}
+          refusal={calibrationRefusal ? state.error : null}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-center gap-3">
         <SilenceLengthToggle />
         {state.phase === "recording" || state.phase === "stopping" ? (
@@ -154,7 +167,8 @@ export const CvmRecorderControls = () => {
             type="button"
             size="sm"
             variant="destructive"
-            disabled={!controls.canRecord}
+            // The Audio Calibration gate (ADR 0038): no skip.
+            disabled={!controls.canRecord || !gate.valid}
             onClick={controls.onRecord}
           >
             <CircleIcon className="size-3.5 mr-1 fill-current" />
@@ -182,7 +196,7 @@ export const CvmRecorderControls = () => {
             : `${framesText(state.framesLost.camera, "camera")}, ${framesText(state.framesLost.screen, "screen")} lost`}
         </p>
       )}
-      {state.error && (
+      {state.error && !calibrationRefusal && (
         <p className="text-xs text-red-500 whitespace-pre-line text-center">
           {state.error}
         </p>

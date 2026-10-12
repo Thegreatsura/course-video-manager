@@ -7,10 +7,15 @@ import {
   useWatchForSilenceDetected,
   useWatchForSpeechDetected,
 } from "./use-speech-detector";
-import type {
-  SilenceLength,
-  SilenceThreshold,
+import {
+  DEFAULT_SILENCE_THRESHOLD_DB,
+  type SilenceLength,
 } from "@/silence-detection-constants";
+import {
+  calibrationValidity,
+  describeCalibrationRefusal,
+  type LastPassedCalibration,
+} from "@/audio-calibration-constants";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
 import { ensureOBSProfile } from "./ensure-obs-profile";
 import { useEnsureOBSProfile } from "./use-ensure-obs-profile";
@@ -28,6 +33,11 @@ export type OBSConnectedState = {
   profile: string;
   scene: string;
   latestOutputPath: string | null;
+  /**
+   * Why CVM stopped the recording OBS last started (the Audio Calibration
+   * gate, ADR 0038), until a recording is let through.
+   */
+  calibrationRefusal?: string;
 };
 
 export type OBSRecordingState = {
@@ -36,9 +46,10 @@ export type OBSRecordingState = {
   scene: string;
   latestOutputPath: string;
   /**
-   * The silence threshold this take cuts with, fixed when it started (the
-   * latest passed Audio Calibration's then): the browser detector and the
-   * after-recording FFmpeg pass both use it, whatever is calibrated since.
+   * The silence threshold this take cuts with, fixed when it started (that
+   * of the Audio Calibration it was let through under): the browser detector
+   * and the after-recording FFmpeg pass both use it, whatever is calibrated
+   * since.
    */
   silenceThresholdDb: number;
 };
@@ -262,8 +273,11 @@ export namespace useOBSConnector {
     | {
         type: "recording-started";
         outputPath: string;
-        /** The editor's silence threshold when OBS started recording. */
-        silenceThresholdDb: number;
+        /** The editor's latest calibration passed under today's rules, then. */
+        lastPassed: LastPassedCalibration | null;
+        /** The label of the editor's mic track then; null with none open. */
+        browserInputLabel: string | null;
+        nowMs: number;
       }
     | {
         type: "recording-stopped";
@@ -397,12 +411,27 @@ export const obsConnectorReducer: EffectReducer<
     }
     case "recording-started": {
       if (state.type === "obs-connected") {
+        // THE GATE (ADR 0038): a take OBS started without a fresh Audio
+        // Calibration on this mic is stopped at once, and the editor says
+        // why. Only here, at its start: a take let through runs to its end.
+        const gate = calibrationValidity(
+          action.lastPassed,
+          { browserInputLabel: action.browserInputLabel },
+          action.nowMs
+        );
+        if (!gate.valid) {
+          exec({ type: "stop-recording" });
+          return {
+            ...state,
+            calibrationRefusal: describeCalibrationRefusal(gate.reason),
+          };
+        }
         return {
           type: "obs-recording",
           profile: state.profile,
           scene: state.scene,
           latestOutputPath: action.outputPath,
-          silenceThresholdDb: action.silenceThresholdDb,
+          silenceThresholdDb: gate.calibration.thresholdDb,
         };
       }
 
@@ -454,18 +483,21 @@ export const useOBSConnector = (props: {
   onClipAudioWindowClosed: () => void;
   silenceLength: SilenceLength;
   /**
-   * The latest passed Audio Calibration's threshold (or the fixed default):
-   * what a take that starts now cuts with.
+   * The latest Audio Calibration passed under today's rules: a take OBS
+   * starts is let through only under it (ADR 0038), and cuts with its
+   * threshold.
    */
-  silenceThreshold: SilenceThreshold;
+  lastPassedCalibration: LastPassedCalibration | null;
   targetProfile: string;
   /** False for a CVM recorder Video: OBS is left alone. */
   usesObs: boolean;
 }) => {
   const [websocket] = useState(() => new OBSWebSocket());
   // Read by OBS's recording listener, which outlives a render.
-  const silenceThresholdRef = useRef(props.silenceThreshold.thresholdDb);
-  silenceThresholdRef.current = props.silenceThreshold.thresholdDb;
+  const gateFactsRef = useRef({
+    lastPassed: props.lastPassedCalibration,
+    browserInputLabel: null as string | null,
+  });
 
   const [state, dispatch] = useEffectReducer(
     obsConnectorReducer,
@@ -527,7 +559,8 @@ export const useOBSConnector = (props: {
             dispatch({
               type: "recording-started",
               outputPath: e.outputPath,
-              silenceThresholdDb: silenceThresholdRef.current,
+              ...gateFactsRef.current,
+              nowMs: Date.now(),
             });
           } else if (e.outputState === "OBS_WEBSOCKET_OUTPUT_STOPPED") {
             dispatch({
@@ -597,6 +630,13 @@ export const useOBSConnector = (props: {
     profileReady,
   });
 
+  /** The mic the browser detector hears: what the gate compares on OBS. */
+  const browserInputLabel = mediaStream?.getAudioTracks()[0]?.label ?? null;
+  gateFactsRef.current = {
+    lastPassed: props.lastPassedCalibration,
+    browserInputLabel,
+  };
+
   const speechDetectorState = useSpeechDetector({
     mediaStream,
     isRecording: state.type === "obs-recording",
@@ -604,7 +644,8 @@ export const useOBSConnector = (props: {
     thresholdDb:
       state.type === "obs-recording"
         ? state.silenceThresholdDb
-        : props.silenceThreshold.thresholdDb,
+        : (props.lastPassedCalibration?.thresholdDb ??
+          DEFAULT_SILENCE_THRESHOLD_DB),
   });
 
   useWatchForSpeechDetected({
@@ -633,9 +674,15 @@ export const useOBSConnector = (props: {
     return {
       state: outerState,
       mediaStream,
+      browserInputLabel,
       speechDetectorState,
     };
-  }, [JSON.stringify(outerState), mediaStream, speechDetectorState]);
+  }, [
+    JSON.stringify(outerState),
+    mediaStream,
+    browserInputLabel,
+    speechDetectorState,
+  ]);
 
   return output;
 };

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
 import { ebur128Line } from "./test-utils/fake-windows";
-import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
+import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
 
 /** The level meter through the WebSocket (test-utils/service-harness.ts). */
 
@@ -47,7 +47,7 @@ describe("the level meter", () => {
       type: "record",
       silenceLength: "short",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect((await client.next("refused")).message).toBe(RECORD_WHILE_METERING);
 
@@ -59,7 +59,7 @@ describe("the level meter", () => {
       type: "record",
       silenceLength: "short",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     await client.next("recording-started");
 
@@ -102,7 +102,7 @@ describe("the level meter", () => {
       type: "record",
       silenceLength: "short",
       folder: tmp(),
-      ...THRESHOLD,
+      ...CALIBRATED,
     });
     expect((await client.next("refused")).message).toBe(RECORD_WHILE_METERING);
 

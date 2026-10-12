@@ -15,6 +15,7 @@ import type { editorModalsReducer } from "./editor-modals-reducer";
 import type { OBSConnectionOuterState } from "./obs-connector";
 import type { RecorderPicker } from "./use-recorder-choice";
 import type { CvmRecorderControls } from "./use-cvm-recorder";
+import type { CalibrationGate } from "./use-calibration-gate";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { ClipComputedProps } from "./types";
@@ -112,6 +113,8 @@ export type VideoEditorContextType = {
   recorderPicker: RecorderPicker;
   /** Record and Stop on a CVM recorder Video. */
   cvmRecorder: CvmRecorderControls;
+  /** Whether each Recorder may start, by the Audio Calibration gate (ADR 0038). */
+  calibrationGate: CalibrationGate;
   liveMediaStream: MediaStream | null;
   speechDetectorState: FrontendSpeechDetectorState;
   silenceLength: SilenceLength;

@@ -80,6 +80,7 @@ export const VideoEditor = (props: {
   obsConnectorState: OBSConnectionOuterState;
   recorderChoice: ReturnType<typeof useRecorderChoice>;
   cvmRecorder: VideoEditorContextType["cvmRecorder"];
+  calibrationGate: VideoEditorContextType["calibrationGate"];
   items: TimelineItem[];
   sessions: RecordingSession[];
   videoTitle: string;
@@ -449,6 +450,7 @@ export const VideoEditor = (props: {
         captureInProgress || props.isRecordingActive
       ),
       cvmRecorder: props.cvmRecorder,
+      calibrationGate: props.calibrationGate,
       liveMediaStream: props.liveMediaStream,
       speechDetectorState: props.speechDetectorState,
       silenceLength: props.silenceLength,
@@ -539,6 +541,7 @@ export const VideoEditor = (props: {
       onShowScriptPanel,
       props.insertionPoint,
       props.obsConnectorState,
+      props.calibrationGate,
       props.recorderChoice.state,
       props.liveMediaStream,
       props.speechDetectorState,
