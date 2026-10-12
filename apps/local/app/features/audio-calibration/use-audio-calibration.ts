@@ -7,24 +7,24 @@ import {
 import type { SavedAudioCalibration } from "./calibration-wire";
 import { listenToMeter } from "./use-level-meter";
 
-const post = async (url: string, body: unknown = {}) => {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    let message = text;
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (typeof parsed === "string") message = parsed;
-    } catch {
-      // Plain text.
-    }
-    throw new Error(message || `${response.status} ${response.statusText}`);
+const json = (body: unknown = {}): RequestInit => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+/** The response, or an Error carrying the route's reason. */
+const answer = async (response: Response) => {
+  if (response.ok) return response;
+  const text = await response.text();
+  let message = text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === "string") message = parsed;
+  } catch {
+    // Plain text.
   }
-  return response;
+  throw new Error(message || `${response.status} ${response.statusText}`);
 };
 
 const messageOf = (error: unknown) =>
@@ -139,22 +139,26 @@ export const useAudioCalibration = () =>
     {
       "listen-to-meter": (_state, _effect, dispatch) => listenToMeter(dispatch),
       "start-calibration": (_state, _effect, dispatch) => {
-        post("/api/audio-calibration/start").catch((error: unknown) =>
-          dispatch({ type: "start-refused", message: messageOf(error) })
-        );
+        fetch("/api/audio-calibration/start", json())
+          .then(answer)
+          .catch((error: unknown) =>
+            dispatch({ type: "start-refused", message: messageOf(error) })
+          );
       },
       "cancel-calibration": () => {
-        post("/api/audio-calibration/cancel").catch((error: unknown) =>
-          console.error("Could not cancel the Audio Calibration", error)
-        );
+        fetch("/api/audio-calibration/cancel", json())
+          .then(answer)
+          .catch((error: unknown) =>
+            console.error("Could not cancel the Audio Calibration", error)
+          );
       },
       "finish-calibration": (_state, effect, dispatch) => {
         const { calibrationId, browserInputLabel, browserTrace } = effect;
-        post("/api/audio-calibration/finish", {
-          calibrationId,
-          browserInputLabel,
-          browserTrace,
-        })
+        fetch(
+          "/api/audio-calibration/finish",
+          json({ calibrationId, browserInputLabel, browserTrace })
+        )
+          .then(answer)
           .then(async (response) =>
             dispatch({
               type: "calibration-saved",
