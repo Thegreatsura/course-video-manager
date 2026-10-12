@@ -6,7 +6,7 @@ import {
   CALIBRATION_MIC_FILE,
   measureCalibration,
 } from "./calibration-run";
-import { CAM_LINK_NOT_STARTING, quitProcess } from "./camera";
+import { CAM_LINK_NOT_STARTING, quitProcess, saysDeviceBusy } from "./camera";
 import { calibrationCaptureArgs, METER_TAG, micInput } from "./capture-args";
 import { lineSplitter, type Launcher } from "./launcher";
 import type {
@@ -17,6 +17,7 @@ import type {
 import { findByName, Refusal } from "./refusal";
 import { listDshowDevices } from "./windows-devices";
 import { MIC_NAME } from "../app/mic-device";
+import { CLOSE_OBS_TO_CALIBRATE } from "../app/av-calibration-constants";
 
 /**
  * THE LEVEL METER (#2078): the AV Calibration page's live loudness of the
@@ -78,21 +79,26 @@ export const startLevelMeter = (o: {
   /** Where it runs: a calibration run's folder (WSL path). */
   cwd: string;
   onReading: (reading: MeterReading) => void;
-  /** It quit without being asked: the last line it printed, if any. */
-  onExit: (lastLine: string | undefined) => void;
+  /**
+   * It quit without being asked: the last line it printed, if any, and the
+   * last few lines that were not readings (where dshow says why it failed).
+   */
+  onExit: (lastLine: string | undefined, said: string) => void;
 }): LevelMeter => {
   const p = o.launch({ tool: "ffmpeg", args: o.args, cwd: o.cwd });
   let stopping = false;
-  let lastLine: string | undefined;
+  const said: string[] = [];
   p.onStderr(
     lineSplitter((line) => {
       const reading = parseMeterLine(line);
       if (reading) return o.onReading(reading);
-      if (line.trim()) lastLine = line.trim();
+      if (!line.trim()) return;
+      said.push(line.trim());
+      if (said.length > 20) said.shift();
     })
   );
   void p.exited.then(() => {
-    if (!stopping) o.onExit(lastLine);
+    if (!stopping) o.onExit(said.at(-1), said.join("\n"));
   });
   return {
     stop: () => {
@@ -124,7 +130,9 @@ type CalibrationRun = {
  * run (its preview lets go of the Cam Link, which opens in one process at a
  * time) and given back when the run's process is gone. The run starts once
  * it is live: its first reading, which comes only once the camera has
- * opened; a process that quits before then is a refused start. Finished or
+ * opened; a process that quits before then is a refused start ("Close OBS
+ * to calibrate" when dshow says another program holds the Cam Link; the
+ * service never closes OBS itself). Finished or
  * cancelled, the plain meter comes back for the same client; stopped, or its
  * client gone, the run is discarded with the meter. A discarded run leaves
  * no file.
@@ -231,10 +239,15 @@ export const createMeterSide = <Owner>(o: {
             }
             o.broadcast({ type: "meter-reading", ...reading });
           },
-          onExit: (lastLine) => {
+          onExit: (lastLine, said) => {
             if (current !== started) return;
             const message = `The AV Calibration's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
-            if (!live) return failToStart(message);
+            // Another program has the Cam Link: Matt closes OBS (CVM never
+            // does) and presses Start again.
+            if (!live)
+              return failToStart(
+                saysDeviceBusy(said) ? CLOSE_OBS_TO_CALIBRATE : message
+              );
             current = undefined;
             o.giveBackCamera();
             discard(run);

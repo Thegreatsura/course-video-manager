@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_NOT_STARTING } from "./camera";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
+import { CLOSE_OBS_TO_CALIBRATE } from "../app/av-calibration-constants";
 import { ebur128Line } from "./test-utils/fake-windows";
 import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
 
@@ -199,5 +200,42 @@ describe("the level meter", () => {
     expect(fs.readdirSync(path.join(folder, "av-calibrations"))).toEqual([]);
     // The plain meter is back.
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");
+  });
+
+  it("refuses to start a run while another program holds the Cam Link, says Close OBS to calibrate, keeps nothing, and starts once it is freed", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    const folder = tmp();
+    client.send({ type: "start-meter" });
+    await client.next("meter-started");
+
+    client.send({ type: "start-calibration", folder });
+    await vi.waitFor(() =>
+      expect(windows.meter()?.launch.args).toContain("mic.wav")
+    );
+    // What dshow says when OBS has the Cam Link: a synthetic error, no device.
+    const busy = windows.meter()!;
+    busy.stderr(
+      "[dshow @ 0001] [error] Could not run graph (sometimes caused by a device already in use by other application)\r\n" +
+        "[in#1 @ 0002] [error] Error opening input: I/O error\r\n"
+    );
+    busy.exit(1);
+    expect(await client.next("refused")).toMatchObject({
+      command: "start-calibration",
+      message: CLOSE_OBS_TO_CALIBRATE,
+    });
+    expect(fs.readdirSync(path.join(folder, "av-calibrations"))).toEqual([]);
+    expect(windows.meter()?.launch.args).not.toContain("mic.wav");
+
+    // OBS lets go: Start runs.
+    client.send({ type: "start-calibration", folder });
+    await vi.waitFor(() =>
+      expect(windows.meter()?.launch.args).toContain("mic.wav")
+    );
+    windows.meter()!.stderr(`${ebur128Line(3.4, -60, -60)}\r\n`);
+    expect(await client.next("calibration-started")).toMatchObject({
+      camera: "Cam Link 4K",
+    });
   });
 });
