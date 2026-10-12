@@ -177,8 +177,35 @@ export const fakeWindows = (
     jpeg?: { camera: Buffer; screen: Buffer; still?: Buffer };
     /** The recording's camera + mic process: its first frame comes at once, or never. */
     recordingCamera?: "frames" | "silent";
+    /**
+     * The Spacedesk display: its size, and whether it is listed before any
+     * wake (default: asleep, 1080x1920). A wake lists it, or fails with
+     * `wakeFails`.
+     */
+    spacedesk?: { width: number; height: number; awake?: boolean };
+    wakeFails?: string;
   } = {}
 ) => {
+  const spacedesk: {
+    width: number;
+    height: number;
+    awake: boolean;
+    wakeFails: string | undefined;
+  } = {
+    width: 1080,
+    height: 1920,
+    awake: false,
+    wakeFails: o.wakeFails,
+    ...o.spacedesk,
+  };
+  let wakes = 0;
+  /** The injected wake: never the real Spacedesk. */
+  const wakeSpacedesk = async () => {
+    wakes += 1;
+    await new Promise((r) => setTimeout(r, 5));
+    if (spacedesk.wakeFails) throw new Error(spacedesk.wakeFails);
+    spacedesk.awake = true;
+  };
   const recorders: FakeProcess[] = [];
   const cameraPreviews: FakeProcess[] = [];
   const screenPreviews: FakeProcess[] = [];
@@ -190,9 +217,14 @@ export const fakeWindows = (
     if (l.tool === "nvidia-smi")
       return answer(p, { stdout: `${o.driver ?? "591.74"}\r\n` });
     if (l.tool === "powershell" && l.script === "screens.ps1") {
+      // The older 7-column listing for the first two, as a Windows with an
+      // old screens.ps1 would print them; the adapter column after that.
       return answer(p, {
         stdout:
-          "0\t0\t0\t2560\t1440\t\\\\.\\DISPLAY1\tLG HDR QHD\r\n1\t2560\t0\t1920\t1080\t\\\\.\\DISPLAY2\tDELL U2424H\r\n",
+          "0\t0\t0\t2560\t1440\t\\\\.\\DISPLAY1\tLG HDR QHD\r\n1\t2560\t0\t1920\t1080\t\\\\.\\DISPLAY2\tDELL U2424H\r\n" +
+          (spacedesk.awake
+            ? `2\t1920\t0\t${spacedesk.width}\t${spacedesk.height}\t\\\\.\\DISPLAY11\t?\tspacedesk Graphics Adapter\r\n`
+            : ""),
       });
     }
     if (l.tool === "powershell" && l.script === "stop-recorders.ps1") {
@@ -296,5 +328,10 @@ export const fakeWindows = (
     cameraPreviews,
     screenPreviews,
     camerasRunning,
+    wakeSpacedesk,
+    /** How many times the service woke Spacedesk. */
+    wakes: () => wakes,
+    /** Spacedesk's display, which a test may resize, put to sleep or make fail to wake. */
+    spacedesk,
   };
 };

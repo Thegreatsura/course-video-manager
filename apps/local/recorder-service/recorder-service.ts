@@ -10,14 +10,9 @@ import {
   recoverCrashedSessions,
   type IndexEntry,
 } from "./crash-recovery";
-import {
-  CAMERA_START_TIMEOUT_MS,
-  openCamera,
-  quitProcess,
-  type Camera,
-} from "./camera";
-import { PREVIEW_TAGS, screenPreviewArgs } from "./capture-args";
-import type { LaunchedProcess, Launcher } from "./launcher";
+import { CAMERA_START_TIMEOUT_MS, openCamera, type Camera } from "./camera";
+import type { Launcher } from "./launcher";
+import type { VideoFormat } from "@/features/videos/video-format";
 import {
   DEFAULT_SCENE,
   SCENES,
@@ -45,8 +40,9 @@ import {
   checkFfmpeg,
   checkNvidiaDriver,
   listDshowDevices,
-  listScreens,
 } from "./windows-devices";
+import { findByName, Refusal } from "./refusal";
+import { createScreenSide, refuseScreenlessScene } from "./screen-side";
 
 /**
  * THE RECORDER SERVICE (ADR 0034): a long-running process of its own in WSL
@@ -62,12 +58,18 @@ import {
  * opens it (`camera.ts`) and the screen preview; Record is refused until the
  * camera is live; Record hands the Cam Link from the preview process to the
  * recording, and the end of the recording hands it back; closing lets it go.
+ *
+ * The screen depends on the Video's format. Landscape records the DELL,
+ * checked at Record. A Short records the Spacedesk virtual display: opening
+ * looks for it and wakes Spacedesk when it is not listed, beside the camera
+ * and outside the command queue, and the state says how that went
+ * (`ScreenStatus`, `screen-side.ts`). With it unavailable a Short records camera and mic only,
+ * and refuses the scenes that draw the screen.
  */
 
 /** The devices the rig proved, found by name. */
 export const CAMERA_NAME = "Cam Link 4K";
 export const MIC_NAME = "Voicemeeter Out B1";
-export const SCREEN_NAME = "DELL U2424H";
 
 /** A still older than this is not the camera now: the preview process stalled or quit. */
 const STILL_MAX_AGE_MS = 2_000;
@@ -82,10 +84,21 @@ export type RecorderServiceOptions = {
   stateDir: string;
   /** How long one try at the Cam Link waits for its first frame. */
   cameraStartTimeoutMs?: number;
+  /**
+   * Wakes the Spacedesk display (`app/spacedesk-wake.ts`); rejects with a
+   * message that says why it could not.
+   */
+  wakeSpacedesk: () => Promise<void>;
 };
 
+const FORMATS = ["landscape", "short"] as const satisfies VideoFormat[];
+
 const Command = Schema.Union(
-  Schema.Struct({ type: Schema.Literal("open"), videoId: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("open"),
+    videoId: Schema.String,
+    format: Schema.optional(Schema.Literal(...FORMATS)),
+  }),
   Schema.Struct({
     type: Schema.Literal("record"),
     silenceLength: Schema.Literal("short", "long"),
@@ -94,6 +107,7 @@ const Command = Schema.Union(
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("close") }),
   Schema.Struct({ type: Schema.Literal("retry-camera") }),
+  Schema.Struct({ type: Schema.Literal("retry-screen") }),
   Schema.Struct({
     type: Schema.Literal("switch-scene"),
     scene: Schema.Literal(...SCENES),
@@ -122,11 +136,6 @@ const Command = Schema.Union(
 );
 const decodeCommand = Schema.decodeUnknownEither(Schema.parseJson(Command));
 
-class Refusal extends Error {}
-
-const findByName = <T>(items: T[], name: (t: T) => string, wanted: string) =>
-  items.find((t) => name(t).toLowerCase().includes(wanted.toLowerCase()));
-
 export const startRecorderService = async (o: RecorderServiceOptions) => {
   const ffmpeg = await checkFfmpeg(o.launch);
   const warnings: string[] = [];
@@ -154,7 +163,6 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   let listening: () => void = () => {};
   let session: RecordingSession | undefined;
   let camera: Camera | undefined;
-  let screenPreview: LaunchedProcess | undefined;
   const feeds = await startPreviewFeeds();
 
   /** `GET /still`: the camera's latest still, or why there is none. */
@@ -249,35 +257,35 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     await released?.release();
   };
 
-  const startScreenPreview = async () => {
-    const screens = await listScreens(o.launch);
-    const screen = findByName(screens, (s) => s.name, SCREEN_NAME);
-    if (!screen || state.kind === "closed" || screenPreview) return;
-    const p = o.launch({
-      tool: "ffmpeg",
-      args: screenPreviewArgs({
-        screenIndex: screen.index,
-        port: feeds.port("screen"),
-      }),
-      cwd: "/mnt/c",
-    });
-    screenPreview = p;
-    void p.exited.then((code) => {
-      if (screenPreview !== p) return;
-      screenPreview = undefined;
-      console.error(`recorder: the screen preview quit (exit ${code})`);
-    });
-  };
-
-  const stopScreenPreview = async () => {
-    const p = screenPreview;
-    screenPreview = undefined;
-    if (p) await quitProcess(p, { launch: o.launch, tag: PREVIEW_TAGS.screen });
-  };
+  const screenSide = createScreenSide({
+    launch: o.launch,
+    previewPort: () => feeds.port("screen"),
+    wakeSpacedesk: o.wakeSpacedesk,
+    format: () => (state.kind === "closed" ? undefined : state.format),
+    setStatus: (screen) => {
+      if (state.kind !== "closed" && state.format === "short")
+        setState({ ...state, screen });
+    },
+  });
 
   const onEvent = (event: RecordingSessionEvent) => {
     if (state.kind === "recording") state = { ...state, lastSeq: event.seq };
     broadcast(event);
+  };
+
+  const screenStatus = () => (state.kind === "closed" ? null : state.screen);
+
+  /** Open again after a Recording Session, with the camera back in the preview. */
+  const reopen = (videoId: string) => {
+    if (state.kind === "closed") return;
+    setState({
+      kind: "open",
+      videoId,
+      format: state.format,
+      scene,
+      screen: state.screen,
+      camera: startCamera(),
+    });
   };
 
   const record = async (
@@ -306,19 +314,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         `${missing} is not among the DirectShow devices. Found: ${devices.map((d) => `${d.name} (${d.kind})`).join(", ") || `none. ffmpeg said: ${raw.slice(0, 500)}`}`
       );
     }
-    const screens = await listScreens(o.launch);
-    const screen = findByName(screens, (s) => s.name, SCREEN_NAME);
-    if (!screen) {
-      throw new Refusal(
-        `No screen named ${SCREEN_NAME}. Found: ${screens.map((s) => s.name).join(", ") || "none"}`
-      );
-    }
-    if (screen.width !== 1920 || screen.height !== 1080) {
-      throw new Refusal(
-        `The ${SCREEN_NAME} is ${screen.width}x${screen.height}; the recorder records it at 1920x1080.`
-      );
-    }
-    const videoId = state.videoId;
+    const { videoId, format } = state;
+    const screenIndex = await screenSide.recordIndex(
+      format,
+      state.screen,
+      scene
+    );
     // The Cam Link opens in one process at a time: the recording's takes it
     // over from the preview, and hands it back when it ends.
     await releaseCamera();
@@ -331,18 +332,19 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         silenceLength: command.silenceLength,
         camera,
         mic,
-        screenIndex: screen.index,
+        screenIndex,
+        format,
         cameraPreviewPort: feeds.port("camera"),
         cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
         onEnded: () => {
           session = undefined;
-          setState({ kind: "open", videoId, camera: startCamera(), scene });
+          reopen(videoId);
         },
       });
     } catch (e) {
-      setState({ kind: "open", videoId, camera: startCamera(), scene });
+      reopen(videoId);
       throw e;
     }
     // The session is already recording: a failed index write must not turn
@@ -358,7 +360,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     setState({
       kind: "recording",
       videoId,
+      format,
       scene,
+      screen: screenStatus(),
       recordingSessionId: session.id,
       lastSeq: session.lastSeq(),
     });
@@ -416,29 +420,46 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     }
     if (!ffmpeg.ok) throw new Refusal(ffmpeg.message);
     switch (command.type) {
-      case "open":
+      case "open": {
         if (state.kind === "recording") {
           throw new Refusal(
             "Stop recording before opening the recorder for another Video."
           );
         }
+        const format = command.format ?? "landscape";
+        const screen = format === "short" ? { kind: "waking" as const } : null;
         if (state.kind === "open") {
-          return setState({ ...state, videoId: command.videoId });
+          if (state.format === format)
+            return setState({ ...state, videoId: command.videoId });
+          setState({ ...state, videoId: command.videoId, format, screen });
+          return void screenSide.restart();
         }
         setState({
           kind: "open",
           videoId: command.videoId,
+          format,
           camera: startCamera(),
           scene,
+          screen,
         });
-        return void startScreenPreview();
+        return void screenSide.restart();
+      }
       case "retry-camera":
         if (state.kind !== "open" || !camera?.retry())
           throw new Refusal("The camera is not waiting for a retry.");
         return;
+      case "retry-screen":
+        if (state.kind === "recording")
+          throw new Refusal("Stop recording before waking Spacedesk again.");
+        if (state.kind !== "open" || state.format !== "short")
+          throw new Refusal("The recorder is not open for a Short.");
+        if (state.screen?.kind === "waking")
+          throw new Refusal("Spacedesk is already waking.");
+        return void screenSide.restart();
       case "switch-scene":
         if (state.kind === "closed")
           throw new Refusal("Open the recorder for a Video first.");
+        refuseScreenlessScene(command.scene, state.format, state.screen);
         // While recording, logged first: a clock that cannot be read refuses
         // the switch rather than showing a scene the Footage never got.
         session?.switchScene(command.scene);
@@ -470,7 +491,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         recordWith = undefined;
         if (state.kind === "closed") return setState(state);
         setState({ kind: "closed" });
-        await Promise.all([releaseCamera(), stopScreenPreview()]);
+        await Promise.all([releaseCamera(), screenSide.close()]);
         return;
     }
   };
@@ -555,7 +576,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     close: async () => {
       await queue;
       if (session) await session.stop();
-      await Promise.all([releaseCamera(), stopScreenPreview()]);
+      await Promise.all([releaseCamera(), screenSide.close()]);
       await feeds.close();
       for (const ws of wss.clients) ws.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
