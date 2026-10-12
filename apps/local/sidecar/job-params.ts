@@ -3,14 +3,25 @@ import {
   ANNOUNCE_NOTHING_BAND,
   PLACEHOLDER_FLOOR_BANDS,
 } from "@/packages/course-json/client";
+import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 
 /**
- * Every Job kind's params, apart from its handler (`kinds/<kind>.ts`): what
- * a caller may enqueue. The app server checks a request against these
- * (`job-specs.ts`) without importing a single handler — a handler reaches
- * ffmpeg, Remotion and the posting services, which only the Sidecar may run
- * (the spawn guard in `.dependency-cruiser.cjs`).
+ * Refuses a title or description YouTube would refuse, naming why — at
+ * enqueue (the app server) and again when the Sidecar decodes the Job, so a
+ * Job queued before this check still never reaches YouTube.
  */
+const youtubeMetadataAccepted = <
+  A extends { readonly title: string; readonly description: string },
+  I,
+>(
+  schema: Schema.Schema<A, I>
+) =>
+  schema.pipe(
+    Schema.filter(
+      (metadata) => findYouTubeMetadataProblem(metadata)?.message ?? true
+    )
+  );
+
 export const JOB_PARAMS = {
   noop: Schema.Struct({
     /** How long to take, in steps of up to 100 ms, reporting each. */
@@ -92,18 +103,22 @@ export const JOB_PARAMS = {
       { default: () => ANNOUNCE_NOTHING_BAND }
     ),
   }),
-  youtube: Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    description: Schema.Trim.pipe(Schema.nonEmptyString()),
-    privacyStatus: Schema.Literal("public", "unlisted"),
-    thumbnailId: Schema.String,
-  }),
-  "youtube-shorts": Schema.Struct({
-    videoId: Schema.String,
-    title: Schema.Trim.pipe(Schema.nonEmptyString()),
-    description: Schema.Trim.pipe(Schema.nonEmptyString()),
-  }),
+  youtube: youtubeMetadataAccepted(
+    Schema.Struct({
+      videoId: Schema.String,
+      title: Schema.Trim.pipe(Schema.nonEmptyString()),
+      description: Schema.Trim.pipe(Schema.nonEmptyString()),
+      privacyStatus: Schema.Literal("public", "unlisted"),
+      thumbnailId: Schema.String,
+    })
+  ),
+  "youtube-shorts": youtubeMetadataAccepted(
+    Schema.Struct({
+      videoId: Schema.String,
+      title: Schema.Trim.pipe(Schema.nonEmptyString()),
+      description: Schema.Trim.pipe(Schema.nonEmptyString()),
+    })
+  ),
   buffer: Schema.Struct({
     videoId: Schema.String,
     caption: Schema.Trim.pipe(Schema.nonEmptyString()),

@@ -2,6 +2,7 @@ import { Config, Data, Effect } from "effect";
 import { statSync } from "fs";
 import * as fs from "fs";
 import { SidecarContext } from "@/services/sidecar-context";
+import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 
 export class YouTubeUploadError extends Data.TaggedError("YouTubeUploadError")<{
   message: string;
@@ -102,6 +103,13 @@ export const uploadVideoToYouTube = (opts: {
 }) =>
   Effect.gen(function* () {
     yield* SidecarContext;
+    const problem = findYouTubeMetadataProblem(opts);
+    if (problem) {
+      return yield* new YouTubeUploadError({
+        message: problem.message,
+        code: "invalid_metadata",
+      });
+    }
     const apiUrl = yield* youtubeApiUrl;
     const fileSize = yield* Effect.try({
       try: () => statSync(opts.filePath).size,

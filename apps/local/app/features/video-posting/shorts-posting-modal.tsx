@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { LinkIcon, Loader2Icon, SendIcon, SparklesIcon } from "lucide-react";
 import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { isDefaultShortTitle } from "@/lib/short-title";
+import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 import type { PostedPlatforms } from "@/lib/short-status";
 import { findConvertibleAiHeroUrls, replaceUrls } from "./convert-short-links";
 
@@ -69,6 +70,12 @@ export function ShortsPostingModal({
 
   const showDescription = mode === "both" || mode === "youtube";
   const requireDescription = showDescription;
+  // What YouTube would refuse, named, so the Short is never queued with it.
+  // Only a YouTube post is held to it; a blank title is reported elsewhere.
+  const metadataProblem =
+    showDescription && title.trim()
+      ? findYouTubeMetadataProblem({ title, description })
+      : null;
 
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isConvertingShortLinks, setIsConvertingShortLinks] = useState(false);
@@ -198,6 +205,11 @@ export function ShortsPostingModal({
       return;
     }
 
+    if (metadataProblem) {
+      toast.error(metadataProblem.message);
+      return;
+    }
+
     setPostState("checking-export");
     try {
       const res = await fetch(`/api/videos/${videoId}/vertical-export-exists`);
@@ -294,6 +306,11 @@ export function ShortsPostingModal({
               onBlur={persistTitle}
               placeholder="Short title..."
             />
+            {metadataProblem?.field === "title" && (
+              <p className="text-sm text-destructive">
+                {metadataProblem.message}
+              </p>
+            )}
           </div>
 
           {showDescription && (
@@ -320,6 +337,11 @@ export function ShortsPostingModal({
                 placeholder="YouTube description..."
                 className="min-h-[80px] resize-y"
               />
+              {metadataProblem?.field === "description" && (
+                <p className="text-sm text-destructive">
+                  {metadataProblem.message}
+                </p>
+              )}
             </div>
           )}
 
@@ -349,6 +371,7 @@ export function ShortsPostingModal({
             disabled={
               (requireDescription && !description.trim()) ||
               !title.trim() ||
+              !!metadataProblem ||
               postState === "checking-export"
             }
           >
