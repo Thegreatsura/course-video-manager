@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fakeFootage } from "recorder-service/test-utils/fake-windows";
 import { connect } from "recorder-service/test-utils/service-harness";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import {
   setupClipServiceTests,
   clipService,
@@ -36,10 +36,10 @@ const setup = async (ingest?: Ingest) => {
 };
 
 describe("the recorder client", () => {
-  it("records on a New recorder Video: scene, Record, speech, Stop yields saved Clips, live", async () => {
+  it("records on a CVM recorder Video: scene, Record, speech, Stop yields saved Clips, live", async () => {
     const { windows, client } = await setup();
-    const video = await clipService.createVideo("new recorder");
-    const heard: NewRecorderMessage[] = [];
+    const video = await clipService.createVideo("CVM recorder");
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })
@@ -123,7 +123,7 @@ describe("the recorder client", () => {
     const { windows, client } = await setup();
     expect(windows.camerasRunning()).toBe(0);
 
-    const heard: NewRecorderMessage[] = [];
+    const heard: CvmRecorderMessage[] = [];
     const unsubscribe = client.subscribe("video-1", (m) => heard.push(m));
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })
@@ -148,7 +148,7 @@ describe("the recorder client", () => {
 
   it("refuses Record with the recorder's reason", async () => {
     const { client } = await setup();
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     client.subscribe(video.id, () => {});
     await vi.waitFor(() =>
       expect(
@@ -251,8 +251,8 @@ describe("the recorder client", () => {
 
   it("saves a take filmed wholly from the Stream Deck while the app server was down", async () => {
     const { windows, client, port } = await setup();
-    const video = await clipService.createVideo("new recorder");
-    const heard: NewRecorderMessage[] = [];
+    const video = await clipService.createVideo("CVM recorder");
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })
@@ -341,8 +341,8 @@ describe("the recorder client", () => {
 
   it("records from the Stream Deck with the editor's Silence Length, and the editor hears it as its own Record", async () => {
     const { client, port } = await setup();
-    const video = await clipService.createVideo("new recorder");
-    const heard: NewRecorderMessage[] = [];
+    const video = await clipService.createVideo("CVM recorder");
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })
@@ -402,7 +402,7 @@ describe("the recorder client, guarding the Stream Deck and the scene", () => {
       { commitState: "published" }
     );
     const videoId = videoIds["01-frozen/Explainer"]!;
-    const heard: NewRecorderMessage[] = [];
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(videoId, (m) => heard.push(m));
     // Said while the Video was still the Draft's (a tab left open over a Publish).
     client.setSilenceLength(videoId, "short");
@@ -426,7 +426,7 @@ describe("the recorder client, guarding the Stream Deck and the scene", () => {
   it("lets a Video chosen to record with OBS go at once: a Stream Deck Record does not record on it", async () => {
     const { client, port } = await setup();
     const video = await clipService.createVideo("switched to OBS");
-    const heard: NewRecorderMessage[] = [];
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
     client.setSilenceLength(video.id, "short");
     await vi.waitFor(() =>
@@ -452,7 +452,7 @@ describe("the recorder client, guarding the Stream Deck and the scene", () => {
     const { client } = await setup();
     const a = await clipService.createVideo("a");
     const b = await clipService.createVideo("b");
-    const heard: NewRecorderMessage[] = [];
+    const heard: CvmRecorderMessage[] = [];
     client.subscribe(a.id, (m) => heard.push(m));
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: "camera-went-live" })

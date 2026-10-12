@@ -15,7 +15,7 @@ import {
   type WriteSeed,
 } from "./cli-write-test-harness";
 
-// `cvm clip` on the effective scene: a New-recorder Clip reports its Scene
+// `cvm clip` on the effective scene: a CVM-recorder Clip reports its Scene
 // Override, effective scene and Recording Session, and Clip Zoom is judged on
 // the effective scene. An OBS Clip's effective scene is its scene.
 
@@ -53,7 +53,7 @@ const seedClips = async () => {
       micFilePath: "/rec/mic.mkv",
     })
     .returning();
-  const [newRecorder, obs] = await testDb
+  const [cvmRecorder, obs] = await testDb
     .insert(schema.clips)
     .values([
       {
@@ -78,15 +78,15 @@ const seedClips = async () => {
       },
     ])
     .returning();
-  return { videoId, session: session!, newRecorder: newRecorder!, obs: obs! };
+  return { videoId, session: session!, cvmRecorder: cvmRecorder!, obs: obs! };
 };
 
 describe("cvm clip on the effective scene", () => {
-  it("reports a New-recorder Clip's effective scene and Recording Session", async () => {
-    const { videoId, session, newRecorder, obs } = await seedClips();
+  it("reports a CVM-recorder Clip's effective scene and Recording Session", async () => {
+    const { videoId, session, cvmRecorder, obs } = await seedClips();
 
     const got = one<ClipRow>(
-      (await run(["clip", "get", newRecorder.id])).stdout
+      (await run(["clip", "get", cvmRecorder.id])).stdout
     );
     expect(got).toMatchObject({
       scene: "Code",
@@ -99,16 +99,16 @@ describe("cvm clip on the effective scene", () => {
       (await run(["clip", "list", "--video", videoId])).stdout
     ) as ClipRow[];
     expect(listed.map((c) => [c.id, c.effectiveScene])).toEqual([
-      [newRecorder.id, "Camera"],
+      [cvmRecorder.id, "Camera"],
       [obs.id, "Code"],
     ]);
   });
 
   it("judges --zoom on the effective scene", async () => {
-    const { newRecorder, obs } = await seedClips();
+    const { cvmRecorder, obs } = await seedClips();
 
     const zoomed = one<ClipRow>(
-      (await run(["clip", "update", "--zoom", "subtle", newRecorder.id])).stdout
+      (await run(["clip", "update", "--zoom", "subtle", cvmRecorder.id])).stdout
     );
     expect(zoomed.zoomType).toBe("subtle");
 

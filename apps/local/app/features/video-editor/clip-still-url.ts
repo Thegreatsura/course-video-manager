@@ -3,7 +3,7 @@ import { SCENES, type Scene } from "@/packages/scene-layout";
 const NO_OVERRIDE = "none";
 
 /**
- * The URL of a saved Clip's first- or last-frame still. A New-recorder Clip's
+ * The URL of a saved Clip's first- or last-frame still. A CVM-recorder Clip's
  * URL names the Scene Override to draw it in (or `none`), so the picture is
  * fixed by the URL, not by whether the override's save has landed yet: the
  * browser fetches the new still the moment the override changes, and a cached

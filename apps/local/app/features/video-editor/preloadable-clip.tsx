@@ -55,7 +55,7 @@ export const PreloadableClip = (props: {
   useAudioBoost(ref, PREVIEW_AUDIO_BOOST_DB);
 
   // The `<video>` below is the playback clock: an OBS Clip's Footage, or a
-  // new-recorder Clip's mic, which runs `clockOffset` behind the picture.
+  // CVM-recorder Clip's mic, which runs `clockOffset` behind the picture.
   // Every time this component keeps is the clock's own.
   const source = clipSource(props.clip);
   const clockOffset = clipPlaybackClock(source).offsetSeconds;
@@ -221,7 +221,7 @@ export const PreloadableClip = (props: {
         className={cn(
           "w-full",
           props.profile === "TikTok" && "w-92 aspect-[9/16]",
-          // A new-recorder Clip's clock is its mic: heard, drawn below.
+          // A CVM-recorder Clip's clock is its mic: heard, drawn below.
           picture && "hidden"
         )}
         // The preview half of two contracts that are never both in force: the

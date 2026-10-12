@@ -49,8 +49,8 @@ is used (the same directory the recorder writes to), falling back to ~/Videos.
 Only video files are listed (mp4/mkv/mov/webm/avi/m4v), sorted by path. The new
 recorder writes each Recording Session into a folder of its own in that directory
 (camera.mkv, screen.mkv, mic.mkv); each folder's mic.mkv is listed too, as
-"<folder>/mic.mkv". It is the file to transcribe when searching a new-recorder
-take: a new-recorder Clip's 'videoFilename' is that same mic file. Its transcript
+"<folder>/mic.mkv". It is the file to transcribe when searching a CVM-recorder
+take: a CVM-recorder Clip's 'videoFilename' is that same mic file. Its transcript
 is in the mic file's own time; a Clip's source times are that plus the session's
 mic offset (default 150 ms). Each line carries:
   path         absolute path to the file (feed straight to 'footage transcribe')

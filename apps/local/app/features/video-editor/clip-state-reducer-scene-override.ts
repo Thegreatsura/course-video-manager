@@ -9,7 +9,7 @@ type SetSceneOverride = Extract<
 >;
 
 /**
- * Set or clear a New-recorder Clip's Scene Override. The item changes at once,
+ * Set or clear a CVM-recorder Clip's Scene Override. The item changes at once,
  * so playback and stills (both derived from it) redraw before the save lands.
  * A zoom the new effective scene forbids is dropped, as the server drops it.
  * An OBS Clip, or one not saved yet, is left alone.

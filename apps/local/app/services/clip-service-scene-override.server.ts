@@ -15,7 +15,7 @@ export const OBS_CLIP_SCENE_OVERRIDE_MESSAGE =
   "An OBS Clip cannot have a Scene Override: its scene is baked into its Footage.";
 
 /**
- * Set (or, with null, clear) a New-recorder Clip's Scene Override.
+ * Set (or, with null, clear) a CVM-recorder Clip's Scene Override.
  *
  * A Clip Zoom is legal only on a camera scene, judged on the effective scene.
  * An override that leaves the Clip off a camera scene drops its zoom in the

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { canRetryCamera } from "@/features/video-editor/new-recorder-reducer";
+import { canRetryCamera } from "@/features/video-editor/cvm-recorder-reducer";
 import { cameraWaitText } from "./recorder-still-reducer";
 import { useRecorderStill } from "./use-recorder-still";
 
@@ -19,7 +19,7 @@ type RecorderCameraModalProps = {
 };
 
 /**
- * The thumbnail camera on a New recorder Video: the raw camera preview from
+ * The thumbnail camera on a CVM recorder Video: the raw camera preview from
  * the recorder service, and Capture takes a full-size still from it. The OBS
  * Video's modal (`CaptureCameraModal`, the Virtual Camera) is untouched.
  */

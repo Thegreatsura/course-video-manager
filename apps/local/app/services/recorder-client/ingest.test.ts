@@ -14,7 +14,7 @@ import { JobOperationsService } from "@cvm/core/services/db-job-operations.serve
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import { transcribeAndStoreClips } from "@/services/clip-transcription.server";
 import type { RecordingSessionEvent } from "recorder-service/protocol";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
 import {
   setupClipServiceTests,
@@ -55,7 +55,7 @@ const recorderIngest = (
     undefined
 ) => {
   const sequencer = createRecorderEventSequencer();
-  const messages: NewRecorderMessage[] = [];
+  const messages: CvmRecorderMessage[] = [];
   const replays: { afterSeq: number }[] = [];
   return {
     messages,
@@ -164,7 +164,7 @@ const readSession = () =>
 
 describe("recorder ingest", () => {
   it("tells the editor the take warmed up, for the glass, and saves nothing for it", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(started(video.id), {
@@ -182,7 +182,7 @@ describe("recorder ingest", () => {
   });
 
   it("saves the Recording Session and each take as a Clip on the mic file, in picture time", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(started(video.id), ...speech(2, 2, 5));
@@ -218,7 +218,7 @@ describe("recorder ingest", () => {
   });
 
   it("drops speech shorter than the minimum Clip length", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(started(video.id), ...speech(2, 1, 1.5));
@@ -228,7 +228,7 @@ describe("recorder ingest", () => {
   });
 
   it("places Clips at the editor's insertion point, each after the last", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const [first] = await clipService.appendClips({
       videoId: video.id,
       insertionPoint: start,
@@ -262,7 +262,7 @@ describe("recorder ingest", () => {
   });
 
   it("saves each take once, however often or out of order its events arrive", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
     const [s1, e1] = speech(2, 2, 5);
     const [s2, e2] = speech(4, 8, 10);
@@ -289,7 +289,7 @@ describe("recorder ingest", () => {
   });
 
   it("does not save a take twice when a restarted app server replays the Recording Session", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const events = [started(video.id), ...speech(2, 2, 5), stopped(4)];
 
     await recorderIngest().feed(...events);
@@ -299,7 +299,7 @@ describe("recorder ingest", () => {
   });
 
   it("saves each scene change as a row, once however often it is replayed", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const events = [
       started(video.id),
       sceneChanged(2, "Code", 0),
@@ -317,7 +317,7 @@ describe("recorder ingest", () => {
   });
 
   it("gives each Clip the scene in force at its start, in picture time", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(
@@ -341,7 +341,7 @@ describe("recorder ingest", () => {
   });
 
   it("hands the editor each saved Clip with its Recording Session, to play as the composite", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
     await ingest.feed(
       started(video.id),
@@ -366,7 +366,7 @@ describe("recorder ingest", () => {
   });
 
   it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file at mic time", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
     await ingest.feed(started(video.id), ...speech(2, 2, 5));
     const saved = ingest.messages.find((m) => m.type === "clips-saved");
@@ -426,7 +426,7 @@ describe("recorder ingest", () => {
   });
 
   it("stores the frames lost when the Recording Session stops", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(started(video.id), {
@@ -447,7 +447,7 @@ describe("recorder ingest", () => {
   });
 
   it("marks a crashed Recording Session crashed and keeps the Clips heard before the crash", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(started(video.id), ...speech(2, 2, 5), {
@@ -492,7 +492,7 @@ describe("recorder ingest", () => {
   });
 
   it("tells the editor the camera was lost", async () => {
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     const ingest = recorderIngest();
 
     await ingest.feed(
@@ -535,7 +535,7 @@ describe("recorder ingest", () => {
     ]);
   });
 
-  it("lets Record start only on a Draft Video that records with the New recorder", async () => {
+  it("lets Record start only on a Draft Video that records with the CVM recorder", async () => {
     const canRecord = (videoId: string) =>
       Effect.runPromise(
         requireRecordableVideo(testDb as never, videoId).pipe(
@@ -543,12 +543,12 @@ describe("recorder ingest", () => {
           Effect.catchAll((e) => Effect.succeed(e._tag))
         )
       );
-    const video = await clipService.createVideo("new recorder");
+    const video = await clipService.createVideo("CVM recorder");
     expect(await canRecord(video.id)).toBe("RecordOnOBSVideoError");
 
     await testDb
       .update(videos)
-      .set({ recorder: "new-recorder" })
+      .set({ recorder: "cvm" })
       .where(eq(videos.id, video.id));
     expect(await canRecord(video.id)).toBe("ok");
 
@@ -560,7 +560,7 @@ describe("recorder ingest", () => {
     const frozen = videoIds["01-frozen/Explainer"]!;
     await testDb
       .update(videos)
-      .set({ recorder: "new-recorder" })
+      .set({ recorder: "cvm" })
       .where(eq(videos.id, frozen));
     expect(await canRecord(frozen)).toBe("VersionNotDraftError");
   });

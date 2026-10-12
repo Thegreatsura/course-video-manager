@@ -37,7 +37,7 @@ export type OBSConnectionOuterState =
   OBSNotRunningState | OBSConnectedState | OBSRecordingState;
 
 /**
- * The Video records with the New recorder, so the editor leaves OBS alone:
+ * The Video records with the CVM recorder, so the editor leaves OBS alone:
  * no connection, no profile switch, no Virtual Camera. Reads as
  * `obs-not-running` outside the connector.
  */
@@ -295,7 +295,7 @@ export const obsConnectorReducer: EffectReducer<
     return { type: "obs-not-used" };
   }
 
-  // A New recorder Video ignores whatever OBS still reports.
+  // A CVM recorder Video ignores whatever OBS still reports.
   if (state.type === "obs-not-used") {
     if (action.type === "obs-connected") exec({ type: "disconnect" });
     return state;
@@ -418,7 +418,7 @@ export const useOBSConnector = (props: {
   onClipAudioWindowClosed: () => void;
   silenceLength: SilenceLength;
   targetProfile: string;
-  /** False for a New recorder Video: OBS is left alone. */
+  /** False for a CVM recorder Video: OBS is left alone. */
   usesObs: boolean;
 }) => {
   const [websocket] = useState(() => new OBSWebSocket());

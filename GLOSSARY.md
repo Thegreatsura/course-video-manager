@@ -225,11 +225,11 @@ _Avoid_: Lint warning, Lint error, Publish blocker (this never blocks a Publish)
 ### Video export and hashing
 
 **Export Hash**:
-A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. A New-recorder Clip also adds what its picture is drawn from: its **Recording Session**, the scenes in its range, its **Scene Override**, the mic offset, the **Mic EQ** and the layout version; an OBS Clip's part never changes. It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
+A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. A CVM-recorder Clip also adds what its picture is drawn from: its **Recording Session**, the scenes in its range, its **Scene Override**, the mic offset, the **Mic EQ** and the layout version; an OBS Clip's part never changes. It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
 _Avoid_: Content hash (that is an encoding of the **Byte Hash**, not of this), Video hash, Byte Hash (the recipe and the result are different things)
 
 **Mic EQ**:
-The equaliser the export applies to the mic of every New-recorder **Recording Session**, one setting for all of them: OBS's 3-band EQ gains, initially Matt's OBS mic EQ (highs down 6.1 dB). It is applied with the mic offset in the same pass that draws the picture; the raw mic **Footage** is never changed. It is part of the **Export Hash** of New-recorder Clips only, so changing it makes every New-recorder Video need a new export. Matt sets it, and a Recording Session's mic offset, from a New-recorder Clip's Mic Settings in the editor.
+The equaliser the export applies to the mic of every CVM-recorder **Recording Session**, one setting for all of them: OBS's 3-band EQ gains, initially Matt's OBS mic EQ (highs down 6.1 dB). It is applied with the mic offset in the same pass that draws the picture; the raw mic **Footage** is never changed. It is part of the **Export Hash** of CVM-recorder Clips only, so changing it makes every CVM-recorder Video need a new export. Matt sets it, and a Recording Session's mic offset, from a CVM-recorder Clip's Mic Settings in the editor.
 
 **Byte Hash**:
 The fingerprint of an **Exported Video**'s actual contents: the result, where the **Export Hash** is the recipe. It decides whether a **Video** is sent: a Video whose contents match a file the previous **Bundle** already holds is copied from there, and every other Video is uploaded. The two hashes must never be merged: the Bundle address must be known before any render, and a Byte Hash is known only after it (ADR 0027).
@@ -258,15 +258,15 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 ### Recording
 
 **Recording Session**:
-A period of time, from start to stop, during which clips are captured for one **Video**. In the editor it groups Optimistic Clips before they are saved. On a Video whose **Recorder** is the New recorder it is also stored: three **Footage** files (camera, screen and mic, on one shared clock), its scene timeline (which scene was live from each moment), its speech events, its mic offset (how much later the mic's sound is played at export, 150 ms by default), its **Silence Length** and whether it stopped cleanly or crashed. Its Clips point at it, and their picture is drawn from its files and scene timeline at export instead of being baked into the Footage. An OBS Recording Session is not stored. Getting the camera ready before a Recording Session starts is "opening the recorder for a Video", not opening a Recording Session.
+A period of time, from start to stop, during which clips are captured for one **Video**. In the editor it groups Optimistic Clips before they are saved. On a Video whose **Recorder** is the CVM recorder it is also stored: three **Footage** files (camera, screen and mic, on one shared clock), its scene timeline (which scene was live from each moment), its speech events, its mic offset (how much later the mic's sound is played at export, 150 ms by default), its **Silence Length** and whether it stopped cleanly or crashed. Its Clips point at it, and their picture is drawn from its files and scene timeline at export instead of being baked into the Footage. An OBS Recording Session is not stored. Getting the camera ready before a Recording Session starts is "opening the recorder for a Video", not opening a Recording Session.
 _Avoid_: Session, Take session, Recording (a Video's _Avoid_)
 
 **Recorder**:
-What films a **Video**, chosen per Video: **OBS** (one Footage file with the scene baked in) or the **New recorder** (CVM's own, which stores a **Recording Session** of separate camera, screen and mic Footage). A Video filmed before the choice existed uses OBS. The choice is locked once the Video has Footage.
-_Avoid_: Recording mode, Capture backend
+What films a **Video**, chosen per Video: **OBS** (one Footage file with the scene baked in) or the **CVM recorder** (CVM's own, which stores a **Recording Session** of separate camera, screen and mic Footage). A Video filmed before the choice existed uses OBS. The choice is locked once the Video has Footage.
+_Avoid_: Recording mode, Capture backend, New recorder (its old name; stored as `cvm`, formerly `new-recorder`)
 
 **Scene Override**:
-A marker on a **Clip** from a New-recorder **Recording Session** naming one scene (Camera, Code or No Face) to draw the whole Clip in, in place of the scenes that were live while it was filmed. With none, the Clip follows its Recording Session's scene timeline. An OBS Clip cannot have one: its scene is baked into its Footage.
+A marker on a **Clip** from a CVM-recorder **Recording Session** naming one scene (Camera, Code or No Face) to draw the whole Clip in, in place of the scenes that were live while it was filmed. With none, the Clip follows its Recording Session's scene timeline. An OBS Clip cannot have one: its scene is baked into its Footage.
 _Avoid_: Scene change (a live switch during a Recording Session), Layout
 
 **Silence Length**:

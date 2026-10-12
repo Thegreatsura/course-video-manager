@@ -43,20 +43,20 @@ const onDatabase = (
   });
 
 describe("getSessionClipMarks", () => {
-  describe("a New recorder take", () => {
-    const newRecorderSession = (status: "recording" | "done") =>
+  describe("a CVM recorder take", () => {
+    const cvmRecorderSession = (status: "recording" | "done") =>
       fromPartial<RecordingSession>({
         id: SESSION,
         displayNumber: 1,
         status,
-        newRecorder: true,
+        cvmRecorder: true,
       });
 
     it("shows speech long enough for a Clip as a pending mark after the landed ones, as OBS's Optimistic Clip", () => {
       expect(
         getSessionClipMarks(
           [onDatabase(1)],
-          [newRecorderSession("recording")],
+          [cvmRecorderSession("recording")],
           "long-enough-speaking-for-clip-detected"
         )
       ).toEqual(["landed", "pending"]);
@@ -67,14 +67,14 @@ describe("getSessionClipMarks", () => {
         expect(
           getSessionClipMarks(
             [onDatabase(1)],
-            [newRecorderSession("recording")],
+            [cvmRecorderSession("recording")],
             capture
           )
         ).toEqual(["landed"]);
       expect(
         getSessionClipMarks(
           [onDatabase(1)],
-          [newRecorderSession("done")],
+          [cvmRecorderSession("done")],
           "long-enough-speaking-for-clip-detected"
         )
       ).toEqual(["landed"]);

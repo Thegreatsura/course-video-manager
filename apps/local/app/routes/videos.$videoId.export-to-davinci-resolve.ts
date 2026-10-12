@@ -20,7 +20,7 @@ export const action = async (args: Route.ActionArgs) => {
       withArchived: false,
     });
 
-    // OBS-only: the editor hides it on a New recorder Video (#2011).
+    // OBS-only: the editor hides it on a CVM recorder Video (#2011).
     const refusal = davinciResolveRefusal(video);
     if (refusal) {
       return yield* Effect.die(data(refusal, { status: 409 }));

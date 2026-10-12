@@ -1,5 +1,5 @@
 import { useEffectReducer } from "use-effect-reducer";
-import { useRecorderEvents } from "@/features/video-editor/use-new-recorder";
+import { useRecorderEvents } from "@/features/video-editor/use-cvm-recorder";
 import {
   canCapture,
   createInitialRecorderStillState,

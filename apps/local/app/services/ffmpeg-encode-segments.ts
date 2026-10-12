@@ -22,7 +22,7 @@ type RunEncodeOptions = {
 };
 
 /**
- * The segmented export's encode: each Clip rendered on its own (a new-recorder
+ * The segmented export's encode: each Clip rendered on its own (a CVM-recorder
  * Clip as its composite), one after another, then the segments joined by
  * stream copy into one file — never one filter graph across Clips (see
  * `clip-segment-args.ts`). Built by `FFmpegEncodeService` over its own

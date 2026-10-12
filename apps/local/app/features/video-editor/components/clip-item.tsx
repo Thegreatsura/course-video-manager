@@ -405,7 +405,7 @@ const ClipMenuContent = (props: {
   );
   const onSetSceneOverride = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.onSetSceneOverride
+    (ctx) => ctx.cvmRecorder.onSetSceneOverride
   );
   const onAddEffectClipAt = useContextSelector(
     VideoEditorContext,
@@ -459,7 +459,7 @@ const ClipMenuContent = (props: {
           // Code scene, and a greyed-out entry on each would be noise. Until
           // the Clip is saved it applies but cannot run yet.
           clipScenePicker(clip, onSetSceneOverride),
-          // A New-recorder Clip's mic is its own file: its Recording
+          // A CVM-recorder Clip's mic is its own file: its Recording
           // Session's offset and the shared EQ are applied at export.
           !!onDatabase?.recordingSession && {
             label: "Mic Settings",

@@ -10,9 +10,9 @@ import { VideoEditorContext } from "../video-editor-context";
 import { SCENES } from "@/packages/scene-layout";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 
-/** What the New recorder is doing, in a few words. */
+/** What the CVM recorder is doing, in a few words. */
 const statusText = (
-  controls: ReturnType<typeof useNewRecorderControls>
+  controls: ReturnType<typeof useCvmRecorderControls>
 ): string => {
   const { state } = controls;
   if (state.reachable === null) return "Connecting to the recorder…";
@@ -48,14 +48,14 @@ const statusText = (
 const framesText = (count: number, picture: string) =>
   `${count} ${picture} ${count === 1 ? "frame" : "frames"}`;
 
-const useNewRecorderControls = () =>
-  useContextSelector(VideoEditorContext, (ctx) => ctx.newRecorder);
+const useCvmRecorderControls = () =>
+  useContextSelector(VideoEditorContext, (ctx) => ctx.cvmRecorder);
 
 /** Camera, Code and No Face: the one lit is the scene the recorder is in. */
 const SceneButtons = () => {
-  const controls = useNewRecorderControls();
+  const controls = useCvmRecorderControls();
   return (
-    <div className="flex items-center gap-1" data-testid="new-recorder-scenes">
+    <div className="flex items-center gap-1" data-testid="cvm-recorder-scenes">
       {SCENES.map((scene) => (
         <Button
           key={scene}
@@ -75,13 +75,13 @@ const SceneButtons = () => {
 
 /** The replug and Close-OBS messages, with Retry. */
 const CameraProblem = () => {
-  const controls = useNewRecorderControls();
+  const controls = useCvmRecorderControls();
   const { camera } = controls.state;
   if (camera.kind !== "not-starting" && camera.kind !== "busy") return null;
   return (
     <div
       className="flex items-center gap-2 text-sm text-amber-500"
-      data-testid="new-recorder-camera-problem"
+      data-testid="cvm-recorder-camera-problem"
     >
       <span>{camera.message}</span>
       <Button
@@ -99,20 +99,20 @@ const CameraProblem = () => {
 };
 
 /**
- * Record and Stop for a New recorder Video, with its Silence Length and the
+ * Record and Stop for a CVM recorder Video, with its Silence Length and the
  * scene buttons, under the live frame (`LivePreviewFrame`), which draws the
  * composite. Clips appear in the timeline as the recorder hears each take
  * end, already saved.
  */
-export const NewRecorderControls = () => {
-  const controls = useNewRecorderControls();
+export const CvmRecorderControls = () => {
+  const controls = useCvmRecorderControls();
   const { state } = controls;
   return (
     <div className="mt-2 flex flex-col items-center gap-2">
       {state.alert && (
         <div
           role="alert"
-          data-testid="new-recorder-alert"
+          data-testid="cvm-recorder-alert"
           className="flex w-full max-w-xl items-start gap-3 rounded-md border-2 border-red-600 bg-red-600/10 p-3 text-sm font-semibold text-red-700 dark:text-red-200"
         >
           <TriangleAlertIcon className="size-5 shrink-0 text-red-500" />
@@ -154,7 +154,7 @@ export const NewRecorderControls = () => {
         )}
         <span
           className="text-xs text-muted-foreground"
-          data-testid="new-recorder-status"
+          data-testid="cvm-recorder-status"
         >
           {statusText(controls)}
         </span>
@@ -164,7 +164,7 @@ export const NewRecorderControls = () => {
       {state.framesLost && (
         <p
           className={`text-xs ${state.framesLost.camera + (state.framesLost.screen ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground"}`}
-          data-testid="new-recorder-frames-lost"
+          data-testid="cvm-recorder-frames-lost"
         >
           Last recording:{" "}
           {state.framesLost.screen === null

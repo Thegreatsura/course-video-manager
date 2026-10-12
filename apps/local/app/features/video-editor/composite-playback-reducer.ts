@@ -3,7 +3,7 @@ import { sceneAt } from "@/packages/clip-source";
 import type { Scene, SceneSegment } from "@/packages/scene-layout";
 
 /**
- * Editor playback of a new-recorder Clip: its mic plays as the clock (the
+ * Editor playback of a CVM-recorder Clip: its mic plays as the clock (the
  * `<video>` every Clip already has), and its camera and screen files play
  * along, muted, in the picture's clock — the mic offset after the mic — to be
  * drawn on a canvas in the scene of the moment.

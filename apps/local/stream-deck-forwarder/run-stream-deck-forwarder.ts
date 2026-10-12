@@ -26,7 +26,7 @@ export const DEFAULT_HTTP_PORT = 5174;
  *     client, so producers like the browser link-capture extension can reach
  *     the Video Editor over the same hub.
  *
- * The New recorder's buttons (`STREAM_DECK_RECORDER_PRESSES`) skip the hub:
+ * The CVM recorder's buttons (`STREAM_DECK_RECORDER_PRESSES`) skip the hub:
  * each press is sent to the recorder service, which acts on it.
  *
  * Ports are injectable so this can be started on ephemeral ports in tests.

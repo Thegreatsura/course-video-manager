@@ -176,7 +176,7 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       }
 
       case "unarchive-clips": {
-        // One Video never mixes OBS and new-recorder Clips: once the Recorder
+        // One Video never mixes OBS and CVM-recorder Clips: once the Recorder
         // switched (every Clip archived), the other Recorder's Clips stay
         // archived. Checked for the whole batch before any write.
         if (event.clipIds.length > 0) {

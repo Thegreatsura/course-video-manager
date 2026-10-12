@@ -6,7 +6,7 @@ import {
   MINIMUM_CLIP_LENGTH_SECONDS,
   type SilenceLength,
 } from "@/silence-detection-constants";
-import { savedItemBefore } from "./clip-state-reducer-new-recorder";
+import { savedItemBefore } from "./clip-state-reducer-cvm-recorder";
 import type {
   ClipReducerAction,
   ClipReducerState,
@@ -18,17 +18,17 @@ import {
   canRetryCamera,
   canStop,
   canSwitchScene,
-  createInitialNewRecorderState,
-  newRecorderReducer,
-} from "./new-recorder-reducer";
+  createInitialCvmRecorderState,
+  cvmRecorderReducer,
+} from "./cvm-recorder-reducer";
 import {
-  NEW_RECORDER_MESSAGE_TYPES,
-  type NewRecorderMessage,
-} from "./new-recorder-wire";
+  CVM_RECORDER_MESSAGE_TYPES,
+  type CvmRecorderMessage,
+} from "./cvm-recorder-wire";
 
-/** What the editor's New recorder controls show and do. */
-export type NewRecorderControls = {
-  state: newRecorderReducer.State;
+/** What the editor's CVM recorder controls show and do. */
+export type CvmRecorderControls = {
+  state: cvmRecorderReducer.State;
   canRecord: boolean;
   canStop: boolean;
   canRetryCamera: boolean;
@@ -38,9 +38,9 @@ export type NewRecorderControls = {
   onStop: () => void;
   onDismissAlert: () => void;
   onRetryCamera: () => void;
-  /** Set (or, with null, clear) a saved New-recorder Clip's Scene Override. */
+  /** Set (or, with null, clear) a saved CVM-recorder Clip's Scene Override. */
   onSetSceneOverride: (clipId: FrontendId, sceneOverride: Scene | null) => void;
-  /** The Mic Settings dialog was saved on a New-recorder Clip. */
+  /** The Mic Settings dialog was saved on a CVM-recorder Clip. */
   onSubmitMicSettings: (
     clipId: FrontendId,
     settings: { micOffsetMs: number; micEq: MicEq }
@@ -58,24 +58,24 @@ const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 /**
- * Hears a Video's `NewRecorderMessage`s from `GET /api/videos/:id/recorder/
+ * Hears a Video's `CvmRecorderMessage`s from `GET /api/videos/:id/recorder/
  * events` while `enabled`. Listening is what opens the recorder (and the Cam
- * Link) for that Video, so only a New recorder Video may listen. The editor
+ * Link) for that Video, so only a CVM recorder Video may listen. The editor
  * and the thumbnail camera both listen through here.
  */
 export const useRecorderEvents = (
   videoId: string,
   enabled: boolean,
-  onMessage: (message: NewRecorderMessage) => void
+  onMessage: (message: CvmRecorderMessage) => void
 ) => {
   const listener = useRef(onMessage);
   listener.current = onMessage;
   useEffect(() => {
     if (!enabled) return;
     const source = new EventSource(`/api/videos/${videoId}/recorder/events`);
-    for (const type of NEW_RECORDER_MESSAGE_TYPES) {
+    for (const type of CVM_RECORDER_MESSAGE_TYPES) {
       source.addEventListener(type, (event) => {
-        listener.current(JSON.parse(event.data) as NewRecorderMessage);
+        listener.current(JSON.parse(event.data) as CvmRecorderMessage);
       });
     }
     return () => source.close();
@@ -83,24 +83,24 @@ export const useRecorderEvents = (
 };
 
 /**
- * The effect runner for `newRecorderReducer`, and the bridge from the app
+ * The effect runner for `cvmRecorderReducer`, and the bridge from the app
  * server's recorder events (`GET /api/videos/:id/recorder/events`) into it
- * and into the clip reducer. Listens only on a New recorder Video, and its
+ * and into the clip reducer. Listens only on a CVM recorder Video, and its
  * listening is what opens the recorder (and the Cam Link) for that Video:
  * an OBS Video never opens it.
  */
-export const useNewRecorder = (o: {
+export const useCvmRecorder = (o: {
   videoId: string;
   enabled: boolean;
   silenceLength: SilenceLength;
   clipStateRef: RefObject<ClipReducerState>;
   clipDispatch: (action: ClipReducerAction) => void;
   micOffsetRefusal: MicOffsetRefusal | null;
-}): NewRecorderControls => {
+}): CvmRecorderControls => {
   const { videoId } = o;
   const [state, dispatch] = useEffectReducer(
-    newRecorderReducer,
-    createInitialNewRecorderState,
+    cvmRecorderReducer,
+    createInitialCvmRecorderState,
     {
       "start-recording": (_state, effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/record`, {
@@ -190,7 +190,7 @@ export const useNewRecorder = (o: {
   useRecorderEvents(videoId, o.enabled, (message) => {
     dispatch({ type: "recorder-message-heard", message });
     o.clipDispatch({
-      type: "new-recorder-message-heard",
+      type: "cvm-recorder-message-heard",
       message,
       receivedAt: Date.now(),
     });

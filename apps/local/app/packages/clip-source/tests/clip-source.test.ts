@@ -87,9 +87,9 @@ describe("an OBS Clip's source", () => {
 
 const SESSION_DIR = "/mnt/d/obs-recordings/2026-10-11T09-00-00 abcd1234";
 
-const newRecorderClip = {
+const cvmRecorderClip = {
   ...obsClip,
-  // A new-recorder Clip's Footage path is its mic file; its range is in the
+  // A CVM-recorder Clip's Footage path is its mic file; its range is in the
   // picture's clock.
   videoFilename: `${SESSION_DIR}/mic.mkv`,
   sourceStartTime: 10,
@@ -110,8 +110,8 @@ const newRecorderClip = {
   },
 };
 
-describe("a new-recorder Clip's source", () => {
-  const source = clipSource(newRecorderClip);
+describe("a CVM-recorder Clip's source", () => {
+  const source = clipSource(cvmRecorderClip);
 
   it("is its Recording Session's files, scene segments and mic offset", () => {
     expect(source).toEqual({
@@ -155,8 +155,8 @@ describe("a new-recorder Clip's source", () => {
     });
     const micEq = { lowDb: 1, midDb: 0, highDb: 0 };
     const saved = clipSource({
-      ...newRecorderClip,
-      recordingSession: { ...newRecorderClip.recordingSession, micEq },
+      ...cvmRecorderClip,
+      recordingSession: { ...cvmRecorderClip.recordingSession, micEq },
     });
     expect(clipComposite(saved)?.eq).toEqual(micEq);
   });
@@ -190,7 +190,7 @@ describe("a new-recorder Clip's source", () => {
 
   it("is drawn in its Scene Override for its whole length", () => {
     const overridden = clipSource({
-      ...newRecorderClip,
+      ...cvmRecorderClip,
       sceneOverride: "No Face",
     });
     expect(
@@ -218,7 +218,7 @@ describe("a new-recorder Clip's source", () => {
     // Picture 0.05–4.05 is mic −0.1–3.95: the mic is silent for its first
     // 0.1 s, so it is read from 0 and the Clip's 4 s still stand.
     const early = clipSource({
-      ...newRecorderClip,
+      ...cvmRecorderClip,
       sourceStartTime: 0.05,
       sourceEndTime: 4.05,
     });

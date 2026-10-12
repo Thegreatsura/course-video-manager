@@ -9,7 +9,7 @@ import { SCENES } from "@/packages/scene-layout";
 
 /**
  * A `ClipFrame` from `@/packages/clip-source`: the picker never names a file.
- * A new-recorder Clip's is a composite, drawn from its screen and camera.
+ * A CVM-recorder Clip's is a composite, drawn from its screen and camera.
  */
 const RequestSchema = Schema.Union(
   Schema.Struct({

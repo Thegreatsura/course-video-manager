@@ -39,16 +39,16 @@ describe("the OBS connector and the Video's Recorder", () => {
     });
   });
 
-  it("a New recorder Video never connects to OBS and ignores what it reports", () => {
-    const newRecorder = start(false);
-    expect(newRecorder.effects).toEqual([]);
-    newRecorder.send({ type: "connection-closed" });
-    newRecorder.send({ type: "recording-started", outputPath: "/a.mkv" });
-    expect(newRecorder.state()).toEqual({ type: "obs-not-used" });
-    expect(newRecorder.effects).toEqual([]);
+  it("a CVM recorder Video never connects to OBS and ignores what it reports", () => {
+    const cvmRecorder = start(false);
+    expect(cvmRecorder.effects).toEqual([]);
+    cvmRecorder.send({ type: "connection-closed" });
+    cvmRecorder.send({ type: "recording-started", outputPath: "/a.mkv" });
+    expect(cvmRecorder.state()).toEqual({ type: "obs-not-used" });
+    expect(cvmRecorder.effects).toEqual([]);
   });
 
-  it("switching a connected Video to the New recorder disconnects OBS, and back reconnects", () => {
+  it("switching a connected Video to the CVM recorder disconnects OBS, and back reconnects", () => {
     const video = start(true);
     video.send(connected);
     video.effects.length = 0;
@@ -62,7 +62,7 @@ describe("the OBS connector and the Video's Recorder", () => {
     expect(video.effects).toEqual([{ type: "attempt-to-connect" }]);
   });
 
-  it("a connection that lands after switching to the New recorder is dropped", () => {
+  it("a connection that lands after switching to the CVM recorder is dropped", () => {
     const video = start(true);
     video.send({ type: "video-recorder-changed", usesObs: false });
     video.effects.length = 0;

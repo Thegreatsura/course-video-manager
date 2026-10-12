@@ -134,7 +134,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
               const duration = clipExportDurationInSeconds(input);
               return {
                 ...input,
-                // A new-recorder Clip's picture is drawn from its Recording
+                // A CVM-recorder Clip's picture is drawn from its Recording
                 // Session, over everything it outputs (long Pause included).
                 composite: clipComposite(source, { durationSeconds: duration }),
               };
@@ -143,7 +143,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // subtitle/CTA overlay below is rendered at 1080x1920 to match.
             const dimensions = VIDEO_FORMAT_DIMENSIONS.short;
             const concatExtras = { onLog: logCliOutput("concat") };
-            // As the export does: a Video with any new-recorder Clip is
+            // As the export does: a Video with any CVM-recorder Clip is
             // rendered Clip by Clip, each one's composite on its own.
             const rawConcatenatedPath = renderClips.some((c) => c.composite)
               ? yield* ffmpegEncode.concatenateClipSegments(

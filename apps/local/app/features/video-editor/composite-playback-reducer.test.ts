@@ -7,7 +7,7 @@ import {
 } from "./composite-playback-reducer";
 
 /**
- * A new-recorder Clip from 10 s to 14 s of picture time, Code until 12 s and
+ * A CVM-recorder Clip from 10 s to 14 s of picture time, Code until 12 s and
  * Camera after, with a 150 ms mic offset: its mic (the clock) plays from
  * 9.85 s.
  */
@@ -48,7 +48,7 @@ const ticked = (clockTime: number, sources = { camera: 0, screen: 0 }) =>
     },
   }) as const;
 
-describe("playing a new-recorder Clip as the composite", () => {
+describe("playing a CVM-recorder Clip as the composite", () => {
   it("plays the camera and screen in the picture's clock, the mic offset after the mic", () => {
     const t = start().send({ type: "clock-played", clockTime: 9.85, rate: 1 });
     expect(t.effects).toEqual([{ type: "play-sources", at: 10, rate: 1 }]);

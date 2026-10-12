@@ -12,7 +12,7 @@ import type { FramesLost } from "recorder-service/protocol";
  * the recorder service's events about this Video's Recording Sessions, after
  * the app server has saved what they mean, and the recorder's status.
  */
-export type NewRecorderMessage =
+export type CvmRecorderMessage =
   | {
       /** Sent first, and whenever the recorder service comes or goes. */
       type: "recorder-status";
@@ -95,7 +95,7 @@ export type NewRecorderMessage =
       message: string;
     };
 
-export const NEW_RECORDER_MESSAGE_TYPES = [
+export const CVM_RECORDER_MESSAGE_TYPES = [
   "recorder-status",
   "camera-opening",
   "camera-went-live",
@@ -111,7 +111,7 @@ export const NEW_RECORDER_MESSAGE_TYPES = [
   "camera-lost",
   "recording-stopped",
   "recorder-failed",
-] as const satisfies readonly NewRecorderMessage["type"][];
+] as const satisfies readonly CvmRecorderMessage["type"][];
 
 /** What the editor sends with Record. */
 export type StartRecordingRequest = {

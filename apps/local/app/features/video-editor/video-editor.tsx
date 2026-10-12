@@ -80,7 +80,7 @@ export const VideoEditor = (props: {
   anyClipsMissingTranscriptWords: boolean;
   obsConnectorState: OBSConnectionOuterState;
   recorderChoice: ReturnType<typeof useRecorderChoice>;
-  newRecorder: VideoEditorContextType["newRecorder"];
+  cvmRecorder: VideoEditorContextType["cvmRecorder"];
   items: TimelineItem[];
   sessions: RecordingSession[];
   videoTitle: string;
@@ -266,7 +266,7 @@ export const VideoEditor = (props: {
 
   const hasLivePreview = getHasLivePreview(
     props.liveMediaStream,
-    props.newRecorder.state
+    props.cvmRecorder.state
   );
   const showVideoPlayer = getShowVideoPlayer(
     state.runningState,
@@ -448,7 +448,7 @@ export const VideoEditor = (props: {
         props.recorderChoice,
         isRecorderLocked(props.obsConnectorState, props.items, props.sessions)
       ),
-      newRecorder: props.newRecorder,
+      cvmRecorder: props.cvmRecorder,
       liveMediaStream: props.liveMediaStream,
       speechDetectorState: props.speechDetectorState,
       silenceLength: props.silenceLength,

@@ -7,7 +7,7 @@ import {
   type RecorderMessage,
   type RecorderState,
 } from "recorder-service/protocol";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
@@ -31,7 +31,7 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
  * again after that.
  *
  * An editor listening is what keeps the recorder open: the first editor on a
- * New recorder Video opens the recorder for it (which opens the Cam Link and
+ * CVM recorder Video opens the recorder for it (which opens the Cam Link and
  * the previews), and once the last editor has gone, for longer than a page
  * reload takes, the recorder closes and lets the camera go. Several Videos
  * listening: the one most recently opened has it. A recording is never
@@ -95,7 +95,7 @@ export type RecorderClientOptions = {
 const cameraMessage = (
   state: RecorderState,
   videoId: string
-): NewRecorderMessage | undefined => {
+): CvmRecorderMessage | undefined => {
   if (state.kind === "recording" && state.videoId === videoId) return undefined;
   if (state.kind !== "open" || state.videoId !== videoId)
     return { type: "camera-closed" };
@@ -116,12 +116,12 @@ const cameraMessage = (
 const sceneMessage = (
   state: RecorderState,
   videoId: string
-): NewRecorderMessage | undefined =>
+): CvmRecorderMessage | undefined =>
   state.kind !== "closed" && state.videoId === videoId
     ? { type: "scene-changed", scene: state.scene }
     : undefined;
 
-type Listener = (message: NewRecorderMessage) => void;
+type Listener = (message: CvmRecorderMessage) => void;
 
 type Waiter = {
   command: RecorderCommand["type"];
@@ -158,10 +158,10 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   };
   const still = `${http}${STILL_PATH}`;
 
-  const publish = (videoId: string, message: NewRecorderMessage) => {
+  const publish = (videoId: string, message: CvmRecorderMessage) => {
     for (const listener of listeners.get(videoId) ?? []) listener(message);
   };
-  const statusFor = (videoId: string): NewRecorderMessage => ({
+  const statusFor = (videoId: string): CvmRecorderMessage => ({
     type: "recorder-status",
     reachable,
     problem,

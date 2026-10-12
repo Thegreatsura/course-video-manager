@@ -11,6 +11,7 @@ import { Effect } from "effect";
 import type { VideoFormat } from "../features/videos/video-format.js";
 import {
   recordersForFormat,
+  resolveVideoRecorder,
   type VideoRecorder,
 } from "../features/videos/recorder.js";
 import {
@@ -320,7 +321,9 @@ export const createVideoWriteOps = (db: Database) => {
     // OBS (null), so `video.recorder` never holds a Recorder the format bars.
     const recorder =
       current.recorder &&
-      !recordersForFormat(opts.format).includes(current.recorder)
+      !recordersForFormat(opts.format).includes(
+        resolveVideoRecorder(current.recorder)
+      )
         ? null
         : current.recorder;
     const [updated] = yield* makeDbCall(() =>
@@ -349,7 +352,7 @@ export const createVideoWriteOps = (db: Database) => {
   /**
    * Choose the Recorder a Video records with. Refused once the Video has a
    * live (non-archived) Clip, and while one of its Recording Sessions is
-   * still recording, so one Video never mixes OBS and new-recorder Clips; and
+   * still recording, so one Video never mixes OBS and CVM-recorder Clips; and
    * for a format that cannot record with it (Shorts are OBS only). A Video
    * whose Clips are all archived counts as having no Footage, so it unlocks.
    */

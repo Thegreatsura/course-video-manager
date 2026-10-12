@@ -7,10 +7,10 @@ import {
   type DatabaseId,
   type FrontendId,
 } from "./clip-state-reducer";
-import type { NewRecorderMessage } from "./new-recorder-wire";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 
 /**
- * The clip reducer on a New recorder Video: the app server's messages arrive
+ * The clip reducer on a CVM recorder Video: the app server's messages arrive
  * as facts, and the Clips shown are the saved Clips, where they were saved.
  */
 
@@ -24,7 +24,7 @@ const saved = (id: string): ClipOnDatabase =>
   });
 
 type SavedClip = Extract<
-  NewRecorderMessage,
+  CvmRecorderMessage,
   { type: "clips-saved" }
 >["clips"][number];
 
@@ -40,9 +40,9 @@ const dbClip = (id: string): SavedClip =>
     transcriptionStatus: "queued",
   });
 
-const heard = (message: NewRecorderMessage) =>
+const heard = (message: CvmRecorderMessage) =>
   ({
-    type: "new-recorder-message-heard",
+    type: "cvm-recorder-message-heard",
     message,
     receivedAt: 1_000,
   }) as const;
@@ -66,7 +66,7 @@ const recorderStatus = (recordingSessionId: string | null) =>
 
 const clipsSaved = (
   ids: string[],
-  placedAt: Extract<NewRecorderMessage, { type: "clips-saved" }>["placedAt"]
+  placedAt: Extract<CvmRecorderMessage, { type: "clips-saved" }>["placedAt"]
 ) =>
   heard({
     type: "clips-saved",
@@ -94,7 +94,7 @@ const databaseIds = (t: ReturnType<typeof tester>) =>
     .getState()
     .items.map((i) => (i.type === "on-database" ? i.databaseId : i.type));
 
-describe("clip reducer on a New recorder Video", () => {
+describe("clip reducer on a CVM recorder Video", () => {
   it("shows each saved Clip as it arrives, with no Optimistic Clip and no polling", () => {
     const t = tester([saved("a")]);
 
@@ -125,7 +125,7 @@ describe("clip reducer on a New recorder Video", () => {
       c1: { jobId: "job-1", started: false },
     });
     expect(state.sessions).toMatchObject([
-      { id: SESSION, status: "done", newRecorder: true },
+      { id: SESSION, status: "done", cvmRecorder: true },
     ]);
     // The app server enqueued the transcription; the editor asks for nothing
     // but that the recorder place Clips at its insertion point.
@@ -187,7 +187,7 @@ describe("clip reducer on a New recorder Video", () => {
 
     // It holds the take, and puts the server's next Clip at its own point.
     expect(t.getState().sessions).toMatchObject([
-      { id: SESSION, status: "recording", newRecorder: true },
+      { id: SESSION, status: "recording", cvmRecorder: true },
     ]);
     expect(t.getEffects()).toEqual([
       {

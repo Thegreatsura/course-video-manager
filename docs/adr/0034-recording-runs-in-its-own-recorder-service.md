@@ -4,6 +4,8 @@ status: accepted
 
 # Recording runs in its own recorder service
 
+> **Note (renamed):** the "new recorder" this ADR describes is now the **CVM recorder**, stored as `video.recorder = 'cvm'` (#1993). The wording below is kept as decided.
+
 Today OBS records every **Video**, and the app reads the file it writes. The new recorder (PRD #1994, decisions in #1993) replaces OBS for Videos that choose it: ffmpeg.exe 8.0.1 on Windows records the camera, the screen and the mic as three files for one **Recording Session**, on one shared clock. Something has to start those ffmpeg processes, hold them while a Recording Session runs, read their silence detection, and stop them cleanly. This ADR records where that runs.
 
 ## Decision

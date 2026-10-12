@@ -21,7 +21,7 @@ export type StreamDeckForwarderMessage = z.infer<
 >;
 
 /**
- * The New recorder's buttons: each HTTP path, and the press the forwarder
+ * The CVM recorder's buttons: each HTTP path, and the press the forwarder
  * passes on to the recorder service (not to the hub, so an editor on an OBS
  * Video never hears them). The service acts on whichever Video the recorder
  * is open for; the editor follows its events. OBS Videos keep Elgato's OBS

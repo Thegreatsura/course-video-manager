@@ -9,8 +9,8 @@
 // Two answers, behind the same functions: a single Footage file with a start
 // and end time (an OBS Clip), or a Recording Session's camera, screen and mic
 // files with the scene segments the layout module draws and the mic offset (a
-// new-recorder Clip, when the row is loaded with its `recordingSession`).
-// `clipComposite` says what the export draws for a new-recorder Clip.
+// CVM-recorder Clip, when the row is loaded with its `recordingSession`).
+// `clipComposite` says what the export draws for a CVM-recorder Clip.
 export {
   clipComposite,
   clipCompositePicture,

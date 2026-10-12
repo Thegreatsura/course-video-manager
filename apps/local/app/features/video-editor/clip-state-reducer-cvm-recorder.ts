@@ -17,15 +17,15 @@ import { createFrontendId } from "./clip-state-reducer.types";
 import { insertAtPoint } from "./insert-at-point";
 
 /**
- * The clip reducer's half of a New recorder Video. The app server saves the
+ * The clip reducer's half of a CVM recorder Video. The app server saves the
  * Clips (speech the recorder heard, `recorder-client/`) and tells the editor;
  * the Clip shown is the saved Clip, placed where the server placed it. No
  * Optimistic Clip, no pairing, no polling.
  */
 
-type NewRecorderAction = Extract<
+type CvmRecorderAction = Extract<
   ClipReducerAction,
-  { type: "new-recorder-message-heard" }
+  { type: "cvm-recorder-message-heard" }
 >;
 
 /** The editor item a saved item's id names, as an insertion point after it. */
@@ -82,9 +82,9 @@ export const savedItemBefore = (state: ClipReducerState): InsertionPoint => {
 const samePoint = (a: InsertionPoint, b: InsertionPoint) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-export const handleNewRecorderMessage = (
+export const handleCvmRecorderMessage = (
   state: ClipReducerState,
-  action: NewRecorderAction,
+  action: CvmRecorderAction,
   exec: ClipReducerExec
 ): ClipReducerState => {
   const message = action.message;
@@ -111,7 +111,7 @@ export const handleNewRecorderMessage = (
             outputPath: message.micFile,
             startedAt: action.receivedAt,
             silenceLength: message.silenceLength,
-            newRecorder: true,
+            cvmRecorder: true,
           },
         ],
       };
@@ -202,13 +202,13 @@ export const handleNewRecorderMessage = (
  */
 const joinRecordingInProgress = (
   state: ClipReducerState,
-  action: NewRecorderAction,
-  message: Extract<NewRecorderAction["message"], { type: "recorder-status" }>,
+  action: CvmRecorderAction,
+  message: Extract<CvmRecorderAction["message"], { type: "recorder-status" }>,
   exec: ClipReducerExec
 ): ClipReducerState => {
   const recording = message.recordingSessionId as SessionId | null;
   const sessions = state.sessions.map((s) =>
-    s.newRecorder && s.status === "recording" && s.id !== recording
+    s.cvmRecorder && s.status === "recording" && s.id !== recording
       ? { ...s, status: "done" as const }
       : s
   );
@@ -232,7 +232,7 @@ const joinRecordingInProgress = (
         displayNumber: Math.max(0, ...sessions.map((s) => s.displayNumber)) + 1,
         status: "recording",
         startedAt: action.receivedAt,
-        newRecorder: true,
+        cvmRecorder: true,
       },
     ],
   };
@@ -240,7 +240,7 @@ const joinRecordingInProgress = (
 
 /**
  * The saved item the editor's insertion point comes after changed while a
- * New recorder Recording Session records: the app server must place the
+ * CVM recorder Recording Session records: the app server must place the
  * next Clip there too. That includes a chapter added there being saved (a
  * Stream Deck "add chapter" mid-recording), which moves no insertion point.
  */
@@ -250,20 +250,20 @@ export const tellRecorderOfInsertionPoint = (
   action: ClipReducerAction,
   exec: ClipReducerExec
 ) => {
-  if (action.type === "new-recorder-message-heard") return;
+  if (action.type === "cvm-recorder-message-heard") return;
   const point = recorderInsertionPoint(after);
   if (!point || (before && samePoint(before, point))) return;
   exec({ type: "send-recorder-insertion-point", insertionPoint: point });
 };
 
 /**
- * Where the editor wants the recorder's next Clip, while a New recorder
+ * Where the editor wants the recorder's next Clip, while a CVM recorder
  * Recording Session records; null otherwise. Read before an action is
  * reduced: some reducers change items in place.
  */
 export const recorderInsertionPoint = (
   state: ClipReducerState
 ): InsertionPoint | null =>
-  state.sessions.some((s) => s.newRecorder && s.status === "recording")
+  state.sessions.some((s) => s.cvmRecorder && s.status === "recording")
     ? savedItemBefore(state)
     : null;

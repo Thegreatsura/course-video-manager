@@ -13,8 +13,8 @@ import { sortByOrder } from "../lib/sort-by-order.js";
 import {
   effectiveScenesOf,
   recordingSessionRowCounts,
-  seedNewRecorderClip,
-} from "../test-utils/new-recorder-clip.js";
+  seedCvmRecorderClip,
+} from "../test-utils/cvm-recorder-clip.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<CourseOperationsService>;
@@ -528,9 +528,9 @@ describe("duplicateCourse", () => {
     expect(newVideo!.lineageId).toBe(mapping!.newLineageId);
   });
 
-  it("carries a new-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
+  it("carries a CVM-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
     const { course, video } = await createFullCourseStructure();
-    await seedNewRecorderClip(testDb, video.id);
+    await seedCvmRecorderClip(testDb, video.id);
     const before = await recordingSessionRowCounts(testDb);
 
     const result = await run(

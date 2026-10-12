@@ -34,7 +34,7 @@ describe("Recording Session schema", () => {
     const video = await seedVideo();
     await testDb
       .update(schema.videos)
-      .set({ recorder: "new-recorder" })
+      .set({ recorder: "cvm" })
       .where(eq(schema.videos.id, video.id));
 
     const [session] = await testDb
@@ -71,9 +71,7 @@ describe("Recording Session schema", () => {
       },
     });
 
-    expect(resolveVideoRecorder(readBack!.video!.recorder)).toBe(
-      "new-recorder"
-    );
+    expect(resolveVideoRecorder(readBack!.video!.recorder)).toBe("cvm");
     expect(readBack).toMatchObject({
       micOffsetMs: DEFAULT_MIC_OFFSET_MS,
       status: "recording",

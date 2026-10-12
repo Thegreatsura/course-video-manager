@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RecorderCommand } from "recorder-service/protocol";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import { clock, connect } from "recorder-service/test-utils/service-harness";
 import {
   setupClipServiceTests,
@@ -130,7 +130,7 @@ describe("the recorder client, cut off mid-take", () => {
         [6, "Camera"],
       ]);
       // An editor opening now (a reload) hears the take and its scene.
-      const late: NewRecorderMessage[] = [];
+      const late: CvmRecorderMessage[] = [];
       client.subscribe(video.id, (m) => late.push(m));
       expect(late).toEqual([
         expect.objectContaining({

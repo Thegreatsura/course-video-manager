@@ -96,7 +96,7 @@ describe("stream deck forwarder hub", () => {
     sender.close();
   });
 
-  it("passes the New recorder's buttons to the recorder service, not the hub; the editor's buttons still go to the hub", async () => {
+  it("passes the CVM recorder's buttons to the recorder service, not the hub; the editor's buttons still go to the hub", async () => {
     const recorder = await startRecorder();
     const hub = await startHub(recorder.url);
     const editor = await openClient(hub.port);

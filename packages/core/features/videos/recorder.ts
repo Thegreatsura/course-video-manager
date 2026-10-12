@@ -3,40 +3,59 @@
  *
  * - `obs` — OBS records one file with the scene baked in, and the editor makes
  *   Clips from it as it always has.
- * - `new-recorder` — CVM's own recorder writes a Recording Session: camera,
+ * - `cvm` — CVM's own recorder writes a Recording Session: camera,
  *   screen and mic as three Footage files plus a scene timeline, so the
  *   picture is drawn at export and a Clip can carry a Scene Override.
  *
  * Every Video filmed before the choice existed has a null column, which reads
  * as OBS.
  */
-export const VIDEO_RECORDERS = ["obs", "new-recorder"] as const;
+export const VIDEO_RECORDERS = ["obs", "cvm"] as const;
 
 export type VideoRecorder = (typeof VIDEO_RECORDERS)[number];
 
 export const DEFAULT_VIDEO_RECORDER: VideoRecorder = "obs";
 
+/**
+ * The CVM recorder's old stored value, from when it was called the "New
+ * recorder" (#1993). Migration 0033 rewrites it to `cvm`; until every
+ * database and browser has caught up, it is still read as the CVM recorder.
+ */
+export const LEGACY_CVM_RECORDER_VALUE = "new-recorder";
+
+/**
+ * A stored Recorder (`video.recorder`, a remembered choice) as a
+ * {@link VideoRecorder}, or null when it names none. The legacy
+ * `new-recorder` reads as `cvm`.
+ */
+export function parseVideoRecorder(
+  recorder: string | null | undefined
+): VideoRecorder | null {
+  if (recorder === LEGACY_CVM_RECORDER_VALUE) return "cvm";
+  return (VIDEO_RECORDERS as readonly string[]).includes(recorder ?? "")
+    ? (recorder as VideoRecorder)
+    : null;
+}
+
 /** Read `video.recorder`: null (or anything unknown) is OBS. */
 export function resolveVideoRecorder(
   recorder: string | null | undefined
 ): VideoRecorder {
-  return (VIDEO_RECORDERS as readonly string[]).includes(recorder ?? "")
-    ? (recorder as VideoRecorder)
-    : DEFAULT_VIDEO_RECORDER;
+  return parseVideoRecorder(recorder) ?? DEFAULT_VIDEO_RECORDER;
 }
 
-/** The Recorder a Clip was filmed with: a Recording Session means the New recorder. */
+/** The Recorder a Clip was filmed with: a Recording Session means the CVM recorder. */
 export function clipRecorder(clip: {
   readonly recordingSessionId: string | null;
 }): VideoRecorder {
-  return clip.recordingSessionId !== null ? "new-recorder" : "obs";
+  return clip.recordingSessionId !== null ? "cvm" : "obs";
 }
 
 /**
  * Why an archived Clip may not be restored onto its Video, or null when it
  * may. Archiving every Clip unlocks the Video's Recorder; once it has
  * switched, restoring a Clip filmed with the other Recorder would mix OBS
- * and new-recorder Clips on one Video, so it is refused.
+ * and CVM-recorder Clips on one Video, so it is refused.
  */
 export function clipRestoreRefusal(
   videoRecorder: string | null,
@@ -46,7 +65,7 @@ export function clipRestoreRefusal(
   const filmed = clipRecorder(clip);
   if (video === filmed) return null;
   const label = (r: VideoRecorder) =>
-    r === "obs" ? "OBS" : "the New recorder";
+    r === "obs" ? "OBS" : "the CVM recorder";
   return `This Clip was filmed with ${label(filmed)}, but the Video now records with ${label(video)}. Switch the Recorder back to restore it.`;
 }
 
@@ -56,7 +75,7 @@ export function clipRestoreRefusal(
  * treating it as a fatal error.
  */
 export function isClipRestoreRefusal(message: string): boolean {
-  return (["obs", "new-recorder"] as const).some(
+  return (["obs", "cvm"] as const).some(
     (videoRecorder) =>
       message ===
       clipRestoreRefusal(videoRecorder, {
@@ -68,9 +87,9 @@ export function isClipRestoreRefusal(message: string): boolean {
 /**
  * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
  * The export hands DaVinci one Footage file per Clip, so it stays OBS-only: a
- * new-recorder Clip's picture is a composite of three files (#2011; Matt
- * never uses this export). The editor hides it on a New recorder Video; this
- * also covers an OBS Video a new-recorder Clip was moved or copied onto.
+ * CVM-recorder Clip's picture is a composite of three files (#2011; Matt
+ * never uses this export). The editor hides it on a CVM recorder Video; this
+ * also covers an OBS Video a CVM-recorder Clip was moved or copied onto.
  */
 export function davinciResolveRefusal(video: {
   readonly recorder: string | null;
@@ -78,10 +97,10 @@ export function davinciResolveRefusal(video: {
 }): string | null {
   const only = "Export to DaVinci Resolve works on OBS Videos only";
   if (resolveVideoRecorder(video.recorder) !== "obs") {
-    return `${only}: this Video records with the New recorder.`;
+    return `${only}: this Video records with the CVM recorder.`;
   }
   if (video.clips.some((clip) => clip.recordingSessionId !== null)) {
-    return `${only}: this Video holds new-recorder Clips.`;
+    return `${only}: this Video holds CVM-recorder Clips.`;
   }
   return null;
 }
@@ -113,7 +132,7 @@ export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
 /**
  * The mic offset a new Recording Session gets, in ms: the mic's sound is
  * shifted later by this much at export. 150 ms matches the sync offset OBS
- * applies to the same mic, which the new recorder's raw files do not carry.
+ * applies to the same mic, which the CVM recorder's raw files do not carry.
  */
 export const DEFAULT_MIC_OFFSET_MS = 150;
 
@@ -141,7 +160,7 @@ export const DEFAULT_MIC_EQ: MicEq = { lowDb: 0, midDb: 0, highDb: -6.1 };
 /**
  * The one saved Mic EQ Setting every Recording Session is exported with
  * (`recording_session.mic_eq_setting_id`). Saving it re-EQs every
- * New-recorder Video; until it is first saved the mic reads as
+ * CVM-recorder Video; until it is first saved the mic reads as
  * {@link DEFAULT_MIC_EQ}.
  */
 export const MIC_EQ_SETTING_ID = "default";
@@ -151,7 +170,7 @@ export const MIC_EQ_DB_RANGE = { min: -24, max: 24 } as const;
 
 /**
  * The Recorders a Video of this format may record with. Shorts record with
- * OBS only: the New recorder cannot film the Spacedesk display yet.
+ * OBS only: the CVM recorder cannot film the Spacedesk display yet.
  */
 export function recordersForFormat(format: string): readonly VideoRecorder[] {
   return format === "short" ? ["obs"] : VIDEO_RECORDERS;

@@ -12,7 +12,7 @@ const sameEq = (a: MicEq, b: MicEq) =>
   a.lowDb === b.lowDb && a.midDb === b.midDb && a.highDb === b.highDb;
 
 /**
- * The Mic Settings dialog was saved on a New-recorder Clip. A changed offset
+ * The Mic Settings dialog was saved on a CVM-recorder Clip. A changed offset
  * belongs to the Clip's Recording Session, so every Clip of that Session
  * replays against the shifted mic at once (no Clip moves: Clip times are the
  * picture's). A changed EQ is the one setting every Recording Session shares.

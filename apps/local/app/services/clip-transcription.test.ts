@@ -9,7 +9,7 @@ import { transcribeAndStoreClips } from "./clip-transcription.server";
 const SESSION_DIR = "/mnt/d/recordings/2026-10-11 abcd1234";
 const MIC = `${SESSION_DIR}/mic.mkv`;
 
-/** A new-recorder Clip at picture 0.05–4.05, its mic 150 ms behind. */
+/** A CVM-recorder Clip at picture 0.05–4.05, its mic 150 ms behind. */
 const earlyClip = {
   id: "clip-1",
   videoFilename: MIC,
@@ -29,7 +29,7 @@ const earlyClip = {
   },
 };
 
-describe("transcribing a new-recorder Clip that starts within the mic offset", () => {
+describe("transcribing a CVM-recorder Clip that starts within the mic offset", () => {
   it("hears its mic from 0 and stores its words in the Clip's clock", async () => {
     const heard: unknown[] = [];
     let stored: unknown;

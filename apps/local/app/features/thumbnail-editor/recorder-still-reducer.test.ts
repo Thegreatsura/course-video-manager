@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import {
   canCapture,
   createInitialRecorderStillState,
   recorderStillReducer,
 } from "./recorder-still-reducer";
 
-const heard = (message: NewRecorderMessage) =>
+const heard = (message: CvmRecorderMessage) =>
   ({ type: "recorder-message-heard", message }) as const;
 
 const status = heard({
@@ -25,7 +25,7 @@ const status = heard({
 const tester = () =>
   new ReducerTester(recorderStillReducer, createInitialRecorderStillState());
 
-describe("the thumbnail camera on a New recorder Video", () => {
+describe("the thumbnail camera on a CVM recorder Video", () => {
   it("takes its still from the recorder service once the camera is live", () => {
     const t = tester().send(status);
     t.send({ type: "press-capture" });

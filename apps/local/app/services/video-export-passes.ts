@@ -45,7 +45,7 @@ export const makeVideoExportPasses = (deps: {
       pauseType: PauseType;
       zoomType: string;
       /**
-       * A new-recorder Clip's composite over its whole output range (long
+       * A CVM-recorder Clip's composite over its whole output range (long
        * Pause included), or null for a Clip cut from one Footage file.
        */
       composite: ClipComposite | null;
@@ -79,7 +79,7 @@ export const makeVideoExportPasses = (deps: {
     // that matches the video's format (portrait for shorts, landscape
     // otherwise).
     //
-    // A Video with any new-recorder Clip is rendered Clip by Clip (each one's
+    // A Video with any CVM-recorder Clip is rendered Clip by Clip (each one's
     // composite on its own) and joined by stream copy: one filter graph
     // across composites opens a decoder per file per Clip. An OBS-only
     // Video takes the single pass exactly as before.

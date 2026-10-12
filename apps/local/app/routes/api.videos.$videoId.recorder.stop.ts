@@ -3,7 +3,7 @@ import { recorderCommand } from "@/services/recorder-client/client.server";
 import { recorderClient } from "@/services/recorder-client/live.server";
 import { makeAction } from "@/services/route-action.server";
 
-/** Stop, on a New recorder Video: answers once the files are closed. */
+/** Stop, on a CVM recorder Video: answers once the files are closed. */
 export const action = makeAction({
   input: "none",
   errors: { RecorderCommandError: 409 },

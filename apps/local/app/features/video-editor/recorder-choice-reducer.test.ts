@@ -3,7 +3,7 @@ import {
   createInitialRecorderChoiceState,
   isRecorderLocked,
   recorderChoiceReducer,
-  showsNewRecorderControls,
+  showsCvmRecorderControls,
   showsOBSChecks,
 } from "./recorder-choice-reducer";
 import type { TimelineItem } from "./clip-state-reducer";
@@ -50,51 +50,51 @@ describe("recorder choice", () => {
     const state = landscape(null);
     expect(state.recorder).toBe("obs");
     expect(showsOBSChecks(state)).toBe(true);
-    expect(showsNewRecorderControls(state)).toBe(false);
+    expect(showsCvmRecorderControls(state)).toBe(false);
   });
 
-  it("picking the New recorder saves it, hides the OBS checks, and remembers it as the last choice once saved", () => {
+  it("picking the CVM recorder saves it, hides the OBS checks, and remembers it as the last choice once saved", () => {
     const picked = run(landscape(), {
       type: "recorder-picked",
-      recorder: "new-recorder",
+      recorder: "cvm",
       locked: false,
     });
-    expect(picked.state.recorder).toBe("new-recorder");
+    expect(picked.state.recorder).toBe("cvm");
     expect(showsOBSChecks(picked.state)).toBe(false);
     // Record, the scene buttons and the composite preview.
-    expect(showsNewRecorderControls(picked.state)).toBe(true);
+    expect(showsCvmRecorderControls(picked.state)).toBe(true);
     expect(picked.effects).toEqual([
-      { type: "save-recorder", recorder: "new-recorder" },
+      { type: "save-recorder", recorder: "cvm" },
     ]);
     const saved = run(picked.state, {
       type: "recorder-saved",
-      recorder: "new-recorder",
+      recorder: "cvm",
     });
     expect(saved.effects).toEqual([
-      { type: "remember-recorder-choice", recorder: "new-recorder" },
+      { type: "remember-recorder-choice", recorder: "cvm" },
     ]);
   });
 
   it("a locked choice does not change", () => {
     const { state, effects } = run(landscape("obs"), {
       type: "recorder-picked",
-      recorder: "new-recorder",
+      recorder: "cvm",
       locked: true,
     });
     expect(state.recorder).toBe("obs");
     expect(effects).toEqual([]);
   });
 
-  it("a Short offers OBS only and never takes the New recorder", () => {
+  it("a Short offers OBS only and never takes the CVM recorder", () => {
     const short = createInitialRecorderChoiceState({
       format: "short",
-      recorder: "new-recorder",
+      recorder: "cvm",
     });
     expect(short.options).toEqual(["obs"]);
     expect(short.recorder).toBe("obs");
     const { state, effects } = run(short, {
       type: "recorder-picked",
-      recorder: "new-recorder",
+      recorder: "cvm",
       locked: false,
     });
     expect(state.recorder).toBe("obs");
@@ -104,10 +104,10 @@ describe("recorder choice", () => {
   it("a failed save goes back to the saved Recorder, says why and is not remembered", () => {
     const { state, effects } = run(
       landscape("obs"),
-      { type: "recorder-picked", recorder: "new-recorder", locked: false },
+      { type: "recorder-picked", recorder: "cvm", locked: false },
       {
         type: "recorder-save-failed",
-        recorder: "new-recorder",
+        recorder: "cvm",
         message: "The Recorder is locked once the Video has Clips",
       }
     );
@@ -121,9 +121,9 @@ describe("recorder choice", () => {
   it("a stale failure after a newer pick changes nothing", () => {
     const { state } = run(
       landscape("obs"),
-      { type: "recorder-picked", recorder: "new-recorder", locked: false },
+      { type: "recorder-picked", recorder: "cvm", locked: false },
       { type: "recorder-picked", recorder: "obs", locked: false },
-      { type: "recorder-save-failed", recorder: "new-recorder", message: "x" }
+      { type: "recorder-save-failed", recorder: "cvm", message: "x" }
     );
     expect(state.recorder).toBe("obs");
     expect(state.error).toBeNull();

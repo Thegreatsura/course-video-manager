@@ -11,13 +11,13 @@ import {
 } from "./clip-state-reducer";
 
 /**
- * The editor's Mic Settings dialog on a New-recorder Clip: the Recording
- * Session's mic offset, and the mic EQ every New-recorder Video shares.
+ * The editor's Mic Settings dialog on a CVM-recorder Clip: the Recording
+ * Session's mic offset, and the mic EQ every CVM-recorder Video shares.
  */
 
 const OBS_EQ = { lowDb: 0, midDb: 0, highDb: -6.1 };
 
-const newRecorderClip = (
+const cvmRecorderClip = (
   id: string,
   sessionId: string,
   range: [number, number]
@@ -67,9 +67,9 @@ const played = (t: ReturnType<typeof tester>) =>
 describe("Mic Settings in the editor", () => {
   it("a new offset replays every Clip of that Recording Session against the shifted mic at once, and saves it", () => {
     const t = tester([
-      newRecorderClip("a", "s1", [10, 20]),
-      newRecorderClip("b", "s1", [25, 30]),
-      newRecorderClip("c", "s2", [10, 20]),
+      cvmRecorderClip("a", "s1", [10, 20]),
+      cvmRecorderClip("b", "s1", [25, 30]),
+      cvmRecorderClip("c", "s2", [10, 20]),
     ]);
 
     t.send({
@@ -109,8 +109,8 @@ describe("Mic Settings in the editor", () => {
   it("a new EQ is saved once and shown on every Recording Session's Clips", () => {
     const quieterHighs = { lowDb: 0, midDb: 0, highDb: -3 };
     const t = tester([
-      newRecorderClip("a", "s1", [10, 20]),
-      newRecorderClip("c", "s2", [10, 20]),
+      cvmRecorderClip("a", "s1", [10, 20]),
+      cvmRecorderClip("c", "s2", [10, 20]),
     ]);
 
     t.send({
@@ -132,8 +132,8 @@ describe("Mic Settings in the editor", () => {
 
   it("an offset refused because a Submitted Version shares the Recording Session goes back, and the dialog says why", () => {
     const t = tester([
-      newRecorderClip("a", "s1", [10, 20]),
-      newRecorderClip("b", "s1", [25, 30]),
+      cvmRecorderClip("a", "s1", [10, 20]),
+      cvmRecorderClip("b", "s1", [25, 30]),
     ]);
     t.send({
       type: "mic-settings-submitted",

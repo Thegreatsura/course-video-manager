@@ -23,8 +23,8 @@ const EQ_BANDS = [
 ] as const;
 
 /**
- * Mic Settings on a New-recorder Clip: its Recording Session's mic offset
- * (lip sync, set once after a clap test) and the mic EQ every New-recorder
+ * Mic Settings on a CVM-recorder Clip: its Recording Session's mic offset
+ * (lip sync, set once after a clap test) and the mic EQ every CVM-recorder
  * Video is exported with. The fields are uncontrolled — the form is read once,
  * on Save, and what changed is the clip reducer's decision
  * (`mic-settings-submitted`). Raw Footage is never changed; the Videos need a
@@ -116,7 +116,7 @@ export function MicSettingsModal(props: {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                For every New recorder Video. OBS Videos are unaffected.
+                For every CVM recorder Video. OBS Videos are unaffected.
               </p>
             </fieldset>
             <div className="flex justify-end space-x-2">

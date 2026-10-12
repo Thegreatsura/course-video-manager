@@ -6,7 +6,7 @@ import type { Clip, FrontendId } from "../clip-state-reducer";
 const FOLLOW_LIVE_SCENES = "follow-live-scenes";
 
 /**
- * "Change Scene" on a saved New-recorder Clip: a Scene Override (Camera, Code
+ * "Change Scene" on a saved CVM-recorder Clip: a Scene Override (Camera, Code
  * or No Face) draws the whole Clip in that scene; "Follow live scenes" clears
  * it, back to the scenes switched while filming. Absent on an OBS Clip, whose
  * scene is baked into its Footage.

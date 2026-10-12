@@ -14,7 +14,7 @@ import { SidecarContextTest } from "./sidecar-context";
 import { makeVideoExportPasses } from "./video-export-passes";
 
 /**
- * The export pass over a Video of new-recorder Clips, with the real ffmpeg on
+ * The export pass over a Video of CVM-recorder Clips, with the real ffmpeg on
  * tiny synthetic stand-ins for a Recording Session (lavfi colours and a sine;
  * no device): a red 60 fps screen, a green 29.97 fps camera, a mono mic.
  * Skipped where there is no ffmpeg.
@@ -159,7 +159,7 @@ const exportClip = (row: ReturnType<typeof sessionRow>) => {
   };
 };
 
-describe.skipIf(!hasFfmpeg)("exporting a Video of new-recorder Clips", () => {
+describe.skipIf(!hasFfmpeg)("exporting a Video of CVM-recorder Clips", () => {
   const dir = path.join(
     os.tmpdir(),
     `composite-export-${process.pid}-${Date.now()}`
@@ -301,7 +301,7 @@ const beeps = (file: string) => {
  * loudnorm moves the sound in its final flush, on every export (the OBS
  * single pass too), which is not the join's doing.
  */
-describe.skipIf(!hasFfmpeg)("joining new-recorder Clips", () => {
+describe.skipIf(!hasFfmpeg)("joining CVM-recorder Clips", () => {
   const dir = path.join(
     os.tmpdir(),
     `composite-join-${process.pid}-${Date.now()}`
