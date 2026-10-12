@@ -14,6 +14,7 @@ import {
   makeLesson,
   makeSection,
   makeVideo,
+  OBS_CLIP,
   run,
 } from "./course-json-fixtures";
 
@@ -362,6 +363,7 @@ describe("buildCourseJson", () => {
                       videoFilename: "rec.mp4",
                       sourceStartTime: 0,
                       sourceEndTime: 20,
+                      ...OBS_CLIP,
                       pauseType: "none",
                       zoomType: "none",
                       order: "a0",
@@ -371,6 +373,7 @@ describe("buildCourseJson", () => {
                       videoFilename: "rec.mp4",
                       sourceStartTime: 25,
                       sourceEndTime: 45,
+                      ...OBS_CLIP,
                       pauseType: "none",
                       zoomType: "none",
                       order: "a2",

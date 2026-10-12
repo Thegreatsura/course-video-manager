@@ -24,6 +24,10 @@ import {
 import { makeDuplicateCourse } from "./db-course-duplicate.server.js";
 import { attachDerivedPaths } from "./path-projection.js";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
+import {
+  loadSceneEvents,
+  recordingSessionExportColumns,
+} from "./db-recording-session-relations.server.js";
 import { toSlug } from "./lesson-path-service.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
@@ -287,6 +291,10 @@ const createCourseOperations = (db: Database) => {
                                 // Part of the export address — see export-hash.
                                 pauseType: true,
                                 zoomType: true,
+                                // A new-recorder Clip's composite — see
+                                // clipRecordingSessionRelation.
+                                recordingSessionId: true,
+                                sceneOverride: true,
                                 order: true,
                                 archived: true,
                                 // Lets callers derive a transcript from this
@@ -296,7 +304,10 @@ const createCourseOperations = (db: Database) => {
                               },
                               orderBy: asc(clips.order),
                               where: eq(clips.archived, false),
-                              with: { overlays: overlayExportRelation },
+                              with: {
+                                overlays: overlayExportRelation,
+                                recordingSession: recordingSessionExportColumns,
+                              },
                             },
                             chapters: {
                               columns: {
@@ -350,6 +361,26 @@ const createCourseOperations = (db: Database) => {
         });
       }
 
+      // A new-recorder Clip's scene events, loaded apart: nested here they
+      // would pass Postgres's identifier limit (see
+      // recordingSessionExportColumns).
+      const withEvents = yield* makeDbCall(() =>
+        loadSceneEvents(
+          db,
+          course.versions.flatMap((v) =>
+            v.sections.flatMap((s) =>
+              s.lessons.flatMap((l) =>
+                l.videos.flatMap((vid) =>
+                  vid.clips.flatMap((c) =>
+                    c.recordingSession ? [c.recordingSession.id] : []
+                  )
+                )
+              )
+            )
+          )
+        )
+      );
+
       // Compute-on-read: attach the derived path at the boundary so every
       // downstream reader sees it without touching the stored column.
       return {
@@ -363,6 +394,10 @@ const createCourseOperations = (db: Database) => {
                 ...lesson,
                 videos: lesson.videos.map((video) => ({
                   ...video,
+                  clips: video.clips.map((clip) => ({
+                    ...clip,
+                    recordingSession: withEvents(clip.recordingSession),
+                  })),
                   beats: video.beats.map(flattenBeatLearningGoalIds),
                 })),
               })),
