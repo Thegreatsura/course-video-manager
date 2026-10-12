@@ -415,6 +415,8 @@ const calibrated = (
     outcome?: "passed" | "failed";
     speechLufs?: number;
     truePeakDb?: number | null;
+    /** null: from before the clap step. */
+    clapsFound?: number | null;
     recorderMic?: string;
   }
 ) => {
@@ -428,9 +430,14 @@ const calibrated = (
     truePeakDb: o.truePeakDb === undefined ? -10 : o.truePeakDb,
     thresholdDb: deriveThreshold(speechLufs),
     recorderMic: o.recorderMic ?? FAKE_MIC,
-    scriptVersion: 2,
-    micFilePath: `/calibrations/${id}/mic.mkv`,
+    scriptVersion: 3,
+    micFilePath: `/calibrations/${id}/mic.wav`,
     browserTracePath: `/calibrations/${id}/browser-trace.json`,
+    cameraDevice: "Cam Link 4K",
+    clapsFound: o.clapsFound === undefined ? 5 : o.clapsFound,
+    clapSpreadMs: o.clapsFound === null ? null : 8,
+    micOffsetMs: o.clapsFound === null ? null : 142,
+    cameraFilePath: `/calibrations/${id}/camera.mkv`,
   });
 };
 
@@ -440,7 +447,7 @@ const guard = (now: number) =>
   );
 
 describe("the recorder client, gated on the AV Calibration (ADR 0038)", () => {
-  it("refuses Record with no calibration passed under today's rules (an old -21 LUFS pass does not count), or an expired one; allows a fresh one", async () => {
+  it("refuses Record with no calibration passed under today's rules (an old -21 LUFS pass, or one from before the clap step, does not count), or an expired one; allows a fresh one", async () => {
     expect(await guard(T0_MS)).toMatchObject({
       _tag: "Left",
       left: {
@@ -455,6 +462,12 @@ describe("the recorder client, gated on the AV Calibration (ADR 0038)", () => {
       speechLufs: -21,
       truePeakDb: null,
     });
+    expect(await guard(T0_MS)).toMatchObject({
+      left: { reason: { kind: "none" } },
+    });
+
+    // A good level, but from before the clap step: no Mic Offset.
+    await calibrated("before-claps", { minutesBefore: 4, clapsFound: null });
     expect(await guard(T0_MS)).toMatchObject({
       left: { reason: { kind: "none" } },
     });

@@ -1,4 +1,5 @@
 import { FileSystem } from "@effect/platform";
+import { NodeContext } from "@effect/platform-node";
 import { desc, eq } from "drizzle-orm";
 import { Data, Effect, Schema } from "effect";
 import path from "node:path";
@@ -15,10 +16,11 @@ import {
   passesCurrentRules,
   type CalibrationInvalidReason,
   type LastPassedCalibration,
-  MEASUREMENT_WINDOWS,
-  SCRIPT_SCHEDULE,
+  type MeasurementWindows,
+  runSchedule,
   SCRIPT_VERSION,
 } from "@/av-calibration-constants";
+import { detectClaps, type ClapMatch } from "@/packages/clap-detection";
 import type {
   BrowserTracePoint,
   SavedAVCalibration,
@@ -45,18 +47,32 @@ export class CalibrationRunMismatchError extends Data.TaggedError(
   "CalibrationRunMismatchError"
 )<{ readonly message: string }> {}
 
+/** No clap found: what a failed clap detection stores. */
+const NO_CLAPS: ClapMatch = {
+  claps: [],
+  found: 0,
+  spreadMs: null,
+  micOffsetMs: null,
+};
+
 /**
  * Stores an AV Calibration from its run's measurement, passed or failed:
- * judges the speech loudness against the band and the true peak against its
- * ceiling, derives the threshold, writes
- * the browser's trace beside the mic file (with the schedule its prompts
- * followed, in the same seconds), and saves the row.
+ * finds the claps in its mic and camera files over the clap window
+ * (`clap-detection`) for the Mic Offset, judges the speech loudness against
+ * the band, the true peak against its ceiling and the claps against their
+ * rule, derives the threshold, writes the browser's trace beside the mic
+ * file (with the schedule its prompts followed, in the files' seconds), and
+ * saves the row with whatever it measured.
  */
 export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
   db: Database,
   o: {
     calibrationId: string;
     measured: CalibrationMeasured;
+    /** The windows the page measured over, in the run's file seconds. */
+    windows: MeasurementWindows;
+    /** Where the script started in the run's files (`calibration-started`). */
+    scriptStartSeconds: number;
     /** The folder (WSL path) the run's own folder was made in. */
     recordingsFolder: string;
     browserInputLabel: string | null;
@@ -68,23 +84,50 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     return yield* new CalibrationRunMismatchError({
       message: `The recorder service measured run ${measured.calibrationId}, not ${o.calibrationId}.`,
     });
-  const judgement = judgeCalibration(measured);
+  // The files come from the recorder service: they must be in the
+  // recordings folder the run was started in.
+  const micFile = yield* assertUnderEffect(
+    o.recordingsFolder,
+    measured.micFile
+  );
+  const cameraFile = yield* assertUnderEffect(
+    o.recordingsFolder,
+    measured.cameraFile
+  );
+  const claps = yield* detectClaps({
+    micFile,
+    cameraFile,
+    window: o.windows.claps,
+  }).pipe(
+    Effect.provide(NodeContext.layer),
+    Effect.catchTag("ClapDetectionError", (e) =>
+      Effect.logError(`Clap detection failed: ${e.message}`).pipe(
+        Effect.as(NO_CLAPS)
+      )
+    )
+  );
+  const judgement = judgeCalibration({
+    speechLufs: measured.speechLufs,
+    truePeakDb: measured.truePeakDb,
+    clapsFound: claps.found,
+    clapSpreadMs: claps.spreadMs,
+  });
   const thresholdDb = deriveThreshold(measured.speechLufs);
-  // The mic file's folder comes from the recorder service: it must be in
-  // the recordings folder the run was started in.
   const browserTracePath = yield* assertUnderEffect(
     o.recordingsFolder,
-    path.join(path.dirname(measured.micFile), BROWSER_TRACE_FILE)
+    path.join(path.dirname(micFile), BROWSER_TRACE_FILE)
   );
   const fs = yield* FileSystem.FileSystem;
   yield* fs.writeFileString(
     browserTracePath,
     JSON.stringify({
       scriptVersion: SCRIPT_VERSION,
-      schedule: SCRIPT_SCHEDULE,
-      measurementWindows: MEASUREMENT_WINDOWS,
+      scriptStartSeconds: o.scriptStartSeconds,
+      schedule: runSchedule(o.scriptStartSeconds),
+      measurementWindows: o.windows,
       browserInputLabel: o.browserInputLabel,
       trace: o.browserTrace,
+      claps: claps.claps,
     })
   );
   const [row] = yield* dbCall(() =>
@@ -100,8 +143,13 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
         recorderMic: measured.mic,
         browserInputLabel: o.browserInputLabel,
         scriptVersion: SCRIPT_VERSION,
-        micFilePath: measured.micFile,
+        micFilePath: micFile,
         browserTracePath,
+        cameraDevice: measured.camera,
+        clapsFound: claps.found,
+        clapSpreadMs: claps.spreadMs,
+        micOffsetMs: claps.micOffsetMs,
+        cameraFilePath: cameraFile,
       })
       .returning()
   );
@@ -111,9 +159,9 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
 type AVCalibrationRow = typeof avCalibrations.$inferSelect;
 
 /**
- * A stored row as the page shows it; the judgement is its stored loudness and
- * peak's, under today's rules (a row from before the -27 LUFS target may now
- * read as too loud).
+ * A stored row as the page shows it; the judgement is its stored loudness,
+ * peak and claps', under today's rules (a row from before the -27 LUFS target
+ * may now read as too loud; one from before the clap step fails).
  */
 const toSaved = (row: AVCalibrationRow): SavedAVCalibration => ({
   id: row.id,
@@ -126,6 +174,10 @@ const toSaved = (row: AVCalibrationRow): SavedAVCalibration => ({
   thresholdDb: row.thresholdDb,
   recorderMic: row.recorderMic,
   browserInputLabel: row.browserInputLabel,
+  cameraDevice: row.cameraDevice,
+  clapsFound: row.clapsFound,
+  clapSpreadMs: row.clapSpreadMs,
+  micOffsetMs: row.micOffsetMs,
 });
 
 /** How many past AV Calibrations the page lists. */
@@ -156,7 +208,12 @@ const TraceFileSchema = Schema.parseJson(
     schedule: Schema.Array(
       Schema.Union(
         Schema.Struct({
-          kind: Schema.Literal("countdown", "silence", "loud"),
+          kind: Schema.Literal("countdown", "silence", "clap-ready", "loud"),
+          ...TimeWindowSchema.fields,
+        }),
+        Schema.Struct({
+          kind: Schema.Literal("clap"),
+          clap: Schema.Number,
           ...TimeWindowSchema.fields,
         }),
         Schema.Struct({

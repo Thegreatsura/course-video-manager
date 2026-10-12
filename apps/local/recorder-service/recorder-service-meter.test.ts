@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { CAM_LINK_NOT_STARTING } from "./camera";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
 import { ebur128Line } from "./test-utils/fake-windows";
 import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
@@ -72,32 +73,53 @@ describe("the level meter", () => {
     expect(windows.meter()).toBeUndefined();
   });
 
-  it("runs an AV Calibration: the mic to a file, timed readings, then the noise floor and speech loudness of its windows and the whole take's true peak; a cancelled run keeps nothing", async () => {
+  it("runs an AV Calibration: the mic and camera to files on one clock, started once live, then the noise floor and speech loudness of its windows and the true peak of all but the claps; a cancelled run keeps nothing", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
     const folder = tmp();
 
+    // The recorder is open for a Video: its preview has the Cam Link.
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    expect(windows.camerasRunning()).toBe(1);
+
     client.send({ type: "start-meter" });
     await client.next("meter-started");
     client.send({ type: "start-calibration", folder });
+    // One process holds the mic and the camera: the run's, writing both. The
+    // preview let the Cam Link go for it.
+    await vi.waitFor(() =>
+      expect(windows.meter()?.launch.args).toContain("mic.wav")
+    );
+    const run = windows.meter()!;
+    expect(run.launch.args).toContain("camera.mkv");
+    expect(run.launch.args).toContain("video=Cam Link 4K");
+    const graph = run.launch.args.join(" ");
+    // The recording's own stamping, so the Mic Offset is the recording's.
+    expect(graph).toMatch(
+      /\[0:v\]setpts=PTS-[\d.]+\/TB,fps=30000\/1001:start_time=0/
+    );
+    expect(graph).toMatch(
+      /\[1:a\]asetpts=PTS-[\d.]+\/TB,atrim=start=1\.5,aresample=async=50:min_hard_comp=0\.1:first_pts=0,ebur128/
+    );
+    expect(windows.cameraPreviews.filter((p) => p.running)).toHaveLength(0);
+
+    // It is started once live: its first reading, after the camera opened.
+    run.stderr(`${ebur128Line(4.6, -60, -60)}\r\n`);
     const started = await client.next("calibration-started");
     expect(started.micFile).toMatch(
       new RegExp(`^${folder}/av-calibrations/[^/]+/mic\\.wav$`)
     );
+    expect(started.cameraFile).toBe(
+      path.join(path.dirname(started.micFile), "camera.mkv")
+    );
+    expect(started.camera).toBe("Cam Link 4K");
+    expect(started.scriptStartSeconds).toBeGreaterThanOrEqual(4.6);
     expect(fs.existsSync(path.dirname(started.micFile))).toBe(true);
-    // One process holds the mic: the run's, writing the file.
-    const run = windows.meter();
-    expect(run?.launch.args).toContain("mic.wav");
-    run?.stderr(`${ebur128Line(12.3, -21.9, -22.4)}\r\n`);
-    expect(await client.next("meter-reading")).toMatchObject({
-      seconds: 12.3,
-      shortTermLufs: -22.4,
-    });
+    expect(await client.next("meter-reading")).toMatchObject({ seconds: 4.6 });
 
     // Record is refused while it runs.
-    client.send({ type: "open", videoId: "video-1" });
-    await client.camera("live");
     client.send({
       type: "record",
       silenceLength: "short",
@@ -113,12 +135,15 @@ describe("the level meter", () => {
         { startSeconds: 13.75, endSeconds: 19.75 },
         { startSeconds: 23.75, endSeconds: 29.75 },
       ],
+      claps: { startSeconds: 20, endSeconds: 23 },
     });
     expect(await client.next("calibration-measured")).toEqual({
       type: "calibration-measured",
       calibrationId: started.calibrationId,
       mic: "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)",
       micFile: started.micFile,
+      camera: "Cam Link 4K",
+      cameraFile: started.cameraFile,
       noiseFloorDb: -97.3,
       speechLufs: -27.4,
       truePeakDb: -9.2,
@@ -126,20 +151,28 @@ describe("the level meter", () => {
     const analysis = windows.launched.find((l) =>
       l.args.some((a) => a.includes("astats="))
     );
-    expect(analysis?.args.join(" ")).toContain(
-      "atrim=start=3.75:end=12.25,astats="
+    const analysed = analysis?.args.join(" ");
+    expect(analysed).toContain("atrim=start=3.75:end=12.25,astats=");
+    expect(analysed).toContain("concat=n=2:v=0:a=1,ebur128");
+    // The true peak is over the take with the clap window cut out.
+    expect(analysed).toContain("[pa]atrim=end=20,");
+    expect(analysed).toContain("[pb]atrim=start=23,");
+    expect(analysed).toContain(
+      "[p0][p1]concat=n=2:v=0:a=1,ebur128=peak=true:framelog=quiet,anullsink"
     );
-    expect(analysis?.args.join(" ")).toContain("concat=n=2:v=0:a=1,ebur128");
-    // The true peak is over the whole take, untrimmed.
-    expect(analysis?.args.join(" ")).toContain(
-      "[p]ebur128=peak=true:framelog=quiet,anullsink"
-    );
-    // The run is over and the plain meter is back, not writing a file.
-    expect(run?.running).toBe(false);
+    // The run is over, the plain meter is back, and so is the preview.
+    expect(run.running).toBe(false);
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");
+    await vi.waitFor(() =>
+      expect(windows.cameraPreviews.filter((p) => p.running)).toHaveLength(1)
+    );
 
     // A cancelled run deletes its folder.
     client.send({ type: "start-calibration", folder });
+    await vi.waitFor(() =>
+      expect(windows.meter()?.launch.args).toContain("mic.wav")
+    );
+    windows.meter()!.stderr(`${ebur128Line(3.1, -60, -60)}\r\n`);
     const cancelled = await client.next("calibration-started");
     client.send({ type: "cancel-calibration" });
     expect(await client.next("calibration-ended")).toEqual({
@@ -149,5 +182,22 @@ describe("the level meter", () => {
     });
     expect(fs.existsSync(path.dirname(cancelled.micFile))).toBe(false);
     expect(fs.existsSync(path.dirname(started.micFile))).toBe(true);
+  });
+
+  it("refuses to start a run whose camera never goes live, and keeps nothing", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    const folder = tmp();
+    client.send({ type: "start-meter" });
+    await client.next("meter-started");
+    client.send({ type: "start-calibration", folder });
+    expect(await client.next("refused")).toMatchObject({
+      command: "start-calibration",
+      message: CAM_LINK_NOT_STARTING,
+    });
+    expect(fs.readdirSync(path.join(folder, "av-calibrations"))).toEqual([]);
+    // The plain meter is back.
+    expect(windows.meter()?.launch.args).not.toContain("mic.wav");
   });
 });

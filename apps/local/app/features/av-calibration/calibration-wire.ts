@@ -1,6 +1,7 @@
 import type {
   CalibrationJudgement,
   CalibrationOutcome,
+  MeasurementWindows,
 } from "@/av-calibration-constants";
 
 /**
@@ -21,6 +22,13 @@ export type BrowserTracePoint = { seconds: number; peakDb: number };
 export type FinishCalibrationRequest = {
   /** The run the page followed (`calibration-started`). */
   calibrationId: string;
+  /** Where the script started in the run's files (`calibration-started`). */
+  scriptStartSeconds: number;
+  /**
+   * What to measure over, in the run's file seconds: the silence, the
+   * speech, and the clap window (the Mic Offset's, cut out of the peak).
+   */
+  windows: MeasurementWindows;
   /** The label of the browser's audio input; null when it could not be opened. */
   browserInputLabel: string | null;
   /** What the browser detector heard during the run; null with no input. */
@@ -35,9 +43,17 @@ export type SavedAVCalibration = {
   judgement: CalibrationJudgement;
   noiseFloorDb: number;
   speechLufs: number;
-  /** The whole take's true peak, in dBTP; null when stored before the peak check. */
+  /** The take's true peak, in dBTP; null when stored before the peak check. */
   truePeakDb: number | null;
   thresholdDb: number;
   recorderMic: string;
   browserInputLabel: string | null;
+  /** The recorder service's camera; null before the clap step. */
+  cameraDevice: string | null;
+  /** Claps found in both mic and camera; null before the clap step. */
+  clapsFound: number | null;
+  /** Max - min of the claps' offsets, in ms; null with none found. */
+  clapSpreadMs: number | null;
+  /** The Mic Offset, in ms; null with no clap found. */
+  micOffsetMs: number | null;
 };

@@ -281,6 +281,13 @@
       "when": 1791835708490,
       "tag": "0039_av_calibration_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791836852901,
+      "tag": "0040_av_calibration_claps",
+      "breakpoints": true
     }
   ]
 }

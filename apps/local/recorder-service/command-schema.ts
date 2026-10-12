@@ -79,6 +79,7 @@ const Command = Schema.Union(
     type: Schema.Literal("finish-calibration"),
     silence: CalibrationWindowSchema,
     speech: Schema.Array(CalibrationWindowSchema),
+    claps: CalibrationWindowSchema,
   }),
   Schema.Struct({ type: Schema.Literal("cancel-calibration") })
 );

@@ -16,6 +16,8 @@ const across = (start: number, end: number, axisEnd: number) => ({
 const PROMPT_STYLE: Record<ScriptStep["kind"], string> = {
   countdown: "bg-muted",
   silence: "bg-sky-500/30",
+  "clap-ready": "bg-violet-500/20",
+  clap: "bg-violet-500/40",
   read: "bg-emerald-500/40",
   pause: "bg-amber-500/30",
   loud: "bg-red-500/40",
@@ -27,6 +29,10 @@ const promptLabel = (step: ScriptStep) => {
       return "Get ready";
     case "silence":
       return "Stay quiet";
+    case "clap-ready":
+      return "Hands up";
+    case "clap":
+      return `Clap ${step.clap}`;
     case "read":
       return `Read ${step.line}`;
     case "pause":

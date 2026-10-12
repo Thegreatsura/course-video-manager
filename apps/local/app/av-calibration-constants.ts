@@ -62,29 +62,60 @@ export const deriveThreshold = (speechLufs: number): number =>
  */
 export const MAX_TRUE_PEAK_DBTP = -6;
 
+/** How many claps the session prompts. */
+export const CLAPS_PROMPTED = 5;
+/** How many of them must be found in both the mic and the camera. */
+export const MIN_CLAPS_FOUND = 3;
+/** The camera's frame rate as the CVM recorder records it (29.97). */
+export const CAMERA_FPS = 30000 / 1001;
+/**
+ * The furthest the paired claps' offsets may spread (max - min), in ms: one
+ * camera frame. Wider, and the Mic Offset is not to be trusted.
+ */
+export const MAX_CLAP_SPREAD_MS = 1000 / CAMERA_FPS;
+
 export type CalibrationOutcome = "passed" | "failed";
 
-/** One reason a calibration failed, and by how many dB. */
+/** One reason a calibration failed. */
 export type CalibrationMiss =
   /** The speech loudness is outside the band; `byDb` past its edge. */
   | { kind: "too-quiet" | "too-loud"; byDb: number }
   /** The take's true peak is over `MAX_TRUE_PEAK_DBTP`, by `byDb`. */
-  | { kind: "peak-too-high"; truePeakDb: number; byDb: number };
+  | { kind: "peak-too-high"; truePeakDb: number; byDb: number }
+  /** Fewer than `MIN_CLAPS_FOUND` claps found in both the mic and the camera. */
+  | { kind: "too-few-claps"; found: number }
+  /** The paired claps' offsets spread over `MAX_CLAP_SPREAD_MS`. */
+  | { kind: "claps-disagree"; spreadMs: number }
+  /** Taken before the clap step (an Audio Calibration): no Mic Offset. */
+  | { kind: "no-clap-step" };
 
 /** Whether a calibration passed, and if not, every way it missed. */
 export type CalibrationJudgement =
   | { outcome: "passed" }
   | { outcome: "failed"; misses: [CalibrationMiss, ...CalibrationMiss[]] };
 
+/** What a calibration is judged on, as measured and as stored. */
+export type CalibrationMeasures = {
+  speechLufs: number;
+  /** null: stored before the peak check. */
+  truePeakDb: number | null;
+  /** null: stored before the clap step. */
+  clapsFound: number | null;
+  /** null: no clap found (or none looked for). */
+  clapSpreadMs: number | null;
+};
+
 /**
  * Passed when the speech loudness is inside the target band, edges included,
- * and the take's true peak is at or under `MAX_TRUE_PEAK_DBTP`. A calibration
- * stored before the peak check (`truePeakDb` null) is judged on loudness alone.
+ * the take's true peak is at or under `MAX_TRUE_PEAK_DBTP`, at least
+ * `MIN_CLAPS_FOUND` claps were found, and their offsets agree within one
+ * camera frame. Every miss is listed, so one re-run can fix them all. A
+ * calibration stored before the peak check (`truePeakDb` null) is not judged
+ * on the peak; one stored before the clap step (`clapsFound` null) fails.
  */
-export const judgeCalibration = (m: {
-  speechLufs: number;
-  truePeakDb: number | null;
-}): CalibrationJudgement => {
+export const judgeCalibration = (
+  m: CalibrationMeasures
+): CalibrationJudgement => {
   const misses: CalibrationMiss[] = [];
   const band = bandPosition(m.speechLufs);
   if (band.position === "below")
@@ -97,20 +128,43 @@ export const judgeCalibration = (m: {
       truePeakDb: m.truePeakDb,
       byDb: m.truePeakDb - MAX_TRUE_PEAK_DBTP,
     });
+  if (m.clapsFound === null) misses.push({ kind: "no-clap-step" });
+  else if (m.clapsFound < MIN_CLAPS_FOUND)
+    misses.push({ kind: "too-few-claps", found: m.clapsFound });
+  if (m.clapSpreadMs !== null && m.clapSpreadMs > MAX_CLAP_SPREAD_MS)
+    misses.push({ kind: "claps-disagree", spreadMs: m.clapSpreadMs });
   const [first, ...rest] = misses;
   return first
     ? { outcome: "failed", misses: [first, ...rest] }
     : { outcome: "passed" };
 };
 
+/** The clap misses as Matt reads them; the level misses are the page's to word. */
+export const describeClapMiss = (
+  miss: Extract<
+    CalibrationMiss,
+    { kind: "too-few-claps" | "claps-disagree" | "no-clap-step" }
+  >
+): string => {
+  switch (miss.kind) {
+    case "too-few-claps":
+      return `Found ${miss.found} of ${CLAPS_PROMPTED} claps`;
+    case "claps-disagree":
+      return `Claps disagree by ${Math.round(miss.spreadMs)} ms`;
+    case "no-clap-step":
+      return "Taken before the clap step: no Mic Offset";
+  }
+};
+
 /**
  * THE SCRIPT. The same every time, so calibrations compare; bump
- * `SCRIPT_VERSION` whenever a line or a duration below changes. Each line
- * ends on a soft, trailing syllable, so quiet tails are exercised. Then one
- * loud line, read as loudly as Matt gets when he is excited, for the peak
- * check (2: the loud line).
+ * `SCRIPT_VERSION` whenever a line or a duration below changes. The silence,
+ * then 5 claps for the Mic Offset, then the reading rounds. Each line ends on
+ * a soft, trailing syllable, so quiet tails are exercised. Then one loud
+ * line, read as loudly as Matt gets when he is excited, for the peak check
+ * (2: the loud line; 3: the claps).
  */
-export const SCRIPT_VERSION = 2;
+export const SCRIPT_VERSION = 3;
 
 export const SCRIPT_LINES = [
   "Let's open up the editor and take a look at the code below.",
@@ -128,6 +182,10 @@ export const LOUD_LINE =
 export const COUNTDOWN_SECONDS = 3;
 /** Seconds of silence the noise floor is measured over. */
 export const SILENCE_SECONDS = 10;
+/** Seconds of "hands in front of your face" before the first clap. */
+export const CLAP_READY_SECONDS = 3;
+/** Seconds for each "Clap N": the claps are this far apart. */
+export const CLAP_SECONDS = 1.5;
 /** Seconds for each "Read line N". */
 export const READ_SECONDS = 6;
 /**
@@ -143,6 +201,8 @@ export const REACTION_MARGIN_SECONDS = 0.75;
 export type ScriptStep =
   | { kind: "countdown"; startSeconds: number; endSeconds: number }
   | { kind: "silence"; startSeconds: number; endSeconds: number }
+  | { kind: "clap-ready"; startSeconds: number; endSeconds: number }
+  | { kind: "clap"; clap: number; startSeconds: number; endSeconds: number }
   | { kind: "read"; line: number; startSeconds: number; endSeconds: number }
   | { kind: "pause"; line: number; startSeconds: number; endSeconds: number }
   | { kind: "loud"; startSeconds: number; endSeconds: number };
@@ -152,17 +212,27 @@ export type ScriptStep =
  * recorder service's clock): what Matt is asked to do, and when.
  */
 export const SCRIPT_SCHEDULE: readonly ScriptStep[] = (() => {
+  const silenceEnd = COUNTDOWN_SECONDS + SILENCE_SECONDS;
+  const clapsAt = silenceEnd + CLAP_READY_SECONDS;
   const steps: ScriptStep[] = [
     { kind: "countdown", startSeconds: 0, endSeconds: COUNTDOWN_SECONDS },
     {
       kind: "silence",
       startSeconds: COUNTDOWN_SECONDS,
-      endSeconds: COUNTDOWN_SECONDS + SILENCE_SECONDS,
+      endSeconds: silenceEnd,
     },
+    { kind: "clap-ready", startSeconds: silenceEnd, endSeconds: clapsAt },
   ];
+  for (let i = 0; i < CLAPS_PROMPTED; i++)
+    steps.push({
+      kind: "clap",
+      clap: i + 1,
+      startSeconds: clapsAt + i * CLAP_SECONDS,
+      endSeconds: clapsAt + (i + 1) * CLAP_SECONDS,
+    });
+  const readsAt = steps.at(-1)!.endSeconds;
   SCRIPT_LINES.forEach((_, i) => {
-    const readAt =
-      COUNTDOWN_SECONDS + SILENCE_SECONDS + i * (READ_SECONDS + PAUSE_SECONDS);
+    const readAt = readsAt + i * (READ_SECONDS + PAUSE_SECONDS);
     const pauseAt = readAt + READ_SECONDS;
     steps.push(
       { kind: "read", line: i + 1, startSeconds: readAt, endSeconds: pauseAt },
@@ -188,25 +258,61 @@ export const SCRIPT_END_SECONDS = SCRIPT_SCHEDULE.at(-1)!.endSeconds;
 export type TimeWindow = { startSeconds: number; endSeconds: number };
 
 /**
- * The windows the recorder service measures: the noise floor over the
- * silence less a reaction margin at each end, and the speech loudness over
- * each "Read line N", starting a margin late and running a margin over. The
- * loud line is in no window: it is measured only by the true peak, which the
- * service takes over the whole take.
+ * The windows the recorder service measures, in seconds of the script: the
+ * noise floor over the silence less a reaction margin at each end, and the
+ * speech loudness over each "Read line N", starting a margin late and
+ * running a margin over. The claps are their own window, from "hands in
+ * front of your face" to a margin past the last clap: used only for the Mic
+ * Offset, and cut out of the true peak, which is taken over the rest of the
+ * take (the loud line is in no other window: the true peak is its check).
  */
-export const MEASUREMENT_WINDOWS: {
+export type MeasurementWindows = {
   silence: TimeWindow;
   speech: TimeWindow[];
-} = {
-  silence: SCRIPT_SCHEDULE.filter((s) => s.kind === "silence").map((s) => ({
-    startSeconds: s.startSeconds + REACTION_MARGIN_SECONDS,
-    endSeconds: s.endSeconds - REACTION_MARGIN_SECONDS,
-  }))[0]!,
-  speech: SCRIPT_SCHEDULE.filter((s) => s.kind === "read").map((s) => ({
-    startSeconds: s.startSeconds + REACTION_MARGIN_SECONDS,
-    endSeconds: s.endSeconds + REACTION_MARGIN_SECONDS,
-  })),
+  claps: TimeWindow;
 };
+
+export const MEASUREMENT_WINDOWS: MeasurementWindows = (() => {
+  const clapSteps = SCRIPT_SCHEDULE.filter(
+    (s) => s.kind === "clap-ready" || s.kind === "clap"
+  );
+  return {
+    silence: SCRIPT_SCHEDULE.filter((s) => s.kind === "silence").map((s) => ({
+      startSeconds: s.startSeconds + REACTION_MARGIN_SECONDS,
+      endSeconds: s.endSeconds - REACTION_MARGIN_SECONDS,
+    }))[0]!,
+    speech: SCRIPT_SCHEDULE.filter((s) => s.kind === "read").map((s) => ({
+      startSeconds: s.startSeconds + REACTION_MARGIN_SECONDS,
+      endSeconds: s.endSeconds + REACTION_MARGIN_SECONDS,
+    })),
+    claps: {
+      startSeconds: clapSteps[0]!.startSeconds,
+      endSeconds: clapSteps.at(-1)!.endSeconds + REACTION_MARGIN_SECONDS,
+    },
+  };
+})();
+
+const shift = (w: TimeWindow, bySeconds: number): TimeWindow => ({
+  startSeconds: w.startSeconds + bySeconds,
+  endSeconds: w.endSeconds + bySeconds,
+});
+
+/**
+ * The script in seconds of a run's files, its countdown starting at
+ * `scriptStartSeconds` (when the run went live: the camera takes a few
+ * seconds to open, and the files' clock starts before it does).
+ */
+export const runSchedule = (scriptStartSeconds: number): ScriptStep[] =>
+  SCRIPT_SCHEDULE.map((s) => ({ ...s, ...shift(s, scriptStartSeconds) }));
+
+/** `MEASUREMENT_WINDOWS` in seconds of a run's files (`runSchedule`). */
+export const runMeasurementWindows = (
+  scriptStartSeconds: number
+): MeasurementWindows => ({
+  silence: shift(MEASUREMENT_WINDOWS.silence, scriptStartSeconds),
+  speech: MEASUREMENT_WINDOWS.speech.map((w) => shift(w, scriptStartSeconds)),
+  claps: shift(MEASUREMENT_WINDOWS.claps, scriptStartSeconds),
+});
 
 /**
  * THE GATE (ADR 0038). A Recorder starts only under a passed AV
@@ -218,14 +324,13 @@ export const CALIBRATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
  * Whether a stored calibration passed under TODAY's rules: its own outcome
  * was a pass, its true peak was measured, and its stored measurements still
  * pass `judgeCalibration` now. So a rule change (the target moving from -21
- * to -27 LUFS, the peak check) takes old passes out of the gate by itself,
- * with no rules version to remember to bump.
+ * to -27 LUFS, the peak check, the clap step) takes old passes out of the
+ * gate by itself, with no rules version to remember to bump: a calibration
+ * with no clap measurements never passes.
  */
-export const passesCurrentRules = (c: {
-  outcome: CalibrationOutcome;
-  speechLufs: number;
-  truePeakDb: number | null;
-}): boolean =>
+export const passesCurrentRules = (
+  c: CalibrationMeasures & { outcome: CalibrationOutcome }
+): boolean =>
   c.outcome === "passed" &&
   c.truePeakDb !== null &&
   judgeCalibration(c).outcome === "passed";
@@ -339,7 +444,7 @@ export const describeCalibrationRefusal = (
 ): string => {
   switch (reason.kind) {
     case "none":
-      return `${CALIBRATION_REFUSAL_PREFIX}none has passed under the current rules (${TARGET_LOUDNESS_LUFS} LUFS ± ${TARGET_TOLERANCE_DB}, peak at most ${MAX_TRUE_PEAK_DBTP} dBTP) yet.`;
+      return `${CALIBRATION_REFUSAL_PREFIX}none has passed under the current rules (${TARGET_LOUDNESS_LUFS} LUFS ± ${TARGET_TOLERANCE_DB}, peak at most ${MAX_TRUE_PEAK_DBTP} dBTP, ${MIN_CLAPS_FOUND} of ${CLAPS_PROMPTED} claps agreeing within a frame) yet.`;
     case "expired":
       return `${CALIBRATION_REFUSAL_PREFIX}the last one expired on ${formatCalibrationTime(reason.expiredAtMs)} (they last 7 days).`;
     case "device-changed":

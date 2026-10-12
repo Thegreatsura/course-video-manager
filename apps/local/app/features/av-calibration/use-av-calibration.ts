@@ -156,10 +156,22 @@ export const useAVCalibration = () => {
           );
       },
       "finish-calibration": (_state, effect, dispatch) => {
-        const { calibrationId, browserInputLabel, browserTrace } = effect;
+        const {
+          calibrationId,
+          scriptStartSeconds,
+          windows,
+          browserInputLabel,
+          browserTrace,
+        } = effect;
         fetch(
           "/api/av-calibration/finish",
-          json({ calibrationId, browserInputLabel, browserTrace })
+          json({
+            calibrationId,
+            scriptStartSeconds,
+            windows,
+            browserInputLabel,
+            browserTrace,
+          })
         )
           .then(answer)
           .then(async (response) =>

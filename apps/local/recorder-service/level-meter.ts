@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  CALIBRATION_CAMERA_FILE,
   CALIBRATION_MIC_FILE,
-  calibrationOutput,
   measureCalibration,
 } from "./calibration-run";
-import { quitProcess } from "./camera";
-import { METER_TAG, micInput } from "./capture-args";
+import { CAM_LINK_NOT_STARTING, quitProcess } from "./camera";
+import { calibrationCaptureArgs, METER_TAG, micInput } from "./capture-args";
 import { lineSplitter, type Launcher } from "./launcher";
 import type {
   CalibrationWindow,
@@ -27,14 +27,8 @@ import { MIC_NAME } from "../app/mic-device";
  * only listens.
  */
 
-/**
- * ffmpeg.exe's args for the meter on `mic` (its DirectShow name). `output`:
- * a calibration run's file; undefined for the plain meter, which writes none.
- */
-export const levelMeterArgs = (
-  mic: string,
-  output: readonly string[] | undefined
-) => [
+/** ffmpeg.exe's args for the plain meter on `mic` (its DirectShow name): it writes nothing. */
+export const levelMeterArgs = (mic: string) => [
   "-hide_banner",
   "-nostats",
   "-loglevel",
@@ -45,7 +39,9 @@ export const levelMeterArgs = (
   "ebur128=framelog=info",
   "-metadata",
   `comment=${METER_TAG}`,
-  ...(output ?? ["-f", "null", "-"]),
+  "-f",
+  "null",
+  "-",
 ];
 
 const NUMBER = String.raw`(-?(?:[\d.]+|inf)|nan)`;
@@ -77,21 +73,15 @@ export type LevelMeter = {
 
 export const startLevelMeter = (o: {
   launch: Launcher;
-  mic: string;
-  /** A calibration run's folder (WSL path), its mic file written there; undefined for the plain meter. */
-  calibrationDir: string | undefined;
+  /** ffmpeg.exe's args: the plain meter's, or a calibration run's capture. */
+  args: string[];
+  /** Where it runs: a calibration run's folder (WSL path). */
+  cwd: string;
   onReading: (reading: MeterReading) => void;
   /** It quit without being asked: the last line it printed, if any. */
   onExit: (lastLine: string | undefined) => void;
 }): LevelMeter => {
-  const p = o.launch({
-    tool: "ffmpeg",
-    args: levelMeterArgs(
-      o.mic,
-      o.calibrationDir ? calibrationOutput : undefined
-    ),
-    cwd: o.calibrationDir ?? "/mnt/c",
-  });
+  const p = o.launch({ tool: "ffmpeg", args: o.args, cwd: o.cwd });
   let stopping = false;
   let lastLine: string | undefined;
   p.onStderr(
@@ -112,8 +102,14 @@ export const startLevelMeter = (o: {
   };
 };
 
-/** A calibration run in progress: its id, its folder and its mic file (WSL paths). */
-type CalibrationRun = { id: string; dir: string; micFile: string };
+/** A calibration run in progress: its id, folder and files (WSL paths), its camera. */
+type CalibrationRun = {
+  id: string;
+  dir: string;
+  micFile: string;
+  cameraFile: string;
+  camera: string;
+};
 
 /**
  * The service's one level meter, run for one client (`Owner`, its socket) at
@@ -123,16 +119,29 @@ type CalibrationRun = { id: string; dir: string; micFile: string };
  * while recording) is the service's to decide.
  *
  * An AV Calibration's run takes the meter's place for a while: the same
- * mic, one process, now also writing a file (`calibration-run.ts`). Finished
- * or cancelled, the plain meter comes back for the same client; stopped, or
- * its client gone, the run is discarded with the meter. A discarded run
- * leaves no file.
+ * mic, one process, now also opening the camera and writing both to files
+ * (`calibration-run.ts`). The camera is borrowed from the service for the
+ * run (its preview lets go of the Cam Link, which opens in one process at a
+ * time) and given back when the run's process is gone. The run starts once
+ * it is live: its first reading, which comes only once the camera has
+ * opened; a process that quits before then is a refused start. Finished or
+ * cancelled, the plain meter comes back for the same client; stopped, or its
+ * client gone, the run is discarded with the meter. A discarded run leaves
+ * no file.
  */
 export const createMeterSide = <Owner>(o: {
   launch: Launcher;
   broadcast: (message: RecorderMessage) => void;
-  /** Windows wall-clock ms, for a run's folder name. */
+  /** Windows wall-clock ms, for a run's folder name and its files' T0. */
   now: () => number;
+  /** The camera's DirectShow name; refuses when it is not listed. */
+  findCamera: () => Promise<string>;
+  /** How long a run may take to go live (the camera to open), in ms. */
+  startTimeoutMs: number;
+  /** Frees the camera for a run (the service's preview lets it go)... */
+  takeCamera: () => Promise<void>;
+  /** ...and has it back once the run's process is gone. */
+  giveBackCamera: () => void;
 }) => {
   let current:
     | { meter: LevelMeter; owner: Owner; mic: string; run?: CalibrationRun }
@@ -149,36 +158,6 @@ export const createMeterSide = <Owner>(o: {
     return mic;
   };
 
-  const launchMeter = (owner: Owner, mic: string, run?: CalibrationRun) => {
-    const started = {
-      owner,
-      mic,
-      run,
-      meter: startLevelMeter({
-        launch: o.launch,
-        mic,
-        calibrationDir: run?.dir,
-        onReading: (reading) =>
-          o.broadcast({ type: "meter-reading", ...reading }),
-        onExit: (lastLine) => {
-          if (current !== started) return;
-          current = undefined;
-          const message = `The level meter's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
-          if (run) {
-            discard(run);
-            o.broadcast({
-              type: "calibration-ended",
-              calibrationId: run.id,
-              message,
-            });
-          }
-          o.broadcast({ type: "meter-stopped", message });
-        },
-      }),
-    };
-    current = started;
-  };
-
   const discard = (run: CalibrationRun) => {
     try {
       fs.rmSync(run.dir, { recursive: true, force: true });
@@ -187,12 +166,103 @@ export const createMeterSide = <Owner>(o: {
     }
   };
 
+  const launchMeter = (owner: Owner, mic: string) => {
+    const started = {
+      owner,
+      mic,
+      meter: startLevelMeter({
+        launch: o.launch,
+        args: levelMeterArgs(mic),
+        cwd: "/mnt/c",
+        onReading: (reading) =>
+          o.broadcast({ type: "meter-reading", ...reading }),
+        onExit: (lastLine) => {
+          if (current !== started) return;
+          current = undefined;
+          o.broadcast({
+            type: "meter-stopped",
+            message: `The level meter's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`,
+          });
+        },
+      }),
+    };
+    current = started;
+  };
+
+  /**
+   * Launches a run's capture in the meter's place. Answers once it is live
+   * (its first reading), with the files' seconds then; rejects with why
+   * when it quits before, or sends nothing within the start timeout (the
+   * Cam Link's real trouble: it opens and sends nothing). Once live, a quit
+   * discards the run.
+   */
+  const launchRun = (owner: Owner, mic: string, run: CalibrationRun) =>
+    new Promise<number>((resolve, reject) => {
+      const t0Ms = o.now();
+      let live = false;
+      const failToStart = (message: string) => {
+        clearTimeout(timer);
+        current = undefined;
+        o.giveBackCamera();
+        discard(run);
+        reject(new Refusal(message));
+      };
+      const started = {
+        owner,
+        mic,
+        run,
+        meter: startLevelMeter({
+          launch: o.launch,
+          args: calibrationCaptureArgs({
+            t0Ms,
+            camera: run.camera,
+            mic,
+            micFile: CALIBRATION_MIC_FILE,
+            cameraFile: CALIBRATION_CAMERA_FILE,
+          }),
+          cwd: run.dir,
+          onReading: (reading) => {
+            if (!live) {
+              live = true;
+              clearTimeout(timer);
+              // The files' clock started at T0, before the camera opened:
+              // their seconds now, a little after the first reading's.
+              resolve(Math.max(reading.seconds, (o.now() - t0Ms) / 1000));
+            }
+            o.broadcast({ type: "meter-reading", ...reading });
+          },
+          onExit: (lastLine) => {
+            if (current !== started) return;
+            const message = `The AV Calibration's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
+            if (!live) return failToStart(message);
+            current = undefined;
+            o.giveBackCamera();
+            discard(run);
+            o.broadcast({
+              type: "calibration-ended",
+              calibrationId: run.id,
+              message,
+            });
+            o.broadcast({ type: "meter-stopped", message });
+          },
+        }),
+      };
+      current = started;
+      const timer = setTimeout(() => {
+        if (live || current !== started) return;
+        void started.meter
+          .stop()
+          .finally(() => failToStart(CAM_LINK_NOT_STARTING));
+      }, o.startTimeoutMs);
+    });
+
   /** Ends a run's process; the caller brings the plain meter back. */
   const endRun = async () => {
     const ending = current;
     if (!ending?.run) throw new Refusal("No AV Calibration is running.");
     current = undefined;
     await ending.meter.stop();
+    o.giveBackCamera();
     return ending as typeof ending & { run: CalibrationRun };
   };
 
@@ -202,6 +272,7 @@ export const createMeterSide = <Owner>(o: {
     current = undefined;
     await stopped.meter.stop();
     if (stopped.run) {
+      o.giveBackCamera();
       discard(stopped.run);
       o.broadcast({
         type: "calibration-ended",
@@ -229,6 +300,7 @@ export const createMeterSide = <Owner>(o: {
       if (!path.isAbsolute(folder))
         throw new Refusal(`The folder must be an absolute path: ${folder}`);
       const mic = current?.mic ?? (await findMic());
+      const camera = await o.findCamera();
       const id = randomUUID();
       const stamp = new Date(o.now())
         .toISOString()
@@ -240,22 +312,40 @@ export const createMeterSide = <Owner>(o: {
         `${stamp} ${id.slice(0, 8)}`
       );
       fs.mkdirSync(dir, { recursive: true });
-      const run = { id, dir, micFile: path.join(dir, CALIBRATION_MIC_FILE) };
+      const run: CalibrationRun = {
+        id,
+        dir,
+        micFile: path.join(dir, CALIBRATION_MIC_FILE),
+        cameraFile: path.join(dir, CALIBRATION_CAMERA_FILE),
+        camera,
+      };
       // One process holds the mic: the plain meter makes way for the run.
       const before = current;
       current = undefined;
       await before?.meter.stop();
-      launchMeter(owner, mic, run);
+      await o.takeCamera();
+      let scriptStartSeconds: number;
+      try {
+        scriptStartSeconds = await launchRun(owner, mic, run);
+      } catch (e) {
+        // It never went live: the plain meter comes back, and Start is refused.
+        launchMeter(owner, mic);
+        throw e;
+      }
       o.broadcast({
         type: "calibration-started",
         calibrationId: id,
         mic,
         micFile: run.micFile,
+        camera,
+        cameraFile: run.cameraFile,
+        scriptStartSeconds,
       });
     },
     finishCalibration: async (windows: {
       silence: CalibrationWindow;
       speech: readonly CalibrationWindow[];
+      claps: CalibrationWindow;
     }) => {
       const { run, owner, mic } = await endRun();
       try {
@@ -269,6 +359,8 @@ export const createMeterSide = <Owner>(o: {
           calibrationId: run.id,
           mic,
           micFile: run.micFile,
+          camera: run.camera,
+          cameraFile: run.cameraFile,
           ...measured,
         });
       } catch (e) {
