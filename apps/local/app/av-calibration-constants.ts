@@ -87,7 +87,12 @@ export type CalibrationMiss =
   /** The paired claps' offsets spread over `MAX_CLAP_SPREAD_MS`. */
   | { kind: "claps-disagree"; spreadMs: number }
   /** Taken before the clap step (an Audio Calibration): no Mic Offset. */
-  | { kind: "no-clap-step" };
+  | { kind: "no-clap-step" }
+  /**
+   * The mic had a start-up gap (`clap-detection`): claps were found, but
+   * the Mic Offset over them cannot be trusted, so none was stored.
+   */
+  | { kind: "mic-start-up-gap" };
 
 /** Whether a calibration passed, and if not, every way it missed. */
 export type CalibrationJudgement =
@@ -103,6 +108,11 @@ export type CalibrationMeasures = {
   clapsFound: number | null;
   /** null: no clap found (or none looked for). */
   clapSpreadMs: number | null;
+  /**
+   * null: no clap found, or none looked for, or (with claps found) the mic
+   * had a start-up gap, so no Mic Offset could be trusted.
+   */
+  micOffsetMs: number | null;
 };
 
 /**
@@ -111,7 +121,9 @@ export type CalibrationMeasures = {
  * `MIN_CLAPS_FOUND` claps were found, and their offsets agree within one
  * camera frame. Every miss is listed, so one re-run can fix them all. A
  * calibration stored before the peak check (`truePeakDb` null) is not judged
- * on the peak; one stored before the clap step (`clapsFound` null) fails.
+ * on the peak; one stored before the clap step (`clapsFound` null) fails,
+ * as does one whose claps were found with no Mic Offset (the mic's start-up
+ * gap left it untrusted).
  */
 export const judgeCalibration = (
   m: CalibrationMeasures
@@ -133,6 +145,8 @@ export const judgeCalibration = (
     misses.push({ kind: "too-few-claps", found: m.clapsFound });
   if (m.clapSpreadMs !== null && m.clapSpreadMs > MAX_CLAP_SPREAD_MS)
     misses.push({ kind: "claps-disagree", spreadMs: m.clapSpreadMs });
+  if (m.clapsFound && m.micOffsetMs === null)
+    misses.push({ kind: "mic-start-up-gap" });
   const [first, ...rest] = misses;
   return first
     ? { outcome: "failed", misses: [first, ...rest] }
@@ -143,7 +157,13 @@ export const judgeCalibration = (
 export const describeClapMiss = (
   miss: Extract<
     CalibrationMiss,
-    { kind: "too-few-claps" | "claps-disagree" | "no-clap-step" }
+    {
+      kind:
+        | "too-few-claps"
+        | "claps-disagree"
+        | "no-clap-step"
+        | "mic-start-up-gap";
+    }
   >
 ): string => {
   switch (miss.kind) {
@@ -153,6 +173,8 @@ export const describeClapMiss = (
       return `Claps disagree by ${Math.round(miss.spreadMs)} ms`;
     case "no-clap-step":
       return "Taken before the clap step: no Mic Offset";
+    case "mic-start-up-gap":
+      return "The mic dropped out as it started: its Mic Offset can't be trusted";
   }
 };
 
@@ -254,6 +276,14 @@ export const SCRIPT_SCHEDULE: readonly ScriptStep[] = (() => {
 })();
 
 export const SCRIPT_END_SECONDS = SCRIPT_SCHEDULE.at(-1)!.endSeconds;
+
+/**
+ * Why Start is refused when another program (OBS) holds the Cam Link: the
+ * session never starts, and nothing is recorded or stored. CVM never closes
+ * OBS itself; Matt does, then presses Start again.
+ */
+export const CLOSE_OBS_TO_CALIBRATE =
+  "Close OBS to calibrate: another program has the Cam Link.";
 
 export type TimeWindow = { startSeconds: number; endSeconds: number };
 

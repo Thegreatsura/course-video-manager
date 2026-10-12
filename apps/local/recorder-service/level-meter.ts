@@ -3,10 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   CALIBRATION_CAMERA_FILE,
+  CALIBRATION_CAPTURE_LOG,
   CALIBRATION_MIC_FILE,
   measureCalibration,
 } from "./calibration-run";
-import { CAM_LINK_NOT_STARTING, quitProcess } from "./camera";
+import { CAM_LINK_NOT_STARTING, quitProcess, saysDeviceBusy } from "./camera";
 import { calibrationCaptureArgs, METER_TAG, micInput } from "./capture-args";
 import { lineSplitter, type Launcher } from "./launcher";
 import type {
@@ -17,6 +18,15 @@ import type {
 import { findByName, Refusal } from "./refusal";
 import { listDshowDevices } from "./windows-devices";
 import { MIC_NAME } from "../app/mic-device";
+import {
+  CLOSE_OBS_TO_CALIBRATE,
+  runMeasurementWindows,
+} from "../app/av-calibration-constants";
+import {
+  motionLineReader,
+  type MotionPoint,
+} from "../app/packages/clap-detection/live";
+import { createLiveClaps, type LiveClaps } from "./live-claps";
 
 /**
  * THE LEVEL METER (#2078): the AV Calibration page's live loudness of the
@@ -77,22 +87,40 @@ export const startLevelMeter = (o: {
   args: string[];
   /** Where it runs: a calibration run's folder (WSL path). */
   cwd: string;
+  /** A file to keep everything it prints in (a calibration run's log). */
+  logFile?: string;
   onReading: (reading: MeterReading) => void;
-  /** It quit without being asked: the last line it printed, if any. */
-  onExit: (lastLine: string | undefined) => void;
+  /** A frame's motion, when the process prints it (a calibration run's camera). */
+  onMotion?: (point: MotionPoint) => void;
+  /**
+   * It quit without being asked: the last line it printed, if any, and the
+   * last few lines that were not readings (where dshow says why it failed).
+   */
+  onExit: (lastLine: string | undefined, said: string) => void;
 }): LevelMeter => {
   const p = o.launch({ tool: "ffmpeg", args: o.args, cwd: o.cwd });
   let stopping = false;
-  let lastLine: string | undefined;
+  const said: string[] = [];
+  const log = o.logFile === undefined ? undefined : fs.openSync(o.logFile, "a");
+  if (log !== undefined) {
+    p.onStderr((chunk) => fs.writeSync(log, chunk));
+    void p.exited.then(() => fs.closeSync(log));
+  }
+  const readMotion = motionLineReader();
   p.onStderr(
     lineSplitter((line) => {
       const reading = parseMeterLine(line);
       if (reading) return o.onReading(reading);
-      if (line.trim()) lastLine = line.trim();
+      const motion = readMotion(line);
+      if (motion) return o.onMotion?.(motion);
+      // A frame's motion is printed over two lines: neither says why it quit.
+      if (!line.trim() || /\bpts_time:/.test(line)) return;
+      said.push(line.trim());
+      if (said.length > 20) said.shift();
     })
   );
   void p.exited.then(() => {
-    if (!stopping) o.onExit(lastLine);
+    if (!stopping) o.onExit(said.at(-1), said.join("\n"));
   });
   return {
     stop: () => {
@@ -102,13 +130,17 @@ export const startLevelMeter = (o: {
   };
 };
 
-/** A calibration run in progress: its id, folder and files (WSL paths), its camera. */
+/**
+ * A calibration run in progress: its id, folder and files (WSL paths), its
+ * camera, and its live clap marks once it is live.
+ */
 type CalibrationRun = {
   id: string;
   dir: string;
   micFile: string;
   cameraFile: string;
   camera: string;
+  claps?: LiveClaps;
 };
 
 /**
@@ -124,7 +156,9 @@ type CalibrationRun = {
  * run (its preview lets go of the Cam Link, which opens in one process at a
  * time) and given back when the run's process is gone. The run starts once
  * it is live: its first reading, which comes only once the camera has
- * opened; a process that quits before then is a refused start. Finished or
+ * opened; a process that quits before then is a refused start ("Close OBS
+ * to calibrate" when dshow says another program holds the Cam Link; the
+ * service never closes OBS itself). Finished or
  * cancelled, the plain meter comes back for the same client; stopped, or its
  * client gone, the run is discarded with the meter. A discarded run leaves
  * no file.
@@ -159,6 +193,7 @@ export const createMeterSide = <Owner>(o: {
   };
 
   const discard = (run: CalibrationRun) => {
+    run.claps?.stop();
     try {
       fs.rmSync(run.dir, { recursive: true, force: true });
     } catch (e) {
@@ -221,6 +256,7 @@ export const createMeterSide = <Owner>(o: {
             cameraFile: CALIBRATION_CAMERA_FILE,
           }),
           cwd: run.dir,
+          logFile: path.join(run.dir, CALIBRATION_CAPTURE_LOG),
           onReading: (reading) => {
             if (!live) {
               live = true;
@@ -230,11 +266,18 @@ export const createMeterSide = <Owner>(o: {
               resolve(Math.max(reading.seconds, (o.now() - t0Ms) / 1000));
             }
             o.broadcast({ type: "meter-reading", ...reading });
+            run.claps?.update();
           },
-          onExit: (lastLine) => {
+          onMotion: (point) => run.claps?.addMotion(point),
+          onExit: (lastLine, said) => {
             if (current !== started) return;
             const message = `The AV Calibration's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
-            if (!live) return failToStart(message);
+            // Another program has the Cam Link: Matt closes OBS (CVM never
+            // does) and presses Start again.
+            if (!live)
+              return failToStart(
+                saysDeviceBusy(said) ? CLOSE_OBS_TO_CALIBRATE : message
+              );
             current = undefined;
             o.giveBackCamera();
             discard(run);
@@ -262,6 +305,7 @@ export const createMeterSide = <Owner>(o: {
     if (!ending?.run) throw new Refusal("No AV Calibration is running.");
     current = undefined;
     await ending.meter.stop();
+    ending.run.claps?.stop();
     o.giveBackCamera();
     return ending as typeof ending & { run: CalibrationRun };
   };
@@ -332,6 +376,12 @@ export const createMeterSide = <Owner>(o: {
         launchMeter(owner, mic);
         throw e;
       }
+      run.claps = createLiveClaps({
+        micFile: run.micFile,
+        window: runMeasurementWindows(scriptStartSeconds).claps,
+        onMarks: (claps) =>
+          o.broadcast({ type: "calibration-claps", calibrationId: id, claps }),
+      });
       o.broadcast({
         type: "calibration-started",
         calibrationId: id,

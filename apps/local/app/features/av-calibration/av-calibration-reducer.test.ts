@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
 import {
+  CLOSE_OBS_TO_CALIBRATE,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
 } from "@/av-calibration-constants";
@@ -8,6 +9,7 @@ import {
   avCalibrationReducer,
   createInitialAVCalibrationState,
   currentStep,
+  liveClaps,
 } from "./av-calibration-reducer";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import type { SavedAVCalibration } from "./calibration-wire";
@@ -137,5 +139,87 @@ describe("the AV Calibration page's session", () => {
     expect(windows.speech[0]!.startSeconds).toBeGreaterThanOrEqual(
       windows.claps.endSeconds
     );
+  });
+
+  it("says Close OBS to calibrate when another program holds the Cam Link, starts nothing, and starts once it is freed, without a reload", () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState(createMockExec())
+    );
+    t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
+      .send({ type: "start-clicked" })
+      .send({ type: "start-refused", message: CLOSE_OBS_TO_CALIBRATE });
+    expect(t.getState().session).toEqual({ kind: "camera-busy" });
+    expect(t.getState().browser.capture).toBeNull();
+    // Nothing ran, so nothing is measured or stored.
+    expect(t.getEffects().map((e) => e.type)).toEqual([
+      "start-calibration",
+      "capture-browser-levels",
+    ]);
+
+    // Matt closes OBS and presses Start again.
+    t.resetExec().send({ type: "start-clicked" }).send({
+      type: "calibration-started",
+      calibrationId: "run-1",
+      mic: "Voicemeeter Out B1",
+      scriptStartSeconds: 3.1,
+    });
+    expect(t.getEffects().map((e) => e.type)).toEqual([
+      "start-calibration",
+      "capture-browser-levels",
+    ]);
+    expect(t.getState().session).toMatchObject({
+      kind: "running",
+      calibrationId: "run-1",
+    });
+  });
+
+  it("shows any other refused Start, such as a Cam Link that opens and sends nothing, as the session stopping", () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState(createMockExec())
+    );
+    const notStarting =
+      "Cam Link not starting: unplug and replug it, then press Retry.";
+    t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
+      .send({ type: "start-clicked" })
+      .send({ type: "start-refused", message: notStarting });
+    expect(t.getState().session).toEqual({
+      kind: "failed",
+      message: notStarting,
+    });
+  });
+
+  it("shows the run's clap marks during the clap step only, ignoring another run's", () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState(createMockExec())
+    );
+    const clapsAt = SCRIPT_SCHEDULE.find((s) => s.kind === "clap-ready")!;
+    const readAt = SCRIPT_SCHEDULE.find((s) => s.kind === "read")!;
+    const marks = [
+      { audioS: 4.2 + 17.1, seen: true },
+      { audioS: 4.2 + 18.6, seen: false },
+    ];
+    t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
+      .send({ type: "start-clicked" })
+      .send({
+        type: "calibration-started",
+        calibrationId: "run-1",
+        mic: "Voicemeeter Out B1",
+        scriptStartSeconds: 4.2,
+      })
+      .send(reading(4.2 + 1));
+    expect(liveClaps(t.getState())).toBeNull();
+
+    t.send(reading(4.2 + clapsAt.startSeconds + 0.1));
+    expect(liveClaps(t.getState())).toEqual([]);
+    t.send({ type: "calibration-claps", calibrationId: "run-1", claps: marks })
+      .send({ type: "calibration-claps", calibrationId: "run-0", claps: [] })
+      .send(reading(4.2 + clapsAt.startSeconds + 5));
+    expect(liveClaps(t.getState())).toEqual(marks);
+
+    t.send(reading(4.2 + readAt.startSeconds + 0.1));
+    expect(liveClaps(t.getState())).toBeNull();
   });
 });

@@ -17,9 +17,10 @@ import {
   type ScriptStep,
 } from "@/av-calibration-constants";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Ear, Eye, EyeOff, Loader2, XCircle } from "lucide-react";
 import {
   currentStep,
+  liveClaps,
   type avCalibrationReducer,
 } from "./av-calibration-reducer";
 import { CalibrationTimelineView } from "./calibration-timeline-view";
@@ -118,6 +119,51 @@ const Prompt = ({ state }: { state: State }) => {
   );
 };
 
+/**
+ * The clap step's live marks: each clap as the mic hears it, and whether the
+ * camera saw the hands meet. Only a clap both heard and seen counts.
+ */
+const ClapMarks = ({ state }: { state: State }) => {
+  const claps = liveClaps(state);
+  if (!claps) return null;
+  const seen = claps.filter((c) => c.seen).length;
+  return (
+    <div className="space-y-2" data-testid="live-claps">
+      <div className="flex flex-wrap gap-2 min-h-10">
+        {claps.length === 0 && (
+          <span className="self-center text-muted-foreground">
+            Listening for claps…
+          </span>
+        )}
+        {claps.map((clap, i) => (
+          <div
+            key={clap.audioS}
+            className={cn(
+              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+              clap.seen
+                ? "border-emerald-500/60 text-emerald-400"
+                : "border-amber-500/60 text-amber-400"
+            )}
+          >
+            <span className="font-semibold">Clap {i + 1}</span>
+            <Ear className="w-4 h-4" aria-label="heard" />
+            {clap.seen ? (
+              <Eye className="w-4 h-4" aria-label="seen" />
+            ) : (
+              <EyeOff className="w-4 h-4" aria-label="not seen" />
+            )}
+            <span>{clap.seen ? "heard and seen" : "heard, not seen"}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {seen} of {CLAPS_PROMPTED} counted so far ({MIN_CLAPS_FOUND} needed): a
+        clap counts when the mic hears it and the camera sees your hands meet.
+      </p>
+    </div>
+  );
+};
+
 /** How far through the script the run is. */
 const Progress = ({ seconds }: { seconds: number }) => (
   <div className="h-1.5 rounded bg-muted overflow-hidden">
@@ -144,6 +190,7 @@ const missTitle = (miss: CalibrationMiss) => {
     case "too-few-claps":
     case "claps-disagree":
     case "no-clap-step":
+    case "mic-start-up-gap":
       return describeClapMiss(miss);
     case "too-quiet":
       return `Too quiet by ${dB(miss.byDb)}`;
@@ -168,6 +215,8 @@ const missAdvice = (miss: CalibrationMiss) => {
       return "The claps gave different offsets: clap crisply, hands meeting flat, then run it again.";
     case "no-clap-step":
       return "Run an AV Calibration to measure the Mic Offset.";
+    case "mic-start-up-gap":
+      return "The recorder lost a moment of the mic just after it started, which shifts the mic against the camera: run it again.";
   }
 };
 
@@ -308,6 +357,7 @@ export const CalibrationSession = ({
       {(session.kind === "starting" || session.kind === "running") && (
         <>
           <Prompt state={state} />
+          <ClapMarks state={state} />
           <Progress
             seconds={session.kind === "running" ? session.seconds : 0}
           />
@@ -340,6 +390,27 @@ export const CalibrationSession = ({
             Back to the meter
           </Button>
         </>
+      )}
+
+      {session.kind === "camera-busy" && (
+        <div className="flex items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="text-xl font-semibold text-amber-500">
+              Close OBS to calibrate
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Another program has the Cam Link, so the session did not start and
+              nothing was recorded. Close OBS, then press Start.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            onClick={onStart}
+            disabled={state.meter.status !== "running"}
+          >
+            Start
+          </Button>
+        </div>
       )}
 
       {session.kind === "failed" && (

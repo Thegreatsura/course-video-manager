@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { isSessionIdle } from "@/features/av-calibration/av-calibration-reducer";
 import { CalibrationHistory } from "@/features/av-calibration/calibration-history";
 import { CalibrationSession } from "@/features/av-calibration/calibration-session";
 import { LevelMeter } from "@/features/av-calibration/level-meter";
@@ -76,11 +77,7 @@ export default function AVCalibrationPage({
         <CalibrationHistory
           calibrations={loaderData.calibrations}
           openId={session.kind === "result" ? session.calibration.id : null}
-          disabled={
-            session.kind !== "meter" &&
-            session.kind !== "result" &&
-            session.kind !== "failed"
-          }
+          disabled={!isSessionIdle(session)}
           onOpen={(calibration) =>
             dispatch({ type: "past-calibration-clicked", calibration })
           }

@@ -1,5 +1,6 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  CLOSE_OBS_TO_CALIBRATE,
   runMeasurementWindows,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
@@ -10,6 +11,7 @@ import type {
   FinishCalibrationRequest,
   SavedAVCalibration,
 } from "./calibration-wire";
+import type { ClapMark } from "@/packages/clap-detection/live";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
 
@@ -32,6 +34,17 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * stores the AV Calibration, passed or failed. Cancel, from any step before
  * the analysis, stores nothing.
  *
+ * Start opens the camera first. Another program (OBS) holding the Cam Link
+ * refuses it with `CLOSE_OBS_TO_CALIBRATE`: the session never starts, and
+ * the page says "Close OBS to calibrate" with Start, which works again as
+ * soon as OBS lets go. A camera that opens but sends nothing is refused with
+ * the "Cam Link not starting" message, as any other refusal.
+ *
+ * During the clap step each clap shows as the mic hears it, marked seen once
+ * the camera saw its contact (`calibration-claps`, worked out by the
+ * recorder service with the result's own rules, so the claps marked seen are
+ * the claps the result finds).
+ *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
  * and timed onto the same axis through the reading heard last.
  *
@@ -48,6 +61,8 @@ export namespace avCalibrationReducer {
     | { kind: "meter" }
     /** Start was pressed; the run has not said it runs. */
     | { kind: "starting" }
+    /** Start was refused: another program (OBS) holds the Cam Link. */
+    | { kind: "camera-busy" }
     | {
         kind: "running";
         calibrationId: string;
@@ -57,6 +72,8 @@ export namespace avCalibrationReducer {
         seconds: number;
         /** In seconds of the run's files, as the browser trace is timed. */
         anchor: Anchor | null;
+        /** The claps heard so far, each seen or not (`calibration-claps`). */
+        claps: ClapMark[];
       }
     | { kind: "analysing"; calibrationId: string }
     | {
@@ -225,6 +242,16 @@ const showResult = (
   };
 };
 
+/**
+ * No run in progress: Start, and a past calibration, may be opened. The
+ * meter, a result, a failure or a refused Start.
+ */
+export const isSessionIdle = (session: avCalibrationReducer.Session) =>
+  session.kind === "meter" ||
+  session.kind === "result" ||
+  session.kind === "failed" ||
+  session.kind === "camera-busy";
+
 export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
@@ -260,8 +287,18 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
           scriptStartSeconds: action.scriptStartSeconds,
           seconds: 0,
           anchor: null,
+          claps: [],
         },
       };
+    }
+    case "calibration-claps": {
+      const session = state.session;
+      if (
+        session.kind !== "running" ||
+        session.calibrationId !== action.calibrationId
+      )
+        return state;
+      return { ...state, session: { ...session, claps: action.claps } };
     }
     case "calibration-failed": {
       const session = state.session;
@@ -273,9 +310,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       return fail(state, exec, action.message);
     }
     case "start-clicked": {
-      const { kind } = state.session;
-      if (kind !== "meter" && kind !== "result" && kind !== "failed")
-        return state;
+      if (!isSessionIdle(state.session)) return state;
       if (state.meter.status !== "running") return state;
       exec({ type: "start-calibration" });
       return {
@@ -289,6 +324,12 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
     }
     case "start-refused":
       if (state.session.kind !== "starting") return state;
+      if (action.message === CLOSE_OBS_TO_CALIBRATE)
+        return {
+          ...state,
+          session: { kind: "camera-busy" },
+          browser: stopCapture(state, exec),
+        };
       return fail(state, exec, action.message);
     case "cancel-clicked": {
       const { kind } = state.session;
@@ -298,7 +339,11 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, session: { kind: "meter" }, browser: noBrowser() };
     }
     case "back-to-meter-clicked":
-      if (state.session.kind !== "result" && state.session.kind !== "failed")
+      if (
+        state.session.kind !== "result" &&
+        state.session.kind !== "failed" &&
+        state.session.kind !== "camera-busy"
+      )
         return state;
       return { ...state, session: { kind: "meter" } };
     case "browser-input-opened":
@@ -351,9 +396,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       exec({ type: "refresh-history" });
       return showResult(state, action.calibration, exec);
     case "past-calibration-clicked": {
-      const { kind } = state.session;
-      if (kind !== "meter" && kind !== "result" && kind !== "failed")
-        return state;
+      if (!isSessionIdle(state.session)) return state;
       return showResult(state, action.calibration, exec);
     }
     case "timeline-loaded":
@@ -400,3 +443,17 @@ export const currentStep = (state: State) =>
   state.session.kind === "running"
     ? (stepAt(state.session.seconds) ?? null)
     : null;
+
+/**
+ * The claps to show now: during the clap step (hands up, then each clap),
+ * every clap heard so far, each seen or not; null outside it.
+ */
+export const liveClaps = (state: State): ClapMark[] | null => {
+  const now = currentStep(state);
+  if (
+    state.session.kind !== "running" ||
+    (now?.step.kind !== "clap-ready" && now?.step.kind !== "clap")
+  )
+    return null;
+  return state.session.claps;
+};

@@ -237,6 +237,10 @@ describe("a Recording Session", () => {
     expect(await client.next("recording-started")).toMatchObject({
       thresholdDb: -36.5,
       avCalibrationId: "calibration-1",
+      devices: {
+        camera: "Cam Link 4K",
+        mic: "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)",
+      },
     });
     expect(windows.recorder("camera").launch.args.join(" ")).toContain(
       "silencedetect=n=-36.5dB:d=0.8"

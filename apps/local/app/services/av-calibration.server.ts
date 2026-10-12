@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Data, Effect, Schema } from "effect";
 import path from "node:path";
 import { avCalibrations } from "@/db/schema";
@@ -20,7 +20,7 @@ import {
   runSchedule,
   SCRIPT_VERSION,
 } from "@/av-calibration-constants";
-import { detectClaps, type ClapMatch } from "@/packages/clap-detection";
+import { detectClaps, type ClapDetection } from "@/packages/clap-detection";
 import type {
   BrowserTracePoint,
   SavedAVCalibration,
@@ -48,20 +48,23 @@ export class CalibrationRunMismatchError extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 /** No clap found: what a failed clap detection stores. */
-const NO_CLAPS: ClapMatch = {
+const NO_CLAPS: ClapDetection = {
   claps: [],
   found: 0,
   spreadMs: null,
   micOffsetMs: null,
+  startUpGap: null,
 };
 
 /**
  * Stores an AV Calibration from its run's measurement, passed or failed:
  * finds the claps in its mic and camera files over the clap window
- * (`clap-detection`) for the Mic Offset, judges the speech loudness against
- * the band, the true peak against its ceiling and the claps against their
- * rule, derives the threshold, writes the browser's trace beside the mic
- * file (with the schedule its prompts followed, in the files' seconds), and
+ * (`clap-detection`) for the Mic Offset (none when the mic had a start-up
+ * gap: the claps are kept, the offset is not, and that fails it), judges
+ * the speech loudness against the band, the true peak against its ceiling
+ * and the claps against their rule, derives the threshold, writes the
+ * browser's trace beside the mic file (with the schedule its prompts
+ * followed, in the files' seconds, the claps and any start-up gap), and
  * saves the row with whatever it measured.
  */
 export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
@@ -111,6 +114,7 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     truePeakDb: measured.truePeakDb,
     clapsFound: claps.found,
     clapSpreadMs: claps.spreadMs,
+    micOffsetMs: claps.micOffsetMs,
   });
   const thresholdDb = deriveThreshold(measured.speechLufs);
   const browserTracePath = yield* assertUnderEffect(
@@ -128,6 +132,7 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
       browserInputLabel: o.browserInputLabel,
       trace: o.browserTrace,
       claps: claps.claps,
+      micStartUpGap: claps.startUpGap,
     })
   );
   const [row] = yield* dbCall(() =>
@@ -307,6 +312,47 @@ export const lastPassedCalibration = Effect.fn("lastPassedCalibration")(
       : null;
   }
 );
+
+/** A camera + mic device pair, by their DirectShow names. */
+export type DevicePair = { camera: string; mic: string };
+
+/**
+ * The latest AV Calibration taken on `pair` that passes under today's rules
+ * (`passesCurrentRules`), or null: the pair's one query, which its Mic
+ * Offset is read from.
+ */
+export const lastPassedCalibrationForPair = Effect.fn(
+  "lastPassedCalibrationForPair"
+)(function* (db: Database, pair: DevicePair) {
+  const rows = yield* dbCall(() =>
+    db
+      .select()
+      .from(avCalibrations)
+      .where(
+        and(
+          eq(avCalibrations.outcome, "passed"),
+          eq(avCalibrations.cameraDevice, pair.camera),
+          eq(avCalibrations.recorderMic, pair.mic)
+        )
+      )
+      .orderBy(desc(avCalibrations.createdAt))
+      .limit(LAST_PASSED_SCAN)
+  );
+  return rows.find(passesCurrentRules) ?? null;
+});
+
+/**
+ * The Mic Offset for a pair (GLOSSARY.md, AV Calibration), in whole ms: its
+ * latest passed AV Calibration's. A new Recording Session starts with it;
+ * null when the pair was never measured (DEFAULT_MIC_OFFSET_MS then).
+ */
+export const pairMicOffsetMs = Effect.fn("pairMicOffsetMs")(function* (
+  db: Database,
+  pair: DevicePair
+) {
+  const offset = (yield* lastPassedCalibrationForPair(db, pair))?.micOffsetMs;
+  return offset == null ? null : Math.round(offset);
+});
 
 /** `lastPassedCalibration` on the app's database. */
 export const lastPassedCalibrationNow = Effect.gen(function* () {
