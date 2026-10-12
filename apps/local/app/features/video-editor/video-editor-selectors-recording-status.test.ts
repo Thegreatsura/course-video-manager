@@ -1,38 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { OBSConnectionOuterState } from "./obs-connector";
 import { getShowRecordingSignal } from "./video-editor-selectors";
 
-const recording: OBSConnectionOuterState = {
-  type: "obs-recording",
-  profile: "Landscape",
-  scene: "Camera",
-  latestOutputPath: "/out.mkv",
-};
-
-const connected: OBSConnectionOuterState = {
-  type: "obs-connected",
-  profile: "Landscape",
-  scene: "Camera",
-  latestOutputPath: null,
-};
-
-const notRunning: OBSConnectionOuterState = { type: "obs-not-running" };
-
 describe("getShowRecordingSignal", () => {
-  it("shows the pulsing signal while OBS is recording", () => {
-    expect(getShowRecordingSignal(recording, false)).toBe(true);
+  it("shows the pulsing signal while a take is under way", () => {
+    expect(getShowRecordingSignal(true, false)).toBe(true);
   });
 
-  it("stays hidden when OBS is connected but not recording", () => {
-    expect(getShowRecordingSignal(connected, false)).toBe(false);
-    expect(getShowRecordingSignal(notRunning, false)).toBe(false);
+  it("stays hidden when nothing is recording", () => {
+    expect(getShowRecordingSignal(false, false)).toBe(false);
   });
 
   // The reason this selector exists: the glass carries the same status, and a
   // pulsing red circle on the editor is the one thing you can't stop seeing
   // while you read off the prompter.
   it("stays hidden while recording if the teleprompter is connected", () => {
-    expect(getShowRecordingSignal(recording, true)).toBe(false);
+    expect(getShowRecordingSignal(true, true)).toBe(false);
   });
 
   // A teleprompter attached while OBS is idle must not resurrect the signal

@@ -58,6 +58,10 @@ export const PortraitStudioPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.isTeleprompterConnected
   );
+  const isRecordingActive = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.isRecordingActive
+  );
   const clipsToAggressivelyPreload = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.clipsToAggressivelyPreload
@@ -128,7 +132,7 @@ export const PortraitStudioPanel = () => {
   const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
   const showCenterLine = getShowCenterLineSelector(obsConnectorState);
   const showRecordingSignal = getShowRecordingSignalSelector(
-    obsConnectorState,
+    isRecordingActive,
     isTeleprompterConnected
   );
   const showScrubSlider = getShowScrubSliderSelector(

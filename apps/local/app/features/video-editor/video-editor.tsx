@@ -16,6 +16,7 @@ import type { CourseEditorEvent } from "@/services/course-editor-service";
 import type { BeatListBeat } from "@/features/beats/beat-list";
 import { useAutofillChaptersModal } from "./hooks/use-autofill-chapters-modal";
 import { useChapterModal } from "./hooks/use-chapter-modal";
+import { getHasLivePreview } from "./live-preview";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useTeleprompterShortcuts } from "./hooks/use-teleprompter-shortcuts";
 import { useTeleprompterEditorMode } from "./hooks/use-teleprompter-editor-mode";
@@ -264,14 +265,15 @@ export const VideoEditor = (props: {
 
   const totalDuration = getTotalDuration(clips);
 
+  const hasLivePreview = getHasLivePreview(
+    props.liveMediaStream,
+    props.newRecorder.state
+  );
   const showVideoPlayer = getShowVideoPlayer(
     state.runningState,
-    !!props.liveMediaStream
+    hasLivePreview
   );
-  const showLiveStream = getShowLiveStream(
-    !!props.liveMediaStream,
-    state.runningState
-  );
+  const showLiveStream = getShowLiveStream(hasLivePreview, state.runningState);
   const showLastFrame = getShowLastFrame(state.showLastFrameOfVideo);
 
   const databaseClipToShowLastFrameOf = getDatabaseClipBeforeInsertionPoint(
