@@ -21,12 +21,16 @@ export interface FootageStats {
   readonly last7DaysSeconds: number;
   readonly last30DaysSeconds: number;
   /**
-   * Today's efficiency, by Clip rather than by duration: how many of the
-   * Clips filmed today are still live (`todayKeptClips`) out of all of them,
-   * archived ones included (`todayClips`). No Clips today means no ratio.
+   * Each window's efficiency, by Clip rather than by duration: how many of the
+   * Clips filmed in it are still live (`…KeptClips`) out of all of them,
+   * archived ones included (`…Clips`). No Clips in a window means no ratio.
    */
   readonly todayClips: number;
   readonly todayKeptClips: number;
+  readonly last7DaysClips: number;
+  readonly last7DaysKeptClips: number;
+  readonly last30DaysClips: number;
+  readonly last30DaysKeptClips: number;
 }
 
 /**
@@ -38,7 +42,7 @@ const EFFECT_CLIP_SCENE = "white noise";
 
 /**
  * One aggregate over the Clips filmed in the last 30 days: nothing but three
- * sums and two counts leaves the database.
+ * sums and six counts leaves the database.
  *
  * - **When** a Clip was filmed is the earlier of its `created_at` and its
  *   `transcribed_at`. Every copy of a Clip (a Submit's new Draft, a
@@ -51,7 +55,7 @@ const EFFECT_CLIP_SCENE = "white noise";
  *   Version holds frozen copies) — each counted for `source_end_time -
  *   source_start_time`. The same stretch of Footage on two live Videos (a
  *   duplicated Course) counts once, dated by its earliest copy.
- * - **Efficiency** (today only): the same Clips, archived ones now included,
+ * - **Efficiency** (per window): the same Clips, archived ones now included,
  *   each counted once as above. A Clip is kept when any copy of it is live.
  *
  * Day boundaries are local midnights in `timeZone` (an IANA name), so a day
@@ -81,6 +85,10 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
         last_30_days: number | string | null;
         today_clips: number | string | null;
         today_kept_clips: number | string | null;
+        last_7_days_clips: number | string | null;
+        last_7_days_kept_clips: number | string | null;
+        last_30_days_clips: number | string | null;
+        last_30_days_kept_clips: number | string | null;
       }>(sql`
         WITH segments AS (
           SELECT min(${filmedAt}) FILTER (WHERE ${clips.archived} = false) AS filmed_at,
@@ -110,7 +118,15 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
           ) AS today_clips,
           count(*) FILTER (
             WHERE kept AND any_filmed_at >= ${localMidnight} AT TIME ZONE ${tz}
-          ) AS today_kept_clips
+          ) AS today_kept_clips,
+          count(*) FILTER (
+            WHERE any_filmed_at >= (${localMidnight} - interval '6 days') AT TIME ZONE ${tz}
+          ) AS last_7_days_clips,
+          count(*) FILTER (
+            WHERE kept AND any_filmed_at >= (${localMidnight} - interval '6 days') AT TIME ZONE ${tz}
+          ) AS last_7_days_kept_clips,
+          count(*) AS last_30_days_clips,
+          count(*) FILTER (WHERE kept) AS last_30_days_kept_clips
         FROM segments
       `),
     catch: (cause) => new UnknownDBServiceError({ cause }),
@@ -123,5 +139,9 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
     last30DaysSeconds: Number(row?.last_30_days ?? 0),
     todayClips: Number(row?.today_clips ?? 0),
     todayKeptClips: Number(row?.today_kept_clips ?? 0),
+    last7DaysClips: Number(row?.last_7_days_clips ?? 0),
+    last7DaysKeptClips: Number(row?.last_7_days_kept_clips ?? 0),
+    last30DaysClips: Number(row?.last_30_days_clips ?? 0),
+    last30DaysKeptClips: Number(row?.last_30_days_kept_clips ?? 0),
   } satisfies FootageStats;
 });
