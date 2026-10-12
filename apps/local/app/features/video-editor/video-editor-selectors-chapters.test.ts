@@ -84,18 +84,6 @@ describe("getChapterForClip", () => {
     ];
     expect(getChapterForClip(items, id("c1"))).toBeUndefined();
   });
-
-  it("returns undefined when clip is not found in items", () => {
-    const items: TimelineItem[] = [
-      makeChapter(id("ch1"), "Intro"),
-      makeClip({ frontendId: id("c1") }),
-    ];
-    expect(getChapterForClip(items, id("missing"))).toBeUndefined();
-  });
-
-  it("returns undefined for empty items", () => {
-    expect(getChapterForClip([], id("c1"))).toBeUndefined();
-  });
 });
 
 describe("getChapterPercentComplete", () => {

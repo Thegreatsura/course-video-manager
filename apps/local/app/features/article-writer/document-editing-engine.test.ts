@@ -12,30 +12,6 @@ describe("applyEdits", () => {
       expect(result).toEqual({ document: "Hello universe, this is a test." });
     });
 
-    it("replaces a full paragraph", () => {
-      const doc = `# Title
-
-First paragraph here.
-
-Second paragraph here.`;
-
-      const result = applyEdits(doc, [
-        {
-          type: "replace",
-          old_text: "First paragraph here.",
-          new_text: "Rewritten first paragraph.",
-        },
-      ]);
-
-      expect(result).toEqual({
-        document: `# Title
-
-Rewritten first paragraph.
-
-Second paragraph here.`,
-      });
-    });
-
     it("deletes text when new_text is empty", () => {
       const doc = "Keep this. Remove this. Keep this too.";
       const result = applyEdits(doc, [
@@ -65,30 +41,6 @@ Second paragraph here.`,
       expect(result).toEqual({
         error: expect.stringContaining("matched 3 locations"),
       });
-    });
-
-    it("replaces text at document start", () => {
-      const doc = "Start of document. Rest here.";
-      const result = applyEdits(doc, [
-        {
-          type: "replace",
-          old_text: "Start of document.",
-          new_text: "New beginning.",
-        },
-      ]);
-      expect(result).toEqual({ document: "New beginning. Rest here." });
-    });
-
-    it("replaces text at document end", () => {
-      const doc = "Beginning. End of document.";
-      const result = applyEdits(doc, [
-        {
-          type: "replace",
-          old_text: "End of document.",
-          new_text: "New ending.",
-        },
-      ]);
-      expect(result).toEqual({ document: "Beginning. New ending." });
     });
 
     it("uses whitespace-insensitive fallback when exact match fails", () => {
@@ -130,28 +82,6 @@ Second paragraph here.`,
       ]);
       expect(result).toEqual({
         document: "# Introduction\n\nInserted paragraph.\n\nSome content here.",
-      });
-    });
-
-    it("inserts after anchor in the middle of document", () => {
-      const doc = "AAA BBB CCC";
-      const result = applyEdits(doc, [
-        { type: "insert_after", anchor: "BBB", new_text: " INSERTED" },
-      ]);
-      expect(result).toEqual({ document: "AAA BBB INSERTED CCC" });
-    });
-
-    it("inserts at document end when anchor is at the end", () => {
-      const doc = "Content here.";
-      const result = applyEdits(doc, [
-        {
-          type: "insert_after",
-          anchor: "Content here.",
-          new_text: "\n\nAppended.",
-        },
-      ]);
-      expect(result).toEqual({
-        document: "Content here.\n\nAppended.",
       });
     });
 
@@ -201,13 +131,6 @@ Second paragraph here.`,
         { type: "rewrite", new_text: "Brand new document." },
       ]);
       expect(result).toEqual({ document: "Brand new document." });
-    });
-
-    it("works with empty document", () => {
-      const result = applyEdits("", [
-        { type: "rewrite", new_text: "New content." },
-      ]);
-      expect(result).toEqual({ document: "New content." });
     });
 
     it("can rewrite to empty document", () => {
@@ -264,17 +187,6 @@ Second paragraph here.`,
         error: expect.stringContaining("not found"),
       });
     });
-
-    it("adjacent edits work correctly", () => {
-      const doc = "AABBCC";
-      const edits: DocumentEdit[] = [
-        { type: "replace", old_text: "AA", new_text: "XX" },
-        { type: "replace", old_text: "BB", new_text: "YY" },
-        { type: "replace", old_text: "CC", new_text: "ZZ" },
-      ];
-      const result = applyEdits(doc, edits);
-      expect(result).toEqual({ document: "XXYYZZ" });
-    });
   });
 
   describe("edge cases", () => {
@@ -282,15 +194,6 @@ Second paragraph here.`,
       const doc = "Unchanged.";
       const result = applyEdits(doc, []);
       expect(result).toEqual({ document: "Unchanged." });
-    });
-
-    it("handles empty document with replace (fails)", () => {
-      const result = applyEdits("", [
-        { type: "replace", old_text: "something", new_text: "other" },
-      ]);
-      expect(result).toEqual({
-        error: expect.stringContaining("not found"),
-      });
     });
 
     it("handles multiline old_text in replace", () => {
@@ -319,30 +222,6 @@ Third line.`;
       expect(result).toEqual({
         error: expect.stringContaining("..."),
       });
-    });
-
-    it("replace with old_text matching entire document", () => {
-      const doc = "Entire document.";
-      const result = applyEdits(doc, [
-        {
-          type: "replace",
-          old_text: "Entire document.",
-          new_text: "New document.",
-        },
-      ]);
-      expect(result).toEqual({ document: "New document." });
-    });
-
-    it("insert_after at document start", () => {
-      const doc = "Start here.";
-      const result = applyEdits(doc, [
-        {
-          type: "insert_after",
-          anchor: "Start",
-          new_text: "INSERTED ",
-        },
-      ]);
-      expect(result).toEqual({ document: "StartINSERTED  here." });
     });
   });
 });

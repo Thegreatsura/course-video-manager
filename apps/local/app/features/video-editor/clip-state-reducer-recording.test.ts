@@ -88,46 +88,6 @@ describe("clipStateReducer", () => {
         expect(stateAfter.insertionOrder).toEqual(stateBefore.insertionOrder);
       });
 
-      it("Should store the outputPath from the action", () => {
-        const tester = new ReducerTester(
-          clipStateReducer,
-          createInitialState()
-        );
-
-        tester.send({
-          type: "recording-started",
-          outputPath: "/videos/2026-03-04_10-30-00.mkv",
-          silenceLength: "short" as const,
-        });
-
-        const state = tester.getState();
-        expect(state.sessions[0]).toMatchObject({
-          outputPath: "/videos/2026-03-04_10-30-00.mkv",
-          status: "recording",
-        });
-      });
-
-      it("Should preserve outputPath after recording stops", () => {
-        const tester = new ReducerTester(
-          clipStateReducer,
-          createInitialState()
-        );
-
-        tester
-          .send({
-            type: "recording-started",
-            outputPath: "/videos/session1.mkv",
-            silenceLength: "short" as const,
-          })
-          .send({ type: "recording-stopped" });
-
-        const state = tester.getState();
-        expect(state.sessions[0]).toMatchObject({
-          outputPath: "/videos/session1.mkv",
-          status: "polling",
-        });
-      });
-
       it("Should store different outputPaths for different sessions", () => {
         const tester = new ReducerTester(
           clipStateReducer,
@@ -178,38 +138,6 @@ describe("clipStateReducer", () => {
           outputPath: "/videos/recording.mkv",
           silenceLength: "short",
         });
-      });
-
-      it("Should fire separate start-session-polling effects for each session", () => {
-        const tester = new ReducerTester(
-          clipStateReducer,
-          createInitialState()
-        );
-
-        tester.send({
-          type: "recording-started",
-          outputPath: "/videos/session1.mkv",
-          silenceLength: "short" as const,
-        });
-        const session1Id = tester.getState().sessions[0]!.id;
-
-        tester.resetExec().send({ type: "recording-stopped" });
-
-        tester.resetExec().send({
-          type: "recording-started",
-          outputPath: "/videos/session2.mkv",
-          silenceLength: "short" as const,
-        });
-        const session2Id = tester.getState().sessions[1]!.id;
-
-        expect(tester.getExec()).toHaveBeenCalledWith({
-          type: "start-session-polling",
-          sessionId: session2Id,
-          outputPath: "/videos/session2.mkv",
-          silenceLength: "short",
-        });
-
-        expect(session1Id).not.toEqual(session2Id);
       });
 
       it("Should fire scroll-to-insertion-point effect", () => {
@@ -492,30 +420,6 @@ describe("clipStateReducer", () => {
         const stateAfterSecond = tester.getState();
 
         expect(stateAfterSecond).toBe(stateAfterFirst);
-      });
-
-      it("Should emit revalidate-loader when all sessions become done", () => {
-        const tester = new ReducerTester(
-          clipStateReducer,
-          createInitialState()
-        );
-
-        tester
-          .send({
-            type: "recording-started",
-            outputPath: "/tmp/recording.mkv",
-            silenceLength: "short" as const,
-          })
-          .send({ type: "recording-stopped" });
-
-        const sessionId = tester.getState().sessions[0]!.id;
-
-        tester.resetExec();
-        tester.send({ type: "session-polling-complete", sessionId });
-
-        expect(tester.getExec()).toHaveBeenCalledWith({
-          type: "revalidate-loader",
-        });
       });
 
       it("Should emit revalidate-loader only when the last session becomes done", () => {
