@@ -144,6 +144,7 @@ const missTitle = (miss: CalibrationMiss) => {
     case "too-few-claps":
     case "claps-disagree":
     case "no-clap-step":
+    case "mic-start-up-gap":
       return describeClapMiss(miss);
     case "too-quiet":
       return `Too quiet by ${dB(miss.byDb)}`;
@@ -168,6 +169,8 @@ const missAdvice = (miss: CalibrationMiss) => {
       return "The claps gave different offsets: clap crisply, hands meeting flat, then run it again.";
     case "no-clap-step":
       return "Run an AV Calibration to measure the Mic Offset.";
+    case "mic-start-up-gap":
+      return "The recorder lost a moment of the mic just after it started, which shifts the mic against the camera: run it again.";
   }
 };
 

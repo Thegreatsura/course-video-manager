@@ -1,14 +1,20 @@
 import { Command } from "@effect/platform";
 import { Chunk, Data, Effect, Stream } from "effect";
-import { findAudioOnsets } from "./audio-onsets";
+import {
+  findAudioOnsets,
+  findStartUpGap,
+  type StartUpGap,
+} from "./audio-onsets";
 import { matchClaps, type ClapMatch, type MotionPoint } from "./match";
 
 /**
  * THE TWO FFMPEG PASSES, offline, over an AV Calibration's files: the mic
  * decoded to mono 48 kHz PCM for its onsets, and the camera scaled to
  * 320x180 grey, each frame differenced with the one before (`tblend`) and
- * averaged (`signalstats` YAVG) for its motion. Both cut to the clap window,
- * keeping the files' own timestamps, so every time is in file seconds.
+ * averaged (`signalstats` YAVG) for its motion. The camera is cut to the
+ * clap window, keeping the file's own timestamps; the mic is decoded from
+ * its start to the window's end, so its start-up is checked for a gap too.
+ * Every time is in file seconds.
  */
 
 export type ClapWindow = { startSeconds: number; endSeconds: number };
@@ -27,7 +33,7 @@ export const micOnsetArgs = (micFile: string, w: ClapWindow) => [
   "-i",
   micFile,
   "-af",
-  `atrim=start=${w.startSeconds}:end=${w.endSeconds}`,
+  `atrim=end=${w.endSeconds}`,
   "-ac",
   "1",
   "-ar",
@@ -112,6 +118,15 @@ const concat = (chunks: Uint8Array[]) => {
   return out;
 };
 
+/** What `detectClaps` answers: the claps, and whether the mic can be trusted. */
+export type ClapDetection = ClapMatch & {
+  /**
+   * The mic's start-up gap, or null. With one the Mic Offset cannot be
+   * trusted, so `micOffsetMs` is null though claps were found.
+   */
+  startUpGap: StartUpGap | null;
+};
+
 /**
  * The claps in an AV Calibration's mic and camera files (paths ffmpeg can
  * open) over the clap window.
@@ -137,8 +152,22 @@ export const detectClaps = Effect.fn("detectClaps")(function* (o: {
     pcm.byteOffset,
     Math.floor(pcm.byteLength / 4)
   );
-  return matchClaps({
-    onsetsS: findAudioOnsets(samples, SAMPLE_RATE, o.window.startSeconds),
+  const windowStart = Math.round(o.window.startSeconds * SAMPLE_RATE);
+  const match = matchClaps({
+    onsetsS: findAudioOnsets(
+      samples.subarray(windowStart),
+      SAMPLE_RATE,
+      windowStart / SAMPLE_RATE
+    ),
     motion,
-  }) satisfies ClapMatch;
+  });
+  const startUpGap = findStartUpGap(
+    samples.subarray(0, windowStart),
+    SAMPLE_RATE
+  );
+  return {
+    ...match,
+    micOffsetMs: startUpGap ? null : match.micOffsetMs,
+    startUpGap,
+  } satisfies ClapDetection;
 });

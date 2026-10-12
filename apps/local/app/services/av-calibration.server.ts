@@ -20,7 +20,7 @@ import {
   runSchedule,
   SCRIPT_VERSION,
 } from "@/av-calibration-constants";
-import { detectClaps, type ClapMatch } from "@/packages/clap-detection";
+import { detectClaps, type ClapDetection } from "@/packages/clap-detection";
 import type {
   BrowserTracePoint,
   SavedAVCalibration,
@@ -48,20 +48,23 @@ export class CalibrationRunMismatchError extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 /** No clap found: what a failed clap detection stores. */
-const NO_CLAPS: ClapMatch = {
+const NO_CLAPS: ClapDetection = {
   claps: [],
   found: 0,
   spreadMs: null,
   micOffsetMs: null,
+  startUpGap: null,
 };
 
 /**
  * Stores an AV Calibration from its run's measurement, passed or failed:
  * finds the claps in its mic and camera files over the clap window
- * (`clap-detection`) for the Mic Offset, judges the speech loudness against
- * the band, the true peak against its ceiling and the claps against their
- * rule, derives the threshold, writes the browser's trace beside the mic
- * file (with the schedule its prompts followed, in the files' seconds), and
+ * (`clap-detection`) for the Mic Offset (none when the mic had a start-up
+ * gap: the claps are kept, the offset is not, and that fails it), judges
+ * the speech loudness against the band, the true peak against its ceiling
+ * and the claps against their rule, derives the threshold, writes the
+ * browser's trace beside the mic file (with the schedule its prompts
+ * followed, in the files' seconds, the claps and any start-up gap), and
  * saves the row with whatever it measured.
  */
 export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
@@ -111,6 +114,7 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     truePeakDb: measured.truePeakDb,
     clapsFound: claps.found,
     clapSpreadMs: claps.spreadMs,
+    micOffsetMs: claps.micOffsetMs,
   });
   const thresholdDb = deriveThreshold(measured.speechLufs);
   const browserTracePath = yield* assertUnderEffect(
@@ -128,6 +132,7 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
       browserInputLabel: o.browserInputLabel,
       trace: o.browserTrace,
       claps: claps.claps,
+      micStartUpGap: claps.startUpGap,
     })
   );
   const [row] = yield* dbCall(() =>
