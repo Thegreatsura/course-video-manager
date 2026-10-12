@@ -47,7 +47,7 @@ export const CalibrationHistory = ({
               <span className="w-28 font-mono tabular-nums">
                 {c.speechLufs.toFixed(1)} LUFS
               </span>
-              <span className="w-24 font-mono tabular-nums">
+              <span className="w-24 whitespace-nowrap font-mono tabular-nums">
                 {c.truePeakDb === null
                   ? "—"
                   : `${c.truePeakDb.toFixed(1)} dBTP`}
@@ -56,7 +56,7 @@ export const CalibrationHistory = ({
                 {c.thresholdDb.toFixed(1)} dB
               </span>
               <span
-                className="w-28 font-mono tabular-nums"
+                className="w-32 whitespace-nowrap font-mono tabular-nums"
                 title="Mic Offset, and its change from the previous calibration that has one"
               >
                 {micOffsets[i]}
