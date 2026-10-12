@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { recorderCommand } from "@/services/recorder-client/client.server";
+import { recorderCommand } from "@/services/recorder-client/recorder-command";
 import { recorderClient } from "@/services/recorder-client/live.server";
 import { makeAction } from "@/services/route-action.server";
 

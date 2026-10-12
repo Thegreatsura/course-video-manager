@@ -9,6 +9,7 @@ import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { SCENES } from "@/packages/scene-layout";
 import { SilenceLengthToggle } from "./silence-length-toggle";
+import { ShortScreenStatus } from "./short-screen-status";
 
 /** What the CVM recorder is doing, in a few words. */
 const statusText = (
@@ -31,7 +32,10 @@ const statusText = (
         case "busy":
           return "The Cam Link is not live.";
         case "live":
-          return "Ready to record.";
+          // Off only when a Short's scene needs a screen that is not ready.
+          return controls.canRecord
+            ? "Ready to record."
+            : "Waiting for the screen.";
       }
     case "starting":
       return "Starting…";
@@ -51,7 +55,10 @@ const framesText = (count: number, picture: string) =>
 const useCvmRecorderControls = () =>
   useContextSelector(VideoEditorContext, (ctx) => ctx.cvmRecorder);
 
-/** Camera, Code and No Face: the one lit is the scene the recorder is in. */
+/**
+ * Camera, Code and No Face: the one lit is the scene the recorder is in. On
+ * a Short, a scene that shows the screen waits for the screen to be ready.
+ */
 const SceneButtons = () => {
   const controls = useCvmRecorderControls();
   return (
@@ -63,7 +70,9 @@ const SceneButtons = () => {
           size="sm"
           variant={controls.state.scene === scene ? "default" : "outline"}
           aria-pressed={controls.state.scene === scene}
-          disabled={!controls.canSwitchScene}
+          disabled={
+            !controls.canSwitchScene || !controls.isSceneAvailable(scene)
+          }
           onClick={() => controls.onScene(scene)}
         >
           {scene}
@@ -160,6 +169,7 @@ export const CvmRecorderControls = () => {
         </span>
       </div>
       <SceneButtons />
+      <ShortScreenStatus />
       <CameraProblem />
       {state.framesLost && (
         <p

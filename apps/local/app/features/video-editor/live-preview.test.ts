@@ -49,6 +49,8 @@ describe("the CVM recorder in the editor's live frame", () => {
     expect(getCvmRecorderLivePreview(t.getState())).toEqual({
       previews,
       scene: "Code",
+      format: "landscape",
+      canvas: { width: 1920, height: 1080 },
       cameraShowing: false,
       cameraKey: "closed",
       showCenterLine: false,

@@ -343,7 +343,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
 
   const recorderChoice = useRecorderChoice(props.loaderData.video);
   const cvmRecorder = useCvmRecorder({
-    videoId: props.loaderData.video.id,
+    video: props.loaderData.video,
     enabled: !recorderChoice.usesObs,
     silenceLength,
     clipStateRef,

@@ -3,6 +3,10 @@ import { useEffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
 import type { MicEq } from "@cvm/core/features/videos/recorder";
 import {
+  resolveVideoFormat,
+  type VideoFormat,
+} from "@/features/videos/video-format";
+import {
   MINIMUM_CLIP_LENGTH_SECONDS,
   type SilenceLength,
 } from "@/silence-detection-constants";
@@ -18,6 +22,7 @@ import {
   canRetryCamera,
   canStop,
   canSwitchScene,
+  canWakeSpacedeskAgain,
   createInitialCvmRecorderState,
   cvmRecorderReducer,
 } from "./cvm-recorder-reducer";
@@ -25,6 +30,7 @@ import {
   CVM_RECORDER_MESSAGE_TYPES,
   type CvmRecorderMessage,
 } from "./cvm-recorder-wire";
+import { isSceneAvailable } from "./cvm-recorder-screen";
 
 /** What the editor's CVM recorder controls show and do. */
 export type CvmRecorderControls = {
@@ -33,6 +39,10 @@ export type CvmRecorderControls = {
   canStop: boolean;
   canRetryCamera: boolean;
   canSwitchScene: boolean;
+  /** A Short's screen scenes wait for its screen; Camera never does. */
+  isSceneAvailable: (scene: Scene) => boolean;
+  canWakeSpacedeskAgain: boolean;
+  onWakeSpacedesk: () => void;
   onRecord: () => void;
   onScene: (scene: Scene) => void;
   onStop: () => void;
@@ -90,17 +100,19 @@ export const useRecorderEvents = (
  * an OBS Video never opens it.
  */
 export const useCvmRecorder = (o: {
-  videoId: string;
+  /** The Video: a Short opens the recorder, and draws, in the Short layout. */
+  video: { id: string; format: string };
   enabled: boolean;
   silenceLength: SilenceLength;
   clipStateRef: RefObject<ClipReducerState>;
   clipDispatch: (action: ClipReducerAction) => void;
   micOffsetRefusal: MicOffsetRefusal | null;
 }): CvmRecorderControls => {
-  const { videoId } = o;
+  const videoId = o.video.id;
+  const format: VideoFormat = resolveVideoFormat(o.video.format);
   const [state, dispatch] = useEffectReducer(
     cvmRecorderReducer,
-    createInitialCvmRecorderState,
+    () => createInitialCvmRecorderState(format),
     {
       "start-recording": (_state, effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/record`, {
@@ -154,6 +166,15 @@ export const useCvmRecorder = (o: {
             dispatch({ type: "retry-camera-failed", message: messageOf(error) })
           );
       },
+      "retry-screen": (_state, _effect, dispatch) => {
+        fetch(`/api/videos/${videoId}/recorder/retry-screen`, {
+          method: "POST",
+        })
+          .then(answer)
+          .catch((error: unknown) =>
+            dispatch({ type: "retry-screen-failed", message: messageOf(error) })
+          );
+      },
       "switch-scene": (_state, effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/scene`, {
           method: "POST",
@@ -202,6 +223,9 @@ export const useCvmRecorder = (o: {
     canStop: canStop(state),
     canRetryCamera: canRetryCamera(state),
     canSwitchScene: canSwitchScene(state),
+    isSceneAvailable: (scene) => isSceneAvailable(state, scene),
+    canWakeSpacedeskAgain: canWakeSpacedeskAgain(state),
+    onWakeSpacedesk: () => dispatch({ type: "press-wake-spacedesk" }),
     onRecord: () =>
       dispatch({
         type: "press-record",

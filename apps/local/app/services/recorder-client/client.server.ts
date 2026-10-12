@@ -1,4 +1,3 @@
-import { Data, Effect } from "effect";
 import { WebSocket } from "ws";
 import {
   previewPath,
@@ -11,7 +10,13 @@ import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wi
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
+import type { VideoFormat } from "@/features/videos/video-format";
+import { cameraMessage, sceneMessage, screenMessage } from "./editor-messages";
 import type { IngestResult } from "./ingest.server";
+import {
+  RecorderRefusedError,
+  RecorderUnavailableError,
+} from "./recorder-command";
 import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 
 /**
@@ -46,25 +51,6 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 /** How many times one event that will not save is asked for again. */
 export const MAX_SAVE_RETRIES = 5;
 
-export class RecorderUnavailableError extends Error {}
-export class RecorderRefusedError extends Error {}
-
-/** Record or Stop was refused, or the recorder service did not answer. */
-export class RecorderCommandError extends Data.TaggedError(
-  "RecorderCommandError"
-)<{ readonly message: string; readonly cause: unknown }> {}
-
-/** A recorder client call, as an Effect a route can run. */
-export const recorderCommand = (run: () => Promise<void>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) =>
-      new RecorderCommandError({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-      }),
-  });
-
 export type RecorderClientOptions = {
   url: string;
   /** Saves one event; the client runs one at a time. */
@@ -91,36 +77,6 @@ export type RecorderClientOptions = {
   folder: string;
 };
 
-/** The camera, as an editor on `videoId` hears it, from the recorder's state. */
-const cameraMessage = (
-  state: RecorderState,
-  videoId: string
-): CvmRecorderMessage | undefined => {
-  if (state.kind === "recording" && state.videoId === videoId) return undefined;
-  if (state.kind !== "open" || state.videoId !== videoId)
-    return { type: "camera-closed" };
-  const camera = state.camera;
-  switch (camera.kind) {
-    case "opening":
-      return { type: "camera-opening", attempt: camera.attempt };
-    case "live":
-      return { type: "camera-went-live" };
-    case "not-starting":
-      return { type: "cam-link-not-starting", message: camera.message };
-    case "busy":
-      return { type: "cam-link-busy", message: camera.message };
-  }
-};
-
-/** The scene, as an editor on `videoId` hears it, while the recorder is its. */
-const sceneMessage = (
-  state: RecorderState,
-  videoId: string
-): CvmRecorderMessage | undefined =>
-  state.kind !== "closed" && state.videoId === videoId
-    ? { type: "scene-changed", scene: state.scene }
-    : undefined;
-
 type Listener = (message: CvmRecorderMessage) => void;
 
 type Waiter = {
@@ -145,8 +101,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   let wanted: string[] = [];
   /** The Video last asked to be open (null: asked to close), until it is. */
   let asked: string | null | undefined;
+  /** Per Video: the format it opens the recorder in (its editor's or Record's). */
+  const formats = new Map<string, VideoFormat>();
   const lastCamera = new Map<string, string>();
-  const lastScene = new Map<string, Scene>();
+  /** Per Video and kind (scene, screen): the last sent while the recorder is its. */
+  const lastOpen = new Map<string, string>();
   /** Per Video: its editor's Silence Length, for a Stream Deck Record. */
   const silenceLengths = new Map<string, SilenceLength>();
   /** The Video and Silence Length the recorder was last prepared with. */
@@ -184,25 +143,30 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     publish(videoId, message);
   };
   /**
-   * The scene, to an editor, only when it changed. Once the recorder is not
-   * its Video's (closed, another Video's, unreachable) its editor has no
-   * scene, so it hears the scene again when the recorder comes back.
+   * The scene or a Short's screen, to an editor, only when it changed. Once
+   * the recorder is not its Video's (closed, another Video's, unreachable)
+   * its editor has neither, so it hears them again when the recorder is back.
    */
-  const publishScene = (videoId: string) => {
-    const message = reachable ? sceneMessage(state, videoId) : undefined;
-    if (message?.type !== "scene-changed") {
-      lastScene.delete(videoId);
-      return;
-    }
-    if (lastScene.get(videoId) === message.scene) return;
-    lastScene.set(videoId, message.scene);
-    publish(videoId, message);
+  const publishWhileOpen = (
+    videoId: string,
+    message: CvmRecorderMessage | undefined,
+    kind: "scene" | "screen",
+    listener?: Listener
+  ) => {
+    const key = `${videoId}:${kind}`;
+    if (!reachable || !message) return void lastOpen.delete(key);
+    const json = JSON.stringify(message);
+    if (lastOpen.get(key) === json && !listener) return;
+    lastOpen.set(key, json);
+    if (listener) listener(message);
+    else publish(videoId, message);
   };
   const publishStatus = () => {
     for (const videoId of listeners.keys()) {
       publish(videoId, statusFor(videoId));
       publishCamera(videoId);
-      publishScene(videoId);
+      publishWhileOpen(videoId, sceneMessage(state, videoId), "scene");
+      publishWhileOpen(videoId, screenMessage(state, videoId), "screen");
     }
   };
 
@@ -233,14 +197,20 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const reconcile = () => {
     if (!reachable || problem || state.kind === "recording") return;
     const want = wanted.at(-1) ?? null;
-    const has = state.kind === "open" ? state.videoId : null;
-    if (want === has) {
+    const format = want ? (formats.get(want) ?? "landscape") : undefined;
+    const settled = want
+      ? state.kind === "open" &&
+        state.videoId === want &&
+        state.format === format
+      : state.kind === "closed";
+    if (settled) {
       asked = undefined;
       return;
     }
-    if (asked === want) return;
-    asked = want;
-    send(want ? { type: "open", videoId: want } : { type: "close" });
+    const ask = want && `${want}:${format}`;
+    if (asked === ask) return;
+    asked = ask;
+    send(want ? { type: "open", videoId: want, format } : { type: "close" });
   };
 
   /**
@@ -476,16 +446,30 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const isState = (
     message: RecorderMessage,
     kind: RecorderState["kind"],
-    videoId: string
+    videoId: string,
+    format?: VideoFormat
   ) =>
     message.type === "state" &&
     message.state.kind === kind &&
     message.state.kind !== "closed" &&
-    message.state.videoId === videoId;
+    message.state.videoId === videoId &&
+    (!format || message.state.format === format);
+
+  const requireOpenFor = (videoId: string) => {
+    if (state.kind === "closed" || state.videoId !== videoId)
+      throw new RecorderRefusedError(
+        "The recorder is not open for this Video."
+      );
+  };
 
   return {
     /** Hear what happens to a Video's Recording Sessions; starts with the status. */
-    subscribe(videoId: string, listener: Listener) {
+    subscribe(
+      videoId: string,
+      listener: Listener,
+      format: VideoFormat = "landscape"
+    ) {
+      formats.set(videoId, format);
       let set = listeners.get(videoId);
       if (!set) listeners.set(videoId, (set = new Set()));
       set.add(listener);
@@ -495,11 +479,18 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         lastCamera.set(videoId, JSON.stringify(camera));
         listener(camera);
       }
-      const scene = reachable ? sceneMessage(state, videoId) : undefined;
-      if (scene?.type === "scene-changed") {
-        lastScene.set(videoId, scene.scene);
-        listener(scene);
-      }
+      publishWhileOpen(
+        videoId,
+        sceneMessage(state, videoId),
+        "scene",
+        listener
+      );
+      publishWhileOpen(
+        videoId,
+        screenMessage(state, videoId),
+        "screen",
+        listener
+      );
       wanted = [...wanted.filter((v) => v !== videoId), videoId];
       reconcile();
       return () => {
@@ -507,7 +498,8 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         if (set.size > 0) return;
         listeners.delete(videoId);
         lastCamera.delete(videoId);
-        lastScene.delete(videoId);
+        lastOpen.delete(`${videoId}:scene`);
+        lastOpen.delete(`${videoId}:screen`);
         setTimeout(() => {
           if (listeners.has(videoId)) return;
           wanted = wanted.filter((v) => v !== videoId);
@@ -523,12 +515,16 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         insertionPoint: InsertionPoint;
         /** The folder (WSL path) each Recording Session's folder goes in. */
         folder: string;
+        /** The Video's format: a Short records the Short layout's sources. */
+        format?: VideoFormat;
       }
     ) {
       if (problem) throw new RecorderRefusedError(problem);
       insertionPoints.set(videoId, request.insertionPoint);
-      await command({ type: "open", videoId }, (m) =>
-        isState(m, "open", videoId)
+      const format = request.format ?? "landscape";
+      formats.set(videoId, format);
+      await command({ type: "open", videoId, format }, (m) =>
+        isState(m, "open", videoId, format)
       );
       await command(
         {
@@ -555,12 +551,21 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       );
     },
 
+    /** A Short's screen: wakes Spacedesk and looks for its display again. */
+    async retryScreen(videoId: string) {
+      requireOpenFor(videoId);
+      await command(
+        { type: "retry-screen" },
+        (m) =>
+          m.type === "state" &&
+          m.state.kind === "open" &&
+          m.state.screen?.kind === "waking"
+      );
+    },
+
     /** Draws the picture in `scene` from now on, recording or not. */
     async switchScene(videoId: string, scene: Scene) {
-      if (state.kind === "closed" || state.videoId !== videoId)
-        throw new RecorderRefusedError(
-          "The recorder is not open for this Video."
-        );
+      requireOpenFor(videoId);
       await command(
         { type: "switch-scene", scene },
         (m) =>
