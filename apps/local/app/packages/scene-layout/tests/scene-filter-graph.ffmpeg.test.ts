@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { sceneFilterGraph, type SceneSegment } from "@/packages/scene-layout";
+import {
+  CANVASES,
+  sceneFilterGraph,
+  type SceneSegment,
+} from "@/packages/scene-layout";
 
 /**
  * Renders the real graph with the real ffmpeg over tiny lavfi stand-ins for
@@ -17,30 +21,42 @@ const hasFfmpeg = (() => {
   }
 })();
 
-const W = 1920;
-const H = 1080;
 const RED = [255, 0, 0] as const;
 const GREEN = [0, 255, 0] as const;
 const BLACK = [0, 0, 0] as const;
 
+const SCREEN = ["-f", "lavfi", "-i", "color=c=red:s=320x180:r=60:d=1"];
+const PORTRAIT_SCREEN = ["-f", "lavfi", "-i", "color=c=red:s=180x320:r=60:d=1"];
+const CAMERA = ["-f", "lavfi", "-i", "color=c=lime:s=384x216:r=30000/1001:d=1"];
+
+interface Frame {
+  readonly buffer: Buffer;
+  readonly width: number;
+}
+
 /** Every frame of the composite, as rgb24 buffers. */
-const render = (segments: SceneSegment[]): Buffer[] => {
+const render = (
+  segments: SceneSegment[],
+  {
+    format = "landscape",
+    inputArgs = [...SCREEN, ...CAMERA],
+    inputs,
+  }: {
+    format?: "landscape" | "short";
+    inputArgs?: string[];
+    inputs?: { screen?: string; camera?: string };
+  } = {}
+): Frame[] => {
+  const { width, height } = CANVASES[format];
   const out = execFileSync(
     "ffmpeg",
     [
       "-hide_banner",
       "-v",
       "error",
-      "-f",
-      "lavfi",
-      "-i",
-      "color=c=red:s=320x180:r=60:d=1",
-      "-f",
-      "lavfi",
-      "-i",
-      "color=c=lime:s=384x216:r=30000/1001:d=1",
+      ...inputArgs,
       "-filter_complex",
-      sceneFilterGraph({ segments }),
+      sceneFilterGraph({ segments, format, inputs }),
       "-map",
       "[v]",
       "-pix_fmt",
@@ -51,15 +67,16 @@ const render = (segments: SceneSegment[]): Buffer[] => {
     ],
     { maxBuffer: 1 << 30 }
   );
-  const size = W * H * 3;
-  return Array.from({ length: out.length / size }, (_, i) =>
-    out.subarray(i * size, (i + 1) * size)
-  );
+  const size = width * height * 3;
+  return Array.from({ length: out.length / size }, (_, i) => ({
+    buffer: out.subarray(i * size, (i + 1) * size),
+    width,
+  }));
 };
 
-const pixel = (frame: Buffer, x: number, y: number) => {
-  const o = (y * W + x) * 3;
-  return [frame[o]!, frame[o + 1]!, frame[o + 2]!];
+const pixel = ({ buffer, width }: Frame, x: number, y: number) => {
+  const o = (y * width + x) * 3;
+  return [buffer[o]!, buffer[o + 1]!, buffer[o + 2]!];
 };
 
 const near = (actual: number[], expected: readonly number[]) =>
@@ -107,5 +124,28 @@ describe.skipIf(!hasFfmpeg)("the scene filter graph in ffmpeg", () => {
     expect(frames).toHaveLength(18);
     expect(near(pixel(frames[2]!, 960, 540), GREEN)).toBe(true);
     expect(near(pixel(frames[12]!, 960, 540), RED)).toBe(true);
+  });
+
+  it("draws a Short Code as the screen above the camera band on 1080x1920", () => {
+    const frames = render(
+      [{ scene: "Code", startSeconds: 0, endSeconds: 0.1 }],
+      {
+        format: "short",
+        inputArgs: [...PORTRAIT_SCREEN, ...CAMERA],
+      }
+    );
+    expect(frames).toHaveLength(6);
+    expect(near(pixel(frames[3]!, 540, 500), RED)).toBe(true);
+    expect(near(pixel(frames[3]!, 540, 1500), GREEN)).toBe(true);
+  });
+
+  it("draws a Short Camera from the camera alone, with no screen input at all", () => {
+    const frames = render(
+      [{ scene: "Camera", startSeconds: 0, endSeconds: 0.1 }],
+      { format: "short", inputArgs: CAMERA, inputs: { camera: "0:v" } }
+    );
+    expect(frames).toHaveLength(6);
+    expect(near(pixel(frames[3]!, 540, 960), GREEN)).toBe(true);
+    expect(near(pixel(frames[3]!, 0, 0), GREEN)).toBe(true);
   });
 });
