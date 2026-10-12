@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { silenceRule } from "@/silence-detection-constants";
+import {
+  DEFAULT_SILENCE_THRESHOLD_DB,
+  silenceRule,
+} from "@/silence-detection-constants";
 import { createSilenceScanState, scanForSilence } from "./silence-scan";
 
 /**
@@ -10,7 +13,7 @@ import { createSilenceScanState, scanForSilence } from "./silence-scan";
 describe("scanForSilence", () => {
   it("is silencedetect's rule: every channel's peak below the noise level for the Silence Length, in blocks", () => {
     const rate = 1000;
-    const rule = silenceRule("short"); // -38 dB (≈0.0126), 0.8 s
+    const rule = silenceRule("short", DEFAULT_SILENCE_THRESHOLD_DB); // -38 dB (≈0.0126), 0.8 s
     const seconds = 6;
     const left = new Float32Array(rate * seconds);
     const right = new Float32Array(rate * seconds);

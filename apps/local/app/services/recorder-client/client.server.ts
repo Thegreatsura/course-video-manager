@@ -6,7 +6,10 @@ import {
 } from "recorder-service/protocol";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
-import type { SilenceLength } from "@/silence-detection-constants";
+import type {
+  SilenceLength,
+  SilenceThreshold,
+} from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
 import {
@@ -25,6 +28,7 @@ import {
 import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 import { meterRelay, isMeterMessage } from "./meter-relay";
 import { calibrationCommands } from "./calibration-commands";
+import { streamDeckPreparation } from "./stream-deck-prepare";
 
 /**
  * THE RECORDER CLIENT: the app server's one WebSocket to the recorder service
@@ -51,8 +55,8 @@ import { calibrationCommands } from "./calibration-commands";
  *
  * The Stream Deck presses Record, Stop and the scenes on the recorder
  * service itself; this client tells the service what a Stream Deck Record on
- * the open Video records with (its editor's Silence Length, `folder`), and
- * hears its events as for any Record.
+ * the open Video records with (`stream-deck-prepare.ts`), and hears its
+ * events as for any Record. Every Record carries the silence threshold.
  */
 
 /** How many times one event that will not save is asked for again. */
@@ -82,6 +86,8 @@ export type RecorderClientOptions = {
   retryMs: number;
   /** The folder (WSL path) a Stream Deck Record's Recording Session goes in. */
   folder: string;
+  /** What a Recording Session started now cuts with (`currentSilenceThreshold`). */
+  silenceThreshold: () => Promise<SilenceThreshold>;
 };
 
 type Listener = (message: CvmRecorderMessage) => void;
@@ -113,10 +119,6 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const lastCamera = new Map<string, string>();
   /** Per Video and kind (scene, screen): the last sent while the recorder is its. */
   const lastOpen = new Map<string, string>();
-  /** Per Video: its editor's Silence Length, for a Stream Deck Record. */
-  const silenceLengths = new Map<string, SilenceLength>();
-  /** The Video and Silence Length the recorder was last prepared with. */
-  let prepared: string | undefined;
   const { previews, still } = serviceUrls(o.url);
 
   const publish = (videoId: string, message: CvmRecorderMessage) => {
@@ -181,23 +183,16 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     unavailable: () => (reachable ? problem : NOT_RUNNING),
   });
 
+  const deck = streamDeckPreparation({
+    send,
+    silenceThreshold: o.silenceThreshold,
+    folder: o.folder,
+  });
   /** Tells the open recorder what a Stream Deck Record on its Video records with. */
-  const prepare = () => {
-    if (!reachable || state.kind === "closed") {
-      prepared = undefined;
-      return;
-    }
-    const silenceLength = silenceLengths.get(state.videoId);
-    const key = `${state.videoId}:${silenceLength}`;
-    if (!silenceLength || prepared === key) return;
-    prepared = key;
-    send({
-      type: "prepare-record",
-      videoId: state.videoId,
-      silenceLength,
-      folder: o.folder,
-    });
-  };
+  const prepare = () =>
+    deck.prepare(
+      reachable && state.kind !== "closed" ? state.videoId : undefined
+    );
 
   /** Opens the recorder for the Video an editor wants, or closes it for none. */
   const reconcile = () => {
@@ -335,7 +330,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         problem = helloProblem(message);
         state = message.state;
         asked = undefined;
-        prepared = undefined;
+        deck.forget();
         reconcile();
         prepare();
         catchUp(message.recovered, message.recent);
@@ -399,7 +394,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       if (socket !== ws) return;
       socket = undefined;
       asked = undefined;
-      prepared = undefined;
+      deck.forget();
       if (reachable) {
         reachable = false;
         publishStatus();
@@ -532,11 +527,13 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       await command({ type: "open", videoId, format }, (m) =>
         isState(m, "open", videoId, format)
       );
+      const threshold = await o.silenceThreshold();
       await command(
         {
           type: "record",
           silenceLength: request.silenceLength,
           folder: request.folder,
+          ...threshold,
         },
         (m) => isState(m, "recording", videoId)
       );
@@ -588,9 +585,15 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       await command({ type: "stop" }, (m) => isState(m, "open", videoId));
     },
 
+    /** An Audio Calibration was stored: the next Stream Deck Record cuts with it. */
+    calibrationChanged() {
+      deck.forget();
+      prepare();
+    },
+
     /** The editor's Silence Length: what a Stream Deck Record on this Video uses. */
     setSilenceLength(videoId: string, silenceLength: SilenceLength) {
-      silenceLengths.set(videoId, silenceLength);
+      deck.setSilenceLength(videoId, silenceLength);
       prepare();
     },
 
@@ -599,7 +602,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
      * after the close grace, and a Stream Deck Record no longer records on it.
      */
     releaseVideo(videoId: string) {
-      silenceLengths.delete(videoId);
+      deck.release(videoId);
       wanted = wanted.filter((v) => v !== videoId);
       reconcile();
     },

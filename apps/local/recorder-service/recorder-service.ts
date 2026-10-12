@@ -1,5 +1,5 @@
 import { Either } from "effect";
-import { decodeCommand } from "./command-schema";
+import { decodeCommand, refusalOfUndecodable } from "./command-schema";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -305,6 +305,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         videoId,
         folder: command.folder,
         silenceLength: command.silenceLength,
+        thresholdDb: command.thresholdDb,
+        audioCalibrationId: command.audioCalibrationId,
         camera,
         mic,
         screenIndex,
@@ -378,6 +380,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
           type: "record",
           silenceLength: recordWith.silenceLength,
           folder: recordWith.folder,
+          thresholdDb: recordWith.thresholdDb,
+          audioCalibrationId: recordWith.audioCalibrationId,
         });
       case "stop":
         return handle(ws, { type: "stop" });
@@ -541,6 +545,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     ws.on("message", (data) => {
       const decoded = decodeCommand(data.toString());
       if (Either.isLeft(decoded)) {
+        const refusal = refusalOfUndecodable(data.toString());
+        if (refusal) return send(ws, { type: "refused", ...refusal });
         console.error(
           `recorder: unreadable command ${data.toString().slice(0, 200)}`
         );

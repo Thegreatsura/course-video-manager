@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
+import { THRESHOLD_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import {
   connect,
@@ -13,6 +14,7 @@ import {
   start,
   T0_MS,
   tmp,
+  THRESHOLD,
 } from "./test-utils/service-harness";
 
 /** The recorder service through its WebSocket (test-utils/service-harness.ts). */
@@ -110,7 +112,12 @@ describe("the Cam Link", () => {
     expect(windows.cameraPreviews).toHaveLength(3);
     expect(windows.camerasRunning()).toBe(0);
 
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect((await client.next("refused")).message).toBe(
       "The camera is not live yet."
     );
@@ -173,8 +180,54 @@ describe("a Recording Session", () => {
   it("is refused before the recorder is open for a Video", async () => {
     const { port } = await start();
     const client = await connect(port);
-    client.send({ type: "record", silenceLength: "short", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "short",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect((await client.next("refused")).command).toBe("record");
+  });
+
+  it("cuts with the silence threshold Record carries, and refuses a Record or prepare-record without one", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+
+    // From an app server older than Audio Calibration: no threshold.
+    const folder = tmp();
+    for (const old of [
+      { type: "record", silenceLength: "short", folder },
+      {
+        type: "prepare-record",
+        videoId: "video-1",
+        silenceLength: "short",
+        folder,
+      },
+    ]) {
+      client.send(old as RecorderCommand);
+      expect(await client.next("refused")).toEqual({
+        type: "refused",
+        command: old.type,
+        message: THRESHOLD_REQUIRED,
+      });
+    }
+
+    client.send({
+      type: "record",
+      silenceLength: "short",
+      folder,
+      thresholdDb: -36.5,
+      audioCalibrationId: "calibration-1",
+    });
+    expect(await client.next("recording-started")).toMatchObject({
+      thresholdDb: -36.5,
+      audioCalibrationId: "calibration-1",
+    });
+    expect(windows.recorder("camera").launch.args.join(" ")).toContain(
+      "silencedetect=n=-36.5dB:d=0.8"
+    );
   });
 
   it("records camera, screen and mic to three files and stops on request", async () => {

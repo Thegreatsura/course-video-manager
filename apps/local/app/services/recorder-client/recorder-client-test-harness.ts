@@ -8,6 +8,7 @@ import { fakeWindows } from "recorder-service/test-utils/fake-windows";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { clipService, testDb } from "../clip-service-test-setup";
+import { currentSilenceThreshold } from "../audio-calibration.server";
 import {
   createRecorderClient,
   type RecorderClientOptions,
@@ -72,6 +73,8 @@ export const connectClient = (port: number, ingest: Ingest = saveEvent) => {
       Effect.runPromise(
         unfinishedRecordingSessions(testDb as never, candidates)
       ),
+    silenceThreshold: () =>
+      Effect.runPromise(currentSilenceThreshold(testDb as never)),
     reconnectMs: 50,
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,

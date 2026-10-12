@@ -4,6 +4,7 @@ import {
   MINIMUM_CLIP_LENGTH_SECONDS,
   silenceRule,
   DEFAULT_SILENCE_LENGTH,
+  DEFAULT_SILENCE_THRESHOLD_DB,
   AUTO_EDITED_END_PADDING_SECONDS,
   type SilenceLength,
 } from "@/silence-detection-constants";
@@ -81,17 +82,28 @@ export function parseSpeechFromFFmpeg(rawOutput: string): SpeechSegment[] {
 /**
  * Runs ffmpeg silence detection and parses the output into clip boundaries.
  * Takes an FFmpegCommandsService instance directly to avoid leaking Effect requirements.
+ *
+ * `thresholdDb`: the threshold the take was recorded under (an OBS file's
+ * after-recording pass). Absent, for work that is not recording (chunking
+ * old Footage): the fixed default.
  */
 export function findSilenceInVideo(
   ffmpeg: FFmpegCommandsService,
   inputVideo: string,
-  opts?: { startTime?: number; silenceLength?: SilenceLength }
+  opts?: {
+    startTime?: number;
+    silenceLength?: SilenceLength;
+    thresholdDb?: number;
+  }
 ) {
   return Effect.gen(function* () {
     const fps = yield* ffmpeg.getFPS(inputVideo);
 
     const rawOutput = yield* ffmpeg.detectSilence(inputVideo, {
-      rule: silenceRule(opts?.silenceLength ?? DEFAULT_SILENCE_LENGTH),
+      rule: silenceRule(
+        opts?.silenceLength ?? DEFAULT_SILENCE_LENGTH,
+        opts?.thresholdDb ?? DEFAULT_SILENCE_THRESHOLD_DB
+      ),
       startTime: opts?.startTime,
     });
 

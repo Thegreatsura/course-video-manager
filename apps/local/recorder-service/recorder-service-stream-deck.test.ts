@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connect, start, tmp } from "./test-utils/service-harness";
+import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
 
 /**
  * Stream Deck presses, as the forwarder sends them: they act on whichever
@@ -21,6 +21,7 @@ describe("Stream Deck presses", () => {
       videoId: "video-1",
       silenceLength: "long",
       folder,
+      ...THRESHOLD,
     });
 
     deck.send({ type: "stream-deck", press: { action: "record" } });
@@ -82,6 +83,7 @@ describe("Stream Deck presses", () => {
       videoId: "video-1",
       silenceLength: "short",
       folder: tmp(),
+      ...THRESHOLD,
     });
     app.send({ type: "open", videoId: "video-2" });
     await app.camera("live");

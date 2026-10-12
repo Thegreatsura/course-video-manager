@@ -36,6 +36,8 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           filePath: string | undefined;
           startTime: number | undefined;
           silenceLength?: SilenceLength;
+          /** The threshold the take was recorded under. */
+          thresholdDb?: number;
         }) {
           if (!opts.filePath) {
             // Without a file path, fall back to the most recent OBS recording.
@@ -74,12 +76,14 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
             return yield* findSilenceInVideo(ffmpegCommands, latestFile, {
               startTime: opts.startTime,
               silenceLength: opts.silenceLength,
+              thresholdDb: opts.thresholdDb,
             });
           }
 
           return yield* findSilenceInVideo(ffmpegCommands, opts.filePath, {
             startTime: opts.startTime,
             silenceLength: opts.silenceLength,
+            thresholdDb: opts.thresholdDb,
           });
         }
       );

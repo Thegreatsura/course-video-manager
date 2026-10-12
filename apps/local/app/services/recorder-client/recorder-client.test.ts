@@ -9,6 +9,7 @@ import {
   clipService,
   testDb,
 } from "../clip-service-test-setup";
+import { audioCalibrations } from "@/db/schema";
 import { createRecorderClient } from "./client.server";
 import {
   clipTimes,
@@ -166,6 +167,7 @@ describe("the recorder client", () => {
       url: "ws://127.0.0.1:9",
       ingest: () => Promise.reject(new Error("unused")),
       unfinishedRecordingSessions: () => Promise.resolve([]),
+      silenceThreshold: () => Promise.reject(new Error("unused")),
       reconnectMs: 1_000,
       commandTimeoutMs: 1_000,
       closeGraceMs: 0,
@@ -361,16 +363,17 @@ describe("the recorder client", () => {
     );
 
     client.setSilenceLength(video.id, "long");
-    press("record");
-    await vi.waitFor(() =>
+    // Pressed until the recorder is prepared (the threshold is read first).
+    await vi.waitFor(() => {
+      press("record");
       expect(heard).toContainEqual(
         expect.objectContaining({
           type: "recording-started",
           silenceLength: "long",
           micFile: expect.stringContaining(STREAM_DECK_FOLDER),
         })
-      )
-    );
+      );
+    });
     press("stop");
     await vi.waitFor(() =>
       expect(heard.map((m) => m.type)).toContain("recording-stopped")
@@ -380,6 +383,62 @@ describe("the recorder client", () => {
       silenceLength: "long",
       status: "stopped",
     });
+  });
+});
+
+/** A stored Audio Calibration, taken at `minute` past 9. */
+const calibrated = (
+  id: string,
+  outcome: "passed" | "failed",
+  thresholdDb: number,
+  minute: number
+) =>
+  testDb.insert(audioCalibrations).values({
+    id,
+    createdAt: new Date(2026, 9, 12, 9, minute),
+    outcome,
+    noiseFloorDb: -80,
+    speechLufs: thresholdDb + 16,
+    thresholdDb,
+    recorderMic: "Voicemeeter Out B1",
+    scriptVersion: 1,
+    micFilePath: `/calibrations/${id}/mic.mkv`,
+    browserTracePath: `/calibrations/${id}/browser-trace.json`,
+  });
+
+describe("the recorder client, cutting with the Audio Calibration's threshold", () => {
+  it("records under the latest passed one, keeps it for the whole Recording Session, and a Stream Deck Record after a new one cuts with that", async () => {
+    const { windows, client, port } = await setup();
+    await calibrated("passed-earlier", "passed", -37, 0);
+    await calibrated("failed-later", "failed", -44, 5);
+
+    const video = await recordOn(client);
+    expect(windows.recorder("camera").launch.args.join(" ")).toContain(
+      "silencedetect=n=-37dB:d=0.8"
+    );
+
+    // Calibrating again mid-session changes nothing for it.
+    await calibrated("passed-mid-session", "passed", -35, 10);
+    client.calibrationChanged();
+    await client.stopRecording(video.id);
+    await vi.waitFor(async () =>
+      expect(await readSession()).toMatchObject({
+        status: "stopped",
+        audioCalibrationId: "passed-earlier",
+      })
+    );
+
+    client.setSilenceLength(video.id, "short");
+    const press = await streamDeck(port);
+    await vi.waitFor(async () => {
+      press("record");
+      expect(
+        await testDb.query.recordingSessions.findFirst({
+          where: (s, { eq }) => eq(s.audioCalibrationId, "passed-mid-session"),
+        })
+      ).toBeDefined();
+    });
+    press("stop");
   });
 });
 

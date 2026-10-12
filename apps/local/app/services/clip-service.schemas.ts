@@ -60,6 +60,7 @@ const AppendFromObsInputSchema = Schema.Struct({
   filePath: Schema.optional(Schema.String),
   insertionPoint: InsertionPointSchema,
   silenceLength: Schema.optional(Schema.Literal("short", "long")),
+  silenceThresholdDb: Schema.optional(Schema.Number),
 });
 
 const UpdateClipInputSchema = Schema.Struct({

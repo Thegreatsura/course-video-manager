@@ -267,6 +267,7 @@ const obsRecording: OBSConnectionOuterState = {
   profile: "Default",
   scene: "Camera",
   latestOutputPath: "/output/path",
+  silenceThresholdDb: -38,
 };
 
 describe("getShouldShowLastFrameOverlay", () => {

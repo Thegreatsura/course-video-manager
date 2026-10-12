@@ -1,0 +1,2 @@
+ALTER TABLE "course-video-manager_recording_session" ADD COLUMN "audio_calibration_id" varchar(255);--> statement-breakpoint
+ALTER TABLE "course-video-manager_recording_session" ADD CONSTRAINT "course-video-manager_recording_session_audio_calibration_id_course-video-manager_audio_calibration_id_fk" FOREIGN KEY ("audio_calibration_id") REFERENCES "public"."course-video-manager_audio_calibration"("id") ON DELETE set null ON UPDATE no action;

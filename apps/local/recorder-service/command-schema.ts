@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import type { VideoFormat } from "@/features/videos/video-format";
 import { SCENES } from "../app/packages/scene-layout";
+import { THRESHOLD_REQUIRED, type RecorderCommand } from "./protocol";
 
 /**
  * What the recorder service accepts on its WebSocket: every `RecorderCommand`
@@ -14,6 +15,12 @@ const CalibrationWindowSchema = Schema.Struct({
   endSeconds: Schema.Number,
 });
 
+/** Record's silence threshold and its Audio Calibration (none: null). */
+const threshold = {
+  thresholdDb: Schema.Number,
+  audioCalibrationId: Schema.NullOr(Schema.String),
+};
+
 const Command = Schema.Union(
   Schema.Struct({
     type: Schema.Literal("open"),
@@ -24,6 +31,7 @@ const Command = Schema.Union(
     type: Schema.Literal("record"),
     silenceLength: Schema.Literal("short", "long"),
     folder: Schema.String,
+    ...threshold,
   }),
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("close") }),
@@ -38,6 +46,7 @@ const Command = Schema.Union(
     videoId: Schema.String,
     silenceLength: Schema.Literal("short", "long"),
     folder: Schema.String,
+    ...threshold,
   }),
   Schema.Struct({
     type: Schema.Literal("stream-deck"),
@@ -69,3 +78,27 @@ const Command = Schema.Union(
 export const decodeCommand = Schema.decodeUnknownEither(
   Schema.parseJson(Command)
 );
+
+/**
+ * A command that did not decode but must be answered, not dropped: a Record
+ * (or the Stream Deck's prepare-record) with no silence threshold, from an
+ * app server older than Audio Calibration. Its sender hears why.
+ */
+export const refusalOfUndecodable = (
+  raw: string
+): { command: RecorderCommand["type"]; message: string } | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null) return undefined;
+  const { type, thresholdDb } = parsed as Record<string, unknown>;
+  if (
+    (type === "record" || type === "prepare-record") &&
+    typeof thresholdDb !== "number"
+  )
+    return { command: type, message: THRESHOLD_REQUIRED };
+  return undefined;
+};

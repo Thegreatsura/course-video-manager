@@ -267,6 +267,8 @@ export type CaptureOptions = {
   camera: string;
   mic: string;
   silenceLength: SilenceLength;
+  /** The silence threshold silencedetect cuts with, in dB. */
+  thresholdDb: number;
   /** The service's camera preview feed, which this process also sends to. */
   cameraPreviewPort: number;
 };
@@ -307,7 +309,9 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   // keeps it from becoming an offset. async=50 then follows the system clock.
   // silencedetect reads the very audio mic.mkv gets, so its times are mic
   // file time; anullsink ends that branch inside the graph.
-  const silence = silencedetectFilter(silenceRule(o.silenceLength));
+  const silence = silencedetectFilter(
+    silenceRule(o.silenceLength, o.thresholdDb)
+  );
   const cameraGraph = [
     `[0:v]setpts=PTS-${t0}/TB,fps=30000/1001:start_time=0,${BT709},` +
       "hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,split[cam][camp]",

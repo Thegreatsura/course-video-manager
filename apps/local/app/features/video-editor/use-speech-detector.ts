@@ -21,6 +21,8 @@ export const useSpeechDetector = (opts: {
   mediaStream: MediaStream | null;
   isRecording: boolean;
   silenceLength: SilenceLength;
+  /** The silence threshold, in dB: a take's own while it records. */
+  thresholdDb: number;
 }) => {
   const [state, dispatch] = useReducer(
     speechDetectorReducer,
@@ -40,7 +42,7 @@ export const useSpeechDetector = (opts: {
     const track = opts.mediaStream?.getAudioTracks()[0];
     if (!opts.mediaStream || !track) return;
 
-    const rule = silenceRule(opts.silenceLength);
+    const rule = silenceRule(opts.silenceLength, opts.thresholdDb);
     const channelCount = track.getSettings().channelCount ?? 2;
     const audioContext = new AudioContext();
     const source = audioContext.createMediaStreamSource(opts.mediaStream);
@@ -77,7 +79,7 @@ export const useSpeechDetector = (opts: {
       processor.disconnect();
       void audioContext.close();
     };
-  }, [opts.mediaStream, opts.silenceLength]);
+  }, [opts.mediaStream, opts.silenceLength, opts.thresholdDb]);
 
   return useMemo(() => toFrontendSpeechDetectorState(state), [state]);
 };

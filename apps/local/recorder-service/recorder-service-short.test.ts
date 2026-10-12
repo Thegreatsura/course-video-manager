@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
-import { connect, start, tmp } from "./test-utils/service-harness";
+import { connect, start, tmp, THRESHOLD } from "./test-utils/service-harness";
 
 /**
  * A Short, through the recorder service's WebSocket on a scripted Windows:
@@ -47,7 +47,12 @@ describe("a Short", () => {
       /ddagrab=output_idx=2:.*scale=960:540/
     );
 
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     const started = await client.next("recording-started");
     expect(started).toMatchObject({ format: "short", screenCaptured: true });
     expect(argsOf(windows.recorder("screen").launch)).toContain(
@@ -79,7 +84,12 @@ describe("a Short", () => {
     expect(windows.screenPreviews).toEqual([]);
 
     // The service starts in Code, which shows the screen.
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect((await client.next("refused")).message).toContain(message);
     client.send({ type: "switch-scene", scene: "No Face" });
     expect(await client.next("refused")).toMatchObject({
@@ -99,7 +109,12 @@ describe("a Short", () => {
       "state",
       (m) => m.state.kind === "open" && m.state.scene === "Camera"
     );
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     const started = await client.next("recording-started");
     expect(started).toMatchObject({ format: "short", screenCaptured: false });
     expect(started.files.screen).toMatch(/screen\.mkv$/);
@@ -157,7 +172,12 @@ describe("a Short", () => {
     expect(running.map((p) => argsOf(p.launch))).toEqual([
       expect.stringMatching(/output_idx=1:.*scale=960:540/),
     ]);
-    client.send({ type: "record", silenceLength: "long", folder: tmp() });
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...THRESHOLD,
+    });
     expect(await client.next("recording-started")).toMatchObject({
       format: "landscape",
       screenCaptured: true,
@@ -174,6 +194,7 @@ describe("a Short", () => {
       type: "record",
       silenceLength: "long",
       folder: tmp(),
+      ...THRESHOLD,
     });
     const { files, recordingSessionId } =
       await crashed.client.next("recording-started");

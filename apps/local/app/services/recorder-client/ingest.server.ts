@@ -108,6 +108,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
               silenceLength: event.silenceLength,
               format: event.format ?? "landscape",
               screenCaptured: event.screenCaptured ?? true,
+              audioCalibrationId: event.audioCalibrationId ?? null,
             })
             .onConflictDoNothing()
         );
