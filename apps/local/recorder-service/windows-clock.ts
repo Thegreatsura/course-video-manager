@@ -116,7 +116,7 @@ export const startWindowsClock = async (o: WindowsClockOptions = {}) => {
       const age = performance.now() - lastAt;
       if (age > staleAfterMs) {
         throw new Error(
-          `The Windows clock has not ticked for ${(age / 1000).toFixed(1)} s, so it cannot stamp this recording's time zero. It restarts by itself: try again in a moment, or restart the recorder service.`
+          `The Windows clock has not ticked for ${(age / 1000).toFixed(1)} s, so it cannot stamp this recording's time zero. It restarts by itself: try again in a moment, or restart \`pnpm dev\`.`
         );
       }
       return Math.round(lastWindowsMs + age);

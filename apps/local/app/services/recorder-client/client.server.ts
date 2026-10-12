@@ -12,7 +12,7 @@ import type { SilenceLength } from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
 import { cameraMessage, sceneMessage, screenMessage } from "./editor-messages";
-import { helloProblem, stateFormat } from "./service-version";
+import { helloProblem } from "./service-version";
 import type { IngestResult } from "./ingest.server";
 import {
   RecorderRefusedError,
@@ -22,7 +22,7 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 
 /**
  * THE RECORDER CLIENT: the app server's one WebSocket to the recorder service
- * (ADR 0034). It sends Record and Stop for the editor, saves what the
+ * (ADR 0034, 0035). It sends Record and Stop for the editor, saves what the
  * recorder's events mean (`ingest.server.ts`) one at a time and in order,
  * and passes what was saved on to the editors open on that Video.
  *
@@ -202,7 +202,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     const settled = want
       ? state.kind === "open" &&
         state.videoId === want &&
-        stateFormat(state) === format
+        state.format === format
       : state.kind === "closed";
     if (settled) {
       asked = undefined;
@@ -326,7 +326,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     switch (message.type) {
       case "hello":
         reachable = true;
-        problem = helloProblem(message, http);
+        problem = helloProblem(message);
         state = message.state;
         asked = undefined;
         prepared = undefined;
@@ -454,7 +454,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     message.state.kind === kind &&
     message.state.kind !== "closed" &&
     message.state.videoId === videoId &&
-    (!format || stateFormat(message.state) === format);
+    (!format || message.state.format === format);
 
   const requireOpenFor = (videoId: string) => {
     if (state.kind === "closed" || state.videoId !== videoId)

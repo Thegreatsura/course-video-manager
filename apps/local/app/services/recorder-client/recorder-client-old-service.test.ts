@@ -9,9 +9,10 @@ import {
 } from "./recorder-client-test-harness";
 
 /**
- * The app after a pull, against a recorder service still running from
- * before it (the service outlives app restarts, ADR 0034). The "old
- * service" is the real one behind a proxy that drops fields it never sent.
+ * The app after a pull mid-session, against the recorder service `pnpm dev`
+ * started from the code before it (the app server reloads, the service does
+ * not, ADR 0035). The "old service" is the real one behind a proxy that drops
+ * fields it never sent.
  */
 
 setupClipServiceTests();
@@ -66,7 +67,7 @@ const recordLandscape = (
   });
 
 describe("the recorder client against an older recorder service", () => {
-  it("says to restart a service that greets without the protocol version, and refuses Record with that", async () => {
+  it("says to restart `pnpm dev` when the service greets without the protocol version, and refuses Record with that", async () => {
     const { port } = await startService();
     const client = connectClient(
       await proxy(port, ["protocol", "format", "screen"])
@@ -79,7 +80,7 @@ describe("the recorder client against an older recorder service", () => {
         expect.objectContaining({
           type: "recorder-status",
           problem: expect.stringMatching(
-            /^The recorder service is running older code: restart it\..*kill <pid>.*\/health.*pnpm dev/
+            /^The recorder service is running older code than the app: restart `pnpm dev`/
           ),
         })
       )
@@ -87,15 +88,5 @@ describe("the recorder client against an older recorder service", () => {
     await expect(recordLandscape(client, video.id)).rejects.toThrow(
       /running older code/
     );
-  });
-
-  it("reads a state without a format as Landscape", async () => {
-    const { port } = await startService();
-    const client = connectClient(await proxy(port, ["format", "screen"]));
-    const video = await clipService.createVideo("Landscape");
-    client.subscribe(video.id, () => {});
-    await vi.waitFor(() => recordLandscape(client, video.id), {
-      timeout: 5_000,
-    });
   });
 });

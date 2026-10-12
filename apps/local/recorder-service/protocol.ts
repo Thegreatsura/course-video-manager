@@ -38,9 +38,10 @@ export const RECORDER_SERVICE_PORT = 5177;
 
 /**
  * Bumped whenever the wire changes in a way an older service cannot follow
- * (2: a Short's `format` and `screen`). The service outlives app restarts
- * (ADR 0034), so after a pull the app may meet a service started from older
- * code; `hello` says which wire it speaks (none before 2).
+ * (2: a Short's `format` and `screen`). The app server reloads on a change
+ * and the service does not (ADR 0035), so after a pull mid-session the app may
+ * meet a service started from older code; `hello` says which wire it speaks
+ * (none before 2).
  */
 export const RECORDER_PROTOCOL_VERSION = 2;
 

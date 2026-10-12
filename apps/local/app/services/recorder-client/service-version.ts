@@ -1,33 +1,24 @@
-import type { VideoFormat } from "@/features/videos/video-format";
 import {
   RECORDER_PROTOCOL_VERSION,
   type RecorderMessage,
-  type RecorderState,
 } from "../../../recorder-service/protocol";
 
 /**
- * A recorder service started from older code. It outlives `pnpm dev`
- * restarts on purpose (ADR 0034; `ensure-recorder-service.ts` leaves a
- * running one alone), so after a pull the app can meet one that speaks an
- * older wire. Nothing works reliably against it, so it is a `problem` that
- * says how to restart it.
+ * A recorder service running older code than the app. The service starts and
+ * stops with `pnpm dev` and is never watched (ADR 0035), while the app server
+ * reloads on a change: after a pull mid-session the app can meet a service
+ * that speaks an older wire. Nothing works reliably against it, so it is a
+ * `problem` that says to restart `pnpm dev`.
  */
 
 /** Why the recorder cannot record, from its greeting; null when it can. */
 export const helloProblem = (
-  hello: Extract<RecorderMessage, { type: "hello" }>,
-  httpUrl: string
+  hello: Extract<RecorderMessage, { type: "hello" }>
 ): string | null => {
   if (hello.protocol !== RECORDER_PROTOCOL_VERSION)
     return (
-      "The recorder service is running older code: restart it. When it is not recording, " +
-      `stop its process (\`kill <pid>\`; \`curl ${httpUrl}/health\` gives the pid), ` +
-      "then `pnpm dev` (or `pnpm start`) starts it again."
+      "The recorder service is running older code than the app: " +
+      "restart `pnpm dev` (or `pnpm start`) when it is not recording."
     );
   return hello.ffmpeg.ok ? null : hello.ffmpeg.message;
 };
-
-/** An open recorder's format: a service from before Shorts sends none, and is Landscape. */
-export const stateFormat = (
-  state: Exclude<RecorderState, { kind: "closed" }>
-): VideoFormat => (state as { format?: VideoFormat }).format ?? "landscape";
