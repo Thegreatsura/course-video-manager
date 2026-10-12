@@ -339,6 +339,7 @@ describe("recorder ingest", () => {
       screenFilePath: FILES.screen,
       micFilePath: FILES.mic,
       micOffsetMs: 150,
+      micEq: null,
       sceneEvents: [
         { fileTime: 0, scene: "Code" },
         { fileTime: 4, scene: "Camera" },

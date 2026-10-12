@@ -3,8 +3,8 @@ import { recordingSessionSceneEvents } from "../db/schema.js";
 
 /**
  * The `recordingSession` relation a Clip is loaded with wherever its picture
- * is shown: a new-recorder Clip's Recording Session files, mic offset and
- * scene timeline — what the Clip Source module (`@/packages/clip-source`,
+ * is shown: a new-recorder Clip's Recording Session files, mic offset, mic
+ * EQ and scene timeline — what the Clip Source module (`@/packages/clip-source`,
  * `ClipRecordingSession`) composites it from. Null on an OBS Clip.
  *
  * Every query whose Clips are exported or hashed (`toExportClips`) must load
@@ -21,6 +21,9 @@ export const clipRecordingSessionRelation = {
     micOffsetMs: true,
   },
   with: {
+    // The saved mic EQ (null until first saved: DEFAULT_MIC_EQ). It is part
+    // of every New-recorder Clip's Export Hash, so it rides along here.
+    micEq: { columns: { lowDb: true, midDb: true, highDb: true } },
     sceneEvents: {
       columns: { fileTime: true, scene: true },
       orderBy: asc(recordingSessionSceneEvents.fileTime),

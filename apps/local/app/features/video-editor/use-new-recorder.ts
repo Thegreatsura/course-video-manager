@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
+import type { MicEq } from "@cvm/core/features/videos/recorder";
 import type { SilenceLength } from "@/silence-detection-constants";
 import { savedItemBefore } from "./clip-state-reducer-new-recorder";
 import type {
@@ -35,6 +36,11 @@ export type NewRecorderControls = {
   onRetryCamera: () => void;
   /** Set (or, with null, clear) a saved New-recorder Clip's Scene Override. */
   onSetSceneOverride: (clipId: FrontendId, sceneOverride: Scene | null) => void;
+  /** The Mic Settings dialog was saved on a New-recorder Clip. */
+  onSubmitMicSettings: (
+    clipId: FrontendId,
+    settings: { micOffsetMs: number; micEq: MicEq }
+  ) => void;
 };
 
 const answer = async (response: Response) => {
@@ -189,5 +195,7 @@ export const useNewRecorder = (o: {
     onRetryCamera: () => dispatch({ type: "press-retry" }),
     onSetSceneOverride: (clipId, sceneOverride) =>
       o.clipDispatch({ type: "set-scene-override", clipId, sceneOverride }),
+    onSubmitMicSettings: (clipId, settings) =>
+      o.clipDispatch({ type: "mic-settings-submitted", clipId, ...settings }),
   };
 };

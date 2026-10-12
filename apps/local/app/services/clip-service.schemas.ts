@@ -4,7 +4,11 @@
  */
 
 import { Schema } from "effect";
-import { RECORDING_SESSION_SCENES } from "@cvm/core/features/videos/recorder";
+import {
+  MIC_EQ_DB_RANGE,
+  MIC_OFFSET_MS_RANGE,
+  RECORDING_SESSION_SCENES,
+} from "@cvm/core/features/videos/recorder";
 
 export const InsertionPointSchema = Schema.Union(
   Schema.Struct({
@@ -18,6 +22,10 @@ export const InsertionPointSchema = Schema.Union(
     type: Schema.Literal("after-chapter"),
     chapterId: Schema.String,
   })
+);
+
+const MicEqGainSchema = Schema.Number.pipe(
+  Schema.between(MIC_EQ_DB_RANGE.min, MIC_EQ_DB_RANGE.max)
 );
 
 const ReorderDirectionSchema = Schema.Union(
@@ -159,6 +167,21 @@ export const ClipServiceEventSchema = Schema.Union(
     type: Schema.Literal("update-scene-override"),
     clipId: Schema.String,
     sceneOverride: Schema.NullOr(Schema.Literal(...RECORDING_SESSION_SCENES)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("update-mic-offset"),
+    clipId: Schema.String,
+    micOffsetMs: Schema.Int.pipe(
+      Schema.between(MIC_OFFSET_MS_RANGE.min, MIC_OFFSET_MS_RANGE.max)
+    ),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("update-mic-eq"),
+    micEq: Schema.Struct({
+      lowDb: MicEqGainSchema,
+      midDb: MicEqGainSchema,
+      highDb: MicEqGainSchema,
+    }),
   }),
   Schema.Struct({
     type: Schema.Literal("reorder-clip"),

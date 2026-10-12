@@ -59,6 +59,7 @@ export const requireDraftForClipServiceEvent = Effect.fn(
     case "update-pause":
     case "update-zoom":
     case "update-scene-override":
+    case "update-mic-offset":
     case "reorder-clip":
       return yield* requireDraftVersionForClip(db, event.clipId);
     case "update-chapter":
@@ -66,9 +67,11 @@ export const requireDraftForClipServiceEvent = Effect.fn(
       return yield* requireDraftVersionForChapter(db, event.chapterId);
     case "archive-chapters":
       return yield* requireDraftVersionForChapters(db, event.chapterIds);
-    // A read, and a Video created standalone, have no owning Version to guard.
+    // A read, a Video created standalone, and the mic EQ (a setting, not
+    // any one Version's content) have no owning Version to guard.
     case "get-timeline":
     case "create-video":
+    case "update-mic-eq":
       return;
   }
 });
@@ -89,6 +92,7 @@ export const withClipServiceWriteClosure = <A, E>(
     case "create-video":
     case "get-timeline":
     case "append-from-obs":
+    case "update-mic-eq":
       return run(db);
     case "append-clips":
     case "create-chapter-at-insertion-point":
@@ -102,6 +106,7 @@ export const withClipServiceWriteClosure = <A, E>(
     case "update-pause":
     case "update-zoom":
     case "update-scene-override":
+    case "update-mic-offset":
     case "reorder-clip":
     case "update-chapter":
     case "reorder-chapter":

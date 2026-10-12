@@ -456,6 +456,15 @@ export const recordingSessions = createTable(
     micFilePath: text("mic_file_path").notNull(),
     /** Shifts the mic later by this much at export — see DEFAULT_MIC_OFFSET_MS. */
     micOffsetMs: integer("mic_offset_ms").notNull().default(150),
+    /**
+     * The Mic EQ Setting the mic is exported with (`micEqSettings.id`). Every
+     * Session names the one setting, MIC_EQ_SETTING_ID, so changing it re-EQs
+     * every New-recorder Video. Not a foreign key: until the setting is first
+     * saved there is no row, and the mic reads as DEFAULT_MIC_EQ.
+     */
+    micEqSettingId: varchar("mic_eq_setting_id", { length: 255 })
+      .notNull()
+      .default("default"),
     /** See RECORDING_SESSION_STATUSES (features/videos/recorder.ts). */
     status: text("status")
       .$type<RecordingSessionStatus>()
@@ -487,6 +496,19 @@ export const recordingSessions = createTable(
     ),
   ]
 );
+
+/**
+ * A saved mic EQ: the three band gains, in dB, of OBS's 3-Band Equalizer (see
+ * MicEq in features/videos/recorder.ts), applied to a Recording Session's mic
+ * at export. One row today, MIC_EQ_SETTING_ID, written the first time Matt
+ * saves the setting; before that the export uses DEFAULT_MIC_EQ.
+ */
+export const micEqSettings = createTable("mic_eq_setting", {
+  id: varchar("id", { length: 255 }).notNull().primaryKey(),
+  lowDb: doublePrecision("low_db").notNull(),
+  midDb: doublePrecision("mid_db").notNull(),
+  highDb: doublePrecision("high_db").notNull(),
+});
 
 /**
  * One live scene change in a Recording Session: from `fileTime` (seconds into
@@ -1028,6 +1050,10 @@ export const recordingSessionsRelations = relations(
     }),
     sceneEvents: many(recordingSessionSceneEvents),
     clips: many(clips),
+    micEq: one(micEqSettings, {
+      fields: [recordingSessions.micEqSettingId],
+      references: [micEqSettings.id],
+    }),
   })
 );
 

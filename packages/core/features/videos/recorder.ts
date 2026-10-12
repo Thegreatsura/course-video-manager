@@ -57,6 +57,13 @@ export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
 export const DEFAULT_MIC_OFFSET_MS = 150;
 
 /**
+ * The range a Recording Session's mic offset may be set to, in ms. Lip sync
+ * is corrected by a few hundred ms at most; anything past two seconds is a
+ * typo, not a correction.
+ */
+export const MIC_OFFSET_MS_RANGE = { min: -2000, max: 2000 } as const;
+
+/**
  * The mic EQ the export applies to a Recording Session's mic: the gains, in
  * dB, of OBS's 3-Band Equalizer filter (bands split at 800 Hz and 5 kHz), the
  * filter OBS runs on the same mic. Raw Footage is never changed.
@@ -69,6 +76,17 @@ export type MicEq = {
 
 /** Matt's OBS mic EQ: highs down 6.1 dB, low and mid flat. */
 export const DEFAULT_MIC_EQ: MicEq = { lowDb: 0, midDb: 0, highDb: -6.1 };
+
+/**
+ * The one saved Mic EQ Setting every Recording Session is exported with
+ * (`recording_session.mic_eq_setting_id`). Saving it re-EQs every
+ * New-recorder Video; until it is first saved the mic reads as
+ * {@link DEFAULT_MIC_EQ}.
+ */
+export const MIC_EQ_SETTING_ID = "default";
+
+/** The gain each band of the mic EQ may be set to, in dB. */
+export const MIC_EQ_DB_RANGE = { min: -24, max: 24 } as const;
 
 /**
  * The Recorders a Video of this format may record with. Shorts record with

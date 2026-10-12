@@ -49,7 +49,6 @@ import {
   type UpdateClipDiagramPinFn,
   type VideoEditorContextType,
 } from "./video-editor-context";
-import type { editorModalsReducer } from "./editor-modals-reducer";
 import { useEditorModalsReducer } from "./hooks/use-editor-modals-reducer";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { ClipOverlay } from "./overlay-preview";
@@ -205,20 +204,11 @@ export const VideoEditor = (props: {
   const currentClipId = state.currentClipId;
 
   const exportToDavinciResolveFetcher = useFetcher();
-  const { state: modalsState, dispatch: modalDispatch } =
-    useEditorModalsReducer();
-  const onModalOpenChange = useMemo(() => {
-    const dismiss = (modal: editorModalsReducer.Modal) => (open: boolean) => {
-      if (!open) modalDispatch({ type: "modal-dismissed", modal });
-    };
-    return {
-      "add-video": dismiss("add-video"),
-      "paste-file": dismiss("paste-file"),
-      "rename-video": dismiss("rename-video"),
-      "copy-video": dismiss("copy-video"),
-      "create-video-from-selection": dismiss("create-video-from-selection"),
-    };
-  }, [modalDispatch]);
+  const {
+    state: modalsState,
+    dispatch: modalDispatch,
+    onModalOpenChange,
+  } = useEditorModalsReducer();
 
   const {
     openForMain: onOpenAutofillChaptersModal,
@@ -502,6 +492,7 @@ export const VideoEditor = (props: {
 
       // From editorModalsReducer
       openModal: modalsState.openModal,
+      micSettingsClipId: modalsState.micSettingsClipId,
       modalDispatch,
       onModalOpenChange,
       suggestionState: modalsState.suggestion,

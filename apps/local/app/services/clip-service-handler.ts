@@ -20,6 +20,10 @@ import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
+  updateMicEq,
+  updateMicOffset,
+} from "./clip-service-mic-settings.server";
+import {
   type VideoProcessingAdapter,
   type LoggerAdapter,
   noopLogger,
@@ -295,6 +299,12 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
 
       case "update-scene-override":
         return yield* updateSceneOverride(db, logger, event);
+
+      case "update-mic-offset":
+        return yield* updateMicOffset(db, logger, event);
+
+      case "update-mic-eq":
+        return yield* updateMicEq(db, event);
 
       case "reorder-clip": {
         const clip = yield* dbCall(() =>

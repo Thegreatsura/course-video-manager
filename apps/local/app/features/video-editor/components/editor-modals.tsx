@@ -7,6 +7,7 @@ import { VideoEditorContext } from "../video-editor-context";
 import { ChapterNamingModal as ChapterNamingModalComponent } from "./chapter-naming-modal";
 import { CreateVideoFromSelectionModal } from "./create-video-from-selection-modal";
 import { DeferredVideoFilePasteModal } from "./deferred-fs-panels";
+import { MicSettingsModal } from "./mic-settings-modal";
 
 /**
  * Every dialog the editor keeps mounted alongside its panels. They live in one
@@ -55,6 +56,13 @@ export const EditorModals = (props: {
     VideoEditorContext,
     (ctx) => ctx.onModalOpenChange
   );
+  const micSettingsClip = useContextSelector(VideoEditorContext, (ctx) =>
+    ctx.clips.find((c) => c.frontendId === ctx.micSettingsClipId)
+  );
+  const onSubmitMicSettings = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.newRecorder.onSubmitMicSettings
+  );
 
   return (
     <>
@@ -96,6 +104,19 @@ export const EditorModals = (props: {
         open={openModal === "create-video-from-selection"}
         onOpenChange={onModalOpenChange["create-video-from-selection"]}
         onSubmit={props.onCreateVideoFromSelection}
+      />
+      <MicSettingsModal
+        open={openModal === "mic-settings"}
+        onOpenChange={onModalOpenChange["mic-settings"]}
+        recordingSession={
+          (micSettingsClip?.type === "on-database" &&
+            micSettingsClip.recordingSession) ||
+          null
+        }
+        onSubmit={(settings) =>
+          micSettingsClip &&
+          onSubmitMicSettings(micSettingsClip.frontendId, settings)
+        }
       />
       {props.autofillChaptersModal}
     </>

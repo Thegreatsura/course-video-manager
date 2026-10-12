@@ -59,7 +59,10 @@ describe("an OBS Clip's Export Hash through the Clip Source", () => {
   });
 });
 
-const sessionRow = (micOffsetMs: number) => ({
+const sessionRow = (
+  micOffsetMs: number,
+  micEq: { lowDb: number; midDb: number; highDb: number } | null = null
+) => ({
   videoFilename: "/rec/s1/mic.mkv",
   sourceStartTime: 12,
   sourceEndTime: 20,
@@ -74,6 +77,7 @@ const sessionRow = (micOffsetMs: number) => ({
     screenFilePath: "/rec/s1/screen.mkv",
     micFilePath: "/rec/s1/mic.mkv",
     micOffsetMs,
+    micEq,
     sceneEvents: [{ fileTime: 14, scene: "Camera" as const }],
   },
 });
@@ -81,10 +85,8 @@ const sessionRow = (micOffsetMs: number) => ({
 const QUIETER_HIGHS = { lowDb: 0, midDb: 0, highDb: -3 };
 
 describe("a new-recorder Clip's Export Hash", () => {
-  const hash = (
-    rows: Parameters<typeof toExportClips>[0],
-    micEq?: typeof QUIETER_HIGHS
-  ) => computeExportHash(toExportClips(rows), "landscape", { micEq });
+  const hash = (rows: Parameters<typeof toExportClips>[0]) =>
+    computeExportHash(toExportClips(rows), "landscape");
   const base = hash([sessionRow(150)]);
 
   it("moves when the Scene Override, mic offset or mic EQ changes", () => {
@@ -92,12 +94,10 @@ describe("a new-recorder Clip's Export Hash", () => {
       base
     );
     expect(hash([sessionRow(180)])).not.toBe(base);
-    expect(hash([sessionRow(150)], QUIETER_HIGHS)).not.toBe(base);
-  });
-
-  it("leaves OBS Clips' addresses where they were, whatever the EQ", () => {
-    expect(hash(obsRows, QUIETER_HIGHS)).toBe(
-      "9a58c78eb23dbfc7020e1c84ae3cc711"
+    expect(hash([sessionRow(150, QUIETER_HIGHS)])).not.toBe(base);
+    // The saved default reads exactly as no saved setting at all.
+    expect(hash([sessionRow(150, { lowDb: 0, midDb: 0, highDb: -6.1 })])).toBe(
+      base
     );
   });
 });
