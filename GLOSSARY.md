@@ -225,8 +225,11 @@ _Avoid_: Lint warning, Lint error, Publish blocker (this never blocks a Publish)
 ### Video export and hashing
 
 **Export Hash**:
-A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
+A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. A New-recorder Clip also adds what its picture is drawn from: its **Recording Session**, the scenes in its range, its **Scene Override**, the mic offset, the **Mic EQ** and the layout version; an OBS Clip's part never changes. It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
 _Avoid_: Content hash (that is an encoding of the **Byte Hash**, not of this), Video hash, Byte Hash (the recipe and the result are different things)
+
+**Mic EQ**:
+The equaliser the export applies to the mic of every New-recorder **Recording Session**, one setting for all of them: OBS's 3-band EQ gains, initially Matt's OBS mic EQ (highs down 6.1 dB). It is applied with the mic offset in the same pass that draws the picture; the raw mic **Footage** is never changed. It is part of the **Export Hash** of New-recorder Clips only.
 
 **Byte Hash**:
 The fingerprint of an **Exported Video**'s actual contents: the result, where the **Export Hash** is the recipe. It decides whether a **Video** is sent: a Video whose contents match a file the previous **Bundle** already holds is copied from there, and every other Video is uploaded. The two hashes must never be merged: the Bundle address must be known before any render, and a Byte Hash is known only after it (ADR 0027).

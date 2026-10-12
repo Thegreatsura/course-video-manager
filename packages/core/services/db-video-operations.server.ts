@@ -161,7 +161,10 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
             clips: {
               orderBy: asc(clips.order),
               where: eq(clips.archived, false),
-              with: { overlays: overlayExportRelation },
+              with: {
+                overlays: overlayExportRelation,
+                recordingSession: clipRecordingSessionRelation,
+              },
             },
           },
         })
@@ -189,7 +192,10 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
             clips: {
               orderBy: asc(clips.order),
               where: eq(clips.archived, false),
-              with: { overlays: overlayExportRelation },
+              with: {
+                overlays: overlayExportRelation,
+                recordingSession: clipRecordingSessionRelation,
+              },
             },
           },
         })
