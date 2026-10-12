@@ -22,7 +22,8 @@ import {
  * (-use_wallclock_as_timestamps), -copyts keeps ffmpeg from zeroing each
  * input on its own, and every stream subtracts the same T0. File time t then
  * means wall time T0 + t in all three files. fps=…:start_time=0 and
- * aresample=…:first_pts=0 make each file CFR from exactly t=0.
+ * aresample=…:first_pts=0 make each file CFR from exactly t=0. The mic's
+ * stamps only anchor it: its audio is timed by sample count (`micOnClock`).
  *
  * PREVIEWS: every process that sees a picture also sends a small MJPEG of it
  * to the service (`previewOutput`), which serves it to the browser
@@ -264,13 +265,47 @@ const cameraOnClock = (t0: string) =>
   `[0:v]setpts=PTS-${t0}/TB,fps=30000/1001:start_time=0`;
 
 /**
- * The mic (input 1) on the shared clock. Audio queued while the camera was
- * opening arrives in one burst stamped "now": dropping the first 1.5 s
- * (padded back with silence by first_pts=0) keeps it from becoming an
- * offset. async=50 then follows the system clock.
+ * How fast the mic's anchor may move later, in seconds per second of mic
+ * audio: far above any sound card's clock error (tens of ppm), far below a
+ * stall's (a 400 ms stall moves it 0.2 ms).
  */
-const micOnClock = (t0: string) =>
-  `[1:a]asetpts=PTS-${t0}/TB,atrim=start=1.5,aresample=async=50:min_hard_comp=0.1:first_pts=0`;
+const MIC_ANCHOR_RISE = 0.0005;
+
+/** A mic buffer read this late (seconds) is logged as a stall. */
+const MIC_STALL_LOGGED = 0.05;
+
+/**
+ * The mic (input 1) on the shared clock, timed by sample count (#2120).
+ *
+ * Its wall-time stamps cannot be trusted one by one: ffmpeg sometimes stops
+ * reading the mic for 100-400 ms, then reads the backlog all stamped "now".
+ * Following those stamps, aresample padded the gap with silence and was left
+ * tens of ms out, a different amount every take. So a buffer's time is the
+ * mic's anchor plus the samples before it. The anchor is the earliest time
+ * any buffer so far says the mic started (its stamp less the samples before
+ * it): a late buffer only ever says later, so a stall cannot move it. To
+ * follow a sound card whose clock runs slow against Windows, it may creep
+ * later by `MIC_ANCHOR_RISE`; aresample's async=50 follows the small steps
+ * either way. With no stall a buffer keeps its stamp, give or take the
+ * jitter in how soon ffmpeg reads it.
+ *
+ * Audio queued while the camera was opening arrives in one burst stamped
+ * "now", before the anchor has settled: dropping the first 1.5 s (padded
+ * back with silence by first_pts=0) keeps it from becoming an offset.
+ * Recordings and AV Calibration runs both time the mic with this.
+ *
+ * The first buffer of a stall (read more than `MIC_STALL_LOGGED` late)
+ * logs how late it was as a bare number of seconds ("[info] 0.391306"), so
+ * a take's ffmpeg log still shows the stalls its mic file no longer does.
+ */
+export const micOnClock = (t0: string, input = "1:a") => {
+  const startedAt = `PTS*TB-${t0}-N/SR`;
+  const anchor = `st(0,if(N,min(ld(0)+${MIC_ANCHOR_RISE}*(N-ld(1))/SR,${startedAt}),${startedAt}))`;
+  // ld(2): how late this buffer was read; logged on the first of a stall.
+  const late = `st(3,ld(2));st(2,${startedAt}-ld(0))`;
+  const stallLog = `if(gt(ld(2),${MIC_STALL_LOGGED})*lte(ld(3),${MIC_STALL_LOGGED}),print(ld(2),32))`;
+  return `[${input}]asetpts='${anchor};${late};${stallLog};st(1,N);(ld(0)+N/SR)/TB',atrim=start=1.5,aresample=async=50:min_hard_comp=0.1:first_pts=0`;
+};
 
 /**
  * AN AV CALIBRATION'S RUN (`calibration-run.ts`): one ffmpeg.exe, the Cam

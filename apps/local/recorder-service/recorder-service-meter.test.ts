@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_NOT_STARTING } from "./camera";
+import { micOnClock } from "./capture-args";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
 import { CLOSE_OBS_TO_CALIBRATE } from "../app/av-calibration-constants";
 import { ebur128Line } from "./test-utils/fake-windows";
@@ -97,13 +98,14 @@ describe("the level meter", () => {
     expect(run.launch.args).toContain("camera.mkv");
     expect(run.launch.args).toContain("video=Cam Link 4K");
     const graph = run.launch.args.join(" ");
-    // The recording's own stamping, so the Mic Offset is the recording's.
-    expect(graph).toMatch(
-      /\[0:v\]setpts=PTS-[\d.]+\/TB,fps=30000\/1001:start_time=0/
-    );
-    expect(graph).toMatch(
-      /\[1:a\]asetpts=PTS-[\d.]+\/TB,atrim=start=1\.5,aresample=async=50:min_hard_comp=0\.1:first_pts=0,ebur128/
-    );
+    // The recording's own stamping and mic timing, so the Mic Offset is the
+    // recording's.
+    const t0 =
+      /\[0:v\]setpts=PTS-([\d.]+)\/TB,fps=30000\/1001:start_time=0/.exec(
+        graph
+      )?.[1];
+    expect(t0).toBeDefined();
+    expect(graph).toContain(`${micOnClock(t0!)},ebur128`);
     expect(windows.cameraPreviews.filter((p) => p.running)).toHaveLength(0);
 
     // It is started once live: its first reading, after the camera opened.
