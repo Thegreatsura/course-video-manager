@@ -61,6 +61,11 @@ export type RecordingSessionOptions = {
   screenIndex: number;
   /** The service's camera preview feed, which the camera process sends to. */
   cameraPreviewPort: number;
+  /**
+   * How long after Record the Cam Link may take to send its first frame
+   * before the camera counts as lost.
+   */
+  cameraStartTimeoutMs: number;
   /** The scene the Recording Session starts in. */
   scene: Scene;
   /** Each event, after it is in the log. */
@@ -86,21 +91,11 @@ const errorTail = (log: string) =>
     .slice(-6);
 
 /**
- * The frames a process's ffmpeg counted as duplicated or dropped, from the
- * latest `-progress` block.
+ * An error line about the Cam Link: input 0 of the camera + mic process, or
+ * dshow naming its video input. The mic is input 1; outputs are the files.
  */
-const countFramesLost = (p: LaunchedProcess) => {
-  let dup = 0;
-  let drop = 0;
-  p.onStdout(
-    lineSplitter((line) => {
-      const m = line.match(/^(dup|drop)_frames=(\d+)/);
-      if (m?.[1] === "dup") dup = Number(m[2]);
-      if (m?.[1] === "drop") drop = Number(m[2]);
-    })
-  );
-  return () => dup + drop;
-};
+const namesCamera = (line: string) =>
+  /\bin#0\b|\[video input\]|video=/.test(line);
 
 export const startRecordingSession = (
   o: RecordingSessionOptions
@@ -168,8 +163,12 @@ export const startRecordingSession = (
 
   const screen = run("screen", args.screen);
   const camera = run("camera", args.camera);
-  const screenLost = countFramesLost(screen.child);
-  const cameraLostFrames = countFramesLost(camera.child);
+  // FRAMES LOST. Only the Cam Link's dshow buffer drops are counted. The
+  // -progress dup_frames/drop_frames cannot see a loss: `-fps_mode
+  // passthrough` never dups or drops, and the gaps (ddagrab skipping slots,
+  // the Cam Link skipping a frame) are filled by the fps filter, which logs
+  // its counts only at verbose. So the screen's loss is not measured (null)
+  // rather than a 0 that hides it; measuring it needs a rig run.
   let cameraBufferDrops = 0;
   camera.child.onStderr(
     lineSplitter((line) => {
@@ -194,6 +193,7 @@ export const startRecordingSession = (
       if (time) lastFileTime = Math.max(lastFileTime, Number(time[1]) / 1e6);
       const frame = line.match(/^frame=(\d+)/);
       if (frame) cameraFrames = Number(frame[1]);
+      if (cameraFrames > 0) clearTimeout(cameraStart);
       if (!line.startsWith("progress=")) return;
       stalledBlocks =
         cameraFrames > 0 && cameraFrames === framesAtLastBlock
@@ -206,6 +206,13 @@ export const startRecordingSession = (
         ]);
       }
     })
+  );
+
+  // A Cam Link stuck opening holds up the mic too and prints no progress at
+  // all, so its first frame is waited for on the wall clock.
+  const cameraStart = setTimeout(
+    () => cameraLost(["The Cam Link sent nothing after Record."]),
+    o.cameraStartTimeoutMs
   );
 
   log({
@@ -247,6 +254,7 @@ export const startRecordingSession = (
   ) => {
     if (stopping) return finished.then(() => {});
     stopping = true;
+    clearTimeout(cameraStart);
     speech.stopRequested();
     const quitting = Promise.all([quit(screen.child), quit(camera.child)]);
     return quitting.then(async () => {
@@ -267,10 +275,7 @@ export const startRecordingSession = (
         fileTime: lastFileTime,
         files,
         exitCodes: { screen: screenCode, camera: cameraCode },
-        framesLost: {
-          camera: cameraLostFrames() + cameraBufferDrops,
-          screen: screenLost(),
-        },
+        framesLost: { camera: cameraBufferDrops, screen: null },
         errors:
           reason === "ffmpeg-exited"
             ? [...screen.errors(), ...camera.errors()]
@@ -292,12 +297,18 @@ export const startRecordingSession = (
   }
 
   // A process that quits on its own ends the Recording Session: the other is
-  // stopped so its file closes cleanly. The camera process quitting means
-  // the camera is gone.
+  // stopped so its file closes cleanly. The camera + mic process quitting is
+  // the camera lost only when its errors name the Cam Link; a mic or disk
+  // failure is reported as itself.
   void screen.child.exited.then(() => {
     if (!stopping) void stopWith("ffmpeg-exited");
   });
-  void camera.child.exited.then(() => cameraLost(camera.errors()));
+  void camera.child.exited.then(() => {
+    if (stopping) return;
+    const errors = camera.errors();
+    if (errors.some(namesCamera)) cameraLost(errors);
+    else void stopWith("ffmpeg-exited");
+  });
 
   return {
     id,

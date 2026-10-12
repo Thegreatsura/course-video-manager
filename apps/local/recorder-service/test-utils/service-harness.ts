@@ -110,8 +110,10 @@ export const readLog = (file: string) =>
     .split("\n")
     .map((l) => JSON.parse(l) as { seq: number; type: string });
 
-export const recordOnce = async () => {
-  const s = await start();
+export const recordOnce = async (
+  windows: Parameters<typeof fakeWindows>[0] = {}
+) => {
+  const s = await start(fakeWindows(windows));
   const folder = tmp();
   const client = await connect(s.port);
   await client.next("hello");

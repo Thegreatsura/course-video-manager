@@ -322,7 +322,31 @@ describe("recorder ingest", () => {
     ]);
   });
 
-  it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file", async () => {
+  it("hands the editor each saved Clip with its Recording Session, to play as the composite", async () => {
+    const video = await clipService.createVideo("new recorder");
+    const ingest = recorderIngest();
+    await ingest.feed(
+      started(video.id),
+      sceneChanged(2, "Code", 0),
+      sceneChanged(3, "Camera", 4),
+      ...speech(4, 2, 6)
+    );
+    const saved = ingest.messages.find((m) => m.type === "clips-saved");
+    if (saved?.type !== "clips-saved") throw new Error("no Clips saved");
+    expect(saved.clips[0]!.recordingSession).toEqual({
+      id: SESSION,
+      cameraFilePath: FILES.camera,
+      screenFilePath: FILES.screen,
+      micFilePath: FILES.mic,
+      micOffsetMs: 150,
+      sceneEvents: [
+        { fileTime: 0, scene: "Code" },
+        { fileTime: 4, scene: "Camera" },
+      ],
+    });
+  });
+
+  it("enqueues a transcribe-clips Job that transcribes the new Clip from the mic file at mic time", async () => {
     const video = await clipService.createVideo("new recorder");
     const ingest = recorderIngest();
     await ingest.feed(started(video.id), ...speech(2, 2, 5));
@@ -372,7 +396,9 @@ describe("recorder ingest", () => {
       )
     );
 
-    expect(heard).toMatchObject([{ inputVideo: MIC, startTime: 2.15 }]);
+    // Speech heard at mic time 2.0 is cut at picture time 2.15; Whisper hears
+    // the mic from 2.0, not 150 ms into the take.
+    expect(heard).toMatchObject([{ inputVideo: MIC, startTime: 2 }]);
     expect(
       (await clipService.getTimeline(video.id)).map(
         (i) => i.type === "clip" && i.data.text

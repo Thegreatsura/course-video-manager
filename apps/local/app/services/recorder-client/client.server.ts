@@ -36,6 +36,11 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
  * reload takes, the recorder closes and lets the camera go. Several Videos
  * listening: the one most recently opened has it. A recording is never
  * closed this way; it closes once stopped, if nobody listens by then.
+ *
+ * The Stream Deck presses Record, Stop and the scenes on the recorder
+ * service itself; this client tells the service what a Stream Deck Record on
+ * the open Video records with (its editor's Silence Length, `folder`), and
+ * hears its events as for any Record.
  */
 
 /** How many times one event that will not save is asked for again. */
@@ -81,6 +86,8 @@ export type RecorderClientOptions = {
   closeGraceMs: number;
   /** The pause before a Recording Session with an unsaved event is asked for again. */
   retryMs: number;
+  /** The folder (WSL path) a Stream Deck Record's Recording Session goes in. */
+  folder: string;
 };
 
 /** The camera, as an editor on `videoId` hears it, from the recorder's state. */
@@ -139,6 +146,10 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   let asked: string | null | undefined;
   const lastCamera = new Map<string, string>();
   const lastScene = new Map<string, Scene>();
+  /** Per Video: its editor's Silence Length, for a Stream Deck Record. */
+  const silenceLengths = new Map<string, SilenceLength>();
+  /** The Video and Silence Length the recorder was last prepared with. */
+  let prepared: string | undefined;
   const http = o.url.replace(/^ws/, "http");
   const previews = {
     camera: `${http}${previewPath("camera")}`,
@@ -190,6 +201,24 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const send = (command: RecorderCommand) => {
     if (socket?.readyState === WebSocket.OPEN)
       socket.send(JSON.stringify(command));
+  };
+
+  /** Tells the open recorder what a Stream Deck Record on its Video records with. */
+  const prepare = () => {
+    if (!reachable || state.kind === "closed") {
+      prepared = undefined;
+      return;
+    }
+    const silenceLength = silenceLengths.get(state.videoId);
+    const key = `${state.videoId}:${silenceLength}`;
+    if (!silenceLength || prepared === key) return;
+    prepared = key;
+    send({
+      type: "prepare-record",
+      videoId: state.videoId,
+      silenceLength,
+      folder: o.folder,
+    });
   };
 
   /** Opens the recorder for the Video an editor wants, or closes it for none. */
@@ -305,13 +334,23 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         problem = message.ffmpeg.ok ? null : message.ffmpeg.message;
         state = message.state;
         asked = undefined;
+        prepared = undefined;
         reconcile();
+        prepare();
         catchUp(message.recovered);
         return publishStatus();
       case "state":
         state = message.state;
         reconcile();
+        prepare();
         return publishStatus();
+      case "stream-deck-ignored":
+        for (const videoId of listeners.keys())
+          publish(videoId, {
+            type: "recorder-failed",
+            message: `Stream Deck: ${message.message}`,
+          });
+        return;
       case "refused":
         // An open or close of our own was refused: ask again on the next state.
         if (message.command === "open" || message.command === "close") {
@@ -356,6 +395,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       if (socket !== ws) return;
       socket = undefined;
       asked = undefined;
+      prepared = undefined;
       if (reachable) {
         reachable = false;
         publishStatus();
@@ -510,6 +550,12 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       if (state.kind !== "recording" || state.videoId !== videoId)
         throw new RecorderRefusedError("This Video is not recording.");
       await command({ type: "stop" }, (m) => isState(m, "open", videoId));
+    },
+
+    /** The editor's Silence Length: what a Stream Deck Record on this Video uses. */
+    setSilenceLength(videoId: string, silenceLength: SilenceLength) {
+      silenceLengths.set(videoId, silenceLength);
+      prepare();
     },
 
     /** The editor moved its insertion point: the next Clip goes there. */

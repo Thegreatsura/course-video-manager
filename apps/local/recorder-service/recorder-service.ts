@@ -4,6 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
+import { corsHeaders, isAllowedOrigin } from "./allowed-origin";
 import {
   readJsonLines,
   recoverCrashedSessions,
@@ -33,6 +34,7 @@ import {
   type RecorderMessage,
   type RecorderState,
   type RecordingSessionEvent,
+  type StreamDeckPress,
 } from "./protocol";
 import {
   startRecordingSession,
@@ -96,6 +98,22 @@ const Command = Schema.Union(
     scene: Schema.Literal(...SCENES),
   }),
   Schema.Struct({
+    type: Schema.Literal("prepare-record"),
+    videoId: Schema.String,
+    silenceLength: Schema.Literal("short", "long"),
+    folder: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("stream-deck"),
+    press: Schema.Union(
+      Schema.Struct({ action: Schema.Literal("record", "stop") }),
+      Schema.Struct({
+        action: Schema.Literal("switch-scene"),
+        scene: Schema.Literal(...SCENES),
+      })
+    ),
+  }),
+  Schema.Struct({
     type: Schema.Literal("replay"),
     recordingSessionId: Schema.String,
     afterSeq: Schema.Number,
@@ -129,6 +147,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   let state: RecorderState = { kind: "closed" };
   /** The scene the picture is drawn in; kept while the service runs. */
   let scene: Scene = DEFAULT_SCENE;
+  /** What a Stream Deck Record records with, from the app server. */
+  let recordWith:
+    Extract<RecorderCommand, { type: "prepare-record" }> | undefined;
   let listening: () => void = () => {};
   let session: RecordingSession | undefined;
   let camera: Camera | undefined;
@@ -136,10 +157,10 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const feeds = await startPreviewFeeds();
 
   /** `GET /still`: the camera's latest still, or why there is none. */
-  const serveStill = (res: http.ServerResponse) => {
+  const serveStill = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const headers = {
       "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*",
+      ...corsHeaders(req.headers.origin),
     };
     const still = feeds.latest("still");
     const refusal =
@@ -165,8 +186,13 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   const server = http.createServer((req, res) => {
-    if (feeds.serve(req, res)) return;
-    if (req.method === "GET" && req.url === STILL_PATH) return serveStill(res);
+    if (!isAllowedOrigin(req.headers.origin)) {
+      res.writeHead(403, { Vary: "Origin" }).end();
+      return;
+    }
+    if (feeds.serve(req, res, corsHeaders(req.headers.origin))) return;
+    if (req.method === "GET" && req.url === STILL_PATH)
+      return serveStill(req, res);
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ service: "recorder", pid: process.pid, state }));
@@ -174,7 +200,11 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     }
     res.writeHead(404).end();
   });
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({
+    server,
+    verifyClient: ({ origin }: { origin?: string }) =>
+      isAllowedOrigin(origin || undefined),
+  });
   const send = (ws: WebSocket, message: RecorderMessage) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   };
@@ -299,6 +329,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         mic,
         screenIndex: screen.index,
         cameraPreviewPort: feeds.port("camera"),
+        cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
         onEnded: () => {
@@ -342,7 +373,34 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     send(ws, { type: "replay-done", recordingSessionId, lastSeq });
   };
 
-  const handle = async (ws: WebSocket, command: RecorderCommand) => {
+  /** A Stream Deck button: acts on whichever Video the recorder is open for. */
+  const press = async (ws: WebSocket, p: StreamDeckPress): Promise<void> => {
+    if (state.kind === "closed")
+      throw new Refusal(
+        "The recorder is not open: open the editor on a New recorder Video first."
+      );
+    switch (p.action) {
+      case "record":
+        if (recordWith?.videoId !== state.videoId)
+          throw new Refusal(
+            "The editor has not said its Silence Length yet: press Record in the editor."
+          );
+        return record({
+          type: "record",
+          silenceLength: recordWith.silenceLength,
+          folder: recordWith.folder,
+        });
+      case "stop":
+        return handle(ws, { type: "stop" });
+      case "switch-scene":
+        return handle(ws, { type: "switch-scene", scene: p.scene });
+    }
+  };
+
+  const handle = async (
+    ws: WebSocket,
+    command: RecorderCommand
+  ): Promise<void> => {
     if (command.type === "replay") {
       return replay(ws, command.recordingSessionId, command.afterSeq);
     }
@@ -381,9 +439,25 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       case "stop":
         if (!session) throw new Refusal("Not recording.");
         return session.stop();
+      case "prepare-record":
+        recordWith = command;
+        return;
+      case "stream-deck":
+        // Whatever the reason, the press does nothing; every client hears why.
+        return press(ws, command.press).catch((e: unknown) => {
+          if (!(e instanceof Refusal))
+            console.error("recorder: a Stream Deck press failed", e);
+          const message = e instanceof Error ? e.message : String(e);
+          broadcast({
+            type: "stream-deck-ignored",
+            press: command.press,
+            message,
+          });
+        });
       case "close":
         if (state.kind === "recording")
           throw new Refusal("Stop recording before closing the recorder.");
+        recordWith = undefined;
         if (state.kind === "closed") return setState(state);
         setState({ kind: "closed" });
         await Promise.all([releaseCamera(), stopScreenPreview()]);

@@ -3,8 +3,8 @@ import type { SilenceLength } from "../app/silence-detection-constants";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
- * client, later the Stream Deck) sends over the one WebSocket, and what the
- * service sends back. Why the service exists at all is ADR 0034.
+ * client, the Stream Deck forwarder) sends over the one WebSocket, and what
+ * the service sends back. Why the service exists at all is ADR 0034.
  *
  * Two kinds of message come back:
  *
@@ -69,6 +69,16 @@ export type CameraStatus =
   /** Another program (OBS) holds it. The service never closes OBS itself. */
   | { kind: "busy"; message: string };
 
+/**
+ * A Stream Deck button, as the forwarder passes it on. It acts on whichever
+ * Video the recorder is open for; with none, or when the recorder cannot do
+ * it, the service does nothing and says why (`stream-deck-ignored`).
+ */
+export type StreamDeckPress =
+  | { action: "record" }
+  | { action: "stop" }
+  | { action: "switch-scene"; scene: Scene };
+
 export type RecorderCommand =
   /**
    * Open the recorder for a Video: opens the camera and the previews. Open
@@ -87,6 +97,18 @@ export type RecorderCommand =
   | { type: "record"; silenceLength: SilenceLength; folder: string }
   | { type: "stop" }
   | { type: "close" }
+  /**
+   * What a Stream Deck Record records with on this Video: the editor's
+   * Silence Length and the recordings folder. Kept until the recorder closes
+   * or opens for another Video.
+   */
+  | {
+      type: "prepare-record";
+      videoId: string;
+      silenceLength: SilenceLength;
+      folder: string;
+    }
+  | { type: "stream-deck"; press: StreamDeckPress }
   /** Send this Recording Session's logged events with `seq > afterSeq`. */
   | { type: "replay"; recordingSessionId: string; afterSeq: number };
 
@@ -97,11 +119,12 @@ export type RecordingSessionFiles = {
 };
 
 /**
- * Frames lost in a Recording Session, per picture file: the frames each
- * process's ffmpeg counted as duplicated or dropped in its `-progress`, plus,
- * for the camera, the frames DirectShow dropped from a full real-time buffer.
+ * Frames lost in a Recording Session, per picture file. The camera's are the
+ * frames DirectShow dropped from a full real-time buffer. The screen's are not
+ * measured yet (null): see recording-session.ts, FRAMES LOST. Logs written
+ * before that carry a number.
  */
-export type FramesLost = { camera: number; screen: number };
+export type FramesLost = { camera: number; screen: number | null };
 
 /**
  * What a file needed after a crash: `readable` as it was, `remuxed` to give
@@ -193,6 +216,8 @@ export type RecorderStatusMessage =
     }
   | { type: "state"; state: RecorderState }
   | { type: "refused"; command: RecorderCommand["type"]; message: string }
+  /** A Stream Deck press the recorder did nothing about, and why. Broadcast. */
+  | { type: "stream-deck-ignored"; press: StreamDeckPress; message: string }
   | { type: "replay-done"; recordingSessionId: string; lastSeq: number };
 
 export type RecorderMessage = RecordingSessionEvent | RecorderStatusMessage;
