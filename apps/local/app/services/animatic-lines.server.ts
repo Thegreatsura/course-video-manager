@@ -6,7 +6,7 @@ import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operation
 
 /**
  * A Video's Animatic read as lines — both nouns and their comments, read and merged in one place
- * for the Teleprompter's content poll and the Video Editor's Animatic tab.
+ * for the Video Editor's Animatic tab and the Article Writer.
  */
 export const loadAnimaticLines = (videoId: string) =>
   Effect.gen(function* () {

@@ -13,17 +13,14 @@
 import {
   teleprompterChannel,
   type CaptureStatus,
-  type EditorTab,
   type ClipMarks,
   type ClipMarkIds,
-  type TeleprompterCommand,
   type TeleprompterChildToParentMessage,
 } from "./teleprompter-protocol";
 
 export type TeleprompterEditorState = {
   videoId: string | null;
   capture: CaptureStatus;
-  tab: EditorTab;
   /** This session's clips, for the marks display on the glass. */
   marks?: ClipMarks;
   /** The Clip each mark stands for, in the same order as `marks`. */
@@ -86,9 +83,4 @@ export function pushTeleprompterState(state: TeleprompterEditorState): void {
  */
 export function pushTeleprompterScript(videoId: string, script: string): void {
   teleprompterChannel.sendToChild({ type: "scriptChanged", videoId, script });
-}
-
-/** Forward a transport control pressed in the editor to the popup. */
-export function sendTeleprompterCommand(command: TeleprompterCommand): void {
-  teleprompterChannel.sendToChild({ type: "command", command });
 }

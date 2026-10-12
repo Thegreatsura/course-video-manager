@@ -1,16 +1,10 @@
 /**
- * How the teleprompter looks, and the two things that stay adjustable.
+ * How the teleprompter looks.
  *
  * The type is fixed. It was tuned against the real Prompter panel and settled;
  * a teleprompter that looks different every take is worse than one that looks
  * merely good, so these are constants, not controls. Change them here.
- *
- * What stays adjustable is what genuinely varies per take: which document is on
- * the glass, and how fast it rolls. Both live in the URL so a reload mid-session
- * doesn't lose them.
  */
-import { useCallback } from "react";
-import { useSearchParams } from "react-router";
 
 export const TYPE = {
   fontFamily:
@@ -32,63 +26,6 @@ export const TYPE = {
   letterSpacing: 0,
   /** Measure in `ch`. Short lines are the biggest teleprompter lever there is. */
   measure: 25,
-  /**
-   * The Beats column, in `ch` of the page's own type rather than the glass's —
-   * the column sets no font of its own, so this number isn't comparable to
-   * `measure` above, only to itself.
-   *
-   * A short measure is for reading a line aloud without losing your place in
-   * it. The plan isn't read that way: it's glanced at, a row at a time, behind
-   * an icon gutter that takes width off every line. Wide enough that a beat's
-   * sentence lands in a line or two rather than a stack of fragments.
-   *
-   * Anchored to the page's type, so it doesn't follow `beatTitleScale`: setting
-   * the plan a step larger buys no extra width, it spends some. Tune the two
-   * together, and judge the result by characters on a line rather than by
-   * either number on its own.
-   */
-  beatsMeasure: 36,
-  /**
-   * A Beat Title, against the script's body size. The rest of the row — the
-   * icon gutter, and the description under it — is sized from the title, so
-   * this is the one number that scales a beat.
-   *
-   * The script's size is tuned for reading a line off the glass word by word,
-   * from where the lens has you standing. A beat is taken in whole and at a
-   * glance — often from further back than that, and never mid-sentence — so it
-   * is set a step above. A step, not a jump: much larger and a plan of a dozen
-   * beats stops fitting on the glass at once, which is the thing the Beats view
-   * is for.
-   */
-  beatTitleScale: 1.1,
-  /**
-   * A Beat Description, relative to the beat title above it.
-   *
-   * The title is what you scan the plan for; the description is the detail you
-   * read once you've found it. Set at the same size the two run together into
-   * one wall of text and the plan loses its shape at a glance. Well above the
-   * cue size, though — a description is a sentence of what you're about to
-   * actually do, and it still has to be legible from where you stand.
-   */
-  beatDescriptionScale: 0.7,
-  /**
-   * The Animatic's clip-number gutter, in `em` of the body size. The lines
-   * themselves ARE read aloud, so they keep the script's size and `measure`;
-   * the gutter is added beside that, never taken out of it.
-   */
-  animaticGutter: 1.6,
-  /**
-   * A Clip Mockup Chapter's title, against the body size. A step down and
-   * quiet: it is a signpost between clips, never a line you say.
-   */
-  animaticChapterScale: 0.7,
-  /**
-   * A Clip Mockup Comment, against the body size. Small like a cue, because it
-   * is never said aloud. Plain white, set apart from a stage direction by its
-   * comment icon rather than by a colour of its own.
-   */
-  animaticCommentScale: 0.6,
-  commentColor: "var(--color-white)",
   /**
    * Warm rather than white: easier on the eye through beam-splitter glass.
    *
@@ -170,8 +107,8 @@ export function textStyle(): React.CSSProperties {
     // teleprompter shell in `app/routes/teleprompter.tsx`, because the glass
     // lives reflected in front of a lens and a stray drag highlighting the
     // chrome is pure noise. The words themselves are the exception: a line of
-    // script or a beat's note is as often something to paste elsewhere as
-    // something to read aloud, so everything set in this type opts back in.
+    // script is as often something to paste elsewhere as something to read
+    // aloud, so everything set in this type opts back in.
     // Inline, so it beats that class wherever this style lands.
     userSelect: "text",
   };
@@ -206,50 +143,4 @@ export function cueStyle(): React.CSSProperties {
     fontStyle: "italic",
     color: TYPE.cueColor,
   };
-}
-
-/**
- * Which document is on the glass, in the order the editor's side panel lists
- * the same three tabs.
- */
-export const SOURCES = ["script", "animatic", "beats"] as const;
-export type Source = (typeof SOURCES)[number];
-
-export const MIN_WPM = 80;
-export const MAX_WPM = 400;
-const DEFAULT_WPM = 200;
-
-/**
- * Crawl speed, in spoken words per minute, kept in the URL so a reload
- * mid-session doesn't lose it.
- *
- * Speed is the only setting that persists. Which document is on the glass
- * follows the editor's side panel — see `teleprompterSession.resolveSource` —
- * so there's nothing to remember.
- */
-export function useTeleprompterWpm(): [number, (wpm: number) => void] {
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const raw = Number(searchParams.get("wpm"));
-  const wpm =
-    Number.isFinite(raw) && raw > 0
-      ? Math.min(MAX_WPM, Math.max(MIN_WPM, raw))
-      : DEFAULT_WPM;
-
-  const setWpm = useCallback(
-    (next: number) => {
-      const clamped = Math.min(MAX_WPM, Math.max(MIN_WPM, next));
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.set("wpm", String(clamped));
-          return params;
-        },
-        { replace: true, preventScrollReset: true }
-      );
-    },
-    [setSearchParams]
-  );
-
-  return [wpm, setWpm];
 }

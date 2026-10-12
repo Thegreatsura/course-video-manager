@@ -1,23 +1,13 @@
 /**
- * The script on the glass: a continuous upward crawl.
+ * The script on the glass, in a plain scroll container.
  *
- * The crawl moves a real scroll container rather than translating the text,
- * because the current H2 and H3 pin at the top with CSS `position: sticky`
- * (see `heading-sections.ts`), and sticky only follows a scroll. Whole pixels
- * go to `scrollTop`; the fraction left over is a `transform`, so a slow crawl
- * still glides instead of stepping a pixel at a time.
- *
- * Speed is expressed in spoken words per minute and converted to pixels per
- * second using the height the prose actually renders at, so changing the type
- * doesn't change the reading pace. The runway below the text is deliberately
- * excluded from that measurement — it's padding, not words, and counting it
- * would inflate the pace on short scripts.
- *
- * The Stream Deck's job here is trim: play/pause, and nudge forward or back
- * when the crawl drifts out of sync with the delivery. The mouse wheel scrolls
- * directly, which is the fastest way to reach a particular line between takes.
+ * It scrolls rather than paging because the current H1, H2 and H3 pin at the
+ * top with CSS `position: sticky` (see `heading-sections.ts`), and sticky only
+ * follows a scroll. Nothing moves it on its own: the mouse wheel scrolls it
+ * directly, which is the fastest way to reach a particular line between takes,
+ * and the Stream Deck nudges it forward or back, or returns it to the top.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { ScriptCodeBlock } from "./script-code-block";
 import { nestHeadingSections, type HeadingNode } from "./heading-sections";
 import {
@@ -27,45 +17,13 @@ import {
 } from "./sticky-heading";
 import { useTeleprompterActions } from "./use-teleprompter-actions";
 import { ScriptMarkdown } from "./script-markdown";
-import {
-  parseScriptBlocks,
-  wordCount,
-  type ScriptBlock,
-} from "./script-blocks";
+import { parseScriptBlocks, type ScriptBlock } from "./script-blocks";
 import { TYPE, textStyle } from "./teleprompter-settings";
 
-export function TeleprompterCrawl(props: {
-  blocks: ScriptBlock[];
-  /** Crawl speed, in spoken words per minute. */
-  wpm: number;
-  /**
-   * Whether the crawl is rolling. Owned by the session reducer, and only ever
-   * started by hand — recording doesn't — see `teleprompter-session.ts`.
-   */
-  playing: boolean;
-  onTogglePlay: () => void;
-  onRewind: () => void;
-}) {
-  /** The scroll container the rAF loop moves. Owns its `scrollTop`. */
+export function TeleprompterCrawl(props: { blocks: ScriptBlock[] }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  /** The sub-pixel remainder. Owns its `transform` — don't set it in JSX. */
-  const contentRef = useRef<HTMLDivElement>(null);
-  /** Just the prose, for measuring pace. Excludes the runway. */
+  /** Just the prose, for measuring the pinned headings. Excludes the runway. */
   const proseRef = useRef<HTMLDivElement>(null);
-  const offsetRef = useRef(0);
-  const targetRef = useRef(0);
-  const playingRef = useRef(props.playing);
-  playingRef.current = props.playing;
-
-  // Only prose is spoken: headings and cues are read silently, so counting
-  // their words would slow the crawl below the pace actually being delivered.
-  const totalWords = useMemo(
-    () =>
-      props.blocks
-        .filter((block) => block.kind === "para" || block.kind === "list")
-        .reduce((sum, block) => sum + wordCount(block.text), 0),
-    [props.blocks]
-  );
 
   const sections = useMemo(
     () => nestHeadingSections(props.blocks, headingRank),
@@ -77,78 +35,24 @@ export function TeleprompterCrawl(props: {
   // One nudge ≈ three lines, which is about a sentence at these settings.
   const nudge = TYPE.fontSize * TYPE.lineHeight * 3;
 
-  const scrollBy = (delta: number) => {
-    targetRef.current = Math.max(0, targetRef.current + delta);
-    offsetRef.current = Math.max(0, offsetRef.current + delta);
-  };
+  const scrollBy = (top: number) =>
+    scrollerRef.current?.scrollBy({ top, behavior: "smooth" });
 
   useTeleprompterActions({
-    advance: () => {
-      targetRef.current += nudge;
-    },
-    back: () => {
-      targetRef.current = Math.max(0, targetRef.current - nudge);
-    },
-    togglePlay: props.onTogglePlay,
-    reset: () => {
-      targetRef.current = 0;
-      offsetRef.current = 0;
-      props.onRewind();
-    },
+    advance: () => scrollBy(nudge),
+    back: () => scrollBy(-nudge),
+    reset: () => scrollerRef.current?.scrollTo({ top: 0 }),
   });
 
-  useEffect(() => {
-    let raf = 0;
-    let last = performance.now();
-
-    const tick = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.1);
-      last = now;
-
-      const el = scrollerRef.current;
-      const content = contentRef.current;
-      if (el && content) {
-        const proseHeight = proseRef.current?.scrollHeight ?? 0;
-        // Height per word × words per second = the pace the script reads at.
-        const pxPerWord = totalWords > 0 ? proseHeight / totalWords : 0;
-        const pxPerSecond = (props.wpm / 60) * pxPerWord;
-
-        if (playingRef.current) targetRef.current += pxPerSecond * dt;
-        targetRef.current = Math.max(
-          0,
-          Math.min(targetRef.current, el.scrollHeight - el.clientHeight)
-        );
-
-        // Chase the target rather than snapping to it: a constant-velocity crawl
-        // keeps a constant (invisible) lag, while nudges arrive as a smooth ease.
-        offsetRef.current += (targetRef.current - offsetRef.current) * 0.18;
-        el.scrollTop = Math.floor(offsetRef.current);
-        // Whatever the browser actually scrolled to, the transform makes up
-        // the rest.
-        content.style.transform = `translateY(${el.scrollTop - offsetRef.current}px)`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [props.wpm, totalWords]);
-
   return (
-    <div
-      className="relative h-full w-full overflow-hidden bg-black"
-      onWheel={(e) => scrollBy(e.deltaY)}
-    >
-      {/* Scrolled by the rAF loop only: the wheel goes through `scrollBy`. */}
+    <div className="relative h-full w-full overflow-hidden bg-black">
       <div
         ref={scrollerRef}
         data-crawl-scroller
-        className="absolute inset-0"
-        style={{ overflow: "hidden" }}
+        className="absolute inset-0 overflow-y-auto [scrollbar-width:none]"
       >
         <div
-          ref={contentRef}
-          className="mx-auto will-change-transform"
+          className="mx-auto"
           style={{
             ...textStyle(),
             width: `${TYPE.measure}ch`,
@@ -228,6 +132,12 @@ function SectionsView(props: {
           style={{
             marginBottom: "1.5rem",
             paddingBlock: "0.4em",
+            // On a narrow glass the centred column starts left of the Video
+            // length, top left of the glass, and the pinned title runs under
+            // it. Pad the title in until its left edge shares the timecode's
+            // (`left-24` in `video-length.tsx`); `100%` is the column's width,
+            // so `(100vw - 100%) / 2` is where the column starts.
+            paddingLeft: "max(0px, calc(6rem - (100vw - 100%) / 2))",
             fontSize: `${HEADING_SIZE}px`,
             lineHeight: 1.35,
             fontWeight: 600,

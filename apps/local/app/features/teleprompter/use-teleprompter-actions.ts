@@ -1,24 +1,20 @@
 /**
  * One input surface: Stream Deck presses (over the forwarder hub at
- * ws://localhost:5172), the equivalent keyboard shortcuts, and the same
- * shortcuts pressed over in the Video Editor window.
+ * ws://localhost:5172) and the equivalent keyboard shortcuts.
  *
  * Connects its own socket rather than reusing the editor's `useWebSocket` —
  * this is a different window, and the hub fans out to every client anyway.
  *
  *   advance / back  →  Stream Deck /api/teleprompter-advance | -back  ·  J/K, ↓/↑, Space
- *   togglePlay      →  /api/teleprompter-toggle-play                  ·  P
  *   reset           →  /api/teleprompter-reset                        ·  R
  * */
 import { STREAM_DECK_HUB_URL } from "@/lib/live-channels";
 import { useEffect, useRef } from "react";
 import { streamDeckForwarderMessageSchema } from "stream-deck-forwarder/stream-deck-forwarder-types";
-import { teleprompterChannel } from "@/lib/teleprompter-protocol";
 
 export type TeleprompterActions = {
   advance: () => void;
   back: () => void;
-  togglePlay: () => void;
   reset: () => void;
 };
 
@@ -49,7 +45,6 @@ export function useTeleprompterActions(actions: TeleprompterActions) {
         const { type } = parsed.data;
         if (type === "teleprompter-advance") ref.current.advance();
         else if (type === "teleprompter-back") ref.current.back();
-        else if (type === "teleprompter-toggle-play") ref.current.togglePlay();
         else if (type === "teleprompter-reset") ref.current.reset();
       });
       // The forwarder may not be up yet (or may restart under `tsx watch`).
@@ -69,17 +64,6 @@ export function useTeleprompterActions(actions: TeleprompterActions) {
     };
   }, []);
 
-  // The same controls pressed in the editor window, forwarded over
-  // BroadcastChannel — this popup only sees real keystrokes when it has OS
-  // focus, and it won't while you're reading off the Prompter.
-  useEffect(
-    () =>
-      teleprompterChannel.subscribeChild((msg) => {
-        if (msg.type === "command") ref.current[msg.command]();
-      }),
-    []
-  );
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -97,9 +81,6 @@ export function useTeleprompterActions(actions: TeleprompterActions) {
       } else if (e.key === "k" || e.key === "ArrowUp") {
         e.preventDefault();
         ref.current.back();
-      } else if (e.key === "p") {
-        e.preventDefault();
-        ref.current.togglePlay();
       } else if (e.key === "r") {
         e.preventDefault();
         ref.current.reset();

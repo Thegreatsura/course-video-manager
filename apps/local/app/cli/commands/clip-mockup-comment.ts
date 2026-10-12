@@ -25,7 +25,7 @@ import {
 
 /**
  * `cvm clip-mockup-comment` — the author's notes pinned to one Clip Mockup or
- * one Clip Mockup Chapter, shown in the teleprompter on the filming day.
+ * one Clip Mockup Chapter, shown under it in the Animatic.
  *
  * NOT LOCAL-ONLY, like `clip-mockup-chapter`: a comment is a row and touches no
  * disk. Every write goes through the Draft guard in the service.

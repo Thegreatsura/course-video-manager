@@ -137,10 +137,6 @@ export function startStreamDeckForwarder(opts?: {
       sendMessage({
         type: "teleprompter-back",
       });
-    } else if (req.url === "/api/teleprompter-toggle-play") {
-      sendMessage({
-        type: "teleprompter-toggle-play",
-      });
     } else if (req.url === "/api/teleprompter-reset") {
       sendMessage({
         type: "teleprompter-reset",

@@ -32,8 +32,7 @@ import type {
 
 /**
  * Clip Mockup Comments in the Animatic's sidebar — the author's notes on one
- * moment or one Chapter, kept for the filming day, where the teleprompter
- * shows them under the line.
+ * moment or one Chapter.
  *
  * LIKE A COMMENT IN A GOOGLE DOC. A row or a divider with comments carries an
  * amber badge with their count; one without shows a quiet "add" icon on hover

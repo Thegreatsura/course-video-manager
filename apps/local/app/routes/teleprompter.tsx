@@ -1,7 +1,6 @@
 /**
- * The teleprompter window: the current video's Script (or its Animatic's
- * lines, or its Beat plan) on an Elgato Prompter, following whatever the Video
- * Editor has open.
+ * The teleprompter window: the current video's Script on an Elgato Prompter,
+ * following whatever the Video Editor has open.
  *
  * A top-level flat route (no `_app.` prefix) so it renders bare with no
  * sidebar, exactly like `diagram-playground.*`.
@@ -18,10 +17,6 @@ import { useEffect, useMemo, useReducer, useRef } from "react";
 import { teleprompterChannel } from "@/lib/teleprompter-protocol";
 import { parseScriptBlocks } from "@/features/teleprompter/script-blocks";
 import { CaptureIndicator } from "@/features/teleprompter/capture-indicator";
-import { TeleprompterControls } from "@/features/teleprompter/teleprompter-controls";
-import { useTeleprompterWpm } from "@/features/teleprompter/teleprompter-settings";
-import { BeatsView } from "@/features/teleprompter/beats-view";
-import { AnimaticView } from "@/features/teleprompter/animatic-view";
 import { TeleprompterCrawl } from "@/features/teleprompter/teleprompter-crawl";
 import { teleprompterSession } from "@/features/teleprompter/teleprompter-session";
 import { SessionMarks } from "@/features/teleprompter/session-marks";
@@ -38,7 +33,6 @@ export const handle = NO_TOASTS;
 export const meta: Route.MetaFunction = () => [{ title: "Teleprompter" }];
 
 export default function Teleprompter() {
-  const [wpm, setWpm] = useTeleprompterWpm();
   const [state, dispatch] = useReducer(
     teleprompterSession.reducer,
     teleprompterSession.initialState
@@ -61,7 +55,6 @@ export default function Teleprompter() {
           type: "editor-state",
           videoId: msg.videoId,
           capture: msg.capture,
-          tab: msg.tab,
           marks: msg.marks,
           markClipIds: msg.markClipIds,
           playingClipId: msg.playingClipId,
@@ -150,38 +143,11 @@ export default function Teleprompter() {
     [content.script]
   );
 
-  const hasScript = blocks.length > 0;
-  const hasBeats = content.beats.length > 0;
-  const hasAnimatic = content.animatic.length > 0;
-
-  const source = teleprompterSession.resolveSource(state, {
-    hasScript,
-    hasBeats,
-    hasAnimatic,
-  });
-
-  const status = state.editorConnected
-    ? videoId
-      ? "following editor"
-      : "editor connected · no video"
-    : "editor not connected";
-
   const emptyMessage = !state.editorConnected
     ? "Waiting for a Video Editor window."
     : !videoId
       ? "No video open in the editor."
-      : source === "beats"
-        ? "This video has no Beats yet."
-        : source === "animatic"
-          ? "This video has no Clip Mockups yet."
-          : "This video has no Script yet.";
-
-  const hasContent =
-    source === "beats"
-      ? hasBeats
-      : source === "animatic"
-        ? hasAnimatic
-        : hasScript;
+      : "This video has no Script yet.";
 
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-black">
@@ -218,33 +184,13 @@ export default function Teleprompter() {
         <LatestTranscript text={state.latestTranscript} />
       )}
 
-      {!hasContent ? (
+      {blocks.length === 0 ? (
         <div className="flex h-full items-center justify-center px-12 text-center">
           <p className="max-w-md text-white/35">{emptyMessage}</p>
         </div>
-      ) : source === "beats" ? (
-        <BeatsView beats={content.beats} />
-      ) : source === "animatic" ? (
-        <AnimaticView lines={content.animatic} />
       ) : (
-        <TeleprompterCrawl
-          blocks={blocks}
-          wpm={wpm}
-          playing={state.playing}
-          onTogglePlay={() => dispatch({ type: "toggle-play" })}
-          onRewind={() => dispatch({ type: "rewound" })}
-        />
+        <TeleprompterCrawl blocks={blocks} />
       )}
-
-      <TeleprompterControls
-        source={source}
-        onSourceChange={(next) =>
-          dispatch({ type: "source-picked", source: next })
-        }
-        wpm={wpm}
-        onWpmChange={setWpm}
-        status={status}
-      />
     </div>
   );
 }
