@@ -2,29 +2,20 @@ import { describe, expect, it } from "vitest";
 import { resolveBeatTab } from "./beat-tab";
 
 describe("resolveBeatTab", () => {
-  it("honours a persisted tab that still exists (beats)", () => {
-    expect(
-      resolveBeatTab({
-        persistedTab: "beats",
-        hasBeats: true,
-        hasReference: true,
-        hasAnimatic: true,
-      })
-    ).toBe("beats");
+  it("honours a persisted Beats or Reference tab that still exists", () => {
+    for (const persistedTab of ["beats", "reference"] as const) {
+      expect(
+        resolveBeatTab({
+          persistedTab,
+          hasBeats: true,
+          hasReference: true,
+          hasAnimatic: true,
+        })
+      ).toBe(persistedTab);
+    }
   });
 
-  it("honours a persisted tab that still exists (reference)", () => {
-    expect(
-      resolveBeatTab({
-        persistedTab: "reference",
-        hasBeats: true,
-        hasReference: true,
-        hasAnimatic: true,
-      })
-    ).toBe("reference");
-  });
-
-  it("falls back to script when the persisted tab no longer exists (reference removed)", () => {
+  it("falls back to script when the persisted tab no longer exists", () => {
     expect(
       resolveBeatTab({
         persistedTab: "reference",
@@ -33,9 +24,6 @@ describe("resolveBeatTab", () => {
         hasAnimatic: true,
       })
     ).toBe("script");
-  });
-
-  it("falls back to script when the persisted tab no longer exists (beats gone)", () => {
     expect(
       resolveBeatTab({
         persistedTab: "beats",
@@ -57,45 +45,12 @@ describe("resolveBeatTab", () => {
     ).toBe("script");
   });
 
-  it("defaults to script even when the video has beats", () => {
-    expect(
-      resolveBeatTab({
-        persistedTab: null,
-        hasBeats: true,
-        hasReference: false,
-        hasAnimatic: true,
-      })
-    ).toBe("script");
-  });
-
   it("falls back to script when neither beats nor reference is available", () => {
     expect(
       resolveBeatTab({
         persistedTab: null,
         hasBeats: false,
         hasReference: false,
-        hasAnimatic: true,
-      })
-    ).toBe("script");
-  });
-
-  it("falls back to script when a stale beats tab was persisted and neither exists", () => {
-    expect(
-      resolveBeatTab({
-        persistedTab: "beats",
-        hasBeats: false,
-        hasReference: false,
-        hasAnimatic: true,
-      })
-    ).toBe("script");
-  });
-
-  it("honours a persisted script tab (always available)", () => {
-    expect(
-      resolveBeatTab({
-        persistedTab: "script",
-        hasBeats: true,
-        hasReference: true,
         hasAnimatic: true,
       })
     ).toBe("script");

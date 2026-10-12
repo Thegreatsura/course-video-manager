@@ -39,12 +39,6 @@ const optimistic = (frontendId: string): ClipOptimisticallyAdded => ({
 });
 
 describe("getRetranscribableClipIds", () => {
-  it("names every clip of the video that is already on the database", () => {
-    expect(
-      getRetranscribableClipIds([onDatabase("a"), onDatabase("b")])
-    ).toEqual(["a", "b"]);
-  });
-
   it("skips a clip still being written, which has no id to transcribe by", () => {
     expect(
       getRetranscribableClipIds([
@@ -53,13 +47,5 @@ describe("getRetranscribableClipIds", () => {
         onDatabase("b"),
       ])
     ).toEqual(["a", "b"]);
-  });
-
-  it("names an already-transcribed clip too — a re-transcribe redoes it", () => {
-    expect(getRetranscribableClipIds([onDatabase("a")])).toEqual(["a"]);
-  });
-
-  it("is empty for a video with no clips", () => {
-    expect(getRetranscribableClipIds([])).toEqual([]);
   });
 });

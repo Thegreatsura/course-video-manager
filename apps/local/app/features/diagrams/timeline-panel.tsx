@@ -8,6 +8,7 @@ import {
   type Snapshot,
 } from "@/features/diagrams/snapshot-list";
 import { usePlaygroundStatus } from "@/features/diagrams/playground-status";
+import { railRowClass } from "@/features/diagrams/rail-row-class";
 
 export type { Snapshot };
 
@@ -116,11 +117,8 @@ export function TimelinePanel({
             snapshot.contentHash === activeContentHash ? "true" : undefined
           }
           className={
-            "group flex h-14 items-center gap-2 overflow-hidden rounded border border-zinc-700 pr-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 " +
-            // The Diagram Rail's active row.
-            (snapshot.contentHash === activeContentHash
-              ? "bg-zinc-700/60"
-              : "bg-zinc-800 hover:bg-zinc-700/40")
+            "group flex h-14 items-center gap-2 overflow-hidden rounded border pr-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 " +
+            railRowClass(snapshot.contentHash === activeContentHash)
           }
         >
           <DiagramThumbnail

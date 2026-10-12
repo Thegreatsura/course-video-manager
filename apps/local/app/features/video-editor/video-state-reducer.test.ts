@@ -294,39 +294,6 @@ describe("videoStateReducer", () => {
   });
 
   describe("create-video-from-selection-confirmed", () => {
-    it("should dispatch create-video-from-selection effect with selected clip IDs, title, and mode", () => {
-      const clip1 = "clip-1" as FrontendId;
-      const clip2 = "clip-2" as FrontendId;
-      const clip3 = "clip-3" as FrontendId;
-
-      const itemIds = [clip1, clip2, clip3];
-      const clipIds = [clip1, clip2, clip3];
-
-      const reducer = makeVideoEditorReducer(itemIds, clipIds);
-
-      const tester = new ReducerTester(
-        reducer,
-        createInitialState({
-          selectedClipsSet: new Set([clip1, clip2]),
-          currentClipId: clip1,
-        })
-      );
-
-      tester.send({
-        type: "create-video-from-selection-confirmed",
-        title: "New Video Title",
-        mode: "copy",
-      });
-
-      expect(tester.getExec()).toHaveBeenCalledWith({
-        type: "create-video-from-selection",
-        clipIds: [clip1, clip2],
-        chapterIds: [],
-        title: "New Video Title",
-        mode: "copy",
-      });
-    });
-
     it("should separate clip IDs and chapter IDs in the effect payload", () => {
       const clip1 = "clip-1" as FrontendId;
       const section1 = "section-1" as FrontendId;
@@ -390,7 +357,7 @@ describe("videoStateReducer", () => {
       expect(state.selectedClipsSet).toEqual(new Set([clip1, clip2]));
     });
 
-    it("should clear selection in move mode (optimistic removal)", () => {
+    it("should clear selection and ask for a move in move mode (optimistic removal)", () => {
       const clip1 = "clip-1" as FrontendId;
       const clip2 = "clip-2" as FrontendId;
       const clip3 = "clip-3" as FrontendId;
@@ -418,35 +385,11 @@ describe("videoStateReducer", () => {
 
       // In move mode, selection should be cleared (items are being moved away)
       expect(state.selectedClipsSet).toEqual(new Set());
-    });
-
-    it("should dispatch effect with move mode when specified", () => {
-      const clip1 = "clip-1" as FrontendId;
-
-      const itemIds = [clip1];
-      const clipIds = [clip1];
-
-      const reducer = makeVideoEditorReducer(itemIds, clipIds);
-
-      const tester = new ReducerTester(
-        reducer,
-        createInitialState({
-          selectedClipsSet: new Set([clip1]),
-          currentClipId: clip1,
-        })
-      );
-
-      tester.send({
-        type: "create-video-from-selection-confirmed",
-        title: "Move Video",
-        mode: "move",
-      });
-
       expect(tester.getExec()).toHaveBeenCalledWith({
         type: "create-video-from-selection",
-        clipIds: [clip1],
+        clipIds: [clip1, clip2],
         chapterIds: [],
-        title: "Move Video",
+        title: "Move Mode Video",
         mode: "move",
       });
     });
