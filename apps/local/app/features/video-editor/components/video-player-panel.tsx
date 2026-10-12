@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LiveMediaStream } from "./live-media-stream";
+import { LivePreviewFrame } from "./live-preview-frame";
+import { getHasLivePreview } from "../live-preview";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { NewRecorderControls } from "./new-recorder-controls";
 import { showsNewRecorderControls } from "../recorder-choice-reducer";
-import { RecordingSignalIndicator } from "./timeline-indicators";
 import { TableOfContents } from "./table-of-contents";
 import {
   DeferredAddVideoModal,
@@ -17,16 +17,11 @@ import { AutofillDescriptionModal } from "@/features/lesson-writer/autofill-desc
 import { VideoPlayerLinksTab } from "./video-player-links-tab";
 import { VideoMoreActions } from "./video-more-actions";
 import { PreloadableClipManager } from "../preloadable-clip";
-import { clipStillUrl } from "../clip-still-url";
 import {
   getLastTranscribedClipId as getLastTranscribedClipIdSelector,
   getChapters as getChaptersSelector,
   getHasSections as getHasSectionsSelector,
   getIsOBSActive as getIsOBSActiveSelector,
-  getIsLiveStreamPortrait as getIsLiveStreamPortraitSelector,
-  getShouldShowLastFrameOverlay as getShouldShowLastFrameOverlaySelector,
-  getShowCenterLine as getShowCenterLineSelector,
-  getShowRecordingSignal as getShowRecordingSignalSelector,
   getShowScrubSlider as getShowScrubSliderSelector,
 } from "../video-editor-selectors";
 import { ClipboardIcon, VideoOffIcon } from "lucide-react";
@@ -71,33 +66,17 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.showVideoPlayer
   );
-  const showLiveStream = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.showLiveStream
-  );
-  const showLastFrame = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.showLastFrame
-  );
   const obsConnectorState = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.obsConnectorState
   );
+  const newRecorderState = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.newRecorder.state
+  );
   const recorder = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.recorderPicker.recorder
-  );
-  const speechDetectorState = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.speechDetectorState
-  );
-  const isTeleprompterConnected = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.isTeleprompterConnected
-  );
-  const databaseClipToShowLastFrameOf = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.databaseClipToShowLastFrameOf
   );
   const clipsToAggressivelyPreload = useContextSelector(
     VideoEditorContext,
@@ -228,18 +207,7 @@ export const VideoPlayerPanel = () => {
   const hasSections = getHasSectionsSelector(items);
 
   const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
-  const isLiveStreamPortrait =
-    getIsLiveStreamPortraitSelector(obsConnectorState);
-  const shouldShowLastFrameOverlay = getShouldShowLastFrameOverlaySelector(
-    databaseClipToShowLastFrameOf,
-    showLastFrame,
-    obsConnectorState
-  );
-  const showCenterLine = getShowCenterLineSelector(obsConnectorState);
-  const showRecordingSignal = getShowRecordingSignalSelector(
-    obsConnectorState,
-    isTeleprompterConnected
-  );
+  const hasLivePreview = getHasLivePreview(liveMediaStream, newRecorderState);
   const showScrubSlider = getShowScrubSliderSelector(
     currentClip?.type,
     showVideoPlayer
@@ -344,7 +312,7 @@ export const VideoPlayerPanel = () => {
         <div className="">
           <VideoPlayerStatusStrip />
 
-          {!liveMediaStream && clips.length === 0 ? (
+          {!hasLivePreview && clips.length === 0 ? (
             <div className="w-full aspect-[16/9] bg-card rounded-lg flex flex-col items-center justify-center gap-3">
               <VideoOffIcon className="size-10 text-muted-foreground" />
               <p className="text-muted-foreground text-sm text-center px-4">
@@ -355,43 +323,7 @@ export const VideoPlayerPanel = () => {
             </div>
           ) : (
             <>
-              {liveMediaStream && (
-                <div
-                  className={cn(
-                    "w-full relative aspect-[16/9]",
-                    isLiveStreamPortrait && "w-92 aspect-[9/16]",
-                    "hidden",
-                    !showVideoPlayer &&
-                      (showLiveStream || showLastFrame) &&
-                      "block"
-                  )}
-                >
-                  {showRecordingSignal && <RecordingSignalIndicator />}
-
-                  {isOBSActive && (
-                    <LiveMediaStream
-                      mediaStream={liveMediaStream}
-                      obsConnectorState={obsConnectorState}
-                      speechDetectorState={speechDetectorState}
-                      showCenterLine={showCenterLine}
-                      showCaptureStatus={!isTeleprompterConnected}
-                    />
-                  )}
-                  {!showVideoPlayer &&
-                    shouldShowLastFrameOverlay &&
-                    databaseClipToShowLastFrameOf && (
-                      <div className="absolute inset-0 rounded-lg">
-                        <img
-                          className="w-full h-full rounded-lg opacity-50 object-contain"
-                          src={clipStillUrl(
-                            databaseClipToShowLastFrameOf,
-                            "last"
-                          )}
-                        />
-                      </div>
-                    )}
-                </div>
-              )}
+              <LivePreviewFrame />
               <div
                 className={cn(
                   // overflow-hidden is what makes a Clip Zoom read as a

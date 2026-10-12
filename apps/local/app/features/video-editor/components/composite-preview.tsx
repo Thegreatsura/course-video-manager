@@ -18,10 +18,8 @@ const frameOf = (
  * feeds drawn on a canvas by the layout module's draw instructions for the
  * scene the recorder is in. The feeds load in `<img>`s kept out of sight;
  * the canvas redraws them every animation frame. A feed with no frame yet
- * is left out (black).
- *
- * `overlay` is drawn over it at half opacity: the previous Clip's last
- * frame, to match position between takes.
+ * is left out (black). It fills the editor's live frame, where OBS's
+ * Virtual Camera would be (`LivePreviewFrame`).
  */
 export const CompositePreview = (props: {
   previews: { camera: string; screen: string };
@@ -30,7 +28,6 @@ export const CompositePreview = (props: {
   cameraShowing: boolean;
   /** Changes when the camera comes back, so its stream reconnects. */
   cameraKey: string;
-  overlay: string | null;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<HTMLImageElement>(null);
@@ -55,7 +52,7 @@ export const CompositePreview = (props: {
   const hidden = "pointer-events-none absolute size-px opacity-0";
   return (
     <div
-      className="relative w-full aspect-[16/9] overflow-hidden rounded bg-black"
+      className="relative w-full h-full overflow-hidden rounded-lg bg-black"
       data-testid="new-recorder-composite"
       data-scene={scene}
     >
@@ -82,13 +79,6 @@ export const CompositePreview = (props: {
         alt=""
         className={hidden}
       />
-      {props.overlay && (
-        <img
-          src={props.overlay}
-          alt=""
-          className="absolute inset-0 h-full w-full object-contain opacity-50"
-        />
-      )}
     </div>
   );
 };

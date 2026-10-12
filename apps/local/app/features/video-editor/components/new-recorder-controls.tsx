@@ -8,8 +8,6 @@ import {
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { SCENES } from "@/packages/scene-layout";
-import { CompositePreview } from "./composite-preview";
-import { clipStillUrl } from "../clip-still-url";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 
 /** What the New recorder is doing, in a few words. */
@@ -49,38 +47,6 @@ const framesText = (count: number, picture: string) =>
 
 const useNewRecorderControls = () =>
   useContextSelector(VideoEditorContext, (ctx) => ctx.newRecorder);
-
-/**
- * The composite preview: the scene the recorder is in, drawn from its raw
- * camera and screen feeds, with the previous Clip's last frame over it when
- * that is toggled on.
- */
-const ScenePreview = () => {
-  const controls = useNewRecorderControls();
-  const { state } = controls;
-  const showLastFrame = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.showLastFrame
-  );
-  const lastFrameClip = useContextSelector(
-    VideoEditorContext,
-    (ctx) => ctx.databaseClipToShowLastFrameOf
-  );
-  if (!state.previews || !state.reachable || !state.scene) return null;
-  return (
-    <CompositePreview
-      previews={state.previews}
-      scene={state.scene}
-      cameraShowing={state.camera.kind === "live" || state.phase !== "idle"}
-      cameraKey={state.camera.kind}
-      overlay={
-        showLastFrame && lastFrameClip
-          ? clipStillUrl(lastFrameClip, "last")
-          : null
-      }
-    />
-  );
-};
 
 /** Camera, Code and No Face: the one lit is the scene the recorder is in. */
 const SceneButtons = () => {
@@ -130,8 +96,9 @@ const CameraProblem = () => {
 };
 
 /**
- * Record and Stop for a New recorder Video, with its Silence Length, the
- * scene buttons and the composite preview. Clips appear in the timeline as the recorder hears each take
+ * Record and Stop for a New recorder Video, with its Silence Length and the
+ * scene buttons, under the live frame (`LivePreviewFrame`), which draws the
+ * composite. Clips appear in the timeline as the recorder hears each take
  * end, already saved.
  */
 export const NewRecorderControls = () => {
@@ -207,7 +174,6 @@ export const NewRecorderControls = () => {
           {state.error}
         </p>
       )}
-      <ScenePreview />
     </div>
   );
 };

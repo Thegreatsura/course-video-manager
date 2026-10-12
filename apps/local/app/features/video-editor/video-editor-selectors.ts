@@ -496,10 +496,10 @@ export const getShowCenterLine = (
  * would only put something blinking on a screen you aren't watching.
  */
 export const getShowRecordingSignal = (
-  obsConnectorState: OBSConnectionOuterState,
+  isRecordingActive: boolean,
   isTeleprompterConnected: boolean
 ): boolean => {
-  return obsConnectorState.type === "obs-recording" && !isTeleprompterConnected;
+  return isRecordingActive && !isTeleprompterConnected;
 };
 
 /**
