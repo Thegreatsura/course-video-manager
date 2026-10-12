@@ -80,7 +80,7 @@ import {
  * it runs whether the recorder is closed or open, for the client that started
  * it, until it asks to stop or goes. It and a recording never run together,
  * and neither does an AV Calibration's run, which takes the meter's place
- * while it writes the mic to a file (`calibration-run.ts`).
+ * while it writes the mic and the camera to files (`calibration-run.ts`).
  */
 
 /** The devices the rig proved, found by name. */
@@ -221,17 +221,32 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     return camera.status();
   };
 
-  const meter = createMeterSide<WebSocket>({
-    launch: o.launch,
-    broadcast,
-    now: o.now,
-  });
-
   const releaseCamera = async () => {
     const released = camera;
     camera = undefined;
     await released?.release();
   };
+
+  const meter = createMeterSide<WebSocket>({
+    launch: o.launch,
+    broadcast,
+    now: o.now,
+    findCamera: async () => {
+      const found = await findCamera();
+      if (!found)
+        throw new Refusal(
+          `${CAMERA_NAME} (video) is not among the DirectShow devices.`
+        );
+      return found;
+    },
+    startTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
+    // The Cam Link opens in one process at a time: the preview makes way.
+    takeCamera: releaseCamera,
+    giveBackCamera: () => {
+      if (state.kind === "open" && !camera)
+        setState({ ...state, camera: startCamera() });
+    },
+  });
 
   const screenSide = createScreenSide({
     launch: o.launch,

@@ -77,6 +77,7 @@ export const meterRelay = (o: {
             type: "calibration-started",
             calibrationId: message.calibrationId,
             mic: message.mic,
+            scriptStartSeconds: message.scriptStartSeconds,
           });
         // The finish's own answer, to the recorder client's waiter.
         case "calibration-measured":

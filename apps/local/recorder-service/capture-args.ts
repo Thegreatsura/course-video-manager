@@ -254,6 +254,74 @@ export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
   ...previewOutput(o.port),
 ];
 
+/**
+ * The camera (input 0) on the shared clock: wall time less T0, then CFR
+ * 29.97 from exactly t=0. A Recording Session and an AV Calibration's run
+ * both stamp it so, which is what makes a calibration's Mic Offset the
+ * recording's.
+ */
+const cameraOnClock = (t0: string) =>
+  `[0:v]setpts=PTS-${t0}/TB,fps=30000/1001:start_time=0`;
+
+/**
+ * The mic (input 1) on the shared clock. Audio queued while the camera was
+ * opening arrives in one burst stamped "now": dropping the first 1.5 s
+ * (padded back with silence by first_pts=0) keeps it from becoming an
+ * offset. async=50 then follows the system clock.
+ */
+const micOnClock = (t0: string) =>
+  `[1:a]asetpts=PTS-${t0}/TB,atrim=start=1.5,aresample=async=50:min_hard_comp=0.1:first_pts=0`;
+
+/**
+ * AN AV CALIBRATION'S RUN (`calibration-run.ts`): one ffmpeg.exe, the Cam
+ * Link and the mic stamped exactly as a Recording Session's camera + mic
+ * process stamps them, so a clap's camera time less its mic time is the
+ * recording's Mic Offset. The mic goes through ebur128 for the level meter's
+ * readings (timed in mic file seconds: it counts the samples the file gets)
+ * to `micFile`, raw PCM; the camera, scaled to 640x360 on the GPU (enough to
+ * see hands meet), to `cameraFile`. Both tagged as the meter is, so a run
+ * left behind can be found and stopped.
+ */
+export const calibrationCaptureArgs = (o: {
+  t0Ms: number;
+  camera: string;
+  mic: string;
+  micFile: string;
+  cameraFile: string;
+}) => {
+  const t0 = (o.t0Ms / 1000).toFixed(3);
+  return [
+    "-hide_banner",
+    "-nostats",
+    "-loglevel",
+    "level+info",
+    "-y",
+    "-copyts",
+    ...WALLCLOCK,
+    ...camLinkInput(o.camera),
+    ...WALLCLOCK,
+    ...micInput(o.mic),
+    "-filter_complex",
+    [
+      `${cameraOnClock(t0)},hwupload_cuda,scale_cuda=640:360[cam]`,
+      // framelog=info: ebur128 logs each 100 ms reading at info, not verbose.
+      `${micOnClock(t0)},ebur128=framelog=info[mic]`,
+    ].join(";"),
+    "-map",
+    "[mic]",
+    "-c:a",
+    "pcm_s16le",
+    ...tagged(METER_TAG),
+    o.micFile,
+    "-map",
+    "[cam]",
+    ...nvenc(60),
+    ...tagged(METER_TAG),
+    ...MKV,
+    o.cameraFile,
+  ];
+};
+
 export type CaptureOptions = {
   t0Ms: number;
   /** Put in each file's metadata and command line, so a process can be found by it. */
@@ -304,19 +372,16 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   // and scale to 1440p on the GPU: no 4K reaches the disk.
   const cameraIn = [...WALLCLOCK, ...camLinkInput(o.camera)];
   const micIn = [...WALLCLOCK, ...micInput(o.mic)];
-  // Audio queued while the camera was opening arrives in one burst stamped
-  // "now": dropping the first 1.5 s (padded back with silence by first_pts=0)
-  // keeps it from becoming an offset. async=50 then follows the system clock.
   // silencedetect reads the very audio mic.mkv gets, so its times are mic
   // file time; anullsink ends that branch inside the graph.
   const silence = silencedetectFilter(
     silenceRule(o.silenceLength, o.thresholdDb)
   );
   const cameraGraph = [
-    `[0:v]setpts=PTS-${t0}/TB,fps=30000/1001:start_time=0,${BT709},` +
+    `${cameraOnClock(t0)},${BT709},` +
       "hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,split[cam][camp]",
     `[camp]${CAMERA_PREVIEW_SCALE}[camprev]`,
-    `[1:a]asetpts=PTS-${t0}/TB,atrim=start=1.5,aresample=async=50:min_hard_comp=0.1:first_pts=0,asplit=2[mic][sd]`,
+    `${micOnClock(t0)},asplit=2[mic][sd]`,
     `[sd]${silence},anullsink`,
   ].join(";");
   const camera = [

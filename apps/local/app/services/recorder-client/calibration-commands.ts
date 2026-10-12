@@ -25,8 +25,8 @@ export const calibrationCommands = (o: {
   problem: () => string | null;
 }) => ({
   /**
-   * Starts an AV Calibration's run, its mic file in a new folder under
-   * `folder` (a WSL path). Answers once it is running.
+   * Starts an AV Calibration's run, its mic and camera files in a new folder
+   * under `folder` (a WSL path). Answers once it is live (the camera open).
    */
   async startCalibration(folder: string) {
     const problem = o.problem();
@@ -37,10 +37,14 @@ export const calibrationCommands = (o: {
     );
   },
 
-  /** Ends the run and measures its file over these windows (file seconds). */
+  /**
+   * Ends the run and measures its mic file over these windows (file
+   * seconds): the clap window is cut out of the true peak.
+   */
   async finishCalibration(windows: {
     silence: CalibrationWindow;
     speech: readonly CalibrationWindow[];
+    claps: CalibrationWindow;
   }): Promise<CalibrationMeasured> {
     let measured: CalibrationMeasured | undefined;
     await o.command({ type: "finish-calibration", ...windows }, (m) => {

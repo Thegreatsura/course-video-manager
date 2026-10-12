@@ -550,15 +550,19 @@ export const avCalibrations = createTable(
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
     /**
-     * Passed when the speech loudness was inside the target band and the
-     * true peak at or under the ceiling, as the rules stood when it ran.
+     * Passed when the speech loudness was inside the target band, the true
+     * peak at or under the ceiling, and (since the clap step) enough claps
+     * found agreeing within a frame, as the rules stood when it ran.
      */
     outcome: text("outcome").$type<"passed" | "failed">().notNull(),
     /** The RMS level of the silence, in dBFS. */
     noiseFloorDb: doublePrecision("noise_floor_db").notNull(),
     /** The integrated loudness of the reading rounds, in LUFS. */
     speechLufs: doublePrecision("speech_lufs").notNull(),
-    /** The true peak of the whole take, in dBTP; null before the peak check. */
+    /**
+     * The true peak of the take, in dBTP (the clap window cut out, since the
+     * clap step); null before the peak check.
+     */
     truePeakDb: doublePrecision("true_peak_db"),
     /** The silence threshold it chose (speech - 16 dB, clamped), in dB. */
     thresholdDb: doublePrecision("threshold_db").notNull(),
@@ -571,6 +575,21 @@ export const avCalibrations = createTable(
     micFilePath: text("mic_file_path").notNull(),
     /** The browser detector's level trace and the prompt schedule (JSON). */
     browserTracePath: text("browser_trace_path").notNull(),
+    /**
+     * THE CLAP STEP (#2095). Every column null before it. The recorder
+     * service's camera: its DirectShow name.
+     */
+    cameraDevice: text("camera_device"),
+    /** How many of the 5 claps were found in both the mic and the camera. */
+    clapsFound: integer("claps_found"),
+    /** Max - min of the paired claps' offsets, in ms; null with none found. */
+    clapSpreadMs: doublePrecision("clap_spread_ms"),
+    /**
+     * The Mic Offset: median(video - audio) over the paired claps, in ms;
+     * how much later the mic's sound is played at export. Null with none found.
+     */
+    micOffsetMs: doublePrecision("mic_offset_ms"),
+    cameraFilePath: text("camera_file_path"),
   },
   (table) => [
     index("av_calibration_created_at_idx").on(table.createdAt),

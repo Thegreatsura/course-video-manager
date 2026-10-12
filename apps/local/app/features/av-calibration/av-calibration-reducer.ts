@@ -1,5 +1,6 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  runMeasurementWindows,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
   type ScriptStep,
@@ -16,16 +17,20 @@ import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
  * THE AV CALIBRATION PAGE (#2079): the level meter, then the scripted
  * session, then its result.
  *
- *   meter → countdown → silence → read 1 / pause 1 … read 5 / pause 5
- *         → analysing → result
+ *   meter → starting (the camera opening) → countdown → silence
+ *         → hands up → clap 1 … clap 5 → read 1 / pause 1 … read 5 / pause 5
+ *         → loud → analysing → result
  *
  * The session runs on the recorder service's clock: every meter reading of a
- * run is timed in seconds of its mic file, and the step on screen is the
- * schedule's step at the latest reading (`currentStep`), so the prompts Matt
- * saw and the audio they are measured against share one time axis. When a
- * reading reaches the end of the script the page asks for the measurement,
- * which stores the AV Calibration, passed or failed. Cancel, from any step
- * before the analysis, stores nothing.
+ * run is timed in seconds of its mic and camera files, the script starting
+ * where the run went live (`scriptStartSeconds`, once the camera opened), and
+ * the step on screen is the schedule's step at the latest reading
+ * (`currentStep`), so the prompts Matt saw and the audio and picture they are
+ * measured against share one time axis. When a reading reaches the end of
+ * the script the page asks for the measurement over the script's windows in
+ * the files' seconds (the silence, the speech and the clap window), which
+ * stores the AV Calibration, passed or failed. Cancel, from any step before
+ * the analysis, stores nothing.
  *
  * Alongside, the browser detector's input is traced (`capture-browser-levels`)
  * and timed onto the same axis through the reading heard last.
@@ -46,8 +51,11 @@ export namespace avCalibrationReducer {
     | {
         kind: "running";
         calibrationId: string;
-        /** Seconds of the run's mic file at the latest reading. */
+        /** Where the script starts, in seconds of the run's files. */
+        scriptStartSeconds: number;
+        /** Seconds of the script at the latest reading (negative: not yet). */
         seconds: number;
+        /** In seconds of the run's files, as the browser trace is timed. */
         anchor: Anchor | null;
       }
     | { kind: "analysing"; calibrationId: string }
@@ -178,12 +186,13 @@ const onReading = (
 ): State => {
   const session = state.session;
   if (session.kind !== "running") return state;
-  if (reading.seconds < SCRIPT_END_SECONDS)
+  const seconds = reading.seconds - session.scriptStartSeconds;
+  if (seconds < SCRIPT_END_SECONDS)
     return {
       ...state,
       session: {
         ...session,
-        seconds: reading.seconds,
+        seconds,
         anchor: session.anchor ?? reading,
       },
     };
@@ -191,6 +200,8 @@ const onReading = (
   exec({
     type: "finish-calibration",
     calibrationId: session.calibrationId,
+    scriptStartSeconds: session.scriptStartSeconds,
+    windows: runMeasurementWindows(session.scriptStartSeconds),
     browserInputLabel: browser.label,
     browserTrace: browser.label ? browser.trace : null,
   });
@@ -246,6 +257,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
         session: {
           kind: "running",
           calibrationId: action.calibrationId,
+          scriptStartSeconds: action.scriptStartSeconds,
           seconds: 0,
           anchor: null,
         },
