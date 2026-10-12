@@ -50,6 +50,8 @@ describe("ClipService.getFootageStats", () => {
       todaySeconds: 0,
       last7DaysSeconds: 0,
       last30DaysSeconds: 0,
+      todayClips: 0,
+      todayKeptClips: 0,
     });
   });
 
@@ -69,6 +71,8 @@ describe("ClipService.getFootageStats", () => {
       todaySeconds: 60,
       last7DaysSeconds: 60 + 120 + 240,
       last30DaysSeconds: 60 + 120 + 240 + 480 + 960,
+      todayClips: 1,
+      todayKeptClips: 1,
     });
   });
 
@@ -145,6 +149,38 @@ describe("ClipService.getFootageStats", () => {
       todaySeconds: 45,
       last7DaysSeconds: 45,
       last30DaysSeconds: 45,
+      todayClips: 1,
+      todayKeptClips: 1,
+    });
+  });
+
+  it("counts today's efficiency by Clip, archived Clips included", async () => {
+    const now = "2026-10-12T09:00:00Z";
+    const { videoId } = await film("take.mp4", "2026-10-12T08:00:00Z", 600);
+    const short = { videoId, startTime: 600 };
+    const { clip: dud1 } = await film(
+      "take.mp4",
+      "2026-10-12T08:10:00Z",
+      5,
+      short
+    );
+    const { clip: dud2 } = await film("take.mp4", "2026-10-12T08:11:00Z", 5, {
+      videoId,
+      startTime: 605,
+    });
+    await film("take.mp4", "2026-10-12T08:12:00Z", 5, {
+      videoId,
+      startTime: 610,
+    });
+    // Archived yesterday's take: not today, so not in either count.
+    const { clip: old } = await film("old.mp4", "2026-10-11T12:00:00Z", 5);
+    await clipService.archiveClips([dud1.id, dud2.id, old.id]);
+
+    // 2 of 4 Clips kept, though they hold 605 of the 615 seconds.
+    expect(await stats(now)).toMatchObject({
+      todaySeconds: 605,
+      todayClips: 4,
+      todayKeptClips: 2,
     });
   });
 });
