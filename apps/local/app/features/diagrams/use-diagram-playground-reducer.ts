@@ -336,6 +336,21 @@ export function useDiagramPlaygroundReducer() {
           isFocusMode: effect.isFocusMode,
         });
       },
+      // Focus Mode removes the sidebar on the next render, and tldraw learns
+      // its canvas grew from a ResizeObserver after that. Two frames lets the
+      // render land; re-measuring the container then doesn't rely on the
+      // observer having fired yet.
+      "centre-camera-after-layout": () => {
+        let frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => {
+            const ed = editorRef.current;
+            if (!ed) return;
+            ed.updateViewportScreenBounds(ed.getContainer());
+            centreCameraOnContent(ed);
+          });
+        });
+        return () => cancelAnimationFrame(frame);
+      },
     }
   );
 
