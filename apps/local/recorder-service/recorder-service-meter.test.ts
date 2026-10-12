@@ -3,11 +3,90 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CAM_LINK_NOT_STARTING } from "./camera";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
-import { CLOSE_OBS_TO_CALIBRATE } from "../app/av-calibration-constants";
+import {
+  CLOSE_OBS_TO_CALIBRATE,
+  runMeasurementWindows,
+} from "../app/av-calibration-constants";
 import { ebur128Line } from "./test-utils/fake-windows";
 import { connect, start, tmp, CALIBRATED } from "./test-utils/service-harness";
 
 /** The level meter through the WebSocket (test-utils/service-harness.ts). */
+
+/**
+ * A synthetic mic file as the run's capture writes it while it records:
+ * 16-bit stereo 48 kHz, ffmpeg's LIST of metadata before the samples, the
+ * data size not yet filled in. A faint hiss, and a sharp clap at each of
+ * `clapsS` (its file seconds), up to `toSeconds`.
+ */
+const SAMPLE_RATE = 48_000;
+const writeMic = (file: string, clapsS: number[], toSeconds: number) => {
+  // ICMT "cvm-recorder-meter\0": 19 bytes, padded to an even 20.
+  const comment = Buffer.alloc(28);
+  comment.write("ICMT", 0, "ascii");
+  comment.writeUInt32LE(19, 4);
+  comment.write("cvm-recorder-meter", 8, "ascii");
+  const list = Buffer.concat([
+    Buffer.from("LIST", "ascii"),
+    Buffer.alloc(4),
+    Buffer.from("INFO", "ascii"),
+    comment,
+  ]);
+  list.writeUInt32LE(list.length - 8, 4);
+  const fmt = Buffer.alloc(24);
+  fmt.write("fmt ", 0, "ascii");
+  fmt.writeUInt32LE(16, 4);
+  fmt.writeUInt16LE(1, 8);
+  fmt.writeUInt16LE(2, 10);
+  fmt.writeUInt32LE(SAMPLE_RATE, 12);
+  fmt.writeUInt32LE(SAMPLE_RATE * 4, 16);
+  fmt.writeUInt16LE(4, 20);
+  fmt.writeUInt16LE(16, 22);
+  const frames = Math.round(toSeconds * SAMPLE_RATE);
+  const data = Buffer.alloc(frames * 4);
+  for (let i = 0; i < frames; i++) {
+    const t = i / SAMPLE_RATE;
+    let x = 0.0001 * Math.sin(i * 2.3);
+    for (const c of clapsS)
+      if (t >= c) x += 0.5 * Math.exp(-(t - c) / 0.005) * Math.sin(i * 1.1);
+    const v = Math.round(Math.max(-1, Math.min(1, x)) * 32767);
+    data.writeInt16LE(v, i * 4);
+    data.writeInt16LE(v, i * 4 + 2);
+  }
+  fs.writeFileSync(
+    file,
+    Buffer.concat([
+      Buffer.from("RIFF\xff\xff\xff\xffWAVE", "latin1"),
+      fmt,
+      list,
+      Buffer.from("data\xff\xff\xff\xff", "latin1"),
+      data,
+    ])
+  );
+};
+
+/**
+ * The capture's camera motion over `[fromS, toS)`, printed as its
+ * `metadata=print` logs it: each frame's pts_time line, then its YAVG line.
+ * The hands close over 0.25 s and stop dead at each of `contactsS`.
+ */
+const FRAME_S = 1001 / 30_000;
+const motionLines = (contactsS: number[], fromS: number, toS: number) => {
+  const lines: string[] = [];
+  for (let n = Math.ceil(fromS / FRAME_S); n * FRAME_S < toS; n++) {
+    const t = n * FRAME_S;
+    let moving = 0;
+    for (const c of contactsS) {
+      const from = Math.max(t - FRAME_S, c - 0.25);
+      moving += Math.max(0, Math.min(t, c) - from) / FRAME_S;
+    }
+    const level = 0.2 + 0.05 * Math.sin(n * 1.7) + 6 * moving;
+    lines.push(
+      `[Parsed_metadata_9 @ 000001d3] [info] frame:${n}    pts:${n}       pts_time:${t.toFixed(6)}`,
+      `[Parsed_metadata_9 @ 000001d3] [info] lavfi.signalstats.YAVG=${level.toFixed(5)}`
+    );
+  }
+  return `${lines.join("\r\n")}\r\n`;
+};
 
 describe("the level meter", () => {
   it("streams ebur128's readings of the mic, and never runs alongside a recording", async () => {
@@ -245,5 +324,56 @@ describe("the level meter", () => {
     expect(await client.next("calibration-started")).toMatchObject({
       camera: "Cam Link 4K",
     });
+  });
+
+  it("marks each clap in the clap window as the mic hears it, and seen when the camera saw its hands meet, by the result's own rules", async () => {
+    const { port, windows } = await start();
+    const client = await connect(port);
+    await client.next("hello");
+    client.send({ type: "start-meter" });
+    await client.next("meter-started");
+    client.send({ type: "start-calibration", folder: tmp() });
+    await vi.waitFor(() =>
+      expect(windows.meter()?.launch.args).toContain("mic.wav")
+    );
+    const run = windows.meter()!;
+    // The capture reads its camera's motion, as the offline pass reads the file.
+    expect(run.launch.args.join(" ")).toContain(
+      "scale=320:180,format=gray,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG,nullsink"
+    );
+    run.stderr(`${ebur128Line(4.6, -60, -60)}\r\n`);
+    const started = await client.next("calibration-started");
+    const window = runMeasurementWindows(started.scriptStartSeconds).claps;
+    // Three claps; the camera sees the first two meet, 50 ms after the mic.
+    const clapsS = [1, 2.5, 4].map((s) => window.startSeconds + 3 + s);
+    const contactsS = clapsS.slice(0, 2).map((s) => s + 0.05);
+
+    // Half a second after the first clap: heard, and seen.
+    const firstAt = clapsS[0]! + 0.5;
+    writeMic(started.micFile, clapsS, firstAt);
+    run.stderr(motionLines(contactsS, 0, firstAt));
+    run.stderr(`${ebur128Line(firstAt, -30, -30)}\r\n`);
+    const first = await client.next("calibration-claps");
+    expect(first.calibrationId).toBe(started.calibrationId);
+    expect(first.claps).toHaveLength(1);
+    expect(first.claps[0]!.audioS).toBeCloseTo(clapsS[0]!, 3);
+    expect(first.claps[0]!.seen).toBe(true);
+
+    // The rest of the window: the third clap is heard, but the camera saw
+    // no hands meet, so it does not count.
+    writeMic(started.micFile, clapsS, window.endSeconds + 1);
+    run.stderr(motionLines(contactsS, firstAt, window.endSeconds + 1));
+    run.stderr(`${ebur128Line(window.endSeconds + 1, -30, -30)}\r\n`);
+    const all = await client.next("calibration-claps");
+    expect(all.claps.map((c) => c.seen)).toEqual([true, true, false]);
+    all.claps.forEach((c, i) => expect(c.audioS).toBeCloseTo(clapsS[i]!, 3));
+    // The motion lines printed after an error never stand in for why the
+    // capture quit.
+    run.stderr("[vost#1:0 @ 0001] [error] Error submitting a packet\r\n");
+    run.stderr(motionLines([], window.endSeconds + 1, window.endSeconds + 2));
+    run.exit(1);
+    expect((await client.next("calibration-ended")).message).toContain(
+      "Error submitting a packet"
+    );
   });
 });

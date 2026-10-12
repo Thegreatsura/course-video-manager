@@ -17,9 +17,10 @@ import {
   type ScriptStep,
 } from "@/av-calibration-constants";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Ear, Eye, EyeOff, Loader2, XCircle } from "lucide-react";
 import {
   currentStep,
+  liveClaps,
   type avCalibrationReducer,
 } from "./av-calibration-reducer";
 import { CalibrationTimelineView } from "./calibration-timeline-view";
@@ -114,6 +115,51 @@ const Prompt = ({ state }: { state: State }) => {
           </span>
         )}
       </div>
+    </div>
+  );
+};
+
+/**
+ * The clap step's live marks: each clap as the mic hears it, and whether the
+ * camera saw the hands meet. Only a clap both heard and seen counts.
+ */
+const ClapMarks = ({ state }: { state: State }) => {
+  const claps = liveClaps(state);
+  if (!claps) return null;
+  const seen = claps.filter((c) => c.seen).length;
+  return (
+    <div className="space-y-2" data-testid="live-claps">
+      <div className="flex flex-wrap gap-2 min-h-10">
+        {claps.length === 0 && (
+          <span className="self-center text-muted-foreground">
+            Listening for claps…
+          </span>
+        )}
+        {claps.map((clap, i) => (
+          <div
+            key={clap.audioS}
+            className={cn(
+              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+              clap.seen
+                ? "border-emerald-500/60 text-emerald-400"
+                : "border-amber-500/60 text-amber-400"
+            )}
+          >
+            <span className="font-semibold">Clap {i + 1}</span>
+            <Ear className="w-4 h-4" aria-label="heard" />
+            {clap.seen ? (
+              <Eye className="w-4 h-4" aria-label="seen" />
+            ) : (
+              <EyeOff className="w-4 h-4" aria-label="not seen" />
+            )}
+            <span>{clap.seen ? "heard and seen" : "heard, not seen"}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {seen} of {CLAPS_PROMPTED} counted so far ({MIN_CLAPS_FOUND} needed): a
+        clap counts when the mic hears it and the camera sees your hands meet.
+      </p>
     </div>
   );
 };
@@ -311,6 +357,7 @@ export const CalibrationSession = ({
       {(session.kind === "starting" || session.kind === "running") && (
         <>
           <Prompt state={state} />
+          <ClapMarks state={state} />
           <Progress
             seconds={session.kind === "running" ? session.seconds : 0}
           />
