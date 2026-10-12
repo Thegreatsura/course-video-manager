@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { LAYOUT_VERSION } from "@/packages/scene-layout";
 import {
+  clipComposite,
   clipCompositePicture,
   clipFfmpegInput,
   clipFrame,
@@ -18,6 +20,9 @@ const obsClip = {
   sourceStartTime: 12.5,
   sourceEndTime: 19.75,
   text: "Hello there",
+  recordingSessionId: null,
+  sceneOverride: null,
+  recordingSession: null,
 };
 
 describe("an OBS Clip's source", () => {
@@ -68,7 +73,14 @@ describe("an OBS Clip's source", () => {
       videoFilename: OBS_FILE,
       sourceStartTime: 12.5,
       sourceEndTime: 19.75,
+      recordingSessionId: null,
+      sceneOverride: null,
+      recordingSession: null,
     });
+  });
+
+  it("has no composite", () => {
+    expect(clipComposite(source)).toBeNull();
   });
 });
 
@@ -81,6 +93,7 @@ const newRecorderClip = {
   videoFilename: `${SESSION_DIR}/mic.mkv`,
   sourceStartTime: 10,
   sourceEndTime: 14,
+  recordingSessionId: "session-1",
   sceneOverride: null,
   recordingSession: {
     id: "session-1",
@@ -109,6 +122,14 @@ describe("a new-recorder Clip's source", () => {
         mic: `${SESSION_DIR}/mic.mkv`,
       },
       micOffsetSeconds: 0.15,
+      micOffsetMs: 150,
+      micEq: { lowDb: 0, midDb: 0, highDb: -6.1 },
+      sceneEvents: [
+        { scene: "Code", atSeconds: 0 },
+        { scene: "Camera", atSeconds: 12 },
+        { scene: "No Face", atSeconds: 20 },
+      ],
+      sceneOverride: null,
       segments: [
         { scene: "Code", startSeconds: 10, endSeconds: 12 },
         { scene: "Camera", startSeconds: 12, endSeconds: 14 },
@@ -116,6 +137,52 @@ describe("a new-recorder Clip's source", () => {
       start: 10,
       end: 14,
     });
+  });
+
+  it("is exported as the composite of its Session's files, mic EQ applied", () => {
+    expect(clipComposite(source)).toEqual({
+      start: 10,
+      screen: `${SESSION_DIR}/screen.mkv`,
+      camera: `${SESSION_DIR}/camera.mkv`,
+      mic: `${SESSION_DIR}/mic.mkv`,
+      micOffsetSeconds: 0.15,
+      eq: { lowDb: 0, midDb: 0, highDb: -6.1 },
+      segments: [
+        { scene: "Code", startSeconds: 10, endSeconds: 12 },
+        { scene: "Camera", startSeconds: 12, endSeconds: 14 },
+      ],
+    });
+    const micEq = { lowDb: 1, midDb: 0, highDb: 0 };
+    expect(clipComposite(clipSource(newRecorderClip, { micEq }))?.eq).toBe(
+      micEq
+    );
+  });
+
+  it("composites past its end when its output runs longer (a long Pause)", () => {
+    const composite = clipComposite(source, { durationSeconds: 12 });
+    expect(composite?.segments.map((s) => s.scene)).toEqual([
+      "Code",
+      "Camera",
+      "No Face",
+    ]);
+  });
+
+  it("adds its composite's inputs to the Export Hash after the OBS keys", () => {
+    expect(JSON.stringify(clipSourceHashFields(source))).toBe(
+      JSON.stringify({
+        f: `${SESSION_DIR}/mic.mkv`,
+        s: 10,
+        e: 14,
+        rs: "session-1",
+        sg: [
+          ["Code", 10, 12],
+          ["Camera", 12, 14],
+        ],
+        mo: 150,
+        eq: [0, 0, -6.1],
+        lv: LAYOUT_VERSION,
+      })
+    );
   });
 
   it("is drawn in its Scene Override for its whole length", () => {

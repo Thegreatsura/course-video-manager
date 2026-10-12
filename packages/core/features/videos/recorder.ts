@@ -57,6 +57,20 @@ export type RecordingSessionScene = (typeof RECORDING_SESSION_SCENES)[number];
 export const DEFAULT_MIC_OFFSET_MS = 150;
 
 /**
+ * The mic EQ the export applies to a Recording Session's mic: the gains, in
+ * dB, of OBS's 3-Band Equalizer filter (bands split at 800 Hz and 5 kHz), the
+ * filter OBS runs on the same mic. Raw Footage is never changed.
+ */
+export type MicEq = {
+  readonly lowDb: number;
+  readonly midDb: number;
+  readonly highDb: number;
+};
+
+/** Matt's OBS mic EQ: highs down 6.1 dB, low and mid flat. */
+export const DEFAULT_MIC_EQ: MicEq = { lowDb: 0, midDb: 0, highDb: -6.1 };
+
+/**
  * The Recorders a Video of this format may record with. Shorts record with
  * OBS only: the New recorder cannot film the Spacedesk display yet.
  */

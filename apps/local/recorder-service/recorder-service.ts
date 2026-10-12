@@ -25,6 +25,7 @@ import {
   STILL_PATH,
   STILL_RECORDER_CLOSED,
   STILL_WHILE_RECORDING,
+  RECENT_SESSIONS,
   type CameraStatus,
   type RecorderCommand,
   type RecorderMessage,
@@ -207,6 +208,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     verifyClient: ({ origin }: { origin?: string }) =>
       isAllowedOrigin(origin || undefined),
   });
+  // An error event nobody listens for kills the process, and with it the
+  // only thing that can send ffmpeg.exe its `q`. No client may do that.
+  wss.on("error", (e) => console.error("recorder: WebSocket server error", e));
   const send = (ws: WebSocket, message: RecorderMessage) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   };
@@ -343,10 +347,16 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       setState({ kind: "open", videoId, camera: startCamera(), scene });
       throw e;
     }
-    fs.appendFileSync(
-      indexFile,
-      `${JSON.stringify({ recordingSessionId: session.id, eventLog: session.eventLog })}\n`
-    );
+    // The session is already recording: a failed index write must not turn
+    // into a refusal that leaves it running unseen. It only costs replay.
+    try {
+      fs.appendFileSync(
+        indexFile,
+        `${JSON.stringify({ recordingSessionId: session.id, eventLog: session.eventLog })}\n`
+      );
+    } catch (e) {
+      console.error("recorder: could not index the Recording Session", e);
+    }
     setState({
       kind: "recording",
       videoId,
@@ -470,6 +480,16 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   let recovered: string[] = [];
+  const recentSessions = () => {
+    try {
+      return readIndex()
+        .slice(-RECENT_SESSIONS)
+        .map((e) => e.recordingSessionId);
+    } catch (e) {
+      console.error("recorder: could not read the Recording Session index", e);
+      return [];
+    }
+  };
   // Crash recovery runs before any command and any greeting, so a client
   // hears of every Recording Session it repaired. Only once listening: a
   // second service that cannot take the port must not touch the files.
@@ -489,8 +509,21 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   });
   queue = recovering;
   wss.on("connection", (ws) => {
+    // ws raises a client's protocol violation (an unmasked or oversized
+    // frame, bad UTF-8) on its socket: drop that client, keep recording.
+    ws.on("error", (e) => {
+      console.error("recorder: dropping a client that broke the protocol", e);
+      ws.terminate();
+    });
     void recovering.then(() =>
-      send(ws, { type: "hello", ffmpeg, warnings, state, recovered })
+      send(ws, {
+        type: "hello",
+        ffmpeg,
+        warnings,
+        state,
+        recovered,
+        recent: recentSessions(),
+      })
     );
     ws.on("message", (data) => {
       const decoded = decodeCommand(data.toString());

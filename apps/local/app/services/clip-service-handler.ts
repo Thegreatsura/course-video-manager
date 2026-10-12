@@ -16,7 +16,9 @@ import {
   checkClipZoomEligibility,
   clipZoomIneligibilityMessage,
 } from "@/features/videos/clip-zoom";
+import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
+import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
   type VideoProcessingAdapter,
   type LoggerAdapter,
@@ -268,7 +270,9 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
           throw new Error(`Clip not found: ${event.clipId}`);
         }
 
-        const ineligibility = checkClipZoomEligibility(clip.scene);
+        const ineligibility = checkClipZoomEligibility(
+          effectiveClipScene(clip)
+        );
         if (ineligibility) {
           throw new Error(clipZoomIneligibilityMessage(ineligibility));
         }
@@ -288,6 +292,9 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         });
         return;
       }
+
+      case "update-scene-override":
+        return yield* updateSceneOverride(db, logger, event);
 
       case "reorder-clip": {
         const clip = yield* dbCall(() =>

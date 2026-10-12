@@ -11,8 +11,10 @@ import {
   type VideoFormat,
 } from "@/features/videos/video-format";
 import type { PauseType } from "./video-processing-service";
+import { clipExportDurationInSeconds } from "./export-duration-check";
 import type { RenderedOverlay } from "./overlay-compositing";
 import { removeBestEffort } from "@/services/remove-best-effort";
+import type { ClipComposite } from "@/packages/clip-source";
 
 /**
  * The ffmpeg passes that turn one Video's Clips into a finished file: the
@@ -42,6 +44,11 @@ export const makeVideoExportPasses = (deps: {
       duration: number;
       pauseType: PauseType;
       zoomType: string;
+      /**
+       * A new-recorder Clip's composite over its whole output range (long
+       * Pause included), or null for a Clip cut from one Footage file.
+       */
+      composite: ClipComposite | null;
     }[];
     onStageChange?: (
       stage: "concatenating-clips" | "normalizing-audio"
@@ -71,17 +78,32 @@ export const makeVideoExportPasses = (deps: {
     // Create concatenated video using native FFmpeg, in the aspect ratio
     // that matches the video's format (portrait for shorts, landscape
     // otherwise).
+    //
+    // A Video with any new-recorder Clip is rendered Clip by Clip (each one's
+    // composite on its own) and joined by stream copy: one filter graph
+    // across composites opens a decoder per file per Clip. An OBS-only
+    // Video takes the single pass exactly as before.
     opts.onStageChange?.("concatenating-clips");
-    const concatenatedPath =
-      yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
-        opts.clips,
-        VIDEO_FORMAT_DIMENSIONS[opts.format],
-        {
-          onProgress: (percent) =>
-            opts.onProgress?.({ stage: "concatenating-clips", percent }),
-          onLog: logCliOutput("concat"),
-        }
-      );
+    const concatExtras = {
+      onProgress: (percent: number) =>
+        opts.onProgress?.({ stage: "concatenating-clips", percent }),
+      onLog: logCliOutput("concat"),
+    };
+    const dimensions = VIDEO_FORMAT_DIMENSIONS[opts.format];
+    const concatenatedPath = opts.clips.some((clip) => clip.composite)
+      ? yield* ffmpegEncode.concatenateClipSegments(
+          opts.clips.map((clip) => ({
+            ...clip,
+            duration: clipExportDurationInSeconds(clip),
+          })),
+          dimensions,
+          concatExtras
+        )
+      : yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
+          opts.clips.map(({ composite: _, ...clip }) => clip),
+          dimensions,
+          concatExtras
+        );
 
     // Normalize audio
     opts.onStageChange?.("normalizing-audio");

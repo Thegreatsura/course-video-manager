@@ -73,11 +73,12 @@ export type RecorderClientOptions = {
     insertionPointFor: (videoId: string) => InsertionPoint | undefined
   ) => Promise<IngestResult>;
   /**
-   * The Recording Sessions the database still has as recording. Each is
-   * replayed whenever the recorder service greets the client, so a stop or a
-   * crash it missed (the app server was down) is caught up on.
+   * The Recording Sessions the database still has as recording, and those of
+   * `candidates` it has no row for. Each is replayed whenever the recorder
+   * service greets the client, so a start, stop or crash it missed (the app
+   * server was down) is caught up on.
    */
-  unfinishedRecordingSessions: () => Promise<string[]>;
+  unfinishedRecordingSessions: (candidates: string[]) => Promise<string[]>;
   /** How long to wait before reconnecting to a recorder service that went away. */
   reconnectMs: number;
   /** How long a command may take to be carried out. */
@@ -309,16 +310,20 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   };
 
   /**
-   * Replays, from the start, every Recording Session that may have events
-   * this client never saved: the one recording now, the ones the service
-   * found crashed, and the ones the database still has as recording. What
+   * Replays every Recording Session that may have events this client never
+   * saved: the one recording now, the ones the service found crashed, the
+   * ones the database still has as recording, and the service's recent ones
+   * the database never heard of (filmed from the Stream Deck while the app
+   * server was down). Each replays from after
+   * the last event this client heard of it: after a dropped connection, only
+   * what it missed; after an app-server restart, the whole of it, and what
    * was saved already is skipped (ingest is idempotent).
    */
-  const catchUp = (recovered: string[]) => {
+  const catchUp = (recovered: string[], recent: string[]) => {
     const ids = new Set(recovered);
     if (state.kind === "recording") ids.add(state.recordingSessionId);
     void o
-      .unfinishedRecordingSessions()
+      .unfinishedRecordingSessions(recent)
       .catch((error: unknown) => {
         console.error(
           "recorder client: could not read unfinished Recording Sessions",
@@ -329,7 +334,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       .then((unfinished) => {
         for (const id of unfinished) ids.add(id);
         for (const recordingSessionId of ids)
-          send({ type: "replay", recordingSessionId, afterSeq: 0 });
+          send({
+            type: "replay",
+            recordingSessionId,
+            afterSeq: sequencer.heard(recordingSessionId),
+          });
       });
   };
 
@@ -352,7 +361,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         prepared = undefined;
         reconcile();
         prepare();
-        catchUp(message.recovered);
+        catchUp(message.recovered, message.recent);
         return publishStatus();
       case "state":
         state = message.state;

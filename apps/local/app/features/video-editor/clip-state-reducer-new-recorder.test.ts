@@ -54,6 +54,16 @@ const recordingStarted = heard({
   micFile: "/mnt/d/r/mic.mkv",
 });
 
+const recorderStatus = (recordingSessionId: string | null) =>
+  heard({
+    type: "recorder-status",
+    reachable: true,
+    problem: null,
+    recordingSessionId,
+    previews: { camera: "c", screen: "s" },
+    still: "still",
+  });
+
 const clipsSaved = (
   ids: string[],
   placedAt: Extract<NewRecorderMessage, { type: "clips-saved" }>["placedAt"]
@@ -168,6 +178,49 @@ describe("clip reducer on a New recorder Video", () => {
 
     expect(databaseIds(t)).toEqual(["c1"]);
     expect(t.getState().sessions).toHaveLength(1);
+  });
+
+  it("joins a take already recording when it opens late, and leaves it when the take ends", () => {
+    const t = tester([saved("a"), saved("b")]);
+    t.send(recorderStatus(SESSION));
+
+    // It holds the take, and puts the server's next Clip at its own point.
+    expect(t.getState().sessions).toMatchObject([
+      { id: SESSION, status: "recording", newRecorder: true },
+    ]);
+    expect(t.getEffects()).toEqual([
+      {
+        type: "send-recorder-insertion-point",
+        insertionPoint: { type: "after-clip", databaseClipId: "b" },
+      },
+    ]);
+    t.send({ type: "set-insertion-point-after", clipId: "f-a" as FrontendId });
+    expect(t.getEffects().at(-1)).toEqual({
+      type: "send-recorder-insertion-point",
+      insertionPoint: { type: "after-clip", databaseClipId: "a" },
+    });
+
+    // Its recording-stopped was missed too: the status still ends the take.
+    t.send(recorderStatus(SESSION)).send(recorderStatus(null));
+    expect(t.getState().sessions).toMatchObject([
+      { id: SESSION, status: "done" },
+    ]);
+  });
+
+  it("keeps showing Clips after it missed one", () => {
+    const t = tester([saved("a")]);
+    t.send(recordingStarted);
+
+    // c1's clips-saved never arrived; c2 was saved after it.
+    t.send(clipsSaved(["c2"], { type: "after-clip", databaseClipId: "c1" }));
+    t.send(clipsSaved(["c3"], { type: "after-clip", databaseClipId: "c2" }));
+
+    expect(databaseIds(t)).toEqual(["a", "c2", "c3"]);
+    const c3 = t.getState().items[2]!;
+    expect(t.getState().insertionPoint).toEqual({
+      type: "after-clip",
+      frontendClipId: c3.frontendId,
+    });
   });
 
   it("leaves an OBS recording's insertion point to the OBS path", () => {

@@ -45,9 +45,12 @@ import {
   clips as clipsTable,
   chapters as chaptersTable,
   videos as videosTable,
+  recordingSessions as recordingSessionsTable,
+  recordingSessionSceneEvents as recordingSessionSceneEventsTable,
   dropboxAuth,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import type { ClipComposite } from "@/packages/clip-source";
 import { bundleReaders } from "./course-publish-dropbox-upload-test-setup";
 
 export let testDb: TestDb;
@@ -73,6 +76,8 @@ export type FakeRenderRun = {
   videoId: string;
   /** 1 on this Video's first export, 2 on its next, and so on. */
   runNumber: number;
+  /** Each Clip's composite as the renderer was asked for it (null: OBS). */
+  composites: ReadonlyArray<ClipComposite | null>;
   /**
    * The total duration this Video's Clips ask for, in seconds — what an honest
    * encode would produce, including the final-clip padding.
@@ -163,6 +168,11 @@ export const setupPublishableCourse = async (opts?: {
    * `.data/logs`. Default: every write lands.
    */
   throwOnLogWrite?: Error;
+  /**
+   * Film every Video with the New recorder: its Clips are cut from one
+   * Recording Session (Code, then Camera from 5 s). Default: OBS Clips.
+   */
+  newRecorder?: boolean;
 }) => {
   const videoCount = opts?.videoCount ?? 1;
   await truncateAllTables(testDb);
@@ -215,11 +225,38 @@ export const setupPublishableCourse = async (opts?: {
   // Video n's clips are shifted by n, so every Video gets a distinct Export
   // Hash — and therefore a distinct export file and bundle entry. Video 0's
   // timings are the historical ones, so its Export Hash is stable.
+  const recordingSession = opts?.newRecorder
+    ? await (async () => {
+        const [row] = await testDb
+          .insert(recordingSessionsTable)
+          .values({
+            cameraFilePath: "/rec/s1/camera.mkv",
+            screenFilePath: "/rec/s1/screen.mkv",
+            micFilePath: "recording.mp4",
+            status: "stopped",
+          })
+          .returning();
+        const sceneEvents = [{ fileTime: 5, scene: "Camera" as const }];
+        await testDb
+          .insert(recordingSessionSceneEventsTable)
+          .values(
+            sceneEvents.map((e) => ({ ...e, recordingSessionId: row!.id }))
+          );
+        return { ...row!, sceneEvents };
+      })()
+    : null;
+  const sessionColumns = {
+    recordingSessionId: recordingSession?.id ?? null,
+    sceneOverride: null,
+    recordingSession,
+  };
+
   const clipsForIndex = (index: number): ExportClip[] => [
     {
       videoFilename: "recording.mp4",
       sourceStartTime: 0,
       sourceEndTime: 10 + index,
+      ...sessionColumns,
       pauseType: "none",
       zoomType: "none",
       overlays: [],
@@ -228,6 +265,7 @@ export const setupPublishableCourse = async (opts?: {
       videoFilename: "recording.mp4",
       sourceStartTime: 15,
       sourceEndTime: 25 + index,
+      ...sessionColumns,
       pauseType: "none",
       zoomType: "none",
       overlays: [],
@@ -271,7 +309,7 @@ export const setupPublishableCourse = async (opts?: {
 
     const videoClips = clipsForIndex(index);
     await testDb.insert(clipsTable).values(
-      videoClips.map((clip, clipIndex) => ({
+      videoClips.map(({ recordingSession: _, ...clip }, clipIndex) => ({
         ...clip,
         videoId: video.id,
         order: `a${clipIndex}`,
@@ -326,6 +364,7 @@ export const setupPublishableCourse = async (opts?: {
         const run: FakeRenderRun = {
           videoId,
           runNumber,
+          composites: exportOpts.clips.map((clip) => clip.composite),
           requestedDurationInSeconds: (
             exportOpts.clips as Array<{ duration: number }>
           ).reduce((total, clip) => total + clip.duration, 0),

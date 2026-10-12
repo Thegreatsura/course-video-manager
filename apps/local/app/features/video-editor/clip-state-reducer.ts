@@ -32,6 +32,8 @@ import {
 } from "./clip-state-reducer-chapters";
 import { DELETED_CLIPS_SESSION_ID } from "./video-editor-selectors";
 import { canZoomClip, type ClipZoomType } from "@/features/videos/clip-zoom";
+import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
+import { handleSetSceneOverride } from "./clip-state-reducer-scene-override";
 
 export namespace clipStateReducer {
   export type State = ClipReducerState;
@@ -57,6 +59,10 @@ const reduceClipState = (
 ): clipStateReducer.State => {
   if (action.type === "new-recorder-message-heard") {
     return handleNewRecorderMessage(state, action, exec);
+  }
+
+  if (action.type === "set-scene-override") {
+    return handleSetSceneOverride(state, action, exec);
   }
 
   if (isRecordingAction(action)) {
@@ -339,7 +345,11 @@ const reduceClipState = (
 
       // Only a persisted clip can be zoomed: the write needs a database id,
       // and the eligibility rule reads the clip's recorded scene.
-      if (!item || item.type !== "on-database" || !canZoomClip(item.scene)) {
+      if (
+        !item ||
+        item.type !== "on-database" ||
+        !canZoomClip(effectiveClipScene(item))
+      ) {
         return state;
       }
 
