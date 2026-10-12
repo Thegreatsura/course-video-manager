@@ -163,6 +163,14 @@ describe("the level meter", () => {
     expect(analysed).toContain(
       "[p0][p1]concat=n=2:v=0:a=1,ebur128=peak=true:framelog=quiet,anullsink"
     );
+    // Both processes' ffmpeg logs are kept beside the files.
+    const runDir = path.dirname(started.micFile);
+    expect(
+      fs.readFileSync(path.join(runDir, "ffmpeg-capture.log"), "utf8")
+    ).toContain(ebur128Line(4.6, -60, -60));
+    expect(
+      fs.readFileSync(path.join(runDir, "ffmpeg-analysis.log"), "utf8")
+    ).toContain("RMS level dB");
     // The run is over, the plain meter is back, and so is the preview.
     expect(run.running).toBe(false);
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");

@@ -4,21 +4,28 @@
 // A deep module answering one question: "in this AV Calibration's mic and
 // camera files, where are the claps, and what is the Mic Offset?" Given the
 // two files and the clap window it runs two ffmpeg passes (mic onsets; camera
-// motion), pairs each mic onset with the camera's contact frame, and answers
-// the claps found, how far their offsets spread, and the median offset.
+// motion), looks for each mic onset's contact in the camera near it, and
+// answers the claps found, how far their offsets spread, the median offset,
+// and whether the mic had a start-up gap (which leaves the offset untrusted).
 //
 // `matchClaps` is the pure part, over the decoded onset and motion series, so
-// it is testable without ffmpeg; `findAudioOnsets` is the mic's pure part.
+// it is testable without ffmpeg; `findAudioOnsets` and `findStartUpGap` are
+// the mic's pure parts.
 export {
   detectClaps,
   ClapDetectionError,
+  type ClapDetection,
   type ClapWindow,
 } from "./lib/ffmpeg-passes";
 export {
   matchClaps,
-  MAX_PAIR_DISTANCE_S,
+  CONTACT_WINDOW_S,
   type Clap,
   type ClapMatch,
   type MotionPoint,
 } from "./lib/match";
-export { findAudioOnsets } from "./lib/audio-onsets";
+export {
+  findAudioOnsets,
+  findStartUpGap,
+  type StartUpGap,
+} from "./lib/audio-onsets";

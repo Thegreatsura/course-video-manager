@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   CALIBRATION_CAMERA_FILE,
+  CALIBRATION_CAPTURE_LOG,
   CALIBRATION_MIC_FILE,
   measureCalibration,
 } from "./calibration-run";
@@ -78,6 +79,8 @@ export const startLevelMeter = (o: {
   args: string[];
   /** Where it runs: a calibration run's folder (WSL path). */
   cwd: string;
+  /** A file to keep everything it prints in (a calibration run's log). */
+  logFile?: string;
   onReading: (reading: MeterReading) => void;
   /**
    * It quit without being asked: the last line it printed, if any, and the
@@ -88,6 +91,11 @@ export const startLevelMeter = (o: {
   const p = o.launch({ tool: "ffmpeg", args: o.args, cwd: o.cwd });
   let stopping = false;
   const said: string[] = [];
+  const log = o.logFile === undefined ? undefined : fs.openSync(o.logFile, "a");
+  if (log !== undefined) {
+    p.onStderr((chunk) => fs.writeSync(log, chunk));
+    void p.exited.then(() => fs.closeSync(log));
+  }
   p.onStderr(
     lineSplitter((line) => {
       const reading = parseMeterLine(line);
@@ -229,6 +237,7 @@ export const createMeterSide = <Owner>(o: {
             cameraFile: CALIBRATION_CAMERA_FILE,
           }),
           cwd: run.dir,
+          logFile: path.join(run.dir, CALIBRATION_CAPTURE_LOG),
           onReading: (reading) => {
             if (!live) {
               live = true;
