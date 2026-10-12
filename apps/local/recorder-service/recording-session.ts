@@ -251,6 +251,7 @@ export const startRecordingSession = (
     screenCaptured: screen !== null,
     thresholdDb: o.thresholdDb,
     avCalibrationId: o.avCalibrationId,
+    devices: { camera: o.camera, mic: o.mic },
   });
   log({ type: "scene-changed", scene: o.scene, fileTime: 0 });
 
