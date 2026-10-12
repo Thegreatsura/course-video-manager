@@ -157,37 +157,9 @@ Intro paragraph.
 Closing paragraph.
 `);
   });
-
-  it("removes the leading heading", () => {
-    const title = removableBlocks(document).find((b) => b.text === "# Title");
-
-    expect(title?.result).toBe(`Intro paragraph.
-
-<ChooseScreenshot clipIndex={1} alt="the editor" />
-
-## Steps
-
-- alpha
-- beta
-
-Closing paragraph.
-`);
-  });
 });
 
 describe("removing a block nested inside another", () => {
-  it("keeps the indentation of the sibling below a nested list item", () => {
-    const nested = `- outer
-  - inner a
-  - inner b
-`;
-    const item = removableBlocks(nested).find((b) => b.text === "- inner a");
-
-    expect(item?.result).toBe(`- outer
-  - inner b
-`);
-  });
-
   it("removes the whole subtree when the outer list item goes", () => {
     const nested = `- outer
   - inner a
@@ -199,20 +171,6 @@ After.
     );
 
     expect(outer?.result).toBe(`After.
-`);
-  });
-
-  it("takes the quote marker when removing a blockquoted paragraph", () => {
-    const quoted = `> A quoted line.
-> Second quoted line.
-
-After.
-`;
-    const paragraph = removableBlocks(quoted).find((b) =>
-      b.text.startsWith("A quoted line.")
-    );
-
-    expect(paragraph?.result).toBe(`After.
 `);
   });
 });

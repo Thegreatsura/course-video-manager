@@ -18,7 +18,7 @@ function createMockLocalStorage() {
     get length() {
       return store.size;
     },
-    key: (_index: number) => null,
+    key: (index: number) => [...store.keys()][index] ?? null,
   } satisfies Storage;
 }
 
@@ -66,6 +66,16 @@ describe("field messages localStorage persistence", () => {
     expect(loadFieldMessages("v1", "skills-changelog-body", "article")).toEqual(
       [{ id: 2 }]
     );
+  });
+
+  it("stores nothing but conversations", () => {
+    saveFieldMessages("v1", "ai-hero-body", "article", [{ id: "msg" }]);
+
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      keys.push(localStorage.key(i)!);
+    }
+    expect(keys).toEqual(["writer-field-messages-v1-ai-hero-body-article"]);
   });
 });
 

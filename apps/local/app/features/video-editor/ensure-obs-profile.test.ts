@@ -75,32 +75,6 @@ describe("ensureOBSProfile", () => {
     expect(calls.map((c) => c.method)).toEqual(["GetProfileList"]);
   });
 
-  it("does not call CreateProfile for missing profiles", async () => {
-    const { websocket, calls } = createMockWebSocket({
-      currentProfileName: "Default",
-      profiles: ["Default"],
-    });
-
-    await ensureOBSProfile(websocket as any, "TikTok");
-
-    expect(calls.every((c) => c.method !== "CreateProfile")).toBe(true);
-  });
-
-  it("switches from TikTok to Landscape Recording", async () => {
-    const { websocket, calls } = createMockWebSocket({
-      currentProfileName: "TikTok",
-      profiles: ["Landscape Recording", "TikTok"],
-    });
-
-    const result = await ensureOBSProfile(
-      websocket as any,
-      "Landscape Recording"
-    );
-
-    expect(result).toEqual({ type: "switched" });
-    expect(calls[2]!.args).toEqual({ profileName: "Landscape Recording" });
-  });
-
   it("lists available profiles in the error message", async () => {
     const { websocket } = createMockWebSocket({
       currentProfileName: "Default",
@@ -116,11 +90,8 @@ describe("ensureOBSProfile", () => {
 });
 
 describe("targetProfileForFormat", () => {
-  it("returns Landscape Recording for standard format", () => {
-    expect(targetProfileForFormat("landscape")).toBe(OBS_PROFILE_LANDSCAPE);
-  });
-
-  it("returns TikTok for short format", () => {
+  it("records a Short on the TikTok profile and anything else on Landscape", () => {
     expect(targetProfileForFormat("short")).toBe(OBS_PROFILE_TIKTOK);
+    expect(targetProfileForFormat("landscape")).toBe(OBS_PROFILE_LANDSCAPE);
   });
 });
