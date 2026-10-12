@@ -14,6 +14,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import type { clips, chapters, videos } from "@/db/schema";
 import { parse409Message } from "@/services/version-not-draft-message";
 import type { SilenceLength } from "@/silence-detection-constants";
+import type { FootageStats } from "@cvm/core/services/db-footage-stats.server";
 import type {
   MicEq,
   RecordingSessionScene,
@@ -346,6 +347,16 @@ export interface ClipService {
   // Timeline
   getTimeline(videoId: string): Promise<TimelineItem[]>;
 
+  /**
+   * How much Footage was filmed today, in the last 7 and in the last 30
+   * calendar days (in `timeZone`, ending at `now`) — see getFootageStats in
+   * @cvm/core/services/db-footage-stats.server.
+   */
+  getFootageStats(input: {
+    now: Date;
+    timeZone: string;
+  }): Promise<FootageStats>;
+
   // Clip operations
   appendClips(input: AppendClipsInput): Promise<Clip[]>;
   appendFromObs(input: AppendFromObsInput): Promise<Clip[]>;
@@ -416,6 +427,7 @@ export interface ClipService {
 export type ClipServiceEvent =
   | { type: "create-video"; title: string }
   | { type: "get-timeline"; videoId: string }
+  | { type: "get-footage-stats"; now: string; timeZone: string }
   | { type: "append-clips"; input: InternalAppendClipsInput }
   | { type: "append-from-obs"; input: InternalAppendFromObsInput }
   | { type: "archive-clips"; clipIds: readonly string[] }
@@ -489,6 +501,14 @@ export function createClipService(send: ClipServiceTransport): ClipService {
 
     async getTimeline(videoId) {
       return send({ type: "get-timeline", videoId }) as Promise<TimelineItem[]>;
+    },
+
+    async getFootageStats({ now, timeZone }) {
+      return send({
+        type: "get-footage-stats",
+        now: now.toISOString(),
+        timeZone,
+      }) as Promise<FootageStats>;
     },
 
     async appendClips(input) {
