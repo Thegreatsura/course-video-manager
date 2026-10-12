@@ -333,10 +333,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   const silenceLengthRef = useRef(silenceLength);
   silenceLengthRef.current = silenceLength;
 
-  // Feeds browser link-capture events from the Chrome extension into the clip
-  // reducer, which folds them to the currently-visible page and accumulates the
-  // set of pages shown while a clip records. Best-effort: no extension / hub
-  // means no capture.
+  // Chrome extension link-capture events into the clip reducer, which folds
+  // them to the visible page and collects the pages shown while a clip
+  // records. Best-effort: no extension / hub means no capture.
   useBrowserLinkCapture((event) => {
     dispatch({ type: "browser-event", event });
     if (event.type === "browser-focus") {
