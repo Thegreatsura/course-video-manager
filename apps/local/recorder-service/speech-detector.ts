@@ -6,9 +6,14 @@
  *
  * Every Recording Session opens in silence (the mic's first 1.5 s are padded
  * with it, capture-args.ts), so its first speech is a `silence_end`.
+ *
+ * The first silence, heard before any speech, is `warmed-up`: the take is
+ * ready for speech. It is what the OBS path's browser detector shows as the
+ * end of "warming up" (use-speech-detector.ts), so the teleprompter shows the
+ * same for either Recorder.
  */
 export type Speech = {
-  type: "speech-started" | "speech-ended";
+  type: "warmed-up" | "speech-started" | "speech-ended";
   fileTime: number;
 };
 
@@ -17,6 +22,7 @@ const LINE = /\[silencedetect @[^\]]*\].*?silence_(start|end):\s*(-?[\d.]+)/;
 export const createSpeechDetector = () => {
   let speaking = false;
   let stopping = false;
+  let warm = false;
   return {
     /**
      * From here on no new speech starts: ffmpeg ends a file that closes in
@@ -31,7 +37,12 @@ export const createSpeechDetector = () => {
       if (!m) return undefined;
       // A file that opens in silence reports silence_start: -0.0001.
       const fileTime = Math.max(0, Number(m[2]));
+      if (m[1] === "start" && !speaking && !warm && !stopping) {
+        warm = true;
+        return { type: "warmed-up", fileTime };
+      }
       if (m[1] === "end" && !speaking && !stopping) {
+        warm = true;
         speaking = true;
         return { type: "speech-started", fileTime };
       }

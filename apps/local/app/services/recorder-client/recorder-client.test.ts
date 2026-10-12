@@ -103,6 +103,18 @@ describe("the recorder client", () => {
     expect(saved.flatMap((m) => m.clips.map((c) => c.id))).toEqual(
       clips.map((c) => c.id)
     );
+    // What the editor (and so the glass) hears of silence detection, in order.
+    expect(
+      heard
+        .map((m) => m.type)
+        .filter((t) => t === "warmed-up" || t.startsWith("speech-"))
+    ).toEqual([
+      "warmed-up",
+      "speech-started",
+      "speech-ended",
+      "speech-started",
+      "speech-ended",
+    ]);
     const session = await testDb.query.recordingSessions.findFirst();
     expect(session).toMatchObject({ videoId: video.id, status: "stopped" });
   });

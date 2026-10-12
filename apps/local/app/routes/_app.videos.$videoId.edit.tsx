@@ -18,6 +18,7 @@ import { targetProfileForFormat } from "@/features/video-editor/ensure-obs-profi
 import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
 import { useNewRecorder } from "@/features/video-editor/use-new-recorder";
+import { captureProps } from "@/features/video-editor/recorder-capture";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
@@ -477,10 +478,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       repoName={props.loaderData.video.lesson?.section.repoVersion.repo.name}
       videoId={props.loaderData.video.id}
       liveMediaStream={obsConnector.mediaStream}
-      speechDetectorState={obsConnector.speechDetectorState}
+      {...captureProps(recorderChoice, obsConnector, newRecorder)}
       silenceLength={silenceLength}
       onSilenceLengthChange={setSilenceLength}
-      isRecordingActive={obsConnector.state.type === "obs-recording"}
       fsData={props.loaderData.fsData}
       videoCount={props.loaderData.videoCount}
       referenceCandidates={props.loaderData.referenceCandidates}
