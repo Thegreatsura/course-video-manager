@@ -4,7 +4,6 @@ export * from "./clip-state-reducer.types";
 import type {
   Clip,
   ClipOnDatabase,
-  ClipOptimisticallyAdded,
   ClipReducerAction,
   ClipReducerEffect,
   ClipReducerState,
@@ -38,6 +37,10 @@ import {
   handleMicOffsetSaveFailed,
   handleMicSettingsSubmitted,
 } from "./clip-state-reducer-mic-settings";
+import {
+  handleClipRestoreFailed,
+  handleRestoreClip,
+} from "./clip-state-reducer-restore";
 
 export namespace clipStateReducer {
   export type State = ClipReducerState;
@@ -468,41 +471,10 @@ const reduceClipState = (
         }),
       };
     }
-    case "restore-clip": {
-      const item = state.items.find((c) => c.frontendId === action.clipId);
-
-      if (!item) {
-        return state;
-      }
-
-      // Only restore clips that have shouldArchive
-      if (
-        (item.type !== "optimistically-added" && item.type !== "on-database") ||
-        !item.shouldArchive
-      ) {
-        return state;
-      }
-
-      // Fire unarchive-clips effect for resolved (database) clips
-      if (item.type === "on-database") {
-        exec({
-          type: "unarchive-clips",
-          clipIds: [item.databaseId],
-        });
-      }
-
-      return {
-        ...state,
-        items: state.items.map((c) => {
-          if (c.frontendId === action.clipId) {
-            const { shouldArchive, ...rest } = c as
-              ClipOnDatabase | ClipOptimisticallyAdded;
-            return rest;
-          }
-          return c;
-        }),
-      };
-    }
+    case "restore-clip":
+      return handleRestoreClip(state, action, exec);
+    case "clip-restore-failed":
+      return handleClipRestoreFailed(state, action, exec);
     case "permanently-remove-archived": {
       const isDeletedClipsPanel = action.sessionId === DELETED_CLIPS_SESSION_ID;
 

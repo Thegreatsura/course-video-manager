@@ -51,6 +51,21 @@ export function clipRestoreRefusal(
 }
 
 /**
+ * Whether an error message is a `clipRestoreRefusal`, as the server sends it
+ * back: the editor rolls a refused restore back and shows why, rather than
+ * treating it as a fatal error.
+ */
+export function isClipRestoreRefusal(message: string): boolean {
+  return (["obs", "new-recorder"] as const).some(
+    (videoRecorder) =>
+      message ===
+      clipRestoreRefusal(videoRecorder, {
+        recordingSessionId: videoRecorder === "obs" ? "session" : null,
+      })
+  );
+}
+
+/**
  * Why Export to DaVinci Resolve refuses this Video, or null when it may run.
  * The export hands DaVinci one Footage file per Clip, so it stays OBS-only: a
  * new-recorder Clip's picture is a composite of three files (#2011; Matt

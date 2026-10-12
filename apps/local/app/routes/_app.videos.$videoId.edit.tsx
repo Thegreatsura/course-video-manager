@@ -332,10 +332,8 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   const silenceLengthRef = useRef(silenceLength);
   silenceLengthRef.current = silenceLength;
 
-  // Feeds browser link-capture events from the Chrome extension into the clip
-  // reducer, which folds them to the currently-visible page and accumulates the
-  // set of pages shown while a clip records. Best-effort: no extension / hub
-  // means no capture.
+  // Feeds the Chrome extension's link-capture events into the clip reducer,
+  // which keeps the pages shown while a clip records. Best-effort.
   useBrowserLinkCapture((event) => {
     dispatch({ type: "browser-event", event });
     if (event.type === "browser-focus") {
@@ -456,7 +454,11 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         dispatch({ type: "add-effect-clip-at", effectType, position, itemId });
       }}
       onRestoreClip={(clipId) => {
-        dispatch({ type: "restore-clip", clipId });
+        dispatch({
+          type: "restore-clip",
+          clipId,
+          videoRecorder: recorderChoice.state.recorder,
+        });
       }}
       onPermanentlyRemoveArchived={(scope) => {
         dispatch(

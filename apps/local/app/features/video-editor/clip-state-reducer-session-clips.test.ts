@@ -146,7 +146,7 @@ describe("clipStateReducer", () => {
       expect(archivedClip.shouldArchive).toBe(true);
 
       // Restore the clip
-      tester.send({ type: "restore-clip", clipId });
+      tester.send({ type: "restore-clip", clipId, videoRecorder: "obs" });
 
       const restoredClip = tester.getState()
         .items[0] as ClipOptimisticallyAdded;
@@ -183,7 +183,9 @@ describe("clipStateReducer", () => {
       expect(archivedDbClip.shouldArchive).toBe(true);
 
       // Restore the clip
-      tester.resetExec().send({ type: "restore-clip", clipId });
+      tester
+        .resetExec()
+        .send({ type: "restore-clip", clipId, videoRecorder: "obs" });
 
       const restoredClip = tester.getState().items[0] as ClipOnDatabase;
       expect(restoredClip.shouldArchive).toBeUndefined();
@@ -214,7 +216,9 @@ describe("clipStateReducer", () => {
       });
 
       // Restore the resolved clip
-      tester.resetExec().send({ type: "restore-clip", clipId });
+      tester
+        .resetExec()
+        .send({ type: "restore-clip", clipId, videoRecorder: "obs" });
 
       expect(tester.getExec()).toHaveBeenCalledWith({
         type: "unarchive-clips",
@@ -243,7 +247,9 @@ describe("clipStateReducer", () => {
       tester.send({ type: "clips-deleted", clipIds: [clipId] });
 
       // Restore the unresolved clip
-      tester.resetExec().send({ type: "restore-clip", clipId });
+      tester
+        .resetExec()
+        .send({ type: "restore-clip", clipId, videoRecorder: "obs" });
 
       expect(tester.getExec()).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: "unarchive-clips" })
@@ -257,6 +263,7 @@ describe("clipStateReducer", () => {
       tester.send({
         type: "restore-clip",
         clipId: "nonexistent" as FrontendId,
+        videoRecorder: "obs",
       });
 
       expect(tester.getState()).toEqual(stateBefore);
