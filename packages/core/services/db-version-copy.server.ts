@@ -60,7 +60,7 @@ const makeDbCall = <T>(fn: () => Promise<T>) =>
  * for this copy (and duplicateCourse, and the Video copy) in
  * version-copy-manifest.ts, or CI fails (copy-paths-table-guard.test.ts). The
  * copy then checks itself: `assertCopyComplete` refuses a Submit whose new
- * Draft is missing live rows of any `copied` table.
+ * Draft is missing rows of any `copied` table: live ones, and archived Clips.
  *
  * Both exits from `copyVersionStructureInDb` are here: `copyVersionStructure`
  * (which freezes its source itself; no app path calls it any more, only tests
@@ -138,9 +138,10 @@ export const createVersionCopyOps = (db: Database) => {
                   orderBy: asc(videos.title),
                   where: eq(videos.archived, false),
                   with: {
+                    // Archived Clips too, still archived: see KEEPS_ARCHIVED_CLIPS in
+                    // version-copy-manifest.ts.
                     clips: {
                       orderBy: asc(clips.order),
-                      where: eq(clips.archived, false),
                       with: clipChildrenWith,
                     },
                     chapters: {
@@ -268,7 +269,9 @@ export const createVersionCopyOps = (db: Database) => {
                     sourceStartTime: clip.sourceStartTime,
                     sourceEndTime: clip.sourceEndTime,
                     order: clip.order,
-                    archived: false,
+                    archived: clip.archived,
+                    // When the take was filmed, which the footage stats date it by.
+                    createdAt: clip.createdAt,
                     text: clip.text,
                     transcribedAt: clip.transcribedAt,
                     transcriptionStatus: clip.transcriptionStatus,

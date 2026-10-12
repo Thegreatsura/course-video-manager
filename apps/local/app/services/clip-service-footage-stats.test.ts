@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
+import * as schema from "@/db/schema";
 import { clips } from "@/db/schema";
 
 import {
@@ -199,6 +200,68 @@ describe("ClipService.getFootageStats", () => {
       last7DaysKeptClips: 2,
       last30DaysClips: 6,
       last30DaysKeptClips: 3,
+    });
+  });
+
+  it("counts efficiency across every Version, keeping only what the Draft keeps", async () => {
+    const now = "2026-10-12T09:00:00Z";
+    const filmed = new Date("2026-10-12T08:00:00Z");
+    const [course] = await testDb
+      .insert(schema.courses)
+      .values({ name: "Course" })
+      .returning();
+    const versionVideo = async (commitState: "published" | "draft") => {
+      const [version] = await testDb
+        .insert(schema.courseVersions)
+        .values({ repoId: course!.id, name: commitState, commitState })
+        .returning();
+      const [section] = await testDb
+        .insert(schema.sections)
+        .values({ repoVersionId: version!.id, title: "S", order: 1 })
+        .returning();
+      const [lesson] = await testDb
+        .insert(schema.lessons)
+        .values({ sectionId: section!.id, title: "L", order: 1 })
+        .returning();
+      const [video] = await testDb
+        .insert(schema.videos)
+        .values({ lessonId: lesson!.id, title: "V", originalFootagePath: "/f" })
+        .returning();
+      return video!.id;
+    };
+    const takes = (
+      videoId: string,
+      cuts: ReadonlyArray<readonly [start: number, archived: boolean]>
+    ) =>
+      testDb.insert(clips).values(
+        cuts.map(([start, archived], i) => ({
+          videoId,
+          videoFilename: "take.mp4",
+          sourceStartTime: start,
+          sourceEndTime: start + 10,
+          order: `a${i}`,
+          text: "",
+          archived,
+          createdAt: filmed,
+        }))
+      );
+    // Submitted with one take cut (only the Published Version holds it, as
+    // a Draft made before Submit carried archived Clips), then in the new
+    // Draft the first take was cut too.
+    await takes(await versionVideo("published"), [
+      [0, false],
+      [10, true],
+      [20, false],
+    ]);
+    await takes(await versionVideo("draft"), [
+      [0, true],
+      [20, false],
+    ]);
+
+    expect(await stats(now)).toMatchObject({
+      todaySeconds: 10,
+      todayClips: 3,
+      todayKeptClips: 1,
     });
   });
 });

@@ -42,7 +42,6 @@ const NOT_CARRIED: Record<string, string> = {
   "lesson.createdAt": "a copy is a new row",
   "video.createdAt": "a copy is a new row",
   "video.updatedAt": "a copy is a new row",
-  "clip.createdAt": "a copy is a new row",
   "chapter.createdAt": "a copy is a new row",
   "beat.createdAt": "a copy is a new row",
   "clip_mockup.createdAt": "a copy is a new row",
@@ -62,6 +61,9 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   // CHECK clip_transcription_status_valid; one non-default value per row, so
   // a copy that drops the status (back to "done") fails.
   "clip.transcriptionStatus": (i) => (i % 2 === 0 ? "failed" : "queued"),
+  // Row 1 is an archived Clip: Submit carries it, still archived, with its
+  // Transcript Words, Web Links and Overlays (KEEPS_ARCHIVED_CLIPS).
+  "clip.archived": (i) => i % 2 === 1,
   // CHECK clip_mockup_voice_status_valid. A READY voice is carried as it is,
   // WAV and all (and a ready one has no error); a failed one stays failed and
   // a pending one stays pending (`copiedVoice`).

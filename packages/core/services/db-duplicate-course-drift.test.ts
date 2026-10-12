@@ -103,8 +103,12 @@ describe("duplicateCourse — schema-drift guard", () => {
         // Shared, not copied: the copy draws the same picture.
         "recordingSessionId",
         "sceneOverride",
+        // An archived Clip is copied, still archived (KEEPS_ARCHIVED_CLIPS).
+        "archived",
+        // When the take was filmed, which the footage stats date it by.
+        "createdAt",
       ],
-      notCopied: ["id", "videoId", "archived", "createdAt"],
+      notCopied: ["id", "videoId"],
     },
     chapter: {
       table: schema.chapters,
@@ -232,6 +236,8 @@ describe("duplicateCourse — schema-drift guard", () => {
       profile: "profile-1",
       pauseType: "intro",
       diagramSnapshotId: snapshot!.id,
+      archived: true,
+      createdAt: new Date("2025-12-31T00:00:00.000Z"),
     });
     await testDb.insert(schema.chapters).values({
       videoId: video!.id,

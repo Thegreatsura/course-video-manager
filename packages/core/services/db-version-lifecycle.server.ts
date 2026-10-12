@@ -75,9 +75,13 @@ export const createVersionLifecycleOps = (db: Database) => {
   /**
    * Discard (issues #1348/#1401): delete a Pending Version whose Commit did
    * not land. Deletes ONLY a `pending` row — a Draft or Published Version can
-   * never be discarded — and cascades to its cloned sections/lessons/videos.
-   * No content is lost: Submit already cloned the same structure into the new
-   * Draft.
+   * never be discarded — and cascades to its sections/lessons/videos, which
+   * are the ORIGINAL rows: Submit froze them and gave the new Draft copies.
+   * Every Clip of a copied Video survives in that Draft, archived ones
+   * included (KEEPS_ARCHIVED_CLIPS in version-copy-manifest.ts). What Submit
+   * did not copy goes for good: archived Sections, Lessons and Videos (with
+   * their Clips), and archived Learning Goals, Chapters, Beats and Clip
+   * Mockups.
    */
   const discardPendingVersion = Effect.fn("discardPendingVersion")(function* (
     versionId: string

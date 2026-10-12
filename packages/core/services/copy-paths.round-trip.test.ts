@@ -38,7 +38,6 @@ const ROOT = schema.videos;
 
 /** Columns a Video-level copy deliberately does not carry, with why. */
 const NOT_CARRIED: Record<string, string> = {
-  "clip.createdAt": "a copy is a new row",
   "chapter.createdAt": "a copy is a new row",
   "beat.createdAt": "a copy is a new row",
   "clip_mockup.createdAt": "a copy is a new row",
@@ -56,10 +55,15 @@ const NOT_CARRIED: Record<string, string> = {
 const overrides = (ctx: {
   snapshotId: string;
   learningGoalId: string;
+  keepsArchivedClips: boolean;
 }): Overrides => ({
   // CHECK clip_transcription_status_valid; one non-default value per row, so
   // a copy that drops the status (back to "done") fails.
   "clip.transcriptionStatus": (i) => (i % 2 === 0 ? "failed" : "queued"),
+  // On a path that keeps archived Clips, row 1 is one: it must arrive still
+  // archived, with everything that hangs off it. The other paths copy only
+  // the live timeline, so their fixture has no archived Clip.
+  "clip.archived": (i) => ctx.keepsArchivedClips && i % 2 === 1,
   // CHECK clip_mockup_voice_status_valid. A READY voice is carried as it is,
   // WAV and all (and a ready one has no error); a failed one stays failed and
   // a pending one stays pending (`copiedVoice`).
@@ -102,7 +106,7 @@ beforeEach(async () => {
 
 const db = () => testDb as unknown as Database;
 
-async function generateVideoTree() {
+async function generateVideoTree(path: CopyPathName) {
   const [course] = await testDb
     .insert(schema.courses)
     .values({ name: "Course" })
@@ -139,7 +143,11 @@ async function generateVideoTree() {
     testDb,
     ROOT,
     video!.id,
-    overrides({ snapshotId: snapshot!.id, learningGoalId: goal!.id })
+    overrides({
+      snapshotId: snapshot!.id,
+      learningGoalId: goal!.id,
+      keepsArchivedClips: COPY_PATHS[path].keepsArchived.includes("clip"),
+    })
   );
   return video!;
 }
@@ -196,7 +204,13 @@ describe("Video-level copy paths round trip — the copy is the source, row for 
     const real = columnNamesBelow(ROOT);
     for (const name of [
       ...Object.keys(NOT_CARRIED),
-      ...Object.keys(overrides({ snapshotId: "", learningGoalId: "" })),
+      ...Object.keys(
+        overrides({
+          snapshotId: "",
+          learningGoalId: "",
+          keepsArchivedClips: false,
+        })
+      ),
     ]) {
       expect(real.has(name), `stale entry "${name}"`).toBe(true);
     }
@@ -206,7 +220,7 @@ describe("Video-level copy paths round trip — the copy is the source, row for 
     it(`${path}: carries every column of every copied table, with ids remapped`, async () => {
       const run = RUN_PATH[path];
       expect(run, `teach RUN_PATH how to run ${path}`).toBeDefined();
-      const source = await generateVideoTree();
+      const source = await generateVideoTree(path);
       const copyId = await run!(source.id);
 
       const of = await signaturesBelow(

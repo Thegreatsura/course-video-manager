@@ -81,7 +81,7 @@ async function animaticLabels(videoId: string) {
 }
 
 describe("copyVersionStructure", () => {
-  it("copies only active rows at every level", async () => {
+  it("copies only active rows at every level, but every Clip", async () => {
     const { course, version } = await createCourseAndVersion();
     const [section] = await testDb
       .insert(schema.sections)
@@ -191,7 +191,13 @@ describe("copyVersionStructure", () => {
     const newVideos = newLessons[0]!.videos;
     expect(newVideos.map((v) => v.title)).toEqual(["active.mp4"]);
     const newVideo = newVideos[0]!;
-    expect(newVideo.clips.map((c) => c.videoFilename)).toEqual(["active.mp4"]);
+    // Except Clips: an archived one is carried, still archived.
+    expect(
+      sortByOrder(newVideo.clips).map((c) => [c.videoFilename, c.archived])
+    ).toEqual([
+      ["active.mp4", false],
+      ["archived.mp4", true],
+    ]);
     expect(newVideo.chapters.map((c) => c.name)).toEqual(["Active"]);
     expect(newVideo.beats.map((b) => b.title)).toEqual(["Active"]);
 
@@ -388,5 +394,92 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
     expect(scenes).toHaveLength(1);
     expect(scenes).toEqual(await effectiveScenesOf(testDb, video!.id));
     expect(await recordingSessionRowCounts(testDb)).toEqual(before);
+  });
+
+  it("keeps an archived Clip through Submit then Discard, still archived and still hidden", async () => {
+    const { course, version } = await createCourseAndVersion();
+    const [section] = await testDb
+      .insert(schema.sections)
+      .values({ repoVersionId: version.id, title: "Section", order: 1 })
+      .returning();
+    const [lesson] = await testDb
+      .insert(schema.lessons)
+      .values({ sectionId: section!.id, order: 1, title: "Lesson" })
+      .returning();
+    const [video] = await testDb
+      .insert(schema.videos)
+      .values({ lessonId: lesson!.id, title: "v", originalFootagePath: "/f" })
+      .returning();
+    const filmedAt = new Date("2026-10-06T09:00:00.000Z");
+    const [, cut] = await testDb
+      .insert(schema.clips)
+      .values(
+        [false, true].map((archived, i) => ({
+          videoId: video!.id,
+          videoFilename: "take.mp4",
+          sourceStartTime: i * 10,
+          sourceEndTime: i * 10 + 5,
+          order: `a${i}`,
+          text: archived ? "the cut take" : "the kept take",
+          archived,
+          createdAt: filmedAt,
+        }))
+      )
+      .returning();
+    await testDb
+      .insert(schema.clipTranscriptWords)
+      .values({ clipId: cut!.id, start: 0, end: 0.4, text: "cut" });
+
+    const draft = await run(
+      Effect.gen(function* () {
+        const versionOps = yield* VersionOperationsService;
+        const submitted = yield* versionOps.freezeAndCloneVersion({
+          sourceVersionId: version.id,
+          repoId: course.id,
+          sourceName: "v1",
+          sourceDescription: "",
+        });
+        // The release fails: Discard deletes the Pending Version, which holds
+        // the ORIGINAL rows.
+        yield* versionOps.discardPendingVersion(version.id);
+        return submitted.version;
+      })
+    );
+
+    const clips = await testDb.query.clips.findMany({
+      with: { transcriptWords: true },
+    });
+    expect(
+      sortByOrder(clips).map((c) => ({
+        text: c.text,
+        archived: c.archived,
+        createdAt: c.createdAt,
+        words: c.transcriptWords.map((w) => w.text),
+      }))
+    ).toEqual([
+      {
+        text: "the kept take",
+        archived: false,
+        createdAt: filmedAt,
+        words: [],
+      },
+      {
+        text: "the cut take",
+        archived: true,
+        createdAt: filmedAt,
+        words: ["cut"],
+      },
+    ]);
+    // Archived is archived: the Draft's reads (the editor's, the export's)
+    // still see only the kept take.
+    const loaded = await run(
+      Effect.gen(function* () {
+        const versionOps = yield* VersionOperationsService;
+        return yield* versionOps.getVersionWithSections(draft.id);
+      })
+    );
+    expect(
+      loaded.sections[0]!.lessons[0]!.videos[0]!.clips.map((c) => c.text)
+    ).toEqual(["the kept take"]);
   });
 });

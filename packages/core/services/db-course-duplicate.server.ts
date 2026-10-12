@@ -122,6 +122,7 @@ export const makeDuplicateCourse = (db: Database) =>
     }
 
     // Deep-copy from source's latest draft, excluding archived entities
+    // except Clips (KEEPS_ARCHIVED_CLIPS in version-copy-manifest.ts)
     const sourceSections = yield* makeDbCall(() =>
       db.query.sections.findMany({
         where: and(
@@ -142,9 +143,10 @@ export const makeDuplicateCourse = (db: Database) =>
                 orderBy: asc(videos.title),
                 where: eq(videos.archived, false),
                 with: {
+                  // Archived Clips too, still archived: see KEEPS_ARCHIVED_CLIPS in
+                  // version-copy-manifest.ts.
                   clips: {
                     orderBy: asc(clips.order),
-                    where: eq(clips.archived, false),
                     with: clipChildrenWith,
                   },
                   chapters: {
@@ -272,7 +274,9 @@ export const makeDuplicateCourse = (db: Database) =>
               sourceStartTime: clip.sourceStartTime,
               sourceEndTime: clip.sourceEndTime,
               order: clip.order,
-              archived: false,
+              archived: clip.archived,
+              // When the take was filmed, which the footage stats date it by.
+              createdAt: clip.createdAt,
               text: clip.text,
               transcribedAt: clip.transcribedAt,
               transcriptionStatus: clip.transcriptionStatus,

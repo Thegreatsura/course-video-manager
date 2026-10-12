@@ -16,7 +16,7 @@ import {
 import * as schema from "../db/schema.js";
 import {
   COPY_PATHS,
-  countLiveBelow,
+  countCarriedBelow,
   shortName,
   tablesBelow,
   type CopyPathName as PathName,
@@ -256,12 +256,7 @@ describe("copy paths — table-level guard", () => {
       // A table with no source row could never fail the check below.
       for (const table of below) {
         expect(
-          await countLiveBelow(
-            db(),
-            table,
-            spec.root,
-            sourceRootId(path, seed)
-          ),
+          await countCarriedBelow(db(), path, table, sourceRootId(path, seed)),
           `seedEveryTable() leaves "${shortName(table)}" empty — give it a row`
         ).toBeGreaterThan(0);
       }
@@ -270,7 +265,7 @@ describe("copy paths — table-level guard", () => {
 
       for (const table of below) {
         const name = shortName(table);
-        const copied = await countLiveBelow(db(), table, spec.root, copyRootId);
+        const copied = await countCarriedBelow(db(), path, table, copyRootId);
         if (spec.tables[name] === "copied") {
           expect(copied, `${path} did not copy "${name}"`).toBeGreaterThan(0);
         } else {
