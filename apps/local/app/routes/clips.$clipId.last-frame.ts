@@ -4,9 +4,10 @@ import { Effect } from "effect";
 import { makeLoader } from "@/services/route-action.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { clipFrame, clipSource } from "@/packages/clip-source";
+import { stillSceneOverride } from "@/features/video-editor/clip-still-url";
 
 export const loader = makeLoader({
-  effect: ({ params }) =>
+  effect: ({ params, request }) =>
     Effect.gen(function* () {
       const clipOps = yield* ClipOperationsService;
       const clip = yield* clipOps.getClipWithRecordingSession(params.clipId!);
@@ -14,7 +15,13 @@ export const loader = makeLoader({
       const videoProcessing = yield* VideoProcessingService;
 
       const lastFramePath = yield* videoProcessing.getLastFrame(
-        clipFrame(clipSource(clip), "last")
+        clipFrame(
+          clipSource({
+            ...clip,
+            sceneOverride: stillSceneOverride(request.url, clip.sceneOverride),
+          }),
+          "last"
+        )
       );
 
       return new Response(webFileStream(lastFramePath), {

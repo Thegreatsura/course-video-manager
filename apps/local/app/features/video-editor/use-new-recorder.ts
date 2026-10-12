@@ -6,6 +6,7 @@ import { savedItemBefore } from "./clip-state-reducer-new-recorder";
 import type {
   ClipReducerAction,
   ClipReducerState,
+  FrontendId,
 } from "./clip-state-reducer.types";
 import {
   canRecord,
@@ -32,6 +33,8 @@ export type NewRecorderControls = {
   onStop: () => void;
   onDismissAlert: () => void;
   onRetryCamera: () => void;
+  /** Set (or, with null, clear) a saved New-recorder Clip's Scene Override. */
+  onSetSceneOverride: (clipId: FrontendId, sceneOverride: Scene | null) => void;
 };
 
 const answer = async (response: Response) => {
@@ -184,5 +187,7 @@ export const useNewRecorder = (o: {
     onScene: (scene) => dispatch({ type: "press-scene", scene }),
     onDismissAlert: () => dispatch({ type: "dismiss-alert" }),
     onRetryCamera: () => dispatch({ type: "press-retry" }),
+    onSetSceneOverride: (clipId, sceneOverride) =>
+      o.clipDispatch({ type: "set-scene-override", clipId, sceneOverride }),
   };
 };

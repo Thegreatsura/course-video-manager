@@ -21,6 +21,7 @@ import {
   CLIP_ZOOM_TYPES,
   type ClipZoomType,
 } from "@/features/videos/clip-zoom";
+import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { MINIMUM_CLIP_LENGTH_SECONDS } from "@/silence-detection-constants";
 import { readFootageTranscript } from "@/services/footage-cache";
 import {
@@ -73,7 +74,10 @@ import {
  *   transcribedAt    when a Transcription last produced `text` (null for a clip
  *                    cut from footage, or never transcribed)
  *   transcriptionStatus  "queued" | "transcribing" | "failed" | "done"
- *   scene / profile  optional capture metadata
+ *   scene / profile  optional capture metadata (scene: in force at the start)
+ *   sceneOverride    New recorder only: a Scene Override, or null
+ *   effectiveScene   sceneOverride ?? scene — what Clip Zoom is judged on
+ *   recordingSessionId  New recorder only: the Recording Session it is cut from
  *   pauseType         held pause after clip; "none" or "long"
  *   zoomType          Clip Zoom; "none" or "subtle" (camera scenes only)
  *   diagramSnapshotId pinned DiagramSnapshot filmed against this clip, if any
@@ -122,6 +126,11 @@ import {
  *     | jq -r '.. | objects | select(.kind=="clip") | .id' \
  *     | xargs cvm clip get
  */
+/** Every reported Clip carries the scene rules judge it on (see GLOSSARY Scene Override). */
+const withEffectiveScene = <C extends Parameters<typeof effectiveClipScene>[0]>(
+  clip: C
+) => ({ ...clip, effectiveScene: effectiveClipScene(clip) });
+
 const videoOpt = draftIdOption("video", "video").pipe(
   Options.withDescription("Parent Video id whose clips to list")
 );
@@ -142,7 +151,7 @@ const listCmd = Command.make(
       const found = yield* videoOps
         .getVideoWithClipsById(video, { withArchived: archived })
         .pipe(Effect.catchTag("NotFoundError", () => notFound("video", video)));
-      yield* emitNdjson(found.clips);
+      yield* emitNdjson(found.clips.map(withEffectiveScene));
     })
 ).pipe(Command.withDescription(detail(LIST_HELP)));
 
@@ -170,13 +179,13 @@ const getCmd = Command.make(
 
       if (ids.length === 1) {
         if (found.length === 1) {
-          yield* emitObject(found[0]);
+          yield* emitObject(withEffectiveScene(found[0]!));
           return;
         }
         return yield* notFound("clip", ids[0]!);
       }
 
-      yield* emitNdjson(found);
+      yield* emitNdjson(found.map(withEffectiveScene));
       if (missing.length > 0) {
         return yield* notFoundMany("clip", missing);
       }
@@ -403,7 +412,7 @@ const updateCmd = Command.make(
           );
       }
 
-      yield* emitObject(row);
+      yield* emitObject(withEffectiveScene(row));
     })
 ).pipe(Command.withDescription(detail(UPDATE_HELP)));
 

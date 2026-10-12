@@ -278,7 +278,7 @@ A marker on a **Clip** (none or long) that adds a short held pause after it in t
 _Avoid_: Beat (former name), Silence Length, Gap, Hold
 
 **Clip Zoom**:
-A marker on a **Clip** (none or subtle) that shows the Clip slightly zoomed in, so a run of camera-only clips has some visual change across its cuts. It is allowed only on Clips recorded from a camera scene. It has values rather than on/off, so more levels can be added later. What the author sees in the editor is what the **Publish** will ship. It is part of the **Export Hash**. Superseded by **Transform**, which can move across Clips; kept until that change ships.
+A marker on a **Clip** (none or subtle) that shows the Clip slightly zoomed in, so a run of camera-only clips has some visual change across its cuts. It is allowed only on Clips in a camera scene: the Clip's **Scene Override** if it has one, else the scene it was recorded in. An override that moves a zoomed Clip off a camera scene drops its zoom. It has values rather than on/off, so more levels can be added later. What the author sees in the editor is what the **Publish** will ship. It is part of the **Export Hash**. Superseded by **Transform**, which can move across Clips; kept until that change ships.
 _Avoid_: Punch-in, Ken Burns (implies an animated move; this one is static — reserved as an informal synonym for **Transform** instead), Scale, Crop
 
 **Insertion Point**:

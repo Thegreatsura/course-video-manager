@@ -33,6 +33,9 @@ import {
 import { resolveForClip } from "@/lib/diagram-action-resolver";
 import { getWebLinkLabel } from "@/lib/clip-web-link";
 import { canZoomClip } from "@/features/videos/clip-zoom";
+import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
+import { clipScenePicker } from "./clip-scene-picker";
+import { clipStillUrl } from "../clip-still-url";
 import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   overlayKindLabel,
@@ -131,7 +134,7 @@ export const ClipItem = (props: ClipItemProps) => {
           {clip.type === "on-database" ? (
             <div className="flex-shrink-0 relative">
               <img
-                src={`/clips/${clip.databaseId}/first-frame`}
+                src={clipStillUrl(clip, "first")}
                 alt="First frame"
                 className={cn(
                   "rounded object-cover h-full object-center",
@@ -399,6 +402,10 @@ const ClipMenuContent = (props: {
     VideoEditorContext,
     (ctx) => ctx.onToggleZoomForClip
   );
+  const onSetSceneOverride = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.newRecorder.onSetSceneOverride
+  );
   const onAddEffectClipAt = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.onAddEffectClipAt
@@ -450,7 +457,8 @@ const ClipMenuContent = (props: {
           // Only on a scene that can zoom: roughly nine Clips in ten are a
           // Code scene, and a greyed-out entry on each would be noise. Until
           // the Clip is saved it applies but cannot run yet.
-          canZoomClip(clip.scene) && {
+          clipScenePicker(clip, onSetSceneOverride),
+          canZoomClip(effectiveClipScene(clip)) && {
             label:
               onDatabase && onDatabase.zoomType !== "none"
                 ? "Remove Zoom"
