@@ -1,9 +1,10 @@
-import { clips } from "@/db/schema";
+import { clips, recordingSessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { canZoomClip } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import type { RecordingSessionScene } from "@cvm/core/features/videos/recorder";
+import { sceneOverrideScenes } from "@/packages/clip-source";
 import type { Database } from "@/services/drizzle-service.server";
 import {
   type LoggerAdapter,
@@ -14,12 +15,19 @@ import {
 export const OBS_CLIP_SCENE_OVERRIDE_MESSAGE =
   "An OBS Clip cannot have a Scene Override: its scene is baked into its Footage.";
 
+/** Why a screen-drawing scene cannot be a camera-only Clip's override. */
+export const screenlessSceneOverrideMessage = (scene: RecordingSessionScene) =>
+  `${scene} shows the screen, and this Clip's Recording Session captured no screen: only Camera can be drawn.`;
+
 /**
  * Set (or, with null, clear) a CVM-recorder Clip's Scene Override.
  *
  * A Clip Zoom is legal only on a camera scene, judged on the effective scene.
  * An override that leaves the Clip off a camera scene drops its zoom in the
  * same write, so the stored Clip never carries a zoom the rule forbids.
+ *
+ * A camera-only Recording Session (a Short filmed without its screen) can
+ * only be overridden to a scene that draws no screen: Camera.
  */
 export const updateSceneOverride = (
   db: Database,
@@ -35,6 +43,19 @@ export const updateSceneOverride = (
     }
     if (!clip.recordingSessionId) {
       throw new Error(OBS_CLIP_SCENE_OVERRIDE_MESSAGE);
+    }
+    if (event.sceneOverride) {
+      const session = yield* dbCall(() =>
+        db.query.recordingSessions.findFirst({
+          where: eq(recordingSessions.id, clip.recordingSessionId!),
+        })
+      );
+      if (
+        session &&
+        !sceneOverrideScenes(session).includes(event.sceneOverride)
+      ) {
+        throw new Error(screenlessSceneOverrideMessage(event.sceneOverride));
+      }
     }
 
     const scene = effectiveClipScene({

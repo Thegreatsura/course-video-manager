@@ -3,6 +3,7 @@ import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 import {
   drawnSources,
   LAYOUT_VERSIONS,
+  SCENES,
   sceneFilterGraph,
   sceneSegments,
   type LayoutSource,
@@ -313,6 +314,21 @@ export const clipPlaybackUrl = (
 
 const viewVideoUrl = (file: string, from: number, to: number) =>
   `/view-video?videoPath=${encodeURIComponent(file)}#t=${from},${to}`;
+
+/**
+ * The scenes a Clip of this Recording Session may be overridden to: every
+ * scene, or — when the session captured no screen — only those that draw no
+ * screen (Camera).
+ */
+export const sceneOverrideScenes = (session: {
+  readonly format: VideoFormat;
+  readonly screenCaptured: boolean;
+}): Scene[] =>
+  session.screenCaptured
+    ? [...SCENES]
+    : SCENES.filter(
+        (scene) => !drawnSources([{ scene }], session.format).includes("screen")
+      );
 
 /**
  * The recordings a composite of `segments` opens, in input order. A Landscape

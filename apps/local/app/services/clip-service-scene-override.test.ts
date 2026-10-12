@@ -15,7 +15,13 @@ setupClipServiceTests();
  * A CVM-recorder Clip from 10 s to 20 s of a Recording Session whose scene
  * went Camera at 0 and Code at 15 — a change in the middle of the Clip.
  */
-const seedCvmRecorderClip = async (opts: { zoomType?: string } = {}) => {
+const seedCvmRecorderClip = async (
+  opts: {
+    zoomType?: string;
+    format?: "landscape" | "short";
+    screenCaptured?: boolean;
+  } = {}
+) => {
   const video = await clipService.createVideo("override");
   const [session] = await testDb
     .insert(schema.recordingSessions)
@@ -24,6 +30,8 @@ const seedCvmRecorderClip = async (opts: { zoomType?: string } = {}) => {
       cameraFilePath: "/rec/camera.mkv",
       screenFilePath: "/rec/screen.mkv",
       micFilePath: "/rec/mic.mkv",
+      format: opts.format ?? "landscape",
+      screenCaptured: opts.screenCaptured ?? true,
     })
     .returning();
   await testDb.insert(schema.recordingSessionSceneEvents).values([
@@ -101,6 +109,34 @@ describe("Scene Override", () => {
       clipService.updateSceneOverride(clip!.id, "Camera")
     ).rejects.toThrow(/OBS Clip/);
     expect((await readClip(clip!.id)).sceneOverride).toBeNull();
+  });
+});
+
+describe("Scene Override on a camera-only Recording Session", () => {
+  it("refuses a scene that draws the screen, and accepts Camera and clearing", async () => {
+    const clip = await seedCvmRecorderClip({
+      format: "short",
+      screenCaptured: false,
+    });
+
+    for (const scene of ["Code", "No Face"] as const) {
+      await expect(
+        clipService.updateSceneOverride(clip.id, scene)
+      ).rejects.toThrow(/captured no screen.*only Camera/);
+    }
+    expect((await readClip(clip.id)).sceneOverride).toBeNull();
+
+    await clipService.updateSceneOverride(clip.id, "Camera");
+    expect((await readClip(clip.id)).sceneOverride).toBe("Camera");
+
+    await clipService.updateSceneOverride(clip.id, null);
+    expect((await readClip(clip.id)).sceneOverride).toBeNull();
+  });
+
+  it("accepts Code on a Short whose screen was captured", async () => {
+    const clip = await seedCvmRecorderClip({ format: "short" });
+    await clipService.updateSceneOverride(clip.id, "Code");
+    expect((await readClip(clip.id)).sceneOverride).toBe("Code");
   });
 });
 
