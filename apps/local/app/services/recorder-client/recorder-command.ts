@@ -15,7 +15,7 @@ export class RecorderCommandError extends Data.TaggedError(
 )<{ readonly message: string; readonly cause: unknown }> {}
 
 /** A recorder client call, as an Effect a route can run. */
-export const recorderCommand = (run: () => Promise<void>) =>
+export const recorderCommand = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
     catch: (cause) =>

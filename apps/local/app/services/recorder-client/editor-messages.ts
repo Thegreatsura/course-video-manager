@@ -1,4 +1,8 @@
-import type { RecorderState } from "recorder-service/protocol";
+import {
+  previewPath,
+  STILL_PATH,
+  type RecorderState,
+} from "recorder-service/protocol";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 
 /**
@@ -45,3 +49,15 @@ export const screenMessage = (
   state.kind !== "closed" && state.videoId === videoId && state.screen
     ? { type: "screen-changed", screen: state.screen }
     : undefined;
+
+/** Where an editor's browser finds the recorder service's previews and still. */
+export const serviceUrls = (url: string) => {
+  const http = url.replace(/^ws/, "http");
+  return {
+    previews: {
+      camera: `${http}${previewPath("camera")}`,
+      screen: `${http}${previewPath("screen")}`,
+    },
+    still: `${http}${STILL_PATH}`,
+  };
+};

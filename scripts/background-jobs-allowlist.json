@@ -185,6 +185,11 @@
       "file": "apps/local/app/features/thumbnail-editor/use-recorder-still.ts",
       "count": 1,
       "reason": "Interactive: the thumbnail camera on a CVM recorder Video fetches one still (a JPEG) from the local recorder service when the author presses Capture, while the modal waits."
+    },
+    {
+      "file": "apps/local/app/features/audio-calibration/use-audio-calibration.ts",
+      "count": 1,
+      "reason": "Interactive: the Audio Calibration page starts, cancels and finishes a run while Matt sits at it (#2079). The finish waits about a second while the recorder service measures a minute of mic audio, then shows the result; the run itself must end with the tab, the opposite of a Job."
     }
   ]
 }

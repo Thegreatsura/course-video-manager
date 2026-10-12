@@ -1,4 +1,5 @@
-import { Either, Schema } from "effect";
+import { Either } from "effect";
+import { decodeCommand } from "./command-schema";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -12,15 +13,11 @@ import {
 } from "./crash-recovery";
 import { CAMERA_START_TIMEOUT_MS, openCamera, type Camera } from "./camera";
 import type { Launcher } from "./launcher";
-import type { VideoFormat } from "@/features/videos/video-format";
-import {
-  DEFAULT_SCENE,
-  SCENES,
-  type Scene,
-} from "../app/packages/scene-layout";
+import { DEFAULT_SCENE, type Scene } from "../app/packages/scene-layout";
 import { startPreviewFeeds } from "./preview-feeds";
 import { createMeterSide } from "./level-meter";
 import {
+  CALIBRATION_WHILE_RECORDING,
   METER_WHILE_RECORDING,
   RECORD_WHILE_METERING,
   STILL_NO_PICTURE,
@@ -77,7 +74,9 @@ import {
  *
  * The level meter (`level-meter.ts`) holds only the mic, and needs no Video:
  * it runs whether the recorder is closed or open, for the client that started
- * it, until it asks to stop or goes. It and a recording never run together.
+ * it, until it asks to stop or goes. It and a recording never run together,
+ * and neither does an Audio Calibration's run, which takes the meter's place
+ * while it writes the mic to a file (`calibration-run.ts`).
  */
 
 /** The devices the rig proved, found by name. */
@@ -102,52 +101,6 @@ export type RecorderServiceOptions = {
    */
   wakeSpacedesk: () => Promise<void>;
 };
-
-const FORMATS = ["landscape", "short"] as const satisfies VideoFormat[];
-
-const Command = Schema.Union(
-  Schema.Struct({
-    type: Schema.Literal("open"),
-    videoId: Schema.String,
-    format: Schema.optional(Schema.Literal(...FORMATS)),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("record"),
-    silenceLength: Schema.Literal("short", "long"),
-    folder: Schema.String,
-  }),
-  Schema.Struct({ type: Schema.Literal("stop") }),
-  Schema.Struct({ type: Schema.Literal("close") }),
-  Schema.Struct({ type: Schema.Literal("retry-camera") }),
-  Schema.Struct({ type: Schema.Literal("retry-screen") }),
-  Schema.Struct({
-    type: Schema.Literal("switch-scene"),
-    scene: Schema.Literal(...SCENES),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("prepare-record"),
-    videoId: Schema.String,
-    silenceLength: Schema.Literal("short", "long"),
-    folder: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("stream-deck"),
-    press: Schema.Union(
-      Schema.Struct({ action: Schema.Literal("record", "stop") }),
-      Schema.Struct({
-        action: Schema.Literal("switch-scene"),
-        scene: Schema.Literal(...SCENES),
-      })
-    ),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("replay"),
-    recordingSessionId: Schema.String,
-    afterSeq: Schema.Number,
-  }),
-  Schema.Struct({ type: Schema.Literal("start-meter", "stop-meter") })
-);
-const decodeCommand = Schema.decodeUnknownEither(Schema.parseJson(Command));
 
 export const startRecorderService = async (o: RecorderServiceOptions) => {
   const ffmpeg = await checkFfmpeg(o.launch);
@@ -264,7 +217,11 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     return camera.status();
   };
 
-  const meter = createMeterSide<WebSocket>({ launch: o.launch, broadcast });
+  const meter = createMeterSide<WebSocket>({
+    launch: o.launch,
+    broadcast,
+    now: o.now,
+  });
 
   const releaseCamera = async () => {
     const released = camera;
@@ -510,6 +467,14 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         return meter.start(ws);
       case "stop-meter":
         return meter.stop();
+      case "start-calibration":
+        if (state.kind === "recording")
+          throw new Refusal(CALIBRATION_WHILE_RECORDING);
+        return meter.startCalibration(ws, command.folder);
+      case "finish-calibration":
+        return meter.finishCalibration(command);
+      case "cancel-calibration":
+        return meter.cancelCalibration();
       case "close":
         if (state.kind === "recording")
           throw new Refusal("Stop recording before closing the recorder.");

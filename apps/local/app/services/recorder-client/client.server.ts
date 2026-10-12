@@ -1,7 +1,5 @@
 import { WebSocket } from "ws";
 import {
-  previewPath,
-  STILL_PATH,
   type RecorderCommand,
   type RecorderMessage,
   type RecorderState,
@@ -11,7 +9,12 @@ import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { Scene } from "@/packages/scene-layout";
 import type { VideoFormat } from "@/features/videos/video-format";
-import { cameraMessage, sceneMessage, screenMessage } from "./editor-messages";
+import {
+  cameraMessage,
+  sceneMessage,
+  screenMessage,
+  serviceUrls,
+} from "./editor-messages";
 import { helloProblem } from "./service-version";
 import type { IngestResult } from "./ingest.server";
 import {
@@ -21,6 +24,7 @@ import {
 } from "./recorder-command";
 import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 import { meterRelay, isMeterMessage } from "./meter-relay";
+import { calibrationCommands } from "./calibration-commands";
 
 /**
  * THE RECORDER CLIENT: the app server's one WebSocket to the recorder service
@@ -113,12 +117,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const silenceLengths = new Map<string, SilenceLength>();
   /** The Video and Silence Length the recorder was last prepared with. */
   let prepared: string | undefined;
-  const http = o.url.replace(/^ws/, "http");
-  const previews = {
-    camera: `${http}${previewPath("camera")}`,
-    screen: `${http}${previewPath("screen")}`,
-  };
-  const still = `${http}${STILL_PATH}`;
+  const { previews, still } = serviceUrls(o.url);
 
   const publish = (videoId: string, message: CvmRecorderMessage) => {
     for (const listener of listeners.get(videoId) ?? []) listener(message);
@@ -320,7 +319,6 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   };
 
   const onMessage = (message: RecorderMessage) => {
-    if (isMeterMessage(message)) return meter.hear(message);
     for (const waiter of waiters.slice()) {
       if (message.type === "refused" && message.command === waiter.command) {
         waiters = waiters.filter((w) => w !== waiter);
@@ -330,6 +328,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         waiter.resolve();
       }
     }
+    if (isMeterMessage(message)) return meter.hear(message);
     switch (message.type) {
       case "hello":
         reachable = true;
@@ -611,6 +610,8 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     },
 
     subscribeMeter: meter.subscribe,
+
+    ...calibrationCommands({ command, problem: () => problem }),
 
     /** Waits for every event heard so far to be saved (tests). */
     settled: () => ingesting,
