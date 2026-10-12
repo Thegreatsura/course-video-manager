@@ -11,12 +11,12 @@ import {
 import { clipStillUrl } from "./clip-still-url";
 
 /**
- * Overriding a New-recorder Clip's scene in the editor: playback and stills
+ * Overriding a CVM-recorder Clip's scene in the editor: playback and stills
  * follow at once, before the server answers.
  */
 
 /** 10-20 s of a Recording Session that went Camera at 0, Code at 15. */
-const newRecorderClip = (
+const cvmRecorderClip = (
   overrides: Partial<ClipOnDatabase> = {}
 ): ClipOnDatabase =>
   fromPartial({
@@ -66,7 +66,7 @@ const scenesPlayed = (clip: ClipOnDatabase) =>
 
 describe("Scene Override in the editor", () => {
   it("redraws playback and stills in the override at once, and saves it", () => {
-    const t = tester([newRecorderClip()]);
+    const t = tester([cvmRecorderClip()]);
     const stillBefore = clipStillUrl(shown(t), "first");
     expect(scenesPlayed(shown(t))).toEqual(["Camera", "Code"]);
 
@@ -97,7 +97,7 @@ describe("Scene Override in the editor", () => {
   });
 
   it("drops a zoom the override makes illegal, as the server does", () => {
-    const t = tester([newRecorderClip({ zoomType: "subtle" })]);
+    const t = tester([cvmRecorderClip({ zoomType: "subtle" })]);
 
     t.send({
       type: "set-scene-override",
@@ -111,7 +111,7 @@ describe("Scene Override in the editor", () => {
   });
 
   it("ignores an OBS Clip", () => {
-    const obs = newRecorderClip({ recordingSession: null });
+    const obs = cvmRecorderClip({ recordingSession: null });
     const t = tester([obs]);
 
     t.send({

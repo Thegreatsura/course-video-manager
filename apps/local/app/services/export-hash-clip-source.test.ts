@@ -84,7 +84,7 @@ const sessionRow = (
 
 const QUIETER_HIGHS = { lowDb: 0, midDb: 0, highDb: -3 };
 
-describe("a new-recorder Clip's Export Hash", () => {
+describe("a CVM-recorder Clip's Export Hash", () => {
   const hash = (rows: Parameters<typeof toExportClips>[0]) =>
     computeExportHash(toExportClips(rows), "landscape");
   const base = hash([sessionRow(150)]);

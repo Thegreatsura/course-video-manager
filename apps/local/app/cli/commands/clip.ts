@@ -75,9 +75,9 @@ import {
  *                    cut from footage, or never transcribed)
  *   transcriptionStatus  "queued" | "transcribing" | "failed" | "done"
  *   scene / profile  optional capture metadata (scene: in force at the start)
- *   sceneOverride    New recorder only: a Scene Override, or null
+ *   sceneOverride    CVM recorder only: a Scene Override, or null
  *   effectiveScene   sceneOverride ?? scene — what Clip Zoom is judged on
- *   recordingSessionId  New recorder only: the Recording Session it is cut from
+ *   recordingSessionId  CVM recorder only: the Recording Session it is cut from
  *   pauseType         held pause after clip; "none" or "long"
  *   zoomType          Clip Zoom; "none" or "subtle" (camera scenes only)
  *   diagramSnapshotId pinned DiagramSnapshot filmed against this clip, if any

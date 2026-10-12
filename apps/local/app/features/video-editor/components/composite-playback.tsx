@@ -16,7 +16,7 @@ const frameOf = (
     : undefined;
 
 /**
- * A new-recorder Clip played as the composite: its camera and screen files
+ * A CVM-recorder Clip played as the composite: its camera and screen files
  * play, muted and out of sight, in step with the clock `<video>` (the Clip's
  * mic, which carries the sound), and a canvas draws them every animation
  * frame with the layout module's draw instructions for the scene of the

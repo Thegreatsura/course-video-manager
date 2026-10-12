@@ -12,8 +12,8 @@ import {
 
 setupClipServiceTests();
 
-/** Two New-recorder Clips cut from one Recording Session, 10–20 s and 25–30 s. */
-const seedNewRecorderVideo = async () => {
+/** Two CVM-recorder Clips cut from one Recording Session, 10–20 s and 25–30 s. */
+const seedCvmRecorderVideo = async () => {
   const video = await clipService.createVideo("mic");
   const [session] = await testDb
     .insert(schema.recordingSessions)
@@ -74,7 +74,7 @@ const exportHashOf = async (videoId: string) =>
 
 describe("mic offset", () => {
   it("sets the Recording Session's offset without moving its Clips, and the Video needs a new export", async () => {
-    const { video, first } = await seedNewRecorderVideo();
+    const { video, first } = await seedCvmRecorderVideo();
     const before = await exportHashOf(video.id);
 
     await clipService.updateMicOffset(first.id, 210);
@@ -103,9 +103,9 @@ describe("mic offset", () => {
 });
 
 describe("mic EQ", () => {
-  it("exports every New-recorder Video with the saved EQ, so each needs a new export, and leaves OBS Videos alone", async () => {
-    const a = await seedNewRecorderVideo();
-    const b = await seedNewRecorderVideo();
+  it("exports every CVM-recorder Video with the saved EQ, so each needs a new export, and leaves OBS Videos alone", async () => {
+    const a = await seedCvmRecorderVideo();
+    const b = await seedCvmRecorderVideo();
     const obs = await seedObsVideo();
     const before = await Promise.all(
       [a.video, b.video, obs].map((v) => exportHashOf(v.id))

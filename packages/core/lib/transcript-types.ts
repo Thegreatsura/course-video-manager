@@ -19,7 +19,7 @@ export type SectionWithWordCount = {
 import type { RecordingSessionScene } from "../features/videos/recorder.js";
 
 /**
- * A new-recorder Clip's Recording Session as loaded with it — the shape the
+ * A CVM-recorder Clip's Recording Session as loaded with it — the shape the
  * Clip Source module (`ClipRecordingSession`) composites the picture from.
  */
 export type IndexedClipRecordingSession = {
@@ -38,7 +38,7 @@ export type IndexedClip = {
   sourceEndTime: number;
   videoFilename: string;
   text: string | null;
-  /** Present on a new-recorder Clip, so its screenshot is the composite. */
+  /** Present on a CVM-recorder Clip, so its screenshot is the composite. */
   recordingSession?: IndexedClipRecordingSession | null;
   sceneOverride?: RecordingSessionScene | null;
 };

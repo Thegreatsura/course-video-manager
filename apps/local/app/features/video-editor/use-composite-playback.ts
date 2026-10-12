@@ -12,7 +12,7 @@ const PICTURE_SOURCES: readonly PictureSource[] = ["camera", "screen"];
 
 /**
  * The effect runner for `compositePlaybackReducer`, and the bridge from the
- * clock `<video>` (a new-recorder Clip's mic) and the two picture `<video>`s
+ * clock `<video>` (a CVM-recorder Clip's mic) and the two picture `<video>`s
  * into it. Returns the refs the picture `<video>`s mount on and the scene to
  * draw now.
  */

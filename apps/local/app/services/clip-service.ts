@@ -312,7 +312,7 @@ interface InternalAppendClipsInput {
     inputVideo: string;
     startTime: number;
     endTime: number;
-    /** A new-recorder Clip's Recording Session and starting scene. */
+    /** A CVM-recorder Clip's Recording Session and starting scene. */
     recordingSessionId?: string | null;
     scene?: string | null;
   }[];
@@ -359,7 +359,7 @@ export interface ClipService {
    */
   updateZoom(clipId: string, zoomType: string): Promise<void>;
   /**
-   * Set (or clear, with null) a New-recorder Clip's Scene Override. Refused on
+   * Set (or clear, with null) a CVM-recorder Clip's Scene Override. Refused on
    * an OBS Clip. Drops the Clip Zoom when the effective scene is not a camera
    * scene.
    */
@@ -368,13 +368,13 @@ export interface ClipService {
     sceneOverride: RecordingSessionScene | null
   ): Promise<void>;
   /**
-   * Set the mic offset of the Recording Session a New-recorder Clip was cut
+   * Set the mic offset of the Recording Session a CVM-recorder Clip was cut
    * from — every Clip of that Session moves its sound, none moves its
    * picture. Refused on an OBS Clip.
    */
   updateMicOffset(clipId: string, micOffsetMs: number): Promise<void>;
   /**
-   * Save the mic EQ every New-recorder Video is exported with. Every such
+   * Save the mic EQ every CVM-recorder Video is exported with. Every such
    * Video needs a new export; OBS Videos are untouched.
    */
   updateMicEq(micEq: MicEq): Promise<void>;

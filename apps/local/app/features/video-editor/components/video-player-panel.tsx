@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils";
 import { LivePreviewFrame } from "./live-preview-frame";
 import { getHasLivePreview } from "../live-preview";
 import { SilenceLengthToggle } from "./silence-length-toggle";
-import { NewRecorderControls } from "./new-recorder-controls";
-import { showsNewRecorderControls } from "../recorder-choice-reducer";
+import { CvmRecorderControls } from "./cvm-recorder-controls";
+import { showsCvmRecorderControls } from "../recorder-choice-reducer";
 import { TableOfContents } from "./table-of-contents";
 import {
   DeferredAddVideoModal,
@@ -70,9 +70,9 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.obsConnectorState
   );
-  const newRecorderState = useContextSelector(
+  const cvmRecorderState = useContextSelector(
     VideoEditorContext,
-    (ctx) => ctx.newRecorder.state
+    (ctx) => ctx.cvmRecorder.state
   );
   const recorder = useContextSelector(
     VideoEditorContext,
@@ -207,7 +207,7 @@ export const VideoPlayerPanel = () => {
   const hasSections = getHasSectionsSelector(items);
 
   const isOBSActive = getIsOBSActiveSelector(obsConnectorState);
-  const hasLivePreview = getHasLivePreview(liveMediaStream, newRecorderState);
+  const hasLivePreview = getHasLivePreview(liveMediaStream, cvmRecorderState);
   const showScrubSlider = getShowScrubSliderSelector(
     currentClip?.type,
     showVideoPlayer
@@ -272,7 +272,7 @@ export const VideoPlayerPanel = () => {
       : undefined,
     createConcatenatedVideo: () =>
       navigate(`/videos/concatenate?initial=${videoId}`),
-    // OBS-only (#2011): hidden on a New recorder Video, refused by the route.
+    // OBS-only (#2011): hidden on a CVM recorder Video, refused by the route.
     exportToDavinciResolve:
       recorder === "obs"
         ? () =>
@@ -318,7 +318,7 @@ export const VideoPlayerPanel = () => {
               <p className="text-muted-foreground text-sm text-center px-4">
                 {recorder === "obs"
                   ? "No video stream or clips yet. Connect OBS to start recording."
-                  : "No clips yet. This Video records with the New recorder."}
+                  : "No clips yet. This Video records with the CVM recorder."}
               </p>
             </div>
           ) : (
@@ -357,7 +357,7 @@ export const VideoPlayerPanel = () => {
               <SilenceLengthToggle />
             </div>
           )}
-          {showsNewRecorderControls({ recorder }) && <NewRecorderControls />}
+          {showsCvmRecorderControls({ recorder }) && <CvmRecorderControls />}
 
           {showScrubSlider && currentClip?.type === "on-database" && (
             <input

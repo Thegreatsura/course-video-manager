@@ -232,6 +232,13 @@
       "when": 1791790212894,
       "tag": "0032_mic_eq_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791795567649,
+      "tag": "0033_video_recorder_cvm",
+      "breakpoints": true
     }
   ]
 }

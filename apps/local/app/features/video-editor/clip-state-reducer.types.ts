@@ -6,7 +6,7 @@ import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
 import type { JobEventMessage } from "@/features/jobs/job-wire";
 import type { InsertionPoint } from "@/services/clip-service";
-import type { NewRecorderMessage } from "./new-recorder-wire";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { Scene } from "@/packages/scene-layout";
 import type { MicEq, VideoRecorder } from "@cvm/core/features/videos/recorder";
@@ -71,7 +71,7 @@ export type ClipOnDatabase = {
    */
   webLinks: DB.ClipWebLink[];
   /**
-   * A new-recorder Clip's Recording Session (files, mic offset, scene
+   * A CVM-recorder Clip's Recording Session (files, mic offset, scene
    * timeline) and Scene Override: the Clip Source plays and stills it as the
    * composite. Absent or null on an OBS Clip.
    */
@@ -207,17 +207,17 @@ export type RecordingSession = {
   displayNumber: number;
   status: RecordingSessionStatus;
   /**
-   * Unknown only for a New recorder Recording Session this editor joined
+   * Unknown only for a CVM recorder Recording Session this editor joined
    * late (`recorder-status`), having missed its `recording-started`.
    */
   outputPath?: string;
   startedAt: number;
   silenceLength?: SilenceLength;
   /**
-   * A New recorder Recording Session: its id is the recorder's, and its
+   * A CVM recorder Recording Session: its id is the recorder's, and its
    * Clips arrive saved (`clips-saved`), never optimistically.
    */
-  newRecorder?: true;
+  cvmRecorder?: true;
 };
 
 /**
@@ -305,9 +305,9 @@ export type ClipReducerState = {
 
 export type ClipReducerAction =
   | {
-      /** The app server told this editor about its New recorder Video. */
-      type: "new-recorder-message-heard";
-      message: NewRecorderMessage;
+      /** The app server told this editor about its CVM recorder Video. */
+      type: "cvm-recorder-message-heard";
+      message: CvmRecorderMessage;
       receivedAt: number;
     }
   | {
@@ -391,7 +391,7 @@ export type ClipReducerAction =
       sceneOverride: Scene | null;
     }
   | {
-      /** The Mic Settings dialog was saved on a New-recorder Clip. */
+      /** The Mic Settings dialog was saved on a CVM-recorder Clip. */
       type: "mic-settings-submitted";
       clipId: FrontendId;
       micOffsetMs: number;
@@ -501,7 +501,7 @@ export type ClipReducerAction =
 
 export type ClipReducerEffect =
   | {
-      /** The app server places the New recorder's next Clip here. */
+      /** The app server places the CVM recorder's next Clip here. */
       type: "send-recorder-insertion-point";
       insertionPoint: InsertionPoint;
     }

@@ -10,7 +10,7 @@ const chooseRecorderSchema = Schema.Struct({
 
 /**
  * Choose the Recorder a Video records with (the editor's Recorder picker).
- * Chosen OBS, the New recorder lets the Video go at once.
+ * Chosen OBS, the CVM recorder lets the Video go at once.
  */
 export const action = makeAction({
   input: "json",

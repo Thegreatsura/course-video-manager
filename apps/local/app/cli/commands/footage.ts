@@ -101,9 +101,9 @@ const listCmd = Command.make("list", { dir: dirOption }, ({ dir }) =>
     const files = entries.filter((name) =>
       VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase())
     );
-    // The new recorder writes each Recording Session into a folder of its own
+    // The CVM recorder writes each Recording Session into a folder of its own
     // here; its mic file is the one a lost take is searched for in (a
-    // new-recorder Clip's Footage path is that same file).
+    // CVM-recorder Clip's Footage path is that same file).
     const micFiles = yield* Effect.filter(
       entries.map((name) => path.join(name, FILE_NAMES.mic)),
       // Under a file rather than a folder, `exists` fails (ENOTDIR): not one.

@@ -7,7 +7,7 @@ import { VideoEditorContext } from "../video-editor-context";
 
 const LABELS: Record<VideoRecorder, string> = {
   obs: "OBS",
-  "new-recorder": "New recorder",
+  cvm: "CVM recorder",
 };
 
 /**

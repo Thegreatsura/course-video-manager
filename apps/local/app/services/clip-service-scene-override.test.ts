@@ -12,10 +12,10 @@ import {
 setupClipServiceTests();
 
 /**
- * A New-recorder Clip from 10 s to 20 s of a Recording Session whose scene
+ * A CVM-recorder Clip from 10 s to 20 s of a Recording Session whose scene
  * went Camera at 0 and Code at 15 — a change in the middle of the Clip.
  */
-const seedNewRecorderClip = async (opts: { zoomType?: string } = {}) => {
+const seedCvmRecorderClip = async (opts: { zoomType?: string } = {}) => {
   const video = await clipService.createVideo("override");
   const [session] = await testDb
     .insert(schema.recordingSessions)
@@ -68,7 +68,7 @@ const scenesDrawn = async (id: string) => {
 
 describe("Scene Override", () => {
   it("sets an override that draws the whole Clip in one scene, and clearing it follows the live scenes again", async () => {
-    const clip = await seedNewRecorderClip();
+    const clip = await seedCvmRecorderClip();
     expect(await scenesDrawn(clip.id)).toEqual(["Camera", "Code"]);
 
     await clipService.updateSceneOverride(clip.id, "No Face");
@@ -106,7 +106,7 @@ describe("Scene Override", () => {
 
 describe("Clip Zoom on the effective scene", () => {
   it("allows a zoom on a Code Clip overridden to Camera", async () => {
-    const clip = await seedNewRecorderClip();
+    const clip = await seedCvmRecorderClip();
     await testDb
       .update(schema.clips)
       .set({ scene: "Code" })
@@ -120,7 +120,7 @@ describe("Clip Zoom on the effective scene", () => {
   });
 
   it("drops an existing zoom when an override from Camera to Code makes it illegal", async () => {
-    const clip = await seedNewRecorderClip({ zoomType: "subtle" });
+    const clip = await seedCvmRecorderClip({ zoomType: "subtle" });
 
     await clipService.updateSceneOverride(clip.id, "Code");
 

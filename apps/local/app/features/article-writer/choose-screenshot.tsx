@@ -66,7 +66,7 @@ export function ChooseScreenshot({
   const { steps, dials } = useScreenshotSteps();
 
   // Every time kept here is the Clip's source time. The `<video>` is the
-  // playback clock: an OBS Clip's Footage, or a new-recorder Clip's mic,
+  // playback clock: an OBS Clip's Footage, or a CVM-recorder Clip's mic,
   // `offset` behind the picture (drawn by CompositePlayback).
   const source = clip ? clipSource(clip) : null;
   const offset = source ? clipPlaybackClock(source).offsetSeconds : 0;

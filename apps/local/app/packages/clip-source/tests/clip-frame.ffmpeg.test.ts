@@ -11,7 +11,7 @@ import {
 } from "@/packages/clip-source";
 
 /**
- * Renders a new-recorder Clip's first and last frames with the real ffmpeg
+ * Renders a CVM-recorder Clip's first and last frames with the real ffmpeg
  * from tiny lavfi stand-ins for a Recording Session's files (no device): a
  * red 60 fps screen and a green 29.97 fps camera, two seconds each, and
  * reads known pixels back. Skipped where there is no ffmpeg.
@@ -28,7 +28,7 @@ const hasFfmpeg = (() => {
 const W = 1920;
 const H = 1080;
 
-describe.skipIf(!hasFfmpeg)("a new-recorder Clip's stills in ffmpeg", () => {
+describe.skipIf(!hasFfmpeg)("a CVM-recorder Clip's stills in ffmpeg", () => {
   // Made in beforeAll: a skipped describe still runs its body.
   const dir = path.join(tmpdir(), `clip-frame-${process.pid}-${Date.now()}`);
   afterAll(() => rmSync(dir, { recursive: true, force: true }));

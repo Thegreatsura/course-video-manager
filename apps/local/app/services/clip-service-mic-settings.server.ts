@@ -16,7 +16,7 @@ export const OBS_CLIP_MIC_OFFSET_MESSAGE =
   "An OBS Clip has no mic offset: its sound is baked into its Footage.";
 
 /**
- * Set the mic offset of the Recording Session a New-recorder Clip was cut
+ * Set the mic offset of the Recording Session a CVM-recorder Clip was cut
  * from. Clip times are in the picture's clock, so no Clip moves: the export
  * reads the mic from (start − offset) instead. Raw Footage is untouched; the
  * offset joins the Export Hash, so every Video cut from the Session needs a
@@ -55,8 +55,8 @@ export const updateMicOffset = (
 
 /**
  * Save the mic EQ every Recording Session is exported with (the one Mic EQ
- * Setting, MIC_EQ_SETTING_ID). It joins every New-recorder Clip's Export
- * Hash, so every New-recorder Video needs a new export; OBS Videos are
+ * Setting, MIC_EQ_SETTING_ID). It joins every CVM-recorder Clip's Export
+ * Hash, so every CVM-recorder Video needs a new export; OBS Videos are
  * untouched. Raw Footage is never changed.
  */
 export const updateMicEq = (db: Database, event: { micEq: MicEq }) =>

@@ -24,6 +24,31 @@ const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
  */
 const MIGRATION_TIMEOUT_MS = 60_000;
 
+/**
+ * A fresh PGlite migrated to just before `tag`: replays a copy of the folder
+ * whose journal stops short of it, so a test can seed rows the migration then
+ * rewrites when the real folder is run.
+ */
+async function migrateUpTo(
+  tag: string
+): Promise<ReturnType<typeof createBlankDb>> {
+  const before = mkdtempSync(join(tmpdir(), "cvm-migrations-"));
+  cpSync(MIGRATIONS_FOLDER, before, { recursive: true });
+  const journalPath = join(before, "meta/_journal.json");
+  const journal: { entries: { tag: string }[] } = JSON.parse(
+    readFileSync(journalPath, "utf-8")
+  );
+  const cut = journal.entries.findIndex((entry) => entry.tag === tag);
+  writeFileSync(
+    journalPath,
+    JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut) })
+  );
+  const testDb = createBlankDb();
+  await migrate(testDb.db, { migrationsFolder: before });
+  rmSync(before, { recursive: true, force: true });
+  return testDb;
+}
+
 describe("drizzle migrations", () => {
   it(
     "baseline SQL hash matches what readMigrationFiles would compute",
@@ -119,25 +144,11 @@ describe("drizzle migrations", () => {
   it(
     "0028 backfills each Clip's Transcription status from what it already had",
     async () => {
-      // Migrate to just before 0028 from a copy of the folder whose journal
-      // stops at 0027, seed the Clips, then run the real folder for 0028.
-      const before = mkdtempSync(join(tmpdir(), "cvm-migrations-"));
-      cpSync(MIGRATIONS_FOLDER, before, { recursive: true });
-      const journalPath = join(before, "meta/_journal.json");
-      const journal: { entries: { tag: string }[] } = JSON.parse(
-        readFileSync(journalPath, "utf-8")
+      // Migrate to just before 0028, seed the Clips, then run the real folder
+      // for 0028.
+      const { pglite, db } = await migrateUpTo(
+        "0028_clip_transcription_status"
       );
-      const cut = journal.entries.findIndex(
-        (entry) => entry.tag === "0028_clip_transcription_status"
-      );
-      writeFileSync(
-        journalPath,
-        JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut) })
-      );
-
-      const { pglite, db } = createBlankDb();
-      await migrate(db, { migrationsFolder: before });
-      rmSync(before, { recursive: true, force: true });
 
       // Clip rows only: the Video they point at is beside the point here.
       await db.execute(sql`SET session_replication_role = replica`);
@@ -163,6 +174,41 @@ describe("drizzle migrations", () => {
         { id: "text-no-timestamp", status: "done" },
         { id: "never-transcribed", status: "failed" },
       ]);
+
+      await pglite.close();
+    },
+    MIGRATION_TIMEOUT_MS
+  );
+
+  it(
+    "0033 renames the New recorder's stored value to `cvm` and refuses the old one",
+    async () => {
+      const { pglite, db } = await migrateUpTo("0033_video_recorder_cvm");
+
+      await db.execute(sql`
+        INSERT INTO "course-video-manager_video"
+          (id, lineage_id, title, original_footage_path, recorder)
+        VALUES
+          ('cvm-video', 'l1', 'CVM', '', 'new-recorder'),
+          ('obs-video', 'l2', 'OBS', '', 'obs'),
+          ('unset-video', 'l3', 'Unset', '', NULL)
+      `);
+
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+      const rows = await db.execute<{ id: string; recorder: string | null }>(
+        sql`SELECT id, recorder FROM "course-video-manager_video" ORDER BY lineage_id`
+      );
+      expect(rows.rows).toEqual([
+        { id: "cvm-video", recorder: "cvm" },
+        { id: "obs-video", recorder: "obs" },
+        { id: "unset-video", recorder: null },
+      ]);
+      await expect(
+        db.execute(
+          sql`UPDATE "course-video-manager_video" SET recorder = 'new-recorder' WHERE id = 'obs-video'`
+        )
+      ).rejects.toThrow();
 
       await pglite.close();
     },

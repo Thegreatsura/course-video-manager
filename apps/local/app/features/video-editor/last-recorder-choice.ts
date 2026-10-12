@@ -1,5 +1,5 @@
 import {
-  VIDEO_RECORDERS,
+  parseVideoRecorder,
   type VideoRecorder,
 } from "@cvm/core/features/videos/recorder";
 import { readStored, writeStored } from "@/hooks/use-local-storage";
@@ -12,10 +12,8 @@ const STORAGE_KEY = "video-editor:lastRecorder";
  * Video stays on OBS (null) until then.
  */
 export const readLastRecorderChoice = (): VideoRecorder | null => {
-  const stored = readStored(STORAGE_KEY);
-  return (VIDEO_RECORDERS as readonly string[]).includes(stored ?? "")
-    ? (stored as VideoRecorder)
-    : null;
+  // A choice remembered before the rename reads `new-recorder`: the CVM recorder.
+  return parseVideoRecorder(readStored(STORAGE_KEY));
 };
 
 export const rememberRecorderChoice = (recorder: VideoRecorder): void => {

@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
-  createInitialNewRecorderState,
-  newRecorderReducer,
-} from "./new-recorder-reducer";
-import type { NewRecorderMessage } from "./new-recorder-wire";
-import { getHasLivePreview, getNewRecorderLivePreview } from "./live-preview";
+  createInitialCvmRecorderState,
+  cvmRecorderReducer,
+} from "./cvm-recorder-reducer";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
+import { getHasLivePreview, getCvmRecorderLivePreview } from "./live-preview";
 import {
   getShowLiveStream,
   getShowVideoPlayer,
 } from "./video-editor-selectors";
 
-const heard = (message: NewRecorderMessage) =>
+const heard = (message: CvmRecorderMessage) =>
   ({ type: "recorder-message-heard", message }) as const;
 
 const previews = {
@@ -30,7 +30,7 @@ const status = (reachable = true, recordingSessionId: string | null = null) =>
   });
 
 const tester = () =>
-  new ReducerTester(newRecorderReducer, createInitialNewRecorderState());
+  new ReducerTester(cvmRecorderReducer, createInitialCvmRecorderState());
 
 /** The recorder open for this Video, in Code, with the Cam Link live. */
 const open = () =>
@@ -39,14 +39,14 @@ const open = () =>
     .send(heard({ type: "scene-changed", scene: "Code" }))
     .send(heard({ type: "camera-went-live" }));
 
-describe("the New recorder in the editor's live frame", () => {
+describe("the CVM recorder in the editor's live frame", () => {
   it("fills the live frame once the recorder is open with a scene, as OBS's Virtual Camera does", () => {
     const t = tester().send(status());
     // Reachable, but the recorder has not said which scene it draws yet.
     expect(getHasLivePreview(null, t.getState())).toBe(false);
 
     t.send(heard({ type: "scene-changed", scene: "Code" }));
-    expect(getNewRecorderLivePreview(t.getState())).toEqual({
+    expect(getCvmRecorderLivePreview(t.getState())).toEqual({
       previews,
       scene: "Code",
       cameraShowing: false,
@@ -70,18 +70,18 @@ describe("the New recorder in the editor's live frame", () => {
 
   it("draws the camera once it is live, and the framing guide only in the Camera scene", () => {
     const t = open();
-    expect(getNewRecorderLivePreview(t.getState())).toMatchObject({
+    expect(getCvmRecorderLivePreview(t.getState())).toMatchObject({
       cameraShowing: true,
       cameraKey: "live",
       showCenterLine: false,
     });
 
     t.send(heard({ type: "scene-changed", scene: "Camera" }));
-    expect(getNewRecorderLivePreview(t.getState())?.showCenterLine).toBe(true);
+    expect(getCvmRecorderLivePreview(t.getState())?.showCenterLine).toBe(true);
   });
 
   it("never takes the live frame on an OBS Video, whose editor never listens to the recorder", () => {
-    expect(getHasLivePreview(null, createInitialNewRecorderState())).toBe(
+    expect(getHasLivePreview(null, createInitialCvmRecorderState())).toBe(
       false
     );
   });

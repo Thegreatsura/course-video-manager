@@ -15,7 +15,7 @@ const startRecordingSchema = Schema.Struct({
 });
 
 /**
- * Record, on a New recorder Video: the recorder service starts a Recording
+ * Record, on a CVM recorder Video: the recorder service starts a Recording
  * Session in a folder of its own beside the OBS recordings. Answers once it
  * is recording; a refusal is a 409 with the reason: the Video records with
  * OBS, its Version is not the Draft, or the recorder said no.

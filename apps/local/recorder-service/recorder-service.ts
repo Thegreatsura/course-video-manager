@@ -387,7 +387,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const press = async (ws: WebSocket, p: StreamDeckPress): Promise<void> => {
     if (state.kind === "closed")
       throw new Refusal(
-        "The recorder is not open: open the editor on a New recorder Video first."
+        "The recorder is not open: open the editor on a CVM recorder Video first."
       );
     switch (p.action) {
       case "record":

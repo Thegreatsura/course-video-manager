@@ -9,13 +9,13 @@ import {
 } from "./clip-state-reducer";
 import {
   canStop,
-  createInitialNewRecorderState,
-  newRecorderReducer,
-} from "./new-recorder-reducer";
-import type { NewRecorderMessage } from "./new-recorder-wire";
+  createInitialCvmRecorderState,
+  cvmRecorderReducer,
+} from "./cvm-recorder-reducer";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 
 /**
- * An editor loaded (or reloaded) while the New recorder is mid-take: its
+ * An editor loaded (or reloaded) while the CVM recorder is mid-take: its
  * Clips so far come from the loader, and the take from what the app server
  * says first to every editor that listens (`recorder-status`, then the
  * scene). It never heard `recording-started`.
@@ -31,7 +31,7 @@ const saved = (id: string): ClipOnDatabase =>
   });
 
 /** What the app server says to an editor subscribing mid-take. */
-const onSubscribe: NewRecorderMessage[] = [
+const onSubscribe: CvmRecorderMessage[] = [
   {
     type: "recorder-status",
     reachable: true,
@@ -46,11 +46,11 @@ const onSubscribe: NewRecorderMessage[] = [
   { type: "scene-changed", scene: "Camera" },
 ];
 
-/** The editor's two reducers, each hearing every message, as useNewRecorder does. */
+/** The editor's two reducers, each hearing every message, as useCvmRecorder does. */
 const loadEditor = (items: ClipOnDatabase[]) => {
   const recorder = new ReducerTester(
-    newRecorderReducer,
-    createInitialNewRecorderState()
+    cvmRecorderReducer,
+    createInitialCvmRecorderState()
   );
   const clips = new ReducerTester(clipStateReducer, {
     clipIdsWithTranscriptWords: new Set<DatabaseId>(),
@@ -63,10 +63,10 @@ const loadEditor = (items: ClipOnDatabase[]) => {
     jobEventCursor: 0,
     micOffsetRefusal: null,
   });
-  const hear = (message: NewRecorderMessage) => {
+  const hear = (message: CvmRecorderMessage) => {
     recorder.send({ type: "recorder-message-heard", message });
     clips.send({
-      type: "new-recorder-message-heard",
+      type: "cvm-recorder-message-heard",
       message,
       receivedAt: 1_000,
     });
@@ -90,7 +90,7 @@ describe("an editor that loads mid-recording", () => {
     const clips = editor.clips.getState();
     expect(databaseIds(clips.items)).toEqual(["a", "b"]);
     expect(clips.sessions).toMatchObject([
-      { id: SESSION, status: "recording", newRecorder: true },
+      { id: SESSION, status: "recording", cvmRecorder: true },
     ]);
 
     editor.hear({

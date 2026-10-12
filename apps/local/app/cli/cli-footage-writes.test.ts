@@ -213,7 +213,7 @@ describe("footage list", () => {
 
 describe("footage on a Recording Session's mic file", () => {
   it("lists the mic file of each Recording Session folder, and transcribes it", async () => {
-    // The new recorder writes each Recording Session into a folder of its
+    // The CVM recorder writes each Recording Session into a folder of its
     // own beside the OBS recordings: camera, screen and mic.
     const session = nodePath.join(footageDir, "2026-10-12T10-00-00 abcd1234");
     nodeFs.mkdirSync(session);

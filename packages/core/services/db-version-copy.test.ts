@@ -12,8 +12,8 @@ import { sortByOrder } from "../lib/sort-by-order.js";
 import {
   effectiveScenesOf,
   recordingSessionRowCounts,
-  seedNewRecorderClip,
-} from "../test-utils/new-recorder-clip.js";
+  seedCvmRecorderClip,
+} from "../test-utils/cvm-recorder-clip.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<VersionOperationsService>;
@@ -349,7 +349,7 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
     ]);
   });
 
-  it("carries a new-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
+  it("carries a CVM-recorder Clip's Recording Session and Scene Override, sharing the session", async () => {
     const { course, version } = await createCourseAndVersion();
     const [section] = await testDb
       .insert(schema.sections)
@@ -365,10 +365,10 @@ describe("Submit (freezeAndCloneVersion) — the new Draft keeps how each Clip l
         lessonId: lesson!.id,
         title: "take",
         originalFootagePath: "/rec",
-        recorder: "new-recorder",
+        recorder: "cvm",
       })
       .returning();
-    await seedNewRecorderClip(testDb, video!.id);
+    await seedCvmRecorderClip(testDb, video!.id);
     const before = await recordingSessionRowCounts(testDb);
 
     const result = await run(

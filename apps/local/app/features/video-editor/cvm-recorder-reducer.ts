@@ -3,11 +3,11 @@ import type { Scene } from "@/packages/scene-layout";
 import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost } from "recorder-service/protocol";
-import type { NewRecorderMessage } from "./new-recorder-wire";
+import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 
 /**
- * The New recorder's Record and Stop in the editor. The recorder service
+ * The CVM recorder's Record and Stop in the editor. The recorder service
  * records; this follows what the app server reports of it (`recorder-message-
  * heard`) and asks for Record and Stop. Whatever started a recording, the
  * editor shows what the recorder says.
@@ -34,7 +34,7 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * (timed here, as the OBS path's browser detector times it); a silence as
  * long as the Silence Length (`speech-ended`) closes it.
  */
-export namespace newRecorderReducer {
+export namespace cvmRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
 
   export type Camera =
@@ -75,7 +75,7 @@ export namespace newRecorderReducer {
   };
 
   export type Action =
-    | { type: "recorder-message-heard"; message: NewRecorderMessage }
+    | { type: "recorder-message-heard"; message: CvmRecorderMessage }
     | { type: "silence-length-chosen"; silenceLength: SilenceLength }
     | {
         type: "press-record";
@@ -107,7 +107,7 @@ export namespace newRecorderReducer {
     | { type: "switch-scene"; scene: Scene };
 }
 
-export const createInitialNewRecorderState = (): newRecorderReducer.State => ({
+export const createInitialCvmRecorderState = (): cvmRecorderReducer.State => ({
   reachable: null,
   problem: null,
   phase: "idle",
@@ -129,38 +129,38 @@ export const CAMERA_LOST_ALERT =
 export const CRASHED_ALERT =
   "The recorder crashed during the last recording. Its files were repaired and the Clips up to the crash are kept. Press Record to carry on.";
 
-export const canRecord = (state: newRecorderReducer.State) =>
+export const canRecord = (state: cvmRecorderReducer.State) =>
   state.reachable === true &&
   state.problem === null &&
   state.phase === "idle" &&
   state.camera.kind === "live";
 
-export const canSwitchScene = (state: newRecorderReducer.State) =>
+export const canSwitchScene = (state: cvmRecorderReducer.State) =>
   state.reachable === true && state.scene !== null;
 
-export const canRetryCamera = (state: newRecorderReducer.State) =>
+export const canRetryCamera = (state: cvmRecorderReducer.State) =>
   !state.retrying &&
   (state.camera.kind === "not-starting" || state.camera.kind === "busy");
 
 const cameraHeard = (
-  state: newRecorderReducer.State,
-  camera: newRecorderReducer.Camera
-): newRecorderReducer.State => ({ ...state, camera, retrying: false });
+  state: cvmRecorderReducer.State,
+  camera: cvmRecorderReducer.Camera
+): cvmRecorderReducer.State => ({ ...state, camera, retrying: false });
 
-export const canStop = (state: newRecorderReducer.State) =>
+export const canStop = (state: cvmRecorderReducer.State) =>
   state.phase === "recording";
 
 /** Whether a take is being recorded, as OBS reports "recording". */
-export const isNewRecorderRecording = (state: newRecorderReducer.State) =>
+export const isCvmRecorderRecording = (state: cvmRecorderReducer.State) =>
   state.phase === "recording" || state.phase === "stopping";
 
 const WARMING_UP: FrontendSpeechDetectorState = { type: "warming-up" };
 const SILENCE: FrontendSpeechDetectorState = { type: "silence" };
 
 const heard = (
-  state: newRecorderReducer.State,
-  message: NewRecorderMessage
-): newRecorderReducer.State => {
+  state: cvmRecorderReducer.State,
+  message: CvmRecorderMessage
+): cvmRecorderReducer.State => {
   switch (message.type) {
     case "recorder-status": {
       const recording = message.recordingSessionId !== null;
@@ -236,10 +236,10 @@ const heard = (
   }
 };
 
-export const newRecorderReducer: EffectReducer<
-  newRecorderReducer.State,
-  newRecorderReducer.Action,
-  newRecorderReducer.Effect
+export const cvmRecorderReducer: EffectReducer<
+  cvmRecorderReducer.State,
+  cvmRecorderReducer.Action,
+  cvmRecorderReducer.Effect
 > = (state, action, exec) => {
   switch (action.type) {
     case "recorder-message-heard": {
@@ -295,7 +295,7 @@ export const newRecorderReducer: EffectReducer<
         ...state,
         speech: {
           type: "long-enough-speaking-for-clip-detected",
-          soundDetectionId: `new-recorder-speech-${action.speechCount}`,
+          soundDetectionId: `cvm-recorder-speech-${action.speechCount}`,
         },
       };
     case "press-stop":

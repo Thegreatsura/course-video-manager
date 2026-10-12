@@ -21,7 +21,7 @@ a dead address instead of the hub and OBS — see `../live-desk/live-desk.ts`.
 | Add Chapter        | `GET /api/add-chapter`                | Opens the chapter naming modal                                     |
 | Clear All Archived | `GET /api/clear-all-archived`         | Clears all deleted clips and orphans across all recording sessions |
 
-### New recorder
+### CVM recorder
 
 Passed to the recorder service (`../recorder-service/`), not the hub: the
 service acts on whichever Video the recorder is open for, and the editor

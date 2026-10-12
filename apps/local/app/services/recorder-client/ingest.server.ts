@@ -1,6 +1,6 @@
 import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import type { DatabaseId } from "@cvm/core/db/ids";
-import type { NewRecorderMessage } from "@/features/video-editor/new-recorder-wire";
+import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import { asc, eq, inArray, or } from "drizzle-orm";
 import { clipRecordingSessionRelation } from "@cvm/core/services/clip-recording-session-relation";
 import { Effect } from "effect";
@@ -27,13 +27,13 @@ import type { SequencedEvent } from "./sequencer";
  * or its scene looked up (recorder-service/protocol.ts, TIME BASE).
  */
 
-/** The picture's frame rate: the new recorder records the screen at 60 fps. */
-export const NEW_RECORDER_FPS = 60;
+/** The picture's frame rate: the CVM recorder records the screen at 60 fps. */
+export const CVM_RECORDER_FPS = 60;
 
 export type IngestResult = {
   /** The Video the event is about; null when it means nothing to an editor. */
   videoId: string | null;
-  messages: NewRecorderMessage[];
+  messages: CvmRecorderMessage[];
   /** Where the next Clip of this Video goes, when the event moved it. */
   insertionPoint: InsertionPoint | null;
   /** The Recording Session was refused: nothing of it is saved. */
@@ -193,7 +193,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         videoId,
         footagePath: session.micFilePath,
         insertionPoint,
-        fps: NEW_RECORDER_FPS,
+        fps: CVM_RECORDER_FPS,
         speech: [speech],
         recordingSession: {
           id: recordingSessionId,
@@ -201,7 +201,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         },
       });
       const last = placed.clips.at(-1);
-      const messages: NewRecorderMessage[] = [
+      const messages: CvmRecorderMessage[] = [
         { type: "speech-ended", recordingSessionId },
       ];
       if (last && placed.transcriptionJobId) {

@@ -1,5 +1,5 @@
 /**
- * A Video filmed with the New recorder goes through the same Publish as an OBS
+ * A Video filmed with the CVM recorder goes through the same Publish as an OBS
  * one: the export step reads each Clip's Recording Session through the Clip
  * Source and hands the renderer its composite; addressing, upload and the
  * bundle are unchanged.
@@ -18,11 +18,11 @@ import {
 
 setupPublishServiceTests();
 
-describe("CoursePublishService — a Video of new-recorder Clips", () => {
+describe("CoursePublishService — a Video of CVM-recorder Clips", () => {
   it("renders every Clip as its composite and publishes it", async () => {
     const runs: FakeRenderRun[] = [];
     const { course, video, run } = await setup({
-      newRecorder: true,
+      cvmRecorder: true,
       renderBytes: (r) => {
         runs.push(r);
         return "composite";
