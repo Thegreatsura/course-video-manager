@@ -618,10 +618,11 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       return { ...state, isFocusMode: action.isFocusMode };
     case "recording-status-reported":
       if (action.recording === state.recording) return state;
-      // The window is the recording surface: the sidebar gets out of the way
-      // when a recording starts and comes back when it stops. Between the two,
-      // the author can still toggle it by hand.
+      // The window is the recording surface: the sidebar hides while a take
+      // records, though the author can still toggle it by hand.
       exec({ type: "set-focus-mode", isFocusMode: action.recording });
+      // Centre once as a take starts; the author may pan during it.
+      if (action.recording) exec({ type: "centre-camera-after-layout" });
       return { ...state, recording: action.recording };
 
     case "error-reported":

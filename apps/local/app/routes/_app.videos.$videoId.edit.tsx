@@ -19,6 +19,7 @@ import { useSilenceLength } from "@/features/video-editor/use-silence-length";
 import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
 import { useCvmRecorder } from "@/features/video-editor/use-cvm-recorder";
 import { captureProps } from "@/features/video-editor/recorder-capture";
+import { useDiagramRecordingStatus } from "@/features/video-editor/use-diagram-recording-status";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
@@ -35,10 +36,7 @@ import { makeLoader } from "@/services/route-action.server";
 import { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
 import { useEffectReducer } from "use-effect-reducer";
-import {
-  getActiveDiagramId,
-  pushDiagramRecordingStatus,
-} from "@/lib/diagram-window";
+import { getActiveDiagramId } from "@/lib/diagram-window";
 import { browserFocus, diagramFocus } from "@/lib/focus-tracker";
 import { useBrowserLinkCapture } from "@/features/video-editor/hooks/use-browser-link-capture";
 import type { Route } from "./+types/_app.videos.$videoId.edit";
@@ -381,14 +379,16 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     ),
   });
 
-  // Sync OBS recording state to clip-state-reducer sessions, and to the
-  // diagram playground, which hides its sidebar while recording.
+  const capture = captureProps(recorderChoice, obsConnector, cvmRecorder);
+
+  useDiagramRecordingStatus(capture.isRecordingActive);
+
+  // Sync OBS recording state to clip-state-reducer sessions.
   const prevOBSStateTypeRef = useRef(obsConnector.state.type);
   useEffect(() => {
     const prevType = prevOBSStateTypeRef.current;
     const currType = obsConnector.state.type;
     prevOBSStateTypeRef.current = currType;
-    pushDiagramRecordingStatus(currType === "obs-recording");
 
     if (prevType !== "obs-recording" && currType === "obs-recording") {
       dispatch({
@@ -480,7 +480,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       repoName={props.loaderData.video.lesson?.section.repoVersion.repo.name}
       videoId={props.loaderData.video.id}
       liveMediaStream={obsConnector.mediaStream}
-      {...captureProps(recorderChoice, obsConnector, cvmRecorder)}
+      {...capture}
       silenceLength={silenceLength}
       onSilenceLengthChange={setSilenceLength}
       fsData={props.loaderData.fsData}
