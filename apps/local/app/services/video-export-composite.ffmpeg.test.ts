@@ -143,6 +143,8 @@ const sessionRow = (
     cameraFilePath: path.join(dir, "camera.mkv"),
     micFilePath: path.join(dir, "mic.mkv"),
     micOffsetMs: 150,
+    format: "landscape" as const,
+    screenCaptured: true,
     sceneEvents,
   },
 });

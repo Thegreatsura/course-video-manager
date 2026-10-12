@@ -1,5 +1,6 @@
 import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
+import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -143,6 +144,16 @@ export type RecordingSessionEvent = Logged<
       t0Ms: number;
       silenceLength: SilenceLength;
       files: RecordingSessionFiles;
+      /**
+       * The Video Format it is filmed in. Absent (a service from before
+       * Shorts): Landscape.
+       */
+      format?: VideoFormat;
+      /**
+       * Whether a screen process records `files.screen`: false for a
+       * camera-only Short. Absent: true.
+       */
+      screenCaptured?: boolean;
     }
   /**
    * The scene from here on, in picture file time. Every Recording Session

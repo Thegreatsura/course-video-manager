@@ -1,5 +1,5 @@
 import type { MicEq } from "@cvm/core/features/videos/recorder";
-import type { ClipComposite } from "@/packages/clip-source";
+import { compositeFiles, type ClipComposite } from "@/packages/clip-source";
 import { sceneFilterGraph } from "@/packages/scene-layout";
 import { clipZoomCropFilter } from "@/features/videos/clip-zoom";
 import { BITEXACT_ARGS, LANDSCAPE_VIDEO_ENCODE_ARGS } from "./ffmpeg-error";
@@ -164,21 +164,20 @@ export const clipSegmentArgs = (
     ...micEqFilters(composite.eq),
     audioTail(duration),
   ];
+  // Landscape opens screen then camera; a Short only what its segments draw.
+  const pictures = compositeFiles(composite, segments);
+  const micInput = pictures.length;
   return [
     "-y",
     "-hide_banner",
-    "-ss",
-    String(start),
-    "-t",
-    pictureRead,
-    "-i",
-    composite.screen,
-    "-ss",
-    String(start),
-    "-t",
-    pictureRead,
-    "-i",
-    composite.camera,
+    ...pictures.flatMap(({ file }) => [
+      "-ss",
+      String(start),
+      "-t",
+      pictureRead,
+      "-i",
+      file,
+    ]),
     "-ss",
     String(Math.max(0, micStart)),
     "-t",
@@ -189,12 +188,15 @@ export const clipSegmentArgs = (
     [
       sceneFilterGraph({
         segments,
-        inputs: { screen: "0:v", camera: "1:v" },
+        inputs: Object.fromEntries(
+          pictures.map(({ source }, i) => [source, `${i}:v`])
+        ),
         inputStartSeconds: start,
         output: "composite",
+        format: composite.format,
       }),
       `[composite]${frameFilter(clip.zoomType, dims)}[outv]`,
-      `[2:a]${audioFilters.join(",")}[outa]`,
+      `[${micInput}:a]${audioFilters.join(",")}[outa]`,
     ].join(";"),
     ...encode,
   ];

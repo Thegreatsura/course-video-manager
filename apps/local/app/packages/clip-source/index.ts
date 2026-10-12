@@ -10,9 +10,12 @@
 // and end time (an OBS Clip), or a Recording Session's camera, screen and mic
 // files with the scene segments the layout module draws and the mic offset (a
 // CVM-recorder Clip, when the row is loaded with its `recordingSession`).
-// `clipComposite` says what the export draws for a CVM-recorder Clip.
+// `clipComposite` says what the export draws for a CVM-recorder Clip, drawn
+// in its Recording Session's Video Format; `compositeFiles` says which files a
+// run of its segments opens (a Short opens only what it draws).
 export {
   clipComposite,
+  compositeFiles,
   clipCompositePicture,
   clipFfmpegInput,
   clipFrame,

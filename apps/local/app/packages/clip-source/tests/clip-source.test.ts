@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { LAYOUT_VERSION } from "@/packages/scene-layout";
+import { LAYOUT_VERSION, LAYOUT_VERSIONS } from "@/packages/scene-layout";
 import {
   clipComposite,
+  clipFrameFfmpegArgs,
   clipCompositePicture,
   clipFfmpegInput,
   clipFrame,
@@ -102,6 +103,8 @@ const cvmRecorderClip = {
     screenFilePath: `${SESSION_DIR}/screen.mkv`,
     micFilePath: `${SESSION_DIR}/mic.mkv`,
     micOffsetMs: 150,
+    format: "landscape" as const,
+    screenCaptured: true,
     sceneEvents: [
       { fileTime: 0, scene: "Code" as const },
       { fileTime: 12, scene: "Camera" as const },
@@ -117,6 +120,7 @@ describe("a CVM-recorder Clip's source", () => {
     expect(source).toEqual({
       kind: "recording-session",
       recordingSessionId: "session-1",
+      format: "landscape",
       files: {
         camera: `${SESSION_DIR}/camera.mkv`,
         screen: `${SESSION_DIR}/screen.mkv`,
@@ -142,6 +146,7 @@ describe("a CVM-recorder Clip's source", () => {
 
   it("is exported as the composite of its Session's files, mic EQ applied", () => {
     expect(clipComposite(source)).toEqual({
+      format: "landscape",
       start: 10,
       screen: `${SESSION_DIR}/screen.mkv`,
       camera: `${SESSION_DIR}/camera.mkv`,
@@ -232,6 +237,7 @@ describe("a CVM-recorder Clip's source", () => {
 
   it("draws its picture from its camera and screen, in the picture's clock", () => {
     expect(clipCompositePicture(source, { from: 10, to: 14 })).toEqual({
+      format: "landscape",
       camera: `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/camera.mkv`)}#t=10,14`,
       screen: `/view-video?videoPath=${encodeURIComponent(`${SESSION_DIR}/screen.mkv`)}#t=10,14`,
       segments: source.kind === "recording-session" ? source.segments : [],
@@ -240,6 +246,7 @@ describe("a CVM-recorder Clip's source", () => {
 
   it("takes composited stills in the scene drawn at that moment", () => {
     const files = {
+      format: "landscape",
       screen: `${SESSION_DIR}/screen.mkv`,
       camera: `${SESSION_DIR}/camera.mkv`,
     };
@@ -259,6 +266,85 @@ describe("a CVM-recorder Clip's source", () => {
       scene: "Code",
       time: 11.5,
     });
+  });
+});
+
+const shortClip = {
+  ...cvmRecorderClip,
+  recordingSession: {
+    ...cvmRecorderClip.recordingSession,
+    format: "short" as const,
+  },
+};
+
+const cameraOnlyShortClip = {
+  ...shortClip,
+  recordingSession: {
+    ...shortClip.recordingSession,
+    screenCaptured: false,
+    sceneEvents: [{ fileTime: 0, scene: "Camera" as const }],
+  },
+};
+
+describe("a CVM-recorder Short Clip's source", () => {
+  it("adds its format after the Short layout's version to the Export Hash", () => {
+    expect(JSON.stringify(clipSourceHashFields(clipSource(shortClip)))).toBe(
+      JSON.stringify({
+        f: `${SESSION_DIR}/mic.mkv`,
+        s: 10,
+        e: 14,
+        rs: "session-1",
+        sg: [
+          ["Code", 10, 12],
+          ["Camera", 12, 14],
+        ],
+        mo: 150,
+        eq: [0, 0, -6.1],
+        lv: LAYOUT_VERSIONS.short,
+        vf: "short",
+      })
+    );
+  });
+
+  it("is composited in the Short layout", () => {
+    expect(clipComposite(clipSource(shortClip))?.format).toBe("short");
+    expect(clipFrame(clipSource(shortClip), "first")).toMatchObject({
+      kind: "composite",
+      format: "short",
+      scene: "Code",
+    });
+  });
+
+  it("never opens a screen that a camera-only session did not capture", () => {
+    const source = clipSource(cameraOnlyShortClip);
+    expect(clipComposite(source)?.screen).toBeNull();
+    expect(clipCompositePicture(source, { from: 10, to: 14 })).toMatchObject({
+      format: "short",
+      screen: null,
+    });
+    const args = clipFrameFfmpegArgs(clipFrame(source, "first"), {
+      seek: "10",
+    });
+    expect(args.filter((a) => a === "-i")).toHaveLength(1);
+    expect(args).toContain(`${SESSION_DIR}/camera.mkv`);
+    expect(args).not.toContain(`${SESSION_DIR}/screen.mkv`);
+  });
+
+  it("leaves the screen out of a Camera-only Short picture it captured", () => {
+    const source = clipSource({ ...shortClip, sceneOverride: "Camera" });
+    expect(
+      clipCompositePicture(source, { from: 10, to: 14 })?.screen
+    ).toBeNull();
+  });
+
+  it("refuses to draw a screen scene on a camera-only session", () => {
+    const source = clipSource({
+      ...cameraOnlyShortClip,
+      sceneOverride: "Code",
+    });
+    expect(() =>
+      clipFrameFfmpegArgs(clipFrame(source, "first"), { seek: "10" })
+    ).toThrow(/captured no screen/);
   });
 });
 

@@ -19,6 +19,8 @@ export const clipRecordingSessionRelation = {
     screenFilePath: true,
     micFilePath: true,
     micOffsetMs: true,
+    format: true,
+    screenCaptured: true,
   },
   with: {
     // The saved mic EQ (null until first saved: DEFAULT_MIC_EQ). It is part

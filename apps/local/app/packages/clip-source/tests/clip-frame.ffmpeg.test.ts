@@ -71,6 +71,8 @@ describe.skipIf(!hasFfmpeg)("a CVM-recorder Clip's stills in ffmpeg", () => {
       screenFilePath: screen,
       micFilePath: path.join(dir, "mic.mkv"),
       micOffsetMs: 150,
+      format: "landscape" as const,
+      screenCaptured: true,
       sceneEvents: [{ fileTime: 1, scene: "Camera" }],
     },
   });

@@ -71,6 +71,7 @@ const overrides = (ctx: {
   // shares rather than copies.
   "recording_session.status": () => "stopped",
   "recording_session.silenceLength": () => "long",
+  "recording_session.format": () => "short",
   "recording_session_scene_event.scene": () => "Code",
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
