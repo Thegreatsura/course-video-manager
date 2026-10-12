@@ -8,6 +8,18 @@ import {
   newRecorderReducer,
 } from "./new-recorder-reducer";
 import type { NewRecorderMessage } from "./new-recorder-wire";
+import { getRecorderCapture, toCaptureStatus } from "./recorder-capture";
+
+/** What the teleprompter's capture indicator would show for this state. */
+const captureOf = (state: newRecorderReducer.State) =>
+  toCaptureStatus(
+    getRecorderCapture({
+      usesObs: false,
+      obsState: { type: "obs-not-running" },
+      obsSpeech: { type: "warming-up" },
+      newRecorder: state,
+    })
+  );
 
 const heard = (message: NewRecorderMessage) =>
   ({ type: "recorder-message-heard", message }) as const;
@@ -97,12 +109,16 @@ describe("the New recorder's Record and Stop", () => {
         })
       )
       .send(heard({ type: "speech-started", recordingSessionId: "s1" }));
-    expect(t.getState()).toMatchObject({ phase: "recording", speaking: true });
+    expect(t.getState()).toMatchObject({
+      phase: "recording",
+      speech: { type: "speaking-detected" },
+    });
 
     t.send({ type: "press-stop" }).send(heard(stoppedMessage()));
-    expect(t.getState()).toMatchObject({ phase: "idle", speaking: false });
+    expect(t.getState()).toMatchObject({ phase: "idle" });
     expect(t.getEffects().map((e) => e.type)).toEqual([
       "start-recording",
+      "time-speech",
       "stop-recording",
     ]);
   });
@@ -139,7 +155,8 @@ describe("the New recorder's Record and Stop", () => {
           errors: ["I/O error"],
         })
       );
-    expect(t.getState()).toMatchObject({ phase: "idle", speaking: false });
+    expect(t.getState()).toMatchObject({ phase: "idle" });
+    expect(captureOf(t.getState())).toBe("not-recording");
     expect(t.getState().alert).toContain("Cam Link");
     expect(t.getState().alert).toContain("replug");
     // Record waits for the recorder to have the Cam Link live again.
@@ -330,5 +347,96 @@ describe("the Stream Deck on the New recorder", () => {
       { type: "send-silence-length", silenceLength: "short" },
       { type: "send-silence-length", silenceLength: "short" },
     ]);
+  });
+});
+
+describe("silence detection on the New recorder, as the glass shows it", () => {
+  const speechStarted = heard({
+    type: "speech-started",
+    recordingSessionId: "s1",
+  });
+  const speechEnded = heard({ type: "speech-ended", recordingSessionId: "s1" });
+  const warmedUp = heard({ type: "warmed-up", recordingSessionId: "s1" });
+
+  it("walks the OBS path's states: warming up, silence, speaking, long enough for a Clip, silence", () => {
+    const t = tester().send(status()).send(live);
+    expect(captureOf(t.getState())).toBe("not-recording");
+
+    t.send(pressRecord);
+    // Starting is not recording yet, as OBS is not until it says so.
+    expect(captureOf(t.getState())).toBe("not-recording");
+
+    t.send(
+      heard({
+        type: "recording-started",
+        recordingSessionId: "s1",
+        silenceLength: "long",
+        micFile: "mic.mkv",
+      })
+    );
+    expect(captureOf(t.getState())).toBe("warming-up");
+
+    t.send(warmedUp);
+    expect(captureOf(t.getState())).toBe("silence");
+
+    t.send(speechStarted);
+    expect(captureOf(t.getState())).toBe("speaking-detected");
+    expect(t.getEffects().at(-1)).toEqual({
+      type: "time-speech",
+      speechCount: 1,
+    });
+
+    t.send({ type: "speech-long-enough", speechCount: 1 });
+    expect(captureOf(t.getState())).toBe(
+      "long-enough-speaking-for-clip-detected"
+    );
+
+    t.send(speechEnded);
+    expect(captureOf(t.getState())).toBe("silence");
+
+    t.send({ type: "press-stop" });
+    // Still recording until the recorder has stopped, as OBS is.
+    expect(captureOf(t.getState())).toBe("silence");
+    t.send(heard(stoppedMessage()));
+    expect(captureOf(t.getState())).toBe("not-recording");
+  });
+
+  it("never turns long enough for a speech that ended, or for an earlier speech's timer", () => {
+    const t = recording()
+      .send(warmedUp)
+      .send(speechStarted)
+      .send(speechEnded)
+      .send({ type: "speech-long-enough", speechCount: 1 });
+    expect(captureOf(t.getState())).toBe("silence");
+
+    t.send(speechStarted).send({ type: "speech-long-enough", speechCount: 1 });
+    expect(captureOf(t.getState())).toBe("speaking-detected");
+    t.send({ type: "speech-long-enough", speechCount: 2 });
+    expect(captureOf(t.getState())).toBe(
+      "long-enough-speaking-for-clip-detected"
+    );
+  });
+
+  it("warms up again on the next Record", () => {
+    const t = recording()
+      .send(warmedUp)
+      .send(heard(stoppedMessage()))
+      .send(pressRecord)
+      .send(
+        heard({
+          type: "recording-started",
+          recordingSessionId: "s2",
+          silenceLength: "long",
+          micFile: "mic2.mkv",
+        })
+      );
+    expect(captureOf(t.getState())).toBe("warming-up");
+  });
+
+  it("joins a take already recording as warming up, and keeps what it hears on later status", () => {
+    const t = tester().send(status({ recordingSessionId: "s1" }));
+    expect(captureOf(t.getState())).toBe("warming-up");
+    t.send(warmedUp).send(status({ recordingSessionId: "s1" }));
+    expect(captureOf(t.getState())).toBe("silence");
   });
 });

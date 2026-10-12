@@ -151,6 +151,11 @@ export type RecordingSessionEvent = Logged<
   | { type: "scene-changed"; scene: Scene; fileTime: number }
   /** The screen recorder's 1 ms timer, no-throttling and High priority. */
   | { type: "screen-recorder-tuned"; ok: boolean; detail: string }
+  /**
+   * The mic's first silence as long as the Silence Length, before any
+   * speech: the take is ready for speech (speech-detector.ts).
+   */
+  | { type: "warmed-up"; fileTime: number }
   /** Speech in the mic file, in seconds of file time. */
   | { type: "speech-started"; fileTime: number }
   | { type: "speech-ended"; fileTime: number }
