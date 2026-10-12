@@ -77,6 +77,16 @@ async function seed() {
     },
     {
       videoId,
+      // Not in normal form: stripping the root would not give what the
+      // Export Hash (which normalizes) uses, so it is left as stored.
+      videoFilename: "/mnt/d/raw-footage//doubled.mp4",
+      sourceStartTime: 0,
+      sourceEndTime: 1,
+      order: "a5",
+      text: "",
+    },
+    {
+      videoId,
       videoFilename: "raw-footage/already.mp4",
       sourceStartTime: 0,
       sourceEndTime: 1,
@@ -129,6 +139,7 @@ describe("migrateStoragePaths", () => {
       "/home/matt/Videos/s1/mic.mkv",
       "/mnt/dd/raw-footage/c.mp4",
     ]);
+    expect(clip.notNormalized).toBe(1);
     expect(clip.alreadyRelative).toBe(1);
   });
 
@@ -139,6 +150,7 @@ describe("migrateStoragePaths", () => {
 
     expect(await clipPaths()).toEqual([
       "/home/matt/Videos/s1/mic.mkv",
+      "/mnt/d/raw-footage//doubled.mp4",
       "/mnt/dd/raw-footage/c.mp4",
       "raw-footage/a.mp4",
       "raw-footage/already.mp4",

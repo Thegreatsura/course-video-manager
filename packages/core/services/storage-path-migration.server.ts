@@ -1,4 +1,4 @@
-import { and, count, not, sql, type SQL } from "drizzle-orm";
+import { and, count, not, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import {
   avCalibrations,
@@ -91,6 +91,8 @@ export type ColumnMigrationReport = {
   readonly unmappable: number;
   /** Up to ten of them, distinct, for the operator to read. */
   readonly unmappableSamples: readonly string[];
+  /** Under a root but not in normal form (`//`, `.`, `..`): left as stored. */
+  readonly notNormalized: number;
   /** Rows already relative (a previous run, or written after the switch). */
   readonly alreadyRelative: number;
 };
@@ -104,6 +106,18 @@ export type StoragePathMigrationReport = {
 
 const underRootPredicate = (column: PgColumn, root: string): SQL =>
   sql`starts_with(${column}, ${`${root}/`})`;
+
+/**
+ * Already in normal form (no `//`, `.` or `..` segment, no trailing slash), so
+ * stripping the root gives exactly what `toRootRelative` (which normalizes)
+ * gives for the absolute path. Only such a path is rewritten; any other is
+ * left as stored and reported, and keeps reading and hashing as it does now.
+ */
+const isNormalized = (column: PgColumn): SQL =>
+  sql`(position('//' in ${column}) = 0 AND position('/./' in ${column}) = 0 AND position('/../' in ${column}) = 0 AND right(${column}, 1) <> '/' AND right(${column}, 2) <> '/.' AND right(${column}, 3) <> '/..')`;
+
+const rewritable = (column: PgColumn, root: string): SQL =>
+  sql`(${underRootPredicate(column, root)} AND ${isNormalized(column)})`;
 
 const isAbsolute = (column: PgColumn): SQL => sql`starts_with(${column}, '/')`;
 
@@ -121,7 +135,7 @@ const reportColumn = async (
   for (const root of roots) {
     underRoot.push({
       root,
-      rows: await countWhere(db, table, underRootPredicate(column, root)),
+      rows: await countWhere(db, table, rewritable(column, root)),
     });
   }
 
@@ -136,6 +150,11 @@ const reportColumn = async (
     .where(notUnderAnyRoot)
     .orderBy(sql`${column}`)
     .limit(10);
+  const notNormalized = await countWhere(
+    db,
+    table,
+    sql`(${or(...roots.map((root) => underRootPredicate(column, root)))}) AND NOT ${isNormalized(column)}`
+  );
   const alreadyRelative = await countWhere(
     db,
     table,
@@ -147,6 +166,7 @@ const reportColumn = async (
     underRoot,
     unmappable,
     unmappableSamples: samples.map((s) => s.path),
+    notNormalized,
     alreadyRelative,
   };
 };
@@ -187,7 +207,7 @@ export const migrateStoragePaths = async (
         for (const root of roots) {
           // `substr` is 1-based: skip `<root>/`.
           await tx.execute(
-            sql`UPDATE ${table} SET ${sql.identifier(column.name)} = substr(${column}, ${root.length + 2}) WHERE ${underRootPredicate(column, root)}`
+            sql`UPDATE ${table} SET ${sql.identifier(column.name)} = substr(${column}, ${root.length + 2}) WHERE ${rewritable(column, root)}`
           );
         }
       }

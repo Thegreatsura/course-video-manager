@@ -36,7 +36,7 @@ const report = await migrateStoragePaths(db as Database, { roots, apply });
 const print = (c: (typeof report.columns)[number]) => {
   const under = c.underRoot.map((r) => `${r.root}: ${r.rows}`).join(", ");
   console.log(
-    `  ${c.column}: under a root ${under}; already relative ${c.alreadyRelative}; not under any root ${c.unmappable}`
+    `  ${c.column}: under a root ${under}; already relative ${c.alreadyRelative}; not under any root ${c.unmappable}; not normalized (left as stored) ${c.notNormalized}`
   );
   for (const sample of c.unmappableSamples) console.log(`      e.g. ${sample}`);
 };
