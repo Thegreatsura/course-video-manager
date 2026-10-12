@@ -115,10 +115,16 @@ export type Screen = {
   index: number;
   width: number;
   height: number;
+  /** The monitor's EDID name; "?" when it has none (Spacedesk's). */
   name: string;
+  /** Its display adapter's name ("spacedesk Graphics Adapter"); "" when not listed. */
+  adapter: string;
 };
 
-/** ddagrab's outputs in its output_idx order, each with its monitor's EDID name. */
+/**
+ * ddagrab's outputs in its output_idx order, each with its monitor's EDID name
+ * and its display adapter's name. Reads the older 7-column listing too.
+ */
 export const listScreens = async (launch: Launcher): Promise<Screen[]> => {
   const { stdout } = await runToEnd(
     launch({ tool: "powershell", script: "screens.ps1", args: [] })
@@ -128,12 +134,13 @@ export const listScreens = async (launch: Launcher): Promise<Screen[]> => {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [index, , , width, height, , name] = line.split("\t");
+      const [index, , , width, height, , name, adapter] = line.split("\t");
       return {
         index: Number(index),
         width: Number(width),
         height: Number(height),
         name: name ?? "?",
+        adapter: adapter ?? "",
       };
     });
 };

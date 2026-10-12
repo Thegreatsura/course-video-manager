@@ -4,10 +4,12 @@
 # ddagrab's output_idx counts the outputs of the first adapter (D3D11's default
 # device), so this walks IDXGIFactory1 -> adapter 0 -> EnumOutputs(i) in the same
 # order. Each output's \\.\DISPLAYn is matched to its monitor (EDID name from
-# WmiMonitorID) through EnumDisplayDevices' device-interface path.
+# WmiMonitorID) through EnumDisplayDevices' device-interface path, and to its
+# display adapter's name (EnumDisplayDevices(NULL, i).DeviceString), which is how
+# the Spacedesk display is found: its monitor has no EDID name.
 #
-# One tab-separated line per output: idx, x, y, width, height, \\.\DISPLAYn, name
-# (x/y/width/height are physical desktop pixels).
+# One tab-separated line per output: idx, x, y, width, height, \\.\DISPLAYn, name,
+# adapter (x/y/width/height are physical desktop pixels; name is ? without EDID).
 
 Add-Type -TypeDefinition @"
 using System;
@@ -56,6 +58,17 @@ public static class RigScreens {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)]
   static extern bool EnumDisplayDevices(string device, uint i, ref DISPLAY_DEVICE dd, uint flags);
 
+  // The display adapter driving \\.\DISPLAYn. A null device (NULL in C#; from
+  // PowerShell it would have to be [NullString]::Value, as $null enumerates
+  // nothing) walks the adapters themselves.
+  static string AdapterOf(string deviceName) {
+    for (uint j = 0; ; j++) {
+      var ad = new DISPLAY_DEVICE(); ad.cb = Marshal.SizeOf(ad);
+      if (!EnumDisplayDevices(null, j, ref ad, 0)) return "";
+      if (ad.DeviceName == deviceName) return ad.DeviceString;
+    }
+  }
+
   public static string[] List() {
     var result = new System.Collections.Generic.List<string>();
     Guid iid = typeof(IDXGIFactory1).GUID;
@@ -72,7 +85,7 @@ public static class RigScreens {
       // EDD_GET_DEVICE_INTERFACE_NAME (1): DeviceID becomes \\?\DISPLAY#DELA233#5&...#{guid}
       var dd = new DISPLAY_DEVICE(); dd.cb = Marshal.SizeOf(dd);
       string id = EnumDisplayDevices(d.DeviceName, 0, ref dd, 1) ? dd.DeviceID : "";
-      result.Add(i + "\t" + r.Left + "\t" + r.Top + "\t" + (r.Right - r.Left) + "\t" + (r.Bottom - r.Top) + "\t" + d.DeviceName + "\t" + id);
+      result.Add(i + "\t" + r.Left + "\t" + r.Top + "\t" + (r.Right - r.Left) + "\t" + (r.Bottom - r.Top) + "\t" + d.DeviceName + "\t" + id + "\t" + AdapterOf(d.DeviceName));
     }
     return result.ToArray();
   }
@@ -90,5 +103,5 @@ foreach ($line in [RigScreens]::List()) {
   $key = ''
   if ($p[6] -match '^\\\\\?\\(.+)#\{') { $key = ($Matches[1] -replace '#', '\').ToUpperInvariant() }
   $name = if ($names.ContainsKey($key)) { $names[$key] } else { '?' }
-  [Console]::Out.WriteLine(($p[0..5] -join "`t") + "`t" + $name)
+  [Console]::Out.WriteLine(($p[0..5] -join "`t") + "`t" + $name + "`t" + $p[7])
 }
