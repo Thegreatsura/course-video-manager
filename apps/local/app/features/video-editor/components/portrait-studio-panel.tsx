@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LiveMediaStream } from "./live-media-stream";
+import { LivePreviewFrame } from "./live-preview-frame";
+import { CvmRecorderControls } from "./cvm-recorder-controls";
+import { RecorderPicker } from "./recorder-picker";
+import { showsCvmRecorderControls } from "../recorder-choice-reducer";
+import { getHasLivePreview } from "../live-preview";
 import { SilenceLengthToggle } from "./silence-length-toggle";
 import { RecordingSignalIndicator } from "./timeline-indicators";
 import { ActionsDropdown } from "./actions-dropdown";
@@ -112,6 +117,17 @@ export const PortraitStudioPanel = () => {
     (ctx) => ctx.allClipsHaveSilenceDetected
   );
   const videoId = useContextSelector(VideoEditorContext, (ctx) => ctx.videoId);
+  const cvmRecorderState = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.cvmRecorder.state
+  );
+  const recorder = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.recorderPicker.recorder
+  );
+  // A Short on the CVM recorder: its 9:16 composite and controls, not OBS's.
+  const usesCvmRecorder = showsCvmRecorderControls({ recorder });
+  const hasLivePreview = getHasLivePreview(liveMediaStream, cvmRecorderState);
 
   const [isPostingModalOpen, setIsPostingModalOpen] = useState(false);
   const [postingMode, setPostingMode] = useState<ShortsPostingMode>("both");
@@ -144,11 +160,13 @@ export const PortraitStudioPanel = () => {
     <div className="lg:flex-1 relative order-1 lg:order-2 h-full min-h-0 flex flex-col">
       {/* 9:16 height-driven preview */}
       <div className="flex-1 min-h-0 flex items-center justify-center relative">
-        {!liveMediaStream && clips.length === 0 ? (
+        {!hasLivePreview && clips.length === 0 ? (
           <div className="h-full aspect-[9/16] bg-card rounded-lg flex flex-col items-center justify-center gap-3">
             <VideoOffIcon className="size-10 text-muted-foreground" />
             <p className="text-muted-foreground text-sm text-center px-4">
-              No video stream or clips yet. Connect OBS to start recording.
+              {usesCvmRecorder
+                ? "No clips yet. This Short records with the CVM recorder."
+                : "No video stream or clips yet. Connect OBS to start recording."}
             </p>
           </div>
         ) : (
@@ -174,6 +192,7 @@ export const PortraitStudioPanel = () => {
                 )}
               </div>
             )}
+            {usesCvmRecorder && <LivePreviewFrame />}
             <div
               className={cn(
                 "flex-1 min-h-0 aspect-[9/16]",
@@ -227,6 +246,12 @@ export const PortraitStudioPanel = () => {
         )}
       </div>
 
+      {usesCvmRecorder && (
+        <div className="shrink-0">
+          <CvmRecorderControls />
+        </div>
+      )}
+
       {/* Compact actions bar */}
       <div className="flex items-center justify-between mt-1 shrink-0">
         <span className="text-xs text-muted-foreground truncate">
@@ -234,7 +259,8 @@ export const PortraitStudioPanel = () => {
           {" · " + formatDuration(totalDuration)}
         </span>
         <MissingWordTimingBadge />
-        <div className="flex gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          <RecorderPicker />
           <ActionsDropdown
             videoId={videoId}
             groups={menuGroups}
