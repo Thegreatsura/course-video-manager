@@ -135,8 +135,15 @@ describe.skipIf(!hasFfmpeg)("rendering a Short Code segment in ffmpeg", () => {
   beforeAll(() => {
     fs.mkdirSync(dir, { recursive: true });
     const h264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p"];
-    // A portrait screen (the Spacedesk display) and a 16:9 camera.
-    lavfi(path.join(dir, "screen.mkv"), "color=c=red:s=180x320:r=60:d=2", h264);
+    // The Spacedesk display as it is, 1920x1080: its left 1080x1080 square
+    // red with a white 100 px marker at (900,100), the strip right of it blue.
+    lavfi(
+      path.join(dir, "screen.mkv"),
+      "color=c=blue:s=1920x1080:r=60:d=2," +
+        "drawbox=x=0:y=0:w=1080:h=1080:color=red:t=fill," +
+        "drawbox=x=900:y=100:w=100:h=100:color=white:t=fill",
+      h264
+    );
     lavfi(
       path.join(dir, "camera.mkv"),
       "color=c=lime:s=384x216:r=30000/1001:d=2",
@@ -161,7 +168,7 @@ describe.skipIf(!hasFfmpeg)("rendering a Short Code segment in ffmpeg", () => {
 
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  it("is 1080x1920, the screen on top and the camera band below y=1080", () => {
+  it("is 1080x1920: the screen's left square 1:1 at 0..1080, the camera band below", () => {
     const video = JSON.parse(
       execFileSync(
         "ffprobe",
@@ -179,8 +186,26 @@ describe.skipIf(!hasFfmpeg)("rendering a Short Code segment in ffmpeg", () => {
       )
     ).streams[0];
     expect(video).toMatchObject({ width: 1080, height: 1920 });
-    expect(near(pixel(out, 540, 500), [255, 0, 0])).toBe(true);
+    const RED = [255, 0, 0];
+    const WHITE = [255, 255, 255];
+    // The square fills 0..1080 on both axes, and none of the blue strip shows.
+    for (const [x, y] of [
+      [4, 4],
+      [540, 500],
+      [1076, 500],
+      [1076, 1074],
+      [4, 1074],
+    ])
+      expect(near(pixel(out, x!, y!), RED)).toBe(true);
+    // The marker is where it was, at its size: drawn 1:1, not stretched.
+    expect(near(pixel(out, 950, 150), WHITE)).toBe(true);
+    for (const [x, y] of [
+      [890, 150],
+      [1010, 150],
+      [950, 90],
+      [950, 210],
+    ])
+      expect(near(pixel(out, x!, y!), RED)).toBe(true);
     expect(near(pixel(out, 540, 1500), [0, 255, 0])).toBe(true);
-    expect(near(pixel(out, 540, 1060), [255, 0, 0])).toBe(true);
   });
 });

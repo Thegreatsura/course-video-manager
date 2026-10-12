@@ -6,7 +6,9 @@
 //
 // Short: copied from OBS's TikTok Face / TikTok Code / TikTok Code No Face
 // (profile TikTok, canvas 1080x1920), as the visible part of each item (PRD
-// #2052, "Layout module").
+// #2052, "Layout module"). The screen is the Spacedesk display, 1920x1080
+// landscape like every other screen: OBS draws it 1:1 at (0,0), so a Short
+// shows its left 1080x1080 square and the rest falls off the canvas.
 //
 // - `crop` is a fraction of the source frame, so one definition holds for the
 //   4K camera, the 2560x1440 screen recording and the low-res previews alike.
@@ -89,7 +91,9 @@ const LANDSCAPE = {
 } as const satisfies Layout;
 
 const SHORT = {
-  version: 1,
+  // 2: the screen is the Spacedesk display's left 1080x1080 square, 1:1, not
+  // the whole frame stretched to 1080x1920.
+  version: 2,
   canvas: { width: 1080, height: 1920 },
   scenes: {
     // TikTok Face: the 4K camera at scale 0.891 (3423x1925) at x=-1157, y=0.
@@ -101,13 +105,14 @@ const SHORT = {
         dest: { x: 0, y: 0, w: 1080, h: 1920 },
       },
     ],
-    // TikTok Code: the screen full-frame; the camera, cropped 92 px off the
-    // top and scaled by 0.498 (1913x1030) at x=-393, y=1080, below it.
+    // TikTok Code: the 1920x1080 screen at scale 1 at (0,0), so its left
+    // 1080x1080 square fills the top of the canvas; the camera, cropped 92 px
+    // off the top and scaled by 0.498 (1913x1030) at x=-393, y=1080, below it.
     Code: [
       {
         source: "screen",
-        crop: { x: 0, y: 0, w: 1, h: 1 },
-        dest: { x: 0, y: 0, w: 1080, h: 1920 },
+        crop: { x: 0, y: 0, w: 0.5625, h: 1 },
+        dest: { x: 0, y: 0, w: 1080, h: 1080 },
       },
       {
         source: "camera",
@@ -115,12 +120,13 @@ const SHORT = {
         dest: { x: 0, y: 1080, w: 1080, h: 840 },
       },
     ],
-    // TikTok Code No Face: the camera is hidden in OBS, so it is left out.
+    // TikTok Code No Face: the same square; the camera is hidden in OBS, so it
+    // is left out and the band below stays black.
     "No Face": [
       {
         source: "screen",
-        crop: { x: 0, y: 0, w: 1, h: 1 },
-        dest: { x: 0, y: 0, w: 1080, h: 1920 },
+        crop: { x: 0, y: 0, w: 0.5625, h: 1 },
+        dest: { x: 0, y: 0, w: 1080, h: 1080 },
       },
     ],
   },
