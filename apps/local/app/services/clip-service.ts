@@ -348,8 +348,9 @@ export interface ClipService {
   getTimeline(videoId: string): Promise<TimelineItem[]>;
 
   /**
-   * How much Footage was filmed today, in the last 7 and in the last 30
-   * calendar days (in `timeZone`, ending at `now`) — see getFootageStats in
+   * How much Footage was filmed today and in the last 7 calendar days, and
+   * the personal-best day of the last 365 (in `timeZone`, ending at `now`) —
+   * see getFootageStats in
    * @cvm/core/services/db-footage-stats.server.
    */
   getFootageStats(input: {
