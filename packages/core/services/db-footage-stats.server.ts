@@ -20,6 +20,13 @@ export interface FootageStats {
   readonly todaySeconds: number;
   readonly last7DaysSeconds: number;
   readonly last30DaysSeconds: number;
+  /**
+   * Today's efficiency, by Clip rather than by duration: how many of the
+   * Clips filmed today are still live (`todayKeptClips`) out of all of them,
+   * archived ones included (`todayClips`). No Clips today means no ratio.
+   */
+  readonly todayClips: number;
+  readonly todayKeptClips: number;
 }
 
 /**
@@ -31,7 +38,7 @@ const EFFECT_CLIP_SCENE = "white noise";
 
 /**
  * One aggregate over the Clips filmed in the last 30 days: nothing but three
- * sums leaves the database.
+ * sums and two counts leaves the database.
  *
  * - **When** a Clip was filmed is the earlier of its `created_at` and its
  *   `transcribed_at`. Every copy of a Clip (a Submit's new Draft, a
@@ -44,6 +51,8 @@ const EFFECT_CLIP_SCENE = "white noise";
  *   Version holds frozen copies) — each counted for `source_end_time -
  *   source_start_time`. The same stretch of Footage on two live Videos (a
  *   duplicated Course) counts once, dated by its earliest copy.
+ * - **Efficiency** (today only): the same Clips, archived ones now included,
+ *   each counted once as above. A Clip is kept when any copy of it is live.
  *
  * Day boundaries are local midnights in `timeZone` (an IANA name), so a day
  * that changes the clocks is still one calendar day.
@@ -51,7 +60,8 @@ const EFFECT_CLIP_SCENE = "white noise";
  * Every page load runs this (the sidebar is on every page), so it reads
  * through `clip_filmed_at_idx`, an index on exactly the `least(...)`
  * expression below: about 6 ms on production-sized data (138k Clips), where
- * a scan of every Clip took 70 ms. The 30-day bound is written inline, not
+ * a scan of every Clip took 70 ms. The index covers archived Clips too (it
+ * has no `WHERE`), so reading them for the efficiency costs no new index. The 30-day bound is written inline, not
  * read from a CTE: behind a CTE the planner guessed a third of the table and
  * went parallel.
  */
@@ -69,9 +79,13 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
         today: number | string | null;
         last_7_days: number | string | null;
         last_30_days: number | string | null;
+        today_clips: number | string | null;
+        today_kept_clips: number | string | null;
       }>(sql`
         WITH segments AS (
-          SELECT min(${filmedAt}) AS filmed_at,
+          SELECT min(${filmedAt}) FILTER (WHERE ${clips.archived} = false) AS filmed_at,
+                 min(${filmedAt}) AS any_filmed_at,
+                 bool_or(${clips.archived} = false) AS kept,
                  greatest(${clips.sourceEndTime} - ${clips.sourceStartTime}, 0) AS seconds
           FROM ${clips}
           JOIN ${videos} ON ${videos.id} = ${clips.videoId}
@@ -79,7 +93,6 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
           LEFT JOIN ${sections} ON ${sections.id} = ${lessons.sectionId}
           LEFT JOIN ${courseVersions} ON ${courseVersions.id} = ${sections.repoVersionId}
           WHERE ${filmedAt} >= (${localMidnight} - interval '29 days') AT TIME ZONE ${tz}
-            AND ${clips.archived} = false
             AND ${clips.scene} IS DISTINCT FROM ${EFFECT_CLIP_SCENE}
             AND (${videos.lessonId} IS NULL OR ${courseVersions.commitState} = 'draft')
           GROUP BY ${clips.videoFilename}, ${clips.sourceStartTime}, ${clips.sourceEndTime}
@@ -91,7 +104,13 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
           sum(seconds) FILTER (
             WHERE filmed_at >= (${localMidnight} - interval '6 days') AT TIME ZONE ${tz}
           ) AS last_7_days,
-          sum(seconds) AS last_30_days
+          sum(seconds) FILTER (WHERE filmed_at IS NOT NULL) AS last_30_days,
+          count(*) FILTER (
+            WHERE any_filmed_at >= ${localMidnight} AT TIME ZONE ${tz}
+          ) AS today_clips,
+          count(*) FILTER (
+            WHERE kept AND any_filmed_at >= ${localMidnight} AT TIME ZONE ${tz}
+          ) AS today_kept_clips
         FROM segments
       `),
     catch: (cause) => new UnknownDBServiceError({ cause }),
@@ -102,5 +121,7 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
     todaySeconds: Number(row?.today ?? 0),
     last7DaysSeconds: Number(row?.last_7_days ?? 0),
     last30DaysSeconds: Number(row?.last_30_days ?? 0),
+    todayClips: Number(row?.today_clips ?? 0),
+    todayKeptClips: Number(row?.today_kept_clips ?? 0),
   } satisfies FootageStats;
 });

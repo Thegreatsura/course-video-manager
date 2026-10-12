@@ -1,4 +1,4 @@
-import type { VideoFormat } from "@/features/videos/video-format";
+import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 import {
   CANVASES,
   drawInstructions,
@@ -15,9 +15,8 @@ export type CompositeSourceFrame = {
 /**
  * Draws one frame of the composite: black, then the scene's items from the
  * layout module's draw instructions, bottom to top. A source with no frame
- * yet is left out (black), and so is one the scene does not draw. Drawn in
- * `format`'s layout, on its canvas (a Short's is 1080x1920). Shared by the
- * live preview and editor playback.
+ * yet is left out (black). Shared by the live preview and editor playback.
+ * `format` picks the layout and canvas (Landscape unless told otherwise).
  */
 export const drawComposite = (
   ctx: CanvasRenderingContext2D,

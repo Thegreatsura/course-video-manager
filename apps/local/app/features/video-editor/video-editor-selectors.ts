@@ -378,10 +378,16 @@ export const getChapterPercentComplete = (params: {
   return Math.min(1, Math.max(0, elapsed / total));
 };
 
+/**
+ * A Clip shown 9:16: an OBS Clip filmed in the `TikTok`/`Portrait` profile,
+ * or a CVM-recorder Clip whose Recording Session was filmed as a Short.
+ */
 export const getIsClipPortrait = (clip: Clip): boolean => {
   return (
     clip.type === "on-database" &&
-    (clip.profile === "TikTok" || clip.profile === "Portrait")
+    (clip.profile === "TikTok" ||
+      clip.profile === "Portrait" ||
+      clip.recordingSession?.format === "short")
   );
 };
 

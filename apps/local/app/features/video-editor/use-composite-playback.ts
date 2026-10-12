@@ -8,18 +8,18 @@ import {
   type PictureSource,
 } from "./composite-playback-reducer";
 
-const PICTURE_SOURCES: readonly PictureSource[] = ["camera", "screen"];
-
 /**
  * The effect runner for `compositePlaybackReducer`, and the bridge from the
- * clock `<video>` (a CVM-recorder Clip's mic) and the two picture `<video>`s
+ * clock `<video>` (a CVM-recorder Clip's mic) and the picture `<video>`s
  * into it. Returns the refs the picture `<video>`s mount on and the scene to
- * draw now.
+ * draw now. `sources` are the picture `<video>`s mounted (no screen when the
+ * picture never draws it).
  */
 export const useCompositePlayback = (o: {
   clock: RefObject<HTMLVideoElement | null>;
   segments: readonly SceneSegment[];
   offsetSeconds: number;
+  sources: readonly PictureSource[];
 }) => {
   const camera = useRef<HTMLVideoElement>(null);
   const screen = useRef<HTMLVideoElement>(null);
@@ -40,16 +40,17 @@ export const useCompositePlayback = (o: {
       createInitialCompositePlaybackState({
         segments: o.segments,
         offsetSeconds: o.offsetSeconds,
+        sources: o.sources,
       }),
     {
       "play-sources": (_state, effect) =>
-        each(PICTURE_SOURCES, (video) => {
+        each(effect.sources, (video) => {
           video.currentTime = effect.at;
           video.playbackRate = effect.rate;
           void video.play().catch(() => {});
         }),
       "pause-sources": (_state, effect) =>
-        each(PICTURE_SOURCES, (video) => {
+        each(effect.sources, (video) => {
           video.pause();
           video.currentTime = effect.at;
         }),
@@ -58,19 +59,20 @@ export const useCompositePlayback = (o: {
           video.currentTime = effect.at;
         }),
       "set-sources-rate": (_state, effect) =>
-        each(PICTURE_SOURCES, (video) => {
+        each(effect.sources, (video) => {
           video.playbackRate = effect.rate;
         }),
     }
   );
 
   // Bridge: a changed Clip Source (a Scene Override, a new mic offset).
-  const sourceKey = JSON.stringify([o.segments, o.offsetSeconds]);
+  const sourceKey = JSON.stringify([o.segments, o.offsetSeconds, o.sources]);
   useEffect(() => {
     dispatch({
       type: "clip-source-changed",
       segments: o.segments,
       offsetSeconds: o.offsetSeconds,
+      sources: o.sources,
     });
   }, [sourceKey]);
 
@@ -106,7 +108,7 @@ export const useCompositePlayback = (o: {
 
   // Bridge: the picture `<video>`s landing where they were sent.
   useEffect(() => {
-    const cleanups = PICTURE_SOURCES.map((source) => {
+    const cleanups = (["camera", "screen"] as const).map((source) => {
       const video = refs[source].current;
       if (!video) return () => {};
       const seeked = () => dispatch({ type: "source-seeked", source });

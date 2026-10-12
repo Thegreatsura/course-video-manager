@@ -177,6 +177,31 @@ describe("getIsClipPortrait", () => {
     });
     expect(getIsClipPortrait(clip)).toBe(false);
   });
+
+  const cvmRecorderClip = (format: "landscape" | "short") =>
+    makeClipOnDatabase({
+      frontendId: id("a"),
+      profile: null,
+      recordingSession: {
+        id: "session-1",
+        cameraFilePath: "/rec/camera.mkv",
+        screenFilePath: "/rec/screen.mkv",
+        micFilePath: "/rec/mic.mkv",
+        micOffsetMs: 0,
+        format,
+        screenCaptured: format === "landscape",
+        micEq: null,
+        sceneEvents: [{ fileTime: 0, scene: "Camera" }],
+      },
+    });
+
+  it("returns true for a CVM-recorder Clip of a Short Recording Session", () => {
+    expect(getIsClipPortrait(cvmRecorderClip("short"))).toBe(true);
+  });
+
+  it("returns false for a CVM-recorder Clip of a Landscape Recording Session", () => {
+    expect(getIsClipPortrait(cvmRecorderClip("landscape"))).toBe(false);
+  });
 });
 
 describe("getIsClipDangerous", () => {
