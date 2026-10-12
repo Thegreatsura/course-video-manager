@@ -145,6 +145,18 @@ export const previewOutput = (port: number, quality = 7) => [
   `[f=mpjpeg:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000|[f=null:use_fifo=0]-`,
 ];
 
+/**
+ * In each preview ffmpeg.exe's command line, so one left running by a service
+ * that died can be found and stopped (`stop-recorders.ps1`). A preview never
+ * exits by itself: its tee retries a dead feed for ever.
+ */
+export const PREVIEW_TAGS = {
+  camera: "cvm-recorder-preview-camera",
+  screen: "cvm-recorder-preview-screen",
+} as const;
+
+const tagged = (tag: string) => ["-metadata", `comment=${tag}`];
+
 const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 
 /** 640x360 off the GPU, for the browser. */
@@ -193,6 +205,7 @@ export const cameraPreviewArgs = (o: {
   `[0:v]hwupload_cuda,split[p][s];[p]${CAMERA_PREVIEW_SCALE}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
   "-map",
   "[prev]",
+  ...tagged(PREVIEW_TAGS.camera),
   ...previewOutput(o.port),
   "-map",
   "[still]",
@@ -212,6 +225,7 @@ export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
   `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=960:540,format=yuvj420p`,
   "-map",
   "0:v",
+  ...tagged(PREVIEW_TAGS.screen),
   ...previewOutput(o.port),
 ];
 
