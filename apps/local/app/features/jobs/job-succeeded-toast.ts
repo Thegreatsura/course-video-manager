@@ -87,6 +87,7 @@ export const succeededToastOf = (job: jobsReducer.JobView): SucceededToast => {
     case "render-vertical":
     // A Course duplicate never toasts its success (`isSilentSettlement`).
     case "duplicate-course":
+    case "storage-move":
     case undefined:
       return genericSucceededToast(job.kind, job.subjectId);
   }

@@ -23,6 +23,7 @@ import {
   type JobContext,
 } from "./job-kind";
 import { makeKindCleanup } from "./kind-cleanup";
+import { settleCancelled } from "./settle-cancelled";
 import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import {
@@ -261,6 +262,13 @@ export const runSidecar = <R>(opts: {
                 )
               ),
           onFailure: (cause) => {
+            const cancelled = settleCancelled({
+              ops,
+              jobId: job.id,
+              holder: identity.holder,
+              cause,
+            });
+            if (cancelled) return cancelled;
             const interrupted = Cause.isInterruptedOnly(cause);
             const posting = isPostingKind(kindOf(job.kind));
             const neverReRun = isNeverReRun(kindOf(job.kind));

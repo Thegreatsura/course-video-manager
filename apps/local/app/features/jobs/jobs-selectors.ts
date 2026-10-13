@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   AutofillUploadEntry,
   DuplicateCourseUploadEntry,
+  StorageMoveUploadEntry,
   BaseUploadEntry,
   ExportStage,
   ExportUploadEntry,
@@ -22,6 +23,7 @@ import {
   PUBLISH_STAGE_BANDS,
   PUBLISH_VIDEO_UPLOAD_BANDS,
   RENDER_VERTICAL_STAGE_BANDS,
+  STORAGE_MOVE_STAGE_BANDS,
   withDerivedParentProgress,
 } from "@/features/upload-manager/upload-progress";
 import {
@@ -30,6 +32,7 @@ import {
   type jobsReducer,
 } from "./jobs-reducer";
 import { isDuplicateCourseStage } from "./duplicate-course-job";
+import { isStorageMoveStage } from "@/packages/storage/client";
 import {
   isPostingJobKind,
   mayLeavePendingVersion,
@@ -96,6 +99,7 @@ const uploadStatusOf = (job: jobsReducer.JobView): UploadStatus => {
       return "success";
     case "failed":
     case "interrupted":
+    case "cancelled":
       return "error";
   }
 };
@@ -213,6 +217,8 @@ export const jobUploadEntry = (
     }
     case "duplicate-course":
       return duplicateCourseEntry(job);
+    case "storage-move":
+      return storageMoveEntry(job);
     default:
       return null;
   }
@@ -241,6 +247,36 @@ const duplicateCourseEntry = (
     uploadType: "duplicate-course",
     duplicateCourseStage: status === "success" ? null : stage,
     courseId: job.subjectId ?? "",
+  };
+};
+
+/**
+ * A Storage move: one row about a Storage Bucket (its subject, not a Video),
+ * checking then copying, a real percentage by bytes. Its row has a Cancel.
+ */
+const storageMoveEntry = (job: jobsReducer.JobView): StorageMoveUploadEntry => {
+  const stage =
+    job.stage !== null && isStorageMoveStage(job.stage) ? job.stage : null;
+  const status = uploadStatusOf(job);
+  const progress =
+    status === "success"
+      ? 100
+      : stage === null
+        ? 0
+        : fillBand(STORAGE_MOVE_STAGE_BANDS[stage], job.percent ?? 0);
+  const live =
+    job.status === "queued" ||
+    job.status === "running" ||
+    job.status === "retrying" ||
+    job.status === "requested";
+  return {
+    ...baseEntryOf(job, status, progress),
+    videoId: "",
+    uploadType: "storage-move",
+    storageMoveStage: status === "success" ? null : stage,
+    cancellable: live && job.status !== "requested" && !job.cancelRequested,
+    cancelRequested: live && job.cancelRequested,
+    cancelled: job.status === "cancelled",
   };
 };
 

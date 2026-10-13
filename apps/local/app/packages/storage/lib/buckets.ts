@@ -112,6 +112,12 @@ export type StorageOwnership = {
   readonly exports: ReadonlyMap<string, string>;
   /** Root-relative paths of Recording Sessions' camera, screen and mic files. */
   readonly recordingSessionFootage: ReadonlySet<string>;
+  /**
+   * Bucket id → the Videos whose files are in it: whose Clips or Recording
+   * Sessions use its Footage, or whose current Exported Video it holds. What a
+   * move asks about before it starts (a running export, a recording).
+   */
+  readonly videosByBucket: ReadonlyMap<string, ReadonlySet<string>>;
 };
 
 /**
@@ -179,6 +185,25 @@ export const assignStorageBuckets = (
     }
   }
 
+  const videosByBucket = new Map<string, Set<string>>();
+  const addVideo = (bucketId: string, videoId: string) => {
+    const set = videosByBucket.get(bucketId) ?? new Set<string>();
+    set.add(videoId);
+    videosByBucket.set(bucketId, set);
+  };
+  for (const use of input.footageUses) {
+    if (use.videoId === null) continue;
+    const relative = rootRelativePath(use.stored, roots);
+    const bucketId = relative === null ? undefined : footage.get(relative);
+    if (bucketId !== undefined) addVideo(bucketId, use.videoId);
+  }
+  for (const video of input.videos) {
+    for (const name of video.exportNames) {
+      const bucketId = exports.get(name);
+      if (bucketId !== undefined) addVideo(bucketId, video.id);
+    }
+  }
+
   const sharedBy = [...sharers.values()]
     .map((b) => b.name)
     .sort((a, b) => a.localeCompare(b));
@@ -202,6 +227,7 @@ export const assignStorageBuckets = (
     footage,
     exports,
     recordingSessionFootage,
+    videosByBucket,
   };
 };
 

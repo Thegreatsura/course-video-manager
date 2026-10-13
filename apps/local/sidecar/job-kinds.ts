@@ -20,6 +20,7 @@ import { clipMockupVoiceJobKind } from "./kinds/clip-mockup-voice";
 import { aiHeroJobKind } from "./kinds/ai-hero";
 import { bufferJobKind } from "./kinds/buffer";
 import { skillsChangelogJobKind } from "./kinds/skills-changelog";
+import { storageMoveJobKind } from "./kinds/storage-move";
 import { youtubeJobKind } from "./kinds/youtube";
 import { youtubeShortsJobKind } from "./kinds/youtube-shorts";
 
@@ -39,6 +40,7 @@ export const JOB_KINDS = {
   "remove-local-images": removeLocalImagesJobKind,
   "duplicate-course": duplicateCourseJobKind,
   "clip-mockup-voice": clipMockupVoiceJobKind,
+  "storage-move": storageMoveJobKind,
   // The `publish` lane, one at a time; never run again on its own.
   publish: publishJobKind,
   // Posting kinds (decision 5): one attempt each, never re-queued.

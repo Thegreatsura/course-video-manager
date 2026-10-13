@@ -196,6 +196,17 @@ export const COURSE_DUPLICATE_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Storage move** (#2109): copies a Storage Bucket's files to another drive,
+ * checking each by checksum. 2 attempts, like a Course duplicate: a lost run
+ * resumes each file by size, and a copy already in place is checked, never
+ * copied again. A stop puts it back. The author's Cancel ends it `cancelled`.
+ */
+export const STORAGE_MOVE_POLICY = {
+  lane: "default",
+  maxAttempts: 2,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * **Clip Mockup voice**: Kokoro, on this machine's GPU, through the Clip
  * Mockup daemon. Never an Upload Manager job — `cvm clip-mockup add` used to
  * voice the line before it returned — so this policy is chosen, not copied

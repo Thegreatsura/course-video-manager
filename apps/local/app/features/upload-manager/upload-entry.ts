@@ -4,6 +4,7 @@ import type {
 } from "@/services/course-publish-export-events";
 import type { RenderVerticalStage as RenderVerticalServiceStage } from "@/services/render-vertical-video-service";
 import type { DuplicateCourseStage as DuplicateCourseJobStage } from "@/features/jobs/duplicate-course-job";
+import type { StorageMoveStage as StorageMoveJobStage } from "@/packages/storage/client";
 
 /**
  * One row of the Upload Manager: how a Job draws (`jobUploadEntries` in
@@ -25,7 +26,8 @@ export type UploadType =
   | "publish"
   | "autofill"
   | "render-vertical"
-  | "duplicate-course";
+  | "duplicate-course"
+  | "storage-move";
 export type BufferStage =
   "uploading-blob" | "creating-post" | "polling" | "cleaning-up";
 // Every stage union below is the SERVICE's own union, never a restatement of
@@ -39,6 +41,7 @@ export type ExportStage = ExportServiceStage;
 export type RenderVerticalStage = RenderVerticalServiceStage;
 export type PublishStage = PublishServiceStage;
 export type DuplicateCourseStage = DuplicateCourseJobStage;
+export type StorageMoveStage = StorageMoveJobStage;
 // An Autofill only ever does two things: work out which Videos it has work
 // for, then write their text. The parent passes through both; a per-Video
 // child is born already writing.
@@ -141,6 +144,21 @@ export interface DuplicateCourseUploadEntry extends BaseUploadEntry {
   courseId: string;
 }
 
+/**
+ * A Storage move (#2109): a Storage Bucket's files copied to another drive
+ * and checked by checksum. The one row with a Cancel.
+ */
+export interface StorageMoveUploadEntry extends BaseUploadEntry {
+  uploadType: "storage-move";
+  storageMoveStage: StorageMoveStage | null;
+  /** Cancel is offered: queued or running, and not asked already. */
+  cancellable: boolean;
+  /** The author pressed Cancel; it is removing its partial copies. */
+  cancelRequested: boolean;
+  /** It ended on the author's Cancel (drawn as `error`, without the alarm). */
+  cancelled: boolean;
+}
+
 export type UploadEntry =
   | YouTubeUploadEntry
   | YouTubeShortsUploadEntry
@@ -151,4 +169,5 @@ export type UploadEntry =
   | PublishUploadEntry
   | AutofillUploadEntry
   | RenderVerticalUploadEntry
-  | DuplicateCourseUploadEntry;
+  | DuplicateCourseUploadEntry
+  | StorageMoveUploadEntry;

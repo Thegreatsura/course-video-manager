@@ -1,4 +1,4 @@
-import { Effect, Schema, type ParseResult } from "effect";
+import { Data, Effect, Schema, type ParseResult } from "effect";
 import {
   INTERRUPTED_POST_MESSAGE,
   type JobFailure,
@@ -8,6 +8,22 @@ import {
   type JobPolicy,
   type RetryingJobPolicy,
 } from "./retry-policy";
+
+/**
+ * A handler stopped on the author's Cancel (`requestJobCancel`) and has
+ * cleaned up after itself. The sidecar ends the Job `cancelled` — never
+ * retried, never failed. Only a kind that can be cancelled fails with it.
+ */
+export class JobCancelledError extends Data.TaggedError("JobCancelledError")<{
+  readonly message: string;
+}> {}
+
+/** Whether a handler's failure is its answer to the author's Cancel. */
+export const isJobCancelled = (error: unknown): error is JobCancelledError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "JobCancelledError";
 
 /** Another Job a handler starts, as it asks for one. */
 export interface JobRequest {

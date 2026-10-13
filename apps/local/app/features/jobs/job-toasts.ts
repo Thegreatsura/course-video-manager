@@ -20,6 +20,7 @@ const FAILED: Record<string, string> = {
   "autofill-video": "autofill failed",
   publish: "publish failed",
   "duplicate-course": "duplicate failed",
+  "storage-move": "failed: every original is untouched",
   /** One Video of a Publish: its export or its upload. */
   "publish-video": "failed in the Publish",
 };
@@ -195,6 +196,12 @@ export function showRetryFailedToast(
   toast.error(`Could not retry "${effect.title}": ${effect.message}`, {
     duration: Infinity,
   });
+}
+
+export function showCancelFailedToast(
+  effect: Toast<"show-cancel-failed-toast">
+): void {
+  toast.error(`Could not cancel "${effect.title}": ${effect.message}`);
 }
 
 export function showDismissFailedToast(

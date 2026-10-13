@@ -9,7 +9,10 @@ import {
 import {
   bucketCanBeDeleted,
   bucketCanBePurged,
+  movableKindsOf,
   moveTargetRefusal,
+  type StorageMoveKind,
+  type StorageMovePlan,
   type StorageBucket,
   type StorageDeleteResult,
   type StorageFileKind,
@@ -43,7 +46,28 @@ export namespace storagePageReducer {
     deletion: Deletion | null;
     /** Purging a bucket's Exported Videos (#2111): asked, under way, or done. */
     purge: exportPurge.State | null;
+    /** Moving a bucket's files to another drive (#2109), up to its Job. */
+    move: Move | null;
   };
+
+  /**
+   * One move confirmation at a time. `planning`: the server is counting what
+   * would be copied and checking every refusal; `confirming`: the dialog shows
+   * the size, the target's free space and any refusal (then it is blocked);
+   * `starting`: the Job is being enqueued; `started`: it runs in the Sidecar
+   * and shows in the Upload Manager, with its Cancel.
+   */
+  export type Move =
+    | {
+        status: "planning";
+        bucket: StorageBucket;
+        kind: StorageMoveKind;
+        target: string;
+      }
+    | { status: "confirming"; plan: StorageMovePlan }
+    | { status: "starting"; plan: StorageMovePlan }
+    | { status: "started"; plan: StorageMovePlan; jobId: string }
+    | { status: "failed"; bucket: StorageBucket; message: string };
 
   /**
    * One delete at a time. `bytes` is what the scan counted in the bucket when
@@ -66,12 +90,37 @@ export namespace storagePageReducer {
     | { type: "bucket-delete-failed"; bucketId: string; message: string }
     | { type: "deletion-dismissed" }
     | { type: "purge-bucket-clicked"; bucketId: string }
-    | exportPurge.Action;
+    | exportPurge.Action
+    | {
+        type: "move-clicked";
+        bucketId: string;
+        kind: StorageMoveKind;
+        target: string;
+      }
+    | { type: "move-planned"; plan: StorageMovePlan }
+    | { type: "move-plan-failed"; bucketId: string; message: string }
+    | { type: "move-confirmed" }
+    | { type: "move-cancelled" }
+    | { type: "move-started"; jobId: string }
+    | { type: "move-start-failed"; message: string }
+    | { type: "move-dismissed" };
 
   export type Effect =
     | { type: "listen-to-scan" }
     | { type: "delete-bucket"; bucketId: string }
-    | exportPurge.Effect;
+    | exportPurge.Effect
+    | {
+        type: "plan-move";
+        bucketId: string;
+        kind: StorageMoveKind;
+        target: string;
+      }
+    | {
+        type: "start-move";
+        bucketId: string;
+        kind: StorageMoveKind;
+        target: string;
+      };
 }
 
 type State = storagePageReducer.State;
@@ -99,6 +148,7 @@ export const createInitialStoragePageState = (): State => ({
   scan: null,
   deletion: null,
   purge: null,
+  move: null,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
@@ -119,6 +169,7 @@ const rescan = (
     ...createInitialStoragePageState(),
     deletion: state.deletion,
     purge: state.purge,
+    move: state.move,
     scan: exec({ type: "listen-to-scan" }),
   };
 };
@@ -208,6 +259,132 @@ const deletionReducer = (
     case "purge-dismissed":
       // The scan's and the Purge's events: not the delete's.
       return null;
+    case "move-clicked":
+    case "move-planned":
+    case "move-plan-failed":
+    case "move-confirmed":
+    case "move-cancelled":
+    case "move-started":
+    case "move-start-failed":
+    case "move-dismissed":
+      // The move's events, handled by `moveReducer`.
+      return null;
+  }
+};
+
+/** The move half of the page: one confirmation at a time, up to its Job. */
+const moveReducer = (
+  state: State,
+  action: Action,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State | null => {
+  const move = state.move;
+  switch (action.type) {
+    case "move-clicked": {
+      if (
+        move?.status === "planning" ||
+        move?.status === "confirming" ||
+        move?.status === "starting"
+      )
+        return state;
+      const bucket = state.buckets[action.bucketId];
+      if (!bucket || !movableKindsOf(bucket).includes(action.kind)) {
+        return state;
+      }
+      exec({
+        type: "plan-move",
+        bucketId: bucket.id,
+        kind: action.kind,
+        target: action.target,
+      });
+      return {
+        ...state,
+        move: {
+          status: "planning",
+          bucket,
+          kind: action.kind,
+          target: action.target,
+        },
+      };
+    }
+    case "move-planned":
+      if (
+        move?.status !== "planning" ||
+        move.bucket.id !== action.plan.bucketId ||
+        move.kind !== action.plan.kind ||
+        move.target !== action.plan.target
+      )
+        return state;
+      return { ...state, move: { status: "confirming", plan: action.plan } };
+    case "move-plan-failed":
+      if (move?.status !== "planning" || move.bucket.id !== action.bucketId)
+        return state;
+      return {
+        ...state,
+        move: {
+          status: "failed",
+          bucket: move.bucket,
+          message: action.message,
+        },
+      };
+    case "move-confirmed":
+      // A blocked move can't be confirmed: the button is off, and so is this.
+      if (move?.status !== "confirming" || move.plan.refusals.length > 0)
+        return state;
+      exec({
+        type: "start-move",
+        bucketId: move.plan.bucketId,
+        kind: move.plan.kind,
+        target: move.plan.target,
+      });
+      return { ...state, move: { status: "starting", plan: move.plan } };
+    case "move-cancelled":
+      if (move?.status !== "confirming" && move?.status !== "planning")
+        return state;
+      return { ...state, move: null };
+    case "move-started":
+      if (move?.status !== "starting") return state;
+      return {
+        ...state,
+        move: { status: "started", plan: move.plan, jobId: action.jobId },
+      };
+    case "move-start-failed": {
+      if (move?.status !== "starting") return state;
+      const bucket = state.buckets[move.plan.bucketId] ?? {
+        id: move.plan.bucketId,
+        kind: "course" as const,
+        name: move.plan.bucketName,
+      };
+      return {
+        ...state,
+        move: { status: "failed", bucket, message: action.message },
+      };
+    }
+    case "move-dismissed":
+      if (move?.status !== "started" && move?.status !== "failed") return state;
+      return { ...state, move: null };
+    case "page-opened":
+    case "roots-measured":
+    case "buckets-listed":
+    case "sizes-counted":
+    case "root-unreadable":
+    case "scan-completed":
+    case "scan-failed":
+    case "delete-bucket-clicked":
+    case "delete-confirmed":
+    case "delete-cancelled":
+    case "bucket-deleted":
+    case "bucket-delete-failed":
+    case "deletion-dismissed":
+    case "purge-bucket-clicked":
+    case "purge-planned":
+    case "purge-confirmed":
+    case "purge-cancelled":
+    case "exports-purged":
+    case "purge-failed":
+    case "purge-dismissed":
+      // The scan's, the delete's and the Purge's events.
+      return null;
   }
 };
 
@@ -245,6 +422,8 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
   action,
   exec
 ) => {
+  const afterMove = moveReducer(state, action, exec);
+  if (afterMove !== null) return afterMove;
   const afterDeletion = deletionReducer(state, action, exec);
   if (afterDeletion !== null) return afterDeletion;
   const afterPurge = purgeReducer(state, action, exec);
@@ -319,6 +498,16 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
     case "purge-failed":
     case "purge-dismissed":
       // The delete's and the Purge's events, handled above.
+      return state;
+    case "move-clicked":
+    case "move-planned":
+    case "move-plan-failed":
+    case "move-confirmed":
+    case "move-cancelled":
+    case "move-started":
+    case "move-start-failed":
+    case "move-dismissed":
+      // The move's events, handled by `moveReducer`.
       return state;
   }
 };
@@ -436,3 +625,65 @@ export const moveTargets = (
     root,
     refusal: moveTargetRefusal(root),
   }));
+
+/** Where each kind a move carries is counted on the page. */
+const SCAN_KIND_OF: Record<StorageMoveKind, StorageFileKind> = {
+  footage: "footage",
+  "exported-videos": "exported-videos",
+  "clip-mockups": "other",
+};
+
+/**
+ * The move buttons a row offers: each kind the bucket can move, to each
+ * Storage Root that does not already hold all of it, with why it can't go
+ * there (an Offline root) or null.
+ */
+export const rowMoveActions = (
+  state: State,
+  row: StorageRow
+): {
+  kind: StorageMoveKind;
+  target: StorageRootReport;
+  refusal: string | null;
+}[] =>
+  movableKindsOf(row.bucket).flatMap((kind) =>
+    moveTargets(state).flatMap(({ root, refusal }) => {
+      const scanKind = SCAN_KIND_OF[kind];
+      const elsewhere = Object.entries(row.byLocation).some(
+        ([location, bytes]) => location !== root.root && bytes[scanKind] > 0
+      );
+      return elsewhere ? [{ kind, target: root, refusal }] : [];
+    })
+  );
+
+/**
+ * The move confirmation's numbers: the size to copy (files not already on
+ * the target), the target's free space and what it would have left, and
+ * whether the move is blocked (any refusal), naming each reason. Null when no
+ * plan is shown.
+ */
+export const moveConfirmation = (
+  state: State
+): {
+  plan: StorageMovePlan;
+  bytesToCopy: number;
+  freeBytes: number | null;
+  freeAfter: number | null;
+  blocked: boolean;
+  reasons: string[];
+  starting: boolean;
+} | null => {
+  const move = state.move;
+  if (move?.status !== "confirming" && move?.status !== "starting") return null;
+  const plan = move.plan;
+  return {
+    plan,
+    bytesToCopy: plan.bytesToCopy,
+    freeBytes: plan.freeBytes,
+    freeAfter:
+      plan.freeBytes === null ? null : plan.freeBytes - plan.bytesToCopy,
+    blocked: plan.refusals.length > 0,
+    reasons: plan.refusals.map((r) => r.message),
+    starting: move.status === "starting",
+  };
+};

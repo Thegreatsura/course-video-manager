@@ -121,6 +121,14 @@ export const toJobsAction = (
       };
     case "dismissed":
       return { ...base, type: "job-dismissed" };
+    case "cancel-requested":
+      return { ...base, type: "job-cancel-requested" };
+    case "cancelled":
+      return {
+        ...base,
+        type: "job-cancelled",
+        message: typeof data.message === "string" ? data.message : null,
+      };
     case "posted":
       return { ...base, type: "job-posted", result: { ...data } };
     case "post-check": {

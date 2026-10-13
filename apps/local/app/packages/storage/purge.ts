@@ -6,7 +6,8 @@
 // on a reachable Storage Root, so every one deleted can be exported again.
 // The others are kept and reported as skipped. Raw Footage, Recording
 // Sessions, Clip Mockups, Video Files and thumbnails are never touched (ADR
-// 0041). Refused while an export or Publish is queued or running. Every
+// 0041). Refused while an export, a Publish or a Storage move is queued or
+// running, or a move is being started. Every
 // file's real path is checked inside its root's real `finished-videos/`, and
 // outside every root's `raw-footage/`, before it is deleted.
 export {

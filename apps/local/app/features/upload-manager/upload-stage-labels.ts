@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   BufferStage,
   DuplicateCourseStage,
+  StorageMoveStage,
   ExportStage,
   PublishStage,
   RenderVerticalStage,
@@ -59,6 +60,11 @@ const DUPLICATE_COURSE_STAGE_LABELS: Record<DuplicateCourseStage, string> = {
  * byte percentage, so the bar alone says everything) or when a staged job has
  * not reported its first stage yet.
  */
+const STORAGE_MOVE_STAGE_LABELS: Record<StorageMoveStage, string> = {
+  checking: "Checking room and running work",
+  copying: "Copying and verifying checksums",
+};
+
 export function uploadStageLabel(upload: UploadEntry): string | null {
   switch (upload.uploadType) {
     case "export":
@@ -91,6 +97,12 @@ export function uploadStageLabel(upload: UploadEntry): string | null {
       return upload.duplicateCourseStage
         ? DUPLICATE_COURSE_STAGE_LABELS[upload.duplicateCourseStage]
         : null;
+    case "storage-move":
+      return upload.cancelRequested
+        ? "Cancelling: removing partial copies"
+        : upload.storageMoveStage
+          ? STORAGE_MOVE_STAGE_LABELS[upload.storageMoveStage]
+          : null;
     // A plain upload has no stages: its bar streams a byte percentage.
     case "youtube":
     case "youtube-shorts":

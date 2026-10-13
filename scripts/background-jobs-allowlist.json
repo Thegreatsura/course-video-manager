@@ -193,8 +193,8 @@
     },
     {
       "file": "apps/local/app/features/jobs/use-jobs.ts",
-      "count": 3,
-      "reason": "Browser: the Upload Manager's Retry, Dismiss and stage history, each a call to the app's own route by the href job-wire.ts names (/api/jobs/\u2026). Not outbound."
+      "count": 4,
+      "reason": "Browser: the Upload Manager's Retry, Cancel, Dismiss and stage history, each a call to the app's own route by the href job-wire.ts names (/api/jobs/\u2026). Not outbound."
     },
     {
       "file": "apps/local/app/lib/post-confirmed.ts",

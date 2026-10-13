@@ -1,5 +1,6 @@
 import nodeFs from "node:fs/promises";
 import path from "node:path";
+import { holdingStorageWrites } from "./storage-busy";
 import { Data, Effect } from "effect";
 import { videos as videosTable } from "@cvm/core/db/schema";
 import { listVideosForExportHash } from "@cvm/core/services/db-export-hash-videos.server";
@@ -11,6 +12,7 @@ import { classifyStorageFile } from "./buckets";
 import {
   encodingJobs,
   encodingRefusalMessage,
+  storageBusyMessage,
   fileRefusal,
   folderRefusal,
   listFiles,
@@ -46,7 +48,7 @@ export class StoragePurgeRefusedError extends Data.TaggedError(
   "StoragePurgeRefusedError"
 )<{
   readonly bucketId: string;
-  readonly reason: "not-purgeable" | "export-running";
+  readonly reason: "not-purgeable" | "export-running" | "storage-busy";
   readonly message: string;
 }> {}
 
@@ -407,5 +409,17 @@ export const purgeExportedVideos = (opts: {
         : Effect.logInfo(
             `[storage] purged ${r.bucketId}: ${r.videos} Videos, ${r.deleted.reduce((n, d) => n + d.files, 0)} files, ${r.skipped.length} Videos skipped, ${r.left.length} files left`
           )
-    )
+    ),
+    // Never beside a move being started, or another delete (#2109).
+    (purge) =>
+      holdingStorageWrites(
+        "a Purge",
+        (heldBy) =>
+          new StoragePurgeRefusedError({
+            bucketId: opts.bucketId,
+            reason: "storage-busy",
+            message: storageBusyMessage(heldBy),
+          }),
+        purge
+      )
   );
