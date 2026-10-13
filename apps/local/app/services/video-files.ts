@@ -446,11 +446,22 @@ export function videoFileRelativePathOf(
 
 /**
  * Where a stored Video File path (a Thumbnail's) is on disk: a root-relative
- * path on the first Storage Root that has it, a legacy absolute path as it
- * is. Null when a root-relative file is on no root.
+ * path on the first Storage Root that has it (or, for an old checkout-relative
+ * row, the legacy store that has it), a legacy absolute path as it is. Null
+ * when the file is in none of them.
  */
 export function locateStoredVideoFile(stored: string): string | null {
-  return findStoragePathSync(stored, readStorageRootsSync());
+  const found = findStoragePathSync(stored, readStorageRootsSync());
+  if (found !== null) return found;
+  // Old rows stored `video-files/{lineageId}/…` relative to the checkout:
+  // until the relocation moves those files, they are in a legacy store.
+  const prefix = `${STORAGE_FOLDERS.videoFiles}/`;
+  if (path.isAbsolute(stored) || !stored.startsWith(prefix)) return null;
+  for (const store of legacyVideoFilesStores()) {
+    const candidate = path.join(store, stored.slice(prefix.length));
+    if (isUnder(store, candidate) && existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 /**
@@ -472,6 +483,15 @@ export const removeStoredVideoFile = (
           path.join(root, STORAGE_FOLDERS.videoFiles),
           path.join(root, relative)
         );
+      }
+      // An old checkout-relative row's file may still be in a legacy store.
+      const prefix = `${STORAGE_FOLDERS.videoFiles}/`;
+      if (path.isAbsolute(stored) || !relative.startsWith(prefix)) return;
+      for (const store of legacyVideoFilesStores()) {
+        const candidate = path.join(store, relative.slice(prefix.length));
+        if (yield* fs.exists(candidate)) {
+          yield* removeUnderBestEffort(fs, store, candidate);
+        }
       }
       return;
     }

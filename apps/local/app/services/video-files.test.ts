@@ -151,6 +151,12 @@ describe("across Storage Roots and the legacy store", () => {
     const e = writeIn(onE(), "thumbnail-1.png");
     expect(locateStoredVideoFile(row)).toBe(e);
 
+    // An old checkout-relative row, before the relocation: the legacy store.
+    const old = writeIn(legacyDir, "thumbnail-3.png");
+    expect(
+      locateStoredVideoFile(videoFileRowPath(LINEAGE, "thumbnail-3.png"))
+    ).toBe(old);
+
     // A legacy absolute path is read where it is.
     const legacy = writeIn(legacyDir, "thumbnail-2.png");
     expect(locateStoredVideoFile(legacy)).toBe(legacy);
