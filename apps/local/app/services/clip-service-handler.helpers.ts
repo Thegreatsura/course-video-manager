@@ -133,6 +133,66 @@ export const touchVideoUpdatedAt = (db: Database, videoId: string) =>
   );
 
 // ============================================================================
+// Helper: Where a saved Clip goes
+// ============================================================================
+
+/**
+ * The orders a Clip saved at `insertionPoint` goes between. A save never
+ * fails because of its insertion point (#2163): one naming an archived item
+ * (deleted from the Stream Deck while a take was saving) places it where
+ * that item stood, so restoring the item puts it back before it; one naming
+ * an item that is gone places it at the end.
+ */
+const ordersAroundInsertionPoint = Effect.fn("ordersAroundInsertionPoint")(
+  function* (
+    db: Database,
+    videoId: string,
+    allItems: ReadonlyArray<{
+      type: "clip" | "chapter";
+      id: string;
+      order: string;
+    }>,
+    insertionPoint: Extract<
+      ClipServiceEvent,
+      { type: "append-clips" }
+    >["input"]["insertionPoint"]
+  ) {
+    if (insertionPoint.type === "start")
+      return { prevOrder: null, nextOrder: allItems[0]?.order ?? null };
+
+    const type = insertionPoint.type === "after-clip" ? "clip" : "chapter";
+    const id =
+      insertionPoint.type === "after-clip"
+        ? insertionPoint.databaseClipId
+        : insertionPoint.chapterId;
+    const index = allItems.findIndex((i) => i.type === type && i.id === id);
+    if (index !== -1)
+      return {
+        prevOrder: allItems[index]!.order,
+        nextOrder: allItems[index + 1]?.order ?? null,
+      };
+
+    const table = type === "clip" ? clips : chapters;
+    const archived = yield* dbCall(() =>
+      db
+        .select({ order: table.order })
+        .from(table)
+        .where(and(eq(table.id, id), eq(table.videoId, videoId)))
+        .limit(1)
+    );
+    const order = archived[0]?.order;
+    if (order === undefined)
+      return { prevOrder: allItems.at(-1)?.order ?? null, nextOrder: null };
+    return {
+      prevOrder: order,
+      nextOrder:
+        allItems.find((i) => compareOrderStrings(i.order, order) > 0)?.order ??
+        null,
+    };
+  }
+);
+
+// ============================================================================
 // Helper: Append clips at an insertion point
 // ============================================================================
 
@@ -145,46 +205,12 @@ export const appendClipsAtInsertionPoint = Effect.fn(
   const { videoId, insertionPoint, clips: inputClips } = input;
   const allItems = yield* getOrderedItems(db, videoId);
 
-  let prevOrder: string | null = null;
-  let nextOrder: string | null = null;
-
-  if (insertionPoint.type === "start") {
-    const firstItem = allItems[0];
-    nextOrder = firstItem?.order ?? null;
-  } else if (insertionPoint.type === "after-clip") {
-    const insertAfterClipIndex = allItems.findIndex(
-      (item) =>
-        item.type === "clip" && item.id === insertionPoint.databaseClipId
-    );
-
-    if (insertAfterClipIndex === -1) {
-      throw new Error(
-        `Could not find a clip to insert after: ${insertionPoint.databaseClipId}`
-      );
-    }
-
-    const insertAfterItem = allItems[insertAfterClipIndex];
-    prevOrder = insertAfterItem?.order ?? null;
-
-    const nextItem = allItems[insertAfterClipIndex + 1];
-    nextOrder = nextItem?.order ?? null;
-  } else if (insertionPoint.type === "after-chapter") {
-    const insertAfterSectionIndex = allItems.findIndex(
-      (item) => item.type === "chapter" && item.id === insertionPoint.chapterId
-    );
-
-    if (insertAfterSectionIndex === -1) {
-      throw new Error(
-        `Could not find a chapter to insert after: ${insertionPoint.chapterId}`
-      );
-    }
-
-    const insertAfterItem = allItems[insertAfterSectionIndex];
-    prevOrder = insertAfterItem?.order ?? null;
-
-    const nextItem = allItems[insertAfterSectionIndex + 1];
-    nextOrder = nextItem?.order ?? null;
-  }
+  const { prevOrder, nextOrder } = yield* ordersAroundInsertionPoint(
+    db,
+    videoId,
+    allItems,
+    insertionPoint
+  );
 
   const orders = generateNKeysBetween(prevOrder, nextOrder, inputClips.length);
 

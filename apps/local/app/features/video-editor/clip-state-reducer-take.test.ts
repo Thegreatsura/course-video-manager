@@ -24,10 +24,13 @@ type Tester = ReducerTester<
 
 type Recorder = {
   name: string;
-  startRecording: (t: Tester) => void;
-  startTake: (t: Tester, n: number) => void;
+  /** Recording Session `n` (1 by default) starts. */
+  startRecording: (t: Tester, n?: number) => void;
+  startTake: (t: Tester, n: number, session?: number) => void;
   /** The Recorder saves the take's Clip where it was told to, and says so. */
-  saveTake: (t: Tester, clipId: string) => void;
+  saveTake: (t: Tester, clipId: string, session?: number) => void;
+  /** Recording Session `n` stops, and everything it heard is in. */
+  stopRecording: (t: Tester, n?: number) => void;
 };
 
 const dbClip = (id: string) =>
@@ -48,13 +51,13 @@ type DB_Clip = Extract<
   { type: "clips-saved" }
 >["clips"][number];
 
-const OBS_FILE = "/obs/take.mkv";
+const obsFile = (n = 1) => `/obs/take-${n}.mkv`;
 const obs: Recorder = {
   name: "OBS",
-  startRecording: (t) =>
+  startRecording: (t, n) =>
     t.send({
       type: "recording-started",
-      outputPath: OBS_FILE,
+      outputPath: obsFile(n),
       silenceLength: "short",
     }),
   startTake: (t, n) =>
@@ -65,58 +68,110 @@ const obs: Recorder = {
       profile: "Landscape",
       at: 0,
     }),
-  saveTake: (t, clipId) =>
+  saveTake: (t, clipId, session) =>
     t.send({
       type: "new-database-clips",
       clips: [dbClip(clipId)],
-      outputPath: OBS_FILE,
+      outputPath: obsFile(session),
       transcriptionJobId: `job-${clipId}`,
     }),
+  stopRecording: (t, n) => {
+    t.send({ type: "recording-stopped" });
+    const session = t
+      .getState()
+      .sessions.find((s) => s.outputPath === obsFile(n))!;
+    t.send({ type: "session-polling-complete", sessionId: session.id });
+  },
 };
 
-const SESSION = "session-1";
+const sessionId = (n = 1) => `session-${n}`;
+const SESSION = sessionId(1);
 const heard = (message: CvmRecorderMessage) =>
   ({ type: "cvm-recorder-message-heard", message, receivedAt: 0 }) as const;
-/** Where the app server was last told to save the CVM recorder's next Clip. */
-const serverPoint = (t: Tester): InsertionPoint => {
-  const sent = t
-    .getEffects()
-    .findLast((e) => e.type === "send-recorder-insertion-point");
-  if (!sent) throw new Error("The app server was never told where");
-  return sent.insertionPoint;
+
+/**
+ * The app server's side of the CVM recorder (`recorder-client/
+ * client.server.ts`): where it saves the next Clip. The editor tells it
+ * (`send-recorder-insertion-point`), and it moves after each Clip it saves.
+ */
+type AppServer = { point: InsertionPoint | undefined; heard: number };
+const appServers = new WeakMap<Tester, AppServer>();
+const appServer = (t: Tester): AppServer => {
+  let server = appServers.get(t);
+  if (!server) appServers.set(t, (server = { point: undefined, heard: 0 }));
+  const effects = t.getEffects();
+  for (const effect of effects.slice(server.heard))
+    if (effect.type === "send-recorder-insertion-point")
+      server.point = effect.insertionPoint;
+  server.heard = effects.length;
+  return server;
 };
+/** Where the app server will save the CVM recorder's next Clip. */
+const serverPoint = (t: Tester): InsertionPoint => {
+  const point = appServer(t).point;
+  if (!point) throw new Error("The app server was never told where");
+  return point;
+};
+/** The point names a Clip the editor has deleted: saving there failed (#2163). */
+const namesDeletedClip = (t: Tester, point: InsertionPoint) =>
+  point.type === "after-clip" &&
+  t
+    .getState()
+    .items.some(
+      (i) =>
+        i.type === "on-database" &&
+        i.databaseId === point.databaseClipId &&
+        i.shouldArchive
+    );
 const cvm: Recorder = {
   name: "CVM recorder",
-  startRecording: (t) =>
+  startRecording: (t, n) =>
     t.send(
       heard({
         type: "recording-started",
-        recordingSessionId: SESSION,
+        recordingSessionId: sessionId(n),
         silenceLength: "short",
         micFile: "mic.mkv",
       })
     ),
-  startTake: (t, n) =>
+  startTake: (t, n, session) =>
     t.send({
       type: "take-started",
-      recordingSessionId: SESSION,
+      recordingSessionId: sessionId(session),
       soundDetectionId: `cvm-recorder-speech-${n}`,
       scene: null,
       profile: null,
       at: 0,
     }),
-  saveTake: (t, clipId) =>
-    t
-      .send(
-        heard({
-          type: "clips-saved",
-          recordingSessionId: SESSION,
-          clips: [dbClip(clipId)],
-          placedAt: serverPoint(t),
-          transcriptionJobId: `job-${clipId}`,
-        })
-      )
-      .send(heard({ type: "speech-ended", recordingSessionId: SESSION })),
+  saveTake: (t, clipId, session) => {
+    const placedAt = serverPoint(t);
+    if (namesDeletedClip(t, placedAt))
+      throw new Error(
+        `The app server was left saving after a deleted Clip: ${JSON.stringify(placedAt)}`
+      );
+    appServer(t).point = { type: "after-clip", databaseClipId: clipId };
+    t.send(
+      heard({
+        type: "clips-saved",
+        recordingSessionId: sessionId(session),
+        clips: [dbClip(clipId)],
+        placedAt,
+        transcriptionJobId: `job-${clipId}`,
+      })
+    ).send(
+      heard({ type: "speech-ended", recordingSessionId: sessionId(session) })
+    );
+  },
+  stopRecording: (t, n) =>
+    t.send(
+      heard({
+        type: "recording-stopped",
+        recordingSessionId: sessionId(n),
+        errors: [],
+        crashed: false,
+        framesLost: { camera: 0, screen: 0 },
+      })
+    ),
 };
 
 const saved = (id: string): ClipOnDatabase =>
@@ -234,6 +289,44 @@ describe.each([obs, cvm])("a take on the $name", (recorder) => {
     expect(shown(t)).toEqual(["a", "c1"]);
     expect(t.getEffects().map((e) => e.type)).not.toContain("archive-clips");
   });
+
+  // #2163: a Clip deleted mid-take, then more speech, a Stop and a new take.
+  it("after a take deleted mid-take, every later take saves where the editor shows it, through Stop and the next Recording Session", () => {
+    const t = tester([saved("a")]);
+    recorder.startRecording(t);
+    recorder.startTake(t, 1);
+    t.send({ type: "delete-latest-inserted-clip" });
+    recorder.saveTake(t, "c1");
+    expect(archived(t)).toEqual(["c1"]);
+
+    recorder.startTake(t, 2);
+    recorder.saveTake(t, "c2");
+    recorder.startTake(t, 3);
+    recorder.saveTake(t, "c3");
+    expect(shown(t)).toEqual(["a", "c2", "c3"]);
+
+    recorder.stopRecording(t);
+    expect(t.getState().sessions.map((s) => s.status)).toEqual(["done"]);
+
+    recorder.startRecording(t, 2);
+    recorder.startTake(t, 4, 2);
+    recorder.saveTake(t, "c4", 2);
+    expect(shown(t)).toEqual(["a", "c2", "c3", "c4"]);
+    expect(archived(t)).toEqual(["c1"]);
+  });
+
+  it("a saved take deleted straight after, then more speech, saves the next take where the editor shows it", () => {
+    const t = tester([saved("a")]);
+    recorder.startRecording(t);
+    recorder.startTake(t, 1);
+    recorder.saveTake(t, "c1");
+    t.send({ type: "delete-latest-inserted-clip" });
+    expect(archived(t)).toEqual(["c1"]);
+
+    recorder.startTake(t, 2);
+    recorder.saveTake(t, "c2");
+    expect(shown(t)).toEqual(["a", "c2"]);
+  });
 });
 
 describe("a take on the CVM recorder, as the app server sees it", () => {
@@ -256,6 +349,49 @@ describe("a take on the CVM recorder, as the app server sees it", () => {
     expect(t.getState().clipTranscriptionJobs).toEqual({
       c1: { jobId: "job-c1", started: false },
     });
+  });
+
+  it("an old Recording Session's held Clips and events, arriving during the next, land without touching it (#2163)", () => {
+    const t = tester([saved("a")]);
+    cvm.startRecording(t, 1);
+    cvm.startTake(t, 1, 1);
+    // Session 1 stopped, but its last events were held behind a failed save.
+    t.send(
+      heard({
+        type: "recorder-status",
+        reachable: true,
+        problem: null,
+        recordingSessionId: null,
+        previews: { camera: "c", screen: "s" },
+        still: "still",
+      })
+    );
+    cvm.startRecording(t, 2);
+    cvm.startTake(t, 2, 2);
+    const take = t.getState().items.at(-1)!;
+
+    // The held save goes through: its Footage becomes a Clip all the same.
+    cvm.saveTake(t, "c1", 1);
+    cvm.stopRecording(t, 1);
+
+    // Session 1's take, orphaned at its Stop, stays; session 2's is untouched.
+    expect(shown(t)).toEqual([
+      "a",
+      "c1",
+      "optimistically-added",
+      "optimistically-added",
+    ]);
+    expect(t.getState().items.at(-1)).toEqual(take);
+    expect(t.getState().recordingClipFrontendId).toBe(take.frontendId);
+    expect(t.getState().sessions.map((s) => [s.id, s.status] as const)).toEqual(
+      [
+        [sessionId(1), "done"],
+        [sessionId(2), "recording"],
+      ]
+    );
+
+    cvm.saveTake(t, "c2", 2);
+    expect(shown(t).at(-1)).toBe("c2");
   });
 
   it("orphans a take whose speech made no Clip", () => {
