@@ -13,6 +13,7 @@ import {
 import { isInsideGitWorktree } from "@cvm/core/git-worktree";
 import { leaveSignalsToTheProcess } from "@/services/ffmpeg-child-registry";
 import { judgeServiceUrlOverrides } from "@/services/service-url-guard";
+import { judgeStorageRootsOnDisk } from "@/services/storage-roots";
 import { sidecarSocketPath } from "@/services/sidecar-socket.server";
 import { sidecarLayer } from "./sidecar-layer";
 import { JOB_KINDS, type JobServices } from "./job-kinds";
@@ -64,6 +65,11 @@ const refusal = (): string | undefined => {
   const urls = judgeServiceUrlOverrides(process.env);
   if (urls.length > 0) {
     return `a service URL override would send production credentials to another host:\n${urls.map((r) => `  - ${r.message}`).join("\n")}`;
+  }
+  const storage = judgeStorageRootsOnDisk(process.env);
+  if (storage.refusal) return storage.refusal;
+  for (const root of storage.offline) {
+    say(`Storage Root ${root} is offline: files on it will be "not found".`);
   }
   const url = resolveDatabaseUrl();
   if (!url) return "DATABASE_URL is not set, so there is no job table to read.";

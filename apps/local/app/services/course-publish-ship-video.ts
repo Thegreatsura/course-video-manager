@@ -1,12 +1,13 @@
 import { Effect, Stream } from "effect";
 import { FileSystem } from "@effect/platform";
 import { createHash } from "node:crypto";
-import path from "node:path";
 import {
   computeExportHash,
-  resolveExportPath,
+  exportFilename,
   toExportClips,
 } from "./export-hash";
+import type { StorageRoots } from "@/packages/storage";
+import { locateExportedVideo } from "./finished-videos.server";
 import { ExportError } from "./course-publish-errors";
 import {
   extractErrorMessage,
@@ -46,6 +47,10 @@ export type VideoEntry = {
  * and is pure database state, which is what lets the Bundle address be knowable
  * up front too. Whether a Video's file has actually appeared yet is checked per
  * Video, after its handoff.
+ *
+ * `localPath` is where the export is now — on whichever Storage Root has it —
+ * or, for one not yet exported, where the export will write it (the first
+ * root).
  */
 export const toVideoEntries = (input: {
   readonly sections: readonly {
@@ -61,31 +66,38 @@ export const toVideoEntries = (input: {
     }[];
   }[];
   readonly courseId: string;
-  readonly finishedVideosDirectory: string;
-}): VideoEntry[] =>
-  input.sections.flatMap((section) =>
-    section.lessons.flatMap((lesson) =>
-      lesson.videos.map((video) => {
+  readonly storageRoots: StorageRoots;
+}): Effect.Effect<VideoEntry[], never, FileSystem.FileSystem> =>
+  Effect.forEach(
+    input.sections.flatMap((section) =>
+      section.lessons.flatMap((lesson) =>
+        lesson.videos.map((video) => ({ section, lesson, video }))
+      )
+    ),
+    ({ section, lesson, video }) =>
+      Effect.gen(function* () {
         const exportHash =
           video.clips.length > 0
-            ? computeExportHash(toExportClips([...video.clips]), video.format)
+            ? computeExportHash(
+                toExportClips([...video.clips]),
+                video.format,
+                input.storageRoots
+              )
             : null;
         return {
           videoId: video.id,
           videoTitle: video.title,
           lessonPath: lesson.path,
-          localPath: exportHash
-            ? resolveExportPath(
-                input.finishedVideosDirectory,
-                input.courseId,
-                exportHash
-              )
-            : path.join(input.finishedVideosDirectory, `${video.id}.mp4`),
+          localPath: yield* locateExportedVideo(
+            input.storageRoots,
+            exportHash
+              ? exportFilename(input.courseId, exportHash)
+              : `${video.id}.mp4`
+          ),
           relativeAssetPath: `${section.path}/${lesson.path}/${video.title}.mp4`,
           exportHash,
         };
       })
-    )
   );
 
 /**

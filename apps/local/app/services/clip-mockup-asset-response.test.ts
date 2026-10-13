@@ -7,10 +7,8 @@ import {
   clipMockupAssetContentType,
   clipMockupAssetResponse,
 } from "./clip-mockup-asset-response.server";
-import {
-  CLIP_MOCKUP_DIR_ENV_KEY,
-  resolveClipMockupPath,
-} from "./clip-mockup-files";
+import { resolveClipMockupPath } from "./clip-mockup-files";
+import { STORAGE_ROOTS_ENV_KEY } from "./storage-roots";
 
 /**
  * The Animatic route itself is view code over a loader and has no test seam of
@@ -137,15 +135,15 @@ describe("path containment", () => {
   let previous: string | undefined;
 
   beforeAll(() => {
-    previous = process.env[CLIP_MOCKUP_DIR_ENV_KEY];
-    const base = path.join(dir, "store");
-    mkdirSync(base, { recursive: true });
-    process.env[CLIP_MOCKUP_DIR_ENV_KEY] = base;
+    previous = process.env[STORAGE_ROOTS_ENV_KEY];
+    const root = path.join(dir, "store");
+    mkdirSync(path.join(root, "clip-mockups"), { recursive: true });
+    process.env[STORAGE_ROOTS_ENV_KEY] = root;
   });
 
   afterAll(() => {
-    if (previous === undefined) delete process.env[CLIP_MOCKUP_DIR_ENV_KEY];
-    else process.env[CLIP_MOCKUP_DIR_ENV_KEY] = previous;
+    if (previous === undefined) delete process.env[STORAGE_ROOTS_ENV_KEY];
+    else process.env[STORAGE_ROOTS_ENV_KEY] = previous;
   });
 
   it("resolves a path inside the Video's own directory", () => {

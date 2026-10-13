@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Effect, Layer } from "effect";
+import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import { eq } from "drizzle-orm";
@@ -411,7 +411,13 @@ describe("recorder ingest", () => {
             layer(),
             whisper,
             NodeContext.layer,
-            SidecarContextTest
+            SidecarContextTest,
+            // Its Footage is under no Storage Root, so is read where it is.
+            Layer.setConfigProvider(
+              ConfigProvider.fromMap(
+                new Map([["STORAGE_ROOTS", "/no-such-storage-root"]])
+              )
+            )
           )
         )
       )

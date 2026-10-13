@@ -1,3 +1,6 @@
+import nodeFs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Data, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
@@ -26,7 +29,17 @@ let testDb: TestDb;
 let clipOpsLayer: Layer.Layer<ClipOperationsService | JobOperationsService>;
 let videoId: string;
 
+/**
+ * The Clips' names are root-relative Footage on this temp Storage Root, where
+ * `seedClips` puts a file for each; Whisper is told the file on disk.
+ */
+let storageRoot: string;
+
 beforeAll(async () => {
+  storageRoot = nodeFs.mkdtempSync(
+    nodePath.join(os.tmpdir(), "transcribe-clips-root-")
+  );
+  process.env.STORAGE_ROOTS = storageRoot;
   const result = await createTestDb();
   testDb = result.testDb;
   clipOpsLayer = Layer.mergeAll(
@@ -52,15 +65,27 @@ const fakeWhisper = Layer.succeed(WhisperTranscriptionService, {
   transcribeClips: (
     clips: ReadonlyArray<{ id: string; inputVideo: string }>
   ) =>
-    clips[0]!.inputVideo === "bad.mp4"
+    nodePath.basename(clips[0]!.inputVideo) === "bad.mp4"
       ? Effect.fail(
           new FakeWhisperError({ message: "Whisper API call failed: 500" })
         )
       : Effect.succeed(
           clips.map((clip) => ({
             id: clip.id,
-            words: [{ start: 0, end: 1, text: `word-of-${clip.inputVideo}` }],
-            segments: [{ start: 0, end: 1, text: `said ${clip.inputVideo}` }],
+            words: [
+              {
+                start: 0,
+                end: 1,
+                text: `word-of-${nodePath.basename(clip.inputVideo)}`,
+              },
+            ],
+            segments: [
+              {
+                start: 0,
+                end: 1,
+                text: `said ${nodePath.basename(clip.inputVideo)}`,
+              },
+            ],
           }))
         ),
 } as unknown as WhisperTranscriptionService);
@@ -90,6 +115,9 @@ const run = <A, E>(
 
 /** Fresh recordings, still `queued`, one per name. */
 const seedClips = async (...inputVideos: string[]) => {
+  for (const name of inputVideos) {
+    nodeFs.writeFileSync(nodePath.join(storageRoot, name), "");
+  }
   const rows = await testDb
     .insert(schema.clips)
     .values(

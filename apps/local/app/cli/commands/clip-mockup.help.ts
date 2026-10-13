@@ -24,7 +24,7 @@ File order is Animatic order; paths are relative to the file; the whole file
 is checked first and lands together or not at all. Entry keys are in
 'clip-mockup add --help' and 'clip-mockup update --help'.
 
-Rows carry imagePath / audioPath (relative to {CLIP_MOCKUP_DIR}/{lineageId}/)
+Rows carry imagePath / audioPath (relative to clip-mockups/{lineageId}/ on a Storage Root)
 and imageFile / audioFile (the same files as absolute paths — read these).
 
 THE VOICE IS MADE IN THE BACKGROUND. 'add' and 'update' return once the frames
@@ -50,7 +50,7 @@ machine. A voice that cannot be made never fails the command: it shows as
 voiceStatus "failed" on the row.
 
 LOCAL-ONLY. Frames, voices and the headless browser are on the author's
-machine (CLIP_MOCKUP_DIR), and so is the Sidecar that voices the lines. Elsewhere every verb is refused before doing
+machine (clip-mockups/ under STORAGE_ROOTS), and so is the Sidecar that voices the lines. Elsewhere every verb is refused before doing
 anything: _tag "LocalOnlyCommandError", exit 7. Stop; do not retry.
 
 Examples:
@@ -130,7 +130,7 @@ Each entry is ONE of:
             the screenshot becomes the frame. Prefer this: write the page, look
             at the result, rewrite the page. A page that will not render is a
             FrameCaptureError (exit 4) — a NAMED failure, never a blank frame.
-  "image"   a ready-made PNG. It is COPIED into {CLIP_MOCKUP_DIR}/{lineageId}/
+  "image"   a ready-made PNG. It is COPIED into clip-mockups/{lineageId}/ on a Storage Root
             under a fresh name, so clearing your scratch folder can never empty
             the Animatic. The row stores the path RELATIVE to that directory.
             The same image in several entries is copied once, and shared.
@@ -154,7 +154,7 @@ from the line's word count (durationEstimated: true) — sum it for a Video's
 run time all the same. Once the voice is "ready", 'list' and 'get' show the
 WAV (audioPath, named by a hash of the line, so two moments saying the same
 words share one) and its measured length. imagePath and audioPath are
-relative to {CLIP_MOCKUP_DIR}/{lineageId}/; imageFile and audioFile are the
+relative to clip-mockups/{lineageId}/ on a Storage Root; imageFile and audioFile are the
 same files as ABSOLUTE paths.
 
 Want to see a frame before it becomes a row? 'cvm clip-mockup capture' renders
@@ -227,7 +227,7 @@ Flags:
                    back to the author. The field makes the mistake impossible.
 
 Every Clip Mockup row carries imagePath / audioPath (relative to
-{CLIP_MOCKUP_DIR}/{lineageId}/) and imageFile / audioFile — the same files as
+clip-mockups/{lineageId}/ on a Storage Root) and imageFile / audioFile — the same files as
 ABSOLUTE paths, so you can open a frame without knowing where the store is.
 
 Without --with-chapters the stream is Clip Mockups only, with no 'type' or

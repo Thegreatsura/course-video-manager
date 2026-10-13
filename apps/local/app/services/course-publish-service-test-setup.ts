@@ -52,6 +52,7 @@ import {
 import { eq } from "drizzle-orm";
 import type { ClipComposite } from "@/packages/clip-source";
 import { bundleReaders } from "./course-publish-dropbox-upload-test-setup";
+import { EXPORT_HASH_RENAME_MARKER } from "./export-hash-rename";
 
 export let testDb: TestDb;
 export let finishedVideosDir: string;
@@ -180,8 +181,16 @@ export const setupPublishableCourse = async (opts?: {
   fakeDropbox = createFakeDropbox();
   fakeDropbox.install();
 
-  finishedVideosDir = fs.mkdtempSync(
-    path.join(tmpdir(), "publish-test-videos-")
+  // `finished-videos/` on a temp Storage Root, with the Exported Video
+  // rename recorded so export GC runs as it does after the switch (#2104).
+  finishedVideosDir = path.join(
+    fs.mkdtempSync(path.join(tmpdir(), "publish-test-videos-")),
+    "finished-videos"
+  );
+  fs.mkdirSync(finishedVideosDir);
+  fs.writeFileSync(
+    path.join(finishedVideosDir, EXPORT_HASH_RENAME_MARKER),
+    "{}"
   );
 
   // Seed Dropbox auth.
@@ -232,7 +241,7 @@ export const setupPublishableCourse = async (opts?: {
           .values({
             cameraFilePath: "/rec/s1/camera.mkv",
             screenFilePath: "/rec/s1/screen.mkv",
-            micFilePath: "recording.mp4",
+            micFilePath: "/footage/recording.mp4",
             status: "stopped",
           })
           .returning();
@@ -253,7 +262,7 @@ export const setupPublishableCourse = async (opts?: {
 
   const clipsForIndex = (index: number): ExportClip[] => [
     {
-      videoFilename: "recording.mp4",
+      videoFilename: "/footage/recording.mp4",
       sourceStartTime: 0,
       sourceEndTime: 10 + index,
       ...sessionColumns,
@@ -262,7 +271,7 @@ export const setupPublishableCourse = async (opts?: {
       overlays: [],
     },
     {
-      videoFilename: "recording.mp4",
+      videoFilename: "/footage/recording.mp4",
       sourceStartTime: 15,
       sourceEndTime: 25 + index,
       ...sessionColumns,
@@ -332,7 +341,7 @@ export const setupPublishableCourse = async (opts?: {
       id: video.id,
       title: video.title,
       lessonPath,
-      exportHash: computeExportHash(videoClips, "landscape")!,
+      exportHash: computeExportHash(videoClips, "landscape", [])!,
       relativeAssetPath: `intro/${derivedLessonPath}/${video.title}.mp4`,
     });
   }
@@ -405,7 +414,7 @@ export const setupPublishableCourse = async (opts?: {
     opts?.mockVideoProcessing ?? defaultMockVideoProcessing;
 
   const configMap = new Map([
-    ["FINISHED_VIDEOS_DIRECTORY", finishedVideosDir],
+    ["STORAGE_ROOTS", path.dirname(finishedVideosDir)],
     ["DROPBOX_REMOTE_PATH", DROPBOX_REMOTE_PATH],
     ["DROPBOX_APP_KEY", "test-dropbox-app-key"],
     ["DROPBOX_APP_SECRET", "test-dropbox-app-secret"],

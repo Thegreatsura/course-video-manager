@@ -1,14 +1,16 @@
-import { Config, Effect } from "effect";
+import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import type { ClipSourceColumns } from "@/packages/clip-source";
 import {
   computeExportHash,
+  exportFilename,
   type ExportOverlay,
-  resolveExportPath as resolveExportPathPure,
   toExportClips,
 } from "./export-hash";
+import { locateExportedVideo } from "./finished-videos.server";
+import { storageRootsConfig } from "./storage-roots";
 import {
   ANNOUNCE_NOTHING,
   type PlaceholderFloor,
@@ -45,10 +47,12 @@ export type VideoForExport = {
 export const makeCoursePublishReads = Effect.gen(function* () {
   const videoOps = yield* VideoOperationsService;
   const effectFs = yield* FileSystem.FileSystem;
-  const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-    "FINISHED_VIDEOS_DIRECTORY"
-  );
+  const storageRoots = yield* storageRootsConfig;
 
+  /**
+   * Where a Video's Exported Video is: on whichever Storage Root has it, or —
+   * when none does — where an export would write it (the first root).
+   */
   const resolveExportPath = Effect.fn("resolveExportPath")(function* (
     videoOrId: string | VideoForExport
   ) {
@@ -58,11 +62,18 @@ export const makeCoursePublishReads = Effect.gen(function* () {
         : videoOrId;
     if (video.clips.length === 0) return null;
 
-    const hash = computeExportHash(toExportClips(video.clips), video.format);
+    const hash = computeExportHash(
+      toExportClips(video.clips),
+      video.format,
+      storageRoots
+    );
     if (!hash) return null;
 
     const namespace = video.lesson?.section.repoVersion.repo.id ?? video.id;
-    return resolveExportPathPure(FINISHED_VIDEOS_DIRECTORY, namespace, hash);
+    return yield* locateExportedVideo(
+      storageRoots,
+      exportFilename(namespace, hash)
+    );
   });
 
   const isExported = Effect.fn("isExported")(function* (

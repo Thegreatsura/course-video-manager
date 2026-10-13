@@ -50,10 +50,10 @@ const obsRows = [
 describe("an OBS Clip's Export Hash through the Clip Source", () => {
   it("keeps every existing address exactly where it was", () => {
     const clips = toExportClips(obsRows);
-    expect(computeExportHash(clips, "landscape")).toBe(
+    expect(computeExportHash(clips, "landscape", [])).toBe(
       "9a58c78eb23dbfc7020e1c84ae3cc711"
     );
-    expect(computeExportHash(clips, "short")).toBe(
+    expect(computeExportHash(clips, "short", [])).toBe(
       "4950ba6b38ec40b7cff9bc03a37d84d1"
     );
   });
@@ -89,7 +89,7 @@ const QUIETER_HIGHS = { lowDb: 0, midDb: 0, highDb: -3 };
 
 describe("a CVM-recorder Clip's Export Hash", () => {
   const hash = (rows: Parameters<typeof toExportClips>[0]) =>
-    computeExportHash(toExportClips(rows), "landscape");
+    computeExportHash(toExportClips(rows), "landscape", []);
   const base = hash([sessionRow(150)]);
 
   it("moves when the Scene Override, mic offset or mic EQ changes", () => {
@@ -110,10 +110,10 @@ describe("a Landscape CVM-recorder Clip's Export Hash", () => {
     // Computed on main before the Short layout reached the Export Hash, then
     // moved once by layout versions 2 and 3 (bilinear item scaling).
     const clips = toExportClips([sessionRow(150)]);
-    expect(computeExportHash(clips, "landscape")).toBe(
+    expect(computeExportHash(clips, "landscape", [])).toBe(
       "040fe2894dcfead6bb03c0086f432b97"
     );
-    expect(computeExportHash(clips, "short")).toBe(
+    expect(computeExportHash(clips, "short", [])).toBe(
       "7d710ca8c4838658be6378bf73a76a28"
     );
   });
@@ -123,11 +123,13 @@ describe("a Short CVM-recorder Clip's Export Hash", () => {
   it("is not the same Clip's as if filmed in Landscape (its fields carry the Short layout version: clip-source.test.ts)", () => {
     const landscape = computeExportHash(
       toExportClips([sessionRow(150)]),
-      "short"
+      "short",
+      []
     );
     const short = computeExportHash(
       toExportClips([sessionRow(150, null, "short")]),
-      "short"
+      "short",
+      []
     );
     expect(short).not.toBe(landscape);
   });

@@ -62,7 +62,8 @@ const exportHashOf = async (videoId: string) =>
         })
       ).map((c) => ({ ...c, overlays: [] }))
     ),
-    "landscape"
+    "landscape",
+    []
   );
 
 describe("update-mic-offset on a shared Recording Session", () => {

@@ -1,5 +1,6 @@
-import { Config, Effect } from "effect";
-import { assertUnderEffect } from "@/services/assert-under";
+import { Effect } from "effect";
+import { assertUnderFinishedVideos } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { FileSystem } from "@effect/platform";
 import { data } from "react-router";
 import { CoursePublishReadService } from "@/services/course-publish-reads";
@@ -18,8 +19,8 @@ export const action = makeAction({
         return yield* Effect.die(data("File not found", { status: 404 }));
       }
 
-      const videoPath = yield* assertUnderEffect(
-        yield* Config.string("FINISHED_VIDEOS_DIRECTORY"),
+      const videoPath = yield* assertUnderFinishedVideos(
+        yield* storageRootsConfig,
         exportPath
       );
 

@@ -31,14 +31,22 @@ clone_app_env() {
   local dir="$1" url="$2" scratch="$1/scratch"
   mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
            "$scratch/finished-videos" "$scratch/obs-recordings" "$scratch/dropbox"
+  # The run's scratch/ is its one Storage Root (ADR 0040): finished-videos/,
+  # clip-mockups/ and overlay-renders/ under it are the run's own. A clone's
+  # Clips name their Footage root-relative (raw-footage/…) once Matt has run
+  # the path migration, so raw-footage/ is a link to the real Footage folder,
+  # for the editor to READ — nothing in CVM writes Footage. Before the
+  # migration the rows are absolute and are read where they are.
+  local footage="${VERIFY_FOOTAGE_DIR:-/mnt/d/raw-footage}"
+  if [ -d "$footage" ] && [ ! -e "$scratch/raw-footage" ]; then
+    ln -s "$footage" "$scratch/raw-footage"
+  fi
   CLONE_APP_ENV=(
     "DATABASE_URL=$url"
     "DIRECT_DATABASE_URL=$url"
     "VIDEO_FILES_DIR=$scratch/video-files"
-    "CLIP_MOCKUP_DIR=$scratch/clip-mockups"
+    "STORAGE_ROOTS=$scratch"
     "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
-    "OVERLAY_RENDER_CACHE_DIRECTORY=$scratch/overlay-renders"
-    "FINISHED_VIDEOS_DIRECTORY=$scratch/finished-videos"
     "OBS_RECORDING_DIR=$scratch/obs-recordings"
     "DROPBOX_REMOTE_PATH=$scratch/dropbox"
     "${OFFLINE_SERVICES_ENV[@]}"

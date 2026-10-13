@@ -90,6 +90,10 @@ const RUN_BOUNDARIES: ReadonlyArray<readonly [RegExp, string]> = [
     /^apps\/local\/scripts\/verify-api\.ts$/,
     "verify-cvm's local apps/remote: its entry point mints the run's token",
   ],
+  [
+    /^apps\/local\/scripts\/storage-rename-exports\.ts$/,
+    "the one-off Exported Video rename (#2104): its entry point runs the plan",
+  ],
 ];
 
 export const isRunBoundary = (file: string): boolean =>

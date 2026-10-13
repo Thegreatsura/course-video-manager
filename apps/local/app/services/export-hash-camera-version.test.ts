@@ -46,7 +46,7 @@ const clip = (overlays: ExportOverlay[]): ExportClip => ({
 });
 
 const addressOf = (...overlays: ExportOverlay[]) =>
-  computeExportHash([clip(overlays)], "landscape");
+  computeExportHash([clip(overlays)], "landscape", []);
 
 describe("the camera move's version in the export address", () => {
   /**

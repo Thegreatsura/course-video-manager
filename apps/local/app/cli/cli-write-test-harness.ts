@@ -106,30 +106,33 @@ export const makeTempVideoFilesDir = (): {
 };
 
 /**
- * Point CLIP_MOCKUP_DIR at a fresh temp directory for the duration of a suite.
+ * Point STORAGE_ROOTS at a fresh temp Storage Root for the duration of a
+ * suite; `dir` is its `clip-mockups/`, where frames are written.
  *
  * Same reason as {@link makeTempVideoFilesDir}, different directory: Clip
  * Mockup frames are deliberately NOT under VIDEO_FILES_DIR, and without this a
- * `cvm clip-mockup` test would write PNGs into the repo's own ./clip-mockups.
+ * `cvm clip-mockup` test would write PNGs into the author's real store.
  */
 export const makeTempClipMockupDir = (): {
   readonly dir: string;
   readonly cleanup: () => void;
 } => {
-  const previous = process.env.CLIP_MOCKUP_DIR;
-  const dir = nodeFs.mkdtempSync(
+  const previous = process.env.STORAGE_ROOTS;
+  const root = nodeFs.mkdtempSync(
     nodePath.join(os.tmpdir(), "cvm-clip-mockups-")
   );
-  process.env.CLIP_MOCKUP_DIR = dir;
+  const dir = nodePath.join(root, "clip-mockups");
+  nodeFs.mkdirSync(dir);
+  process.env.STORAGE_ROOTS = root;
 
   return {
     dir,
     cleanup: () => {
-      nodeFs.rmSync(dir, { recursive: true, force: true });
+      nodeFs.rmSync(root, { recursive: true, force: true });
       if (previous === undefined) {
-        delete process.env.CLIP_MOCKUP_DIR;
+        delete process.env.STORAGE_ROOTS;
       } else {
-        process.env.CLIP_MOCKUP_DIR = previous;
+        process.env.STORAGE_ROOTS = previous;
       }
     },
   };

@@ -1,16 +1,25 @@
 import { statSync } from "fs";
 import { webFileStream } from "@/services/web-file-stream.server";
+import { findStoragePathSync } from "@/packages/storage/server";
+import { readStorageRootsSync } from "@/services/storage-roots";
 import type { Route } from "./+types/view-video";
 
 export const loader = async (args: Route.LoaderArgs) => {
   const request = args.request;
   const searchParams = new URL(request.url).searchParams;
-  const videoPath = searchParams.get("videoPath");
+  const storedPath = searchParams.get("videoPath");
 
-  if (!videoPath) {
+  if (!storedPath) {
     return new Response("Missing videoPath on search params", {
       status: 400,
     });
+  }
+
+  // The editor names the path the row stores (root-relative, or legacy
+  // absolute); the file is on the first Storage Root that has it.
+  const videoPath = findStoragePathSync(storedPath, readStorageRootsSync());
+  if (videoPath === null) {
+    return new Response(null, { status: 404 });
   }
 
   try {

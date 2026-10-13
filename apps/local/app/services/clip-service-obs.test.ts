@@ -7,12 +7,49 @@ import {
   getItems,
   afterClip,
   start,
+  testDb,
+  TEST_STORAGE_ROOT,
 } from "./clip-service-test-setup";
+import * as schema from "@cvm/core/db/schema";
 
 setupClipServiceTests();
 
 describe("ClipService", () => {
   describe("appendFromObs", () => {
+    it("does not append a take again when its Clip was stored root-relative by the path migration", async () => {
+      const video = await clipService.createVideo("test-video.mp4");
+      // Clipped before the migration, then rewritten to its root-relative form.
+      await testDb.insert(schema.clips).values({
+        videoId: video.id,
+        videoFilename: "raw-footage/take.mkv",
+        sourceStartTime: 0,
+        sourceEndTime: 10,
+        order: "a0",
+        text: "",
+      });
+      // OBS reports the same file by its absolute path.
+      const absolute = `${TEST_STORAGE_ROOT}/raw-footage/take.mkv`;
+      mockVideoProcessing.getLatestOBSVideoClips = vi.fn().mockResolvedValue({
+        clips: [
+          { inputVideo: absolute, startTime: 0.2, endTime: 10.1 },
+          { inputVideo: absolute, startTime: 15, endTime: 25 },
+        ],
+      });
+
+      const result = await clipService.appendFromObs({
+        videoId: video.id,
+        filePath: "T:\\raw-footage\\take.mkv",
+        insertionPoint: start,
+        items: [],
+      });
+
+      // Only the new take lands, and detection resumed after the stored Clip.
+      expect(result.map((c) => c.sourceStartTime)).toEqual([15]);
+      expect(mockVideoProcessing.getLatestOBSVideoClips).toHaveBeenCalledWith(
+        expect.objectContaining({ startTime: 9 })
+      );
+    });
+
     it("returns empty array when CLI detects no clips", async () => {
       const video = await clipService.createVideo("test-video.mp4");
 

@@ -165,6 +165,10 @@ export type BuildCourseJsonInput = {
   // Placeholder Lessons. `ANNOUNCE_NOTHING` reproduces the pre-ADR-0029
   // release exactly: every unshippable Lesson is withheld.
   placeholderFloor: PlaceholderFloor;
+  // The Storage Roots: a Video's `hash` is its Export Hash, which names each
+  // Footage file by its path relative to one of these (see
+  // `computeExportHash`).
+  storageRoots: readonly string[];
 };
 
 // ── Publish-blocker detection ─────────────────────────────────────────────
@@ -285,7 +289,8 @@ function toVideoEntry(
   sectionPath: string,
   lessonPath: string,
   assetBasePath: string,
-  asset: VideoAssetReceipt
+  asset: VideoAssetReceipt,
+  storageRoots: readonly string[]
 ): typeof CourseJsonVideo.Type {
   const exportClips = toExportClips(video.clips);
   return {
@@ -293,7 +298,7 @@ function toVideoEntry(
     relativePath: `${assetBasePath}/${sectionPath}/${lessonPath}/${video.title}.mp4`,
     body: video.body!,
     description: video.description!,
-    hash: computeExportHash(exportClips, video.format)!,
+    hash: computeExportHash(exportClips, video.format, storageRoots)!,
     sha256: asset.sha256,
     bytes: asset.bytes,
     chapters: buildVideoChaptersFromRows(video.clips, video.chapters),
@@ -359,7 +364,8 @@ export const buildCourseJson = (
         sectionPath,
         lessonPath,
         input.assetBasePath,
-        asset
+        asset,
+        input.storageRoots
       );
     });
 

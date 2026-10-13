@@ -24,8 +24,12 @@ export let testDb: TestDb;
 export let clipService: ClipService;
 export let mockVideoProcessing: VideoProcessingAdapter;
 
+/** The Storage Root these tests' Footage paths are under (never read from disk). */
+export const TEST_STORAGE_ROOT = "/mnt/t";
+
 export function setupClipServiceTests() {
   beforeAll(async () => {
+    process.env.STORAGE_ROOTS = TEST_STORAGE_ROOT;
     const result = await createTestDb();
     testDb = result.testDb;
   });

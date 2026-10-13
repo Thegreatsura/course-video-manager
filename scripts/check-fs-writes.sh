@@ -15,9 +15,10 @@
 #   const target = yield* assertUnderEffect(getVideoFilesBaseDir(), row.filePath);
 #   yield* fs.writeFile(target, bytes);
 #
-# The guards are `assertUnder`, `assertUnderEffect`, and the two store
-# resolvers that call it (`resolveVideoFilePath`, `resolveClipMockupPath`), or
-# the guard called inline as the argument. Test files and harnesses are exempt.
+# The guards are `assertUnder`, `assertUnderEffect`, and the resolvers that
+# call it (`assertUnderFinishedVideos`, `resolveVideoFilePath`,
+# `resolveClipMockupPath`, `locateClipMockupFile`), or the guard called inline
+# as the argument. Test files and harnesses are exempt.
 #
 # Writes that genuinely never see such a path (ffmpeg scratch files in the OS
 # temp dir, a daemon's own lock file) are counted per file in ALLOWLIST below.
@@ -51,7 +52,7 @@ ALLOWLIST=(
   # names on the CLI.
   "apps/local/app/services/footage-cache.ts:1"
   # The export digest sidecar: every caller hands it an export path that
-  # resolveExportPath built under FINISHED_VIDEOS_DIRECTORY.
+  # the export code built under finished-videos/ on a Storage Root.
   "apps/local/app/services/export-sha256-sidecar.ts:1"
 )
 MAX_ALLOWLISTED=21
@@ -116,7 +117,7 @@ while IFS= read -r file; do
   matches=$(perl -0777 -ne '
     my $src = $_;
     my %guarded;
-    my $guard = qr/(?:assertUnder|assertUnderEffect|resolveVideoFilePath|resolveClipMockupPath)\s*\(/;
+    my $guard = qr/(?:assertUnder|assertUnderEffect|assertUnderFinishedVideos|resolveVideoFilePath|resolveClipMockupPath|locateClipMockupFile)\s*\(/;
     while ($src =~ /\b(?:const|let)\s+(\w+)\s*=\s*(?:yield\*\s*)?$guard/g) {
       $guarded{$1} = 1;
     }

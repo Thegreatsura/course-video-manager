@@ -225,7 +225,7 @@ _Avoid_: Lint warning, Lint error, Publish blocker (this never blocks a Publish)
 ### Video export and hashing
 
 **Export Hash**:
-A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. A CVM-recorder Clip also adds what its picture is drawn from: its **Recording Session**, the scenes in its range, its **Scene Override**, the mic offset, the **Mic EQ** and the layout version; an OBS Clip's part never changes. It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
+A fingerprint of everything that decides how a Video is rendered: its clips and their order and timing, **Pauses**, **Clip Zoom**, **Overlays**, format, and the **Export Version Key**. A CVM-recorder Clip also adds what its picture is drawn from: its **Recording Session**, the scenes in its range, its **Scene Override**, the mic offset, the **Mic EQ** and the layout version; an OBS Clip's part never changes. A Clip's Footage is named in it by its path relative to its **Storage Root**, never by the drive it is on, so moving Footage between drives never changes it (ADR 0040). It decides whether a Video needs a new export, names the **Exported Video**, and is part of the **Bundle** address (ADR 0023). It names what the render was asked to do, not what it produced, so it must include everything that changes the render. Whether a Video is uploaded is decided by the **Byte Hash** instead (ADR 0027).
 _Avoid_: Content hash (that is an encoding of the **Byte Hash**, not of this), Video hash, Byte Hash (the recipe and the result are different things)
 
 **Mic EQ**:
@@ -254,6 +254,12 @@ _Avoid_: Overlay cache (it holds renders, not **Overlays**), Definition Card cac
 **Overlay Renderer Version**:
 A number, set by hand in the code, that is part of every **Overlay Render Cache** name. Changing it makes every Overlay render again. It is deliberately separate from the **Export Version Key**: a change to how content is drawn should render the content again and leave exported videos alone, and a change to how videos are encoded should do the opposite. A new **Overlay Kind** does not change it.
 _Avoid_: Renderer version, Export Version Key (that addresses the export; this addresses the card render)
+
+### Storage
+
+**Storage Root**:
+One of the drives CVM's files may be on (`/mnt/d`, `/mnt/e`), listed in order in the one `STORAGE_ROOTS` setting. Every Storage Root has the same fixed folders (`raw-footage/`, `finished-videos/`, `clip-mockups/`, `overlay-renders/`). The database stores a file's path relative to a Storage Root, with no drive in it. A file is read from the first Storage Root that has it, and a new file is written to the first. So moving a file between drives changes no row and no **Export Hash** (ADR 0040). A path under no Storage Root (a **Recording Session** in `~/Videos`) is used exactly as stored.
+_Avoid_: Drive (a Storage Root is the folder CVM uses on it), Storage location, Volume
 
 ### Recording
 

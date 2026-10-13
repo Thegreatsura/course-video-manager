@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -27,7 +27,7 @@ import {
 //
 // The point of these tests is the thing that makes the verb worth having: it
 // reads EXPORTEDNESS OFF THE FILESYSTEM, with no CVM server running. Each test
-// points FINISHED_VIDEOS_DIRECTORY at a temp dir and controls whether the
+// points STORAGE_ROOTS at a temp root and controls whether the
 // `{courseId}-{exportHash}.mp4` file exists.
 //
 // Reading that directory is what makes the verb LOCAL-ONLY, so the suite
@@ -38,23 +38,30 @@ import {
 let testDb: TestDb;
 let run: (argv: ReadonlyArray<string>) => Promise<RunResult>;
 let finishedDir: string;
-const originalFinishedDir = process.env.FINISHED_VIDEOS_DIRECTORY;
+const originalRoots = process.env.STORAGE_ROOTS;
+
+/** A fresh temp Storage Root; its `finished-videos/` is returned. */
+const freshFinishedDir = () => {
+  const root = mkdtempSync(path.join(tmpdir(), "cvm-readiness-"));
+  process.env.STORAGE_ROOTS = root;
+  mkdirSync(path.join(root, "finished-videos"));
+  return path.join(root, "finished-videos");
+};
 const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
   run = makeReadRun(buildReadLayer(testDb));
-  finishedDir = mkdtempSync(path.join(tmpdir(), "cvm-readiness-"));
-  process.env.FINISHED_VIDEOS_DIRECTORY = finishedDir;
+  finishedDir = freshFinishedDir();
   process.env[LOCAL_MACHINE_ENV_KEY] = "true";
 });
 
 afterAll(() => {
-  if (originalFinishedDir === undefined) {
-    delete process.env.FINISHED_VIDEOS_DIRECTORY;
+  if (originalRoots === undefined) {
+    delete process.env.STORAGE_ROOTS;
   } else {
-    process.env.FINISHED_VIDEOS_DIRECTORY = originalFinishedDir;
+    process.env.STORAGE_ROOTS = originalRoots;
   }
   if (originalLocalMachine === undefined) {
     delete process.env[LOCAL_MACHINE_ENV_KEY];
@@ -69,9 +76,7 @@ beforeEach(async () => {
   await truncateAllTables(testDb);
   s = await seedRead(testDb);
   rmSync(finishedDir, { recursive: true, force: true });
-  process.env.FINISHED_VIDEOS_DIRECTORY = finishedDir = mkdtempSync(
-    path.join(tmpdir(), "cvm-readiness-")
-  );
+  finishedDir = freshFinishedDir();
 });
 
 /** Write the `.mp4` that makes the seeded lesson video count as exported. */
@@ -88,7 +93,11 @@ const markSeededVideoExported = async () => {
       },
     },
   });
-  const hash = computeExportHash(toExportClips(video!.clips), video!.format);
+  const hash = computeExportHash(
+    toExportClips(video!.clips),
+    video!.format,
+    []
+  );
   writeFileSync(resolveExportPath(finishedDir, s.courseAId, hash!), "");
 };
 

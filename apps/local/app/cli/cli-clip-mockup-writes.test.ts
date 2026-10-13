@@ -33,8 +33,8 @@ import {
 // add (see addArgv in ./cli-clip-mockup-test-harness.ts).
 //
 // A Clip Mockup is half a row and half a file: the line and the order are in
-// the database, the frame is a PNG under {CLIP_MOCKUP_DIR}/{lineageId}/. So
-// this suite points CLIP_MOCKUP_DIR at a temp dir (buildProgram provides the
+// the database, the frame is a PNG under clip-mockups/{lineageId}/ on a Storage Root. So
+// this suite points STORAGE_ROOTS at a temp root (buildProgram provides the
 // real FileSystem) and asserts BOTH halves — what the CLI printed, and what
 // actually landed on disk.
 //

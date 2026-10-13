@@ -12,7 +12,7 @@ import {
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
-import { CLIP_MOCKUP_DIR_ENV_KEY } from "@/services/clip-mockup-files";
+import { STORAGE_ROOTS_ENV_KEY } from "@/services/storage-roots";
 import {
   ClipMockupSpeechService,
   pcmToWav,
@@ -76,7 +76,7 @@ let dbLayer: Layer.Layer<
   ClipMockupOperationsService | ClipMockupVoiceOperationsService
 >;
 let store: string;
-const originalStore = process.env[CLIP_MOCKUP_DIR_ENV_KEY];
+const originalStore = process.env[STORAGE_ROOTS_ENV_KEY];
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
@@ -89,7 +89,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await truncateAllTables(testDb);
   store = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-voice-job-"));
-  process.env[CLIP_MOCKUP_DIR_ENV_KEY] = store;
+  process.env[STORAGE_ROOTS_ENV_KEY] = store;
   await testDb.insert(schema.videos).values({
     id: "video-1",
     lineageId: "lineage-1",
@@ -99,8 +99,8 @@ beforeEach(async () => {
 });
 
 afterAll(() => {
-  if (originalStore === undefined) delete process.env[CLIP_MOCKUP_DIR_ENV_KEY];
-  else process.env[CLIP_MOCKUP_DIR_ENV_KEY] = originalStore;
+  if (originalStore === undefined) delete process.env[STORAGE_ROOTS_ENV_KEY];
+  else process.env[STORAGE_ROOTS_ENV_KEY] = originalStore;
 });
 
 /** Clip Mockups as `cvm clip-mockup add` leaves them: voice pending. */
@@ -166,7 +166,9 @@ describe("the clip-mockup-voice Job kind", () => {
       expect(row.voiceStatus).toBe("ready");
       expect(row.durationSeconds).toBe(FAKE_DURATION_SECONDS);
       expect(
-        nodeFs.existsSync(nodePath.join(store, "lineage-1", row.audioPath!))
+        nodeFs.existsSync(
+          nodePath.join(store, "clip-mockups", "lineage-1", row.audioPath!)
+        )
       ).toBe(true);
     }
   });
@@ -180,9 +182,9 @@ describe("the clip-mockup-voice Job kind", () => {
     expect(speech.spoken).toEqual(["Hold that thought."]);
     const [a, b] = await Promise.all(ids.map(readRow));
     expect(a!.audioPath).toBe(b!.audioPath);
-    expect(nodeFs.readdirSync(nodePath.join(store, "lineage-1"))).toEqual([
-      a!.audioPath,
-    ]);
+    expect(
+      nodeFs.readdirSync(nodePath.join(store, "clip-mockups", "lineage-1"))
+    ).toEqual([a!.audioPath]);
   });
 
   it("voices nothing already ready: a re-run repeats no work", async () => {
@@ -227,7 +229,7 @@ describe("the clip-mockup-voice Job kind", () => {
       voiceStatus: "pending",
       audioPath: null,
     });
-    const dir = nodePath.join(store, "lineage-1");
+    const dir = nodePath.join(store, "clip-mockups", "lineage-1");
     expect(
       nodeFs.existsSync(dir)
         ? nodeFs.readdirSync(dir).filter((f) => f.endsWith(".wav"))

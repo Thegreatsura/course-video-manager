@@ -92,7 +92,7 @@ function makeTestLayer(fakes: {
   const configLayer = Layer.setConfigProvider(
     ConfigProvider.fromMap(
       new Map([
-        ["FINISHED_VIDEOS_DIRECTORY", "/tmp/finished-videos"],
+        ["STORAGE_ROOTS", "/tmp"],
         ["BUFFER_CHANNEL_ID", "channel-abc"],
       ])
     )

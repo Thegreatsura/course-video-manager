@@ -7,6 +7,8 @@ import { FileSystem } from "@effect/platform";
 import path from "node:path";
 import { SCENES } from "@/packages/scene-layout";
 import { VIDEO_FORMATS } from "@cvm/core/features/videos/video-format";
+import { resolveClipFrameFiles } from "@/services/clip-source-files.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 
 /**
  * A `ClipFrame` from `@/packages/clip-source`: the picker never names a file.
@@ -34,7 +36,11 @@ const RequestSchema = Schema.Union(
 
 export const action = makeAction({
   input: "json",
-  errors: { NotFoundError: 404, FFmpegError: 500 },
+  errors: {
+    NotFoundError: 404,
+    StorageFileNotFoundError: 404,
+    FFmpegError: 500,
+  },
   effect: ({ params, payload }) =>
     Effect.gen(function* () {
       const frame = yield* Schema.decodeUnknown(RequestSchema)(payload);
@@ -59,7 +65,12 @@ export const action = makeAction({
 
       const outputPath = path.join(baseDir, filename);
 
-      yield* ffmpeg.captureFrameAtTime(frame, outputPath);
+      // The picker names stored paths; ffmpeg opens the files on disk.
+      const onDisk = yield* resolveClipFrameFiles(
+        frame,
+        yield* storageRootsConfig
+      );
+      yield* ffmpeg.captureFrameAtTime(onDisk, outputPath);
 
       return { imagePath: `./${filename}` };
     }),

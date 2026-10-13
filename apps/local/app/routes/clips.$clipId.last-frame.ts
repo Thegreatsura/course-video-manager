@@ -5,8 +5,11 @@ import { makeLoader } from "@/services/route-action.server";
 import { VideoProcessingService } from "@/services/video-processing-service";
 import { clipFrame, clipSource } from "@/packages/clip-source";
 import { stillSceneOverride } from "@/features/video-editor/clip-still-url";
+import { resolveClipFrameFiles } from "@/services/clip-source-files.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 
 export const loader = makeLoader({
+  errors: { StorageFileNotFoundError: 404 },
   effect: ({ params, request }) =>
     Effect.gen(function* () {
       const clipOps = yield* ClipOperationsService;
@@ -14,15 +17,18 @@ export const loader = makeLoader({
 
       const videoProcessing = yield* VideoProcessingService;
 
-      const lastFramePath = yield* videoProcessing.getLastFrame(
+      // The still's files found on a Storage Root (404 when on none).
+      const frame = yield* resolveClipFrameFiles(
         clipFrame(
           clipSource({
             ...clip,
             sceneOverride: stillSceneOverride(request.url, clip.sceneOverride),
           }),
           "last"
-        )
+        ),
+        yield* storageRootsConfig
       );
+      const lastFramePath = yield* videoProcessing.getLastFrame(frame);
 
       return new Response(webFileStream(lastFramePath), {
         headers: {
