@@ -2,6 +2,7 @@ import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
 import type { LastPassedCalibration } from "../app/av-calibration-constants";
+import type { ClapMark } from "../app/packages/clap-detection/live";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -45,11 +46,13 @@ export const RECORDER_SERVICE_PORT = 5177;
  * recording-started event's `avCalibrationId`, renamed from Audio
  * Calibration; 9: the calibration run records the camera too, starts once
  * live, and cuts its clap window out of the true peak; 10: the
- * recording-started event's `devices`, for the pair's Mic Offset). The app server reloads on a change and the service does not
+ * recording-started event's `devices`, for the pair's Mic Offset; 11: the
+ * mic timed by sample count, which an older service's recordings are not, so
+ * the app refuses to record through one). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 10;
+export const RECORDER_PROTOCOL_VERSION = 11;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -400,6 +403,12 @@ export type RecorderStatusMessage =
       cameraFile: string;
       scriptStartSeconds: number;
     }
+  /**
+   * A run's live clap marks (`live-claps.ts`): every clap the mic has heard
+   * in the clap window so far, in seconds of its files, and whether the
+   * camera saw it. Sent whenever they change. Broadcast.
+   */
+  | { type: "calibration-claps"; calibrationId: string; claps: ClapMark[] }
   /** The run ended and its mic file was measured. Broadcast. */
   | ({
       type: "calibration-measured";

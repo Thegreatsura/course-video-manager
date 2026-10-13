@@ -18,7 +18,15 @@ import type {
 import { findByName, Refusal } from "./refusal";
 import { listDshowDevices } from "./windows-devices";
 import { MIC_NAME } from "../app/mic-device";
-import { CLOSE_OBS_TO_CALIBRATE } from "../app/av-calibration-constants";
+import {
+  CLOSE_OBS_TO_CALIBRATE,
+  runMeasurementWindows,
+} from "../app/av-calibration-constants";
+import {
+  motionLineReader,
+  type MotionPoint,
+} from "../app/packages/clap-detection/live";
+import { createLiveClaps, type LiveClaps } from "./live-claps";
 
 /**
  * THE LEVEL METER (#2078): the AV Calibration page's live loudness of the
@@ -82,6 +90,8 @@ export const startLevelMeter = (o: {
   /** A file to keep everything it prints in (a calibration run's log). */
   logFile?: string;
   onReading: (reading: MeterReading) => void;
+  /** A frame's motion, when the process prints it (a calibration run's camera). */
+  onMotion?: (point: MotionPoint) => void;
   /**
    * It quit without being asked: the last line it printed, if any, and the
    * last few lines that were not readings (where dshow says why it failed).
@@ -96,11 +106,15 @@ export const startLevelMeter = (o: {
     p.onStderr((chunk) => fs.writeSync(log, chunk));
     void p.exited.then(() => fs.closeSync(log));
   }
+  const readMotion = motionLineReader();
   p.onStderr(
     lineSplitter((line) => {
       const reading = parseMeterLine(line);
       if (reading) return o.onReading(reading);
-      if (!line.trim()) return;
+      const motion = readMotion(line);
+      if (motion) return o.onMotion?.(motion);
+      // A frame's motion is printed over two lines: neither says why it quit.
+      if (!line.trim() || /\bpts_time:/.test(line)) return;
       said.push(line.trim());
       if (said.length > 20) said.shift();
     })
@@ -116,13 +130,17 @@ export const startLevelMeter = (o: {
   };
 };
 
-/** A calibration run in progress: its id, folder and files (WSL paths), its camera. */
+/**
+ * A calibration run in progress: its id, folder and files (WSL paths), its
+ * camera, and its live clap marks once it is live.
+ */
 type CalibrationRun = {
   id: string;
   dir: string;
   micFile: string;
   cameraFile: string;
   camera: string;
+  claps?: LiveClaps;
 };
 
 /**
@@ -175,6 +193,7 @@ export const createMeterSide = <Owner>(o: {
   };
 
   const discard = (run: CalibrationRun) => {
+    run.claps?.stop();
     try {
       fs.rmSync(run.dir, { recursive: true, force: true });
     } catch (e) {
@@ -247,7 +266,9 @@ export const createMeterSide = <Owner>(o: {
               resolve(Math.max(reading.seconds, (o.now() - t0Ms) / 1000));
             }
             o.broadcast({ type: "meter-reading", ...reading });
+            run.claps?.update();
           },
+          onMotion: (point) => run.claps?.addMotion(point),
           onExit: (lastLine, said) => {
             if (current !== started) return;
             const message = `The AV Calibration's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
@@ -284,6 +305,7 @@ export const createMeterSide = <Owner>(o: {
     if (!ending?.run) throw new Refusal("No AV Calibration is running.");
     current = undefined;
     await ending.meter.stop();
+    ending.run.claps?.stop();
     o.giveBackCamera();
     return ending as typeof ending & { run: CalibrationRun };
   };
@@ -354,6 +376,12 @@ export const createMeterSide = <Owner>(o: {
         launchMeter(owner, mic);
         throw e;
       }
+      run.claps = createLiveClaps({
+        micFile: run.micFile,
+        window: runMeasurementWindows(scriptStartSeconds).claps,
+        onMarks: (claps) =>
+          o.broadcast({ type: "calibration-claps", calibrationId: id, claps }),
+      });
       o.broadcast({
         type: "calibration-started",
         calibrationId: id,

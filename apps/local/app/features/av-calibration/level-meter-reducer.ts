@@ -62,8 +62,10 @@ export const levelMeterReducer = (state: State, action: Action): State => {
         failure: action.message,
         reading: null,
       };
-    // The meter carries on after a failed run; the session says why.
+    // The meter carries on after a failed run; the session says why. The
+    // claps are the session's too.
     case "calibration-failed":
+    case "calibration-claps":
       return state;
   }
 };

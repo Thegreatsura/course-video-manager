@@ -1,3 +1,5 @@
+import type { ClapMark } from "@/packages/clap-detection/live";
+
 /**
  * What the app server tells the AV Calibration page of the level meter,
  * over `GET /api/av-calibration/meter` (one SSE event per message, its
@@ -31,6 +33,16 @@ export type LevelMeterMessage =
       mic: string;
       scriptStartSeconds: number;
     }
+  /**
+   * A run's live clap marks: every clap the mic has heard in the clap window
+   * so far (`audioS`, in seconds of its files), and whether the camera saw
+   * it, by the rules the result is judged by. The whole list, each time.
+   */
+  | {
+      type: "calibration-claps";
+      calibrationId: string;
+      claps: ClapMark[];
+    }
   /** The run ended without being measured, and why (its ffmpeg quit, say). */
   | { type: "calibration-failed"; calibrationId: string; message: string };
 
@@ -39,5 +51,6 @@ export const LEVEL_METER_MESSAGE_TYPES = [
   "meter-reading",
   "meter-failed",
   "calibration-started",
+  "calibration-claps",
   "calibration-failed",
 ] as const satisfies readonly LevelMeterMessage["type"][];

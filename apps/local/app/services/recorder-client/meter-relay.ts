@@ -15,6 +15,7 @@ type MeterMessage = Extract<
       | "meter-reading"
       | "meter-stopped"
       | "calibration-started"
+      | "calibration-claps"
       | "calibration-measured"
       | "calibration-ended";
   }
@@ -25,6 +26,7 @@ export const isMeterMessage = (m: RecorderMessage): m is MeterMessage =>
   m.type === "meter-reading" ||
   m.type === "meter-stopped" ||
   m.type === "calibration-started" ||
+  m.type === "calibration-claps" ||
   m.type === "calibration-measured" ||
   m.type === "calibration-ended";
 
@@ -78,6 +80,12 @@ export const meterRelay = (o: {
             calibrationId: message.calibrationId,
             mic: message.mic,
             scriptStartSeconds: message.scriptStartSeconds,
+          });
+        case "calibration-claps":
+          return publish({
+            type: "calibration-claps",
+            calibrationId: message.calibrationId,
+            claps: message.claps,
           });
         // The finish's own answer, to the recorder client's waiter.
         case "calibration-measured":
