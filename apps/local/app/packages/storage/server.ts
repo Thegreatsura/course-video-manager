@@ -9,4 +9,5 @@ export {
   findStoragePath,
   findStoragePathSync,
   resolveStoragePath,
+  rootIsOnline,
 } from "./lib/resolve";

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { VideoOffIcon } from "lucide-react";
+import type { FootageNotFound } from "@/services/clip-source-files.server";
 import type { ClipOnDatabase, FrontendId } from "./clip-state-reducer";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +43,11 @@ export const PreloadableClip = (props: {
    * that is still running is in here too, with a negative `at`.
    */
   overlays: ClipOverlay[];
+  /**
+   * "Footage not found (E: offline?): …" when this Clip's Footage is on no
+   * reachable Storage Root: shown in place of the player.
+   */
+  footageNotFound: FootageNotFound | undefined;
 }) => {
   const [preloadState, setPreloadState] = useState<"preloading" | "finished">(
     "preloading"
@@ -212,6 +219,23 @@ export const PreloadableClip = (props: {
         props.hidden && "hidden"
       )}
     >
+      {props.footageNotFound !== undefined && (
+        <div
+          className={cn(
+            "flex w-full flex-col items-center justify-center gap-2 bg-[#101011] p-6 text-center",
+            props.profile === "TikTok" ? "w-92 aspect-[9/16]" : "aspect-[16/9]"
+          )}
+          data-testid="footage-not-found"
+        >
+          <VideoOffIcon className="size-10 text-destructive" />
+          <p className="text-sm font-medium text-destructive">
+            {props.footageNotFound.headline}
+          </p>
+          <p className="text-xs text-muted-foreground break-all">
+            {props.footageNotFound.path}
+          </p>
+        </div>
+      )}
       <video
         key={props.clip.frontendId}
         src={clipPlaybackUrl(source, {
@@ -222,7 +246,8 @@ export const PreloadableClip = (props: {
           "w-full",
           props.profile === "TikTok" && "w-92 aspect-[9/16]",
           // A CVM-recorder Clip's clock is its mic: heard, drawn below.
-          picture && "hidden"
+          picture && "hidden",
+          props.footageNotFound !== undefined && "hidden"
         )}
         // The preview half of two contracts that are never both in force: the
         // Overlay's kind-derived Transform (a sideways translate) and the
@@ -237,7 +262,7 @@ export const PreloadableClip = (props: {
         }
         ref={ref}
       />
-      {picture && (
+      {picture && props.footageNotFound === undefined && (
         <CompositePlayback
           clock={ref}
           picture={picture}
@@ -281,6 +306,8 @@ export const PreloadableClipManager = (props: {
    * needs every Clip's length, not only the preloaded Clips in `clips` above.
    */
   overlaysByClipId: Map<string, ClipOverlay[]>;
+  /** Clips whose Footage is on no reachable Storage Root, by database id. */
+  footageNotFound: Record<string, FootageNotFound>;
 }) => {
   return (
     <div className="">
@@ -326,6 +353,7 @@ export const PreloadableClipManager = (props: {
                 }
               }}
               onPreloadComplete={() => {}}
+              footageNotFound={props.footageNotFound[clip.databaseId]}
               scrubSeekTime={
                 isCurrentlyPlaying ? props.scrubSeekTime : undefined
               }

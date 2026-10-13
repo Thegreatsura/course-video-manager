@@ -3,6 +3,9 @@ import { ReducerTester } from "@/test-utils/reducer-tester";
 import type { StorageBucket } from "@/packages/storage/client";
 import {
   createInitialStoragePageState,
+  driveWarnings,
+  moveTargets,
+  storageCells,
   storagePageReducer,
   storageLocations,
   storageRows,
@@ -34,6 +37,7 @@ const start = () => {
           online: true,
           totalBytes: 2000 * GB,
           freeBytes: 164 * GB,
+          dirtyBit: "clean",
         },
         {
           root: E,
@@ -41,6 +45,7 @@ const start = () => {
           online: true,
           totalBytes: 2000 * GB,
           freeBytes: 1400 * GB,
+          dirtyBit: "clean",
         },
       ],
     })
@@ -214,5 +219,96 @@ describe("storagePageReducer", () => {
       failure: "DATABASE down",
     });
     expect(tester.getExec().stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Offline and Dirty drives", () => {
+  const measured = (roots: storagePageReducer.State["roots"]) => {
+    const listener = { stop: () => {} } as never;
+    return new ReducerTester(
+      storagePageReducer,
+      createInitialStoragePageState(() => listener)
+    )
+      .send({ type: "roots-measured", roots: roots! })
+      .send({ type: "buckets-listed", buckets });
+  };
+
+  const d = {
+    root: D,
+    label: "D:",
+    online: true as const,
+    totalBytes: 2000 * GB,
+    freeBytes: 164 * GB,
+    dirtyBit: "clean" as const,
+  };
+
+  it("an Offline root is warned about, reads Offline in every row, and takes no moves", () => {
+    const tester = measured([
+      d,
+      { root: E, label: "E:", online: false, reason: "ENOENT" },
+    ]).send({
+      type: "sizes-counted",
+      sizes: [
+        {
+          bucketId: "course:a",
+          location: D,
+          kind: "footage",
+          bytes: 5 * GB,
+          files: 1,
+        },
+      ],
+    });
+    const state = tester.getState();
+
+    expect(driveWarnings(state)).toEqual({
+      offline: [{ root: E, label: "E:", online: false, reason: "ENOENT" }],
+      dirty: [],
+    });
+    const [row] = storageRows(state);
+    expect(storageCells(state, row!, "footage")).toEqual([
+      { location: D, type: "bytes", bytes: 5 * GB },
+      { location: E, type: "offline" },
+    ]);
+    expect(moveTargets(state).map((t) => [t.root.root, t.refusal])).toEqual([
+      [D, null],
+      [E, "E: is Offline"],
+    ]);
+  });
+
+  it("a Dirty root is warned about, but still counted and still a move target", () => {
+    const tester = measured([
+      d,
+      { ...d, root: E, label: "E:", dirtyBit: "dirty" },
+    ]).send({
+      type: "sizes-counted",
+      sizes: [
+        {
+          bucketId: "course:a",
+          location: E,
+          kind: "footage",
+          bytes: 3 * GB,
+          files: 1,
+        },
+      ],
+    });
+    const state = tester.getState();
+
+    expect(driveWarnings(state).offline).toEqual([]);
+    expect(driveWarnings(state).dirty.map((r) => r.root)).toEqual([E]);
+    const [row] = storageRows(state);
+    expect(storageCells(state, row!, "footage")).toEqual([
+      { location: D, type: "bytes", bytes: 0 },
+      { location: E, type: "bytes", bytes: 3 * GB },
+    ]);
+    expect(moveTargets(state).every((t) => t.refusal === null)).toBe(true);
+  });
+
+  it("a root whose dirty bit Windows won't give is not warned about", () => {
+    const state = measured([
+      d,
+      { ...d, root: E, label: "E:", dirtyBit: "unknown" },
+    ]).getState();
+
+    expect(driveWarnings(state)).toEqual({ offline: [], dirty: [] });
   });
 });

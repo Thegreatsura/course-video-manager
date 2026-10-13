@@ -118,6 +118,25 @@ describe("verify-cvm scratch — never a real Storage Root", () => {
     realFootageUntouched();
   });
 
+  it("takes VERIFY_EXTRA_STORAGE_ROOTS names inside the run (an Offline drive)", () => {
+    const r = sh(
+      `clone_app_env "${run}" "${URL}"
+       printf '%s\\n' "\${CLONE_APP_ENV[@]}"`,
+      { VERIFY_EXTRA_STORAGE_ROOTS: "gone" }
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`STORAGE_ROOTS=${run}/scratch,${run}/gone\n`);
+  });
+
+  it("refuses a VERIFY_EXTRA_STORAGE_ROOTS entry on a real drive", () => {
+    const r = sh(`clone_app_env "${run}" "${URL}"`, {
+      VERIFY_EXTRA_STORAGE_ROOTS: join(base, "real-drive"),
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/outside this run's directory/);
+    realFootageUntouched();
+  });
+
   it("refuses a symlink anywhere under scratch/", () => {
     mkdirSync(join(run, "scratch", "clip-mockups"), { recursive: true });
     symlinkSync(realFootage, join(run, "scratch", "clip-mockups", "deep"));

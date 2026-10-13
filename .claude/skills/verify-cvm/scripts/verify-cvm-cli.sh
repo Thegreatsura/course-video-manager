@@ -106,6 +106,17 @@ assert_env_paths_contained() {
   done
 }
 
+# extra_storage_roots <run dir> — ",<run dir>/<name>" per name in
+# VERIFY_EXTRA_STORAGE_ROOTS; an absolute entry is kept as given (and refused).
+extra_storage_roots() {
+  local name names
+  IFS=',' read -r -a names <<< "${VERIFY_EXTRA_STORAGE_ROOTS:-}"
+  for name in "${names[@]}"; do
+    [ -n "$name" ] || continue
+    case "$name" in /*) printf ',%s' "$name" ;; *) printf ',%s/%s' "$1" "$name" ;; esac
+  done
+}
+
 CLONE_APP_ENV=()
 clone_app_env() {
   local dir="$1" url="$2" scratch="$1/scratch"
@@ -116,7 +127,11 @@ clone_app_env() {
     "DATABASE_URL=$url"
     "DIRECT_DATABASE_URL=$url"
     "VIDEO_FILES_DIR=$scratch/video-files"
-    "STORAGE_ROOTS=$scratch"
+    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated names) adds roots after
+    # scratch/, e.g. one that does not exist, to see an Offline drive. A name
+    # is taken inside this run's directory; anything resolving outside it —
+    # an absolute /mnt/e — refuses the run: a real drive is never a root here.
+    "STORAGE_ROOTS=$scratch$(extra_storage_roots "$dir")"
     # The app's own half of the rule (services/storage-roots.ts): with this
     # set, the server, the sidecar and `cvm` refuse a Storage Root outside it.
     "CVM_VERIFY_RUN_DIR=$dir"

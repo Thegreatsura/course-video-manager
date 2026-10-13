@@ -9,6 +9,7 @@ import {
   type StorageFileKind,
   type StorageOwnership,
 } from "./buckets";
+import type { DirtyBitReader } from "./dirty-bit";
 import { loadStorageOwnership } from "./ownership.server";
 import type {
   StorageRootReport,
@@ -30,8 +31,11 @@ const messageOf = (e: unknown) =>
       ? String((e as { message: unknown }).message)
       : String(e);
 
-/** Each root's size and free space; a root that can't be read is Offline. */
-const measureRoots = (roots: StorageRoots) =>
+/**
+ * Each root's size, free space and dirty bit; a root that can't be read (not
+ * mounted, or a stale WSL mount) is Offline.
+ */
+const measureRoots = (roots: StorageRoots, readDirtyBit: DirtyBitReader) =>
   Effect.forEach(
     roots,
     (root): Effect.Effect<StorageRootReport, never, FileSystem.FileSystem> =>
@@ -47,6 +51,7 @@ const measureRoots = (roots: StorageRoots) =>
             reason: messageOf(readable.left),
           } as const;
         }
+        const dirtyBit = yield* readDirtyBit(root);
         return yield* Effect.tryPromise(() => statfs(root)).pipe(
           Effect.map((s): StorageRootReport => ({
             root,
@@ -54,6 +59,7 @@ const measureRoots = (roots: StorageRoots) =>
             online: true,
             totalBytes: s.blocks * s.bsize,
             freeBytes: s.bavail * s.bsize,
+            dirtyBit,
           })),
           Effect.orElseSucceed((): StorageRootReport => ({
             root,
@@ -220,11 +226,13 @@ export const streamStorageScan = (opts: {
   readonly db: Database;
   readonly roots: StorageRoots;
   readonly scratchDir?: string;
+  /** Reads each online root's dirty bit; only ever queries. */
+  readonly readDirtyBit: DirtyBitReader;
   readonly emit: (message: StorageScanMessage) => void;
 }) =>
   Effect.gen(function* () {
     yield* Effect.logInfo("[storage] scan started");
-    const reports = yield* measureRoots(opts.roots);
+    const reports = yield* measureRoots(opts.roots, opts.readDirtyBit);
     opts.emit({ type: "roots-measured", roots: reports });
     const ownership = yield* loadStorageOwnership(opts.db, opts.roots);
     opts.emit({ type: "buckets-listed", buckets: [...ownership.buckets] });

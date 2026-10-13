@@ -1,3 +1,4 @@
+import type { FootageNotFound } from "@/services/clip-source-files.server";
 import { createContext } from "use-context-selector";
 import type {
   Clip,
@@ -85,6 +86,11 @@ export type VideoEditorContextType = {
    * Clip and keep covering the Clips that follow. See `overlay-spill.ts`.
    */
   overlaysByClipId: Map<string, ClipOverlay[]>;
+  /**
+   * Clips whose Footage is on no reachable Storage Root, by Clip database
+   * id: "Footage not found (E: offline?): raw-footage/…".
+   */
+  footageNotFound: Record<string, FootageNotFound>;
   sessions: RecordingSession[];
   sessionPanels: SessionPanelData[];
   videoTitle: string;

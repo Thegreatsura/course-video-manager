@@ -92,6 +92,10 @@ export const VideoPlayerPanel = () => {
     VideoEditorContext,
     (ctx) => ctx.overlaysByClipId
   );
+  const footageNotFound = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.footageNotFound
+  );
   const insertionPoint = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.insertionPoint
@@ -339,6 +343,7 @@ export const VideoPlayerPanel = () => {
                   playbackRate={playbackRate}
                   scrubSeekTime={scrubSeekTime}
                   overlaysByClipId={overlaysByClipId}
+                  footageNotFound={footageNotFound}
                 />
               </div>
             </>
