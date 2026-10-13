@@ -14,6 +14,8 @@ import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
 const DeleteOriginalsRequest = Schema.Struct({
   /** The Storage Root to delete the originals from. */
   from: Schema.String,
+  /** Per-file (#2157): only these files (root-relative). */
+  paths: Schema.optional(Schema.NonEmptyArray(Schema.String)),
 });
 
 /**
@@ -45,6 +47,7 @@ export const action = makeAction({
         roots,
         bucketId,
         from: request.from,
+        ...(request.paths === undefined ? {} : { paths: request.paths }),
         enqueue: (plan) =>
           enqueueJob({
             id: null,
@@ -53,8 +56,14 @@ export const action = makeAction({
               operation: "originals",
               bucketName: plan.bucketName,
               locationLabel: rootLabel(request.from),
+              ...(request.paths === undefined ? {} : { paths: request.paths }),
             }),
-            params: { operation: "originals", bucketId, from: request.from },
+            params: {
+              operation: "originals",
+              bucketId,
+              from: request.from,
+              ...(request.paths === undefined ? {} : { paths: request.paths }),
+            },
             subject: { type: "storage-bucket", id: bucketId },
             attemptsSpent: 0,
             dependsOn: null,

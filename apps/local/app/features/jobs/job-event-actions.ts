@@ -131,6 +131,10 @@ export const toJobsAction = (
       };
     case "posted":
       return { ...base, type: "job-posted", result: { ...data } };
+    // What a Storage move or delete did: the Storage pages draw it (#2157).
+    case "storage-moved":
+    case "storage-deleted":
+      return { ...base, type: "job-result-reported", result: { ...data } };
     case "post-check": {
       const check = postCheckOf(data);
       return check

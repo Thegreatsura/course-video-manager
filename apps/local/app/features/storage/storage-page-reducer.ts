@@ -1,23 +1,22 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
-  isExportPurgeAction,
-  purgeIsBusy,
-  purgeTransition,
-  startPurge,
-  type exportPurge,
-} from "./export-purge";
+  beginStorageAction,
+  isStorageActionAction,
+  storageActionTransition,
+  type storageAction,
+} from "./storage-action";
+import { watchStorageJobs, type ObservedStorageJob } from "./storage-jobs";
 import {
   bucketCanBeDeleted,
   bucketCanBePurged,
   movableKindsOf,
   moveTargetRefusal,
   type StorageMoveKind,
-  type StorageMovePlan,
   type StorageBucket,
-  type StorageDeleteResult,
   type StorageFileKind,
   type StorageRootReport,
   type StorageScanMessage,
+  type StorageTrashEntry,
 } from "@/packages/storage/client";
 
 /**
@@ -26,6 +25,13 @@ import {
  * (`/api/storage/scan`), which streams sizes as it counts them; leaving the
  * page closes the stream, and the server stops the walk. Nothing is cached:
  * every visit counts afresh. See docs/FRONTEND_STATE.md.
+ *
+ * Each row has one action menu (#2157): move its Footage, Exported Videos or
+ * Clip Mockups to another drive, delete its Exported Videos, delete an Other
+ * bucket, move Unused Footage to the Trash or empty the Trash. Each is a
+ * `storageAction` (dry run, confirm, Sidecar Job). The page follows every
+ * storage Job live from its Job Events and counts again when one it saw
+ * running settles.
  */
 export namespace storagePageReducer {
   /** Bytes per kind, at one location. */
@@ -42,90 +48,43 @@ export namespace storagePageReducer {
     /** Roots the walk could not read, and why: shown with no sizes. */
     unreadableRoots: Record<string, string>;
     scan: EffectEntity<State, Action> | null;
-    /** Deleting an Other bucket's files (#2112): asked, under way, or done. */
-    deletion: Deletion | null;
-    /** Purging a bucket's Exported Videos (#2111): asked, under way, or done. */
-    purge: exportPurge.State | null;
-    /** Moving a bucket's files to another drive (#2109), up to its Job. */
-    move: Move | null;
+    /** The move or delete being asked for, up to its Job (#2157). */
+    action: storageAction.State | null;
+    /** The next action's `requestId`. */
+    nextRequestId: number;
+    /** Storage Jobs seen running (true) or seen to settle (false). */
+    watchedJobs: Record<string, boolean>;
+    /** What is in the Trash (ADR 0043); null until listed. */
+    trash: StorageTrashEntry[] | null;
+    trashFailure: string | null;
   };
 
-  /**
-   * One move confirmation at a time. `planning`: the server is counting what
-   * would be copied and checking every refusal; `confirming`: the dialog shows
-   * the size, the target's free space and any refusal (then it is blocked);
-   * `starting`: the Job is being enqueued; `started`: it runs in the Sidecar
-   * and shows in the Upload Manager, with its Cancel.
-   */
-  export type Move =
-    | {
-        status: "planning";
-        bucket: StorageBucket;
-        kind: StorageMoveKind;
-        target: string;
-      }
-    | { status: "confirming"; plan: StorageMovePlan }
-    | { status: "starting"; plan: StorageMovePlan }
-    | { status: "started"; plan: StorageMovePlan; jobId: string }
-    | { status: "failed"; bucket: StorageBucket; message: string };
-
-  /**
-   * One delete at a time. `bytes` is what the scan counted in the bucket when
-   * Delete was clicked: the GB the confirmation says it frees.
-   */
-  export type Deletion =
-    | { status: "confirming"; bucket: StorageBucket; bytes: number }
-    | { status: "deleting"; bucket: StorageBucket; bytes: number }
-    | { status: "deleted"; bucket: StorageBucket; result: StorageDeleteResult }
-    | { status: "failed"; bucket: StorageBucket; message: string };
+  /** What a row's action menu offers. */
+  export type RowChoice =
+    | { type: "move"; kind: StorageMoveKind; target: string }
+    | { type: "purge" }
+    | { type: "delete-bucket" }
+    | { type: "trash-unused" };
 
   export type Action =
     | StorageScanMessage
     | { type: "page-opened" }
     | { type: "scan-failed"; message: string }
-    | { type: "delete-bucket-clicked"; bucketId: string }
-    | { type: "delete-confirmed" }
-    | { type: "delete-cancelled" }
-    | { type: "bucket-deleted"; result: StorageDeleteResult }
-    | { type: "bucket-delete-failed"; bucketId: string; message: string }
-    | { type: "deletion-dismissed" }
-    | { type: "purge-bucket-clicked"; bucketId: string }
-    | exportPurge.Action
-    | {
-        type: "move-clicked";
-        bucketId: string;
-        kind: StorageMoveKind;
-        target: string;
-      }
-    | { type: "move-planned"; plan: StorageMovePlan }
-    | { type: "move-plan-failed"; bucketId: string; message: string }
-    | { type: "move-confirmed" }
-    | { type: "move-cancelled" }
-    | { type: "move-started"; jobId: string }
-    | { type: "move-start-failed"; message: string }
-    | { type: "move-dismissed" };
+    | { type: "row-action-clicked"; bucketId: string; choice: RowChoice }
+    | { type: "storage-jobs-observed"; jobs: ObservedStorageJob[] }
+    | { type: "trash-listed"; entries: StorageTrashEntry[] }
+    | { type: "trash-list-failed"; message: string }
+    | { type: "empty-trash-clicked" }
+    | storageAction.Action;
 
   export type Effect =
-    | { type: "listen-to-scan" }
-    | { type: "delete-bucket"; bucketId: string }
-    | exportPurge.Effect
-    | {
-        type: "plan-move";
-        bucketId: string;
-        kind: StorageMoveKind;
-        target: string;
-      }
-    | {
-        type: "start-move";
-        bucketId: string;
-        kind: StorageMoveKind;
-        target: string;
-      };
+    { type: "listen-to-scan" } | { type: "load-trash" } | storageAction.Effect;
 }
 
 type State = storagePageReducer.State;
 type Action = storagePageReducer.Action;
 type Effect = storagePageReducer.Effect;
+type Exec = Parameters<EffectReducer<State, Action, Effect>>[2];
 
 const NO_BYTES: storagePageReducer.KindBytes = {
   footage: 0,
@@ -146,275 +105,135 @@ export const createInitialStoragePageState = (): State => ({
   totals: {},
   unreadableRoots: {},
   scan: null,
-  deletion: null,
-  purge: null,
-  move: null,
+  action: null,
+  nextRequestId: 1,
+  watchedJobs: {},
+  trash: null,
+  trashFailure: null,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
-const stopScan = (
-  state: State,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-) => {
+const stopScan = (state: State, exec: Exec) => {
   if (state.scan) exec.stop(state.scan);
 };
 
-/** Count again from nothing: what a delete changed is counted afresh. */
-const rescan = (
-  state: State,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): State => {
+/** Count again from nothing: what a Job changed is counted afresh. */
+const rescan = (state: State, exec: Exec): State => {
   stopScan(state, exec);
+  exec({ type: "load-trash" });
   return {
     ...createInitialStoragePageState(),
-    deletion: state.deletion,
-    purge: state.purge,
-    move: state.move,
+    action: state.action,
+    nextRequestId: state.nextRequestId,
+    watchedJobs: state.watchedJobs,
+    trash: state.trash,
     scan: exec({ type: "listen-to-scan" }),
   };
 };
 
-/** The delete half of the page: Other buckets only, one at a time. */
-const deletionReducer = (
+/** The request a row's choice makes, or null when the row doesn't offer it. */
+const requestOf = (
   state: State,
-  action: Action,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): State | null => {
-  const deletion = state.deletion;
-  switch (action.type) {
-    case "delete-bucket-clicked": {
-      // Offered once the count is complete, so the GB it frees is known.
-      if (state.status !== "complete") return state;
-      if (deletion?.status === "confirming" || deletion?.status === "deleting")
-        return state;
-      if (purgeIsBusy(state.purge)) return state;
-      const row = storageRows(state).find(
-        (r) => r.bucket.id === action.bucketId
+  row: StorageRow,
+  choice: storagePageReducer.RowChoice
+): storageAction.Request | null => {
+  const bucket = row.bucket;
+  switch (choice.type) {
+    case "move": {
+      const offered = rowMoveActions(state, row).some(
+        (m) =>
+          m.kind === choice.kind &&
+          m.target.root === choice.target &&
+          m.refusal === null
       );
-      if (!row || !bucketCanBeDeleted(row.bucket)) return state;
-      return {
-        ...state,
-        deletion: {
-          status: "confirming",
-          bucket: row.bucket,
-          bytes: row.totalBytes,
-        },
-      };
+      return offered
+        ? {
+            type: "move",
+            bucket,
+            kind: choice.kind,
+            target: choice.target,
+            paths: null,
+          }
+        : null;
     }
-    case "delete-confirmed":
-      if (deletion?.status !== "confirming") return state;
-      exec({ type: "delete-bucket", bucketId: deletion.bucket.id });
-      return { ...state, deletion: { ...deletion, status: "deleting" } };
-    case "delete-cancelled":
-      if (deletion?.status !== "confirming") return state;
-      return { ...state, deletion: null };
-    case "bucket-deleted":
-      if (
-        deletion?.status !== "deleting" ||
-        deletion.bucket.id !== action.result.bucketId
-      )
-        return state;
-      return rescan(
-        {
-          ...state,
-          deletion: {
-            status: "deleted",
-            bucket: deletion.bucket,
-            result: action.result,
-          },
-        },
-        exec
-      );
-    case "bucket-delete-failed":
-      if (
-        deletion?.status !== "deleting" ||
-        deletion.bucket.id !== action.bucketId
-      )
-        return state;
-      return {
-        ...state,
-        deletion: {
-          status: "failed",
-          bucket: deletion.bucket,
-          message: action.message,
-        },
-      };
-    case "deletion-dismissed":
-      if (deletion?.status !== "deleted" && deletion?.status !== "failed")
-        return state;
-      return { ...state, deletion: null };
-    case "page-opened":
-    case "roots-measured":
-    case "buckets-listed":
-    case "sizes-counted":
-    case "root-unreadable":
-    case "scan-completed":
-    case "scan-failed":
-    case "purge-bucket-clicked":
-    case "purge-planned":
-    case "purge-confirmed":
-    case "purge-cancelled":
-    case "exports-purged":
-    case "purge-failed":
-    case "purge-dismissed":
-      // The scan's and the Purge's events: not the delete's.
-      return null;
-    case "move-clicked":
-    case "move-planned":
-    case "move-plan-failed":
-    case "move-confirmed":
-    case "move-cancelled":
-    case "move-started":
-    case "move-start-failed":
-    case "move-dismissed":
-      // The move's events, handled by `moveReducer`.
-      return null;
+    case "purge":
+      return rowCanBePurged(row)
+        ? { type: "purge", bucket, exportPaths: null }
+        : null;
+    case "delete-bucket":
+      return bucketCanBeDeleted(bucket)
+        ? { type: "delete-bucket", bucket, files: null }
+        : null;
+    case "trash-unused":
+      return bucket.kind === "unused-footage"
+        ? { type: "trash-unused", files: null }
+        : null;
   }
 };
 
-/** The move half of the page: one confirmation at a time, up to its Job. */
-const moveReducer = (
+/** The row menus, the action they start, and the Jobs the page follows. */
+const actionReducer = (
   state: State,
   action: Action,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+  exec: Exec
 ): State | null => {
-  const move = state.move;
-  switch (action.type) {
-    case "move-clicked": {
-      if (
-        move?.status === "planning" ||
-        move?.status === "confirming" ||
-        move?.status === "starting"
-      )
-        return state;
-      const bucket = state.buckets[action.bucketId];
-      if (!bucket || !movableKindsOf(bucket).includes(action.kind)) {
-        return state;
-      }
-      exec({
-        type: "plan-move",
-        bucketId: bucket.id,
-        kind: action.kind,
-        target: action.target,
-      });
-      return {
-        ...state,
-        move: {
-          status: "planning",
-          bucket,
-          kind: action.kind,
-          target: action.target,
-        },
-      };
-    }
-    case "move-planned":
-      if (
-        move?.status !== "planning" ||
-        move.bucket.id !== action.plan.bucketId ||
-        move.kind !== action.plan.kind ||
-        move.target !== action.plan.target
-      )
-        return state;
-      return { ...state, move: { status: "confirming", plan: action.plan } };
-    case "move-plan-failed":
-      if (move?.status !== "planning" || move.bucket.id !== action.bucketId)
-        return state;
-      return {
-        ...state,
-        move: {
-          status: "failed",
-          bucket: move.bucket,
-          message: action.message,
-        },
-      };
-    case "move-confirmed":
-      // A blocked move can't be confirmed: the button is off, and so is this.
-      if (move?.status !== "confirming" || move.plan.refusals.length > 0)
-        return state;
-      exec({
-        type: "start-move",
-        bucketId: move.plan.bucketId,
-        kind: move.plan.kind,
-        target: move.plan.target,
-      });
-      return { ...state, move: { status: "starting", plan: move.plan } };
-    case "move-cancelled":
-      if (move?.status !== "confirming" && move?.status !== "planning")
-        return state;
-      return { ...state, move: null };
-    case "move-started":
-      if (move?.status !== "starting") return state;
-      return {
-        ...state,
-        move: { status: "started", plan: move.plan, jobId: action.jobId },
-      };
-    case "move-start-failed": {
-      if (move?.status !== "starting") return state;
-      const bucket = state.buckets[move.plan.bucketId] ?? {
-        id: move.plan.bucketId,
-        kind: "course" as const,
-        name: move.plan.bucketName,
-      };
-      return {
-        ...state,
-        move: { status: "failed", bucket, message: action.message },
-      };
-    }
-    case "move-dismissed":
-      if (move?.status !== "started" && move?.status !== "failed") return state;
-      return { ...state, move: null };
-    case "page-opened":
-    case "roots-measured":
-    case "buckets-listed":
-    case "sizes-counted":
-    case "root-unreadable":
-    case "scan-completed":
-    case "scan-failed":
-    case "delete-bucket-clicked":
-    case "delete-confirmed":
-    case "delete-cancelled":
-    case "bucket-deleted":
-    case "bucket-delete-failed":
-    case "deletion-dismissed":
-    case "purge-bucket-clicked":
-    case "purge-planned":
-    case "purge-confirmed":
-    case "purge-cancelled":
-    case "exports-purged":
-    case "purge-failed":
-    case "purge-dismissed":
-      // The scan's, the delete's and the Purge's events.
-      return null;
-  }
-};
-
-/**
- * The Purge half of the page (#2111): a Course's, Standalone Videos' or
- * Shorts' Exported Videos, one bucket at a time, never during a delete.
- */
-const purgeReducer = (
-  state: State,
-  action: Action,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): State | null => {
-  if (action.type === "purge-bucket-clicked") {
-    // Offered once the count is complete, on a bucket with Exported Videos.
+  if (action.type === "row-action-clicked") {
+    // Offered once the count is complete, so the sizes are known.
     if (state.status !== "complete") return state;
-    if (
-      state.deletion?.status === "confirming" ||
-      state.deletion?.status === "deleting"
-    )
-      return state;
     const row = storageRows(state).find((r) => r.bucket.id === action.bucketId);
-    if (!row || !rowCanBePurged(row)) return state;
-    const purge = startPurge(state.purge, row.bucket, null, exec);
-    return purge === null ? state : { ...state, purge };
+    const request = row ? requestOf(state, row, action.choice) : null;
+    if (request === null) return state;
+    const next = beginStorageAction(
+      state.action,
+      request,
+      state.nextRequestId,
+      exec
+    );
+    return next === null
+      ? state
+      : { ...state, action: next, nextRequestId: state.nextRequestId + 1 };
   }
-  if (!isExportPurgeAction(action)) return null;
-  const next = purgeTransition(state.purge, action, exec);
-  if (next.purge === state.purge) return state;
-  const after = { ...state, purge: next.purge };
-  return next.purged ? rescan(after, exec) : after;
+  if (action.type === "empty-trash-clicked") {
+    if ((state.trash ?? []).length === 0) return state;
+    const next = beginStorageAction(
+      state.action,
+      { type: "empty-trash" },
+      state.nextRequestId,
+      exec
+    );
+    return next === null
+      ? state
+      : { ...state, action: next, nextRequestId: state.nextRequestId + 1 };
+  }
+  if (action.type === "trash-listed") {
+    return { ...state, trash: action.entries, trashFailure: null };
+  }
+  if (action.type === "trash-list-failed") {
+    return { ...state, trashFailure: action.message };
+  }
+  if (action.type === "storage-jobs-observed") {
+    const { watched, settled } = watchStorageJobs(
+      state.watchedJobs,
+      action.jobs
+    );
+    const after = { ...state, watchedJobs: watched };
+    return settled ? rescan(after, exec) : after;
+  }
+  if (!isStorageActionAction(action)) return null;
+  const { state: next, startedJobId } = storageActionTransition(
+    state.action,
+    action,
+    exec
+  );
+  if (next === state.action && startedJobId === null) return state;
+  return {
+    ...state,
+    action: next,
+    watchedJobs:
+      startedJobId === null
+        ? state.watchedJobs
+        : { ...state.watchedJobs, [startedJobId]: true },
+  };
 };
 
 export const storagePageReducer: EffectReducer<State, Action, Effect> = (
@@ -422,12 +241,8 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
   action,
   exec
 ) => {
-  const afterMove = moveReducer(state, action, exec);
-  if (afterMove !== null) return afterMove;
-  const afterDeletion = deletionReducer(state, action, exec);
-  if (afterDeletion !== null) return afterDeletion;
-  const afterPurge = purgeReducer(state, action, exec);
-  if (afterPurge !== null) return afterPurge;
+  const afterAction = actionReducer(state, action, exec);
+  if (afterAction !== null) return afterAction;
   // A message after the scan has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "scanning") return state;
@@ -435,6 +250,7 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
     case "page-opened":
       // Opened again (Strict Mode remounts): one listener, the newest.
       stopScan(state, exec);
+      exec({ type: "load-trash" });
       return { ...state, scan: exec({ type: "listen-to-scan" }) };
     case "roots-measured":
       return { ...state, roots: action.roots };
@@ -484,30 +300,18 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
         failure: action.message,
         scan: null,
       };
-    case "delete-bucket-clicked":
-    case "delete-confirmed":
-    case "delete-cancelled":
-    case "bucket-deleted":
-    case "bucket-delete-failed":
-    case "deletion-dismissed":
-    case "purge-bucket-clicked":
-    case "purge-planned":
-    case "purge-confirmed":
-    case "purge-cancelled":
-    case "exports-purged":
-    case "purge-failed":
-    case "purge-dismissed":
-      // The delete's and the Purge's events, handled above.
-      return state;
-    case "move-clicked":
-    case "move-planned":
-    case "move-plan-failed":
-    case "move-confirmed":
-    case "move-cancelled":
-    case "move-started":
-    case "move-start-failed":
-    case "move-dismissed":
-      // The move's events, handled by `moveReducer`.
+    case "row-action-clicked":
+    case "empty-trash-clicked":
+    case "trash-listed":
+    case "trash-list-failed":
+    case "storage-jobs-observed":
+    case "storage-action-planned":
+    case "storage-action-confirmed":
+    case "storage-action-cancelled":
+    case "storage-action-started":
+    case "storage-action-failed":
+    case "storage-action-dismissed":
+      // The action menu's and the Jobs' events, handled above.
       return state;
   }
 };
@@ -655,35 +459,3 @@ export const rowMoveActions = (
       return elsewhere ? [{ kind, target: root, refusal }] : [];
     })
   );
-
-/**
- * The move confirmation's numbers: the size to copy (files not already on
- * the target), the target's free space and what it would have left, and
- * whether the move is blocked (any refusal), naming each reason. Null when no
- * plan is shown.
- */
-export const moveConfirmation = (
-  state: State
-): {
-  plan: StorageMovePlan;
-  bytesToCopy: number;
-  freeBytes: number | null;
-  freeAfter: number | null;
-  blocked: boolean;
-  reasons: string[];
-  starting: boolean;
-} | null => {
-  const move = state.move;
-  if (move?.status !== "confirming" && move?.status !== "starting") return null;
-  const plan = move.plan;
-  return {
-    plan,
-    bytesToCopy: plan.bytesToCopy,
-    freeBytes: plan.freeBytes,
-    freeAfter:
-      plan.freeBytes === null ? null : plan.freeBytes - plan.bytesToCopy,
-    blocked: plan.refusals.length > 0,
-    reasons: plan.refusals.map((r) => r.message),
-    starting: move.status === "starting",
-  };
-};

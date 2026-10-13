@@ -26,8 +26,25 @@
 
 export const STORAGE_DELETE_JOB_KIND = "storage-delete";
 
-/** What a `storage-delete` Job deletes. */
-export const STORAGE_DELETE_OPERATIONS = ["originals"] as const;
+/**
+ * What a `storage-delete` Job deletes (#2110, #2157):
+ * - `originals`: a bucket's files on one root with an identical copy elsewhere;
+ * - `purge-exports`: a bucket's Exported Videos whose Footage is all found;
+ * - `delete-bucket`: an Other bucket's files (renders, scratch, orphaned exports);
+ * - `trash-unused`: Unused Footage, into the Trash on its own drive;
+ * - `restore-trash`: trashed files, back where they were;
+ * - `empty-trash`: everything in the Trash, for good;
+ * - `expire-trash`: Trash older than 14 days, for good (the Sidecar's sweep).
+ */
+export const STORAGE_DELETE_OPERATIONS = [
+  "originals",
+  "purge-exports",
+  "delete-bucket",
+  "trash-unused",
+  "restore-trash",
+  "empty-trash",
+  "expire-trash",
+] as const;
 export type StorageDeleteOperation = (typeof STORAGE_DELETE_OPERATIONS)[number];
 
 /** Checking (refusals, then each file against its copy), then deleting. */
@@ -54,12 +71,51 @@ export type StorageDeleteJobResult = {
   readonly left: readonly { readonly path: string; readonly message: string }[];
 };
 
-/** "Delete Crash Course originals on D:". */
+/** One file's name, or "3 files": what a per-file Job's title names. */
+const whichFiles = (paths: readonly string[] | undefined, what: string) =>
+  paths === undefined || paths.length === 0
+    ? null
+    : paths.length === 1
+      ? paths[0]!.split("/").pop()!
+      : `${paths.length} ${what}`;
+
+/**
+ * The Job's title: "Delete Crash Course originals on D:", "Delete Crash
+ * Course Exported Videos", "Move 12 Unused Footage files to the Trash".
+ */
 export const storageDeleteTitle = (opts: {
   readonly operation: StorageDeleteOperation;
   readonly bucketName: string;
   readonly locationLabel: string;
-}) => `Delete ${opts.bucketName} originals on ${opts.locationLabel}`;
+  /** A per-file Job's files (root-relative). */
+  readonly paths?: readonly string[];
+}) => {
+  const one = whichFiles(opts.paths, "files");
+  switch (opts.operation) {
+    case "originals":
+      return one === null
+        ? `Delete ${opts.bucketName} originals on ${opts.locationLabel}`
+        : `Delete the original of ${one} on ${opts.locationLabel}`;
+    case "purge-exports":
+      return one === null
+        ? `Delete ${opts.bucketName} Exported Videos`
+        : `Delete Exported Video ${one}`;
+    case "delete-bucket":
+      return one === null
+        ? `Delete ${opts.bucketName}`
+        : `Delete ${one} (${opts.bucketName})`;
+    case "trash-unused":
+      return one === null
+        ? "Move Unused Footage to the Trash"
+        : `Move ${one} to the Trash`;
+    case "restore-trash":
+      return `Restore ${one ?? "files"} from the Trash`;
+    case "empty-trash":
+      return "Empty the Trash";
+    case "expire-trash":
+      return "Delete Trash older than 14 days";
+  }
+};
 
 const gbOrMb = (bytes: number) =>
   bytes >= 1024 ** 3
@@ -71,11 +127,19 @@ const gbOrMb = (bytes: number) =>
  * `label` names the location ("D:").
  */
 export const storageDeleteSummary = (
-  result: Pick<StorageDeleteJobResult, "deleted" | "kept" | "left">,
+  result: Pick<StorageDeleteJobResult, "deleted" | "kept" | "left"> & {
+    readonly operation?: StorageDeleteOperation;
+  },
   label: string
 ) => {
+  const verb =
+    result.operation === "trash-unused"
+      ? "moved to the Trash"
+      : result.operation === "restore-trash"
+        ? "restored"
+        : "deleted";
   const parts = [
-    `${result.deleted.files} deleted (${gbOrMb(result.deleted.bytes)})`,
+    `${result.deleted.files} ${verb} (${gbOrMb(result.deleted.bytes)})`,
   ];
   if (result.left.length > 0) {
     parts.push(
@@ -84,7 +148,7 @@ export const storageDeleteSummary = (
   }
   if (result.kept.files > 0) {
     parts.push(
-      `${result.kept.files} with no copy elsewhere ${result.kept.files === 1 ? "stays" : "stay"}`
+      `${result.kept.files} ${result.operation === "originals" ? "with no copy elsewhere" : "kept"} ${result.kept.files === 1 ? "stays" : "stay"}`
     );
   }
   return parts.join("; ");

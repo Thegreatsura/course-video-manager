@@ -200,6 +200,7 @@ export const applyStreamAction = (
     case "job-submitted":
       return { ...job, submitted: true };
     case "job-posted":
+    case "job-result-reported":
     case "job-published":
       return { ...job, result: action.result };
     case "job-post-checked":

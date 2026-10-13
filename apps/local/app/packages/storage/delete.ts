@@ -8,8 +8,13 @@
 // exports are refused until the Export Hash rename has been recorded. Every
 // file's real path is checked inside its bucket's real folder, and outside
 // every root's `raw-footage/`, before it is deleted.
+export { StorageDeleteCancelledError } from "./lib/delete-safety.server";
 export {
   StorageDeleteFailedError,
   StorageDeleteRefusedError,
   deleteOtherStorageBucket,
 } from "./lib/delete-other.server";
+export {
+  StorageDeleteStartRefusedError,
+  startStorageDelete,
+} from "./lib/delete-start.server";

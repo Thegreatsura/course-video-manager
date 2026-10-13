@@ -7,7 +7,9 @@ import type { Database } from "@cvm/core/services/drizzle-service.server";
 import {
   isAtOrInside,
   isInside,
+  cancelledOr,
   messageOf,
+  type StorageDeleteCancelledError,
   realpathOrNull,
   STORAGE_BUSY_JOB_KINDS,
   storageBusyMessage,
@@ -68,6 +70,10 @@ export type Common = {
   readonly now?: Date;
   /** Called after each file, done or not. */
   readonly onProgress?: (done: number, total: number) => void;
+  /** The author's Cancel: stop before the next file. */
+  readonly cancelRequested?: () => boolean;
+  /** The caller holds the Storage page's write hold already (a start). */
+  readonly alreadyHeld?: boolean;
 };
 
 export const refused = (reason: StorageTrashRefusalReason, message: string) =>
@@ -265,13 +271,16 @@ export const tally = () => {
 
 export const held = <A, E, R>(
   what: string,
-  effect: Effect.Effect<A, E, R>
+  effect: Effect.Effect<A, E, R>,
+  alreadyHeld?: boolean
 ): Effect.Effect<A, E | StorageTrashRefusedError, R> =>
-  holdingStorageWrites(
-    what,
-    (heldBy) => refused("storage-busy", storageBusyMessage(heldBy)),
-    effect
-  );
+  alreadyHeld
+    ? effect
+    : holdingStorageWrites(
+        what,
+        (heldBy) => refused("storage-busy", storageBusyMessage(heldBy)),
+        effect
+      );
 
 /** The batch folders (ours, by name) in a trash folder, oldest first. */
 export const batchesOf = async (trash: string) => {
@@ -299,3 +308,13 @@ export function logResult(r: StorageTrashResult) {
         `[storage] trash ${r.operation}: ${r.done.reduce((n, d) => n + d.files, 0)} files, ${r.kept.length} kept, ${r.left.length} left`
       );
 }
+
+/** The author's Cancel stopped a trash operation. */
+export type TrashCancelled = StorageDeleteCancelledError;
+
+/** A trash loop's failure: the author's Cancel, or a failure to read. */
+export const trashFailure = (cause: unknown) =>
+  cancelledOr(
+    cause,
+    () => new StorageTrashFailedError({ message: messageOf(cause) })
+  );

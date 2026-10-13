@@ -119,8 +119,12 @@ export const STORAGE_MOVED_EVENT = "storage-moved";
 export const storageMoveTitle = (
   bucketName: string,
   kind: StorageMoveKind,
-  targetLabel: string
+  targetLabel: string,
+  /** A per-file move's files: "Move a.mkv to E:", "Move 3 files to E:". */
+  paths?: readonly string[]
 ) =>
-  kind === "clip-mockups"
-    ? `Move Clip Mockups to ${targetLabel}`
-    : `Move ${bucketName} ${STORAGE_MOVE_KIND_LABELS[kind]} to ${targetLabel}`;
+  paths !== undefined && paths.length > 0
+    ? `Move ${paths.length === 1 ? paths[0]!.split("/").pop() : `${paths.length} ${bucketName} files`} to ${targetLabel}`
+    : kind === "clip-mockups"
+      ? `Move Clip Mockups to ${targetLabel}`
+      : `Move ${bucketName} ${STORAGE_MOVE_KIND_LABELS[kind]} to ${targetLabel}`;

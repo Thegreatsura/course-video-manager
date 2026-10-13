@@ -24,6 +24,7 @@ import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
 import { sweepStuckClips } from "./stuck-clip-sweep";
 import { sweepUnqueuedVoices } from "./clip-mockup-voice-sweep";
+import { sweepExpiredTrash } from "./trash-expiry-sweep";
 import { superviseSidecar } from "./supervise";
 
 /**
@@ -158,7 +159,8 @@ const main = async (): Promise<void> => {
               Effect.catchAllCause((cause) =>
                 Effect.logError("sidecar: the stuck-Clip sweep failed", cause)
               ),
-              Effect.zipRight(sweepUnqueuedVoices)
+              Effect.zipRight(sweepUnqueuedVoices),
+              Effect.zipRight(sweepExpiredTrash)
             ),
             serve: (handle) =>
               serveSidecarSocket({

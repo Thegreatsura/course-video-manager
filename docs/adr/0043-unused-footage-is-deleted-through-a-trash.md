@@ -17,6 +17,8 @@ About 104 GB of raw **Footage** on D: is used by no **Clip**. ADR 0041 made all 
 3. **The Trash comes first.** Deleting Unused Footage renames each file into `<root>/.cvm-trash/<batch>/<its root-relative path>` on its own **Storage Root**. It is a rename, never a copy, and it is refused if the trash is on another device, so a file never crosses drives. Restore puts a file back at its old path, never over anything. Trash older than 14 days is deleted for good (its age is read from the batch's name); "Empty trash" deletes it now.
 4. **Same path safety as every other delete.** A file must be a regular file (never a link) whose real path is exactly where its root-relative path says, under the real `raw-footage/` of a real root; the trash folder must really be on that root. Every trash operation refuses while an export, a Publish, a move, a transcription, another delete or a recording is queued or running.
 
+5. **Every delete is a Sidecar Job.** Trashing, Restore, Empty trash and the 14-day expiry are operations of the `storage-delete` Job (#2110's), like a Purge, an Other bucket's delete and "Delete originals". The page's dry run is the confirmation; the Job checks every refusal again (not counting itself), reports progress and a result, and can be cancelled before its next file. The Sidecar looks for expired trash at most once an hour and queues an `expire-trash` Job when it finds some.
+
 ## Alternatives rejected
 
 - **Delete Unused Footage at once.** One wrong reading of the database (a Clip copied into a new Draft a moment later, a Recording Session whose Clips are not saved yet) would lose a take for good. The trash costs 14 days of space.

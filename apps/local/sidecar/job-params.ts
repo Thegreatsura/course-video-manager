@@ -6,6 +6,18 @@ import {
 import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 import { STORAGE_MOVE_KINDS } from "@/packages/storage/client";
 
+const NonEmptyPath = Schema.String.pipe(Schema.nonEmptyString());
+
+/** A file the per-bucket page listed: where, and its path relative to there. */
+const FileAtParam = Schema.Struct({
+  location: Schema.String.pipe(
+    Schema.filter((p) => p.startsWith("/"), {
+      message: () => "a location is an absolute path",
+    })
+  ),
+  path: NonEmptyPath,
+});
+
 /** A Storage Root: an absolute path. */
 const StorageRootParam = Schema.String.pipe(
   Schema.filter((p) => p.startsWith("/"), {
@@ -84,6 +96,10 @@ export const JOB_PARAMS = {
   "storage-move": Schema.Struct({
     bucketId: Schema.String.pipe(Schema.nonEmptyString()),
     kind: Schema.Literal(...STORAGE_MOVE_KINDS),
+    /** Only these files (root-relative), from the per-bucket page; absent, all. */
+    paths: Schema.optional(
+      Schema.NonEmptyArray(Schema.String.pipe(Schema.nonEmptyString()))
+    ),
     target: Schema.String.pipe(
       Schema.filter((p) => p.startsWith("/"), {
         message: () => "a Storage Root is an absolute path",
@@ -100,7 +116,38 @@ export const JOB_PARAMS = {
       operation: Schema.Literal("originals"),
       bucketId: Schema.String.pipe(Schema.nonEmptyString()),
       from: StorageRootParam,
-    })
+      /** Per-file (#2157): only these files, root-relative. */
+      paths: Schema.optional(Schema.NonEmptyArray(NonEmptyPath)),
+    }),
+    Schema.Struct({
+      operation: Schema.Literal("purge-exports"),
+      bucketId: Schema.String.pipe(Schema.nonEmptyString()),
+      /** The ticked Exported Videos (root-relative); absent, the bucket. */
+      exportPaths: Schema.optional(Schema.NonEmptyArray(NonEmptyPath)),
+    }),
+    Schema.Struct({
+      operation: Schema.Literal("delete-bucket"),
+      bucketId: Schema.String.pipe(Schema.nonEmptyString()),
+      /** Per-file: only these files; absent, the bucket. */
+      files: Schema.optional(Schema.NonEmptyArray(FileAtParam)),
+    }),
+    Schema.Struct({
+      operation: Schema.Literal("trash-unused"),
+      /** Per-file: only these files; absent, all Unused Footage. */
+      files: Schema.optional(Schema.NonEmptyArray(FileAtParam)),
+    }),
+    Schema.Struct({
+      operation: Schema.Literal("restore-trash"),
+      files: Schema.NonEmptyArray(
+        Schema.Struct({
+          location: StorageRootParam,
+          batch: NonEmptyPath,
+          path: NonEmptyPath,
+        })
+      ),
+    }),
+    Schema.Struct({ operation: Schema.Literal("empty-trash") }),
+    Schema.Struct({ operation: Schema.Literal("expire-trash") })
   ),
   /**
    * The Clip Mockups one `cvm clip-mockup add` or `update` left with a
