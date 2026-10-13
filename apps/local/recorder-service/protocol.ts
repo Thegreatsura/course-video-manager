@@ -2,6 +2,7 @@ import type { VideoFormat } from "@/features/videos/video-format";
 import type { Scene } from "../app/packages/scene-layout";
 import type { SilenceLength } from "../app/silence-detection-constants";
 import type { LastPassedCalibration } from "../app/av-calibration-constants";
+import type { ClapMark } from "../app/packages/clap-detection/live";
 
 /**
  * THE RECORDER SERVICE'S WIRE: what a client (the app server's recorder
@@ -402,6 +403,12 @@ export type RecorderStatusMessage =
       cameraFile: string;
       scriptStartSeconds: number;
     }
+  /**
+   * A run's live clap marks (`live-claps.ts`): every clap the mic has heard
+   * in the clap window so far, in seconds of its files, and whether the
+   * camera saw it. Sent whenever they change. Broadcast.
+   */
+  | { type: "calibration-claps"; calibrationId: string; claps: ClapMark[] }
   /** The run ended and its mic file was measured. Broadcast. */
   | ({
       type: "calibration-measured";

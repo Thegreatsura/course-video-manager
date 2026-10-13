@@ -1,17 +1,14 @@
 import { Command } from "@effect/platform";
 import { Chunk, Data, Effect, Stream } from "effect";
-import {
-  findAudioOnsets,
-  findStartUpGap,
-  type StartUpGap,
-} from "./audio-onsets";
-import { matchClaps, type ClapMatch, type MotionPoint } from "./match";
+import { findStartUpGap, type StartUpGap } from "./audio-onsets";
+import { hearClaps } from "./hear-claps";
+import type { ClapMatch } from "./match";
+import { MOTION_FILTERS, MOTION_KEY, parseMotion } from "./motion";
 
 /**
  * THE TWO FFMPEG PASSES, offline, over an AV Calibration's files: the mic
- * decoded to mono 48 kHz PCM for its onsets, and the camera scaled to
- * 320x180 grey, each frame differenced with the one before (`tblend`) and
- * averaged (`signalstats` YAVG) for its motion. The camera is cut to the
+ * decoded to mono 48 kHz PCM for its onsets, and the camera through
+ * `MOTION_FILTERS` for its motion. The camera is cut to the
  * clap window, keeping the file's own timestamps; the mic is decoded from
  * its start to the window's end, so its start-up is checked for a gap too.
  * Every time is in file seconds.
@@ -54,35 +51,13 @@ export const cameraMotionArgs = (cameraFile: string, w: ClapWindow) => [
   "-vf",
   [
     `trim=start=${w.startSeconds}:end=${w.endSeconds}`,
-    "scale=320:180",
-    "format=gray",
-    "tblend=all_mode=difference",
-    "signalstats",
-    "metadata=mode=print:key=lavfi.signalstats.YAVG:file=-",
+    ...MOTION_FILTERS,
+    `metadata=mode=print:key=${MOTION_KEY}:file=-`,
   ].join(","),
   "-f",
   "null",
   "-",
 ];
-
-/** `metadata=print`'s lines: `frame:N pts:P pts_time:T`, then `key=value`. */
-export const parseMotion = (stdout: string): MotionPoint[] => {
-  const points: MotionPoint[] = [];
-  let seconds: number | undefined;
-  for (const line of stdout.split(/\r?\n/)) {
-    const time = line.match(/\bpts_time:\s*(-?[\d.]+)/);
-    if (time) {
-      seconds = Number(time[1]);
-      continue;
-    }
-    const yavg = line.match(/^lavfi\.signalstats\.YAVG=(-?[\d.]+)/);
-    if (yavg && seconds !== undefined) {
-      points.push({ seconds, level: Number(yavg[1]) });
-      seconds = undefined;
-    }
-  }
-  return points;
-};
 
 const run = (args: string[]) =>
   Effect.scoped(
@@ -153,12 +128,10 @@ export const detectClaps = Effect.fn("detectClaps")(function* (o: {
     Math.floor(pcm.byteLength / 4)
   );
   const windowStart = Math.round(o.window.startSeconds * SAMPLE_RATE);
-  const match = matchClaps({
-    onsetsS: findAudioOnsets(
-      samples.subarray(windowStart),
-      SAMPLE_RATE,
-      windowStart / SAMPLE_RATE
-    ),
+  const heard = hearClaps({
+    samples: samples.subarray(windowStart),
+    sampleRate: SAMPLE_RATE,
+    startSeconds: windowStart / SAMPLE_RATE,
     motion,
   });
   const startUpGap = findStartUpGap(
@@ -166,8 +139,10 @@ export const detectClaps = Effect.fn("detectClaps")(function* (o: {
     SAMPLE_RATE
   );
   return {
-    ...match,
-    micOffsetMs: startUpGap ? null : match.micOffsetMs,
+    claps: heard.claps,
+    found: heard.found,
+    spreadMs: heard.spreadMs,
+    micOffsetMs: startUpGap ? null : heard.micOffsetMs,
     startUpGap,
   } satisfies ClapDetection;
 });
