@@ -12,12 +12,14 @@
  * Derived here rather than on the glass because clips live in this window's
  * reducer and the popup is a pure slave (see `teleprompter-protocol.ts`).
  *
+ * Either Recorder's take is an optimistic clip (`clip-state-reducer-take.ts`),
+ * so both Recorders' marks come from the same items.
+ *
  * Scoped to the newest recording session, so pressing record wipes the slate:
  * what's on the glass is always this take's exposure, never last take's.
  */
 import { useMemo } from "react";
 import type {
-  CaptureStatus,
   ClipMarkIds,
   ClipMarks,
   ClipMarkState,
@@ -33,38 +35,14 @@ export type SessionClipMark = { clipId: FrontendId; state: ClipMarkState };
 
 export function getSessionClipMarks(
   items: TimelineItem[],
-  sessions: RecordingSession[],
-  capture: CaptureStatus = "not-recording"
+  sessions: RecordingSession[]
 ): ClipMarks {
-  return getSessionClipMarksWithIds(items, sessions, capture).map(
-    (mark) => mark.state
-  );
+  return getSessionClipMarksWithIds(items, sessions).map((mark) => mark.state);
 }
-
-/**
- * A CVM recorder take has no Optimistic Clip: its Clips are saved by the app
- * server once the speech ends. So the speech the recorder is hearing, once it
- * is long enough for a Clip, is shown as a pending mark, as OBS's Optimistic
- * Clip is, until the saved Clip lands in its place. Never orphaned: the one
- * silence detection that heard it is the one that saves it.
- */
-const cvmRecorderSpeechMark = (
-  session: RecordingSession,
-  capture: CaptureStatus
-): SessionClipMark | null =>
-  session.cvmRecorder &&
-  session.status === "recording" &&
-  capture === "long-enough-speaking-for-clip-detected"
-    ? {
-        clipId: `cvm-recorder-speech:${session.id}` as FrontendId,
-        state: "pending",
-      }
-    : null;
 
 export function getSessionClipMarksWithIds(
   items: TimelineItem[],
-  sessions: RecordingSession[],
-  capture: CaptureStatus = "not-recording"
+  sessions: RecordingSession[]
 ): SessionClipMark[] {
   // The newest session is the one being filmed. Until there is one, there is
   // nothing to report.
@@ -105,23 +83,20 @@ export function getSessionClipMarksWithIds(
     }
   }
 
-  const sorted = marks
+  return marks
     .sort((a, b) => a.insertionOrder - b.insertionOrder)
     .map(({ clipId, state }) => ({ clipId, state }));
-  const speech = cvmRecorderSpeechMark(currentSession, capture);
-  return speech ? [...sorted, speech] : sorted;
 }
 
 export function useSessionClipMarks(
   items: TimelineItem[],
-  sessions: RecordingSession[],
-  capture: CaptureStatus
+  sessions: RecordingSession[]
 ): { marks: ClipMarks; markClipIds: ClipMarkIds } {
   return useMemo(() => {
-    const withIds = getSessionClipMarksWithIds(items, sessions, capture);
+    const withIds = getSessionClipMarksWithIds(items, sessions);
     return {
       marks: withIds.map((mark) => mark.state),
       markClipIds: withIds.map((mark) => mark.clipId),
     };
-  }, [items, sessions, capture]);
+  }, [items, sessions]);
 }
