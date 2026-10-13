@@ -2,9 +2,7 @@ import type { Editor } from "tldraw";
 import type { VideoFormat } from "@/features/videos/video-format";
 import {
   getCenteringSettings,
-  getHiddenRightWidth,
-  getRightOffscreenWidth,
-  getSafeAreaInsets,
+  getCentringInsets,
 } from "./diagram-centering-settings";
 
 /**
@@ -57,14 +55,13 @@ import {
  * into the full viewport, centred, and can't target an off-centre
  * sub-region of it.
  *
- * `format` is what a take starting now records. A Short shows only the
- * window's left square, so the reserved strip becomes everything right of
- * that square (`getHiddenRightWidth`) — same padding and zoom cap, no
- * face-cam strip. Every caller but the take-start recentre is Landscape.
+ * `format` is the playground's Video's — what a take records. A Short
+ * shows only the window's left square, so it centres in that square
+ * (`getCentringInsets`) — same padding and zoom cap, no face-cam strip.
  */
 export function centreCameraOnContent(
   editor: Editor,
-  format: VideoFormat = "landscape"
+  format: VideoFormat
 ): void {
   const bounds = editor.getCurrentPageBounds();
   if (!bounds) return;
@@ -76,17 +73,7 @@ export function centreCameraOnContent(
   // the sidebar was accounted for.
   const windowWidth =
     typeof window !== "undefined" ? window.innerWidth : viewport.x + viewport.w;
-  const insets = getSafeAreaInsets(
-    {
-      ...settings,
-      faceCamWidth: getHiddenRightWidth(
-        format,
-        settings.faceCamWidth,
-        windowWidth
-      ),
-    },
-    getRightOffscreenWidth(viewport, windowWidth)
-  );
+  const insets = getCentringInsets(settings, format, viewport, windowWidth);
 
   // The rectangle (in screen pixels) the diagram is allowed to occupy: the
   // viewport, inset on every side by `insets` — the same insets the debug

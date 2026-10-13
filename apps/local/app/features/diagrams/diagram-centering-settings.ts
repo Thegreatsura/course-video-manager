@@ -131,22 +131,30 @@ export function getRightOffscreenWidth(
 }
 
 /**
- * How wide a strip on the window's right the recording doesn't show the
- * diagram through — what {@link getSafeAreaInsets} reserves as `faceCamWidth`.
+ * The one place a Video's format becomes the area the diagram is centred in:
+ * every centring path (`centreCameraOnContent`) and the debug panel's guide
+ * boxes read their insets from here, so no format rule lives anywhere else.
  *
- * Landscape: the face-cam strip, as tuned. A Short draws the screen 1:1 at
- * the top-left of its canvas, so it shows only the window's left
- * canvas-width square and Matt's face sits below the diagram, not beside it:
- * everything right of that square is hidden, and there is no face-cam strip.
+ * Landscape: the tuned face-cam strip on the right. A Short draws the screen
+ * 1:1 at the top-left of its canvas, so it shows only the window's left
+ * canvas-width square, and Matt's face sits below the diagram, not beside
+ * it: everything right of that square is reserved instead, and there is no
+ * face-cam strip. The padding is the same for both.
  */
-export function getHiddenRightWidth(
+export function getCentringInsets(
+  settings: Pick<CenteringSettings, "faceCamWidth" | "paddingX" | "paddingY">,
   format: VideoFormat,
-  faceCamWidth: number,
+  viewport: { x: number; w: number },
   windowWidth: number
-): number {
-  return format === "short"
-    ? Math.max(windowWidth - CANVASES.short.width, 0)
-    : faceCamWidth;
+): SafeAreaInsets {
+  const hiddenRightWidth =
+    format === "short"
+      ? Math.max(windowWidth - CANVASES.short.width, 0)
+      : settings.faceCamWidth;
+  return getSafeAreaInsets(
+    { ...settings, faceCamWidth: hiddenRightWidth },
+    getRightOffscreenWidth(viewport, windowWidth)
+  );
 }
 
 /**

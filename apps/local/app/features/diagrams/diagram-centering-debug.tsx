@@ -2,10 +2,9 @@ import { useEffect, useState, type RefObject } from "react";
 import { useValue, type Editor } from "tldraw";
 import { SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { centreCameraOnContent } from "./centre-camera-on-content";
+import type { VideoFormat } from "@/features/videos/video-format";
 import {
-  getRightOffscreenWidth,
-  getSafeAreaInsets,
+  getCentringInsets,
   useCenteringSetting,
 } from "./diagram-centering-settings";
 
@@ -26,8 +25,14 @@ import {
  */
 export function DiagramCenteringDebug({
   editorRef,
+  format,
+  onRecentre,
 }: {
   editorRef: RefObject<Editor | null>;
+  /** The playground's Video's format, which the guide boxes are drawn for. */
+  format: VideoFormat;
+  /** The playground's own recentre, so the preview centres for `format` too. */
+  onRecentre: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [faceCamWidth, setFaceCamWidth] = useCenteringSetting("faceCamWidth");
@@ -46,20 +51,18 @@ export function DiagramCenteringDebug({
     typeof window !== "undefined"
       ? window.innerWidth
       : (viewport?.x ?? 0) + (viewport?.w ?? 0);
-  const rightOffscreen = viewport
-    ? getRightOffscreenWidth(viewport, windowWidth)
-    : 0;
-  const insets = getSafeAreaInsets(
+  const insets = getCentringInsets(
     { faceCamWidth, paddingX, paddingY },
-    rightOffscreen
+    format,
+    viewport ?? { x: 0, w: windowWidth },
+    windowWidth
   );
 
   // Live-update: every persisted change re-runs the same recentre the rest
   // of the app uses, so the debug panel never drifts from real behaviour.
   useEffect(() => {
-    const ed = editorRef.current;
-    if (ed) centreCameraOnContent(ed);
-  }, [faceCamWidth, paddingX, paddingY, maxZoomPercent, editorRef]);
+    onRecentre();
+  }, [faceCamWidth, paddingX, paddingY, maxZoomPercent, onRecentre]);
 
   // The live counterpart to `maxZoomPercent` above: past the padded edges,
   // this is what a small diagram's fit zoom actually comes out to, tuned
@@ -95,14 +98,15 @@ export function DiagramCenteringDebug({
 
       {open && (
         <>
-          {/* Reserved face-cam strip — a full-height zone on the right the
+          {/* Reserved strip (the face-cam, or for a Short everything right of
+              its square) — a full-height zone on the right the
               diagram is kept clear of. Drawn at whatever's left of it after
               the sidebar's own width: the strip is pinned to the window's
               edge, so a sidebar wide enough to cover it needs no red shown
               here at all. */}
           <div
             className="pointer-events-none absolute right-0 top-0 z-40 h-full border-l-2 border-red-500/70 bg-red-500/10"
-            style={{ width: Math.max(faceCamWidth - rightOffscreen, 0) }}
+            style={{ width: Math.max(insets.right - paddingX, 0) }}
           />
           {/* The padded safe rect the diagram is actually fit-and-centred
               into — the same `getSafeAreaInsets` `centreCameraOnContent`
