@@ -114,7 +114,8 @@ export type DiagramPlaygroundEffect =
       diagramId: string;
       scene: TLStoreSnapshot | null;
       stored: StoredHead;
-      centreCamera: boolean;
+      /** Centre the camera for this format once shown; `null` leaves it. */
+      centreFor: VideoFormat | null;
     }
   /** Save the canvas over whatever head is stored now, seen or not. */
   | { type: "overwrite-stored-head"; diagramId: string }
@@ -162,7 +163,7 @@ export type DiagramPlaygroundEffect =
   /**
    * Centre the camera on the diagram (`centreCameraOnContent`) once the layout
    * has caught up with any sidebar change declared alongside it, so the fit
-   * uses the canvas's new size. `format` is the take's: a Short centres in
-   * the square it shows, with no face-cam strip.
+   * uses the canvas's new size. `format` is the playground's Video's: a Short
+   * centres in the square it shows, with no face-cam strip.
    */
   | { type: "centre-camera-after-layout"; format: VideoFormat };
