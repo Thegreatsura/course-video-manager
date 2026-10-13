@@ -28,6 +28,8 @@ export const startStorageMove = <A, E, R>(opts: {
   readonly bucketId: string;
   readonly kind: StorageMoveKind;
   readonly target: string;
+  /** Only these files (root-relative), and their companions; absent, all. */
+  readonly paths?: readonly string[];
   readonly enqueue: (plan: StorageMovePlan) => Effect.Effect<A, E, R>;
 }): Effect.Effect<A, E | StorageMoveRefusedError | StorageMoveFailedError, R> =>
   holdingStorageWrites(

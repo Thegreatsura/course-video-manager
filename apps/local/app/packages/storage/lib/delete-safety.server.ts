@@ -1,10 +1,36 @@
 import nodeFs from "node:fs/promises";
 import path from "node:path";
 import { and, inArray, ne } from "drizzle-orm";
+import { Data } from "effect";
 import { jobs } from "@cvm/core/db/schema";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
 import { assertUnder } from "@/services/assert-under";
 import { STORAGE_FOLDERS, type StorageRoots } from "./storage-roots";
+
+/**
+ * The author's Cancel stopped a delete Job before its next file. What went
+ * stays gone; every other file is where it was.
+ */
+export class StorageDeleteCancelledError extends Data.TaggedError(
+  "StorageDeleteCancelledError"
+)<{ readonly message: string }> {}
+
+/** Thrown inside a delete's loop when Cancel was asked for. */
+export class DeleteStopRequested extends Error {}
+
+/** Stop before the next file when the author asked to Cancel. */
+export const stopIfCancelled = (cancelRequested?: () => boolean) => {
+  if (cancelRequested?.()) throw new DeleteStopRequested("Cancelled");
+};
+
+/** A delete loop's failure: the author's Cancel, or `otherwise`. */
+export const cancelledOr = <E>(cause: unknown, otherwise: () => E) =>
+  cause instanceof DeleteStopRequested
+    ? new StorageDeleteCancelledError({
+        message:
+          "Cancelled before the next file: what was deleted stays deleted, every other file is where it was",
+      })
+    : otherwise();
 
 /**
  * The checks every Storage page delete makes before it unlinks a file

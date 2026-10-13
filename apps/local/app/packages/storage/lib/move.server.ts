@@ -74,6 +74,8 @@ export const runStorageMove = (opts: {
   readonly target: string;
   /** This move's own Job: not "another move of this bucket". */
   readonly jobId?: string;
+  /** Only these files (root-relative), and their companions; absent, all. */
+  readonly paths?: readonly string[];
   readonly cancelRequested: () => boolean;
   readonly onProgress?: (percent: number) => void;
   readonly disk?: StorageMoveDisk;

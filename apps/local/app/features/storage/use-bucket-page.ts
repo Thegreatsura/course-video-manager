@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
-import { planPurge, purgeExports } from "./export-purge-effects";
 import {
-  planDeleteOriginals,
-  startDeleteOriginalsJob,
-} from "./delete-originals-effects";
+  planStorageAction,
+  startStorageAction,
+} from "./storage-action-effects";
+import { loadTrash } from "./trash-effects";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   type StorageBucketFilesMessage,
@@ -51,6 +51,29 @@ const listenToListing = (
 };
 
 /**
+ * The `reveal-file` effect: Show in Explorer. Only a failure is news.
+ */
+const revealFile = (
+  effect: { location: string; path: string },
+  dispatch: (action: bucketPageReducer.Action) => void
+) => {
+  fetch("/api/storage/reveal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ location: effect.location, path: effect.path }),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(await response.text());
+    })
+    .catch((error: unknown) =>
+      dispatch({
+        type: "reveal-failed",
+        message: `Could not show it in Explorer: ${error instanceof Error ? error.message : String(error)}`,
+      })
+    );
+};
+
+/**
  * The effect runner for `bucketPageReducer`, and the bridge that tells it the
  * page has opened. Remount it for another bucket.
  */
@@ -61,13 +84,12 @@ export const useBucketPage = (bucketId: string) => {
     {
       "listen-to-listing": (_state, effect, dispatch) =>
         listenToListing(effect.bucketId, dispatch),
-      "plan-purge": (_state, effect, dispatch) => planPurge(effect, dispatch),
-      "purge-exports": (_state, effect, dispatch) =>
-        purgeExports(effect, dispatch),
-      "plan-delete-originals": (_state, effect, dispatch) =>
-        planDeleteOriginals(effect, dispatch),
-      "start-delete-originals": (_state, effect, dispatch) =>
-        startDeleteOriginalsJob(effect, dispatch),
+      "load-trash": (_state, _effect, dispatch) => loadTrash(dispatch),
+      "reveal-file": (_state, effect, dispatch) => revealFile(effect, dispatch),
+      "plan-storage-action": (_state, effect, dispatch) =>
+        planStorageAction(effect, dispatch),
+      "start-storage-action": (_state, effect, dispatch) =>
+        startStorageAction(effect, dispatch),
     }
   );
   useEffect(() => {

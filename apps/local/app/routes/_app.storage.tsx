@@ -3,24 +3,27 @@ import {
   ArrowRight,
   HardDrive,
   Loader2,
+  MoreHorizontal,
   Trash2,
 } from "lucide-react";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
-  ExportPurgeConfirmation,
-  ExportPurgeStatus,
-} from "@/features/storage/export-purge-dialog";
-import { purgeIsBusy } from "@/features/storage/export-purge";
+  StorageActionDialog,
+  StorageActionFailure,
+} from "@/features/storage/storage-action-dialog";
+import { storageActionIsBusy } from "@/features/storage/storage-action";
+import { StorageJobsPanel } from "@/features/storage/storage-jobs-panel";
+import { shownStorageJobs } from "@/features/storage/storage-jobs";
+import { useStorageJobs } from "@/features/storage/use-storage-jobs";
 import {
   driveWarnings,
   rowCanBePurged,
@@ -32,14 +35,10 @@ import {
 } from "@/features/storage/storage-page-reducer";
 import { useStoragePage } from "@/features/storage/use-storage-page";
 import {
-  MoveConfirmation,
-  MoveStatus,
-} from "@/features/storage/storage-move-dialog";
-import {
   bucketCanBeDeleted,
   STORAGE_MOVE_KIND_LABELS,
+  TRASH_RETENTION_DAYS,
   type StorageFileKind,
-  type StorageMoveKind,
 } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage";
 
@@ -47,6 +46,10 @@ export const meta: Route.MetaFunction = () => [{ title: "CVM - Storage" }];
 
 /** Gigabytes as Windows counts them (GiB), to one decimal place. */
 const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+
+/** GB, or MB for what is under one. */
+const size = (bytes: number) =>
+  bytes >= 1024 ** 3 ? gb(bytes) : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 
 const KINDS: { kind: StorageFileKind; label: string }[] = [
   { kind: "footage", label: "Footage" },
@@ -75,6 +78,7 @@ export default function StoragePage() {
       state.roots?.find((r) => r.root === location)?.label ?? location;
     return label.startsWith("/") ? `…/${label.split("/").pop()}` : label;
   };
+  const jobs = useStorageJobs(null, labelOf, dispatch);
 
   return (
     <div className="flex-1 overflow-y-auto bg-background text-foreground">
@@ -87,35 +91,20 @@ export default function StoragePage() {
           <ScanStatus state={state} />
         </div>
 
-        <DeletionStatus
-          state={state}
+        <StorageActionFailure
+          action={state.action}
           labelOf={labelOf}
-          onDismiss={() => dispatch({ type: "deletion-dismissed" })}
+          onDismiss={() => dispatch({ type: "storage-action-dismissed" })}
         />
-        <ExportPurgeStatus
-          purge={state.purge}
+        <StorageActionDialog
+          action={state.action}
           labelOf={labelOf}
-          onDismiss={() => dispatch({ type: "purge-dismissed" })}
+          onConfirm={() => dispatch({ type: "storage-action-confirmed" })}
+          onCancel={() => dispatch({ type: "storage-action-cancelled" })}
         />
-        <ExportPurgeConfirmation
-          purge={state.purge}
-          onConfirm={() => dispatch({ type: "purge-confirmed" })}
-          onCancel={() => dispatch({ type: "purge-cancelled" })}
-        />
-        <DeleteConfirmation
-          state={state}
-          onConfirm={() => dispatch({ type: "delete-confirmed" })}
-          onCancel={() => dispatch({ type: "delete-cancelled" })}
-        />
-        <MoveStatus
-          state={state}
-          onDismiss={() => dispatch({ type: "move-dismissed" })}
-        />
-        <MoveConfirmation
-          state={state}
-          labelOf={labelOf}
-          onConfirm={() => dispatch({ type: "move-confirmed" })}
-          onCancel={() => dispatch({ type: "move-cancelled" })}
+        <StorageJobsPanel
+          jobs={shownStorageJobs(jobs.views, state.watchedJobs)}
+          onCancel={jobs.cancelJob}
         />
 
         {(warnings.offline.length > 0 || warnings.dirty.length > 0) && (
@@ -188,6 +177,12 @@ export default function StoragePage() {
           ))}
         </section>
 
+        <TrashCard
+          state={state}
+          labelOf={labelOf}
+          onEmpty={() => dispatch({ type: "empty-trash-clicked" })}
+        />
+
         <table className="w-full text-sm" data-testid="storage-table">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
@@ -198,6 +193,7 @@ export default function StoragePage() {
                   {label}
                 </th>
               ))}
+              <th className="py-2 w-10" />
             </tr>
           </thead>
           <tbody>
@@ -207,24 +203,11 @@ export default function StoragePage() {
                 state={state}
                 row={row}
                 labelOf={labelOf}
-                onDelete={() =>
+                onChoose={(choice) =>
                   dispatch({
-                    type: "delete-bucket-clicked",
+                    type: "row-action-clicked",
                     bucketId: row.bucket.id,
-                  })
-                }
-                onPurge={() =>
-                  dispatch({
-                    type: "purge-bucket-clicked",
-                    bucketId: row.bucket.id,
-                  })
-                }
-                onMove={(kind, target) =>
-                  dispatch({
-                    type: "move-clicked",
-                    bucketId: row.bucket.id,
-                    kind,
-                    target,
+                    choice,
                   })
                 }
               />
@@ -258,21 +241,19 @@ function BucketRow({
   state,
   row,
   labelOf,
-  onDelete,
-  onPurge,
-  onMove,
+  onChoose,
 }: {
   state: storagePageReducer.State;
   row: StorageRow;
   labelOf: (location: string) => string;
-  onDelete: () => void;
-  onPurge: () => void;
-  onMove: (kind: StorageMoveKind, target: string) => void;
+  onChoose: (choice: storagePageReducer.RowChoice) => void;
 }) {
-  const moveBusy =
-    state.move?.status === "planning" ||
-    state.move?.status === "confirming" ||
-    state.move?.status === "starting";
+  const busy = state.status !== "complete" || storageActionIsBusy(state.action);
+  const moves = rowMoveActions(state, row);
+  const canDelete = bucketCanBeDeleted(row.bucket);
+  const canPurge = rowCanBePurged(row);
+  const canTrash = row.bucket.kind === "unused-footage";
+  const hasActions = moves.length > 0 || canDelete || canPurge || canTrash;
   return (
     <tr className="border-b align-top" data-testid="storage-row">
       <td className="py-2 pr-4">
@@ -313,201 +294,145 @@ function BucketRow({
           )}
         </td>
       ))}
-      <td className="py-2 pr-4 text-right space-y-1">
-        {rowMoveActions(state, row).map(({ kind, target, refusal }) => (
-          <Button
-            key={`${kind}:${target.root}`}
-            variant="outline"
-            size="sm"
-            className="ml-1"
-            disabled={refusal !== null || moveBusy}
-            title={
-              refusal ??
-              `Copy ${row.bucket.name}'s ${STORAGE_MOVE_KIND_LABELS[kind]} to ${labelOf(target.root)}, checked by checksum. Originals are kept.`
-            }
-            onClick={() => onMove(kind, target.root)}
-            data-testid="storage-bucket-move"
-          >
-            {STORAGE_MOVE_KIND_LABELS[kind]} <ArrowRight className="w-3 h-3" />{" "}
-            {labelOf(target.root)}
-          </Button>
-        ))}
-        {bucketCanBeDeleted(row.bucket) && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              state.status !== "complete" ||
-              state.deletion?.status === "deleting"
-            }
-            title={
-              state.status !== "complete"
-                ? "Wait for the count to finish"
-                : `Delete every file in ${row.bucket.name}`
-            }
-            onClick={onDelete}
-            data-testid="storage-bucket-delete"
-          >
-            <Trash2 className="w-4 h-4" /> Delete
-          </Button>
-        )}
-        {rowCanBePurged(row) && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              state.status !== "complete" ||
-              purgeIsBusy(state.purge) ||
-              state.deletion?.status === "deleting"
-            }
-            title={
-              state.status !== "complete"
-                ? "Wait for the count to finish"
-                : `Delete ${row.bucket.name}'s Exported Videos whose Footage is all found. Footage is never deleted.`
-            }
-            onClick={onPurge}
-            data-testid="storage-bucket-purge"
-          >
-            <Trash2 className="w-4 h-4" /> Delete Exported Videos
-          </Button>
+      <td className="py-2 text-right">
+        {hasActions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                title={
+                  state.status !== "complete"
+                    ? "Wait for the count to finish"
+                    : `Actions for ${row.bucket.name}`
+                }
+                aria-label={`Actions for ${row.bucket.name}`}
+                data-testid="storage-row-actions"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {moves.map(({ kind, target, refusal }) => (
+                <DropdownMenuItem
+                  key={`${kind}:${target.root}`}
+                  disabled={refusal !== null}
+                  onSelect={() =>
+                    onChoose({ type: "move", kind, target: target.root })
+                  }
+                  data-testid="storage-row-move"
+                >
+                  Move {STORAGE_MOVE_KIND_LABELS[kind]}{" "}
+                  <ArrowRight className="w-3 h-3" /> {labelOf(target.root)}
+                  {refusal !== null && (
+                    <span className="text-xs text-muted-foreground">
+                      ({refusal})
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+              {moves.length > 0 && (canDelete || canPurge || canTrash) && (
+                <DropdownMenuSeparator />
+              )}
+              {canPurge && (
+                <DropdownMenuItem
+                  onSelect={() => onChoose({ type: "purge" })}
+                  data-testid="storage-row-purge"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Exported Videos…
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  onSelect={() => onChoose({ type: "delete-bucket" })}
+                  data-testid="storage-row-delete"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete {row.bucket.name}…
+                </DropdownMenuItem>
+              )}
+              {canTrash && (
+                <DropdownMenuItem
+                  onSelect={() => onChoose({ type: "trash-unused" })}
+                  data-testid="storage-row-trash"
+                >
+                  <Trash2 className="w-4 h-4" /> Move to the Trash…
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </td>
     </tr>
   );
 }
 
-/** What deleting each Other bucket means, in the confirmation. */
-const DELETE_EXPLANATIONS: Record<string, string> = {
-  "overlay-render-cache":
-    "Every Overlay render on every drive. Each is rendered again, on demand, the next time an export needs it.",
-  "export-scratch":
-    "Every leftover file exports were encoded in. Refused while an export is running.",
-  "orphaned-exports":
-    "Every Exported Video (and its companions) that is no Video's current export, on every drive. A Video's current Exported Video is never deleted.",
-};
-
-function DeleteConfirmation({
-  state,
-  onConfirm,
-  onCancel,
-}: {
-  state: storagePageReducer.State;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const deletion = state.deletion;
-  const open =
-    deletion?.status === "confirming" || deletion?.status === "deleting";
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) onCancel();
-      }}
-    >
-      {open && (
-        <DialogContent data-testid="storage-delete-confirmation">
-          <DialogHeader>
-            <DialogTitle>
-              Delete {deletion.bucket.name}: free {gb(deletion.bytes)}?
-            </DialogTitle>
-            <DialogDescription>
-              {DELETE_EXPLANATIONS[deletion.bucket.id]} Raw Footage is never
-              deleted.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              disabled={deletion.status === "deleting"}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={onConfirm}
-              disabled={deletion.status === "deleting"}
-              data-testid="storage-delete-confirm"
-            >
-              {deletion.status === "deleting" ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Deleting…
-                </>
-              ) : (
-                <>Delete {gb(deletion.bytes)}</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      )}
-    </Dialog>
-  );
-}
-
-function DeletionStatus({
+/**
+ * The Trash (ADR 0043): what is in `.cvm-trash/` on each drive, when the
+ * oldest goes for good, Empty trash, and where to Restore from.
+ */
+function TrashCard({
   state,
   labelOf,
-  onDismiss,
+  onEmpty,
 }: {
   state: storagePageReducer.State;
   labelOf: (location: string) => string;
-  onDismiss: () => void;
+  onEmpty: () => void;
 }) {
-  const deletion = state.deletion;
-  if (deletion?.status === "failed") {
-    return (
-      <div
-        className="flex items-start justify-between gap-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm"
-        data-testid="storage-delete-result"
-      >
-        <span>
-          <strong>{deletion.bucket.name} was not deleted.</strong>{" "}
-          {deletion.message}
-        </span>
-        <Button variant="ghost" size="sm" onClick={onDismiss}>
-          Dismiss
-        </Button>
-      </div>
-    );
+  const entries = state.trash ?? [];
+  if (entries.length === 0 && state.trashFailure === null) return null;
+  const byLocation = new Map<string, number>();
+  for (const e of entries) {
+    byLocation.set(e.location, (byLocation.get(e.location) ?? 0) + e.bytes);
   }
-  if (deletion?.status !== "deleted") return null;
-  const { deleted, left } = deletion.result;
-  const files = deleted.reduce((n, d) => n + d.files, 0);
-  const bytes = deleted.reduce((n, d) => n + d.bytes, 0);
+  const nextExpiry = entries.map((e) => e.expiresAt).sort()[0];
   return (
-    <div
-      className="flex items-start justify-between gap-4 rounded-lg border p-3 text-sm"
-      data-testid="storage-delete-result"
+    <section
+      className="flex items-start justify-between gap-4 rounded-lg border p-4 text-sm"
+      data-testid="storage-trash"
     >
       <div className="space-y-1">
-        <div>
-          <strong>
-            Deleted {gb(bytes)} from {deletion.bucket.name}
-          </strong>{" "}
-          ({files} {files === 1 ? "file" : "files"}
-          {deleted.length > 0 &&
-            `: ${deleted.map((d) => `${gb(d.bytes)} on ${labelOf(d.location)}`).join(", ")}`}
-          ).
+        <div className="flex items-center gap-2 font-semibold">
+          <Trash2 className="w-4 h-4" /> Trash
         </div>
-        {left.length > 0 && (
-          <div className="text-destructive" data-testid="storage-delete-left">
-            {left.length} {left.length === 1 ? "file" : "files"} left (a locked
-            file can be retried):
-            <ul className="list-disc pl-5">
-              {left.slice(0, 10).map((l) => (
-                <li key={`${l.location}:${l.path}`} className="break-all">
-                  {labelOf(l.location)} {l.path}: {l.message}
-                </li>
-              ))}
-              {left.length > 10 && <li>…and {left.length - 10} more</li>}
-            </ul>
-          </div>
+        {state.trashFailure !== null ? (
+          <div className="text-destructive">{state.trashFailure}</div>
+        ) : (
+          <>
+            <div>
+              {entries.length} {entries.length === 1 ? "file" : "files"}:{" "}
+              {[...byLocation]
+                .map(
+                  ([location, bytes]) =>
+                    `${size(bytes)} on ${labelOf(location)}`
+                )
+                .join(", ")}
+              .
+            </div>
+            <div className="text-muted-foreground">
+              Each is deleted for good {TRASH_RETENTION_DAYS} days after it was
+              trashed
+              {nextExpiry &&
+                ` (the next on ${new Date(nextExpiry).toLocaleDateString()})`}
+              . Restore files from{" "}
+              <Link to="/storage/unused-footage" className="underline">
+                Unused Footage
+              </Link>
+              .
+            </div>
+          </>
         )}
       </div>
-      <Button variant="ghost" size="sm" onClick={onDismiss}>
-        Dismiss
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={entries.length === 0 || storageActionIsBusy(state.action)}
+        onClick={onEmpty}
+        data-testid="storage-trash-empty"
+      >
+        <Trash2 className="w-4 h-4" /> Empty trash…
       </Button>
-    </div>
+    </section>
   );
 }

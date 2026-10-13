@@ -5,6 +5,7 @@ import {
   messageOf,
   realConfineOf,
   realpathOrNull,
+  stopIfCancelled,
 } from "./delete-safety.server";
 import { STORAGE_FOLDERS, type StorageRoots } from "./storage-roots";
 import {
@@ -32,6 +33,8 @@ import {
   StorageTrashRefusedError,
   StorageTrashFailedError,
   type RestoreFileRef,
+  trashFailure,
+  type TrashCancelled,
 } from "./trash-checks.server";
 
 /** Listing the trash, Restore, "Empty trash" and the 14-day expiry (#2157, ADR 0043). */
@@ -81,7 +84,7 @@ export const restoreTrashedFootage = (
   opts: Common & { readonly files: readonly RestoreFileRef[] }
 ): Effect.Effect<
   StorageTrashResult,
-  StorageTrashRefusedError | StorageTrashFailedError
+  StorageTrashRefusedError | StorageTrashFailedError | TrashCancelled
 > =>
   held(
     "a restore from the trash",
@@ -95,6 +98,7 @@ export const restoreTrashedFootage = (
           const done = tally();
           let progressed = 0;
           for (const f of opts.files) {
+            stopIfCancelled(opts.cancelRequested);
             const why = await restoreOne(f, opts.roots, realConfine, dryRun);
             if (typeof why === "number") done.add(f.location, why);
             else
@@ -115,10 +119,10 @@ export const restoreTrashedFootage = (
             left,
           };
         },
-        catch: (cause) =>
-          new StorageTrashFailedError({ message: messageOf(cause) }),
+        catch: trashFailure,
       });
-    })
+    }),
+    opts.alreadyHeld
   ).pipe(Effect.tap(logResult));
 
 /** Restore one file: its size when done (or would be), else why not. */
@@ -190,7 +194,7 @@ export const emptyStorageTrash = (
   opts: Common & { readonly olderThanRetention?: boolean }
 ): Effect.Effect<
   StorageTrashResult,
-  StorageTrashRefusedError | StorageTrashFailedError
+  StorageTrashRefusedError | StorageTrashFailedError | TrashCancelled
 > => {
   const operation: StorageTrashOperation = opts.olderThanRetention
     ? "expire"
@@ -267,6 +271,7 @@ export const emptyStorageTrash = (
           }
           let progressed = 0;
           for (const d of doomed) {
+            stopIfCancelled(opts.cancelRequested);
             const info = await nodeFs.lstat(d.file).catch(() => null);
             const real = await realpathOrNull(d.file);
             if (info === null || !info.isFile()) {
@@ -311,10 +316,10 @@ export const emptyStorageTrash = (
             left,
           };
         },
-        catch: (cause) =>
-          new StorageTrashFailedError({ message: messageOf(cause) }),
+        catch: trashFailure,
       });
-    })
+    }),
+    opts.alreadyHeld
   ).pipe(Effect.tap(logResult));
 };
 

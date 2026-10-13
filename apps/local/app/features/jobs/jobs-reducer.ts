@@ -205,6 +205,7 @@ export namespace jobsReducer {
     | StreamFact<"job-cancel-requested">
     | StreamFact<"job-cancelled", { message: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
+    | StreamFact<"job-result-reported", { result: Record<string, unknown> }>
     /** A Publish's Submit landed: a Pending Version exists until Promote. */
     | StreamFact<"job-submitted">
     /** A Publish's Promote landed: the Versions it made, and its Lesson counts. */
@@ -541,6 +542,7 @@ export const jobsReducer: EffectReducer<
     case "job-cancel-requested":
     case "job-cancelled":
     case "job-posted":
+    case "job-result-reported":
     case "job-post-checked":
     case "job-submitted":
     case "job-published":

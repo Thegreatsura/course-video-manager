@@ -5,14 +5,13 @@ import {
   storageRootsConfig,
   VERIFY_RUN_DIR_ENV_KEY,
 } from "@/services/storage-roots";
-import { runDeleteOriginals } from "@/packages/storage/originals";
+import { runStorageDeleteOperation } from "./storage-delete-ops";
 import { rootLabel } from "@/packages/storage";
 import {
   STORAGE_DELETED_EVENT,
   storageDeleteSummary,
-  type StorageDeleteJobResult,
 } from "@/packages/storage/client";
-import { defineJobKind, JobCancelledError } from "../job-kind";
+import { defineJobKind } from "../job-kind";
 import { JOB_PARAMS } from "../job-params";
 import { STORAGE_DELETE_POLICY } from "../retry-policy";
 
@@ -34,13 +33,13 @@ const CANCEL_POLL_MS = 500;
  * "N deleted; N files still on D:, retry" so its row says so and Retry runs
  * it again.
  *
- * `originals`: delete the bucket's files on `from` that have an identical
- * copy on another Storage Root, each read again on both and compared by
- * SHA-256 just before it goes (`@/packages/storage/originals`).
+ * The operations (`./storage-delete-ops.ts`): `originals` (#2110),
+ * `purge-exports`, `delete-bucket`, the Trash's `trash-unused`,
+ * `restore-trash`, `empty-trash` and `expire-trash` (#2157, ADR 0043).
  *
  * Cancel: a `cancel-requested` Job Event, looked for every half second; the
  * delete stops before its next file (or mid-checksum), and the Job ends
- * `cancelled`. What it deleted stays deleted: each was a verified duplicate.
+ * `cancelled`. What it deleted (or trashed) stays so.
  */
 export const storageDeleteJobKind = defineJobKind({
   ...STORAGE_DELETE_POLICY,
@@ -77,30 +76,16 @@ export const storageDeleteJobKind = defineJobKind({
         );
 
         yield* ctx.emit("stage", { stage: "checking" });
-        const originals = yield* runDeleteOriginals({
+        const result = yield* runStorageDeleteOperation(params, {
           db,
           roots,
-          bucketId: params.bucketId,
-          from: params.from,
-          selfJobId: ctx.jobId,
+          jobId: ctx.jobId,
+          ...confineTo,
           cancelRequested: () => cancelRequested,
-          onProgress: (p) => {
+          onPercent: (p) => {
             percent = p;
           },
-          ...confineTo,
-        }).pipe(
-          Effect.catchTag("StorageOriginalsCancelledError", (e) =>
-            Effect.fail(new JobCancelledError({ message: e.message }))
-          )
-        );
-        const result: StorageDeleteJobResult = {
-          bucketId: originals.bucketId,
-          operation: params.operation,
-          location: originals.from,
-          deleted: originals.deleted,
-          kept: originals.kept,
-          left: originals.left,
-        };
+        });
 
         yield* ctx.emit("progress", { stage: "deleting", percent: 100 });
         yield* ctx.emit(STORAGE_DELETED_EVENT, {
@@ -110,7 +95,7 @@ export const storageDeleteJobKind = defineJobKind({
         if (result.left.length > 0) {
           const first = result.left.slice(0, 3);
           return yield* new StorageDeleteIncompleteError({
-            message: `${storageDeleteSummary(result, rootLabel(params.from))}: ${first.map((l) => `${l.path}: ${l.message}`).join("; ")}${result.left.length > 3 ? "; …" : ""}`,
+            message: `${storageDeleteSummary(result, result.location === null ? "its drive" : rootLabel(result.location))}: ${first.map((l) => `${l.path}: ${l.message}`).join("; ")}${result.left.length > 3 ? "; …" : ""}`,
           });
         }
       })

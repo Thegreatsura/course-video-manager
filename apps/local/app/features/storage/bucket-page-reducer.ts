@@ -1,20 +1,15 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
-  isExportPurgeAction,
-  purgeIsBusy,
-  purgeTransition,
-  startPurge,
-  type exportPurge,
-} from "./export-purge";
-import {
-  deleteOriginalsIsBusy,
-  deleteOriginalsTransition,
-  isDeleteOriginalsAction,
-  startDeleteOriginals,
-  type deleteOriginals,
-} from "./delete-originals";
+  beginStorageAction,
+  isStorageActionAction,
+  storageActionIsBusy,
+  storageActionTransition,
+  type storageAction,
+} from "./storage-action";
+import { watchStorageJobs, type ObservedStorageJob } from "./storage-jobs";
 import {
   addFoundFiles,
+  bucketCanBeDeleted,
   bucketCanBePurged,
   dropFilesAt,
   largestFirst,
@@ -23,18 +18,27 @@ import {
   type StorageBucket,
   type StorageBucketFile,
   type StorageBucketFilesMessage,
+  type StorageMoveKind,
   type StorageRootReport,
+  type StorageTrashEntry,
 } from "@/packages/storage/client";
 
 /**
  * THE PER-BUCKET PAGE (#2108): one Storage Bucket's files, largest first,
- * each with what it is and the Storage Root(s) it is on. Opening the page
- * listens to the listing (`/api/storage/buckets/:bucketId/files`), which
- * streams files as the walk finds them; leaving the page closes the stream,
- * and the server stops the walk. Nothing is cached. Exported Videos can be
- * ticked and Purged (#2111); everything else is listed only. After a move,
- * "Delete originals on D:" deletes the files on D: that have an identical
- * copy on another root (#2110). See docs/FRONTEND_STATE.md.
+ * each with the drive(s) it is on and what it is. Opening the page listens
+ * to the listing (`/api/storage/buckets/:bucketId/files`), which streams
+ * files as the walk finds them; leaving the page closes the stream, and the
+ * server stops the walk. Nothing is cached. See docs/FRONTEND_STATE.md.
+ *
+ * Each file has an action menu (#2157) with what its bucket allows: Delete
+ * (an Exported Video whose Footage is found, an Other bucket's file, or
+ * Unused Footage, which goes to the Trash), Move to another drive, Delete
+ * original (only where an identical copy is on another drive), and Show in
+ * Explorer. Exported Videos can still be ticked and deleted together, and
+ * "Delete originals on D:" covers the whole bucket (#2110). Every move or
+ * delete is a `storageAction` (dry run, confirm, Sidecar Job); the page
+ * follows the bucket's storage Jobs live and lists again when one settles.
+ * Unused Footage's page also lists the Trash, to Restore from or empty.
  */
 export namespace bucketPageReducer {
   export type State = {
@@ -52,11 +56,23 @@ export namespace bucketPageReducer {
     listing: EffectEntity<State, Action> | null;
     /** The ticked Exported Videos (root-relative paths), in tick order. */
     selected: string[];
-    /** Purging the ticked Exported Videos: asked, under way, or done. */
-    purge: exportPurge.State | null;
-    /** "Delete originals" (#2110): asked, under way, or done. */
-    originals: deleteOriginals.State | null;
+    /** The move or delete being asked for, up to its Job (#2157). */
+    action: storageAction.State | null;
+    nextRequestId: number;
+    /** Storage Jobs seen running (true) or seen to settle (false). */
+    watchedJobs: Record<string, boolean>;
+    /** The Trash, on Unused Footage's page; null elsewhere or until listed. */
+    trash: StorageTrashEntry[] | null;
+    /** The last thing that went wrong outside an action (Show in Explorer). */
+    notice: string | null;
   };
+
+  /** What a file's action menu offers. */
+  export type FileChoice =
+    | { type: "delete" }
+    | { type: "move"; target: string }
+    | { type: "delete-original"; from: string }
+    | { type: "reveal"; location: string };
 
   export type Action =
     | StorageBucketFilesMessage
@@ -65,18 +81,29 @@ export namespace bucketPageReducer {
     | { type: "export-checkbox-toggled"; path: string }
     | { type: "purge-selected-clicked" }
     | { type: "delete-originals-clicked"; from: string }
-    | exportPurge.Action
-    | deleteOriginals.Action;
+    | { type: "file-action-clicked"; path: string; choice: FileChoice }
+    | { type: "restore-clicked"; entries: StorageTrashEntry[] }
+    | { type: "empty-trash-clicked" }
+    | { type: "trash-listed"; entries: StorageTrashEntry[] }
+    | { type: "trash-list-failed"; message: string }
+    | { type: "reveal-failed"; message: string }
+    | { type: "notice-dismissed" }
+    | { type: "storage-jobs-observed"; jobs: ObservedStorageJob[] }
+    | storageAction.Action;
 
   export type Effect =
     | { type: "listen-to-listing"; bucketId: string }
-    | exportPurge.Effect
-    | deleteOriginals.Effect;
+    | { type: "load-trash" }
+    | { type: "reveal-file"; location: string; path: string }
+    | storageAction.Effect;
 }
 
 type State = bucketPageReducer.State;
 type Action = bucketPageReducer.Action;
 type Effect = bucketPageReducer.Effect;
+type Exec = Parameters<EffectReducer<State, Action, Effect>>[2];
+
+const UNUSED_FOOTAGE = "unused-footage";
 
 /**
  * The page starts listening on `page-opened`, not here: a listener started
@@ -93,23 +120,36 @@ export const createInitialBucketPageState = (bucketId: string): State => ({
   unreadableRoots: {},
   listing: null,
   selected: [],
-  purge: null,
-  originals: null,
+  action: null,
+  nextRequestId: 1,
+  watchedJobs: {},
+  trash: null,
+  notice: null,
 });
 
-/** List again from nothing: what a Purge deleted is gone from the list. */
-const relist = (
-  state: State,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): State => {
+/** Start listening (and, on Unused Footage's page, list the Trash). */
+const listen = (state: State, exec: Exec): State => {
   if (state.listing) exec.stop(state.listing);
+  if (state.bucketId === UNUSED_FOOTAGE) exec({ type: "load-trash" });
   return {
-    ...createInitialBucketPageState(state.bucketId),
-    purge: state.purge,
-    originals: state.originals,
+    ...state,
     listing: exec({ type: "listen-to-listing", bucketId: state.bucketId }),
   };
 };
+
+/** List again from nothing: what a Job moved or deleted is listed afresh. */
+const relist = (state: State, exec: Exec): State =>
+  listen(
+    {
+      ...createInitialBucketPageState(state.bucketId),
+      action: state.action,
+      nextRequestId: state.nextRequestId,
+      watchedJobs: state.watchedJobs,
+      trash: state.trash,
+      listing: state.listing,
+    },
+    exec
+  );
 
 /** Whether the file can be ticked: an Exported Video of a purgeable bucket. */
 export const fileCanBeTicked = (state: State, path: string): boolean =>
@@ -117,69 +157,282 @@ export const fileCanBeTicked = (state: State, path: string): boolean =>
   bucketCanBePurged(state.bucket) &&
   state.files[path]?.role === "exported-video";
 
-/** Ticking Exported Videos and Purging them (#2111). */
-const selectionReducer = (
-  state: State,
-  action: Action,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): State | null => {
-  if (action.type === "export-checkbox-toggled") {
-    if (purgeIsBusy(state.purge) || deleteOriginalsIsBusy(state.originals))
-      return state;
-    if (state.selected.includes(action.path)) {
-      return {
-        ...state,
-        selected: state.selected.filter((p) => p !== action.path),
-      };
-    }
-    if (!fileCanBeTicked(state, action.path)) return state;
-    return { ...state, selected: [...state.selected, action.path] };
+/** What a move of this file carries, or null for a file moved with another. */
+const moveKindOf = (file: StorageBucketFile): StorageMoveKind | null => {
+  switch (file.role) {
+    case "footage":
+    case "recording-session":
+      return "footage";
+    case "exported-video":
+      return "exported-videos";
+    case "clip-mockup":
+      return "clip-mockups";
+    // Moved with the file they sit beside, or never moved.
+    case "footage-companion":
+    case "export-companion":
+    case "overlay-render":
+    case "export-scratch":
+      return null;
   }
-  if (action.type === "purge-selected-clicked") {
-    if (state.status !== "complete" || state.bucket === null) return state;
-    if (state.selected.length === 0 || !bucketCanBePurged(state.bucket))
-      return state;
-    if (deleteOriginalsIsBusy(state.originals)) return state;
-    const purge = startPurge(
-      state.purge,
-      state.bucket,
-      [...state.selected],
-      exec
-    );
-    return purge === null ? state : { ...state, purge };
-  }
-  if (!isExportPurgeAction(action)) return null;
-  const next = purgeTransition(state.purge, action, exec);
-  if (next.purge === state.purge) return state;
-  const after = { ...state, purge: next.purge };
-  return next.purged ? relist(after, exec) : after;
 };
 
-/** "Delete originals on <root>" (#2110): only from what the listing offers. */
-const originalsReducer = (
+/** One entry of a file's action menu. */
+export type FileAction = {
+  readonly choice: bucketPageReducer.FileChoice;
+  readonly label: string;
+  /** Why it is offered but can't be done now, or null. */
+  readonly refusal: string | null;
+};
+
+const labelOfRoot = (state: State, location: string) =>
+  state.roots?.find((r) => r.root === location)?.label ?? location;
+
+/**
+ * A file's action menu, with exactly what its bucket allows (#2157). The
+ * server checks every one again.
+ */
+export const fileActions = (
+  state: State,
+  file: StorageBucketFile
+): FileAction[] => {
+  const bucket = state.bucket;
+  if (bucket === null) return [];
+  const out: FileAction[] = [];
+  const kind = moveKindOf(file);
+  const deletable =
+    bucket.kind === UNUSED_FOOTAGE
+      ? "Move to the Trash…"
+      : bucketCanBePurged(bucket) && file.role === "exported-video"
+        ? "Delete Exported Video…"
+        : bucketCanBeDeleted(bucket) && file.role !== "export-companion"
+          ? "Delete…"
+          : null;
+  if (deletable !== null) {
+    out.push({ choice: { type: "delete" }, label: deletable, refusal: null });
+  }
+  if (kind !== null && movableKindsOf(bucket).includes(kind)) {
+    for (const root of state.roots ?? []) {
+      if (root.root in file.copies) continue;
+      out.push({
+        choice: { type: "move", target: root.root },
+        label: `Move to ${root.label}…`,
+        refusal: root.online ? null : `${root.label} is Offline`,
+      });
+    }
+  }
+  if (movableKindsOf(bucket).length > 0) {
+    for (const [from, bytes] of Object.entries(file.copies)) {
+      const copied = Object.entries(file.copies).some(
+        ([at, size]) => at !== from && size === bytes
+      );
+      if (!copied) continue;
+      out.push({
+        choice: { type: "delete-original", from },
+        label: `Delete the original on ${labelOfRoot(state, from)}…`,
+        refusal: null,
+      });
+    }
+  }
+  for (const location of Object.keys(file.copies)) {
+    out.push({
+      choice: { type: "reveal", location },
+      label: `Show in Explorer (${labelOfRoot(state, location)})`,
+      refusal: null,
+    });
+  }
+  return out;
+};
+
+const sameChoice = (
+  a: bucketPageReducer.FileChoice,
+  b: bucketPageReducer.FileChoice
+) => JSON.stringify(a) === JSON.stringify(b);
+
+/** Every copy of a file, as the server names a file on a drive. */
+const copiesOf = (file: StorageBucketFile): storageAction.FileAt[] =>
+  Object.keys(file.copies).map((location) => ({ location, path: file.path }));
+
+/** The request a file's chosen action makes. */
+const fileRequest = (
+  bucket: StorageBucket,
+  file: StorageBucketFile,
+  choice: Exclude<bucketPageReducer.FileChoice, { type: "reveal" }>
+): storageAction.Request | null => {
+  switch (choice.type) {
+    case "delete":
+      if (bucket.kind === UNUSED_FOOTAGE) {
+        return { type: "trash-unused", files: copiesOf(file) };
+      }
+      if (bucketCanBePurged(bucket)) {
+        return { type: "purge", bucket, exportPaths: [file.path] };
+      }
+      return { type: "delete-bucket", bucket, files: copiesOf(file) };
+    case "move": {
+      const kind = moveKindOf(file);
+      return kind === null
+        ? null
+        : {
+            type: "move",
+            bucket,
+            kind,
+            target: choice.target,
+            paths: [file.path],
+          };
+    }
+    case "delete-original":
+      return {
+        type: "originals",
+        bucket,
+        from: choice.from,
+        paths: [file.path],
+      };
+  }
+};
+
+/** Begin `request` as the page's one action, or change nothing. */
+const begin = (
+  state: State,
+  request: storageAction.Request | null,
+  exec: Exec
+): State => {
+  if (request === null) return state;
+  const next = beginStorageAction(
+    state.action,
+    request,
+    state.nextRequestId,
+    exec
+  );
+  return next === null
+    ? state
+    : { ...state, action: next, nextRequestId: state.nextRequestId + 1 };
+};
+
+/** Every gesture that starts a move or delete, and the Jobs the page follows. */
+const actionReducer = (
   state: State,
   action: Action,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+  exec: Exec
 ): State | null => {
-  if (action.type === "delete-originals-clicked") {
-    if (state.bucket === null || purgeIsBusy(state.purge)) return state;
-    const offered = originalsOffers(state).some(
-      (o) => o.location === action.from
-    );
-    if (!offered) return state;
-    const originals = startDeleteOriginals(
-      state.originals,
-      state.bucket,
-      action.from,
+  if (isStorageActionAction(action)) {
+    const { state: next, startedJobId } = storageActionTransition(
+      state.action,
+      action,
       exec
     );
-    return originals === null ? state : { ...state, originals };
+    if (next === state.action && startedJobId === null) return state;
+    return {
+      ...state,
+      action: next,
+      // A started Purge of the ticked files: the ticks are done with.
+      selected: startedJobId === null ? state.selected : [],
+      watchedJobs:
+        startedJobId === null
+          ? state.watchedJobs
+          : { ...state.watchedJobs, [startedJobId]: true },
+    };
   }
-  if (!isDeleteOriginalsAction(action)) return null;
-  const next = deleteOriginalsTransition(state.originals, action, exec);
-  if (next.state === state.originals) return state;
-  const after = { ...state, originals: next.state };
-  return next.relist ? relist(after, exec) : after;
+  switch (action.type) {
+    case "export-checkbox-toggled": {
+      if (storageActionIsBusy(state.action)) return state;
+      if (state.selected.includes(action.path)) {
+        return {
+          ...state,
+          selected: state.selected.filter((p) => p !== action.path),
+        };
+      }
+      if (!fileCanBeTicked(state, action.path)) return state;
+      return { ...state, selected: [...state.selected, action.path] };
+    }
+    case "purge-selected-clicked":
+      if (state.status !== "complete" || state.bucket === null) return state;
+      if (state.selected.length === 0 || !bucketCanBePurged(state.bucket))
+        return state;
+      return begin(
+        state,
+        {
+          type: "purge",
+          bucket: state.bucket,
+          exportPaths: [...state.selected],
+        },
+        exec
+      );
+    case "delete-originals-clicked": {
+      if (state.bucket === null) return state;
+      const offered = originalsOffers(state).some(
+        (o) => o.location === action.from
+      );
+      if (!offered) return state;
+      return begin(
+        state,
+        {
+          type: "originals",
+          bucket: state.bucket,
+          from: action.from,
+          paths: null,
+        },
+        exec
+      );
+    }
+    case "file-action-clicked": {
+      const file = state.files[action.path];
+      if (state.status !== "complete" || state.bucket === null || !file)
+        return state;
+      const offered = fileActions(state, file).find(
+        (a) => sameChoice(a.choice, action.choice) && a.refusal === null
+      );
+      if (!offered) return state;
+      if (action.choice.type === "reveal") {
+        exec({
+          type: "reveal-file",
+          location: action.choice.location,
+          path: file.path,
+        });
+        return state;
+      }
+      return begin(state, fileRequest(state.bucket, file, action.choice), exec);
+    }
+    case "restore-clicked":
+      if (action.entries.length === 0) return state;
+      return begin(
+        state,
+        {
+          type: "restore-trash",
+          files: action.entries.map((e) => ({
+            location: e.location,
+            batch: e.batch,
+            path: e.path,
+          })),
+        },
+        exec
+      );
+    case "empty-trash-clicked":
+      if ((state.trash ?? []).length === 0) return state;
+      return begin(state, { type: "empty-trash" }, exec);
+    case "trash-listed":
+      return { ...state, trash: action.entries };
+    case "trash-list-failed":
+    case "reveal-failed":
+      return { ...state, notice: action.message };
+    case "notice-dismissed":
+      return { ...state, notice: null };
+    case "storage-jobs-observed": {
+      const { watched, settled } = watchStorageJobs(
+        state.watchedJobs,
+        action.jobs
+      );
+      const after = { ...state, watchedJobs: watched };
+      return settled ? relist(after, exec) : after;
+    }
+    // The listing's own events: not an action's.
+    case "page-opened":
+    case "roots-measured":
+    case "bucket-identified":
+    case "files-found":
+    case "root-unreadable":
+    case "scan-completed":
+    case "listing-failed":
+      return null;
+  }
 };
 
 export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
@@ -187,21 +440,15 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
   action,
   exec
 ) => {
-  const afterSelection = selectionReducer(state, action, exec);
-  if (afterSelection !== null) return afterSelection;
-  const afterOriginals = originalsReducer(state, action, exec);
-  if (afterOriginals !== null) return afterOriginals;
+  const afterAction = actionReducer(state, action, exec);
+  if (afterAction !== null) return afterAction;
   // A message after the listing has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "listing") return state;
   switch (action.type) {
     case "page-opened":
       // Opened again (Strict Mode remounts): one listener, the newest.
-      if (state.listing) exec.stop(state.listing);
-      return {
-        ...state,
-        listing: exec({ type: "listen-to-listing", bucketId: state.bucketId }),
-      };
+      return listen(state, exec);
     case "roots-measured":
       return { ...state, roots: action.roots };
     case "bucket-identified":
@@ -237,20 +484,22 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
       };
     case "export-checkbox-toggled":
     case "purge-selected-clicked":
-    case "purge-planned":
-    case "purge-confirmed":
-    case "purge-cancelled":
-    case "exports-purged":
-    case "purge-failed":
-    case "purge-dismissed":
     case "delete-originals-clicked":
-    case "originals-planned":
-    case "delete-originals-confirmed":
-    case "delete-originals-cancelled":
-    case "delete-originals-started":
-    case "delete-originals-failed":
-    case "delete-originals-dismissed":
-      // Ticking, the Purge and "Delete originals", handled above.
+    case "file-action-clicked":
+    case "restore-clicked":
+    case "empty-trash-clicked":
+    case "trash-listed":
+    case "trash-list-failed":
+    case "reveal-failed":
+    case "notice-dismissed":
+    case "storage-jobs-observed":
+    case "storage-action-planned":
+    case "storage-action-confirmed":
+    case "storage-action-cancelled":
+    case "storage-action-started":
+    case "storage-action-failed":
+    case "storage-action-dismissed":
+      // The action menus' and the Jobs' events, handled above.
       return state;
   }
 };

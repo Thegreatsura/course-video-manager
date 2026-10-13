@@ -6,6 +6,7 @@ import {
   messageOf,
   realConfineOf,
   realpathOrNull,
+  stopIfCancelled,
 } from "./delete-safety.server";
 import { loadStorageOwnership } from "./ownership.server";
 import { STORAGE_FOLDERS } from "./storage-roots";
@@ -31,6 +32,8 @@ import {
   StorageTrashRefusedError,
   StorageTrashFailedError,
   type TrashFileRef,
+  trashFailure,
+  type TrashCancelled,
 } from "./trash-checks.server";
 
 /**
@@ -73,7 +76,7 @@ export const trashUnusedFootage = (
   }
 ): Effect.Effect<
   StorageTrashResult,
-  StorageTrashRefusedError | StorageTrashFailedError
+  StorageTrashRefusedError | StorageTrashFailedError | TrashCancelled
 > =>
   held(
     "a move to the trash",
@@ -253,6 +256,7 @@ export const trashUnusedFootage = (
           let progressed = 0;
           const total = candidates.length;
           for (const c of candidates) {
+            stopIfCancelled(opts.cancelRequested);
             const step = await trashOne(c, batch, dryRun);
             if (step === null) done.add(c.root, c.bytes);
             else
@@ -273,10 +277,10 @@ export const trashUnusedFootage = (
             left,
           };
         },
-        catch: (cause) =>
-          new StorageTrashFailedError({ message: messageOf(cause) }),
+        catch: trashFailure,
       });
-    })
+    }),
+    opts.alreadyHeld
   ).pipe(Effect.tap(logResult));
 
 /** The trash folder on `root`, made if missing, checked to be really there. */

@@ -88,6 +88,8 @@ type CoreOptions = {
   /** The Storage Root to delete the originals from. */
   readonly from: string;
   readonly dryRun: boolean;
+  /** Only these files (root-relative), and their companions; absent, all (#2157). */
+  readonly paths?: readonly string[];
   /** This run's own `storage-delete` Job, if it is one. */
   readonly selfJobId?: string;
   readonly cancelRequested?: () => boolean;
@@ -246,6 +248,11 @@ const originalsCore = (
           cls === null ||
           cls.bucketId !== bucket.id ||
           cls.kind !== FILE_KIND_OF[plan.kind]
+        )
+          continue;
+        if (
+          opts.paths !== undefined &&
+          !opts.paths.includes(cls.companionOf ?? f.relative)
         )
           continue;
         todo.push({ relative: f.relative, bytes: f.bytes, plan });

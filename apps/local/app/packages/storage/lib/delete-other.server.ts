@@ -12,7 +12,10 @@ import {
   type StorageOwnership,
 } from "./buckets";
 import {
+  cancelledOr,
   encodingJobs,
+  stopIfCancelled,
+  type StorageDeleteCancelledError,
   encodingRefusalMessage,
   storageBusyMessage,
   fileRefusal,
@@ -140,9 +143,15 @@ export const deleteOtherStorageBucket = (opts: {
   readonly selfJobId?: string | null;
   /** Called after each file, deleted or not. */
   readonly onProgress?: (done: number, total: number) => void;
+  /** The author's Cancel: stop before the next file. */
+  readonly cancelRequested?: () => boolean;
+  /** The caller holds the Storage page's write hold already (a start). */
+  readonly alreadyHeld?: boolean;
 }): Effect.Effect<
   StorageDeleteResult,
-  StorageDeleteRefusedError | StorageDeleteFailedError
+  | StorageDeleteRefusedError
+  | StorageDeleteFailedError
+  | StorageDeleteCancelledError
 > =>
   Effect.gen(function* () {
     const bucketId = DELETABLE_STORAGE_BUCKETS.find(
@@ -255,6 +264,7 @@ export const deleteOtherStorageBucket = (opts: {
           let count = 0;
           let bytes = 0;
           for (const file of files) {
+            stopIfCancelled(opts.cancelRequested);
             progressed += 1;
             opts.onProgress?.(progressed, total);
             // GC's switch, not an export: never deleted, and not news.
@@ -302,7 +312,14 @@ export const deleteOtherStorageBucket = (opts: {
         return result;
       },
       catch: (cause) =>
-        new StorageDeleteFailedError({ bucketId, message: messageOf(cause) }),
+        cancelledOr(
+          cause,
+          () =>
+            new StorageDeleteFailedError({
+              bucketId,
+              message: messageOf(cause),
+            })
+        ),
     });
   }).pipe(
     Effect.tap((r) =>
@@ -314,14 +331,16 @@ export const deleteOtherStorageBucket = (opts: {
     ),
     // Never beside a move being started, or another delete (#2109).
     (deletion) =>
-      holdingStorageWrites(
-        "a delete",
-        (heldBy) =>
-          new StorageDeleteRefusedError({
-            bucketId: opts.bucketId,
-            reason: "storage-busy",
-            message: storageBusyMessage(heldBy),
-          }),
-        deletion
-      )
+      opts.alreadyHeld
+        ? deletion
+        : holdingStorageWrites(
+            "a delete",
+            (heldBy) =>
+              new StorageDeleteRefusedError({
+                bucketId: opts.bucketId,
+                reason: "storage-busy",
+                message: storageBusyMessage(heldBy),
+              }),
+            deletion
+          )
   );
