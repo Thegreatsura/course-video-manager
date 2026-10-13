@@ -5,6 +5,7 @@ import type {
 import type { RenderVerticalStage as RenderVerticalServiceStage } from "@/services/render-vertical-video-service";
 import type { DuplicateCourseStage as DuplicateCourseJobStage } from "@/features/jobs/duplicate-course-job";
 import type { StorageMoveStage as StorageMoveJobStage } from "@/packages/storage/client";
+import type { StorageDeleteStage as StorageDeleteJobStage } from "@/packages/storage/client";
 
 /**
  * One row of the Upload Manager: how a Job draws (`jobUploadEntries` in
@@ -27,7 +28,8 @@ export type UploadType =
   | "autofill"
   | "render-vertical"
   | "duplicate-course"
-  | "storage-move";
+  | "storage-move"
+  | "storage-delete";
 export type BufferStage =
   "uploading-blob" | "creating-post" | "polling" | "cleaning-up";
 // Every stage union below is the SERVICE's own union, never a restatement of
@@ -42,6 +44,7 @@ export type RenderVerticalStage = RenderVerticalServiceStage;
 export type PublishStage = PublishServiceStage;
 export type DuplicateCourseStage = DuplicateCourseJobStage;
 export type StorageMoveStage = StorageMoveJobStage;
+export type StorageDeleteStage = StorageDeleteJobStage;
 // An Autofill only ever does two things: work out which Videos it has work
 // for, then write their text. The parent passes through both; a per-Video
 // child is born already writing.
@@ -159,6 +162,21 @@ export interface StorageMoveUploadEntry extends BaseUploadEntry {
   cancelled: boolean;
 }
 
+/**
+ * A Storage delete (#2110): "Delete originals" today, every Storage page
+ * delete as it moves to a Job. Like a move, its row has a Cancel.
+ */
+export interface StorageDeleteUploadEntry extends BaseUploadEntry {
+  uploadType: "storage-delete";
+  storageDeleteStage: StorageDeleteStage | null;
+  /** Cancel is offered: queued or running, and not asked already. */
+  cancellable: boolean;
+  /** The author pressed Cancel; it stops before its next file. */
+  cancelRequested: boolean;
+  /** It ended on the author's Cancel (drawn as `error`, without the alarm). */
+  cancelled: boolean;
+}
+
 export type UploadEntry =
   | YouTubeUploadEntry
   | YouTubeShortsUploadEntry
@@ -170,4 +188,5 @@ export type UploadEntry =
   | AutofillUploadEntry
   | RenderVerticalUploadEntry
   | DuplicateCourseUploadEntry
-  | StorageMoveUploadEntry;
+  | StorageMoveUploadEntry
+  | StorageDeleteUploadEntry;

@@ -62,6 +62,7 @@ export const storageMoveJobKind = defineJobKind({
           bucketId: params.bucketId,
           kind: params.kind,
           target: params.target,
+          ...(params.paths === undefined ? {} : { paths: params.paths }),
           jobId: ctx.jobId,
           cancelRequested: () => cancelRequested,
           onProgress: (p) => {

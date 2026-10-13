@@ -187,6 +187,45 @@ const seedEverythingElse = () => {
 };
 
 describe("deleteOtherStorageBucket", () => {
+  it("deletes only the files named, and a dry run deletes nothing", async () => {
+    put(d, "overlay-renders/a.mov", 40);
+    put(d, "overlay-renders/b.mov", 20);
+    put(e, "overlay-renders/a.mov", 30);
+    // Named, but not this bucket's: never deleted.
+    put(d, "raw-footage/x.mkv");
+
+    const files = [
+      { location: d, path: "overlay-renders/a.mov" },
+      { location: d, path: "raw-footage/x.mkv" },
+    ];
+    const dry = await Effect.runPromise(
+      deleteOtherStorageBucket({
+        db: db(),
+        roots,
+        bucketId: "overlay-render-cache",
+        scratchDir: scratch,
+        files,
+        dryRun: true,
+      })
+    );
+    expect(dry.deleted).toEqual([{ location: d, files: 1, bytes: 40 }]);
+    expect(exists(d, "overlay-renders/a.mov")).toBe(true);
+
+    await Effect.runPromise(
+      deleteOtherStorageBucket({
+        db: db(),
+        roots,
+        bucketId: "overlay-render-cache",
+        scratchDir: scratch,
+        files,
+      })
+    );
+    expect(exists(d, "overlay-renders/a.mov")).toBe(false);
+    expect(exists(d, "overlay-renders/b.mov")).toBe(true);
+    expect(exists(e, "overlay-renders/a.mov")).toBe(true);
+    expect(exists(d, "raw-footage/x.mkv")).toBe(true);
+  });
+
   it("deletes the Overlay Render Cache on every root, and nothing else", async () => {
     seedEverythingElse();
     put(d, "overlay-renders/c1-abc.mov", 40);

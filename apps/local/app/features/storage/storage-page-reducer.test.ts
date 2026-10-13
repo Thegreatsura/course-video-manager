@@ -74,7 +74,9 @@ describe("storagePageReducer", () => {
     tester.send({ type: "page-opened" }).send({ type: "page-opened" });
 
     expect(tester.getEffects()).toEqual([
+      { type: "load-trash" },
       { type: "listen-to-scan" },
+      { type: "load-trash" },
       { type: "listen-to-scan" },
     ]);
     // The first listener is stopped: only the newest listens.

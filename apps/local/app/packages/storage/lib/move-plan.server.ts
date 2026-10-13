@@ -143,6 +143,16 @@ export const busyRefusals = async (opts: {
     });
   }
 
+  // A delete Job (a Purge, a delete, the trash, "Delete originals") empties
+  // the very folders a move copies from (#2157).
+  const deleting = live.find((j) => j.kind === "storage-delete");
+  if (deleting) {
+    refusals.push({
+      reason: "storage-busy",
+      message: `"${deleting.title}" is queued or running; try again once it has finished`,
+    });
+  }
+
   if (opts.kind === "clip-mockups") {
     const voicing = live.find((j) => j.kind === "clip-mockup-voice");
     if (voicing) {
@@ -202,6 +212,8 @@ export const gather = (opts: {
   readonly selfJobId: string | null;
   /** Started by `startStorageMove`, which holds the write hold itself. */
   readonly holdIsOurs?: boolean;
+  /** Only these files (root-relative), and their companions; absent, all. */
+  readonly paths?: readonly string[];
 }): Effect.Effect<Gathered, StorageMoveFailedError> =>
   Effect.gen(function* () {
     const ownership: StorageOwnership = yield* loadStorageOwnership(
@@ -228,8 +240,10 @@ export const gatherFiles = async (opts: {
   readonly disk: StorageMoveDisk;
   readonly selfJobId: string | null;
   readonly holdIsOurs?: boolean;
+  readonly paths?: readonly string[];
   readonly ownership: StorageOwnership;
 }): Promise<Gathered> => {
+  const only = opts.paths === undefined ? null : new Set(opts.paths);
   const { roots, target, kind } = opts;
   const bucket = opts.ownership.buckets.find((b) => b.id === opts.bucketId);
   const targetLabel = rootLabel(target);
@@ -316,6 +330,8 @@ export const gatherFiles = async (opts: {
         owner.kind !== FILE_KIND_OF[kind]
       )
         continue;
+      // One file (and whatever is kept beside it) from the per-bucket page.
+      if (only !== null && !only.has(owner.companionOf ?? f.relative)) continue;
       const list = copies.get(f.relative) ?? [];
       list.push({ root, bytes: f.bytes });
       copies.set(f.relative, list);
@@ -412,6 +428,7 @@ export const planStorageMove = (opts: {
   readonly target: string;
   readonly disk?: StorageMoveDisk;
   readonly holdIsOurs?: boolean;
+  readonly paths?: readonly string[];
 }): Effect.Effect<StorageMovePlan, StorageMoveFailedError> =>
   gather({
     ...opts,

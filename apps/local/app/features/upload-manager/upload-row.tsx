@@ -87,19 +87,21 @@ export function UploadRow({
           onFollowLink={onFollowLink}
         />
       </div>
-      {upload.uploadType === "storage-move" && upload.cancellable && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCancel();
-          }}
-          className="shrink-0 text-xs text-muted-foreground hover:text-destructive"
-          type="button"
-          data-testid="storage-move-cancel"
-        >
-          Cancel
-        </button>
-      )}
+      {(upload.uploadType === "storage-move" ||
+        upload.uploadType === "storage-delete") &&
+        upload.cancellable && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancel();
+            }}
+            className="shrink-0 text-xs text-muted-foreground hover:text-destructive"
+            type="button"
+            data-testid="storage-move-cancel"
+          >
+            Cancel
+          </button>
+        )}
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
         <button
           onClick={(e) => onDismiss(e, upload.uploadId)}
@@ -246,7 +248,11 @@ function UploadStatusDetail({
     case "success":
       return <SuccessDetail upload={upload} onFollowLink={onFollowLink} />;
     case "error":
-      if (upload.uploadType === "storage-move" && upload.cancelled) {
+      if (
+        (upload.uploadType === "storage-move" ||
+          upload.uploadType === "storage-delete") &&
+        upload.cancelled
+      ) {
         // The author's Cancel, not a failure: no alarm.
         return (
           <p
@@ -299,6 +305,7 @@ function UploadStatusDetail({
             upload.uploadType !== "autofill" &&
             upload.uploadType !== "duplicate-course" &&
             upload.uploadType !== "storage-move" &&
+            upload.uploadType !== "storage-delete" &&
             !upload.parentUploadId && (
               <Link
                 to={`/videos/${upload.videoId}/post`}
@@ -535,6 +542,14 @@ function SuccessDetail({
         <SuccessBadge label="Moved and verified">
           <span className="text-xs text-muted-foreground">
             Originals kept until you delete them
+          </span>
+        </SuccessBadge>
+      );
+    case "storage-delete":
+      return (
+        <SuccessBadge label="Deleted">
+          <span className="text-xs text-muted-foreground">
+            Each checked against an identical copy first
           </span>
         </SuccessBadge>
       );

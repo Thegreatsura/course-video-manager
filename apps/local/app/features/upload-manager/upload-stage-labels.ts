@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   BufferStage,
   DuplicateCourseStage,
+  StorageDeleteStage,
   StorageMoveStage,
   ExportStage,
   PublishStage,
@@ -65,6 +66,11 @@ const STORAGE_MOVE_STAGE_LABELS: Record<StorageMoveStage, string> = {
   copying: "Copying and verifying checksums",
 };
 
+const STORAGE_DELETE_STAGE_LABELS: Record<StorageDeleteStage, string> = {
+  checking: "Checking running work",
+  deleting: "Checking each file against its copy, then deleting",
+};
+
 export function uploadStageLabel(upload: UploadEntry): string | null {
   switch (upload.uploadType) {
     case "export":
@@ -102,6 +108,12 @@ export function uploadStageLabel(upload: UploadEntry): string | null {
         ? "Cancelling: removing partial copies"
         : upload.storageMoveStage
           ? STORAGE_MOVE_STAGE_LABELS[upload.storageMoveStage]
+          : null;
+    case "storage-delete":
+      return upload.cancelRequested
+        ? "Cancelling: stopping before the next file"
+        : upload.storageDeleteStage
+          ? STORAGE_DELETE_STAGE_LABELS[upload.storageDeleteStage]
           : null;
     // A plain upload has no stages: its bar streams a byte percentage.
     case "youtube":

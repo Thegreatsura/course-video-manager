@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   AutofillUploadEntry,
   DuplicateCourseUploadEntry,
+  StorageDeleteUploadEntry,
   StorageMoveUploadEntry,
   BaseUploadEntry,
   ExportStage,
@@ -23,6 +24,7 @@ import {
   PUBLISH_STAGE_BANDS,
   PUBLISH_VIDEO_UPLOAD_BANDS,
   RENDER_VERTICAL_STAGE_BANDS,
+  STORAGE_DELETE_STAGE_BANDS,
   STORAGE_MOVE_STAGE_BANDS,
   withDerivedParentProgress,
 } from "@/features/upload-manager/upload-progress";
@@ -32,7 +34,10 @@ import {
   type jobsReducer,
 } from "./jobs-reducer";
 import { isDuplicateCourseStage } from "./duplicate-course-job";
-import { isStorageMoveStage } from "@/packages/storage/client";
+import {
+  isStorageDeleteStage,
+  isStorageMoveStage,
+} from "@/packages/storage/client";
 import {
   isPostingJobKind,
   mayLeavePendingVersion,
@@ -219,6 +224,8 @@ export const jobUploadEntry = (
       return duplicateCourseEntry(job);
     case "storage-move":
       return storageMoveEntry(job);
+    case "storage-delete":
+      return storageDeleteEntry(job);
     default:
       return null;
   }
@@ -274,6 +281,39 @@ const storageMoveEntry = (job: jobsReducer.JobView): StorageMoveUploadEntry => {
     videoId: "",
     uploadType: "storage-move",
     storageMoveStage: status === "success" ? null : stage,
+    cancellable: live && job.status !== "requested" && !job.cancelRequested,
+    cancelRequested: live && job.cancelRequested,
+    cancelled: job.status === "cancelled",
+  };
+};
+
+/**
+ * A Storage delete (#2110): one row about a Storage Bucket, checking then
+ * deleting, a real percentage by bytes. Its row has a Cancel; its failure
+ * message is "N deleted; N files still on D:, retry".
+ */
+const storageDeleteEntry = (
+  job: jobsReducer.JobView
+): StorageDeleteUploadEntry => {
+  const stage =
+    job.stage !== null && isStorageDeleteStage(job.stage) ? job.stage : null;
+  const status = uploadStatusOf(job);
+  const progress =
+    status === "success"
+      ? 100
+      : stage === null
+        ? 0
+        : fillBand(STORAGE_DELETE_STAGE_BANDS[stage], job.percent ?? 0);
+  const live =
+    job.status === "queued" ||
+    job.status === "running" ||
+    job.status === "retrying" ||
+    job.status === "requested";
+  return {
+    ...baseEntryOf(job, status, progress),
+    videoId: "",
+    uploadType: "storage-delete",
+    storageDeleteStage: status === "success" ? null : stage,
     cancellable: live && job.status !== "requested" && !job.cancelRequested,
     cancelRequested: live && job.cancelRequested,
     cancelled: job.status === "cancelled",

@@ -124,6 +124,38 @@ describe("a Storage move and the Storage page's deletes", () => {
     }
   });
 
+  it("a move, a Purge and a delete refuse while a delete Job is live; the Job does not refuse itself", async () => {
+    const [job] = await testDb
+      .insert(schema.jobs)
+      .values({
+        kind: "storage-delete",
+        title: "Delete Overlay Render Cache",
+        lane: "default",
+        params: {},
+        status: "running",
+        maxAttempts: 1,
+      })
+      .returning();
+    const plan = await Effect.runPromise(
+      planStorageMove({ db: db(), roots, bucketId, kind: "footage", target: e })
+    );
+    expect(plan.refusals.map((r) => r.reason)).toContain("storage-busy");
+    expect(failureOf(await purge()).message).toMatch(
+      /a delete is queued or running/
+    );
+    expect(failureOf(await deleteRenders()).reason).toBe("export-running");
+    const self = await Effect.runPromiseExit(
+      deleteOtherStorageBucket({
+        db: db(),
+        roots,
+        bucketId: "overlay-render-cache",
+        scratchDir: path.join(base, "scratch"),
+        selfJobId: job!.id,
+      })
+    );
+    expect(Exit.isSuccess(self)).toBe(true);
+  });
+
   it("while a move is being started, a Purge, a delete and a second move all refuse", async () => {
     const seen: Exit.Exit<unknown, unknown>[] = [];
     const started = await Effect.runPromiseExit(

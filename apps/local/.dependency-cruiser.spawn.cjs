@@ -51,7 +51,6 @@ const INTERACTIVE_CHILD_PROCESS = [
   // "Send feedback": `gh issue create`, while the dialog waits.
   "^app/routes/api\\.feedback\\.ts$",
   // "Reveal in Explorer": `wslpath` and `explorer.exe` on one file.
-  "^app/routes/api\\.videos\\.\\$videoId\\.reveal\\.ts$",
   // "Open folder" / "Open in VS Code".
   "^app/services/open-folder-service\\.ts$",
   // Starts the Clip Mockup daemon (ADR 0031): a long-lived process of its

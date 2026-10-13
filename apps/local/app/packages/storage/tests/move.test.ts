@@ -262,6 +262,26 @@ describe("runStorageMove", () => {
     expect(await exportNameOf(videoId)).toBe(hashBefore);
   });
 
+  it("moves one file, with what is kept beside it, from the per-bucket page", async () => {
+    const { bucketId } = await seedCourseWithFootage();
+    const exit = await Effect.runPromiseExit(
+      runStorageMove({
+        db: db(),
+        roots,
+        bucketId,
+        kind: "footage",
+        target: e,
+        paths: ["raw-footage/take-1.mkv"],
+        cancelRequested: () => false,
+      })
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(tree(e)).toEqual([
+      "raw-footage/take-1.mkv",
+      "raw-footage/take-1.mkv.transcript.json",
+    ]);
+  });
+
   it("moves Exported Videos with their companions", async () => {
     const { bucketId, exportName } = await seedCourseWithFootage();
     const exit = await move({ bucketId, kind: "exported-videos" });

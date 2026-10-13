@@ -137,8 +137,14 @@ const WALLCLOCK = [
  * preview for good, so it sits behind tee's fifo: its own queue, packets
  * dropped when full, the connection retried every 0.5 s. The null output
  * keeps the tee alive.
+ *
+ * Near-live, as OBS's preview is (#2144): the fifo holds at most two frames
+ * (it held 30, a second of backlog once anything stalled), and the socket
+ * sends each frame as soon as it is written (no Nagle).
  */
 export const previewOutput = (port: number, quality = 7) => [
+  "-fps_mode",
+  "passthrough",
   "-c:v",
   "mjpeg",
   "-q:v",
@@ -148,8 +154,8 @@ export const previewOutput = (port: number, quality = 7) => [
   "-use_fifo",
   "1",
   "-fifo_options",
-  "attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=30",
-  `[f=mpjpeg:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000|[f=null:use_fifo=0]-`,
+  "attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=2",
+  `[f=mpjpeg:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`,
 ];
 
 /**
@@ -173,12 +179,20 @@ const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 const CAMERA_PREVIEW_SCALE =
   "scale_cuda=640:360,hwdownload,format=nv12,format=yuvj420p";
 
+/**
+ * How many bytes of frames DirectShow may hold for ffmpeg: 4K NV12 is 12.4 MB
+ * a frame. A recording must never drop one, so it may hold about four
+ * seconds' worth. The preview-only process holds about five frames (#2144):
+ * a preview that falls behind drops frames instead of showing them late.
+ */
+const RTBUF = { recording: "1500M", preview: "64M" } as const;
+
 /** The Cam Link 4K as DirectShow opens it, for recording and preview alike. */
-const camLinkInput = (camera: string) => [
+const camLinkInput = (camera: string, rtbuf: string = RTBUF.recording) => [
   "-f",
   "dshow",
   "-rtbufsize",
-  "1500M",
+  rtbuf,
   "-video_size",
   "3840x2160",
   "-framerate",
@@ -229,7 +243,7 @@ export const cameraPreviewArgs = (o: {
   stillPort: number;
 }) => [
   ...PREVIEW_HEAD,
-  ...camLinkInput(o.camera),
+  ...camLinkInput(o.camera, RTBUF.preview),
   "-filter_complex",
   `[0:v]hwupload_cuda,split[p][s];[p]${CAMERA_PREVIEW_SCALE}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
   "-map",
@@ -276,14 +290,19 @@ export const screenPreviewArgs = (o: {
   ...previewOutput(o.port),
 ];
 
+/** The camera (input 0) stamped in file time: wall time less T0. */
+const cameraOnT0 = (t0: string) => `[0:v]setpts=PTS-${t0}/TB`;
+
+/** CFR 29.97 from exactly t=0. */
+const CAMERA_CFR = "fps=30000/1001:start_time=0";
+
 /**
  * The camera (input 0) on the shared clock: wall time less T0, then CFR
  * 29.97 from exactly t=0. A Recording Session and an AV Calibration's run
  * both stamp it so, which is what makes a calibration's Mic Offset the
  * recording's.
  */
-const cameraOnClock = (t0: string) =>
-  `[0:v]setpts=PTS-${t0}/TB,fps=30000/1001:start_time=0`;
+const cameraOnClock = (t0: string) => `${cameraOnT0(t0)},${CAMERA_CFR}`;
 
 /**
  * How fast the mic's anchor may move later, in seconds per second of mic
@@ -436,9 +455,12 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   const silence = silencedetectFilter(
     silenceRule(o.silenceLength, o.thresholdDb)
   );
+  // The preview splits off as soon as the camera is on the GPU, before the
+  // shared clock's CFR (#2144): the fps filter holds each frame until the
+  // next one comes, and the preview need not wait on the 1440p scale.
   const cameraGraph = [
-    `${cameraOnClock(t0)},${BT709},` +
-      "hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,split[cam][camp]",
+    `${cameraOnT0(t0)},hwupload_cuda,split[camr][camp]`,
+    `[camr]${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
     `[camp]${CAMERA_PREVIEW_SCALE}[camprev]`,
     `${micOnClock(t0)},asplit=2[mic][sd]`,
     `[sd]${silence},anullsink`,

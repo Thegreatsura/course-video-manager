@@ -205,6 +205,11 @@
       "file": "apps/local/app/features/thumbnail-editor/use-recorder-still.ts",
       "count": 1,
       "reason": "Interactive: the thumbnail camera on a CVM recorder Video fetches one still (a JPEG) from the local recorder service when the author presses Capture, while the modal waits."
+    },
+    {
+      "file": "apps/local/app/features/video-editor/latest-frame.ts",
+      "count": 1,
+      "reason": "Live, not background work: the recorder's camera and screen previews, pulled a frame at a time from the local recorder service while the editor (or the thumbnail camera) shows them (#2144). It stops with the view, the opposite of a Job."
     }
   ]
 }

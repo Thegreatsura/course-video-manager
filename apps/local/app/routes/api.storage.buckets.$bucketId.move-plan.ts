@@ -32,6 +32,10 @@ export const loader = makeLoader({
         bucketId: params.bucketId ?? "",
         kind: query.kind,
         target: query.target,
+        // `&path=raw-footage/a.mkv` (repeated): one file's move, per-file.
+        ...(url.searchParams.getAll("path").length === 0
+          ? {}
+          : { paths: url.searchParams.getAll("path") }),
       });
     }),
 });

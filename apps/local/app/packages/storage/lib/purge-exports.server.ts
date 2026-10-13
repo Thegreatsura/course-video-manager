@@ -10,7 +10,10 @@ import { EXPORT_HASH_RENAME_MARKER } from "@/services/export-hash-rename";
 import { computeExportHash, toExportClips } from "@/services/export-hash";
 import { classifyStorageFile } from "./buckets";
 import {
+  cancelledOr,
   encodingJobs,
+  stopIfCancelled,
+  type StorageDeleteCancelledError,
   encodingRefusalMessage,
   storageBusyMessage,
   fileRefusal,
@@ -189,15 +192,29 @@ export const purgeExportedVideos = (opts: {
   readonly dryRun?: boolean;
   /** Delete nothing outside this folder (a verify-cvm run's own directory). */
   readonly confineTo?: string;
+  /** The delete Job doing this Purge: not a reason for it to refuse itself. */
+  readonly selfJobId?: string | null;
+  /** Called after each file, deleted or not. */
+  readonly onProgress?: (done: number, total: number) => void;
+  /** The author's Cancel: stop before the next file. */
+  readonly cancelRequested?: () => boolean;
+  /** The caller holds the Storage page's write hold already (a start). */
+  readonly alreadyHeld?: boolean;
 }): Effect.Effect<
   StoragePurgeResult,
-  StoragePurgeRefusedError | StoragePurgeFailedError
+  | StoragePurgeRefusedError
+  | StoragePurgeFailedError
+  | StorageDeleteCancelledError
 > =>
   Effect.gen(function* () {
     const { bucketId, roots } = opts;
     const dryRun = opts.dryRun ?? false;
     const failed = (cause: unknown) =>
-      new StoragePurgeFailedError({ bucketId, message: messageOf(cause) });
+      cancelledOr(
+        cause,
+        () =>
+          new StoragePurgeFailedError({ bucketId, message: messageOf(cause) })
+      );
 
     const ownership = yield* loadStorageOwnership(opts.db, roots).pipe(
       Effect.mapError(
@@ -219,7 +236,7 @@ export const purgeExportedVideos = (opts: {
     }
 
     const encoding = yield* Effect.tryPromise({
-      try: () => encodingJobs(opts.db),
+      try: () => encodingJobs(opts.db, opts.selfJobId),
       catch: (cause) =>
         new StoragePurgeFailedError({
           bucketId,
@@ -327,7 +344,11 @@ export const purgeExportedVideos = (opts: {
         const purgedVideos = new Set<string>();
         const skipped = new Map<string, StoragePurgeSkippedVideo>();
         const deleted = new Map<string, { files: number; bytes: number }>();
+        let progressed = 0;
         for (const f of found) {
+          stopIfCancelled(opts.cancelRequested);
+          progressed += 1;
+          opts.onProgress?.(progressed, found.length);
           const exportName = path.posix.basename(f.exportPath);
           const owners = namedBy.get(exportName) ?? [];
           if (owners.length === 0) continue;
@@ -412,14 +433,16 @@ export const purgeExportedVideos = (opts: {
     ),
     // Never beside a move being started, or another delete (#2109).
     (purge) =>
-      holdingStorageWrites(
-        "a Purge",
-        (heldBy) =>
-          new StoragePurgeRefusedError({
-            bucketId: opts.bucketId,
-            reason: "storage-busy",
-            message: storageBusyMessage(heldBy),
-          }),
-        purge
-      )
+      opts.alreadyHeld
+        ? purge
+        : holdingStorageWrites(
+            "a Purge",
+            (heldBy) =>
+              new StoragePurgeRefusedError({
+                bucketId: opts.bucketId,
+                reason: "storage-busy",
+                message: storageBusyMessage(heldBy),
+              }),
+            purge
+          )
   );

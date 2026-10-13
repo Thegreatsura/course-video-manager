@@ -6,10 +6,17 @@ import { PREVIEW_FEEDS, previewPath, type PreviewFeed } from "./protocol";
 /**
  * THE PREVIEW FEEDS, as the rig (#1992) ran them: each ffmpeg.exe that sees a
  * picture connects to a feed's TCP port and sends it as mpjpeg; the service
- * keeps reading, never pushing back on ffmpeg, and passes each JPEG to the
- * browsers watching (`GET /preview/<feed>`) and to whoever waits for a frame
- * (the camera opener). A browser that falls behind skips frames instead of
- * queueing them.
+ * keeps reading, never pushing back on ffmpeg, keeps each feed's latest JPEG
+ * and tells whoever waits for a frame (the camera opener).
+ *
+ * A browser pulls a preview one frame at a time (#2144): `GET
+ * /preview/<feed>?after=<seq>` answers with the latest JPEG, numbered in its
+ * `X-Frame-Seq` header, or waits for the next one when the latest is the one
+ * the browser already has (`after`) or is stale. So a browser has at most
+ * one frame in flight and is only ever sent the newest: one that draws
+ * slowly skips frames instead of queueing them anywhere between ffmpeg and
+ * its screen. (A multipart stream, which this replaces, queued them in the
+ * socket buffers, unseen.)
  *
  * The `still` feed is not a preview: the camera preview process also sends a
  * few full-size (1280x720) JPEGs a second there, and the service keeps only
@@ -20,7 +27,14 @@ import { PREVIEW_FEEDS, previewPath, type PreviewFeed } from "./protocol";
 export type Feed = PreviewFeed | "still";
 const FEEDS = [...PREVIEW_FEEDS, "still"] as const satisfies readonly Feed[];
 
-const BOUNDARY = "cvmpreviewframe";
+/** How long a pull waits for a frame before answering 204, to be asked again. */
+const PULL_WAIT_MS = 5000;
+
+/** A latest frame older than this is not answered at once: the next one is waited for. */
+const STALE_MS = 1000;
+
+/** The header that numbers a pulled frame, for the browser's next `after`. */
+export const FRAME_SEQ_HEADER = "X-Frame-Seq";
 
 /** Splits an mpjpeg stream into its JPEGs. */
 const mpjpegParser = (onJpeg: (jpeg: Buffer) => void) => {
@@ -48,29 +62,27 @@ const mpjpegParser = (onJpeg: (jpeg: Buffer) => void) => {
 };
 
 export const startPreviewFeeds = async () => {
-  const watchers: Record<Feed, Set<http.ServerResponse>> = {
-    camera: new Set(),
-    screen: new Set(),
-    still: new Set(),
-  };
   const frameListeners: Record<Feed, Set<() => void>> = {
     camera: new Set(),
     screen: new Set(),
     still: new Set(),
   };
-  const latest: Partial<Record<Feed, { jpeg: Buffer; atMs: number }>> = {};
+  const latest: Partial<
+    Record<Feed, { jpeg: Buffer; atMs: number; seq: number }>
+  > = {};
   const sockets = new Set<net.Socket>();
+  const pulls = new Set<http.ServerResponse>();
+  let seq = 0;
 
   const frame = (feed: Feed, jpeg: Buffer) => {
-    latest[feed] = { jpeg, atMs: Date.now() };
+    seq += 1;
+    latest[feed] = { jpeg, atMs: Date.now(), seq };
     for (const listener of frameListeners[feed]) listener();
-    const head = `--${BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
-    for (const res of watchers[feed]) {
-      if (res.writableLength > 2 * jpeg.length) continue;
-      res.write(head);
-      res.write(jpeg);
-      res.write("\r\n");
-    }
+  };
+
+  const onFrame = (feed: Feed, listener: () => void) => {
+    frameListeners[feed].add(listener);
+    return () => void frameListeners[feed].delete(listener);
   };
 
   const listen = (feed: Feed) =>
@@ -99,36 +111,71 @@ export const startPreviewFeeds = async () => {
     port: portOf,
 
     /** Calls `listener` on each frame of a feed, until unsubscribed. */
-    onFrame(feed: Feed, listener: () => void) {
-      frameListeners[feed].add(listener);
-      return () => void frameListeners[feed].delete(listener);
-    },
+    onFrame,
 
     /** A feed's latest JPEG and when it arrived (`Date.now()` ms), if any came. */
     latest: (feed: Feed) => latest[feed],
 
-    /** Serves `GET /preview/<feed>` with these CORS headers; false for any other request. */
+    /** Serves `GET /preview/<feed>?after=<seq>` with these CORS headers; false for any other request. */
     serve(
       req: http.IncomingMessage,
       res: http.ServerResponse,
       cors: Record<string, string>
     ) {
-      const feed = PREVIEW_FEEDS.find((f) => req.url === previewPath(f));
-      if (!feed) return false;
-      res.writeHead(200, {
-        "Content-Type": `multipart/x-mixed-replace; boundary=${BOUNDARY}`,
+      const url = new URL(req.url ?? "/", "http://service");
+      const feed = PREVIEW_FEEDS.find((f) => url.pathname === previewPath(f));
+      if (!feed || req.method !== "GET") return false;
+      const after = url.searchParams.get("after");
+      const headers = {
         "Cache-Control": "no-store",
+        "Access-Control-Expose-Headers": FRAME_SEQ_HEADER,
         ...cors,
-      });
+      };
+      const fresh = () => {
+        const f = latest[feed];
+        return f && String(f.seq) !== after && Date.now() - f.atMs < STALE_MS
+          ? f
+          : undefined;
+      };
+      const send = (f: ReturnType<typeof fresh>) => {
+        if (!f) {
+          res.writeHead(204, headers).end();
+          return;
+        }
+        res.writeHead(200, {
+          ...headers,
+          "Content-Type": "image/jpeg",
+          [FRAME_SEQ_HEADER]: String(f.seq),
+        });
+        res.end(f.jpeg);
+      };
       res.socket?.setNoDelay(true);
-      watchers[feed].add(res);
-      req.on("close", () => watchers[feed].delete(res));
+      const now = fresh();
+      if (now) {
+        send(now);
+        return true;
+      }
+      // Wait for the next frame (or give up after a while, to be asked again).
+      pulls.add(res);
+      const unsubscribe = onFrame(feed, () => {
+        stop();
+        send(fresh());
+      });
+      const timer = setTimeout(() => {
+        stop();
+        send(undefined);
+      }, PULL_WAIT_MS);
+      const stop = () => {
+        unsubscribe();
+        clearTimeout(timer);
+        pulls.delete(res);
+      };
+      res.on("close", stop);
       return true;
     },
 
     async close() {
-      for (const set of Object.values(watchers))
-        for (const res of set) res.end();
+      for (const res of pulls) res.writeHead(204).end();
       for (const socket of sockets) socket.destroy();
       await Promise.all(
         Object.values(servers).map(

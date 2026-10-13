@@ -14,6 +14,8 @@ import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
 const MoveRequest = Schema.Struct({
   kind: Schema.Literal(...STORAGE_MOVE_KINDS),
   target: Schema.String,
+  /** Only these files (root-relative), from the per-bucket page. */
+  paths: Schema.optional(Schema.NonEmptyArray(Schema.String)),
 });
 
 /**
@@ -43,6 +45,7 @@ export const action = makeAction({
         bucketId,
         kind: request.kind,
         target: request.target,
+        ...(request.paths === undefined ? {} : { paths: request.paths }),
         enqueue: (plan) =>
           enqueueJob({
             id: null,
@@ -50,9 +53,15 @@ export const action = makeAction({
             title: storageMoveTitle(
               plan.bucketName,
               plan.kind,
-              plan.targetLabel
+              plan.targetLabel,
+              request.paths
             ),
-            params: { bucketId, kind: request.kind, target: request.target },
+            params: {
+              bucketId,
+              kind: request.kind,
+              target: request.target,
+              ...(request.paths === undefined ? {} : { paths: request.paths }),
+            },
             subject: { type: "storage-bucket", id: bucketId },
             attemptsSpent: 0,
             dependsOn: null,
