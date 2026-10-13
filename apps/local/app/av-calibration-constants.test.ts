@@ -4,9 +4,8 @@ import {
   calibrationValidity,
   deriveThreshold,
   describeCalibrationRefusal,
-  describeClapMiss,
   judgeCalibration,
-  MAX_CLAP_SPREAD_MS,
+  loudnessMisses,
   MEASUREMENT_WINDOWS,
   passesCurrentRules,
   RECORDER_CAMERA_NAME,
@@ -19,26 +18,22 @@ import {
   type LastPassedCalibration,
 } from "./av-calibration-constants";
 
-/** A take that passes everything: in band, peak under -6, 5 claps agreeing. */
+/** A take that passes everything: in band, peak under -6, its clap step saved. */
 const GOOD: CalibrationMeasures = {
   speechLufs: -27,
   truePeakDb: -9,
-  clapsFound: 5,
-  clapSpreadMs: 8,
   micOffsetMs: -47,
 };
 
 describe("judging an AV Calibration", () => {
-  it("passes inside -27 LUFS ± 2, edges included, peak at or under -6 dBTP, 3+ of 5 claps within one frame", () => {
+  it("passes inside -27 LUFS ± 2, edges included, peak at or under -6 dBTP, with the clap step saved", () => {
     for (const m of [
       GOOD,
       { ...GOOD, speechLufs: -29, truePeakDb: -6 },
       { ...GOOD, speechLufs: -25, truePeakDb: -12 },
-      { ...GOOD, clapsFound: 3 },
-      { ...GOOD, clapSpreadMs: MAX_CLAP_SPREAD_MS },
+      { ...GOOD, micOffsetMs: 0 },
     ])
       expect(judgeCalibration(m)).toEqual({ outcome: "passed" });
-    expect(MAX_CLAP_SPREAD_MS).toBeCloseTo(33.37, 2);
   });
 
   it.each<[string, Partial<CalibrationMeasures>, CalibrationMiss[]]>([
@@ -49,41 +44,19 @@ describe("judging an AV Calibration", () => {
       { truePeakDb: -4.5 },
       [{ kind: "peak-too-high", truePeakDb: -4.5, byDb: 1.5 }],
     ],
-    ["2 of 5 claps", { clapsFound: 2 }, [{ kind: "too-few-claps", found: 2 }]],
     [
-      "no clap found",
-      { clapsFound: 0, clapSpreadMs: null },
-      [{ kind: "too-few-claps", found: 0 }],
-    ],
-    [
-      "claps a frame and more apart",
-      { clapSpreadMs: 34 },
-      [{ kind: "claps-disagree", spreadMs: 34 }],
+      "the clap step not saved",
+      { micOffsetMs: null },
+      [{ kind: "no-mic-offset" }],
     ],
     [
       "everything at once, every miss listed",
-      { speechLufs: -24, truePeakDb: -5, clapsFound: 2, clapSpreadMs: 45.4 },
+      { speechLufs: -24, truePeakDb: -5, micOffsetMs: null },
       [
         { kind: "too-loud", byDb: 1 },
         { kind: "peak-too-high", truePeakDb: -5, byDb: 1 },
-        { kind: "too-few-claps", found: 2 },
-        { kind: "claps-disagree", spreadMs: 45.4 },
+        { kind: "no-mic-offset" },
       ],
-    ],
-    [
-      "claps found, but the mic's start-up gap left no Mic Offset",
-      { micOffsetMs: null },
-      [{ kind: "mic-start-up-gap" }],
-    ],
-    [
-      "no clap found, so no Mic Offset either: one miss, not two",
-      { clapsFound: 0, clapSpreadMs: null, micOffsetMs: null },
-      [{ kind: "too-few-claps", found: 0 }],
-    ],
-    [
-      "a good level but bad claps",
-      { clapsFound: 1, clapSpreadMs: 0 },
-      [{ kind: "too-few-claps", found: 1 }],
     ],
   ])("fails: %s", (_, change, misses) => {
     expect(judgeCalibration({ ...GOOD, ...change })).toEqual({
@@ -92,25 +65,17 @@ describe("judging an AV Calibration", () => {
     });
   });
 
-  it("judges a calibration stored before the peak check without the peak, and one before the clap step as failed", () => {
+  it("gates the clap step on the loudness check alone", () => {
+    expect(loudnessMisses(GOOD)).toEqual([]);
+    expect(loudnessMisses({ speechLufs: -21, truePeakDb: -9 })).toEqual([
+      { kind: "too-loud", byDb: 4 },
+    ]);
+  });
+
+  it("judges a calibration stored before the peak check without the peak", () => {
     expect(judgeCalibration({ ...GOOD, truePeakDb: null })).toEqual({
       outcome: "passed",
     });
-    expect(
-      judgeCalibration({ ...GOOD, clapsFound: null, clapSpreadMs: null })
-    ).toEqual({ outcome: "failed", misses: [{ kind: "no-clap-step" }] });
-  });
-
-  it("words the clap misses as Matt reads them", () => {
-    expect(describeClapMiss({ kind: "too-few-claps", found: 2 })).toBe(
-      "Found 2 of 5 claps"
-    );
-    expect(describeClapMiss({ kind: "claps-disagree", spreadMs: 25.4 })).toBe(
-      "Claps disagree by 25 ms"
-    );
-    expect(describeClapMiss({ kind: "mic-start-up-gap" })).toBe(
-      "The mic dropped out as it started: its Mic Offset can't be trusted"
-    );
   });
 
   it("sets the threshold 16 dB under the speech, unclamped across the whole band", () => {
@@ -273,8 +238,7 @@ describe("whether a Recorder may start (the gate)", () => {
     expect(passesCurrentRules({ ...pass, speechLufs: -21 })).toBe(false);
     expect(passesCurrentRules({ ...pass, truePeakDb: null })).toBe(false);
     expect(passesCurrentRules({ ...pass, outcome: "failed" })).toBe(false);
-    expect(passesCurrentRules({ ...pass, clapsFound: 2 })).toBe(false);
-    expect(passesCurrentRules({ ...pass, clapSpreadMs: 40 })).toBe(false);
+    expect(passesCurrentRules({ ...pass, micOffsetMs: null })).toBe(false);
   });
 
   it("never counts a pass from before AV Calibration (no clap measurements), however good its level", () => {
@@ -283,8 +247,6 @@ describe("whether a Recorder may start (the gate)", () => {
         outcome: "passed",
         speechLufs: -27,
         truePeakDb: -9,
-        clapsFound: null,
-        clapSpreadMs: null,
         micOffsetMs: null,
       })
     ).toBe(false);

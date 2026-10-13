@@ -1,5 +1,4 @@
 import { FileSystem } from "@effect/platform";
-import { NodeContext } from "@effect/platform-node";
 import { and, desc, eq } from "drizzle-orm";
 import { Data, Effect, Schema } from "effect";
 import path from "node:path";
@@ -13,6 +12,7 @@ import {
   deriveThreshold,
   describeCalibrationRefusal,
   judgeCalibration,
+  loudnessMisses,
   passesCurrentRules,
   type CalibrationInvalidReason,
   type LastPassedCalibration,
@@ -20,7 +20,6 @@ import {
   runSchedule,
   SCRIPT_VERSION,
 } from "@/av-calibration-constants";
-import { detectClaps, type ClapDetection } from "@/packages/clap-detection";
 import type {
   BrowserTracePoint,
   SavedAVCalibration,
@@ -41,6 +40,14 @@ import {
 import { storageRootsConfig } from "./storage-roots";
 import { resolveStoragePath } from "@/packages/storage/server";
 import { toRootRelative } from "@/packages/storage";
+import { DEFAULT_MIC_OFFSET_MS } from "@cvm/core/features/videos/recorder";
+import {
+  CLAP_STEP_WINDOW_MS,
+  loudestMs,
+  waveformPeaks,
+  type ClapStepData,
+} from "@/packages/clap-step";
+import { readMicSamples } from "@/packages/clap-step/server";
 
 /** Beside a calibration's mic file: the browser's level trace and the prompt schedule. */
 export const BROWSER_TRACE_FILE = "browser-trace.json";
@@ -50,25 +57,23 @@ export class CalibrationRunMismatchError extends Data.TaggedError(
   "CalibrationRunMismatchError"
 )<{ readonly message: string }> {}
 
-/** No clap found: what a failed clap detection stores. */
-const NO_CLAPS: ClapDetection = {
-  claps: [],
-  found: 0,
-  spreadMs: null,
-  micOffsetMs: null,
-  startUpGap: null,
-};
+/** The Mic Offset was saved on a calibration other than the latest (#2137). */
+export class NotLatestCalibrationError extends Data.TaggedError(
+  "NotLatestCalibrationError"
+)<{ readonly message: string }> {}
+
+/** The clap step was saved on a calibration whose loudness check failed. */
+export class LoudnessCheckFailedError extends Data.TaggedError(
+  "LoudnessCheckFailedError"
+)<{ readonly message: string }> {}
 
 /**
- * Stores an AV Calibration from its run's measurement, passed or failed:
- * finds the claps in its mic and camera files over the clap window
- * (`clap-detection`) for the Mic Offset (none when the mic had a start-up
- * gap: the claps are kept, the offset is not, and that fails it), judges
- * the speech loudness against the band, the true peak against its ceiling
- * and the claps against their rule, derives the threshold, writes the
- * browser's trace beside the mic file (with the schedule its prompts
- * followed, in the files' seconds, the claps and any start-up gap), and
- * saves the row with whatever it measured.
+ * Stores an AV Calibration from its run's measurement: judges the speech
+ * loudness against the band and the true peak against its ceiling (the
+ * loudness check), derives the threshold, writes the browser's trace beside
+ * the mic file (with the schedule its prompts followed and the windows, in
+ * the files' seconds), and saves the row. It has no Mic Offset yet, so it is
+ * stored failed: the clap step's Save (`saveMicOffset`) passes it (#2137).
  */
 export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
   db: Database,
@@ -100,24 +105,12 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     o.recordingsFolder,
     measured.cameraFile
   );
-  const claps = yield* detectClaps({
-    micFile,
-    cameraFile,
-    window: o.windows.claps,
-  }).pipe(
-    Effect.provide(NodeContext.layer),
-    Effect.catchTag("ClapDetectionError", (e) =>
-      Effect.logError(`Clap detection failed: ${e.message}`).pipe(
-        Effect.as(NO_CLAPS)
-      )
-    )
-  );
+  // No Mic Offset yet: Matt lines up a clap in the clap step (#2137), and
+  // only its Save can pass the calibration.
   const judgement = judgeCalibration({
     speechLufs: measured.speechLufs,
     truePeakDb: measured.truePeakDb,
-    clapsFound: claps.found,
-    clapSpreadMs: claps.spreadMs,
-    micOffsetMs: claps.micOffsetMs,
+    micOffsetMs: null,
   });
   const thresholdDb = deriveThreshold(measured.speechLufs);
   const browserTracePath = yield* assertUnderEffect(
@@ -134,8 +127,6 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
       measurementWindows: o.windows,
       browserInputLabel: o.browserInputLabel,
       trace: o.browserTrace,
-      claps: claps.claps,
-      micStartUpGap: claps.startUpGap,
     })
   );
   const storageRoots = yield* storageRootsConfig;
@@ -156,9 +147,9 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
         micFilePath: toRootRelative(micFile, storageRoots),
         browserTracePath: toRootRelative(browserTracePath, storageRoots),
         cameraDevice: measured.camera,
-        clapsFound: claps.found,
-        clapSpreadMs: claps.spreadMs,
-        micOffsetMs: claps.micOffsetMs,
+        clapsFound: null,
+        clapSpreadMs: null,
+        micOffsetMs: null,
         cameraFilePath: toRootRelative(cameraFile, storageRoots),
       })
       .returning()
@@ -188,6 +179,50 @@ const toSaved = (row: AVCalibrationRow): SavedAVCalibration => ({
   clapsFound: row.clapsFound,
   clapSpreadMs: row.clapSpreadMs,
   micOffsetMs: row.micOffsetMs,
+});
+
+/** The newest AV Calibration's row, or null with none. */
+const latestCalibrationRow = (db: Database) =>
+  dbCall(() =>
+    db
+      .select()
+      .from(avCalibrations)
+      .orderBy(desc(avCalibrations.createdAt))
+      .limit(1)
+  ).pipe(Effect.map(([row]) => row ?? null));
+
+/**
+ * THE CLAP STEP'S SAVE (#2137): the Mic Offset Matt lined up, in whole ms,
+ * stored on the latest AV Calibration (only the latest: an earlier one is
+ * refused), which is judged again with it, so a calibration whose loudness
+ * check passed now passes and unblocks recording. Only a new Recording
+ * Session reads it (`pairMicOffsetMs`); an existing one keeps its own.
+ */
+export const saveMicOffset = Effect.fn("saveMicOffset")(function* (
+  db: Database,
+  o: { calibrationId: string; micOffsetMs: number }
+) {
+  const latest = yield* latestCalibrationRow(db);
+  if (!latest || latest.id !== o.calibrationId)
+    return yield* new NotLatestCalibrationError({
+      message:
+        "Only the latest AV Calibration's clap step can be saved: run a new one.",
+    });
+  if (loudnessMisses(latest).length > 0)
+    return yield* new LoudnessCheckFailedError({
+      message:
+        "This AV Calibration failed its loudness check: run it again before the clap step.",
+    });
+  const micOffsetMs = Math.round(o.micOffsetMs);
+  const judgement = judgeCalibration({ ...latest, micOffsetMs });
+  const [row] = yield* dbCall(() =>
+    db
+      .update(avCalibrations)
+      .set({ micOffsetMs, outcome: judgement.outcome })
+      .where(eq(avCalibrations.id, latest.id))
+      .returning()
+  );
+  return toSaved(row!);
 });
 
 /** How many past AV Calibrations the page lists. */
@@ -236,6 +271,7 @@ const TraceFileSchema = Schema.parseJson(
     measurementWindows: Schema.Struct({
       silence: TimeWindowSchema,
       speech: Schema.Array(TimeWindowSchema),
+      claps: Schema.optional(TimeWindowSchema),
     }),
     trace: Schema.NullOr(
       Schema.Array(
@@ -414,3 +450,112 @@ export const requireFreshAVCalibration = Effect.fn("requireFreshAVCalibration")(
     return validity.calibration;
   }
 );
+
+/** The rate the clap step reads the mic at: 1 ms is 48 samples. */
+const CLAP_STEP_SAMPLE_RATE = 48_000;
+
+/**
+ * The latest AV Calibration, for its clap step (#2137): refused for any
+ * other, and for one whose loudness check failed.
+ */
+const clapStepRow = Effect.fn("clapStepRow")(function* (
+  db: Database,
+  calibrationId: string
+) {
+  const latest = yield* latestCalibrationRow(db);
+  if (!latest || latest.id !== calibrationId)
+    return yield* new NotLatestCalibrationError({
+      message: "The clap step opens only on the latest AV Calibration.",
+    });
+  if (loudnessMisses(latest).length > 0)
+    return yield* new LoudnessCheckFailedError({
+      message:
+        "This AV Calibration failed its loudness check: run it again before the clap step.",
+    });
+  return latest;
+});
+
+/** The latest calibration's mic and camera files, found on a Storage Root. */
+export const clapStepFiles = Effect.fn("clapStepFiles")(function* (
+  db: Database,
+  calibrationId: string
+) {
+  const row = yield* clapStepRow(db, calibrationId);
+  if (!row.cameraFilePath)
+    return yield* new NotFoundError({
+      type: "avCalibration",
+      params: { calibrationId },
+      message: `AV Calibration ${calibrationId} has no camera file.`,
+    });
+  const storageRoots = yield* storageRootsConfig;
+  return {
+    row,
+    micFile: yield* resolveStoragePath(
+      row.micFilePath,
+      storageRoots,
+      "AV Calibration mic recording"
+    ),
+    cameraFile: yield* resolveStoragePath(
+      row.cameraFilePath,
+      storageRoots,
+      "AV Calibration camera recording"
+    ),
+  };
+});
+
+/**
+ * What the clap step opens with (`ClapStepData`): the loudest point in the
+ * run's clap window (the whole mic file, for a run whose trace has none),
+ * the waveform around it, and the Mic Offset to start from: the one already
+ * saved on it, else the pair's current one, else the default.
+ */
+export const loadClapStep = Effect.fn("loadClapStep")(function* (
+  db: Database,
+  calibrationId: string
+) {
+  const { row, micFile } = yield* clapStepFiles(db, calibrationId);
+  const fs = yield* FileSystem.FileSystem;
+  const tracePath = yield* resolveStoragePath(
+    row.browserTracePath,
+    yield* storageRootsConfig,
+    "AV Calibration trace"
+  );
+  const traceFile = yield* Schema.decodeUnknown(TraceFileSchema)(
+    yield* fs.readFileString(tracePath)
+  );
+  const window = traceFile.measurementWindows.claps;
+  const fromMs = window ? window.startSeconds * 1000 : 0;
+  const toMs = window ? window.endSeconds * 1000 : 24 * 60 * 60 * 1000;
+  const clapWindow = yield* readMicSamples({
+    micFile,
+    fromMs,
+    toMs,
+    sampleRate: CLAP_STEP_SAMPLE_RATE,
+  });
+  const loudest = fromMs + loudestMs(clapWindow, CLAP_STEP_SAMPLE_RATE);
+  const startMs = Math.max(0, loudest - CLAP_STEP_WINDOW_MS);
+  const around = yield* readMicSamples({
+    micFile,
+    fromMs: startMs,
+    toMs: loudest + CLAP_STEP_WINDOW_MS,
+    sampleRate: CLAP_STEP_SAMPLE_RATE,
+  });
+  const pairOffset = row.cameraDevice
+    ? yield* pairMicOffsetMs(db, {
+        camera: row.cameraDevice,
+        mic: row.recorderMic,
+      })
+    : null;
+  return {
+    calibrationId: row.id,
+    loudestMs: loudest,
+    waveform: {
+      startMs,
+      peaks: waveformPeaks(around, CLAP_STEP_SAMPLE_RATE),
+    },
+    micOffsetMs:
+      row.micOffsetMs !== null
+        ? Math.round(row.micOffsetMs)
+        : (pairOffset ?? DEFAULT_MIC_OFFSET_MS),
+  } satisfies ClapStepData;
+});

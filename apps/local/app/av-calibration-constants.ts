@@ -64,15 +64,8 @@ export const MAX_TRUE_PEAK_DBTP = -6;
 
 /** How many claps the session prompts. */
 export const CLAPS_PROMPTED = 5;
-/** How many of them must be found in both the mic and the camera. */
-export const MIN_CLAPS_FOUND = 3;
 /** The camera's frame rate as the CVM recorder records it (29.97). */
 export const CAMERA_FPS = 30000 / 1001;
-/**
- * The furthest the paired claps' offsets may spread (max - min), in ms: one
- * camera frame. Wider, and the Mic Offset is not to be trusted.
- */
-export const MAX_CLAP_SPREAD_MS = 1000 / CAMERA_FPS;
 
 export type CalibrationOutcome = "passed" | "failed";
 
@@ -82,17 +75,8 @@ export type CalibrationMiss =
   | { kind: "too-quiet" | "too-loud"; byDb: number }
   /** The take's true peak is over `MAX_TRUE_PEAK_DBTP`, by `byDb`. */
   | { kind: "peak-too-high"; truePeakDb: number; byDb: number }
-  /** Fewer than `MIN_CLAPS_FOUND` claps found in both the mic and the camera. */
-  | { kind: "too-few-claps"; found: number }
-  /** The paired claps' offsets spread over `MAX_CLAP_SPREAD_MS`. */
-  | { kind: "claps-disagree"; spreadMs: number }
-  /** Taken before the clap step (an Audio Calibration): no Mic Offset. */
-  | { kind: "no-clap-step" }
-  /**
-   * The mic had a start-up gap (`clap-detection`): claps were found, but
-   * the Mic Offset over them cannot be trusted, so none was stored.
-   */
-  | { kind: "mic-start-up-gap" };
+  /** The clap step was not saved: no Mic Offset (#2137). */
+  | { kind: "no-mic-offset" };
 
 /** Whether a calibration passed, and if not, every way it missed. */
 export type CalibrationJudgement =
@@ -104,30 +88,18 @@ export type CalibrationMeasures = {
   speechLufs: number;
   /** null: stored before the peak check. */
   truePeakDb: number | null;
-  /** null: stored before the clap step. */
-  clapsFound: number | null;
-  /** null: no clap found (or none looked for). */
-  clapSpreadMs: number | null;
-  /**
-   * null: no clap found, or none looked for, or (with claps found) the mic
-   * had a start-up gap, so no Mic Offset could be trusted.
-   */
+  /** null: the clap step has not been saved (or ran before it existed). */
   micOffsetMs: number | null;
 };
 
 /**
- * Passed when the speech loudness is inside the target band, edges included,
- * the take's true peak is at or under `MAX_TRUE_PEAK_DBTP`, at least
- * `MIN_CLAPS_FOUND` claps were found, and their offsets agree within one
- * camera frame. Every miss is listed, so one re-run can fix them all. A
- * calibration stored before the peak check (`truePeakDb` null) is not judged
- * on the peak; one stored before the clap step (`clapsFound` null) fails,
- * as does one whose claps were found with no Mic Offset (the mic's start-up
- * gap left it untrusted).
+ * THE LOUDNESS CHECK: the speech loudness inside the target band, edges
+ * included, and the take's true peak at or under `MAX_TRUE_PEAK_DBTP` (not
+ * judged on a calibration stored before the peak check). Every miss listed.
  */
-export const judgeCalibration = (
-  m: CalibrationMeasures
-): CalibrationJudgement => {
+export const loudnessMisses = (
+  m: Pick<CalibrationMeasures, "speechLufs" | "truePeakDb">
+): CalibrationMiss[] => {
   const misses: CalibrationMiss[] = [];
   const band = bandPosition(m.speechLufs);
   if (band.position === "below")
@@ -140,42 +112,23 @@ export const judgeCalibration = (
       truePeakDb: m.truePeakDb,
       byDb: m.truePeakDb - MAX_TRUE_PEAK_DBTP,
     });
-  if (m.clapsFound === null) misses.push({ kind: "no-clap-step" });
-  else if (m.clapsFound < MIN_CLAPS_FOUND)
-    misses.push({ kind: "too-few-claps", found: m.clapsFound });
-  if (m.clapSpreadMs !== null && m.clapSpreadMs > MAX_CLAP_SPREAD_MS)
-    misses.push({ kind: "claps-disagree", spreadMs: m.clapSpreadMs });
-  if (m.clapsFound && m.micOffsetMs === null)
-    misses.push({ kind: "mic-start-up-gap" });
+  return misses;
+};
+
+/**
+ * Passed when the loudness check passes (`loudnessMisses`) and the clap
+ * step was saved, so there is a Mic Offset (#2137: Matt lines up a clap by
+ * eye and ear; nothing is detected automatically). Every miss is listed.
+ */
+export const judgeCalibration = (
+  m: CalibrationMeasures
+): CalibrationJudgement => {
+  const misses = loudnessMisses(m);
+  if (m.micOffsetMs === null) misses.push({ kind: "no-mic-offset" });
   const [first, ...rest] = misses;
   return first
     ? { outcome: "failed", misses: [first, ...rest] }
     : { outcome: "passed" };
-};
-
-/** The clap misses as Matt reads them; the level misses are the page's to word. */
-export const describeClapMiss = (
-  miss: Extract<
-    CalibrationMiss,
-    {
-      kind:
-        | "too-few-claps"
-        | "claps-disagree"
-        | "no-clap-step"
-        | "mic-start-up-gap";
-    }
-  >
-): string => {
-  switch (miss.kind) {
-    case "too-few-claps":
-      return `Found ${miss.found} of ${CLAPS_PROMPTED} claps`;
-    case "claps-disagree":
-      return `Claps disagree by ${Math.round(miss.spreadMs)} ms`;
-    case "no-clap-step":
-      return "Taken before the clap step: no Mic Offset";
-    case "mic-start-up-gap":
-      return "The mic dropped out as it started: its Mic Offset can't be trusted";
-  }
 };
 
 /**
@@ -517,7 +470,7 @@ export const describeCalibrationRefusal = (
 ): string => {
   switch (reason.kind) {
     case "none":
-      return `${CALIBRATION_REFUSAL_PREFIX}none has passed under the current rules (${TARGET_LOUDNESS_LUFS} LUFS ± ${TARGET_TOLERANCE_DB}, peak at most ${MAX_TRUE_PEAK_DBTP} dBTP, ${MIN_CLAPS_FOUND} of ${CLAPS_PROMPTED} claps agreeing within a frame) yet.`;
+      return `${CALIBRATION_REFUSAL_PREFIX}none has passed under the current rules (${TARGET_LOUDNESS_LUFS} LUFS ± ${TARGET_TOLERANCE_DB}, peak at most ${MAX_TRUE_PEAK_DBTP} dBTP, the clap step saved) yet.`;
     case "expired":
       return `${CALIBRATION_REFUSAL_PREFIX}the last one expired on ${formatCalibrationTime(reason.expiredAtMs)} (they last 7 days).`;
     case "device-changed":

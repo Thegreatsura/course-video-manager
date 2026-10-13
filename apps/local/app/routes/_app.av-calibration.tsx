@@ -69,6 +69,7 @@ export default function AVCalibrationPage({
           onStart={() => dispatch({ type: "start-clicked" })}
           onCancel={() => dispatch({ type: "cancel-clicked" })}
           onBackToMeter={() => dispatch({ type: "back-to-meter-clicked" })}
+          dispatch={dispatch}
         />
         <LevelMeter
           state={state.meter}
@@ -79,7 +80,11 @@ export default function AVCalibrationPage({
           openId={session.kind === "result" ? session.calibration.id : null}
           disabled={!isSessionIdle(session)}
           onOpen={(calibration) =>
-            dispatch({ type: "past-calibration-clicked", calibration })
+            dispatch({
+              type: "past-calibration-clicked",
+              calibration,
+              latest: calibration.id === loaderData.calibrations[0]?.id,
+            })
           }
         />
       </div>

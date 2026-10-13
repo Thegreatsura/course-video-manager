@@ -2,11 +2,8 @@ import { Button } from "@/components/ui/button";
 import {
   CLAP_SECONDS,
   CLAPS_PROMPTED,
-  describeClapMiss,
   LOUD_LINE,
-  MAX_CLAP_SPREAD_MS,
   MAX_TRUE_PEAK_DBTP,
-  MIN_CLAPS_FOUND,
   READ_SECONDS,
   PAUSE_SECONDS,
   SCRIPT_END_SECONDS,
@@ -24,6 +21,7 @@ import {
   type avCalibrationReducer,
 } from "./av-calibration-reducer";
 import { CalibrationTimelineView } from "./calibration-timeline-view";
+import { ClapStepView } from "./clap-step";
 import type { SavedAVCalibration } from "./calibration-wire";
 
 type State = avCalibrationReducer.State;
@@ -157,8 +155,8 @@ const ClapMarks = ({ state }: { state: State }) => {
         ))}
       </div>
       <p className="text-sm text-muted-foreground">
-        {seen} of {CLAPS_PROMPTED} counted so far ({MIN_CLAPS_FOUND} needed): a
-        clap counts when the mic hears it and the camera sees your hands meet.
+        {seen} of {CLAPS_PROMPTED} heard and seen so far. After the session you
+        line up one clap by eye and ear in the clap step.
       </p>
     </div>
   );
@@ -187,11 +185,8 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 
 const missTitle = (miss: CalibrationMiss) => {
   switch (miss.kind) {
-    case "too-few-claps":
-    case "claps-disagree":
-    case "no-clap-step":
-    case "mic-start-up-gap":
-      return describeClapMiss(miss);
+    case "no-mic-offset":
+      return "Clap step not saved";
     case "too-quiet":
       return `Too quiet by ${dB(miss.byDb)}`;
     case "too-loud":
@@ -209,14 +204,8 @@ const missAdvice = (miss: CalibrationMiss) => {
       return "Turn your level down until the meter sits in the band, then run it again.";
     case "peak-too-high":
       return "Your loudest moment would come close to clipping: turn your level down, then run it again.";
-    case "too-few-claps":
-      return "Clap sharply, with your hands in front of your face where the camera sees them meet, then run it again.";
-    case "claps-disagree":
-      return "The claps gave different offsets: clap crisply, hands meeting flat, then run it again.";
-    case "no-clap-step":
-      return "Run an AV Calibration to measure the Mic Offset.";
-    case "mic-start-up-gap":
-      return "The recorder lost a moment of the mic just after it started, which shifts the mic against the camera: run it again.";
+    case "no-mic-offset":
+      return "Line up a clap in the clap step and save its Mic Offset.";
   }
 };
 
@@ -276,12 +265,8 @@ const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
       </div>
       <p className="text-sm text-muted-foreground">
         Target band {TARGET_BAND.lowLufs} to {TARGET_BAND.highLufs} LUFS; true
-        peak at most {MAX_TRUE_PEAK_DBTP} dBTP; at least {MIN_CLAPS_FOUND} of{" "}
-        {CLAPS_PROMPTED} claps agreeing within {Math.round(MAX_CLAP_SPREAD_MS)}{" "}
-        ms (one frame).
-        {calibration.clapsFound !== null &&
-          ` Found ${calibration.clapsFound} of ${CLAPS_PROMPTED} claps${calibration.clapSpreadMs === null ? "" : `, ${Math.round(calibration.clapSpreadMs)} ms apart`}.`}{" "}
-        Stored {new Date(calibration.createdAt).toLocaleString()}, on{" "}
+        peak at most {MAX_TRUE_PEAK_DBTP} dBTP; then the clap step saved. Stored{" "}
+        {new Date(calibration.createdAt).toLocaleString()}, on{" "}
         {calibration.recorderMic}
         {calibration.cameraDevice ? ` and ${calibration.cameraDevice}` : ""}
         {calibration.browserInputLabel
@@ -321,11 +306,13 @@ export const CalibrationSession = ({
   onStart,
   onCancel,
   onBackToMeter,
+  dispatch,
 }: {
   state: State;
   onStart: () => void;
   onCancel: () => void;
   onBackToMeter: () => void;
+  dispatch: (action: avCalibrationReducer.Action) => void;
 }) => {
   const session = state.session;
   return (
@@ -373,13 +360,20 @@ export const CalibrationSession = ({
       {session.kind === "analysing" && (
         <div className="flex items-center gap-3 text-2xl text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
-          Measuring your mic and finding your claps…
+          Measuring your mic…
         </div>
       )}
 
       {session.kind === "result" && (
         <>
           <Result calibration={session.calibration} />
+          {session.clapStep && (
+            <ClapStepView
+              calibrationId={session.calibration.id}
+              step={session.clapStep}
+              dispatch={dispatch}
+            />
+          )}
           <CalibrationTimelineView timeline={session.timeline} />
           <Button
             variant={

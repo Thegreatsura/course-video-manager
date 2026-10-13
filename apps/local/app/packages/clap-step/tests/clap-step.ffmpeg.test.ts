@@ -4,8 +4,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { detectClaps } from "@/packages/clap-detection";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { loudestMs } from "@/packages/clap-step";
+import {
+  cameraFrameJpeg,
+  clapPreviewMp4,
+  readMicSamples,
+} from "@/packages/clap-step/server";
 
 /**
  * A synthetic AV Calibration take, made with ffmpeg and no device: a mic file
@@ -168,14 +173,6 @@ const writeSyntheticTake = (o: {
   return { micFile, cameraFile };
 };
 
-/** One camera frame at 29.97 fps, in ms. */
-const FRAME_MS = (1000 * FPS_DEN) / FPS_NUM;
-
-/**
- * The real ffmpeg over synthetic AV Calibration takes (no device): claps at
- * known mic times, the hands meeting at known camera times, so the Mic
- * Offset each take should give is known. Skipped where there is no ffmpeg.
- */
 const hasFfmpeg = (() => {
   try {
     execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
@@ -185,103 +182,86 @@ const hasFfmpeg = (() => {
   }
 })();
 
-const WINDOW = { startSeconds: 1, endSeconds: 9.5 };
-const CLAPS_AUDIO_S = [2.013, 3.508, 5.021, 6.497, 8.004];
+const run = <A, E>(effect: Effect.Effect<A, E, never>) =>
+  Effect.runPromise(effect);
 
-describe.skipIf(!hasFfmpeg)("clap detection over real files", () => {
-  const root = path.join(tmpdir(), `claps-${process.pid}-${Date.now()}`);
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
-
-  const take = (
-    name: string,
-    offsetsMs: readonly number[],
-    audioS = CLAPS_AUDIO_S,
-    room: Pick<
-      Parameters<typeof writeSyntheticTake>[0],
-      "hissDb" | "sway" | "gap"
-    > = {}
-  ) => {
-    const dir = path.join(root, name);
+/**
+ * The real ffmpeg over a synthetic take (no device): one clap the mic hears
+ * at 2.013 s, the hands meeting on camera 120 ms later.
+ */
+describe.skipIf(!hasFfmpeg)("the clap step over real files", () => {
+  const dir = path.join(tmpdir(), `clap-step-${process.pid}-${Date.now()}`);
+  let files: { micFile: string; cameraFile: string };
+  beforeAll(() => {
     mkdirSync(dir, { recursive: true });
-    const files = writeSyntheticTake({
+    files = writeSyntheticTake({
       dir,
-      durationS: 10,
-      audioS,
-      videoS: CLAPS_AUDIO_S.map((a, i) => a + offsetsMs[i]! / 1000),
-      ...room,
+      durationS: 4,
+      audioS: [2.013],
+      videoS: [2.133],
     });
-    return Effect.runPromise(
-      detectClaps({ ...files, window: WINDOW }).pipe(
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("finds the clap as the loudest point of the mic, to the ms", async () => {
+    const samples = await run(
+      readMicSamples({
+        micFile: files.micFile,
+        fromMs: 1000,
+        toMs: 3000,
+        sampleRate: 48_000,
+      }).pipe(Effect.provide(NodeContext.layer))
+    );
+    expect(samples.length).toBe(2 * 48_000);
+    const at = 1000 + loudestMs(samples, 48_000);
+    expect(at).toBeGreaterThanOrEqual(2013);
+    expect(at).toBeLessThan(2013 + 15);
+  });
+
+  it("answers one camera frame as a JPEG", async () => {
+    const jpeg = await run(
+      cameraFrameJpeg({ cameraFile: files.cameraFile, frame: 64 }).pipe(
         Effect.provide(NodeContext.layer)
       )
     );
-  };
+    expect([...jpeg.subarray(0, 2)]).toEqual([0xff, 0xd8]);
+    writeFileSync(path.join(dir, "frame.jpg"), jpeg);
+    const size = execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "csv=p=0",
+      path.join(dir, "frame.jpg"),
+    ])
+      .toString()
+      .trim();
+    expect(size).toBe("640,360");
+  });
 
-  it("finds all 5 claps and recovers the Mic Offset within one frame", async () => {
-    // The camera 137 ms late, give or take a few ms per clap.
-    const offsets = [137, 131, 142, 135, 140];
-    const result = await take("clean", offsets);
-    expect(result.found).toBe(5);
-    expect(Math.abs(result.micOffsetMs! - 137)).toBeLessThan(FRAME_MS);
-    expect(result.spreadMs!).toBeLessThanOrEqual(FRAME_MS);
-    result.claps.forEach((c, i) => {
-      expect(Math.abs(c.audioS - CLAPS_AUDIO_S[i]!)).toBeLessThan(0.001);
-      // Well inside the frame the rule allows: a few ms.
-      expect(Math.abs(c.offsetMs - offsets[i]!)).toBeLessThan(5);
-    });
-  }, 60_000);
-
-  it("recovers a negative Mic Offset (the mic late) as well", async () => {
-    const result = await take("negative", [-48, -52, -45, -50, -49]);
-    expect(result.found).toBe(5);
-    expect(Math.abs(result.micOffsetMs! - -49)).toBeLessThan(FRAME_MS);
-  }, 60_000);
-
-  it("finds only the claps heard: 2 of 5 when 3 make no sound", async () => {
-    const result = await take(
-      "two-heard",
-      [137, 137, 137, 137, 137],
-      [CLAPS_AUDIO_S[0]!, CLAPS_AUDIO_S[3]!]
+  it("makes Play's 2 s clip with sound and picture", async () => {
+    const mp4 = await run(
+      clapPreviewMp4({
+        ...files,
+        videoMs: 2133,
+        micOffsetMs: 120,
+      }).pipe(Effect.provide(NodeContext.layer))
     );
-    expect(result.found).toBe(2);
-  }, 60_000);
-
-  it("reports claps that disagree by more than a frame", async () => {
-    const result = await take("spread", [110, 137, 175, 140, 130]);
-    expect(result.found).toBe(5);
-    expect(result.spreadMs!).toBeGreaterThan(FRAME_MS);
-    expect(Math.abs(result.spreadMs! - 65)).toBeLessThan(FRAME_MS);
-  }, 60_000);
-
-  it("finds claps that rise only ~25 dB over a louder room", async () => {
-    const result = await take(
-      "low-rise",
-      [-50, -48, -52, -49, -51],
-      CLAPS_AUDIO_S,
-      { hissDb: -30 }
-    );
-    expect(result.found).toBe(5);
-    expect(Math.abs(result.micOffsetMs! - -50)).toBeLessThan(FRAME_MS);
-  }, 60_000);
-
-  it("finds claps while Matt sways the whole time", async () => {
-    const offsets = [-90, -88, -92, -91, -89];
-    const result = await take("sway", offsets, CLAPS_AUDIO_S, { sway: true });
-    expect(result.found).toBe(5);
-    expect(Math.abs(result.micOffsetMs! - -90)).toBeLessThan(FRAME_MS);
-    expect(result.spreadMs!).toBeLessThanOrEqual(FRAME_MS);
-  }, 60_000);
-
-  it("finds the claps but trusts no Mic Offset when the mic had a start-up gap", async () => {
-    const offsets = [-50, -50, -50, -50, -50];
-    const clean = await take("no-gap", offsets);
-    expect(clean.startUpGap).toBeNull();
-    const result = await take("gap", offsets, CLAPS_AUDIO_S, {
-      gap: { atS: 0.4, ms: 150 },
-    });
-    expect(result.found).toBe(5);
-    expect(result.micOffsetMs).toBeNull();
-    expect(result.startUpGap!.atSeconds).toBeCloseTo(0.4, 2);
-    expect(Math.abs(result.startUpGap!.ms - 150)).toBeLessThan(1);
-  }, 60_000);
+    const file = path.join(dir, "play.mp4");
+    writeFileSync(file, mp4);
+    const streams = execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "stream=codec_type",
+      "-of",
+      "csv=p=0",
+      file,
+    ])
+      .toString()
+      .trim()
+      .split("\n");
+    expect(streams.sort()).toEqual(["audio", "video"]);
+  });
 });
