@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Clapperboard,
   FolderGit2,
+  HardDrive,
   KeyRound,
   Lightbulb,
   Menu,
@@ -249,6 +250,13 @@ export function AppSidebar({ variant }: AppSidebarProps) {
         label="AV Calibration"
         href="/av-calibration"
         active={location.pathname.startsWith("/av-calibration")}
+      />
+
+      <EntityCard
+        icon={<HardDrive className="w-4 h-4 text-muted-foreground" />}
+        label="Storage"
+        href="/storage"
+        active={location.pathname.startsWith("/storage")}
       />
 
       <EntityCard
