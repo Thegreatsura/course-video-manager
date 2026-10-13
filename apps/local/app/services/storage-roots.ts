@@ -1,4 +1,5 @@
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import { Config, ConfigError, Effect, Either } from "effect";
 import {
   InvalidStorageRootsError,
@@ -16,6 +17,53 @@ import { resolveRepoEnvValue } from "./repo-env";
  * settings — asks here.
  */
 export const STORAGE_ROOTS_ENV_KEY = "STORAGE_ROOTS";
+
+/**
+ * Set by verify-cvm on every process of a test-clone run: that run's own
+ * directory. While it is set, every Storage Root — and each Storage Folder
+ * under one — must resolve inside it, or the process refuses to start. A
+ * verify run once reached Matt's real Footage through a symlinked
+ * `raw-footage/`; this is the in-process half of the rule that it never can
+ * again (the shell half is verify-cvm's `assert_env_paths_contained`).
+ */
+export const VERIFY_RUN_DIR_ENV_KEY = "CVM_VERIFY_RUN_DIR";
+
+/** A path with every symlink resolved; a path that does not exist yet, as is. */
+const realpathOrResolved = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+};
+
+/**
+ * Why a verify run's Storage Roots may not be used, or `undefined` when they
+ * may (or when this is not a verify run).
+ */
+export const judgeVerifyRunContainment = (
+  env: Readonly<Record<string, string | undefined>>,
+  roots: StorageRoots,
+  realpath: (path: string) => string = realpathOrResolved
+): string | undefined => {
+  const runDir = env[VERIFY_RUN_DIR_ENV_KEY];
+  if (runDir === undefined || runDir.trim() === "") return undefined;
+  const realRunDir = realpath(runDir);
+  const inside = (path: string) =>
+    path === realRunDir || path.startsWith(realRunDir + sep);
+  for (const root of roots) {
+    for (const path of [
+      root,
+      ...Object.values(STORAGE_FOLDERS).map((f) => `${root}/${f}`),
+    ]) {
+      const real = realpath(path);
+      if (!inside(real)) {
+        return `${path} resolves to ${real}, outside this verify run's directory ${realRunDir} (${VERIFY_RUN_DIR_ENV_KEY}). A verify run must never reach a real Storage Root.`;
+      }
+    }
+  }
+  return undefined;
+};
 
 /** `STORAGE_ROOTS` as an Effect Config, parsed and validated. */
 export const storageRootsConfig: Config.Config<StorageRoots> = Config.string(
@@ -57,7 +105,10 @@ export const readStorageRootsSync = (): StorageRoots => {
       `${STORAGE_ROOTS_ENV_KEY} is not set: add it to .env, e.g. ${STORAGE_ROOTS_ENV_KEY}=/mnt/d,/mnt/e`
     );
   }
-  return parseStorageRoots(raw);
+  const roots = parseStorageRoots(raw);
+  const refusal = judgeVerifyRunContainment(process.env, roots);
+  if (refusal !== undefined) throw new InvalidStorageRootsError(refusal);
+  return roots;
 };
 
 /**
@@ -69,7 +120,8 @@ export const readStorageRootsSync = (): StorageRoots => {
  */
 export const judgeStorageRoots = (
   env: Readonly<Record<string, string | undefined>>,
-  isDirectory: (root: string) => boolean
+  isDirectory: (root: string) => boolean,
+  realpath: (path: string) => string = realpathOrResolved
 ): { refusal: string | undefined; offline: string[] } => {
   const raw = env[STORAGE_ROOTS_ENV_KEY];
   if (raw === undefined || raw.trim() === "") {
@@ -87,6 +139,8 @@ export const judgeStorageRoots = (
       offline: [],
     };
   }
+  const escaped = judgeVerifyRunContainment(env, roots, realpath);
+  if (escaped !== undefined) return { refusal: escaped, offline: [] };
   return {
     refusal: undefined,
     offline: roots.filter((root) => !isDirectory(root)),

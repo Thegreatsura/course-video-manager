@@ -26,33 +26,115 @@ LEDGER_APP_API=cvm-verify-api
 # clone_app_env <run dir> <clone url> — CLONE_APP_ENV: the environment every
 # process of a test-clone run gets. Its database, its own scratch directories
 # (a run's file writes never land on Matt's disk) and the offline services.
+#
+# scratch/ is the run's one Storage Root (ADR 0040), and every folder under it
+# — the four Storage Folders included — is a fresh, EMPTY, real directory of
+# this run's. A run never links to Matt's drives: scratch/raw-footage was once
+# a symlink to /mnt/d/raw-footage, and a test that seeded files there with
+# `truncate -s` resized 51 real takes. A Clip whose Footage is not in scratch/
+# is "not found" on a clone; that is the price of never reaching a real drive.
+# (A second, "read-only" footage-root/ holding the same link is no safer: a
+# link is writable through, so there is no second root either.)
+# Both assertions below are refusals, not warnings: the run does not start.
+SCRATCH_DIRS=(raw-footage finished-videos clip-mockups overlay-renders
+              video-files diagram-thumbnails obs-recordings dropbox)
+STORAGE_FOLDER_NAMES=(raw-footage finished-videos clip-mockups overlay-renders video-files)
+
+# path_inside <real dir> <real path> — true when the path is the dir or under it.
+path_inside() { case "$2/" in "$1"/*) return 0 ;; *) return 1 ;; esac; }
+
+# assert_scratch_contained <run dir> — die unless the run directory is not on
+# a real drive (/mnt), scratch/ is not a symlink, nothing under scratch/ is a
+# symlink, and every scratch folder resolves inside the run directory. Runs
+# BEFORE anything is created under scratch/ (a mkdir through a link would
+# itself write to the far side), and again after.
+assert_scratch_contained() {
+  local dir="$1" real_dir scratch="$1/scratch" links p real
+  real_dir="$(readlink -f -- "$dir")" || die "refusing: cannot resolve the run directory $dir"
+  case "$real_dir/" in
+    /mnt/*) die "refusing: the run directory resolves to $real_dir, on a real drive — a verify run's files live in its worktree, never under /mnt" ;;
+  esac
+  # Anywhere in the run, not only scratch/: a hand-made link beside it
+  # (footage-root/raw-footage -> /mnt/d/raw-footage) is the same hazard.
+  while IFS= read -r -d '' p; do
+    real="$(readlink -m -- "$p")"
+    path_inside "$real_dir" "$real" ||
+      die "refusing: $p is a symlink to $real, outside this run's directory — a verify run must never reach a real Storage Root or Matt's Footage. Remove the link (rm the link itself, never its target) and relaunch."
+  done < <(find "$dir" -type l -print0 2>/dev/null)
+  [ ! -L "$scratch" ] ||
+    die "refusing: $scratch is a symlink (to $(readlink -- "$scratch")) — a run's scratch/ must be a real directory of its own"
+  [ -e "$scratch" ] || return 0
+  links="$(find "$scratch" -type l -print 2>/dev/null | head -5)"
+  [ -z "$links" ] ||
+    die "refusing: symlink(s) under $scratch — a verify run must never reach a real Storage Root or Matt's Footage: $(printf '%s ' $links)"
+  for p in "$scratch" "${SCRATCH_DIRS[@]/#/$scratch/}"; do
+    [ -e "$p" ] || continue
+    real="$(readlink -f -- "$p")"
+    path_inside "$real_dir" "$real" ||
+      die "refusing: $p resolves to $real, outside this run's directory $real_dir"
+  done
+}
+
+# assert_env_paths_contained <run dir> <NAME=value…> — die unless every Storage
+# Root in STORAGE_ROOTS, each Storage Folder under it, and every *_DIR /
+# DROPBOX_REMOTE_PATH value is no symlink and resolves inside the run
+# directory. The last word on what a run's processes are handed.
+assert_env_paths_contained() {
+  local dir="$1" real_dir kv name value root folder p real roots paths=()
+  shift
+  real_dir="$(readlink -f -- "$dir")" || die "refusing: cannot resolve the run directory $dir"
+  for kv in "$@"; do
+    name="${kv%%=*}"; value="${kv#*=}"
+    case "$name" in
+      STORAGE_ROOTS)
+        IFS=',' read -r -a roots <<< "$value"
+        for root in "${roots[@]}"; do
+          root="$(printf '%s' "$root" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [ -n "$root" ] || continue
+          paths+=("$root")
+          for folder in "${STORAGE_FOLDER_NAMES[@]}"; do paths+=("$root/$folder"); done
+        done ;;
+      *_DIR|DROPBOX_REMOTE_PATH) paths+=("$value") ;;
+    esac
+  done
+  for p in "${paths[@]}"; do
+    [ ! -L "$p" ] ||
+      die "refusing: $p is a symlink (to $(readlink -- "$p")) — a verify run's Storage Roots and folders are real directories of its own"
+    real="$(readlink -m -- "$p")"
+    path_inside "$real_dir" "$real" ||
+      die "refusing: $p resolves to $real, outside this run's directory $real_dir — a verify run must never reach a real Storage Root"
+  done
+}
+
+# extra_storage_roots <run dir> — ",<run dir>/<name>" per name in
+# VERIFY_EXTRA_STORAGE_ROOTS; an absolute entry is kept as given (and refused).
+extra_storage_roots() {
+  local name names
+  IFS=',' read -r -a names <<< "${VERIFY_EXTRA_STORAGE_ROOTS:-}"
+  for name in "${names[@]}"; do
+    [ -n "$name" ] || continue
+    case "$name" in /*) printf ',%s' "$name" ;; *) printf ',%s/%s' "$1" "$name" ;; esac
+  done
+}
+
 CLONE_APP_ENV=()
 clone_app_env() {
   local dir="$1" url="$2" scratch="$1/scratch"
-  mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
-           "$scratch/finished-videos" "$scratch/obs-recordings" "$scratch/dropbox"
-  # The run's scratch/ is its FIRST Storage Root (ADR 0040), where every new
-  # file goes: finished-videos/, clip-mockups/, overlay-renders/,
-  # video-files/ and raw-footage/ (a CVM-recorder Recording Session) under it
-  # are the run's own. A clone's Clips name their Footage root-relative
-  # (raw-footage/…) once Matt has run the path migration, so a SECOND root,
-  # footage-root/, holds only a link to the real Footage folder, for the
-  # editor to READ: new files are written to the first root only, so nothing
-  # a run does lands in Matt's raw-footage/. Before the migration the rows are
-  # absolute and are read where they are.
-  local footage="${VERIFY_FOOTAGE_DIR:-/mnt/d/raw-footage}" footage_root="$1/footage-root"
-  mkdir -p "$scratch/raw-footage" "$footage_root"
-  if [ -d "$footage" ] && [ ! -e "$footage_root/raw-footage" ]; then
-    ln -s "$footage" "$footage_root/raw-footage"
-  fi
+  assert_scratch_contained "$dir"
+  mkdir -p "${SCRATCH_DIRS[@]/#/$scratch/}"
+  assert_scratch_contained "$dir"
   CLONE_APP_ENV=(
     "DATABASE_URL=$url"
     "DIRECT_DATABASE_URL=$url"
     "VIDEO_FILES_DIR=$scratch/video-files"
-    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated) adds roots after these,
-    # e.g. a directory that does not exist, to see an Offline drive. Never
-    # name one of Matt's drives.
-    "STORAGE_ROOTS=$scratch,$footage_root${VERIFY_EXTRA_STORAGE_ROOTS:+,$VERIFY_EXTRA_STORAGE_ROOTS}"
+    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated names) adds roots after
+    # scratch/, e.g. one that does not exist, to see an Offline drive. A name
+    # is taken inside this run's directory; anything resolving outside it —
+    # an absolute /mnt/e — refuses the run: a real drive is never a root here.
+    "STORAGE_ROOTS=$scratch$(extra_storage_roots "$dir")"
+    # The app's own half of the rule (services/storage-roots.ts): with this
+    # set, the server, the sidecar and `cvm` refuse a Storage Root outside it.
+    "CVM_VERIFY_RUN_DIR=$dir"
     "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
     "OBS_RECORDING_DIR=$scratch/obs-recordings"
     "DROPBOX_REMOTE_PATH=$scratch/dropbox"
@@ -60,6 +142,7 @@ clone_app_env() {
     # One ffmpeg and one Dropbox upload at a time (verify-clones.sh).
     "${CLONE_ENCODE_CAPS_ENV[@]}"
   )
+  assert_env_paths_contained "$dir" "${CLONE_APP_ENV[@]}"
 }
 
 # --- the assertions -----------------------------------------------------------
