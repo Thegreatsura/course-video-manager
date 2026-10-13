@@ -10,8 +10,10 @@ import {
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 
 /**
- * The clip reducer on a CVM recorder Video: the app server's messages arrive
- * as facts, and the Clips shown are the saved Clips, where they were saved.
+ * The clip reducer on a CVM recorder Video, beyond the Take it shares with
+ * OBS (`clip-state-reducer-take.test.ts`): joining a recording late, Clips
+ * whose take the editor never heard, and telling the app server where to
+ * save.
  */
 
 const SESSION = "session-1";
@@ -95,51 +97,7 @@ const databaseIds = (t: ReturnType<typeof tester>) =>
     .items.map((i) => (i.type === "on-database" ? i.databaseId : i.type));
 
 describe("clip reducer on a CVM recorder Video", () => {
-  it("shows each saved Clip as it arrives, with no Optimistic Clip and no polling", () => {
-    const t = tester([saved("a")]);
-
-    t.send(recordingStarted)
-      .send(heard({ type: "speech-started", recordingSessionId: SESSION }))
-      .send(heard({ type: "speech-ended", recordingSessionId: SESSION }))
-      .send(clipsSaved(["c1"], { type: "after-clip", databaseClipId: "a" }))
-      .send(
-        heard({
-          type: "recording-stopped",
-          recordingSessionId: SESSION,
-          errors: [],
-          crashed: false,
-          framesLost: { camera: 0, screen: 0 },
-        })
-      );
-
-    const state = t.getState();
-    expect(databaseIds(t)).toEqual(["a", "c1"]);
-    expect(state.items.some((i) => i.type === "optimistically-added")).toBe(
-      false
-    );
-    expect(state.items[1]).toMatchObject({
-      sessionId: SESSION,
-      transcriptionStatus: "transcribing",
-    });
-    expect(state.clipTranscriptionJobs).toEqual({
-      c1: { jobId: "job-1", started: false },
-    });
-    expect(state.sessions).toMatchObject([
-      { id: SESSION, status: "done", cvmRecorder: true },
-    ]);
-    // The app server enqueued the transcription; the editor asks for nothing
-    // but that the recorder place Clips at its insertion point.
-    expect(t.getEffects()).toEqual([
-      { type: "scroll-to-insertion-point" },
-      {
-        type: "send-recorder-insertion-point",
-        insertionPoint: { type: "after-clip", databaseClipId: "a" },
-      },
-      { type: "scroll-to-insertion-point" },
-    ]);
-  });
-
-  it("places Clips where the server saved them, and keeps an insertion point moved meanwhile", () => {
+  it("places a Clip it heard no take for where the server saved it, and keeps an insertion point moved meanwhile", () => {
     const t = tester([saved("a"), saved("b")]);
     t.send(recordingStarted).send({
       type: "set-insertion-point-after",

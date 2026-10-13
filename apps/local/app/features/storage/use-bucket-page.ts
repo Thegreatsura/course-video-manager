@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
+import { planPurge, purgeExports } from "./export-purge-effects";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   type StorageBucketFilesMessage,
@@ -56,6 +57,9 @@ export const useBucketPage = (bucketId: string) => {
     {
       "listen-to-listing": (_state, effect, dispatch) =>
         listenToListing(effect.bucketId, dispatch),
+      "plan-purge": (_state, effect, dispatch) => planPurge(effect, dispatch),
+      "purge-exports": (_state, effect, dispatch) =>
+        purgeExports(effect, dispatch),
     }
   );
   useEffect(() => {

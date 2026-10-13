@@ -8,6 +8,7 @@ import {
 import {
   decodeStreamData,
   EnqueueAnswer,
+  jobCancelHref,
   jobRetryHref,
   JOBS_DISMISS_HREF,
   JOB_STREAM_EVENTS,
@@ -21,6 +22,7 @@ import {
   showDismissFailedToast,
   showJobFailedToast,
   showJobSucceededToast,
+  showCancelFailedToast,
   showRetryFailedToast,
   showSidecarNotRunningToast,
 } from "./job-toasts";
@@ -165,6 +167,25 @@ export function useJobs() {
       const timer = setTimeout(() => void send(), effect.afterMs);
       return () => clearTimeout(timer);
     },
+    "cancel-job": (_state, effect, dispatch) => {
+      fetch(jobCancelHref(effect.id), { method: "POST" })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              (await response.text()) ||
+                `The server answered ${response.status}`
+            );
+          }
+          // The stream brings `cancel-requested`, then `cancelled`.
+        })
+        .catch((error: unknown) =>
+          dispatch({
+            type: "cancel-failed",
+            id: effect.id,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+    },
     "retry-job": (_state, effect, dispatch) => {
       fetch(jobRetryHref(effect.id), {
         method: "POST",
@@ -241,6 +262,8 @@ export function useJobs() {
     "show-dismiss-failed-toast": (_state, effect) =>
       showDismissFailedToast(effect),
     "show-retry-failed-toast": (_state, effect) => showRetryFailedToast(effect),
+    "show-cancel-failed-toast": (_state, effect) =>
+      showCancelFailedToast(effect),
     "show-job-succeeded-toast": (_state, effect) =>
       showJobSucceededToast(effect),
     "show-job-failed-toast": (_state, effect) => showJobFailedToast(effect),
@@ -279,6 +302,11 @@ export function useJobs() {
     [dispatch]
   );
 
+  const cancelJob = useCallback(
+    (id: string) => dispatch({ type: "press-cancel", id }),
+    [dispatch]
+  );
+
   const dismissFinishedJobs = useCallback(
     () => dispatch({ type: "idle-timeout-elapsed" }),
     [dispatch]
@@ -296,6 +324,7 @@ export function useJobs() {
     subscribeToJobJoins,
     dismissJob,
     retryJob,
+    cancelJob,
     dismissFinishedJobs,
     clearFinishedJobs,
   };

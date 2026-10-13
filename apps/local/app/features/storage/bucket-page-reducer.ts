@@ -1,6 +1,14 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  isExportPurgeAction,
+  purgeIsBusy,
+  purgeTransition,
+  startPurge,
+  type exportPurge,
+} from "./export-purge";
+import {
   addFoundFiles,
+  bucketCanBePurged,
   dropFilesAt,
   largestFirst,
   type StorageBucket,
@@ -14,7 +22,8 @@ import {
  * each with what it is and the Storage Root(s) it is on. Opening the page
  * listens to the listing (`/api/storage/buckets/:bucketId/files`), which
  * streams files as the walk finds them; leaving the page closes the stream,
- * and the server stops the walk. Read-only, and nothing is cached. See
+ * and the server stops the walk. Nothing is cached. Exported Videos can be
+ * ticked and Purged (#2111); everything else is listed only. See
  * docs/FRONTEND_STATE.md.
  */
 export namespace bucketPageReducer {
@@ -31,14 +40,22 @@ export namespace bucketPageReducer {
     /** Roots the walk could not read, and why: shown with no files. */
     unreadableRoots: Record<string, string>;
     listing: EffectEntity<State, Action> | null;
+    /** The ticked Exported Videos (root-relative paths), in tick order. */
+    selected: string[];
+    /** Purging the ticked Exported Videos: asked, under way, or done. */
+    purge: exportPurge.State | null;
   };
 
   export type Action =
     | StorageBucketFilesMessage
     | { type: "page-opened" }
-    | { type: "listing-failed"; message: string };
+    | { type: "listing-failed"; message: string }
+    | { type: "export-checkbox-toggled"; path: string }
+    | { type: "purge-selected-clicked" }
+    | exportPurge.Action;
 
-  export type Effect = { type: "listen-to-listing"; bucketId: string };
+  export type Effect =
+    { type: "listen-to-listing"; bucketId: string } | exportPurge.Effect;
 }
 
 type State = bucketPageReducer.State;
@@ -59,13 +76,72 @@ export const createInitialBucketPageState = (bucketId: string): State => ({
   files: {},
   unreadableRoots: {},
   listing: null,
+  selected: [],
+  purge: null,
 });
+
+/** List again from nothing: what a Purge deleted is gone from the list. */
+const relist = (
+  state: State,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State => {
+  if (state.listing) exec.stop(state.listing);
+  return {
+    ...createInitialBucketPageState(state.bucketId),
+    purge: state.purge,
+    listing: exec({ type: "listen-to-listing", bucketId: state.bucketId }),
+  };
+};
+
+/** Whether the file can be ticked: an Exported Video of a purgeable bucket. */
+export const fileCanBeTicked = (state: State, path: string): boolean =>
+  state.bucket !== null &&
+  bucketCanBePurged(state.bucket) &&
+  state.files[path]?.role === "exported-video";
+
+/** Ticking Exported Videos and Purging them (#2111). */
+const selectionReducer = (
+  state: State,
+  action: Action,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State | null => {
+  if (action.type === "export-checkbox-toggled") {
+    if (purgeIsBusy(state.purge)) return state;
+    if (state.selected.includes(action.path)) {
+      return {
+        ...state,
+        selected: state.selected.filter((p) => p !== action.path),
+      };
+    }
+    if (!fileCanBeTicked(state, action.path)) return state;
+    return { ...state, selected: [...state.selected, action.path] };
+  }
+  if (action.type === "purge-selected-clicked") {
+    if (state.status !== "complete" || state.bucket === null) return state;
+    if (state.selected.length === 0 || !bucketCanBePurged(state.bucket))
+      return state;
+    const purge = startPurge(
+      state.purge,
+      state.bucket,
+      [...state.selected],
+      exec
+    );
+    return purge === null ? state : { ...state, purge };
+  }
+  if (!isExportPurgeAction(action)) return null;
+  const next = purgeTransition(state.purge, action, exec);
+  if (next.purge === state.purge) return state;
+  const after = { ...state, purge: next.purge };
+  return next.purged ? relist(after, exec) : after;
+};
 
 export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
   exec
 ) => {
+  const afterSelection = selectionReducer(state, action, exec);
+  if (afterSelection !== null) return afterSelection;
   // A message after the listing has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "listing") return state;
@@ -110,10 +186,24 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
         failure: action.message,
         listing: null,
       };
+    case "export-checkbox-toggled":
+    case "purge-selected-clicked":
+    case "purge-planned":
+    case "purge-confirmed":
+    case "purge-cancelled":
+    case "exports-purged":
+    case "purge-failed":
+    case "purge-dismissed":
+      // Ticking and the Purge, handled above.
+      return state;
   }
 };
 
 // --- selectors ---------------------------------------------------------------
+
+/** The ticked Exported Videos' bytes (the largest copy of each). */
+export const selectedBytes = (state: State): number =>
+  state.selected.reduce((n, p) => n + (state.files[p]?.bytes ?? 0), 0);
 
 /** The bucket's files, largest first. */
 export const bucketFiles = (state: State): StorageBucketFile[] =>

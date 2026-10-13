@@ -32,6 +32,14 @@ export {
   type StorageDeleteResult,
 } from "./lib/scan-wire";
 export {
+  PURGEABLE_STORAGE_BUCKET_KINDS,
+  bucketCanBePurged,
+  purgedBytes,
+  purgedFiles,
+  type StoragePurgeResult,
+  type StoragePurgeSkippedVideo,
+} from "./lib/purge-wire";
+export {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   STORAGE_SCAN_MESSAGE_TYPES,
   moveTargetRefusal,
@@ -41,3 +49,19 @@ export {
   type StorageScanMessage,
   type StorageSizeDelta,
 } from "./lib/scan-wire";
+export {
+  STORAGE_MOVED_EVENT,
+  STORAGE_MOVE_JOB_KIND,
+  STORAGE_MOVE_KINDS,
+  STORAGE_MOVE_KIND_LABELS,
+  STORAGE_MOVE_STAGES,
+  isStorageMoveStage,
+  movableKindsOf,
+  storageMoveTitle,
+  type StorageMoveKind,
+  type StorageMovePlan,
+  type StorageMoveRefusal,
+  type StorageMoveRefusalReason,
+  type StorageMoveResult,
+  type StorageMoveStage,
+} from "./lib/move-wire";

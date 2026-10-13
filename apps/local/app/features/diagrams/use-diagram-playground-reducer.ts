@@ -137,7 +137,7 @@ export function useDiagramPlaygroundReducer() {
         if (!ed) return;
         if (effect.scene) {
           loadSnapshot(ed.store, { document: effect.scene });
-          if (effect.centreCamera) centreCameraOnContent(ed);
+          if (effect.centreFor) centreCameraOnContent(ed, effect.centreFor);
         } else {
           clearCanvas(ed);
         }
@@ -340,13 +340,13 @@ export function useDiagramPlaygroundReducer() {
       // its canvas grew from a ResizeObserver after that. Two frames lets the
       // render land; re-measuring the container then doesn't rely on the
       // observer having fired yet.
-      "centre-camera-after-layout": () => {
+      "centre-camera-after-layout": (_state, effect) => {
         let frame = requestAnimationFrame(() => {
           frame = requestAnimationFrame(() => {
             const ed = editorRef.current;
             if (!ed) return;
             ed.updateViewportScreenBounds(ed.getContainer());
-            centreCameraOnContent(ed);
+            centreCameraOnContent(ed, effect.format);
           });
         });
         return () => cancelAnimationFrame(frame);

@@ -34,6 +34,7 @@ export function GlobalUploadProgress() {
     jobs,
     dismissJob,
     retryJob,
+    cancelJob,
     dismissFinishedJobs,
     clearFinished,
   } = useContext(UploadContext);
@@ -259,6 +260,7 @@ export function GlobalUploadProgress() {
                       eta={etas[upload.uploadId]}
                       logHref={jobLogHref(jobIdOfRow(upload.uploadId))}
                       post={postControls(upload.uploadId)}
+                      onCancel={() => cancelJob(jobIdOfRow(upload.uploadId))}
                       publishRecoveryHref={publishRecoveryHref(upload.uploadId)}
                       // Its link goes to another page: the dialog closes.
                       onFollowLink={() => setIsModalOpen(false)}

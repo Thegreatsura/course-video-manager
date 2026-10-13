@@ -1,26 +1,28 @@
-import { resolveClipZoomType } from "@/features/videos/clip-zoom";
 import type { InsertionPoint } from "@/services/clip-service";
-import type { PauseType } from "@/services/video-processing-service";
-import { holdForRequestedJob } from "./clip-state-reducer-transcription-jobs";
 import type {
   ChapterOnDatabase,
   ClipOnDatabase,
   ClipReducerAction,
   ClipReducerExec,
   ClipReducerState,
-  DatabaseId,
   FrontendInsertionPoint,
   SessionId,
   TimelineItem,
 } from "./clip-state-reducer.types";
-import { createFrontendId } from "./clip-state-reducer.types";
-import { insertAtPoint } from "./insert-at-point";
+import {
+  endUnsavedTakes,
+  firstTakeInProgress,
+  nextDisplayNumber,
+  saveTake,
+} from "./clip-state-reducer-take";
 
 /**
  * The clip reducer's half of a CVM recorder Video. The app server saves the
- * Clips (speech the recorder heard, `recorder-client/`) and tells the editor;
- * the Clip shown is the saved Clip, placed where the server placed it. No
- * Optimistic Clip, no pairing, no polling.
+ * Clips (speech the recorder heard, `recorder-client/`) and tells the editor.
+ * Its facts map onto the Take (`clip-state-reducer-take.ts`), as OBS's do:
+ * `take-started` (timed off `speech-started` by the CVM recorder reducer)
+ * puts an Optimistic Clip at the insertion point, and `clips-saved` fills it
+ * in where it stands. The app server is told to save it there.
  */
 
 type CvmRecorderAction = Extract<
@@ -66,7 +68,14 @@ export const savedItemBefore = (state: ClipReducerState): InsertionPoint => {
                 ? point.frontendClipId
                 : point.frontendChapterId)
           );
-  const saved = state.items
+  return savedItemAtOrBefore(state.items, index);
+};
+
+const savedItemAtOrBefore = (
+  items: readonly TimelineItem[],
+  index: number
+): InsertionPoint => {
+  const saved = items
     .slice(0, index + 1)
     .findLast(
       (i): i is ClipOnDatabase | ChapterOnDatabase =>
@@ -92,21 +101,17 @@ export const handleCvmRecorderMessage = (
     case "recording-started": {
       const id = message.recordingSessionId as SessionId;
       if (state.sessions.some((s) => s.id === id)) return state;
-      exec({ type: "scroll-to-insertion-point" });
       // Started from the Stream Deck, the app server has no insertion point
-      // from this editor, or one from an earlier recording: its Clips go here.
-      exec({
-        type: "send-recorder-insertion-point",
-        insertionPoint: savedItemBefore(state),
-      });
+      // from this editor, or one from an earlier recording:
+      // `tellRecorderOfInsertionPoint` sends it, as this starts recording.
+      exec({ type: "scroll-to-insertion-point" });
       return {
         ...state,
         sessions: [
           ...state.sessions,
           {
             id,
-            displayNumber:
-              Math.max(0, ...state.sessions.map((s) => s.displayNumber)) + 1,
+            displayNumber: nextDisplayNumber(state.sessions),
             status: "recording",
             outputPath: message.micFile,
             startedAt: action.receivedAt,
@@ -116,64 +121,42 @@ export const handleCvmRecorderMessage = (
         ],
       };
     }
+    case "speech-ended":
+      // Its clips-saved, if the speech made any, came first.
+      return endUnsavedTakes(state, message.recordingSessionId as SessionId);
     case "recording-stopped":
-      return {
-        ...state,
-        sessions: state.sessions.map((s) =>
-          s.id === message.recordingSessionId ? { ...s, status: "done" } : s
-        ),
-      };
-    case "clips-saved": {
-      const known = new Set(
-        state.items.flatMap((i) =>
-          i.type === "on-database" ? [i.databaseId] : []
-        )
-      );
-      const fresh = message.clips.filter((c) => !known.has(c.id as DatabaseId));
-      if (fresh.length === 0) return state;
-      // Placed after an item this editor never heard of: a Clip whose
-      // clips-saved it missed (before it subscribed, or while reconnecting),
-      // saved where the editor pointed. Show these where the editor points,
-      // so every later Clip, placed after these, has somewhere to go.
-      const placedAt = toFrontendPoint(state.items, message.placedAt);
-      // The editor's insertion point follows the new Clips only when they
-      // went where it pointed; one moved meanwhile stays where it was moved.
-      const followsEditor =
-        !placedAt || samePoint(savedItemBefore(state), message.placedAt);
-      const session = state.sessions.find(
-        (s) => s.id === message.recordingSessionId
-      );
-      let items = state.items;
-      let point = placedAt ?? state.insertionPoint;
-      let insertionOrder = state.insertionOrder;
-      for (const clip of fresh) {
-        insertionOrder += 1;
-        const saved: ClipOnDatabase = {
-          ...clip,
-          type: "on-database",
-          frontendId: createFrontendId(),
-          databaseId: clip.id as DatabaseId,
-          insertionOrder,
-          pauseType: clip.pauseType as PauseType,
-          zoomType: resolveClipZoomType(clip.zoomType),
-          diagramSnapshotId: clip.diagramSnapshotId ?? null,
-          diagramName: null,
-          webLinks: [],
-          sessionId: session?.id,
-        };
-        ({ items, insertionPoint: point } = insertAtPoint(items, saved, point));
-      }
-      exec({ type: "scroll-to-insertion-point" });
-      // The app server enqueued their transcribe-clips Job with them.
-      return holdForRequestedJob(
+      return endUnsavedTakes(
         {
           ...state,
-          items,
-          insertionOrder,
-          insertionPoint: followsEditor ? point : state.insertionPoint,
+          sessions: state.sessions.map((s) =>
+            s.id === message.recordingSessionId ? { ...s, status: "done" } : s
+          ),
         },
-        fresh.map((c) => c.id as DatabaseId),
-        message.transcriptionJobId
+        message.recordingSessionId as SessionId
+      );
+    case "clips-saved": {
+      // Placed after an item this editor never heard of: a Clip whose
+      // clips-saved it missed (before it subscribed, or while reconnecting),
+      // saved where the editor pointed. A Clip with no take to fill in shows
+      // where the editor points, so every later Clip has somewhere to go.
+      const placedAt = toFrontendPoint(state.items, message.placedAt);
+      return saveTake(
+        state,
+        {
+          sessionId: message.recordingSessionId as SessionId,
+          clips: message.clips,
+          transcriptionJobId: message.transcriptionJobId,
+          // The app server enqueued their transcribe-clips Job with them.
+          requestTranscription: false,
+          unpaired: {
+            at: placedAt ?? state.insertionPoint,
+            // The insertion point follows only Clips that went where it
+            // pointed; one moved meanwhile stays where it was moved.
+            insertionPointFollows:
+              !placedAt || samePoint(savedItemBefore(state), message.placedAt),
+          },
+        },
+        exec
       );
     }
     case "recorder-status":
@@ -188,7 +171,6 @@ export const handleCvmRecorderMessage = (
     case "screen-changed":
     case "warmed-up":
     case "speech-started":
-    case "speech-ended":
     case "recorder-failed":
       return state;
   }
@@ -220,9 +202,11 @@ const joinRecordingInProgress = (
     });
   }
   if (!recording || sessions.some((s) => s.id === recording)) {
-    return sessions.some((s, i) => s !== state.sessions[i])
-      ? { ...state, sessions }
-      : state;
+    const left = sessions.filter((s, i) => s !== state.sessions[i]);
+    return left.reduce(
+      (next, s) => endUnsavedTakes(next, s.id),
+      left.length > 0 ? { ...state, sessions } : state
+    );
   }
   return {
     ...state,
@@ -230,7 +214,7 @@ const joinRecordingInProgress = (
       ...sessions,
       {
         id: recording,
-        displayNumber: Math.max(0, ...sessions.map((s) => s.displayNumber)) + 1,
+        displayNumber: nextDisplayNumber(sessions),
         status: "recording",
         startedAt: action.receivedAt,
         cvmRecorder: true,
@@ -240,10 +224,10 @@ const joinRecordingInProgress = (
 };
 
 /**
- * The saved item the editor's insertion point comes after changed while a
- * CVM recorder Recording Session records: the app server must place the
- * next Clip there too. That includes a chapter added there being saved (a
- * Stream Deck "add chapter" mid-recording), which moves no insertion point.
+ * Where the app server places the CVM recorder's next Clip changed: the
+ * editor's insertion point moved, or a chapter added there was saved (a
+ * Stream Deck "add chapter" mid-recording), or recording started. A
+ * `recorder-status` re-sends it itself.
  */
 export const tellRecorderOfInsertionPoint = (
   before: InsertionPoint | null,
@@ -251,20 +235,34 @@ export const tellRecorderOfInsertionPoint = (
   action: ClipReducerAction,
   exec: ClipReducerExec
 ) => {
-  if (action.type === "cvm-recorder-message-heard") return;
+  if (
+    action.type === "cvm-recorder-message-heard" &&
+    action.message.type === "recorder-status"
+  )
+    return;
   const point = recorderInsertionPoint(after);
   if (!point || (before && samePoint(before, point))) return;
   exec({ type: "send-recorder-insertion-point", insertionPoint: point });
 };
 
 /**
- * Where the editor wants the recorder's next Clip, while a CVM recorder
- * Recording Session records; null otherwise. Read before an action is
- * reduced: some reducers change items in place.
+ * Where the app server should save the CVM recorder's next Clip, while a CVM
+ * recorder Recording Session records; null otherwise. While a take is in
+ * progress that is where its Optimistic Clip stands, so the saved Clip
+ * fills it in where the server put it. Read before an action is reduced:
+ * some reducers change items in place.
  */
 export const recorderInsertionPoint = (
   state: ClipReducerState
-): InsertionPoint | null =>
-  state.sessions.some((s) => s.cvmRecorder && s.status === "recording")
+): InsertionPoint | null => {
+  const recording = new Set(
+    state.sessions
+      .filter((s) => s.cvmRecorder && s.status === "recording")
+      .map((s) => s.id)
+  );
+  if (recording.size === 0) return null;
+  const take = firstTakeInProgress(state.items, recording);
+  return take === -1
     ? savedItemBefore(state)
-    : null;
+    : savedItemAtOrBefore(state.items, take - 1);
+};

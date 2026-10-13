@@ -162,27 +162,41 @@ describe("diagramPlaygroundReducer", () => {
   });
 
   it("hides the sidebar when a recording starts and shows it when it stops", () => {
-    const tester = openPage()
-      .resetExec()
-      .send({ type: "recording-status-reported", recording: true });
+    const tester = openPage().resetExec().send({
+      type: "recording-status-reported",
+      recording: true,
+      format: "landscape",
+    });
 
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
-      { type: "centre-camera-after-layout" },
+      { type: "centre-camera-after-layout", format: "landscape" },
     ]);
 
     tester
       .send({ type: "focus-mode-changed", isFocusMode: true })
       // The editor repeats its status on every heartbeat.
-      .send({ type: "recording-status-reported", recording: true })
-      .send({ type: "recording-status-reported", recording: false })
-      .send({ type: "recording-status-reported", recording: false });
+      .send({
+        type: "recording-status-reported",
+        recording: true,
+        format: "landscape",
+      })
+      .send({
+        type: "recording-status-reported",
+        recording: false,
+        format: "landscape",
+      })
+      .send({
+        type: "recording-status-reported",
+        recording: false,
+        format: "landscape",
+      });
 
     // Centred once, as the take starts — never again while it runs, so the
     // author can pan.
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
-      { type: "centre-camera-after-layout" },
+      { type: "centre-camera-after-layout", format: "landscape" },
       { type: "set-focus-mode", isFocusMode: false },
     ]);
   });
@@ -190,15 +204,23 @@ describe("diagramPlaygroundReducer", () => {
   it("a sidebar toggled by hand during a recording stays as it was put", () => {
     const tester = openPage()
       .resetExec()
-      .send({ type: "recording-status-reported", recording: true })
+      .send({
+        type: "recording-status-reported",
+        recording: true,
+        format: "landscape",
+      })
       .send({ type: "focus-mode-changed", isFocusMode: true })
       .send({ type: "focus-mode-changed", isFocusMode: false })
-      .send({ type: "recording-status-reported", recording: true });
+      .send({
+        type: "recording-status-reported",
+        recording: true,
+        format: "landscape",
+      });
 
     expect(tester.getState().isFocusMode).toBe(false);
     expect(tester.getEffects()).toEqual([
       { type: "set-focus-mode", isFocusMode: true },
-      { type: "centre-camera-after-layout" },
+      { type: "centre-camera-after-layout", format: "landscape" },
     ]);
   });
 });

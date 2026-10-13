@@ -28,7 +28,8 @@ import { createTable } from "./table-creator.js";
  * - `running`: claimed; `holder` is the sidecar and `lease_until` its lease.
  * - `succeeded` / `failed`: finished. `failed` is the last attempt's failure.
  * - `interrupted`: its sidecar stopped mid-run on the last attempt it had.
- * - `cancelled`: stopped on request (no verb yet).
+ * - `cancelled`: stopped on the author's Cancel (`requestJobCancel`); only
+ *   a kind that cleans up after itself offers one (a Storage move).
  */
 export const JOB_STATUSES = [
   "queued",

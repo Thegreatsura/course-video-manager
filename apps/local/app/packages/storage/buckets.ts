@@ -40,6 +40,14 @@ export {
   type StorageDeleteResult,
 } from "./lib/scan-wire";
 export {
+  PURGEABLE_STORAGE_BUCKET_KINDS,
+  bucketCanBePurged,
+  purgedBytes,
+  purgedFiles,
+  type StoragePurgeResult,
+  type StoragePurgeSkippedVideo,
+} from "./lib/purge-wire";
+export {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   STORAGE_SCAN_MESSAGE_TYPES,
   moveTargetRefusal,

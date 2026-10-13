@@ -1,8 +1,10 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { TLStoreSnapshot } from "tldraw";
+import type { VideoFormat } from "@/features/videos/video-format";
 import type { Snapshot } from "./snapshot-list";
 import { isHeadCaptured } from "./snapshot-list";
 import { leaveMustWaitFor } from "./diagram-playground-selectors";
+import { reduceCentring } from "./diagram-playground-centring";
 import {
   KEEP_CANVAS_BEFORE_RESTORING_FAILED,
   KEEP_CANVAS_FAILED,
@@ -20,6 +22,7 @@ import type {
   LeaveDestination,
   LeaveSaveOutcome,
   PendingRestore,
+  RecordingStatus,
   StatusError,
   StoredHead,
 } from "./diagram-playground-reducer.types";
@@ -60,6 +63,8 @@ export namespace diagramPlaygroundReducer {
     isFocusMode: boolean;
     /** Whether the video editor last reported a recording in progress. */
     recording: boolean;
+    /** The Video's format, as last reported; every centring is for it. */
+    format: VideoFormat;
     /** Bumped whenever the snapshot timeline may have changed on the server. */
     timelineVersion: number;
     /** What the status line shows; `null` when nothing has gone wrong. */
@@ -172,10 +177,12 @@ export namespace diagramPlaygroundReducer {
     | { type: "window-blurred" }
     | { type: "focus-mode-changed"; isFocusMode: boolean }
     /**
-     * The video editor says whether it is recording. It repeats this on every
-     * heartbeat, so only a change is a recording starting or stopping.
+     * The video editor's status. It repeats this on every heartbeat, so only a
+     * change is a take starting or stopping.
      */
-    | { type: "recording-status-reported"; recording: boolean }
+    | ({ type: "recording-status-reported" } & RecordingStatus)
+    /** The hotkey, the palette or the debug panel. */
+    | { type: "recentre-requested" }
     // The status line
     /** Something on the page failed; `message` is what the author reads. */
     | { type: "error-reported"; message: string }
@@ -203,6 +210,7 @@ export const createInitialDiagramPlaygroundState = (opts: {
   windowFocused: opts.windowFocused,
   isFocusMode: false,
   recording: false,
+  format: "landscape",
   timelineVersion: 0,
   error: null,
   errorCount: 0,
@@ -276,7 +284,13 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
     stored: StoredHead,
     centreCamera: boolean
   ): State => {
-    exec({ type: "show-head", diagramId, scene, stored, centreCamera });
+    exec({
+      type: "show-head",
+      diagramId,
+      scene,
+      stored,
+      centreFor: centreCamera ? state.format : null,
+    });
     return {
       ...state,
       head: {
@@ -617,13 +631,8 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
     case "focus-mode-changed":
       return { ...state, isFocusMode: action.isFocusMode };
     case "recording-status-reported":
-      if (action.recording === state.recording) return state;
-      // The window is the recording surface: the sidebar hides while a take
-      // records, though the author can still toggle it by hand.
-      exec({ type: "set-focus-mode", isFocusMode: action.recording });
-      // Centre once as a take starts; the author may pan during it.
-      if (action.recording) exec({ type: "centre-camera-after-layout" });
-      return { ...state, recording: action.recording };
+    case "recentre-requested":
+      return reduceCentring(state, action, exec);
 
     case "error-reported":
       return fail(state, action.message);

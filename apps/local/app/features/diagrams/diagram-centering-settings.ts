@@ -1,4 +1,6 @@
 import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
+import type { VideoFormat } from "@/features/videos/video-format";
+import { CANVASES } from "@/packages/scene-layout";
 
 /**
  * The presenter's face-cam is composited onto the recording by external
@@ -126,6 +128,33 @@ export function getRightOffscreenWidth(
   windowWidth: number
 ): number {
   return Math.max(windowWidth - (viewport.x + viewport.w), 0);
+}
+
+/**
+ * The one place a Video's format becomes the area the diagram is centred in:
+ * every centring path (`centreCameraOnContent`) and the debug panel's guide
+ * boxes read their insets from here, so no format rule lives anywhere else.
+ *
+ * Landscape: the tuned face-cam strip on the right. A Short draws the screen
+ * 1:1 at the top-left of its canvas, so it shows only the window's left
+ * canvas-width square, and Matt's face sits below the diagram, not beside
+ * it: everything right of that square is reserved instead, and there is no
+ * face-cam strip. The padding is the same for both.
+ */
+export function getCentringInsets(
+  settings: Pick<CenteringSettings, "faceCamWidth" | "paddingX" | "paddingY">,
+  format: VideoFormat,
+  viewport: { x: number; w: number },
+  windowWidth: number
+): SafeAreaInsets {
+  const hiddenRightWidth =
+    format === "short"
+      ? Math.max(windowWidth - CANVASES.short.width, 0)
+      : settings.faceCamWidth;
+  return getSafeAreaInsets(
+    { ...settings, faceCamWidth: hiddenRightWidth },
+    getRightOffscreenWidth(viewport, windowWidth)
+  );
 }
 
 /**

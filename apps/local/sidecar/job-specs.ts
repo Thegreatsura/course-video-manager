@@ -17,6 +17,7 @@ import {
   IMAGE_UPLOAD_POLICY,
   POSTING_JOB_POLICY,
   RETRYING_JOB_POLICY,
+  STORAGE_MOVE_POLICY,
   UPLOAD_MANAGER_POLICIES,
   type JobPolicy,
 } from "./retry-policy";
@@ -106,6 +107,7 @@ export const JOB_KIND_SPECS = {
     COURSE_DUPLICATE_POLICY,
     JOB_PARAMS["duplicate-course"]
   ),
+  "storage-move": spec(STORAGE_MOVE_POLICY, JOB_PARAMS["storage-move"]),
   // One live Job per Clip Mockup and line: a request whose lines a live Job
   // will voice (it has not read its rows yet, or is voicing those very
   // words) adds none. New words always get a Job of their own.
@@ -121,6 +123,12 @@ export const JOB_KIND_SPECS = {
   "ai-hero": spec(POSTING_JOB_POLICY, JOB_PARAMS["ai-hero"]),
   "skills-changelog": spec(POSTING_JOB_POLICY, JOB_PARAMS["skills-changelog"]),
 } as const satisfies Record<keyof typeof JOB_PARAMS, JobKindSpec>;
+
+/**
+ * The kinds the author can Cancel (`requestJobCancel`): each cleans up after
+ * itself when asked. A Storage move removes its partial copies.
+ */
+export const CANCELLABLE_JOB_KINDS: readonly string[] = ["storage-move"];
 
 export class UnknownJobKindError extends Data.TaggedError(
   "UnknownJobKindError"

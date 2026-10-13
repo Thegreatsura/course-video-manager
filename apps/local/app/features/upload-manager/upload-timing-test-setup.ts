@@ -115,6 +115,15 @@ const newRow = (
         duplicateCourseStage: "copying-rows",
         courseId: "c",
       };
+    case "storage-move":
+      return {
+        ...base,
+        uploadType,
+        storageMoveStage: "copying",
+        cancellable: true,
+        cancelRequested: false,
+        cancelled: false,
+      };
   }
 };
 
@@ -275,6 +284,8 @@ export const succeed = (uploadId: string): RowChange => ({
         return { ...done, renderVerticalStage: null };
       case "duplicate-course":
         return { ...done, duplicateCourseStage: null };
+      case "storage-move":
+        return { ...done, storageMoveStage: null };
       case "buffer":
         return { ...done, bufferStage: null };
       case "autofill":

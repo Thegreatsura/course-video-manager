@@ -98,7 +98,11 @@ export namespace cvmRecorderReducer {
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
     /** A speech has lasted the minimum Clip length. */
-    | { type: "speech-long-enough"; speechCount: number }
+    | {
+        type: "speech-long-enough";
+        speechCount: number;
+        recordingSessionId: string;
+      }
     | { type: "press-retry" }
     | { type: "press-scene"; scene: Scene }
     | { type: "press-wake-spacedesk" }
@@ -119,7 +123,13 @@ export namespace cvmRecorderReducer {
     | { type: "retry-camera" }
     | { type: "retry-screen" }
     /** Report `speech-long-enough` once the minimum Clip length has passed. */
-    | { type: "time-speech"; speechCount: number }
+    | { type: "time-speech"; speechCount: number; recordingSessionId: string }
+    /** Tell the clip reducer a Take started (`clip-state-reducer-take.ts`). */
+    | {
+        type: "start-take";
+        recordingSessionId: string;
+        soundDetectionId: string;
+      }
     | { type: "switch-scene"; scene: Scene };
 }
 
@@ -282,7 +292,11 @@ export const cvmRecorderReducer: EffectReducer<
     case "recorder-message-heard": {
       const next = heard(state, action.message);
       if (action.message.type === "speech-started")
-        exec({ type: "time-speech", speechCount: next.speechCount });
+        exec({
+          type: "time-speech",
+          speechCount: next.speechCount,
+          recordingSessionId: action.message.recordingSessionId,
+        });
       // A new or restarted app server knows nothing of the editor's choice.
       if (
         action.message.type === "recorder-status" &&
@@ -328,13 +342,22 @@ export const cvmRecorderReducer: EffectReducer<
         state.speech.type !== "speaking-detected"
       )
         return state;
-      return {
-        ...state,
-        speech: {
-          type: "long-enough-speaking-for-clip-detected",
-          soundDetectionId: `cvm-recorder-speech-${action.speechCount}`,
-        },
-      };
+      {
+        const soundDetectionId = `cvm-recorder-speech-${action.speechCount}`;
+        // The speech is a take now, as OBS's detector makes it one.
+        exec({
+          type: "start-take",
+          recordingSessionId: action.recordingSessionId,
+          soundDetectionId,
+        });
+        return {
+          ...state,
+          speech: {
+            type: "long-enough-speaking-for-clip-detected",
+            soundDetectionId,
+          },
+        };
+      }
     case "press-stop":
       if (!canStop(state)) return state;
       exec({ type: "stop-recording" });

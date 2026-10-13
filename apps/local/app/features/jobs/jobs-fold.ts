@@ -27,6 +27,7 @@ export const viewOf = (
   result: null,
   postCheck: null,
   submitted: false,
+  cancelRequested: false,
   lastEventId: 0,
   videos: null,
 });
@@ -185,6 +186,16 @@ export const applyStreamAction = (
         errorMessage:
           job.kind === "publish" ? PUBLISH_INTERRUPTED_MESSAGE : action.message,
         errorTag: action.tag,
+      };
+    case "job-cancel-requested":
+      return { ...job, cancelRequested: true };
+    case "job-cancelled":
+      return {
+        ...job,
+        status: "cancelled",
+        cancelRequested: true,
+        errorMessage: action.message ?? "Cancelled before it started",
+        errorTag: "JobCancelledError",
       };
     case "job-submitted":
       return { ...job, submitted: true };

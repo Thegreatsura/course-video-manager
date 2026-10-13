@@ -4,6 +4,7 @@ import {
   PLACEHOLDER_FLOOR_BANDS,
 } from "@/packages/course-json/client";
 import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
+import { STORAGE_MOVE_KINDS } from "@/packages/storage/client";
 
 /**
  * Refuses a title or description YouTube would refuse, naming why — at
@@ -71,6 +72,16 @@ export const JOB_PARAMS = {
     sourceCourseId: Schema.String,
     name: Schema.Trim.pipe(Schema.nonEmptyString()),
     newCourseId: Schema.UUID,
+  }),
+  /** A Storage Bucket's files of one kind, copied to one Storage Root. */
+  "storage-move": Schema.Struct({
+    bucketId: Schema.String.pipe(Schema.nonEmptyString()),
+    kind: Schema.Literal(...STORAGE_MOVE_KINDS),
+    target: Schema.String.pipe(
+      Schema.filter((p) => p.startsWith("/"), {
+        message: () => "a Storage Root is an absolute path",
+      })
+    ),
   }),
   /**
    * The Clip Mockups one `cvm clip-mockup add` or `update` left with a
