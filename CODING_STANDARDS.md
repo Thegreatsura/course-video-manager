@@ -95,7 +95,7 @@ nothing there awaits or catches what it returns.
 Enforced by type-aware oxlint (`typescript/no-floating-promises` and
 `typescript/no-misused-promises`) as a ratchet. They are errors in the
 directories listed in `.oxlintrc.json`'s `overrides`, which are services, CLI,
-`.ts` routes, `apps/remote`, `packages` and scripts, and warnings in the
+`.ts` routes, `features/jobs`, `apps/remote`, `packages` and scripts, and warnings in the
 React UI. A file you touch should leave review with fewer warnings than it had.
 
 ## Function signatures
