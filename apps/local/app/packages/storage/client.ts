@@ -26,6 +26,12 @@ export {
   type StorageBucketFile,
 } from "./lib/bucket-files";
 export {
+  DELETABLE_STORAGE_BUCKETS,
+  bucketCanBeDeleted,
+  type DeletableStorageBucketId,
+  type StorageDeleteResult,
+} from "./lib/scan-wire";
+export {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   STORAGE_SCAN_MESSAGE_TYPES,
   moveTargetRefusal,

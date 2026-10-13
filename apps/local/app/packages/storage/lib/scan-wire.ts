@@ -99,3 +99,34 @@ export const STORAGE_BUCKET_FILES_MESSAGE_TYPES = [
   "root-unreadable",
   "scan-completed",
 ] as const satisfies readonly StorageBucketFilesMessage["type"][];
+
+/**
+ * The only Storage Buckets the Storage page can delete: their files are
+ * rebuilt on demand (the Overlay Render Cache, export scratch) or are no
+ * Video's current Exported Video. Raw Footage of any kind, Unused Footage
+ * included, is never deletable, and Clip Mockups are only viewed and moved
+ * (ADR 0041).
+ */
+export const DELETABLE_STORAGE_BUCKETS = [
+  "overlay-render-cache",
+  "export-scratch",
+  "orphaned-exports",
+] as const satisfies readonly StorageBucket["kind"][];
+
+export type DeletableStorageBucketId =
+  (typeof DELETABLE_STORAGE_BUCKETS)[number];
+
+/** Whether the Storage page offers to delete this bucket's files. */
+export const bucketCanBeDeleted = (bucket: StorageBucket): boolean =>
+  (DELETABLE_STORAGE_BUCKETS as readonly string[]).includes(bucket.kind) &&
+  bucket.id === bucket.kind;
+
+/**
+ * What deleting a bucket did: files and bytes gone from each location, and
+ * each file left (Windows had it open, or it failed a safety check), and why.
+ */
+export type StorageDeleteResult = {
+  readonly bucketId: string;
+  readonly deleted: { location: string; files: number; bytes: number }[];
+  readonly left: { path: string; location: string; message: string }[];
+};
