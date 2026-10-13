@@ -152,10 +152,21 @@ export const useCvmRecorder = (o: {
             dispatch({
               type: "speech-long-enough",
               speechCount: effect.speechCount,
+              recordingSessionId: effect.recordingSessionId,
             }),
           MINIMUM_CLIP_LENGTH_SECONDS * 1000
         );
         return () => clearTimeout(timer);
+      },
+      "start-take": (_state, effect) => {
+        o.clipDispatch({
+          type: "take-started",
+          recordingSessionId: effect.recordingSessionId,
+          soundDetectionId: effect.soundDetectionId,
+          scene: null,
+          profile: null,
+          at: Date.now(),
+        });
       },
       "retry-camera": (_state, _effect, dispatch) => {
         fetch(`/api/videos/${videoId}/recorder/retry-camera`, {

@@ -217,9 +217,9 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         },
       });
       const last = placed.clips.at(-1);
-      const messages: CvmRecorderMessage[] = [
-        { type: "speech-ended", recordingSessionId },
-      ];
+      // clips-saved goes first: the editor's take is filled in by it, or,
+      // at speech-ended with none, ends unsaved (clip-state-reducer-take.ts).
+      const messages: CvmRecorderMessage[] = [];
       if (last && placed.transcriptionJobId) {
         const recordingSession = yield* dbCall(() =>
           db.query.recordingSessions.findFirst({
@@ -239,6 +239,7 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           transcriptionJobId: placed.transcriptionJobId,
         });
       }
+      messages.push({ type: "speech-ended", recordingSessionId });
       return {
         videoId,
         messages,

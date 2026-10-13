@@ -133,7 +133,7 @@ _Avoid_: TikTok (reserved for the actual TikTok platform, and NOT the name for a
 
 **Clip**:
 A segment of **Footage** within a Video, defined by a start time and an end time in one source file. Deleting a Clip is an **Archive**, but unlike most archived nouns it can be reviewed and restored, so a Clip deleted by mistake can be found again. So an archived Clip is never left behind by a copy: a new Draft (**Submit**), a duplicated Course and a copied Video carry it, still archived. A Clip is what was FILMED; a **Clip Mockup** is its PRE-IMAGE: the still and the line that stood in for it before filming. Clip Mockups are kept after filming, so the plan can be compared with the Clips really cut.
-_Avoid_: Segment, Cut, Take
+_Avoid_: Segment, Cut, Take (a **Take** is the speech that leaves a Clip, before it is saved)
 
 **Footage**:
 A raw source video file (a camera capture, a screen recording) before it is cut into **Clips**: the input to editing, not a product of it. Unlike every other noun here, Footage is not a record: it is known only by where the file is, its path relative to a **Storage Root**, whichever drive holds it. It is never deleted by CVM: it can only be moved between Storage Roots (ADR 0041). It is transcribed as a whole file, and a new **Clip** takes its text from that transcript. The transcription is a **Job** the **Sidecar** runs; a long file goes through Whisper in pieces, each kept beside the file once it is done, so a transcription cut off by a Sidecar restart picks up where it stopped instead of starting again. A Clip points at the Footage it was cut from.
@@ -151,8 +151,12 @@ _Avoid_: Clip group, Divider, Marker, Section (ambiguous with course Section), C
 A record of a **Video** posted to an external platform: which platform, where, and when. It belongs to the Video, and to that Video row only: no copy of a Video (a new Draft, a duplicated Course or Video) carries it, because the copy was never posted.
 
 **Optimistic Clip**:
-A clip shown during recording before it is saved.
+A clip shown during recording before it is saved: the editor's picture of a **Take** in progress. It appears at the **Insertion Point** when the Take starts, on either **Recorder**, and the saved Clip fills it in where it stands. Deleting it (the Stream Deck's delete) archives the Take: its Clip is still saved, arrives archived, and can be restored; its **Footage** is kept. One whose Take ended with nothing saved is orphaned.
 _Avoid_: Pending clip, Temporary clip
+
+**Take**:
+One stretch of speech a **Recorder** hears long enough to be a **Clip**, from that moment until its Clip is saved (or it ends with none). Both Recorders map their own signals onto it (OBS: the browser's speech detector, then polling; the CVM recorder: its speech events held for the minimum Clip length, then the app server's saved Clips), so delete, restore and the **Insertion Point** behave the same whichever Recorder films. While it is in progress it is shown as an **Optimistic Clip**. A Take is not a Clip: a Clip is what it leaves, and a **Recording Session** holds many Takes.
+_Avoid_: Speech part, Sound detection
 
 **Clip Web Link**:
 A web page that was on screen while a **Clip** was recorded. A Clip can have many. They are shown with the Clip and noted in the **Transcript**, so the writer knows which page went with each moment. Different from the global **Link** list: a Clip Web Link belongs to one Clip and one moment. Every copy of the Clip (a new Draft, a duplicated Course or Video) carries its Clip Web Links.

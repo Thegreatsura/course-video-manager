@@ -51,8 +51,7 @@ export function useTeleprompterEditorMode(input: TeleprompterEditorInput) {
   // One per clip in the current session — see `session-clip-marks.ts`.
   const { marks, markClipIds } = useSessionClipMarks(
     input.items,
-    input.sessions,
-    capture
+    input.sessions
   );
   // See `session-latest-transcript.ts`.
   const latestTranscript = useLatestSessionTranscript(

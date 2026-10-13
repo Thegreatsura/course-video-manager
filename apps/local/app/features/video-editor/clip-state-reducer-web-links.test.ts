@@ -44,7 +44,8 @@ const startRecordingViewing = (url: string, title = "T") => {
 
 const newClip = (soundDetectionId: string) =>
   fromPartial<clipStateReducer.Action>({
-    type: "new-optimistic-clip-detected",
+    type: "take-started",
+    at: 0,
     soundDetectionId,
   });
 

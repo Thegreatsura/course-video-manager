@@ -43,54 +43,6 @@ const onDatabase = (
   });
 
 describe("getSessionClipMarks", () => {
-  describe("a CVM recorder take", () => {
-    const cvmRecorderSession = (status: "recording" | "done") =>
-      fromPartial<RecordingSession>({
-        id: SESSION,
-        displayNumber: 1,
-        status,
-        cvmRecorder: true,
-      });
-
-    it("shows speech long enough for a Clip as a pending mark after the landed ones, as OBS's Optimistic Clip", () => {
-      expect(
-        getSessionClipMarks(
-          [onDatabase(1)],
-          [cvmRecorderSession("recording")],
-          "long-enough-speaking-for-clip-detected"
-        )
-      ).toEqual(["landed", "pending"]);
-    });
-
-    it("shows no pending mark for speech too short for a Clip, in silence, or after the take", () => {
-      for (const capture of ["speaking-detected", "silence"] as const)
-        expect(
-          getSessionClipMarks(
-            [onDatabase(1)],
-            [cvmRecorderSession("recording")],
-            capture
-          )
-        ).toEqual(["landed"]);
-      expect(
-        getSessionClipMarks(
-          [onDatabase(1)],
-          [cvmRecorderSession("done")],
-          "long-enough-speaking-for-clip-detected"
-        )
-      ).toEqual(["landed"]);
-    });
-
-    it("leaves an OBS take's marks to its Optimistic Clips", () => {
-      expect(
-        getSessionClipMarks(
-          [optimistic(1)],
-          [session(SESSION, 1)],
-          "long-enough-speaking-for-clip-detected"
-        )
-      ).toEqual(["pending"]);
-    });
-  });
-
   it("reports nothing before the first recording session", () => {
     expect(getSessionClipMarks([optimistic(1)], [])).toEqual([]);
   });
@@ -181,7 +133,8 @@ describe("getSessionClipMarks over a real take", () => {
       })
       .send(
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
         })
       );
@@ -224,13 +177,15 @@ describe("getSessionClipMarks over a real take", () => {
       })
       .send(
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
         })
       )
       .send(
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-2",
         })
       );
