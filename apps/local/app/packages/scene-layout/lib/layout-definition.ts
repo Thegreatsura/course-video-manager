@@ -11,7 +11,9 @@
 // shows its left 1080x1080 square and the rest falls off the canvas.
 //
 // - `crop` is a fraction of the source frame, so one definition holds for the
-//   4K camera, the 2560x1440 screen recording and the low-res previews alike.
+//   camera (opened at 4K, recorded at 2560x1440), the screen recording
+//   (1920x1080 at 60 fps: the DELL or Spacedesk display at its native size)
+//   and the low-res previews alike.
 // - `dest` is canvas pixels (OBS pos and cropped size x scale).
 // - Items are bottom to top, as in OBS. Items fully off the canvas are kept so
 //   the definition stays a faithful copy of OBS; they are never drawn.
