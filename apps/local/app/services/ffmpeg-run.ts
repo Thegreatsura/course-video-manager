@@ -7,7 +7,7 @@ import { SidecarContext } from "./sidecar-context";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import {
   FFmpegError,
-  landscapeCpuFallbackArgs,
+  cpuFallbackArgs,
   type FfmpegLogInfo,
 } from "./ffmpeg-error";
 
@@ -61,11 +61,11 @@ export {
  * invisible to `Effect.retry`, since a process that never exits never
  * resolves to a failure to retry.
  *
- * It is also where a landscape pass falls back from the GPU. A pass encoding
- * with `LANDSCAPE_VIDEO_ENCODE_ARGS` (h264_nvenc) that fails because NVENC
- * could not open — no CUDA context, no capable device — is run once more,
- * whole, on libx264 (`landscapeCpuFallbackArgs`), with a WARN in the Job's
- * log. Every caller gets it by construction; none decides for itself.
+ * It is also where a pass falls back from the GPU. A pass that decodes with
+ * NVDEC or encodes with one of the h264_nvenc blocks in `ffmpeg-error.ts` and
+ * fails because the GPU could not open — no CUDA context, no capable device —
+ * is run once more, whole, on the CPU (`cpuFallbackArgs`), with a WARN in the
+ * Job's log. Every caller gets it by construction; none decides for itself.
  *
  * And it is where the process-wide limit on heavy encodes is kept: every run
  * takes one of `FfmpegPermitsService`'s encode slots (default 2) for its whole
@@ -95,17 +95,14 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
         message: withStderrTail(`${opts.errorPrefix}${detail}`, stderrTail),
       });
 
-    // The slot is held across the fallback too: the libx264 re-run is the
+    // The slot is held across the fallback too: the CPU re-run is the
     // hungrier of the two, and must not start outside the limit.
     yield* withEncodeSlot(opts.errorPrefix)(
       Effect.gen(function* () {
         const first = yield* runOnce(opts.args);
         if (first.code === 0) return;
 
-        const fallbackArgs = landscapeCpuFallbackArgs(
-          opts.args,
-          first.stderrTail
-        );
+        const fallbackArgs = cpuFallbackArgs(opts.args, first.stderrTail);
         if (!fallbackArgs) {
           return yield* toError(
             null,
@@ -115,14 +112,14 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
         }
 
         yield* Effect.logWarning(
-          "ffmpeg: h264_nvenc could not open (no usable GPU); running this pass again on libx264",
+          "ffmpeg: the GPU could not open (no usable NVENC/NVDEC); running this pass again on the CPU",
           { errorPrefix: opts.errorPrefix, exitCode: first.code }
         );
         const fallback = yield* runOnce(fallbackArgs);
         if (fallback.code !== 0) {
           return yield* toError(
             null,
-            `, exit code: ${fallback.code} (on the libx264 fallback, after h264_nvenc could not open)`,
+            `, exit code: ${fallback.code} (on the CPU fallback, after the GPU could not open)`,
             fallback.stderrTail
           );
         }

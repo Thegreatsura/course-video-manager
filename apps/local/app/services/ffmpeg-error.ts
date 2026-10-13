@@ -48,8 +48,8 @@ export const BITEXACT_ARGS = [
  * without one, and the second write would be a CPU re-encode of a
  * GPU-encoded 40-minute file. They read this constant so they cannot.
  *
- * The vertical Shorts pipeline deliberately does NOT use it. Its subtitle
- * burn-in is libx264 at CRF 18, and its bytes must not move.
+ * The vertical Shorts pipeline's subtitle burn-in does NOT use it: it has its
+ * own constant-quality target, {@link SHORTS_BURN_IN_ENCODE_ARGS}.
  *
  * When NVENC cannot open at all (no usable GPU), the pass is re-run with
  * {@link LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS} instead — decided in one
@@ -78,12 +78,12 @@ export const LANDSCAPE_VIDEO_ENCODE_ARGS = [
 
 /**
  * What a landscape pass encodes with when the GPU cannot: libx264 at CRF 18,
- * the same constant-quality target the Shorts burn-in uses, capped at the same
+ * the same constant-quality target the Shorts burn-in falls back to, capped at the same
  * peak bitrate as the NVENC settings so the file stays in the same size class.
  * `medium` rather than `slow`: this runs on the CPU for a whole course, and it
  * is a stopgap for a GPU that has gone away, not the house encode.
  *
- * Never chosen up front. {@link landscapeCpuFallbackArgs} swaps it in for one
+ * Never chosen up front. {@link cpuFallbackArgs} swaps it in for one
  * pass, only after NVENC has refused to open — see `runFfmpegWithProgress`.
  */
 export const LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS = [
@@ -106,35 +106,174 @@ export const LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS = [
 ];
 
 /**
- * The lines ffmpeg prints when NVENC could not open because there is no usable
- * GPU — the CUDA context will not come up (a driver wedged after sleep, WSL
- * losing the device), the libraries are missing, or no device can encode. Not
- * a bad parameter, not a bad input: the same command on the CPU would run.
+ * How a Short's subtitle burn-in (its final pass, `compositeOverlay`) encodes:
+ * h264_nvenc at constant quality, chosen to look like the libx264 `slow`
+ * CRF 18 it replaced at a similar size (#2140). On two 8 s 1080x1920 60 fps
+ * test composites CQ 22 landed level with CRF 18 on SSIM (23.13 vs 23.02 dB,
+ * +21% size) on dense detail and above it (20.31 vs 18.58 dB, -1% size) on a
+ * camera-and-code frame; CQ 23 fell below on the first.
+ *
+ * `-b:v 0` leaves the quality target uncapped, as CRF is; the lookahead, AQ
+ * and B-frame-as-reference settings are what close most of the gap to x264.
+ *
+ * A Short is not byte-hashed or published through the Export Digest, so its
+ * bytes may move; nothing landscape reads this.
  */
-const NVENC_UNAVAILABLE =
-  /cuCtxCreate|cuInit|CUDA_ERROR_|No (NVENC )?capable devices found|Cannot load libcuda|Cannot load libnvidia-encode|OpenEncodeSessionEx failed/i;
+export const SHORTS_BURN_IN_ENCODE_ARGS = [
+  "-c:v",
+  "h264_nvenc",
+  "-preset",
+  "p7",
+  "-tune",
+  "hq",
+  "-rc",
+  "vbr",
+  "-cq",
+  "22",
+  "-b:v",
+  "0",
+  "-rc-lookahead",
+  "32",
+  "-spatial-aq",
+  "1",
+  "-temporal-aq",
+  "1",
+  "-bf",
+  "3",
+  "-b_ref_mode",
+  "middle",
+  "-profile:v",
+  "high",
+  "-pix_fmt",
+  "yuv420p",
+];
+
+/** The Shorts burn-in without a GPU: the libx264 encode it always was. */
+export const SHORTS_BURN_IN_CPU_FALLBACK_ENCODE_ARGS = [
+  "-c:v",
+  "libx264",
+  "-preset",
+  "slow",
+  "-crf",
+  "18",
+];
 
 /**
- * The one place a landscape pass changes encoder: given the args of a pass
- * that FAILED and the stderr it left, the same pass on libx264 — or `null`
- * when the failure was not NVENC being unable to open, or the pass did not
- * encode with {@link LANDSCAPE_VIDEO_ENCODE_ARGS}.
- *
- * Only the encoder block is swapped; inputs, filters, audio, bitexact flags
- * and the output path stay exactly as the caller built them.
+ * How the AV Calibration clap step's Play clip encodes: two seconds the page
+ * loops, so the fastest NVENC preset. Two threads at most, as the page is
+ * something Matt waits on, not an encode.
  */
-export const landscapeCpuFallbackArgs = (
+export const CLAP_PREVIEW_ENCODE_ARGS = [
+  "-c:v",
+  "h264_nvenc",
+  "-preset",
+  "p1",
+  "-rc",
+  "vbr",
+  "-cq",
+  "23",
+  "-b:v",
+  "0",
+  "-threads",
+  "2",
+  "-pix_fmt",
+  "yuv420p",
+];
+
+/** The clap step's Play clip without a GPU: libx264 `ultrafast`, as it was. */
+export const CLAP_PREVIEW_CPU_FALLBACK_ENCODE_ARGS = [
+  "-c:v",
+  "libx264",
+  "-preset",
+  "ultrafast",
+  "-threads",
+  "2",
+  "-pix_fmt",
+  "yuv420p",
+];
+
+/**
+ * Every GPU encode block and what stands in for it on the CPU. A pass that
+ * encodes with one of these may be re-run by {@link cpuFallbackArgs}; one
+ * that does not is never touched.
+ */
+const GPU_ENCODES: ReadonlyArray<{
+  gpu: readonly string[];
+  cpu: readonly string[];
+}> = [
+  {
+    gpu: LANDSCAPE_VIDEO_ENCODE_ARGS,
+    cpu: LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS,
+  },
+  {
+    gpu: SHORTS_BURN_IN_ENCODE_ARGS,
+    cpu: SHORTS_BURN_IN_CPU_FALLBACK_ENCODE_ARGS,
+  },
+  {
+    gpu: CLAP_PREVIEW_ENCODE_ARGS,
+    cpu: CLAP_PREVIEW_CPU_FALLBACK_ENCODE_ARGS,
+  },
+];
+
+/**
+ * An input option: decode the input after it on the GPU (NVDEC). Frames come
+ * back to system memory, so the CPU filters after it run unchanged, and a
+ * codec or profile NVDEC cannot do is decoded on the CPU by ffmpeg itself.
+ * What it cannot survive is no GPU at all — {@link cpuFallbackArgs} strips it
+ * then.
+ */
+export const GPU_DECODE_ARGS = ["-hwaccel", "cuda"];
+
+/** `args` with {@link GPU_DECODE_ARGS} before every input. */
+export const withGpuDecode = (args: readonly string[]): string[] =>
+  args.flatMap((arg) => (arg === "-i" ? [...GPU_DECODE_ARGS, arg] : [arg]));
+
+/**
+ * The lines ffmpeg prints when NVENC or NVDEC could not open because there is
+ * no usable GPU — the CUDA context will not come up (a driver wedged after
+ * sleep, WSL losing the device), the libraries are missing, or no device can
+ * encode. Not a bad parameter, not a bad input: the same command on the CPU
+ * would run.
+ */
+const GPU_UNAVAILABLE =
+  /cuCtxCreate|cuInit|CUDA_ERROR_|No (NVENC )?capable devices found|Cannot load libcuda|Cannot load libnvidia-encode|OpenEncodeSessionEx failed|Hardware device setup failed/i;
+
+/**
+ * The one place a pass leaves the GPU: given the args of a pass that FAILED
+ * and the stderr it left, the same pass on the CPU — or `null` when the
+ * failure was not the GPU being unusable, or the pass asked nothing of it.
+ *
+ * Every {@link GPU_DECODE_ARGS} is dropped and every GPU encode block in
+ * {@link GPU_ENCODES} is swapped for its CPU stand-in; inputs, filters, audio,
+ * bitexact flags and the output path stay exactly as the caller built them.
+ */
+export const cpuFallbackArgs = (
   failedArgs: readonly string[],
   stderrTail: string
 ): string[] | null => {
-  if (!NVENC_UNAVAILABLE.test(stderrTail)) return null;
-  const at = indexOfSequence(failedArgs, LANDSCAPE_VIDEO_ENCODE_ARGS);
-  if (at === -1) return null;
-  return [
-    ...failedArgs.slice(0, at),
-    ...LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS,
-    ...failedArgs.slice(at + LANDSCAPE_VIDEO_ENCODE_ARGS.length),
-  ];
+  if (!GPU_UNAVAILABLE.test(stderrTail)) return null;
+  let args = withoutGpuDecode(failedArgs);
+  for (const { gpu, cpu } of GPU_ENCODES) {
+    const at = indexOfSequence(args, gpu);
+    if (at === -1) continue;
+    args = [...args.slice(0, at), ...cpu, ...args.slice(at + gpu.length)];
+  }
+  return args.length === failedArgs.length &&
+    args.every((arg, i) => arg === failedArgs[i])
+    ? null
+    : args;
+};
+
+const withoutGpuDecode = (args: readonly string[]): string[] => {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === GPU_DECODE_ARGS[0] && args[i + 1] === GPU_DECODE_ARGS[1]) {
+      i++;
+      continue;
+    }
+    out.push(args[i]!);
+  }
+  return out;
 };
 
 const indexOfSequence = (

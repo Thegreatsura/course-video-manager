@@ -6,10 +6,17 @@ import os from "node:os";
 import path from "node:path";
 import {
   BITEXACT_ARGS,
+  CLAP_PREVIEW_CPU_FALLBACK_ENCODE_ARGS,
+  CLAP_PREVIEW_ENCODE_ARGS,
+  GPU_DECODE_ARGS,
   LANDSCAPE_VIDEO_CPU_FALLBACK_ENCODE_ARGS,
   LANDSCAPE_VIDEO_ENCODE_ARGS,
-  landscapeCpuFallbackArgs,
+  SHORTS_BURN_IN_CPU_FALLBACK_ENCODE_ARGS,
+  SHORTS_BURN_IN_ENCODE_ARGS,
+  cpuFallbackArgs,
+  withGpuDecode,
 } from "./ffmpeg-error";
+import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import { runFfmpegWithProgress } from "./ffmpeg-run";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { SidecarContextTest } from "./sidecar-context";
@@ -35,10 +42,10 @@ const landscapePass = (output: string) => [
   output,
 ];
 
-describe("landscapeCpuFallbackArgs", () => {
+describe("cpuFallbackArgs", () => {
   it("swaps only the encoder block for libx264 when NVENC could not open", () => {
     const args = landscapePass("out.mp4");
-    expect(landscapeCpuFallbackArgs(args, CUDA_UNAVAILABLE_STDERR)).toEqual([
+    expect(cpuFallbackArgs(args, CUDA_UNAVAILABLE_STDERR)).toEqual([
       "-y",
       "-i",
       "in.mkv",
@@ -52,20 +59,110 @@ describe("landscapeCpuFallbackArgs", () => {
 
   it("does not fall back for a failure that is not the GPU", () => {
     expect(
-      landscapeCpuFallbackArgs(
+      cpuFallbackArgs(
         landscapePass("out.mp4"),
         "in.mkv: No such file or directory"
       )
     ).toBeNull();
   });
 
-  it("does not touch a pass that never asked for NVENC", () => {
+  it("does not touch a pass that never asked for the GPU", () => {
     expect(
-      landscapeCpuFallbackArgs(
+      cpuFallbackArgs(
         ["-i", "in.mkv", "-c:v", "libx264", "out.mp4"],
         CUDA_UNAVAILABLE_STDERR
       )
     ).toBeNull();
+  });
+
+  // What ffmpeg 6.1 prints when `-hwaccel cuda` finds no device.
+  const NVDEC_UNAVAILABLE_STDERR = [
+    "[AVHWDeviceContext @ 0x5a306ed94600] cu->cuInit(0) failed -> CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected",
+    "Device creation failed: -542398533.",
+    "[vist#0:0/h264 @ 0x5a306ecdf600] Hardware device setup failed for decoder: Generic error in an external library",
+  ].join("\n");
+
+  it("drops the GPU decode from every input of a still", () => {
+    const args = withGpuDecode([
+      "-ss",
+      "1",
+      "-i",
+      "screen.mkv",
+      "-ss",
+      "1",
+      "-i",
+      "camera.mkv",
+      "-frames:v",
+      "1",
+      "out.png",
+    ]);
+    expect(args.filter((a) => a === "-hwaccel")).toHaveLength(2);
+    expect(cpuFallbackArgs(args, NVDEC_UNAVAILABLE_STDERR)).toEqual([
+      "-ss",
+      "1",
+      "-i",
+      "screen.mkv",
+      "-ss",
+      "1",
+      "-i",
+      "camera.mkv",
+      "-frames:v",
+      "1",
+      "out.png",
+    ]);
+  });
+
+  it("runs a Short's burn-in as the libx264 CRF 18 it was, decoding on the CPU", () => {
+    const args = [
+      ...GPU_DECODE_ARGS,
+      "-i",
+      "in.mp4",
+      "-i",
+      "subs.mov",
+      ...SHORTS_BURN_IN_ENCODE_ARGS,
+      "out.mp4",
+    ];
+    expect(cpuFallbackArgs(args, NVDEC_UNAVAILABLE_STDERR)).toEqual([
+      "-i",
+      "in.mp4",
+      "-i",
+      "subs.mov",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "slow",
+      "-crf",
+      "18",
+      "out.mp4",
+    ]);
+    expect(SHORTS_BURN_IN_CPU_FALLBACK_ENCODE_ARGS).toEqual([
+      "-c:v",
+      "libx264",
+      "-preset",
+      "slow",
+      "-crf",
+      "18",
+    ]);
+  });
+
+  it("runs the clap step's Play clip on libx264 ultrafast", () => {
+    expect(
+      cpuFallbackArgs(
+        [
+          ...GPU_DECODE_ARGS,
+          "-i",
+          "camera.mkv",
+          ...CLAP_PREVIEW_ENCODE_ARGS,
+          "-",
+        ],
+        CUDA_UNAVAILABLE_STDERR
+      )
+    ).toEqual([
+      "-i",
+      "camera.mkv",
+      ...CLAP_PREVIEW_CPU_FALLBACK_ENCODE_ARGS,
+      "-",
+    ]);
   });
 });
 
@@ -142,10 +239,43 @@ exit 0
     expect(runs()[1]).not.toContain("h264_nvenc");
     expect(runs()[1]).toContain("out.mp4");
     expect(warnings).toEqual([
-      expect.stringContaining("h264_nvenc could not open"),
+      expect.stringContaining("the GPU could not open"),
     ]);
     // Both commands reach the per-video log, so it shows what really ran.
     expect(logs).toHaveLength(2);
+  });
+
+  it("re-runs a Short's burn-in on libx264 CRF 18, decoding on the CPU", async () => {
+    const result = await Effect.runPromise(
+      Effect.flatMap(FFmpegEncodeService, (ffmpeg) =>
+        ffmpeg.compositeOverlay(
+          "in.mp4",
+          "subs.mov",
+          path.join(dir, "short.mp4"),
+          () => {}
+        )
+      ).pipe(
+        Effect.either,
+        Effect.provide(
+          Layer.mergeAll(
+            FFmpegEncodeService.Default,
+            NodeContext.layer,
+            SidecarContextTest
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Right");
+    expect(runs()).toHaveLength(2);
+    expect(runs()[0]).toContain("-hwaccel cuda -i in.mp4");
+    expect(runs()[0]).toContain("-c:v h264_nvenc -preset p7");
+    expect(runs()[1]).toContain(
+      "-i in.mp4 -i subs.mov -filter_complex [0:v][1:v]overlay=0:0:format=auto[outv]"
+    );
+    expect(runs()[1]).toContain("-c:v libx264 -preset slow -crf 18");
+    expect(runs()[1]).not.toContain("-hwaccel");
+    expect(runs()[1]).not.toContain("h264_nvenc");
   });
 
   it("fails without a fallback when the failure is not the GPU", async () => {

@@ -1,14 +1,14 @@
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Effect, Ref, Stream } from "effect";
+import { Effect } from "effect";
 import crypto from "node:crypto";
 import path from "node:path";
 import { tmpdir } from "os";
-import { registerFfmpegChild } from "./ffmpeg-child-registry";
-import { appendBoundedTail, withStderrTail } from "./ffmpeg-log-capture";
 import {
   BITEXACT_ARGS,
+  GPU_DECODE_ARGS,
   LANDSCAPE_VIDEO_ENCODE_ARGS,
+  SHORTS_BURN_IN_ENCODE_ARGS,
   FFmpegError,
   type FfmpegLogInfo,
 } from "./ffmpeg-error";
@@ -37,8 +37,8 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
   {
     effect: Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      // Built once per process; every encode below draws its slot from it —
-      // `runFfmpegWithProgress` takes one itself, `compositeOverlay` by hand.
+      // Built once per process; every encode below draws its slot from it,
+      // through `runFfmpegWithProgress`.
       const permits = yield* FfmpegPermitsService;
       const runEncode = (opts: Parameters<typeof runFfmpegWithProgress>[0]) =>
         runFfmpegWithProgress(opts).pipe(
@@ -241,6 +241,20 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
         return outputFile;
       });
 
+      /**
+       * A Short's final pass: its subtitle/CTA overlay (a Remotion ProRes 4444
+       * render with alpha) burned into the concatenated video.
+       *
+       * The video decodes on NVDEC and encodes on NVENC
+       * ({@link SHORTS_BURN_IN_ENCODE_ARGS}); with no usable GPU,
+       * `runFfmpegWithProgress` re-runs it as the libx264 CRF 18 it was.
+       *
+       * The overlay itself stays a CPU filter. NVDEC cannot decode ProRes, and
+       * `overlay_cuda` will not blend an alpha overlay onto NVDEC's NV12 frames,
+       * so the GPU graph still decodes and converts the overlay on the CPU: on
+       * an 8 s 1080x1920 test it saved 1.1 s of 6.7 s. Not worth a second,
+       * GPU-only filter graph that the CPU fallback could not share.
+       */
       const compositeOverlay = Effect.fn("compositeOverlay")(function* (
         videoPath: string,
         overlayPath: string,
@@ -253,6 +267,7 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
         const args = [
           "-y",
           "-hide_banner",
+          ...GPU_DECODE_ARGS,
           "-i",
           videoPath,
           "-i",
@@ -263,12 +278,7 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           "[outv]",
           "-map",
           "0:a",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "slow",
-          "-crf",
-          "18",
+          ...SHORTS_BURN_IN_ENCODE_ARGS,
           "-c:a",
           "copy",
           "-movflags",
@@ -276,88 +286,15 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           ...BITEXACT_ARGS,
           outputPath,
         ];
-        const commandLine = ["ffmpeg", ...args];
 
-        // Scoped (so an interrupted fiber kills the child) and registered
-        // with the parent-death backstop (so a dev-server restart mid-render
-        // doesn't orphan it) — this was previously the one ffmpeg call in the
-        // export path missing both, despite being the final, often longest
-        // step of a Short's render (libx264 "slow"). Only stderr is piped:
-        // stdout carries no progress data here, so inheriting it is exempt
-        // from the drain-or-block hazard documented on runFfmpegWithProgress.
-        yield* permits.withEncodeSlot("Failed to composite overlay")(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const child = yield* Command.start(
-                Command.make("ffmpeg", ...args).pipe(Command.stdout("inherit"))
-              ).pipe(
-                Effect.mapError(
-                  (e) =>
-                    new FFmpegError({
-                      cause: e,
-                      message: `Failed to composite overlay: ${e.message}`,
-                    })
-                )
-              );
-
-              yield* Effect.acquireRelease(
-                Effect.sync(() => registerFfmpegChild(child.pid)),
-                (unregister) => Effect.sync(unregister)
-              );
-
-              // Same Ref-backed, per-chunk-contained capture as
-              // runFfmpegWithProgress's stderr drain — see its comment for
-              // why a Ref (not the stream's own fold result) is what
-              // survives a mid-stream failure.
-              const stderrTailRef = yield* Ref.make("");
-              yield* child.stderr.pipe(
-                Stream.decodeText(),
-                Stream.runForEach((chunk) =>
-                  Effect.sync(() => {
-                    try {
-                      process.stderr.write(chunk);
-                    } catch {
-                      // Best-effort tee only; never let a closed fd stop capture.
-                    }
-                  }).pipe(
-                    Effect.zipRight(
-                      Ref.update(stderrTailRef, (tail) =>
-                        appendBoundedTail(tail, chunk)
-                      )
-                    ),
-                    Effect.catchAllCause(() => Effect.void)
-                  )
-                ),
-                Effect.ignore
-              );
-              const stderrTail = yield* Ref.get(stderrTailRef);
-
-              onLog({ command: commandLine, stderrTail });
-
-              const code = yield* child.exitCode.pipe(
-                Effect.mapError(
-                  (e) =>
-                    new FFmpegError({
-                      cause: e,
-                      message: withStderrTail(
-                        `Failed to composite overlay: ${e.message}`,
-                        stderrTail
-                      ),
-                    })
-                )
-              );
-              if (code !== 0) {
-                return yield* new FFmpegError({
-                  cause: null,
-                  message: withStderrTail(
-                    `ffmpeg composite exited with code ${code}`,
-                    stderrTail
-                  ),
-                });
-              }
-            })
-          )
-        );
+        yield* runEncode({
+          args,
+          // No progress is reported for this pass.
+          totalDurationSeconds: 0,
+          onProgress: undefined,
+          onLog,
+          errorPrefix: "Failed to composite overlay",
+        });
 
         return outputPath;
       });
@@ -367,8 +304,8 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
        * single pass, each shown only for its own span of the timeline.
        *
        * Deliberately NOT a widening of `compositeOverlay`: that one is the
-       * vertical Shorts pipeline's single, full-length subtitle track, encoded
-       * with libx264, and its bytes must not move. This one is the
+       * vertical Shorts pipeline's single, full-length subtitle track, with
+       * its own encode settings. This one is the
        * landscape/course export's sparse, time-gated overlays, and it re-encodes
        * a file the concat pass has already written — so it takes its picture
        * settings from {@link LANDSCAPE_VIDEO_ENCODE_ARGS}, the same ones that

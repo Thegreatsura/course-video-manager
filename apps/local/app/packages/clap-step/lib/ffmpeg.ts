@@ -1,6 +1,11 @@
 import { Command } from "@effect/platform";
 import { Chunk, Data, Effect, Stream } from "effect";
 import { CAMERA_FPS } from "@/av-calibration-constants";
+import {
+  CLAP_PREVIEW_ENCODE_ARGS,
+  GPU_DECODE_ARGS,
+  cpuFallbackArgs,
+} from "@/services/ffmpeg-error";
 import { PLAY_LOOP_SECONDS } from "./clap-step";
 
 export class ClapStepFfmpegError extends Data.TaggedError(
@@ -10,8 +15,8 @@ export class ClapStepFfmpegError extends Data.TaggedError(
 /** Two threads at most: the clap step is a page Matt waits on, not an encode. */
 const THREADS = "2";
 
-/** Runs ffmpeg, answering everything it wrote to stdout. */
-const run = (args: string[]) =>
+/** Runs ffmpeg once: its exit code, stdout and stderr. */
+const runOnce = (args: readonly string[]) =>
   Effect.scoped(
     Effect.gen(function* () {
       const process = yield* Command.start(
@@ -32,19 +37,35 @@ const run = (args: string[]) =>
         { concurrency: 2 }
       );
       const code = yield* process.exitCode;
-      if (code !== 0)
-        return yield* new ClapStepFfmpegError({
-          message: `ffmpeg exited ${code}: ${stderr.trim().split(/\r?\n/).slice(-2).join(" ")}`,
-        });
-      const out = new Uint8Array(stdout.reduce((n, c) => n + c.length, 0));
-      let at = 0;
-      for (const c of stdout) {
-        out.set(c, at);
-        at += c.length;
-      }
-      return out;
+      return { code, stdout, stderr };
     })
-  ).pipe(
+  );
+
+/**
+ * Runs ffmpeg, answering everything it wrote to stdout. A run that asked the
+ * GPU for something (NVDEC, NVENC) and found none is run once more on the
+ * CPU (`cpuFallbackArgs`).
+ */
+const run = (args: string[]) =>
+  Effect.gen(function* () {
+    let result = yield* runOnce(args);
+    if (result.code !== 0) {
+      const fallbackArgs = cpuFallbackArgs(args, result.stderr);
+      if (fallbackArgs) result = yield* runOnce(fallbackArgs);
+    }
+    const { code, stdout, stderr } = result;
+    if (code !== 0)
+      return yield* new ClapStepFfmpegError({
+        message: `ffmpeg exited ${code}: ${stderr.trim().split(/\r?\n/).slice(-2).join(" ")}`,
+      });
+    const out = new Uint8Array(stdout.reduce((n, c) => n + c.length, 0));
+    let at = 0;
+    for (const c of stdout) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  }).pipe(
     Effect.catchTag("SystemError", "BadArgument", (e) =>
       Effect.fail(new ClapStepFfmpegError({ message: e.message }))
     )
@@ -93,6 +114,7 @@ export const cameraFrameJpeg = Effect.fn("cameraFrameJpeg")(function* (o: {
   return yield* run([
     "-threads",
     THREADS,
+    ...GPU_DECODE_ARGS,
     "-ss",
     seconds(((o.frame - 0.5) * 1000) / CAMERA_FPS),
     "-i",
@@ -114,7 +136,8 @@ export const cameraFrameJpeg = Effect.fn("cameraFrameJpeg")(function* (o: {
  * Play's clip: `PLAY_LOOP_SECONDS` of the camera centred on `videoMs`, with
  * the mic played `micOffsetMs` later (as the export plays it: the mic read
  * from the camera's time less the offset), as a fragmented MP4 the page
- * loops. Encoded on the CPU, small and fast.
+ * loops. The camera decodes on NVDEC and the clip encodes on NVENC, small and
+ * fast; with no usable GPU, on the CPU as libx264 `ultrafast`.
  */
 export const clapPreviewMp4 = Effect.fn("clapPreviewMp4")(function* (o: {
   cameraFile: string;
@@ -128,6 +151,7 @@ export const clapPreviewMp4 = Effect.fn("clapPreviewMp4")(function* (o: {
   const micStartMs = videoStartMs - o.micOffsetMs;
   const length = String(PLAY_LOOP_SECONDS);
   return yield* run([
+    ...GPU_DECODE_ARGS,
     "-ss",
     seconds(videoStartMs),
     "-t",
@@ -144,14 +168,7 @@ export const clapPreviewMp4 = Effect.fn("clapPreviewMp4")(function* (o: {
     "0:v:0",
     "-map",
     "1:a:0",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-threads",
-    THREADS,
-    "-pix_fmt",
-    "yuv420p",
+    ...CLAP_PREVIEW_ENCODE_ARGS,
     "-c:a",
     "aac",
     "-b:a",
