@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, CopyX, Loader2, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,15 @@ import {
   bucketFiles,
   bucketTotals,
   fileCanBeTicked,
+  originalsOffers,
   selectedBytes,
   type bucketPageReducer,
 } from "@/features/storage/bucket-page-reducer";
+import { deleteOriginalsIsBusy } from "@/features/storage/delete-originals";
+import {
+  DeleteOriginalsConfirmation,
+  DeleteOriginalsStatus,
+} from "@/features/storage/delete-originals-dialog";
 import { purgeIsBusy } from "@/features/storage/export-purge";
 import {
   ExportPurgeConfirmation,
@@ -43,8 +49,10 @@ const ROLE_LABELS: Record<StorageFileRole, string> = {
  * The per-bucket page (#2108): one Storage Bucket's files, largest first,
  * each with what it is and the Storage Root(s) it is on (both, mid-move).
  * Exported Videos can be ticked and deleted (#2111), if their Footage is all
- * found; every other file is listed only. Listed fresh on every visit and
- * streamed in; leaving the page stops the walk.
+ * found; every other file is listed only. After a move, "Delete originals
+ * on D:" deletes the files on D: with an identical copy elsewhere (#2110).
+ * Listed fresh on every visit and streamed in; leaving the page stops the
+ * walk.
  */
 export default function StorageBucketPage({ params }: Route.ComponentProps) {
   // A new bucket is a new listing: remount rather than reuse the state.
@@ -56,6 +64,9 @@ function BucketPage({ bucketId }: { bucketId: string }) {
   const files = bucketFiles(state);
   const canTick = files.some((f) => fileCanBeTicked(state, f.path));
   const totals = bucketTotals(state);
+  const offers = originalsOffers(state);
+  const busy =
+    purgeIsBusy(state.purge) || deleteOriginalsIsBusy(state.originals);
   const labelOf = (location: string) => {
     const label =
       state.roots?.find((r) => r.root === location)?.label ?? location;
@@ -95,6 +106,43 @@ function BucketPage({ bucketId }: { bucketId: string }) {
           onCancel={() => dispatch({ type: "purge-cancelled" })}
         />
 
+        <DeleteOriginalsStatus
+          originals={state.originals}
+          labelOf={labelOf}
+          onDismiss={() => dispatch({ type: "delete-originals-dismissed" })}
+        />
+        <DeleteOriginalsConfirmation
+          originals={state.originals}
+          labelOf={labelOf}
+          onConfirm={() => dispatch({ type: "delete-originals-confirmed" })}
+          onCancel={() => dispatch({ type: "delete-originals-cancelled" })}
+        />
+
+        {offers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            {offers.map((o) => (
+              <Button
+                key={o.location}
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                title="Delete the files here that have an identical copy (size and checksum) on another drive. A file with no copy elsewhere is never deleted."
+                onClick={() =>
+                  dispatch({
+                    type: "delete-originals-clicked",
+                    from: o.location,
+                  })
+                }
+                data-testid="delete-originals"
+              >
+                <CopyX className="w-4 h-4" /> Delete originals on{" "}
+                {labelOf(o.location)} ({o.files}{" "}
+                {o.files === 1 ? "file" : "files"}, {size(o.bytes)})
+              </Button>
+            ))}
+          </div>
+        )}
+
         {canTick && (
           <div className="flex items-center gap-4 text-sm">
             <Button
@@ -103,7 +151,7 @@ function BucketPage({ bucketId }: { bucketId: string }) {
               disabled={
                 state.status !== "complete" ||
                 state.selected.length === 0 ||
-                purgeIsBusy(state.purge)
+                busy
               }
               title={
                 state.status !== "complete"
@@ -183,7 +231,7 @@ function BucketPage({ bucketId }: { bucketId: string }) {
                         type="checkbox"
                         aria-label={`Tick ${file.path}`}
                         checked={state.selected.includes(file.path)}
-                        disabled={purgeIsBusy(state.purge)}
+                        disabled={busy}
                         onChange={() =>
                           dispatch({
                             type: "export-checkbox-toggled",

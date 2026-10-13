@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   BufferStage,
   DuplicateCourseStage,
+  StorageDeleteStage,
   StorageMoveStage,
   ExportStage,
   ExportUploadEntry,
@@ -120,6 +121,13 @@ export const STORAGE_MOVE_STAGE_BANDS: Record<StorageMoveStage, StageBand> = {
   checking: { start: 1, width: 0 },
   copying: { start: 2, width: 97 },
 };
+
+/** A Storage delete: its checks, then each file checked and deleted. */
+export const STORAGE_DELETE_STAGE_BANDS: Record<StorageDeleteStage, StageBand> =
+  {
+    checking: { start: 1, width: 0 },
+    deleting: { start: 2, width: 97 },
+  };
 
 /** A job that has said its final word: nothing may move it again. */
 export const isSettled = (upload: UploadEntry) =>

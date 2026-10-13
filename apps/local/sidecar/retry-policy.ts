@@ -207,6 +207,19 @@ export const STORAGE_MOVE_POLICY = {
 } as const satisfies RetryingJobPolicy;
 
 /**
+ * **Storage delete** (#2110): "Delete originals", and every other delete on
+ * the Storage page as it moves here. 1 attempt: a file it could not delete
+ * (Windows holds it open) fails the Job with "N files still on D:, retry",
+ * and the author's Retry runs it again, checking every file afresh. A stop
+ * puts it back; it never deletes a file it has not just verified, so a
+ * re-run is safe. The author's Cancel ends it `cancelled`.
+ */
+export const STORAGE_DELETE_POLICY = {
+  lane: "default",
+  maxAttempts: 1,
+} as const satisfies RetryingJobPolicy;
+
+/**
  * **Clip Mockup voice**: Kokoro, on this machine's GPU, through the Clip
  * Mockup daemon. Never an Upload Manager job — `cvm clip-mockup add` used to
  * voice the line before it returned — so this policy is chosen, not copied

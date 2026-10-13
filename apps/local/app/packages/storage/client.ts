@@ -50,6 +50,23 @@ export {
   type StorageSizeDelta,
 } from "./lib/scan-wire";
 export {
+  STORAGE_DELETED_EVENT,
+  STORAGE_DELETE_JOB_KIND,
+  STORAGE_DELETE_OPERATIONS,
+  STORAGE_DELETE_STAGES,
+  isStorageDeleteStage,
+  storageDeleteSummary,
+  storageDeleteTitle,
+  type StorageDeleteJobResult,
+  type StorageDeleteOperation,
+  type StorageDeleteStage,
+} from "./lib/delete-job-wire";
+export {
+  originalsAt,
+  type StorageOriginalsRefusalReason,
+  type StorageOriginalsResult,
+} from "./lib/originals-wire";
+export {
   STORAGE_MOVED_EVENT,
   STORAGE_MOVE_JOB_KIND,
   STORAGE_MOVE_KINDS,

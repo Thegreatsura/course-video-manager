@@ -4,6 +4,7 @@ import { inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { jobs, recordingSessions } from "@cvm/core/db/schema";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
+import { STORAGE_DELETE_JOB_KIND } from "./delete-job-wire";
 import { storageWritesHeldBy } from "./storage-busy";
 import { classifyStorageFile, type StorageOwnership } from "./buckets";
 import { loadStorageOwnership } from "./ownership.server";
@@ -140,6 +141,15 @@ export const busyRefusals = async (opts: {
     refusals.push({
       reason: "move-running",
       message: `"${moving.title}" is already queued or running for this bucket`,
+    });
+  }
+
+  // A delete (#2110) empties folders a move copies from, or into.
+  const deleting = live.find((j) => j.kind === STORAGE_DELETE_JOB_KIND);
+  if (deleting) {
+    refusals.push({
+      reason: "delete-running",
+      message: `"${deleting.title}" is queued or running. Try again once it has finished.`,
     });
   }
 

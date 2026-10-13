@@ -28,12 +28,14 @@ export const ENCODING_JOB_KINDS = [
 ] as const;
 
 /**
- * What a Storage page delete waits for: every encoding Job, and a move of a
- * Storage Bucket (#2109), which copies from the very folders a delete empties.
+ * What a Storage page delete waits for: every encoding Job, a move of a
+ * Storage Bucket (#2109), which copies from the very folders a delete
+ * empties, and a `storage-delete` Job (#2110), one delete at a time.
  */
 export const STORAGE_BUSY_JOB_KINDS = [
   ...ENCODING_JOB_KINDS,
   "storage-move",
+  "storage-delete",
 ] as const;
 
 /** Every encoding Job or Storage move that is queued or running, oldest first. */
@@ -52,8 +54,13 @@ export const encodingJobs = (db: Database) =>
 export const encodingRefusalMessage = (
   encoding: readonly { kind: string; title: string }[]
 ) => {
-  const what = encoding[0]!.kind === "storage-move" ? "a move" : "an export";
-  return `Not deleted: ${encoding.length === 1 ? `${what} is` : `${encoding.length} exports or moves are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
+  const what =
+    encoding[0]!.kind === "storage-move"
+      ? "a move"
+      : encoding[0]!.kind === "storage-delete"
+        ? "a delete"
+        : "an export";
+  return `Not deleted: ${encoding.length === 1 ? `${what} is` : `${encoding.length} exports, moves or deletes are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
 };
 
 /** "Not deleted: a move is being started…": the in-process write hold. */
