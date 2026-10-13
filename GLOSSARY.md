@@ -258,7 +258,7 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 ### Storage
 
 **Storage Root**:
-One of the drives CVM's files may be on (`/mnt/d`, `/mnt/e`), listed in order in the one `STORAGE_ROOTS` setting. Every Storage Root has the same fixed folders (`raw-footage/`, `finished-videos/`, `clip-mockups/`, `overlay-renders/`). The database stores a file's path relative to a Storage Root, with no drive in it. A file is read from the first Storage Root that has it, and a new file is written to the first. So moving a file between drives changes no row and no **Export Hash** (ADR 0040). A path under no Storage Root (a **Recording Session** in `~/Videos`) is used exactly as stored.
+One of the drives CVM's files may be on (`/mnt/d`, `/mnt/e`), listed in order in the one `STORAGE_ROOTS` setting. Every Storage Root has the same fixed folders (`raw-footage/`, `finished-videos/`, `clip-mockups/`, `overlay-renders/`, `video-files/`). The database stores a file's path relative to a Storage Root, with no drive in it. A file is read from the first Storage Root that has it, and a new file is written to the first. So moving a file between drives changes no row and no **Export Hash** (ADR 0040). A path under no Storage Root (an old **Recording Session** in `~/Videos`, from before new ones went to `raw-footage/`) is used exactly as stored.
 _Avoid_: Drive (a Storage Root is the folder CVM uses on it), Storage location, Volume
 
 ### Recording

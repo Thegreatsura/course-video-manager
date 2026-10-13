@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@effect/vitest";
-import { beforeAll, beforeEach } from "vitest";
+import { afterAll, beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import nodeFs from "node:fs";
@@ -45,7 +45,23 @@ type TestServices =
 
 let testLayer: Layer.Layer<TestServices>;
 
+// Video Files go in video-files/ on a temp Storage Root, never the checkout.
+let storageRoot: string;
+const previousRoots = process.env.STORAGE_ROOTS;
+const previousLegacy = process.env.VIDEO_FILES_DIR;
+
+afterAll(() => {
+  if (previousRoots === undefined) delete process.env.STORAGE_ROOTS;
+  else process.env.STORAGE_ROOTS = previousRoots;
+  if (previousLegacy === undefined) delete process.env.VIDEO_FILES_DIR;
+  else process.env.VIDEO_FILES_DIR = previousLegacy;
+  nodeFs.rmSync(storageRoot, { recursive: true, force: true });
+});
+
 beforeAll(async () => {
+  storageRoot = nodeFs.mkdtempSync(path.join(tmpdir(), "posting-context-"));
+  process.env.STORAGE_ROOTS = storageRoot;
+  process.env.VIDEO_FILES_DIR = path.join(storageRoot, "legacy");
   const result = await createTestDb();
   testDb = result.testDb;
 
@@ -165,7 +181,7 @@ const createLessonVideo = (setupFiles?: (lessonDir: string) => void) =>
   });
 
 function setupVideoDir(lineageId: string): string {
-  const baseDir = process.env.VIDEO_FILES_DIR || "./video-files";
+  const baseDir = path.join(storageRoot, "video-files");
   const dir = path.join(baseDir, lineageId);
   nodeFs.mkdirSync(dir, { recursive: true });
   return dir;

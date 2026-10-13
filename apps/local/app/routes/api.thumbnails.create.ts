@@ -1,10 +1,8 @@
 import { Effect } from "effect";
-import { FileSystem } from "@effect/platform";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { makeAction } from "@/services/route-action.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { getVideoFilePath, getVideoFilesBaseDir } from "@/services/video-files";
-import { assertUnderEffect } from "@/services/assert-under";
+import { videoFileRowPath, writeVideoFile } from "@/services/video-files";
 import { data } from "react-router";
 
 function decodeDataUrl(dataUrl: string): Uint8Array {
@@ -62,55 +60,40 @@ export const action = makeAction({
 
       const thumbnailOps = yield* ThumbnailOperationsService;
       const videoOps = yield* VideoOperationsService;
-      const fs = yield* FileSystem.FileSystem;
 
       const video = yield* videoOps.getVideoDeepById(videoId);
+      const thumbnailId = crypto.randomUUID();
+
+      // Each PNG is a Video File, written on the first Storage Root; the row
+      // stores its root-relative path (`video-files/{lineageId}/…`).
+      const writeLayer = (suffix: string, bytes: Uint8Array) =>
+        Effect.gen(function* () {
+          const filename = `thumbnail-${thumbnailId}${suffix}.png`;
+          yield* writeVideoFile(video.lineageId, filename, bytes);
+          return videoFileRowPath(video.lineageId, filename);
+        });
 
       const compositeBytes = decodeDataUrl(imageDataUrl);
+      const filePath = yield* writeLayer("", compositeBytes);
 
-      const thumbnailId = crypto.randomUUID();
-      const filename = `thumbnail-${thumbnailId}.png`;
-      const videoDir = getVideoFilePath(video.lineageId);
-      const videoFilesDir = getVideoFilesBaseDir();
-      const filePath = yield* assertUnderEffect(
-        videoFilesDir,
-        getVideoFilePath(video.lineageId, filename)
-      );
-
-      const dirExists = yield* fs.exists(videoDir);
-      if (!dirExists) {
-        yield* fs.makeDirectory(videoDir, { recursive: true });
-      }
-
-      yield* fs.writeFile(filePath, compositeBytes);
-
-      const bgFilename = `thumbnail-${thumbnailId}-bg.png`;
-      const bgFilePath = yield* assertUnderEffect(
-        videoFilesDir,
-        getVideoFilePath(video.lineageId, bgFilename)
-      );
-      const bgBytes =
+      const bgFilePath = yield* writeLayer(
+        "-bg",
         typeof backgroundPhotoDataUrl === "string" &&
-        backgroundPhotoDataUrl.startsWith("data:")
+          backgroundPhotoDataUrl.startsWith("data:")
           ? decodeDataUrl(backgroundPhotoDataUrl)
-          : compositeBytes;
-      yield* fs.writeFile(bgFilePath, bgBytes);
+          : compositeBytes
+      );
 
       let diagramLayer = null;
       if (
         typeof diagramDataUrl === "string" &&
         diagramDataUrl.startsWith("data:")
       ) {
-        const diagBytes = decodeDataUrl(diagramDataUrl);
-        const diagFilename = `thumbnail-${thumbnailId}-diagram.png`;
-        const diagFilePath = yield* assertUnderEffect(
-          videoFilesDir,
-          getVideoFilePath(video.lineageId, diagFilename)
-        );
-        yield* fs.writeFile(diagFilePath, diagBytes);
-
         diagramLayer = {
-          filePath: diagFilePath,
+          filePath: yield* writeLayer(
+            "-diagram",
+            decodeDataUrl(diagramDataUrl)
+          ),
           horizontalPosition:
             typeof diagramPosition === "number" ? diagramPosition : 50,
         };
@@ -121,16 +104,8 @@ export const action = makeAction({
         typeof cutoutDataUrl === "string" &&
         cutoutDataUrl.startsWith("data:")
       ) {
-        const cutoutBytes = decodeDataUrl(cutoutDataUrl);
-        const cutoutFilename = `thumbnail-${thumbnailId}-cutout.png`;
-        const cutoutFilePath = yield* assertUnderEffect(
-          videoFilesDir,
-          getVideoFilePath(video.lineageId, cutoutFilename)
-        );
-        yield* fs.writeFile(cutoutFilePath, cutoutBytes);
-
         cutoutLayer = {
-          filePath: cutoutFilePath,
+          filePath: yield* writeLayer("-cutout", decodeDataUrl(cutoutDataUrl)),
           horizontalPosition:
             typeof cutoutPosition === "number" ? cutoutPosition : 50,
         };

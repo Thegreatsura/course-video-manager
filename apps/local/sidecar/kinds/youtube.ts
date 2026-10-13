@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { JOB_PARAMS } from "../job-params";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
+import { locateStoredVideoFile } from "@/services/video-files";
 import { getValidAccessToken } from "@/services/youtube-auth-service";
 import {
   setYouTubeThumbnail,
@@ -41,6 +42,9 @@ export const youtubeJobKind = definePostingJobKind({
         });
       }
       const publish = yield* CoursePublishService;
+      // Root-relative on whichever Storage Root has it (ADR 0040).
+      const thumbnailFile =
+        locateStoredVideoFile(thumbnail.filePath) ?? thumbnail.filePath;
       const filePath = yield* publish.resolveExportPath(params.videoId);
       if (!filePath) {
         return yield* new PostNotStartedError({
@@ -70,7 +74,7 @@ export const youtubeJobKind = definePostingJobKind({
         yield* setYouTubeThumbnail({
           accessToken,
           youtubeVideoId: uploaded.videoId,
-          thumbnailFilePath: thumbnail.filePath ?? "",
+          thumbnailFilePath: thumbnailFile,
         });
         return uploaded;
       }).pipe(Effect.ensuring(reports.flush));

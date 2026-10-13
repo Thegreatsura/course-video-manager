@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
+import { FileSystem } from "@effect/platform";
 import {
   copyVideoFilesDirectory,
   deleteVideoFile,
@@ -11,9 +12,13 @@ import {
   isDefaultEnabled,
   isUrl,
   listVideoFiles,
+  locateStoredVideoFile,
   readVideoFileString,
+  removeStoredVideoFile,
   resolveVideoFilePath,
   videoFileExists,
+  videoFileRelativePathOf,
+  videoFileRowPath,
   writeVideoFile,
 } from "./video-files";
 
@@ -30,12 +35,44 @@ describe("isUrl", () => {
   });
 });
 
+/**
+ * Every test runs on two temp Storage Roots (D: and E: stand-ins) and an
+ * empty legacy store; `baseDir` is `video-files/` on the first root, where
+ * new files are written.
+ */
+let rootD: string;
+let rootE: string;
+let legacyDir: string;
+let baseDir: string;
+const previous = {
+  STORAGE_ROOTS: process.env.STORAGE_ROOTS,
+  VIDEO_FILES_DIR: process.env.VIDEO_FILES_DIR,
+};
+
+beforeEach(() => {
+  const tmp = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-vf-test-"));
+  rootD = nodePath.join(tmp, "d");
+  rootE = nodePath.join(tmp, "e");
+  legacyDir = nodePath.join(tmp, "legacy");
+  for (const dir of [rootD, rootE, legacyDir]) nodeFs.mkdirSync(dir);
+  baseDir = nodePath.join(rootD, "video-files");
+  process.env.STORAGE_ROOTS = `${rootD},${rootE}`;
+  process.env.VIDEO_FILES_DIR = legacyDir;
+});
+
+afterEach(() => {
+  nodeFs.rmSync(nodePath.dirname(rootD), { recursive: true, force: true });
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
 describe("getVideoFilePath", () => {
-  it("returns directory path keyed by lineageId when no filename given", () => {
-    const result = getVideoFilePath("lineage-abc-123");
-    expect(result).toContain("video-files");
-    expect(result).toContain("lineage-abc-123");
-    expect(result).not.toContain("standalone");
+  it("is the Video's directory in video-files/ on the first Storage Root", () => {
+    expect(getVideoFilePath("lineage-abc-123")).toBe(
+      nodePath.join(rootD, "video-files", "lineage-abc-123")
+    );
   });
 
   it("returns URL as-is when filename is an https URL", () => {
@@ -55,38 +92,114 @@ describe("getVideoFilePath", () => {
 
 const LINEAGE = "lineage-1";
 
-let baseDir: string;
-let previousBaseDir: string | undefined;
-
 const run = <A, E>(
   effect: Effect.Effect<A, E, NodeContext.NodeContext>
 ): Promise<A> =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeContext.layer)));
 
-const writeFixture = (relativePath: string, contents = "x") => {
-  const full = nodePath.join(baseDir, LINEAGE, relativePath);
+const writeIn = (store: string, relativePath: string, contents = "x") => {
+  const full = nodePath.join(store, LINEAGE, relativePath);
   nodeFs.mkdirSync(nodePath.dirname(full), { recursive: true });
   nodeFs.writeFileSync(full, contents);
+  return full;
 };
 
-// Scoped so the VIDEO_FILES_DIR override cannot leak into the path-derivation
-// suites above, which assert against the default "./video-files" base.
+const writeFixture = (relativePath: string, contents = "x") =>
+  writeIn(baseDir, relativePath, contents);
+
+describe("across Storage Roots and the legacy store", () => {
+  const onE = () => nodePath.join(rootE, "video-files");
+
+  it("lists and reads a Video's files wherever they are, the first store winning", async () => {
+    writeIn(onE(), "notes.md", "on E");
+    writeIn(legacyDir, "old.md", "legacy");
+    writeIn(legacyDir, "notes.md", "stale legacy copy");
+
+    expect((await run(listVideoFiles(LINEAGE))).map((e) => e.path)).toEqual([
+      "notes.md",
+      "old.md",
+    ]);
+    expect(await run(readVideoFileString(LINEAGE, "notes.md"))).toBe("on E");
+    expect(await run(readVideoFileString(LINEAGE, "old.md"))).toBe("legacy");
+  });
+
+  it("writes a new file on the first root and removes its older copies", async () => {
+    const legacy = writeIn(legacyDir, "notes.md", "old");
+
+    const written = await run(writeVideoFile(LINEAGE, "notes.md", "new"));
+
+    expect(written).toBe(nodePath.join(baseDir, LINEAGE, "notes.md"));
+    expect(nodeFs.existsSync(legacy)).toBe(false);
+    expect(await run(readVideoFileString(LINEAGE, "notes.md"))).toBe("new");
+  });
+
+  it("deletes every copy of a file", async () => {
+    const legacy = writeIn(legacyDir, "notes.md");
+    const e = writeIn(onE(), "notes.md");
+
+    await run(deleteVideoFile(LINEAGE, "notes.md"));
+
+    expect(nodeFs.existsSync(legacy)).toBe(false);
+    expect(nodeFs.existsSync(e)).toBe(false);
+  });
+
+  it("stores a Thumbnail's path relative to its Storage Root and finds it on any root", () => {
+    const row = videoFileRowPath(LINEAGE, "thumbnail-1.png");
+    expect(row).toBe(`video-files/${LINEAGE}/thumbnail-1.png`);
+    expect(locateStoredVideoFile(row)).toBeNull();
+
+    const e = writeIn(onE(), "thumbnail-1.png");
+    expect(locateStoredVideoFile(row)).toBe(e);
+
+    // A legacy absolute path is read where it is.
+    const legacy = writeIn(legacyDir, "thumbnail-2.png");
+    expect(locateStoredVideoFile(legacy)).toBe(legacy);
+  });
+
+  it("knows a stored path's file in the Video's directory, and nothing outside any store", () => {
+    expect(
+      videoFileRelativePathOf(`video-files/${LINEAGE}/thumbnail-1.png`, LINEAGE)
+    ).toBe("thumbnail-1.png");
+    expect(
+      videoFileRelativePathOf(
+        nodePath.join(legacyDir, LINEAGE, "thumbnail-1.png"),
+        LINEAGE
+      )
+    ).toBe("thumbnail-1.png");
+    expect(
+      videoFileRelativePathOf(
+        `/home/matt/repo/.worktrees/x/video-files/${LINEAGE}/thumbnail-1.png`,
+        LINEAGE
+      )
+    ).toBeNull();
+    expect(
+      videoFileRelativePathOf(`video-files/other/thumbnail-1.png`, LINEAGE)
+    ).toBeNull();
+  });
+
+  it("removes a stored path's file on every root, and never a file in no store", async () => {
+    const row = videoFileRowPath(LINEAGE, "thumbnail-1.png");
+    const d = writeFixture("thumbnail-1.png");
+    const e = writeIn(onE(), "thumbnail-1.png");
+    const outside = nodePath.join(nodePath.dirname(rootD), "matts-file.png");
+    nodeFs.writeFileSync(outside, "x");
+
+    await run(
+      Effect.flatMap(FileSystem.FileSystem, (fs) =>
+        Effect.all([
+          removeStoredVideoFile(fs, row),
+          removeStoredVideoFile(fs, outside),
+        ])
+      )
+    );
+
+    expect(nodeFs.existsSync(d)).toBe(false);
+    expect(nodeFs.existsSync(e)).toBe(false);
+    expect(nodeFs.existsSync(outside)).toBe(true);
+  });
+});
+
 describe("the on-disk store", () => {
-  beforeEach(() => {
-    previousBaseDir = process.env.VIDEO_FILES_DIR;
-    baseDir = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "cvm-vf-test-"));
-    process.env.VIDEO_FILES_DIR = baseDir;
-  });
-
-  afterEach(() => {
-    nodeFs.rmSync(baseDir, { recursive: true, force: true });
-    if (previousBaseDir === undefined) {
-      delete process.env.VIDEO_FILES_DIR;
-    } else {
-      process.env.VIDEO_FILES_DIR = previousBaseDir;
-    }
-  });
-
   describe("listVideoFiles", () => {
     it("returns an empty array when the video has no directory", async () => {
       expect(await run(listVideoFiles("never-created"))).toEqual([]);

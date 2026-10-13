@@ -1,6 +1,6 @@
 import path from "node:path";
 import { FileSystem } from "@effect/platform";
-import { Data, Effect } from "effect";
+import { Data, Effect, Option } from "effect";
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { assertUnderEffect } from "./assert-under";
 import {
@@ -13,6 +13,7 @@ import {
   getVideoFilePath,
   getVideoFilesBaseDir,
   listVideoFiles,
+  locateVideoFile,
 } from "./video-files";
 
 /**
@@ -93,9 +94,12 @@ export const planDuplicatedVideoFiles = Effect.fn("planDuplicatedVideoFiles")(
       planned.push({ store: getClipMockupBaseDir(), from, to, size });
     }
     for (const entry of yield* listVideoFiles(video.sourceLineageId)) {
+      // Read from whichever store has it; written to the first Storage Root.
+      const from = yield* locateVideoFile(video.sourceLineageId, entry.path);
+      if (Option.isNone(from)) continue;
       planned.push({
         store: getVideoFilesBaseDir(),
-        from: getVideoFilePath(video.sourceLineageId, entry.path),
+        from: from.value,
         to: getVideoFilePath(video.newLineageId, entry.path),
         size: entry.size,
       });

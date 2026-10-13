@@ -40,6 +40,7 @@ import {
 } from "@/services/drizzle-service.server";
 import { storageRootsConfig } from "./storage-roots";
 import { resolveStoragePath } from "@/packages/storage/server";
+import { toRootRelative } from "@/packages/storage";
 
 /** Beside a calibration's mic file: the browser's level trace and the prompt schedule. */
 export const BROWSER_TRACE_FILE = "browser-trace.json";
@@ -137,6 +138,7 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
       micStartUpGap: claps.startUpGap,
     })
   );
+  const storageRoots = yield* storageRootsConfig;
   const [row] = yield* dbCall(() =>
     db
       .insert(avCalibrations)
@@ -150,13 +152,14 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
         recorderMic: measured.mic,
         browserInputLabel: o.browserInputLabel,
         scriptVersion: SCRIPT_VERSION,
-        micFilePath: micFile,
-        browserTracePath,
+        // Relative to its Storage Root, as every stored path is (ADR 0040).
+        micFilePath: toRootRelative(micFile, storageRoots),
+        browserTracePath: toRootRelative(browserTracePath, storageRoots),
         cameraDevice: measured.camera,
         clapsFound: claps.found,
         clapSpreadMs: claps.spreadMs,
         micOffsetMs: claps.micOffsetMs,
-        cameraFilePath: cameraFile,
+        cameraFilePath: toRootRelative(cameraFile, storageRoots),
       })
       .returning()
   );
