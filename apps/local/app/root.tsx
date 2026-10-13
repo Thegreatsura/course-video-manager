@@ -104,6 +104,13 @@ export default function App() {
   // The teleprompter window is pointed at a camera lens, so
   // no app chrome belongs on it.
   const isTeleprompter = useLocation().pathname.startsWith("/teleprompter");
+  // The Shorts studio's Post button sits in the bottom-right corner, right
+  // where the feedback button floats, so lift the button clear of it there.
+  const isShort = useMatches().some(
+    (m) =>
+      (m.loaderData as { videoFormat?: unknown } | undefined)?.videoFormat ===
+      "short"
+  );
 
   return (
     <UploadProvider>
@@ -113,7 +120,7 @@ export default function App() {
         <Button
           size="icon"
           variant="outline"
-          className="fixed bottom-4 z-40 rounded-full size-10 shadow-lg transition-[right] duration-200"
+          className={`fixed ${isShort ? "bottom-14" : "bottom-4"} z-40 rounded-full size-10 shadow-lg transition-[right] duration-200`}
           style={{
             right: "calc(1rem + var(--agent-sidebar-width, 0px))",
           }}
