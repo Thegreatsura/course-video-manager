@@ -21,6 +21,7 @@ const FAILED: Record<string, string> = {
   publish: "publish failed",
   "duplicate-course": "duplicate failed",
   "storage-move": "failed: every original is untouched",
+  "storage-delete": "stopped: every file not deleted is still there",
   /** One Video of a Publish: its export or its upload. */
   "publish-video": "failed in the Publish",
 };

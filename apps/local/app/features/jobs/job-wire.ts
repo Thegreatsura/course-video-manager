@@ -126,7 +126,10 @@ export const isPostingJobKind = (kind: string) =>
  * move removes its partial copies). The server's list is
  * `CANCELLABLE_JOB_KINDS` (`sidecar/job-specs.ts`).
  */
-export const CANCELLABLE_JOB_KIND_NAMES: readonly string[] = ["storage-move"];
+export const CANCELLABLE_JOB_KIND_NAMES: readonly string[] = [
+  "storage-move",
+  "storage-delete",
+];
 
 export const isCancellableJobKind = (kind: string) =>
   CANCELLABLE_JOB_KIND_NAMES.includes(kind);

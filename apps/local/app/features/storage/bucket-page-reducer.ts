@@ -7,10 +7,19 @@ import {
   type exportPurge,
 } from "./export-purge";
 import {
+  deleteOriginalsIsBusy,
+  deleteOriginalsTransition,
+  isDeleteOriginalsAction,
+  startDeleteOriginals,
+  type deleteOriginals,
+} from "./delete-originals";
+import {
   addFoundFiles,
   bucketCanBePurged,
   dropFilesAt,
   largestFirst,
+  movableKindsOf,
+  originalsAt,
   type StorageBucket,
   type StorageBucketFile,
   type StorageBucketFilesMessage,
@@ -23,8 +32,9 @@ import {
  * listens to the listing (`/api/storage/buckets/:bucketId/files`), which
  * streams files as the walk finds them; leaving the page closes the stream,
  * and the server stops the walk. Nothing is cached. Exported Videos can be
- * ticked and Purged (#2111); everything else is listed only. See
- * docs/FRONTEND_STATE.md.
+ * ticked and Purged (#2111); everything else is listed only. After a move,
+ * "Delete originals on D:" deletes the files on D: that have an identical
+ * copy on another root (#2110). See docs/FRONTEND_STATE.md.
  */
 export namespace bucketPageReducer {
   export type State = {
@@ -44,6 +54,8 @@ export namespace bucketPageReducer {
     selected: string[];
     /** Purging the ticked Exported Videos: asked, under way, or done. */
     purge: exportPurge.State | null;
+    /** "Delete originals" (#2110): asked, under way, or done. */
+    originals: deleteOriginals.State | null;
   };
 
   export type Action =
@@ -52,10 +64,14 @@ export namespace bucketPageReducer {
     | { type: "listing-failed"; message: string }
     | { type: "export-checkbox-toggled"; path: string }
     | { type: "purge-selected-clicked" }
-    | exportPurge.Action;
+    | { type: "delete-originals-clicked"; from: string }
+    | exportPurge.Action
+    | deleteOriginals.Action;
 
   export type Effect =
-    { type: "listen-to-listing"; bucketId: string } | exportPurge.Effect;
+    | { type: "listen-to-listing"; bucketId: string }
+    | exportPurge.Effect
+    | deleteOriginals.Effect;
 }
 
 type State = bucketPageReducer.State;
@@ -78,6 +94,7 @@ export const createInitialBucketPageState = (bucketId: string): State => ({
   listing: null,
   selected: [],
   purge: null,
+  originals: null,
 });
 
 /** List again from nothing: what a Purge deleted is gone from the list. */
@@ -89,6 +106,7 @@ const relist = (
   return {
     ...createInitialBucketPageState(state.bucketId),
     purge: state.purge,
+    originals: state.originals,
     listing: exec({ type: "listen-to-listing", bucketId: state.bucketId }),
   };
 };
@@ -106,7 +124,8 @@ const selectionReducer = (
   exec: Parameters<EffectReducer<State, Action, Effect>>[2]
 ): State | null => {
   if (action.type === "export-checkbox-toggled") {
-    if (purgeIsBusy(state.purge)) return state;
+    if (purgeIsBusy(state.purge) || deleteOriginalsIsBusy(state.originals))
+      return state;
     if (state.selected.includes(action.path)) {
       return {
         ...state,
@@ -120,6 +139,7 @@ const selectionReducer = (
     if (state.status !== "complete" || state.bucket === null) return state;
     if (state.selected.length === 0 || !bucketCanBePurged(state.bucket))
       return state;
+    if (deleteOriginalsIsBusy(state.originals)) return state;
     const purge = startPurge(
       state.purge,
       state.bucket,
@@ -135,6 +155,33 @@ const selectionReducer = (
   return next.purged ? relist(after, exec) : after;
 };
 
+/** "Delete originals on <root>" (#2110): only from what the listing offers. */
+const originalsReducer = (
+  state: State,
+  action: Action,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State | null => {
+  if (action.type === "delete-originals-clicked") {
+    if (state.bucket === null || purgeIsBusy(state.purge)) return state;
+    const offered = originalsOffers(state).some(
+      (o) => o.location === action.from
+    );
+    if (!offered) return state;
+    const originals = startDeleteOriginals(
+      state.originals,
+      state.bucket,
+      action.from,
+      exec
+    );
+    return originals === null ? state : { ...state, originals };
+  }
+  if (!isDeleteOriginalsAction(action)) return null;
+  const next = deleteOriginalsTransition(state.originals, action, exec);
+  if (next.state === state.originals) return state;
+  const after = { ...state, originals: next.state };
+  return next.relist ? relist(after, exec) : after;
+};
+
 export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
@@ -142,6 +189,8 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
 ) => {
   const afterSelection = selectionReducer(state, action, exec);
   if (afterSelection !== null) return afterSelection;
+  const afterOriginals = originalsReducer(state, action, exec);
+  if (afterOriginals !== null) return afterOriginals;
   // A message after the listing has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "listing") return state;
@@ -194,7 +243,14 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
     case "exports-purged":
     case "purge-failed":
     case "purge-dismissed":
-      // Ticking and the Purge, handled above.
+    case "delete-originals-clicked":
+    case "originals-planned":
+    case "delete-originals-confirmed":
+    case "delete-originals-cancelled":
+    case "delete-originals-started":
+    case "delete-originals-failed":
+    case "delete-originals-dismissed":
+      // Ticking, the Purge and "Delete originals", handled above.
       return state;
   }
 };
@@ -224,4 +280,21 @@ export const bucketTotals = (
     }
   }
   return [...totals].map(([location, t]) => ({ location, ...t }));
+};
+
+/**
+ * Each Storage Root "Delete originals" can be offered on, with the files on
+ * it that have a same-size copy on another root and their bytes: once the
+ * listing is complete, for a bucket whose files are moved, and only an
+ * online root. The server checks every one again, by checksum.
+ */
+export const originalsOffers = (
+  state: State
+): { location: string; files: number; bytes: number }[] => {
+  if (state.status !== "complete" || state.bucket === null) return [];
+  if (movableKindsOf(state.bucket).length === 0) return [];
+  return (state.roots ?? [])
+    .filter((r) => r.online && !(r.root in state.unreadableRoots))
+    .map((r) => ({ location: r.root, ...originalsAt(state.files, r.root) }))
+    .filter((o) => o.files > 0);
 };

@@ -2,6 +2,10 @@ import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import { planPurge, purgeExports } from "./export-purge-effects";
 import {
+  planDeleteOriginals,
+  startDeleteOriginalsJob,
+} from "./delete-originals-effects";
+import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   type StorageBucketFilesMessage,
 } from "@/packages/storage/client";
@@ -60,6 +64,10 @@ export const useBucketPage = (bucketId: string) => {
       "plan-purge": (_state, effect, dispatch) => planPurge(effect, dispatch),
       "purge-exports": (_state, effect, dispatch) =>
         purgeExports(effect, dispatch),
+      "plan-delete-originals": (_state, effect, dispatch) =>
+        planDeleteOriginals(effect, dispatch),
+      "start-delete-originals": (_state, effect, dispatch) =>
+        startDeleteOriginalsJob(effect, dispatch),
     }
   );
   useEffect(() => {

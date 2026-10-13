@@ -3,6 +3,7 @@ import {
   AUTOFILL_WORK_BAND,
   BUFFER_STAGE_BANDS,
   DUPLICATE_COURSE_STAGE_BANDS,
+  STORAGE_DELETE_STAGE_BANDS,
   STORAGE_MOVE_STAGE_BANDS,
   PUBLISH_VIDEO_UPLOAD_BANDS,
   PUBLISH_WORK_BAND,
@@ -89,6 +90,8 @@ export const timingStage = (
       return upload.duplicateCourseStage ?? "starting";
     case "storage-move":
       return upload.storageMoveStage ?? "starting";
+    case "storage-delete":
+      return upload.storageDeleteStage ?? "starting";
     case "publish": {
       const stage = upload.publishStage;
       if (!stage) return "starting";
@@ -143,6 +146,8 @@ export const stagePlan = (
       return ["starting", "copying-rows", "copying-files"];
     case "storage-move":
       return ["starting", "checking", "copying"];
+    case "storage-delete":
+      return ["starting", "checking", "deleting"];
     case "render-vertical":
       return [
         "starting",
@@ -205,6 +210,8 @@ export const stageBand = (
         : null;
     case "storage-move":
       return stage === "copying" ? STORAGE_MOVE_STAGE_BANDS.copying : null;
+    case "storage-delete":
+      return stage === "deleting" ? STORAGE_DELETE_STAGE_BANDS.deleting : null;
     case "youtube":
     case "youtube-shorts":
     case "ai-hero":

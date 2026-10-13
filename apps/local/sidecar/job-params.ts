@@ -6,6 +6,13 @@ import {
 import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
 import { STORAGE_MOVE_KINDS } from "@/packages/storage/client";
 
+/** A Storage Root: an absolute path. */
+const StorageRootParam = Schema.String.pipe(
+  Schema.filter((p) => p.startsWith("/"), {
+    message: () => "a Storage Root is an absolute path",
+  })
+);
+
 /**
  * Refuses a title or description YouTube would refuse, naming why — at
  * enqueue (the app server) and again when the Sidecar decodes the Job, so a
@@ -83,6 +90,18 @@ export const JOB_PARAMS = {
       })
     ),
   }),
+  /**
+   * A delete on the Storage page (#2110), by `operation` — one member each
+   * (`STORAGE_DELETE_OPERATIONS`). `originals`: the bucket's files on `from`
+   * that have an identical copy on another Storage Root.
+   */
+  "storage-delete": Schema.Union(
+    Schema.Struct({
+      operation: Schema.Literal("originals"),
+      bucketId: Schema.String.pipe(Schema.nonEmptyString()),
+      from: StorageRootParam,
+    })
+  ),
   /**
    * The Clip Mockups one `cvm clip-mockup add` or `update` left with a
    * voice to make; at least one.
