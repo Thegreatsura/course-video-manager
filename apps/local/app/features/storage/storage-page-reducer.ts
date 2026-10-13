@@ -1,6 +1,14 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  isExportPurgeAction,
+  purgeIsBusy,
+  purgeTransition,
+  startPurge,
+  type exportPurge,
+} from "./export-purge";
+import {
   bucketCanBeDeleted,
+  bucketCanBePurged,
   moveTargetRefusal,
   type StorageBucket,
   type StorageDeleteResult,
@@ -33,6 +41,8 @@ export namespace storagePageReducer {
     scan: EffectEntity<State, Action> | null;
     /** Deleting an Other bucket's files (#2112): asked, under way, or done. */
     deletion: Deletion | null;
+    /** Purging a bucket's Exported Videos (#2111): asked, under way, or done. */
+    purge: exportPurge.State | null;
   };
 
   /**
@@ -54,10 +64,14 @@ export namespace storagePageReducer {
     | { type: "delete-cancelled" }
     | { type: "bucket-deleted"; result: StorageDeleteResult }
     | { type: "bucket-delete-failed"; bucketId: string; message: string }
-    | { type: "deletion-dismissed" };
+    | { type: "deletion-dismissed" }
+    | { type: "purge-bucket-clicked"; bucketId: string }
+    | exportPurge.Action;
 
   export type Effect =
-    { type: "listen-to-scan" } | { type: "delete-bucket"; bucketId: string };
+    | { type: "listen-to-scan" }
+    | { type: "delete-bucket"; bucketId: string }
+    | exportPurge.Effect;
 }
 
 type State = storagePageReducer.State;
@@ -84,6 +98,7 @@ export const createInitialStoragePageState = (): State => ({
   unreadableRoots: {},
   scan: null,
   deletion: null,
+  purge: null,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
@@ -103,6 +118,7 @@ const rescan = (
   return {
     ...createInitialStoragePageState(),
     deletion: state.deletion,
+    purge: state.purge,
     scan: exec({ type: "listen-to-scan" }),
   };
 };
@@ -120,6 +136,7 @@ const deletionReducer = (
       if (state.status !== "complete") return state;
       if (deletion?.status === "confirming" || deletion?.status === "deleting")
         return state;
+      if (purgeIsBusy(state.purge)) return state;
       const row = storageRows(state).find(
         (r) => r.bucket.id === action.bucketId
       );
@@ -182,9 +199,45 @@ const deletionReducer = (
     case "root-unreadable":
     case "scan-completed":
     case "scan-failed":
-      // The scan's events: not the delete's.
+    case "purge-bucket-clicked":
+    case "purge-planned":
+    case "purge-confirmed":
+    case "purge-cancelled":
+    case "exports-purged":
+    case "purge-failed":
+    case "purge-dismissed":
+      // The scan's and the Purge's events: not the delete's.
       return null;
   }
+};
+
+/**
+ * The Purge half of the page (#2111): a Course's, Standalone Videos' or
+ * Shorts' Exported Videos, one bucket at a time, never during a delete.
+ */
+const purgeReducer = (
+  state: State,
+  action: Action,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State | null => {
+  if (action.type === "purge-bucket-clicked") {
+    // Offered once the count is complete, on a bucket with Exported Videos.
+    if (state.status !== "complete") return state;
+    if (
+      state.deletion?.status === "confirming" ||
+      state.deletion?.status === "deleting"
+    )
+      return state;
+    const row = storageRows(state).find((r) => r.bucket.id === action.bucketId);
+    if (!row || !rowCanBePurged(row)) return state;
+    const purge = startPurge(state.purge, row.bucket, null, exec);
+    return purge === null ? state : { ...state, purge };
+  }
+  if (!isExportPurgeAction(action)) return null;
+  const next = purgeTransition(state.purge, action, exec);
+  if (next.purge === state.purge) return state;
+  const after = { ...state, purge: next.purge };
+  return next.purged ? rescan(after, exec) : after;
 };
 
 export const storagePageReducer: EffectReducer<State, Action, Effect> = (
@@ -194,6 +247,8 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
 ) => {
   const afterDeletion = deletionReducer(state, action, exec);
   if (afterDeletion !== null) return afterDeletion;
+  const afterPurge = purgeReducer(state, action, exec);
+  if (afterPurge !== null) return afterPurge;
   // A message after the scan has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "scanning") return state;
@@ -256,7 +311,14 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
     case "bucket-deleted":
     case "bucket-delete-failed":
     case "deletion-dismissed":
-      // The delete's events, handled above.
+    case "purge-bucket-clicked":
+    case "purge-planned":
+    case "purge-confirmed":
+    case "purge-cancelled":
+    case "exports-purged":
+    case "purge-failed":
+    case "purge-dismissed":
+      // The delete's and the Purge's events, handled above.
       return state;
   }
 };
@@ -300,6 +362,13 @@ export const storageRows = (state: State): StorageRow[] =>
         b.totalBytes - a.totalBytes ||
         a.bucket.name.localeCompare(b.bucket.name)
     );
+
+/**
+ * Whether the row offers "Delete Exported Videos": a Course's, Standalone
+ * Videos' or Shorts' bucket that has any.
+ */
+export const rowCanBePurged = (row: StorageRow): boolean =>
+  bucketCanBePurged(row.bucket) && row.bytes["exported-videos"] > 0;
 
 /**
  * The columns: each Storage Root in order, then any other folder CVM writes
