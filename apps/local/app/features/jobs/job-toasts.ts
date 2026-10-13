@@ -64,10 +64,17 @@ export function showJobSucceededToast(
         action: youtubeVideoId
           ? {
               label: "Copy YouTube Studio Link",
-              onClick: () =>
-                navigator.clipboard.writeText(
-                  `https://studio.youtube.com/video/${youtubeVideoId}/edit`
-                ),
+              onClick: () => {
+                // Nothing waits on a toast button, so the copy reports its
+                // own failure rather than reject unheard.
+                navigator.clipboard
+                  .writeText(
+                    `https://studio.youtube.com/video/${youtubeVideoId}/edit`
+                  )
+                  .catch(() => {
+                    toast.error("Failed to copy YouTube Studio link");
+                  });
+              },
             }
           : undefined,
         cancel: goTo("Go to Post", `/videos/${decided.videoId}/post`),

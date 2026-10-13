@@ -99,6 +99,7 @@
         "apps/local/app/cli/**",
         "apps/local/recorder-service/**",
         "apps/local/app/routes/**/*.ts",
+        "apps/local/app/features/jobs/**",
         "apps/remote/**",
         "packages/**",
         ".sandcastle/**",
