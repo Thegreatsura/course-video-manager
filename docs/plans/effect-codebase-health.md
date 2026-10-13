@@ -193,6 +193,13 @@ The two promise rules ratchet per directory with `overrides`, for example once
 >   mostly React event handlers. Each of those needs a judgement on whether
 >   the handler should await, so that work is left for a per-directory pass
 >   rather than a mass `void`.
+> - **Per-directory pass 1 (2026-10-13): `features/jobs/**` promoted.** Its
+>   one hit was the YouTube upload toast's "Copy YouTube Studio Link" button,
+>   which handed the `writeText` promise to sonner's void `onClick`. It now
+>   `.catch`es and says "Failed to copy YouTube Studio link", the same
+>   handled-in-the-handler shape as `toast.tsx`'s Copy button, with a test.
+>   Re-measured: 113 / 80 warnings (193). Next smallest: `features/pitches`
+>   1, `features/publish` 1, `hooks` 3 (`features/animatic` 3 too).
 
 **Phase 3 — custom guards.** Add `scripts/check-effect-boundaries.sh` in the
 style of the existing guards.
