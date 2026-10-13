@@ -4,7 +4,7 @@ import { FileSystem } from "@effect/platform";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { CloudinaryMarkdownService } from "@/services/cloudinary-markdown-service";
-import { getVideoFilePath } from "@/services/video-files";
+import { videoFilesDirectory } from "@/services/video-files";
 import { removeUnderBestEffort } from "@/services/remove-best-effort";
 import {
   IMAGE_UPLOADED_EVENT,
@@ -60,7 +60,7 @@ const videoFolder = (videoId: string) =>
   Effect.gen(function* () {
     const videoOps = yield* VideoOperationsService;
     const video = yield* videoOps.getVideoDeepById(videoId);
-    return path.resolve(getVideoFilePath(video.lineageId));
+    return path.resolve(videoFilesDirectory(video.lineageId));
   });
 
 /**

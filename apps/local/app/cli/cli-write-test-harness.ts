@@ -77,30 +77,37 @@ export interface CliVideo {
 export const videoObj = (stdout: string): CliVideo => one<CliVideo>(stdout);
 
 /**
- * Point VIDEO_FILES_DIR at a fresh temp directory for the duration of a suite.
+ * Point STORAGE_ROOTS at a fresh temp Storage Root for the duration of a
+ * suite; `dir` is its `video-files/`, where Video Files are written. The
+ * legacy store (VIDEO_FILES_DIR) is pointed at an empty folder beside it.
  *
  * `buildProgram` provides the REAL FileSystem, so without this any test that
- * exercises `cvm file` would write into the repo's own ./video-files.
+ * exercises `cvm file` would write into the author's real store.
  */
 export const makeTempVideoFilesDir = (): {
   readonly dir: string;
   readonly cleanup: () => void;
 } => {
-  const previous = process.env.VIDEO_FILES_DIR;
-  const dir = nodeFs.mkdtempSync(
+  const previousRoots = process.env.STORAGE_ROOTS;
+  const previousLegacy = process.env.VIDEO_FILES_DIR;
+  const root = nodeFs.mkdtempSync(
     nodePath.join(os.tmpdir(), "cvm-video-files-")
   );
-  process.env.VIDEO_FILES_DIR = dir;
+  const dir = nodePath.join(root, "video-files");
+  nodeFs.mkdirSync(dir);
+  process.env.STORAGE_ROOTS = root;
+  process.env.VIDEO_FILES_DIR = nodePath.join(root, "legacy-video-files");
 
+  const restore = (key: string, previous: string | undefined) => {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  };
   return {
     dir,
     cleanup: () => {
-      nodeFs.rmSync(dir, { recursive: true, force: true });
-      if (previous === undefined) {
-        delete process.env.VIDEO_FILES_DIR;
-      } else {
-        process.env.VIDEO_FILES_DIR = previous;
-      }
+      nodeFs.rmSync(root, { recursive: true, force: true });
+      restore("STORAGE_ROOTS", previousRoots);
+      restore("VIDEO_FILES_DIR", previousLegacy);
     },
   };
 };

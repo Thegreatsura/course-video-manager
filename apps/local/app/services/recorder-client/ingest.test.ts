@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import nodeFs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
+import { resolveStoragePath } from "@/packages/storage/server";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { SidecarContextTest } from "@/services/sidecar-context";
@@ -77,7 +81,9 @@ const recorderIngest = (
   };
 };
 
-const started = (videoId: string): RecordingSessionEvent => ({
+const started = (
+  videoId: string
+): Extract<RecordingSessionEvent, { type: "recording-started" }> => ({
   type: "recording-started",
   seq: 1,
   recordingSessionId: SESSION,
@@ -338,6 +344,46 @@ describe("recorder ingest", () => {
       "Camera",
       "Code",
     ]);
+  });
+
+  it("stores a Recording Session in raw-footage/ relative to its Storage Root, found there through the resolver", async () => {
+    const root = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), "ingest-root-"));
+    const previous = process.env.STORAGE_ROOTS;
+    process.env.STORAGE_ROOTS = root;
+    try {
+      // Where the recorder service puts it: a folder of its own under the
+      // first root's raw-footage/ (recordingFolder()).
+      const folder = nodePath.join(root, "raw-footage", "2026-10-13 11111111");
+      nodeFs.mkdirSync(folder, { recursive: true });
+      const files = {
+        camera: nodePath.join(folder, "camera.mkv"),
+        screen: nodePath.join(folder, "screen.mkv"),
+        mic: nodePath.join(folder, "mic.mkv"),
+      };
+      for (const file of Object.values(files)) nodeFs.writeFileSync(file, "");
+      const video = await clipService.createVideo("CVM recorder");
+
+      await recorderIngest().feed({ ...started(video.id), files });
+
+      const row = await testDb.query.recordingSessions.findFirst({
+        where: eq(recordingSessions.id, SESSION),
+      });
+      expect(row).toMatchObject({
+        cameraFilePath: "raw-footage/2026-10-13 11111111/camera.mkv",
+        screenFilePath: "raw-footage/2026-10-13 11111111/screen.mkv",
+        micFilePath: "raw-footage/2026-10-13 11111111/mic.mkv",
+      });
+      expect(
+        await Effect.runPromise(
+          resolveStoragePath(row!.micFilePath, [root], "Footage").pipe(
+            Effect.provide(NodeContext.layer)
+          )
+        )
+      ).toBe(files.mic);
+    } finally {
+      process.env.STORAGE_ROOTS = previous;
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("hands the editor each saved Clip with its Recording Session, to play as the composite", async () => {

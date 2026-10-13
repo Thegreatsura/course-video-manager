@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { OpenFolderService } from "@/services/open-folder-service";
 import { makeAction } from "@/services/route-action.server";
-import { getVideoFilePath } from "@/services/video-files";
+import { videoFilesDirectory } from "@/services/video-files";
 import path from "node:path";
 
 export const action = makeAction({
@@ -14,7 +14,7 @@ export const action = makeAction({
 
       const video = yield* videoOps.getVideoDeepById(params.videoId!);
 
-      const folderPath = path.resolve(getVideoFilePath(video.lineageId));
+      const folderPath = path.resolve(videoFilesDirectory(video.lineageId));
       yield* openFolder.openInExplorer(folderPath);
 
       return { success: true };

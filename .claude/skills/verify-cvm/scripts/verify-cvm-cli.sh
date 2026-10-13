@@ -33,10 +33,12 @@ LEDGER_APP_API=cvm-verify-api
 # a symlink to /mnt/d/raw-footage, and a test that seeded files there with
 # `truncate -s` resized 51 real takes. A Clip whose Footage is not in scratch/
 # is "not found" on a clone; that is the price of never reaching a real drive.
+# (A second, "read-only" footage-root/ holding the same link is no safer: a
+# link is writable through, so there is no second root either.)
 # Both assertions below are refusals, not warnings: the run does not start.
 SCRATCH_DIRS=(raw-footage finished-videos clip-mockups overlay-renders
               video-files diagram-thumbnails obs-recordings dropbox)
-STORAGE_FOLDER_NAMES=(raw-footage finished-videos clip-mockups overlay-renders)
+STORAGE_FOLDER_NAMES=(raw-footage finished-videos clip-mockups overlay-renders video-files)
 
 # path_inside <real dir> <real path> — true when the path is the dir or under it.
 path_inside() { case "$2/" in "$1"/*) return 0 ;; *) return 1 ;; esac; }
