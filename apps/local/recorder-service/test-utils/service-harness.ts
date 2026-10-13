@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,11 +47,50 @@ afterEach(async () => {
 
 export const tmp = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-service-"));
-  // Retried: a Recording Session's ffmpeg log may still be flushing into it.
-  cleanups.push(async () =>
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
-  );
+  // Not retried: the service closes every file before its close resolves,
+  // so one still being written here is a bug to see.
+  cleanups.push(async () => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
+};
+
+/**
+ * Holds every thread of libuv's threadpool, where Node opens and writes
+ * files, until `release`: each thread blocks opening a FIFO's read end. Any
+ * file write queued meanwhile waits, so a test can see whether the service
+ * waited for one. Released before the service closes, which waits for its
+ * writes.
+ */
+export const holdThreadpool = () => {
+  const dir = tmp();
+  // libuv's default size; the tests never change it.
+  const fifos = Array.from({ length: 4 }, (_, i) => {
+    const fifo = path.join(dir, `hold-${i}`);
+    execFileSync("mkfifo", [fifo]);
+    fs.open(fifo, "r", (error, fd) => {
+      if (!error) fs.closeSync(fd);
+    });
+    return fifo;
+  });
+  let released: Promise<void> | undefined;
+  /** Opens each FIFO's write end, once its reader is waiting, freeing that thread. */
+  const release = () =>
+    (released ??= (async () => {
+      for (const fifo of fifos) {
+        for (;;) {
+          try {
+            const flags = fs.constants.O_WRONLY | fs.constants.O_NONBLOCK;
+            fs.closeSync(fs.openSync(fifo, flags));
+            break;
+          } catch (e) {
+            // ENXIO: its reader has not reached the open yet.
+            if ((e as NodeJS.ErrnoException).code !== "ENXIO") throw e;
+            await new Promise((r) => setImmediate(r));
+          }
+        }
+      }
+    })());
+  cleanups.unshift(release);
+  return { release };
 };
 
 /** The Windows wall clock the service reads; tests move it on. */
