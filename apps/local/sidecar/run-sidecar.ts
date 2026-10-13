@@ -1,3 +1,5 @@
+// First, before any module that reads the environment is evaluated.
+import "./load-repo-env";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -89,11 +91,7 @@ const refusal = (): string | undefined => {
 };
 
 const main = async (): Promise<void> => {
-  // The repo-root .env, as the app reads it. A variable already set wins
-  // (verify-cvm sets DATABASE_URL to its clone and this never overrides it).
-  const envFile = path.join(CHECKOUT, ".env");
-  if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
-
+  // The repo-root .env is already loaded: `./load-repo-env`, imported first.
   const refused = refusal();
   if (refused) {
     say(`not started: ${refused}`);
