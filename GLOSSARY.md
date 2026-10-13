@@ -274,8 +274,12 @@ The **Storage Bucket** of **Footage** used by **Clips** in more than one **Cours
 _Avoid_: Common footage, Reused footage
 
 **Unused Footage**:
-The **Storage Bucket** of **Footage** under `raw-footage/` that no **Clip** and no **Recording Session** uses. It can be moved between **Storage Roots**, but never deleted, like all Footage (ADR 0041).
+The **Storage Bucket** of **Footage** under `raw-footage/` that no **Clip**, live or archived, in any **Video** uses. A **Recording Session** no Clip uses is Unused only once it has stopped and is at least 7 days old. It can be moved between **Storage Roots**, and it is the only Footage that can be deleted: first to the **Trash**, and only files at least 7 days old that no **AV Calibration** or Video names (ADR 0043).
 _Avoid_: Orphaned footage, Unreferenced footage, Dead footage
+
+**Trash**:
+The `.cvm-trash/` folder at the top of each **Storage Root**, where deleted **Unused Footage** goes first. A file is renamed into it on its own Storage Root (never copied to another drive), can be put back where it was (Restore) for 14 days, and is then deleted for good; "Empty trash" deletes it all at once (ADR 0043). Nothing else on the Storage page goes to the Trash: everything else it deletes can be made again.
+_Avoid_: Recycle bin, Bin, Deleted footage
 
 ### Recording
 

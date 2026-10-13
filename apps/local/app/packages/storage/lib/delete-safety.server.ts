@@ -1,6 +1,6 @@
 import nodeFs from "node:fs/promises";
 import path from "node:path";
-import { and, inArray } from "drizzle-orm";
+import { and, inArray, ne } from "drizzle-orm";
 import { jobs } from "@cvm/core/db/schema";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
 import { assertUnder } from "@/services/assert-under";
@@ -34,17 +34,23 @@ export const ENCODING_JOB_KINDS = [
 export const STORAGE_BUSY_JOB_KINDS = [
   ...ENCODING_JOB_KINDS,
   "storage-move",
+  // A delete Job (#2157): never two deletes, or a delete and a move, at once.
+  "storage-delete",
 ] as const;
 
-/** Every encoding Job or Storage move that is queued or running, oldest first. */
-export const encodingJobs = (db: Database) =>
+/**
+ * Every encoding Job, Storage move or delete Job that is queued or running,
+ * other than `selfJobId` (the delete Job asking).
+ */
+export const encodingJobs = (db: Database, selfJobId?: string | null) =>
   db
     .select({ kind: jobs.kind, title: jobs.title })
     .from(jobs)
     .where(
       and(
         inArray(jobs.kind, [...STORAGE_BUSY_JOB_KINDS]),
-        inArray(jobs.status, ["queued", "running"])
+        inArray(jobs.status, ["queued", "running"]),
+        selfJobId ? ne(jobs.id, selfJobId) : undefined
       )
     );
 
@@ -52,8 +58,14 @@ export const encodingJobs = (db: Database) =>
 export const encodingRefusalMessage = (
   encoding: readonly { kind: string; title: string }[]
 ) => {
-  const what = encoding[0]!.kind === "storage-move" ? "a move" : "an export";
-  return `Not deleted: ${encoding.length === 1 ? `${what} is` : `${encoding.length} exports or moves are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
+  const kind = encoding[0]!.kind;
+  const what =
+    kind === "storage-move"
+      ? "a move"
+      : kind === "storage-delete"
+        ? "a delete"
+        : "an export";
+  return `Not deleted: ${encoding.length === 1 ? `${what} is` : `${encoding.length} exports, moves or deletes are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
 };
 
 /** "Not deleted: a move is being started…": the in-process write hold. */

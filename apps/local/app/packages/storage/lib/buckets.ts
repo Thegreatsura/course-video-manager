@@ -5,8 +5,9 @@ import { rootRelativePath, STORAGE_FOLDERS } from "./storage-roots";
  * A Storage Bucket: the unit the Storage page counts (and later moves) space
  * in. Each Course; Standalone Videos; Shorts; Shared Footage (Footage used by
  * more than one Course's Clips, listing those Courses); Unused
- * Footage (Footage under `raw-footage/` no Clip and no Recording Session uses);
- * and the Other buckets.
+ * Footage (Footage under `raw-footage/` no Clip, live or archived, uses, and
+ * no Recording Session still recording or under 7 days old); and the Other
+ * buckets.
  */
 export type StorageBucketKind =
   | "course"
@@ -102,6 +103,13 @@ export type StorageOwnershipInput = {
     /** A Recording Session's camera, screen or mic file. */
     recordingSession?: boolean;
   }[];
+  /**
+   * Stored paths no Clip uses that are still never Unused Footage to delete:
+   * an AV Calibration's files, a Video's original footage path. They are
+   * counted where the scan finds them (Unused Footage, under `raw-footage/`),
+   * but moving them to the trash is refused.
+   */
+  readonly keptFootage?: readonly string[];
 };
 
 export type StorageOwnership = {
@@ -118,6 +126,8 @@ export type StorageOwnership = {
    * move asks about before it starts (a running export, a recording).
    */
   readonly videosByBucket: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Root-relative paths that are never moved to the trash (`keptFootage`). */
+  readonly keptFootage: ReadonlySet<string>;
 };
 
 /**
@@ -228,6 +238,11 @@ export const assignStorageBuckets = (
     exports,
     recordingSessionFootage,
     videosByBucket,
+    keptFootage: new Set(
+      (input.keptFootage ?? [])
+        .map((stored) => rootRelativePath(stored, roots))
+        .filter((r): r is string => r !== null)
+    ),
   };
 };
 
