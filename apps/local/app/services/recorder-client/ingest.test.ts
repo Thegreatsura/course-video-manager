@@ -217,8 +217,8 @@ describe("recorder ingest", () => {
     expect(ingest.messages.map((m) => m.type)).toEqual([
       "recording-started",
       "speech-started",
-      "speech-ended",
       "clips-saved",
+      "speech-ended",
       "recording-stopped",
     ]);
   });

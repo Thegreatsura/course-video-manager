@@ -357,6 +357,12 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
   });
   const speechEnded = heard({ type: "speech-ended", recordingSessionId: "s1" });
   const warmedUp = heard({ type: "warmed-up", recordingSessionId: "s1" });
+  const longEnough = (speechCount: number) =>
+    ({
+      type: "speech-long-enough",
+      speechCount,
+      recordingSessionId: "s1",
+    }) as const;
 
   it("walks the OBS path's states: warming up, silence, speaking, long enough for a Clip, silence", () => {
     const t = tester().send(status()).send(live);
@@ -384,12 +390,19 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
     expect(t.getEffects().at(-1)).toEqual({
       type: "time-speech",
       speechCount: 1,
+      recordingSessionId: "s1",
     });
 
-    t.send({ type: "speech-long-enough", speechCount: 1 });
+    t.send(longEnough(1));
     expect(captureOf(t.getState())).toBe(
       "long-enough-speaking-for-clip-detected"
     );
+    // The speech is a take now: the clip reducer shows its Optimistic Clip.
+    expect(t.getEffects().at(-1)).toEqual({
+      type: "start-take",
+      recordingSessionId: "s1",
+      soundDetectionId: "cvm-recorder-speech-1",
+    });
 
     t.send(speechEnded);
     expect(captureOf(t.getState())).toBe("silence");
@@ -406,12 +419,12 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
       .send(warmedUp)
       .send(speechStarted)
       .send(speechEnded)
-      .send({ type: "speech-long-enough", speechCount: 1 });
+      .send(longEnough(1));
     expect(captureOf(t.getState())).toBe("silence");
 
-    t.send(speechStarted).send({ type: "speech-long-enough", speechCount: 1 });
+    t.send(speechStarted).send(longEnough(1));
     expect(captureOf(t.getState())).toBe("speaking-detected");
-    t.send({ type: "speech-long-enough", speechCount: 2 });
+    t.send(longEnough(2));
     expect(captureOf(t.getState())).toBe(
       "long-enough-speaking-for-clip-detected"
     );

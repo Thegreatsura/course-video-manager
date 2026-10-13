@@ -29,7 +29,8 @@ describe("clipStateReducer", () => {
       const newState = clipStateReducer(
         createInitialState(),
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
         }),
         reportEffect
@@ -89,7 +90,8 @@ describe("clipStateReducer", () => {
       const stateWithOneOptimisticClip = clipStateReducer(
         createInitialState(),
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
         }),
         reportEffect1
@@ -134,7 +136,8 @@ describe("clipStateReducer", () => {
       const stateWithOneOptimisticClip = clipStateReducer(
         createInitialState(),
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           scene: "Camera",
           profile: "Landscape",
           soundDetectionId: "sound-1",
@@ -145,7 +148,8 @@ describe("clipStateReducer", () => {
       const stateWithTwoOptimisticClips = clipStateReducer(
         stateWithOneOptimisticClip,
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           scene: "No Face",
           profile: "Portrait",
           soundDetectionId: "sound-2",
@@ -226,40 +230,13 @@ describe("clipStateReducer", () => {
   });
 
   describe("Archiving Optimistically Added Clips", () => {
-    it("Should archive an optimistically added clip when it is deleted", () => {
-      const reportEffect = createMockExec();
-      const stateWithOneOptimisticClip = clipStateReducer(
-        createInitialState(),
-        fromPartial({
-          type: "new-optimistic-clip-detected",
-          soundDetectionId: "sound-1",
-        }),
-        reportEffect
-      );
-
-      const optimisticClipId = stateWithOneOptimisticClip.items[0]!.frontendId;
-
-      const stateWithOneOptimisticClipDeleted = clipStateReducer(
-        stateWithOneOptimisticClip,
-        fromPartial({
-          type: "clips-deleted",
-          clipIds: [optimisticClipId],
-        }),
-        reportEffect
-      );
-
-      expect(stateWithOneOptimisticClipDeleted.items[0]).toMatchObject({
-        type: "optimistically-added",
-        shouldArchive: true,
-      });
-    });
-
     it("Archived optimistic clips are converted to ClipOnDatabase with shouldArchive: true when DB clip arrives", () => {
       const mockExec1 = createMockExec();
       const stateWithOneOptimisticClip = clipStateReducer(
         createInitialState(),
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
         }),
         mockExec1
@@ -324,7 +301,8 @@ describe("clipStateReducer", () => {
       const stateWithOneOptimisticClip = clipStateReducer(
         createInitialState(),
         fromPartial({
-          type: "new-optimistic-clip-detected",
+          type: "take-started",
+          at: 0,
           soundDetectionId: "sound-1",
           scene: "Camera",
           profile: "TikTok",
@@ -423,7 +401,8 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "new-optimistic-clip-detected",
+            type: "take-started",
+            at: 0,
             soundDetectionId: "sound-1",
           })
         )

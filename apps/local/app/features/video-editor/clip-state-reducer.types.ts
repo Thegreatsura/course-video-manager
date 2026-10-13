@@ -95,11 +95,16 @@ export type ClipOnDatabase = {
   sessionId?: SessionId;
 };
 
+/**
+ * The Optimistic Clip of a Take in progress (`clip-state-reducer-take.ts`),
+ * on either Recorder, until its saved Clip fills it in.
+ */
 export type ClipOptimisticallyAdded = {
   type: "optimistically-added";
   frontendId: FrontendId;
-  scene: string;
-  profile: string;
+  /** OBS's scene and profile, stamped on the saved Clip; null on the CVM recorder. */
+  scene: string | null;
+  profile: string | null;
   /**
    * An integer, incremented each time a new optimistically added clip is added.
    * Used to determine which clips should be paired with which database clips,
@@ -220,7 +225,7 @@ export type RecordingSession = {
   silenceThresholdDb?: number;
   /**
    * A CVM recorder Recording Session: its id is the recorder's, and its
-   * Clips arrive saved (`clips-saved`), never optimistically.
+   * Clips arrive saved (`clips-saved`) to fill in its takes.
    */
   cvmRecorder?: true;
 };
@@ -302,7 +307,8 @@ export type ClipReducerState = {
   } | null;
   /**
    * The optimistic clip currently being recorded (set when speech is detected,
-   * cleared when its audio window closes). While set, the effective visible URL
+   * cleared when its audio window closes or its take is saved or ends). While
+   * set, the effective visible URL
    * from each `browser-event` is accumulated into that clip's `pendingWebLinks`.
    */
   recordingClipFrontendId?: FrontendId | null;
@@ -333,10 +339,19 @@ export type ClipReducerAction =
       sessionId: SessionId;
     }
   | {
-      type: "new-optimistic-clip-detected";
-      scene: string;
-      profile: string;
+      /**
+       * A Recorder heard enough speech for a Clip: a Take started
+       * (`clip-state-reducer-take.ts`). OBS's browser detector, or the CVM
+       * recorder's `speech-started` held for the minimum Clip length.
+       */
+      type: "take-started";
       soundDetectionId: string;
+      /** OBS's scene and profile, stamped on the saved Clip; null on the CVM recorder. */
+      scene: string | null;
+      profile: string | null;
+      /** The CVM recorder's Recording Session; absent on OBS. */
+      recordingSessionId?: string;
+      at: number;
     }
   | {
       type: "browser-event";
