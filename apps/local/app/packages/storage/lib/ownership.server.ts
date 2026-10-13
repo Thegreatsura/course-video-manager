@@ -47,7 +47,7 @@ export const loadStorageOwnership = (
           .from(recordingSessions),
       ]);
 
-      const footageUses: { stored: string; videoId: string | null }[] = [];
+      const footageUses: StorageOwnershipInput["footageUses"][number][] = [];
       const sessionFiles = new Map(
         sessionRows.map((s) => [s.id, [s.camera, s.screen, s.mic]] as const)
       );
@@ -57,14 +57,22 @@ export const loadStorageOwnership = (
         if (clip.recordingSessionId === null) continue;
         sessionsWithClips.add(clip.recordingSessionId);
         for (const stored of sessionFiles.get(clip.recordingSessionId) ?? []) {
-          footageUses.push({ stored, videoId: clip.videoId });
+          footageUses.push({
+            stored,
+            videoId: clip.videoId,
+            recordingSession: true,
+          });
         }
       }
       // A Recording Session no Clip points at still uses its files.
       for (const session of sessionRows) {
         if (sessionsWithClips.has(session.id)) continue;
         for (const stored of [session.camera, session.screen, session.mic]) {
-          footageUses.push({ stored, videoId: session.videoId });
+          footageUses.push({
+            stored,
+            videoId: session.videoId,
+            recordingSession: true,
+          });
         }
       }
 

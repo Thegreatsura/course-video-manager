@@ -1,4 +1,5 @@
 import { AlertTriangle, HardDrive, Loader2 } from "lucide-react";
+import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import {
   driveWarnings,
@@ -25,7 +26,7 @@ const KINDS: { kind: StorageFileKind; label: string }[] = [
 /**
  * The Storage page (#2107): each Storage Root with its free space, then one
  * row per Storage Bucket, largest first, split into Footage and Exported
- * Videos per root. Read-only. Counted fresh on every visit and streamed in;
+ * Videos per root. Each bucket's name opens its per-bucket page. Read-only. Counted fresh on every visit and streamed in;
  * leaving the page stops the scan.
  */
 export default function StoragePage() {
@@ -179,7 +180,13 @@ function BucketRow({
   return (
     <tr className="border-b align-top" data-testid="storage-row">
       <td className="py-2 pr-4">
-        <div className="font-medium">{row.bucket.name}</div>
+        <Link
+          to={`/storage/${encodeURIComponent(row.bucket.id)}`}
+          className="font-medium hover:underline"
+          data-testid="storage-bucket-link"
+        >
+          {row.bucket.name}
+        </Link>
         {row.bucket.sharedBy && row.bucket.sharedBy.length > 0 && (
           <div className="text-xs text-muted-foreground">
             Used by {row.bucket.sharedBy.join(", ")}

@@ -19,6 +19,11 @@
       "file": "apps/local/app/routes/api.storage.scan.ts",
       "count": 1,
       "reason": "Live, not background work: the Storage page's scan (#2107, spec #2103 decision 6). It is read-only, counted fresh for the person watching the page, and must stop when the tab goes (a scan must never keep reading a slow USB drive in the background): the opposite of a Job. Moves are Jobs; this is not."
+    },
+    {
+      "file": "apps/local/app/routes/api.storage.buckets.$bucketId.files.ts",
+      "count": 1,
+      "reason": "Live, not background work: the per-bucket page's listing (#2108), the Storage page's read-only walk kept to one Storage Bucket. It is for the person watching the page and must stop when the tab goes, like the scan: the opposite of a Job."
     }
   ],
   "browser-driver": [
@@ -51,6 +56,11 @@
       "file": "apps/local/app/features/storage/use-storage-page.ts",
       "count": 1,
       "reason": "Live, not background work: the Storage page listens to its read-only scan while open, and closing the stream is what stops the walk (#2107). Stays."
+    },
+    {
+      "file": "apps/local/app/features/storage/use-bucket-page.ts",
+      "count": 1,
+      "reason": "Live, not background work: the per-bucket page listens to its read-only listing while open, and closing the stream is what stops the walk (#2108). Stays."
     }
   ],
   "spawn": [

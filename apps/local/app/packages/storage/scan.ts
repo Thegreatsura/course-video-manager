@@ -5,10 +5,17 @@
 // root's CVM folders (and export scratch), streaming per-bucket, per-root,
 // per-kind byte totals as it counts. It only reads, and saves nothing.
 // Interrupting it — the page closing its SSE stream — stops the walk.
+// `streamStorageBucketFiles` is the same walk kept to one Storage Bucket, for
+// the per-bucket page: file by file, with the root(s) each is on.
 export {
   StorageOwnershipLoadError,
   loadStorageOwnership,
 } from "./lib/ownership.server";
-export { scanStorageFolders, streamStorageScan } from "./lib/scan.server";
+export {
+  StorageBucketNotFoundError,
+  scanStorageFolders,
+  streamStorageBucketFiles,
+  streamStorageScan,
+} from "./lib/scan.server";
 export { windowsDirtyBitReader } from "./lib/dirty-bit.server";
 export type { DirtyBitReader } from "./lib/dirty-bit";

@@ -32,7 +32,9 @@ export namespace storagePageReducer {
   };
 
   export type Action =
-    StorageScanMessage | { type: "scan-failed"; message: string };
+    | StorageScanMessage
+    | { type: "page-opened" }
+    | { type: "scan-failed"; message: string };
 
   export type Effect = { type: "listen-to-scan" };
 }
@@ -47,16 +49,19 @@ const NO_BYTES: storagePageReducer.KindBytes = {
   other: 0,
 };
 
-export const createInitialStoragePageState = (
-  exec: (effect: Effect) => EffectEntity<State, Action>
-): State => ({
+/**
+ * The page starts listening on `page-opened`, not here: a listener started
+ * from the initial state is stopped by React Strict Mode's mount → unmount →
+ * mount (client-side navigation in dev) and never started again.
+ */
+export const createInitialStoragePageState = (): State => ({
   status: "scanning",
   failure: null,
   roots: null,
   buckets: {},
   totals: {},
   unreadableRoots: {},
-  scan: exec({ type: "listen-to-scan" }),
+  scan: null,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
@@ -76,6 +81,10 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
   // reporting the closed stream) changes nothing.
   if (state.status !== "scanning") return state;
   switch (action.type) {
+    case "page-opened":
+      // Opened again (Strict Mode remounts): one listener, the newest.
+      stopScan(state, exec);
+      return { ...state, scan: exec({ type: "listen-to-scan" }) };
     case "roots-measured":
       return { ...state, roots: action.roots };
     case "buckets-listed":

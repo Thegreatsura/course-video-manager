@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import {
   STORAGE_SCAN_MESSAGE_TYPES,
@@ -41,8 +42,20 @@ const listenToScan = (
   };
 };
 
-/** The effect runner for `storagePageReducer`. */
-export const useStoragePage = () =>
-  useEffectReducer(storagePageReducer, createInitialStoragePageState, {
-    "listen-to-scan": (_state, _effect, dispatch) => listenToScan(dispatch),
-  });
+/**
+ * The effect runner for `storagePageReducer`, and the bridge that tells it
+ * the page has opened.
+ */
+export const useStoragePage = () => {
+  const [state, dispatch] = useEffectReducer(
+    storagePageReducer,
+    createInitialStoragePageState(),
+    {
+      "listen-to-scan": (_state, _effect, dispatch) => listenToScan(dispatch),
+    }
+  );
+  useEffect(() => {
+    dispatch({ type: "page-opened" });
+  }, [dispatch]);
+  return [state, dispatch] as const;
+};
