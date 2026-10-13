@@ -14,6 +14,11 @@
       "file": "apps/local/app/routes/api.av-calibration.meter.ts",
       "count": 1,
       "reason": "Live, not background work: the AV Calibration page's level meter (#2078). Listening is what runs the recorder service's mic-only ffmpeg.exe, and the last listener going stops it, so it must end with the tab, the opposite of a Job. Stays."
+    },
+    {
+      "file": "apps/local/app/routes/api.storage.scan.ts",
+      "count": 1,
+      "reason": "Live, not background work: the Storage page's scan (#2107, spec #2103 decision 6). It is read-only, counted fresh for the person watching the page, and must stop when the tab goes (a scan must never keep reading a slow USB drive in the background): the opposite of a Job. Moves are Jobs; this is not."
     }
   ],
   "browser-driver": [
@@ -41,6 +46,11 @@
       "file": "apps/local/app/features/av-calibration/use-level-meter.ts",
       "count": 1,
       "reason": "Live, not background work: the AV Calibration page listens to the level meter while it is open (#2078). Closing the stream is what stops the meter and lets the mic go, so it must end with the tab, the opposite of a Job. Stays."
+    },
+    {
+      "file": "apps/local/app/features/storage/use-storage-page.ts",
+      "count": 1,
+      "reason": "Live, not background work: the Storage page listens to its read-only scan while open, and closing the stream is what stops the walk (#2107). Stays."
     }
   ],
   "spawn": [
