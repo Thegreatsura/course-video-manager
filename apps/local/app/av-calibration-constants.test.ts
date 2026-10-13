@@ -3,11 +3,13 @@ import {
   CALIBRATION_VALIDITY_MS,
   calibrationValidity,
   deriveThreshold,
+  describeCalibrationRefusal,
   describeClapMiss,
   judgeCalibration,
   MAX_CLAP_SPREAD_MS,
   MEASUREMENT_WINDOWS,
   passesCurrentRules,
+  RECORDER_CAMERA_NAME,
   runMeasurementWindows,
   runSchedule,
   SCRIPT_SCHEDULE,
@@ -172,6 +174,7 @@ const lastPassed: LastPassedCalibration = {
   thresholdDb: -43,
   recorderMic: MIC,
   browserInputLabel: MIC,
+  cameraDevice: "Cam Link 4K",
 };
 
 describe("whether a Recorder may start (the gate)", () => {
@@ -179,7 +182,20 @@ describe("whether a Recorder may start (the gate)", () => {
     [string, LastPassedCalibration | null, CurrentInputDevice, number, unknown]
   >([
     ["none yet", null, {}, AT, { kind: "none" }],
-    ["a minute old", lastPassed, { recorderMic: MIC }, AT + 60_000, null],
+    [
+      "a minute old, on the same pair",
+      lastPassed,
+      { recorderMic: MIC, camera: "Cam Link 4K" },
+      AT + 60_000,
+      null,
+    ],
+    [
+      "the editor names the camera as the recorder is configured to find it",
+      { ...lastPassed, cameraDevice: "Elgato Cam Link 4K" },
+      { browserInputLabel: MIC, camera: RECORDER_CAMERA_NAME },
+      AT,
+      null,
+    ],
     [
       "a millisecond under 7 days",
       lastPassed,
@@ -207,6 +223,18 @@ describe("whether a Recorder may start (the gate)", () => {
       },
     ],
     [
+      "the camera changed",
+      lastPassed,
+      { recorderMic: MIC, camera: "Elgato Facecam" },
+      AT,
+      {
+        kind: "device-changed",
+        device: "camera",
+        from: "Cam Link 4K",
+        to: "Elgato Facecam",
+      },
+    ],
+    [
       "the browser has no mic open",
       lastPassed,
       { browserInputLabel: null },
@@ -223,6 +251,19 @@ describe("whether a Recorder may start (the gate)", () => {
             expiresAtMs: AT + CALIBRATION_VALIDITY_MS,
           }
         : { valid: false, reason }
+    );
+  });
+
+  it("names a changed camera in the refusal", () => {
+    expect(
+      describeCalibrationRefusal({
+        kind: "device-changed",
+        device: "camera",
+        from: "Cam Link 4K",
+        to: "Elgato Facecam",
+      })
+    ).toBe(
+      'Recording needs a fresh AV Calibration: The camera changed from "Cam Link 4K" to "Elgato Facecam" since the last one.'
     );
   });
 

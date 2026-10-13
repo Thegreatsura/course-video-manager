@@ -4,7 +4,7 @@ import { rootRelativePath, STORAGE_FOLDERS } from "./storage-roots";
 /**
  * A Storage Bucket: the unit the Storage page counts (and later moves) space
  * in. Each Course; Standalone Videos; Shorts; Shared Footage (Footage used by
- * more than one bucket's Clips, listing the Courses that use it); Unused
+ * more than one Course's Clips, listing those Courses); Unused
  * Footage (Footage under `raw-footage/` no Clip and no Recording Session uses);
  * and the Other buckets.
  */
@@ -23,7 +23,7 @@ export type StorageBucket = {
   readonly id: string;
   readonly kind: StorageBucketKind;
   readonly name: string;
-  /** Shared Footage only: the names of the buckets whose Clips share it. */
+  /** Shared Footage only: the names of the Courses whose Clips share it. */
   readonly sharedBy?: readonly string[];
 };
 
@@ -63,7 +63,7 @@ export const EXPORT_SCRATCH_BUCKET: StorageBucket = {
 export const ORPHANED_EXPORTS_BUCKET: StorageBucket = {
   id: "orphaned-exports",
   kind: "orphaned-exports",
-  name: "Orphaned exports",
+  name: "Exported Videos of no current Video",
 };
 const SHARED_FOOTAGE_ID = "shared-footage";
 
@@ -93,7 +93,7 @@ export type StorageOwnership = {
 
 /**
  * Assign every used Footage file and every current Exported Video to its
- * Storage Bucket. Footage whose users fall in more than one bucket goes to the
+ * Storage Bucket. Footage used by Clips in more than one Course goes to the
  * single Shared Footage bucket, so it is counted once and never moved out from
  * under another Course.
  */
@@ -135,15 +135,23 @@ export const assignStorageBuckets = (
     users.set(relative, set);
   }
 
+  // Shared Footage is Footage used by Clips in more than one Course. Used by
+  // one Course (and any Standalone Video or Short) it is that Course's; by no
+  // Course, it is Standalone Videos' (unless only Shorts use it).
   const footage = new Map<string, string>();
   const sharers = new Map<string, StorageBucket>();
   for (const [relative, set] of users) {
-    if (set.size === 1) {
+    const courses = [...set].filter((b) => b.kind === "course");
+    if (courses.length > 1) {
+      footage.set(relative, SHARED_FOOTAGE_ID);
+      for (const course of courses) sharers.set(course.id, course);
+    } else if (courses.length === 1) {
+      footage.set(relative, courses[0]!.id);
+    } else if (set.size === 1) {
       footage.set(relative, [...set][0]!.id);
-      continue;
+    } else {
+      footage.set(relative, STANDALONE_VIDEOS_BUCKET.id);
     }
-    footage.set(relative, SHARED_FOOTAGE_ID);
-    for (const bucket of set) sharers.set(bucket.id, bucket);
   }
 
   const sharedBy = [...sharers.values()]

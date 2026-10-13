@@ -2,10 +2,10 @@
 // wire format.
 //
 // A Storage Bucket is the unit the Storage page counts space in: each Course,
-// Standalone Videos, Shorts, Shared Footage (Footage more than one bucket's
-// Clips use), Unused Footage (Footage under `raw-footage/` no Clip and no
+// Standalone Videos, Shorts, Shared Footage (Footage Clips in more than one Course
+// use), Unused Footage (Footage under `raw-footage/` no Clip and no
 // Recording Session uses), and the Other buckets (Clip Mockups, the Overlay
-// Render Cache, export scratch, orphaned exports). The scan streams
+// Render Cache, export scratch, Exported Videos of no current Video). The scan streams
 // `StorageScanMessage`s; the page adds them up. Running the scan is
 // `./scan.ts`.
 export {

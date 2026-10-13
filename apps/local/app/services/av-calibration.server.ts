@@ -322,6 +322,7 @@ export const lastPassedCalibration = Effect.fn("lastPassedCalibration")(
           thresholdDb: row.thresholdDb,
           recorderMic: row.recorderMic,
           browserInputLabel: row.browserInputLabel,
+          cameraDevice: row.cameraDevice,
         } satisfies LastPassedCalibration)
       : null;
   }
@@ -391,9 +392,9 @@ export class AVCalibrationRequiredError extends Data.TaggedError(
 
 /**
  * THE GATE, on the app server: Record needs a calibration passed under
- * today's rules and less than 7 days old at `now`. The input device is the
- * recorder service's to check (it alone knows its mic), at the moment it
- * starts recording. Answers the calibration Record goes by.
+ * today's rules and less than 7 days old at `now`. The camera + mic pair is
+ * the recorder service's to check (it alone knows which pair it records), at
+ * the moment it starts recording. Answers the calibration Record goes by.
  */
 export const requireFreshAVCalibration = Effect.fn("requireFreshAVCalibration")(
   function* (db: Database, now: Date) {

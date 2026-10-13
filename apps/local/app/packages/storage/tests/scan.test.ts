@@ -144,7 +144,10 @@ describe("streamStorageScan", () => {
       lessonId: b.lessonId,
       footage: ["raw-footage/shared.mkv"],
     });
-    const standalone = await seedVideo({ footage: ["raw-footage/s.mkv"] });
+    // Also uses Course A's take: Footage of one Course stays that Course's.
+    const standalone = await seedVideo({
+      footage: ["raw-footage/s.mkv", "raw-footage/a.mkv"],
+    });
     const short = await seedVideo({
       format: "short",
       footage: ["raw-footage/short.mkv"],
