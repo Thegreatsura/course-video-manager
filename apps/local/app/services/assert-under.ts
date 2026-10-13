@@ -10,7 +10,7 @@ import { Data, Effect } from "effect";
  * that path still names Matt's real PNG, so a save that wrote straight to it
  * overwrote his file. Every write or delete of such a path goes through
  * `assertUnder` first, with the env-configured folder that kind of file lives
- * in (`VIDEO_FILES_DIR`, `CLIP_MOCKUP_DIR`, `FINISHED_VIDEOS_DIRECTORY`, …) —
+ * in (`VIDEO_FILES_DIR`, or a fixed folder under a Storage Root, …) —
  * the same folders verify-cvm points at its run's `scratch/`. A path outside
  * that folder is refused, so a clone can only ever touch its own scratch.
  *

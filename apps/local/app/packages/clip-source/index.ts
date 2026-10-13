@@ -28,6 +28,8 @@ export {
   clipSource,
   clipSourceColumns,
   clipSourceHashFields,
+  mapClipFrameFiles,
+  mapClipSourceFiles,
   type ClipComposite,
   type ClipFfmpegInput,
   type ClipFrame,

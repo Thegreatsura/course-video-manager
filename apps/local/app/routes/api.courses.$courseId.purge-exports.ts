@@ -1,5 +1,6 @@
-import { Config, Effect, Schema } from "effect";
-import { assertUnderEffect } from "@/services/assert-under";
+import { Effect, Schema } from "effect";
+import { assertUnderFinishedVideos } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { FileSystem } from "@effect/platform";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { makeAction } from "@/services/route-action.server";
@@ -21,16 +22,14 @@ export const action = makeAction({
       const publishService = yield* CoursePublishReadService;
 
       const videoIds = yield* versionOps.getVideoIdsForVersion(versionId);
-      const finishedVideosDir = yield* Config.string(
-        "FINISHED_VIDEOS_DIRECTORY"
-      );
+      const storageRoots = yield* storageRootsConfig;
 
       let deletedCount = 0;
       for (const videoId of videoIds) {
         const exportPath = yield* publishService.resolveExportPath(videoId);
         if (!exportPath) continue;
-        const videoPath = yield* assertUnderEffect(
-          finishedVideosDir,
+        const videoPath = yield* assertUnderFinishedVideos(
+          storageRoots,
           exportPath
         );
         const exists = yield* fs.exists(videoPath);

@@ -1,7 +1,7 @@
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { clipMockupAssetResponse } from "@/services/clip-mockup-asset-response.server";
-import { resolveClipMockupPath } from "@/services/clip-mockup-files";
+import { locateClipMockupFile } from "@/services/clip-mockup-files";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
 import { data } from "react-router";
@@ -11,7 +11,7 @@ import { data } from "react-router";
  * — the only way the browser can reach a Clip Mockup's frame or its speech.
  *
  * Both halves of the noun are served by ONE route because they are the same
- * lookup: the row names a path relative to `{CLIP_MOCKUP_DIR}/{lineageId}/`,
+ * lookup: the row names a path relative to `clip-mockups/{lineageId}/ on a Storage Root`,
  * and only the column differs. The client never names a path — it names a
  * Clip Mockup, and the server resolves the rest. That is what
  * `api.videos.$videoId.stream.ts` does and what `view-image.ts` (absolute path
@@ -59,7 +59,7 @@ export const loader = makeLoader({
       // `lineageId`, and the Animatic asks for sixty of these at once — a
       // four-level join per frame is sixty joins for one column (#1671).
       const video = yield* videoOps.getVideoRowById(mockup.videoId);
-      const absolutePath = yield* resolveClipMockupPath(
+      const absolutePath = yield* locateClipMockupFile(
         video.lineageId,
         relativePath
       );

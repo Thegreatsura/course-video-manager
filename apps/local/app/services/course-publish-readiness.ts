@@ -1,12 +1,13 @@
 import { isTodoLesson } from "@cvm/core/lib/authoring-status";
-import { Config, Effect } from "effect";
-import { FileSystem } from "@effect/platform";
+import { Effect, Option } from "effect";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import {
   computeExportHash,
-  resolveExportPath as resolveExportPathPure,
+  exportFilename,
   toExportClips,
 } from "./export-hash";
+import { findExportedVideo } from "./finished-videos.server";
+import { storageRootsConfig } from "./storage-roots";
 import { collectCourseViewLints } from "./lesson-warnings";
 import { collectLessonPublishStatuses } from "./course-publish-lesson-statuses";
 import {
@@ -28,7 +29,7 @@ import {
  *
  * Whether a Video is EXPORTED is filesystem-derived, never a DB column: its
  * Export Hash (clip filenames, timestamps, order + the Export Version Key) is
- * matched against `{courseId}-{exportHash}.mp4` in FINISHED_VIDEOS_DIRECTORY.
+ * matched against `{courseId}-{exportHash}.mp4` in finished-videos/ on any Storage Root.
  * An Unexported Video is one whose current hash matches no file on disk.
  *
  * THE FOUR LISTS DO NOT ALL BLOCK A PUBLISH, and callers must not treat them as
@@ -122,10 +123,7 @@ export const validateVersionPublishability = Effect.fn(
   version: VersionTree,
   placeholderFloor: PlaceholderFloor = ANNOUNCE_NOTHING
 ) {
-  const effectFs = yield* FileSystem.FileSystem;
-  const finishedVideosDirectory = yield* Config.string(
-    "FINISHED_VIDEOS_DIRECTORY"
-  );
+  const storageRoots = yield* storageRootsConfig;
 
   const courseId = version.repo.id;
 
@@ -148,15 +146,15 @@ export const validateVersionPublishability = Effect.fn(
         if (video.clips.length === 0) continue;
         const hash = computeExportHash(
           toExportClips(video.clips),
-          video.format
+          video.format,
+          storageRoots
         );
         if (!hash) continue;
-        const filePath = resolveExportPathPure(
-          finishedVideosDirectory,
-          courseId,
-          hash
+        const found = yield* findExportedVideo(
+          storageRoots,
+          exportFilename(courseId, hash)
         );
-        exportedById.set(video.id, yield* effectFs.exists(filePath));
+        exportedById.set(video.id, Option.isSome(found));
       }
     }
   }

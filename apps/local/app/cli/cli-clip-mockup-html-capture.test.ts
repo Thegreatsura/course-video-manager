@@ -39,7 +39,7 @@ import {
 // — the command branches on Effect.serviceOption, finds the fake and uses it,
 // and NO CHROMIUM EVER LAUNCHES HERE. The fake writes canned bytes at exactly
 // the path it was asked for, which is all the rest of the verb needs to be
-// real: the copy into {CLIP_MOCKUP_DIR}/{lineageId}/, the row write, the
+// real: the copy into clip-mockups/{lineageId}/ on a Storage Root, the row write, the
 // ordering and the failure paths are the shipping code. Outside a test the
 // same captures go to the Clip Mockup daemon's one browser; the fake is what
 // keeps that daemon from ever starting here.

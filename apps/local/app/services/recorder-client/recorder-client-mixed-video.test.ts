@@ -113,12 +113,14 @@ describe("a Video mixing OBS and CVM-recorder Clips", () => {
       expect(heard.map((m) => m.type)).toContain("recording-stopped")
     );
 
-    const finished = tmp();
+    const root = tmp();
+    const finished = path.join(root, "finished-videos");
+    fs.mkdirSync(finished);
     const exporter = fakeExport(finished);
     await Effect.runPromise(
       exportVideoToItsAddress({
         videoId: video.id,
-        finishedVideosDirectory: finished,
+        storageRoots: [root],
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

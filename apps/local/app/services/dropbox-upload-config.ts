@@ -2,7 +2,7 @@ import { Config } from "effect";
 
 /**
  * Tunables for the Dropbox leg of a Publish, alongside the existing
- * FINISHED_VIDEOS_DIRECTORY / DROPBOX_REMOTE_PATH settings.
+ * STORAGE_ROOTS / DROPBOX_REMOTE_PATH settings.
  *
  * The resident memory ceiling of a Publish is roughly
  * `DROPBOX_UPLOAD_CONCURRENCY × DROPBOX_UPLOAD_CHUNK_SIZE_MB`, since each

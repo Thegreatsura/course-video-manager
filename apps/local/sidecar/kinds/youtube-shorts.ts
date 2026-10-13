@@ -1,6 +1,7 @@
-import { Config, Effect } from "effect";
+import { Effect, Option } from "effect";
 import { JOB_PARAMS } from "../job-params";
-import { FileSystem } from "@effect/platform";
+import { findExportedVideo } from "@/services/finished-videos.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { VideoPostOperationsService } from "@/services/db-video-post-operations.server";
 import { getValidAccessToken } from "@/services/youtube-auth-service";
 import { uploadVideoToYouTube } from "@/services/youtube-upload-service";
@@ -23,14 +24,17 @@ export const youtubeShortsJobKind = definePostingJobKind({
   params: JOB_PARAMS["youtube-shorts"],
   run: (params, ctx) =>
     Effect.gen(function* () {
-      const finishedDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");
-      const fs = yield* FileSystem.FileSystem;
-      const filePath = `${finishedDir}/${params.videoId}.mp4`;
-      if (!(yield* fs.exists(filePath))) {
+      const storageRoots = yield* storageRootsConfig;
+      const found = yield* findExportedVideo(
+        storageRoots,
+        `${params.videoId}.mp4`
+      );
+      if (Option.isNone(found)) {
         return yield* new PostNotStartedError({
           message: "Exported vertical video not found. Export it first.",
         });
       }
+      const filePath = found.value;
       const videoPosts = yield* VideoPostOperationsService;
       const post = yield* videoPosts.createVideoPost({
         videoId: params.videoId,

@@ -6,7 +6,7 @@ import {
 import { clipExportDurationInSeconds } from "./export-duration-check";
 import { Command, FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Cause, Config, Data, Effect, Stream } from "effect";
+import { Cause, Data, Effect, Stream } from "effect";
 import path from "node:path";
 import { tmpdir } from "os";
 import crypto from "node:crypto";
@@ -25,6 +25,9 @@ import {
 import { removeBestEffort } from "@/services/remove-best-effort";
 import { formatFailureCause } from "./format-failure-cause";
 import { SidecarContext } from "./sidecar-context";
+import { storageRootsConfig } from "./storage-roots";
+import { resolveClipSourceFiles } from "./clip-source-files.server";
+import { STORAGE_FOLDERS, writeFolder } from "@/packages/storage";
 
 export type RenderVerticalStage =
   "concatenating-clips" | "transcribing" | "rendering-overlay" | "compositing";
@@ -95,8 +98,10 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
           };
 
           return yield* Effect.gen(function* () {
-            const FINISHED_VIDEOS_DIRECTORY = yield* Config.string(
-              "FINISHED_VIDEOS_DIRECTORY"
+            const storageRoots = yield* storageRootsConfig;
+            const FINISHED_VIDEOS_DIRECTORY = writeFolder(
+              storageRoots,
+              STORAGE_FOLDERS.finishedVideos
             );
 
             const video = yield* videoOps.getVideoWithClipsById(opts.videoId);
@@ -124,21 +129,38 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // Step 1: Concatenate clips → temp file (not the final output path,
             // since the composite step will write the final .mp4)
             enterStage("concatenating-clips");
-            const renderClips = video.clips.map((clip) => {
-              const source = clipSource(clip);
-              const input = {
-                ...clipFfmpegInput(source),
-                pauseType: clip.pauseType as "none" | "long",
-                zoomType: clip.zoomType,
-              };
-              const duration = clipExportDurationInSeconds(input);
-              return {
-                ...input,
-                // A CVM-recorder Clip's picture is drawn from its Recording
-                // Session, over everything it outputs (long Pause included).
-                composite: clipComposite(source, { durationSeconds: duration }),
-              };
-            });
+            const renderClips = yield* Effect.forEach(video.clips, (clip) =>
+              Effect.gen(function* () {
+                // Its files found on a Storage Root, or "Footage not found
+                // (E: offline?)".
+                const source = yield* resolveClipSourceFiles(
+                  clipSource(clip),
+                  storageRoots
+                ).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new RenderVerticalError({
+                        cause: error,
+                        message: error.message,
+                      })
+                  )
+                );
+                const input = {
+                  ...clipFfmpegInput(source),
+                  pauseType: clip.pauseType as "none" | "long",
+                  zoomType: clip.zoomType,
+                };
+                const duration = clipExportDurationInSeconds(input);
+                return {
+                  ...input,
+                  // A CVM-recorder Clip's picture is drawn from its Recording
+                  // Session, over everything it outputs (long Pause included).
+                  composite: clipComposite(source, {
+                    durationSeconds: duration,
+                  }),
+                };
+              })
+            );
             // The vertical renderer always produces a 9:16 short — the Remotion
             // subtitle/CTA overlay below is rendered at 1080x1920 to match.
             // A CVM-recorder Short Clip's composite is drawn on the Short

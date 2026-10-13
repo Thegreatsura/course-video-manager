@@ -2,20 +2,25 @@ import { FileSystem } from "@effect/platform";
 import { isUnder } from "./assert-under";
 import type { PlatformError } from "@effect/platform/Error";
 import { Data, Effect } from "effect";
-import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { resolveRepoEnvValue } from "./repo-env";
+import {
+  folderOnEveryRoot,
+  STORAGE_FOLDERS,
+  writeFolder,
+} from "@/packages/storage";
+import { findStoragePathSync } from "@/packages/storage/server";
+import { readStorageRootsSync } from "./storage-roots";
 
 /**
  * The per-Video Clip Mockup frame store.
  *
- * Frames live on disk at `{CLIP_MOCKUP_DIR}/{video.lineageId}/{relativePath}`
+ * Frames live on disk at `clip-mockups/{video.lineageId}/{relativePath}` on a
+ * Storage Root (written to the first root, read from whichever has them)
  * and the row carries only that relative path — so the CVM keeps its OWN copy
  * of every frame and an authoring agent clearing its scratch folder cannot
  * empty a Video's Animatic.
  *
- * DELIBERATELY NOT UNDER `VIDEO_FILES_DIR`. A Video File is Article Writer
+ * DELIBERATELY NOT UNDER THE VIDEO FILES STORE. A Video File is Article Writer
  * context; sixty frames would drown the writer's context picker. Same
  * directory-is-the-state convention, different directory, on purpose.
  *
@@ -25,9 +30,6 @@ import { resolveRepoEnvValue } from "./repo-env";
  * half is here, and the CLI is what joins them.
  */
 
-/** The environment variable naming the Clip Mockup directory. */
-export const CLIP_MOCKUP_DIR_ENV_KEY = "CLIP_MOCKUP_DIR";
-
 /** Raised when a caller-supplied path escapes the Video's frame directory. */
 export class InvalidClipMockupPathError extends Data.TaggedError(
   "InvalidClipMockupPathError"
@@ -36,50 +38,20 @@ export class InvalidClipMockupPathError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
-/** Walk up from `start` until a directory containing package.json is found. */
-function findRepoRoot(start: string): string | undefined {
-  let dir = start;
-  while (true) {
-    if (existsSync(path.join(dir, "package.json"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
-  }
-}
-
 /**
- * The store's base directory: CLIP_MOCKUP_DIR when set (tests pin a temp dir
- * this way), otherwise `<repoRoot>/clip-mockups` anchored to THIS module's
- * install location.
+ * Where new frames are written: `clip-mockups/` on the first Storage Root.
+ * Reads look on every root ({@link locateClipMockupFile}). Throws, naming
+ * `STORAGE_ROOTS`, when that setting is missing.
  *
- * The setting is read through `resolveRepoEnvValue`, so the repo-root `.env`
- * counts as "set" — NOT a bare `process.env` read. tsx does not auto-load
- * `.env`, so a bare read made this answer depend on whether something earlier
- * in the same command happened to call `loadRepoEnv`: `add` voiced its line
- * first (speech loaded `.env` then) and so found the real store, while
- * `update --image` / `--html` voiced nothing and silently wrote its frame into
- * the fallback below, leaving the row pointing at a picture that was not there.
- *
- * Deliberately NEVER cwd-relative, for the same reason `video-files.ts` says
- * so: the globally-linked `cvm` bin runs from arbitrary directories, and a
- * `./clip-mockups` fallback would scatter frames into whichever repo the agent
- * happened to be standing in. The machine gate, not this fallback, is what
- * actually decides whether the store is reachable.
+ * `STORAGE_ROOTS` is read through `resolveRepoEnvValue`, so the repo-root
+ * `.env` counts as "set" — NOT a bare `process.env` read. tsx does not
+ * auto-load `.env`, so a bare read made the old CLIP_MOCKUP_DIR answer depend
+ * on whether something earlier in the same command happened to call
+ * `loadRepoEnv`, and an `update --image` wrote its frame somewhere the row's
+ * reader never looked.
  */
 export function getClipMockupBaseDir(): string {
-  const fromEnv = resolveRepoEnvValue(CLIP_MOCKUP_DIR_ENV_KEY);
-  if (fromEnv != null && fromEnv !== "") {
-    return fromEnv;
-  }
-
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const repoRoot = findRepoRoot(moduleDir);
-  if (repoRoot === undefined) {
-    throw new Error(
-      `Could not locate the course-video-manager repo root to resolve the Clip Mockup store; set ${CLIP_MOCKUP_DIR_ENV_KEY} explicitly.`
-    );
-  }
-  return path.join(repoRoot, "clip-mockups");
+  return writeFolder(readStorageRootsSync(), STORAGE_FOLDERS.clipMockups);
 }
 
 /** A Video's own frame directory, or a path inside it. */
@@ -107,11 +79,13 @@ export function withClipMockupFiles<
   lineageId: string,
   row: Row
 ): Row & { readonly imageFile: string; readonly audioFile: string | null } {
-  const dir = path.resolve(getClipMockupPath(lineageId));
   return {
     ...row,
-    imageFile: path.join(dir, row.imagePath),
-    audioFile: row.audioPath === null ? null : path.join(dir, row.audioPath),
+    imageFile: locateClipMockupFileSync(lineageId, row.imagePath),
+    audioFile:
+      row.audioPath === null
+        ? null
+        : locateClipMockupFileSync(lineageId, row.audioPath),
   };
 }
 
@@ -170,11 +144,64 @@ export function resolveClipMockupPath(
   return Effect.succeed(resolved);
 }
 
+/** The frame's root-relative path: `clip-mockups/{lineageId}/{relativePath}`. */
+const clipMockupStoragePath = (lineageId: string, relativePath: string) =>
+  path.posix.join(STORAGE_FOLDERS.clipMockups, lineageId, relativePath);
+
+/**
+ * Where a stored frame is: on the first Storage Root that has it, or — when
+ * none does — where it would be written (the first root). Unchecked; for
+ * listing a row's files ({@link withClipMockupFiles}).
+ */
+const locateClipMockupFileSync = (
+  lineageId: string,
+  relativePath: string
+): string =>
+  findStoragePathSync(
+    clipMockupStoragePath(lineageId, relativePath),
+    readStorageRootsSync()
+  ) ?? path.resolve(getClipMockupPath(lineageId, relativePath));
+
+/**
+ * {@link resolveClipMockupPath} for a frame that is READ (or deleted): the
+ * same containment guard, then the first Storage Root that has the file,
+ * which must itself sit inside that root's Clip Mockup directory (no symlink
+ * out). Where it would be written (the first root) when no root has it.
+ */
+export function locateClipMockupFile(
+  lineageId: string,
+  relativePath: string
+): Effect.Effect<string, InvalidClipMockupPathError> {
+  return Effect.flatMap(
+    resolveClipMockupPath(lineageId, relativePath),
+    (writePath) => {
+      const roots = readStorageRootsSync();
+      const found = findStoragePathSync(
+        clipMockupStoragePath(lineageId, relativePath),
+        roots
+      );
+      if (found === null) return Effect.succeed(writePath);
+      const inside = folderOnEveryRoot(roots, STORAGE_FOLDERS.clipMockups).some(
+        (dir) => isUnder(path.join(dir, lineageId), found)
+      );
+      return inside
+        ? Effect.succeed(found)
+        : Effect.fail(
+            new InvalidClipMockupPathError({
+              path: relativePath,
+              message:
+                "path escapes the Clip Mockup directory through a symlink",
+            })
+          );
+    }
+  );
+}
+
 /** Whether a frame already exists at `relativePath`. */
 export const clipMockupFileExists = (lineageId: string, relativePath: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const full = yield* resolveClipMockupPath(lineageId, relativePath);
+    const full = yield* locateClipMockupFile(lineageId, relativePath);
     return yield* fs.exists(full);
   });
 
@@ -182,7 +209,7 @@ export const clipMockupFileExists = (lineageId: string, relativePath: string) =>
 export const readClipMockupFile = (lineageId: string, relativePath: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const full = yield* resolveClipMockupPath(lineageId, relativePath);
+    const full = yield* locateClipMockupFile(lineageId, relativePath);
     return yield* fs.readFile(full);
   });
 
@@ -204,7 +231,7 @@ export const writeClipMockupFile = (
 export const removeClipMockupFile = (lineageId: string, relativePath: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const full = yield* resolveClipMockupPath(lineageId, relativePath);
+    const full = yield* locateClipMockupFile(lineageId, relativePath);
     yield* fs.remove(full, { force: true });
   });
 
@@ -256,7 +283,7 @@ export const copyClipMockupFiles = (
 
     // De-duplicated: two Clip Mockups saying the same words share one WAV.
     for (const relativePath of new Set(relativePaths)) {
-      const from = yield* resolveClipMockupPath(sourceLineageId, relativePath);
+      const from = yield* locateClipMockupFile(sourceLineageId, relativePath);
       const to = yield* resolveClipMockupPath(targetLineageId, relativePath);
 
       if (!(yield* fs.exists(from))) continue;

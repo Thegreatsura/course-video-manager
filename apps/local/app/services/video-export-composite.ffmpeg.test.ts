@@ -115,9 +115,7 @@ const exportClips = async (
         ).pipe(
           Layer.provide(
             Layer.setConfigProvider(
-              ConfigProvider.fromMap(
-                new Map([["FINISHED_VIDEOS_DIRECTORY", path.join(dir, "out")]])
-              )
+              ConfigProvider.fromMap(new Map([["STORAGE_ROOTS", dir]]))
             )
           )
         )

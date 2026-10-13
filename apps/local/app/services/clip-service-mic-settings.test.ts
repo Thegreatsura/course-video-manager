@@ -69,7 +69,8 @@ const exportHashOf = async (videoId: string) =>
     toExportClips(
       (await readClips(videoId)).map((c) => ({ ...c, overlays: [] }))
     ),
-    "landscape"
+    "landscape",
+    []
   );
 
 describe("mic offset", () => {

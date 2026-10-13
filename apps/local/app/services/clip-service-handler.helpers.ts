@@ -18,6 +18,8 @@ import { withDbTransaction } from "@/services/with-db-transaction.server";
 import { createVideoFromSelectionImpl } from "@/services/db-video-from-selection.server";
 import type { LogEvent } from "./video-editor-logger-service";
 import type { SilenceLength } from "@/silence-detection-constants";
+import { toRootRelative } from "@/packages/storage";
+import { storageRootsConfig } from "@/services/storage-roots";
 
 // ============================================================================
 // Errors and the Drizzle bridge
@@ -284,6 +286,14 @@ export const appendFromObsImpl = (
 ) =>
   Effect.gen(function* () {
     const { videoId, filePath, insertionPoint } = event.input;
+    // A Footage path is stored absolute (`/mnt/d/raw-footage/x.mkv`, what OBS
+    // reports) or root-relative (`raw-footage/x.mkv`, after the path
+    // migration). Both name one file, so compare them in one form: a take
+    // clipped before and after the migration must not be appended twice.
+    const storageRoots = yield* storageRootsConfig;
+    const sameFootage = (a: string, b: string | undefined) =>
+      b !== undefined &&
+      toRootRelative(a, storageRoots) === toRootRelative(b, storageRoots);
 
     // Convert Windows path to WSL path if provided
     const resolvedFilePath = filePath ? windowsToWSL(filePath) : undefined;
@@ -297,7 +307,7 @@ export const appendFromObsImpl = (
 
     // Find clips with this input video and get the one with the latest end time
     const clipsWithThisInputVideo = allClipsIncludingArchived
-      .filter((clip) => clip.videoFilename === resolvedFilePath)
+      .filter((clip) => sameFootage(clip.videoFilename, resolvedFilePath))
       .sort((a, b) => b.sourceStartTime - a.sourceStartTime);
 
     const lastClipWithThisInputVideo = clipsWithThisInputVideo[0];
@@ -348,7 +358,7 @@ export const appendFromObsImpl = (
       (clip) =>
         !allClipsForDedup.some(
           (existingClip) =>
-            existingClip.videoFilename === clip.inputVideo &&
+            sameFootage(existingClip.videoFilename, clip.inputVideo) &&
             Math.abs(existingClip.sourceStartTime - clip.startTime) <
               DEDUP_TOLERANCE_SECONDS &&
             Math.abs(existingClip.sourceEndTime - clip.endTime) <

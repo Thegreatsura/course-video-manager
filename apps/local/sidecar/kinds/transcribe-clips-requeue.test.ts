@@ -1,4 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import nodeFs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Effect, Fiber, Layer } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import {
@@ -23,7 +26,17 @@ let testDb: TestDb;
 let dbLayer: Layer.Layer<ClipOperationsService | JobOperationsService>;
 let videoId: string;
 
+/**
+ * The Clips' names are root-relative Footage on this temp Storage Root, where
+ * `seedClips` puts a file for each; Whisper is told the file on disk.
+ */
+let storageRoot: string;
+
 beforeAll(async () => {
+  storageRoot = nodeFs.mkdtempSync(
+    nodePath.join(os.tmpdir(), "transcribe-clips-root-")
+  );
+  process.env.STORAGE_ROOTS = storageRoot;
   const result = await createTestDb();
   testDb = result.testDb;
   dbLayer = Layer.mergeAll(
@@ -46,14 +59,20 @@ let hang = new Set<string>();
 const countingWhisper = Layer.succeed(WhisperTranscriptionService, {
   transcribeClips: (clips: ReadonlyArray<{ id: string; inputVideo: string }>) =>
     Effect.suspend(() => {
-      calls.push(clips[0]!.inputVideo);
-      return hang.has(clips[0]!.inputVideo)
+      calls.push(nodePath.basename(clips[0]!.inputVideo));
+      return hang.has(nodePath.basename(clips[0]!.inputVideo))
         ? Effect.never
         : Effect.succeed(
             clips.map((clip) => ({
               id: clip.id,
               words: [{ start: 0, end: 1, text: "w" }],
-              segments: [{ start: 0, end: 1, text: `said ${clip.inputVideo}` }],
+              segments: [
+                {
+                  start: 0,
+                  end: 1,
+                  text: `said ${nodePath.basename(clip.inputVideo)}`,
+                },
+              ],
             }))
           );
     }),
@@ -68,6 +87,9 @@ const layer = () =>
   );
 
 const seedClips = async (...inputVideos: string[]) => {
+  for (const name of inputVideos) {
+    nodeFs.writeFileSync(nodePath.join(storageRoot, name), "");
+  }
   const rows = await testDb
     .insert(schema.clips)
     .values(
@@ -159,6 +181,9 @@ describe("a transcribe-clips Job put back by a deliberate stop", () => {
     const run1 = startRun(job.id, [a!, b!], 1);
     await run1.ready;
     expect(await status(a!)).toBe("done");
+    // b's file is found on its Storage Root before Whisper hears it: wait
+    // until it really is mid-Whisper.
+    await vi.waitFor(() => expect(calls).toContain("b.mp4"));
     await Effect.runPromise(Fiber.interrupt(run1.fiber));
 
     // The Job goes back to the queue with the same params: run 2 is told

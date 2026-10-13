@@ -3,7 +3,10 @@ import { assertUnder } from "@/services/assert-under";
 import path from "node:path";
 import { FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Config, Effect } from "effect";
+import { Effect, Option } from "effect";
+import { STORAGE_FOLDERS, writeFolder } from "@/packages/storage";
+import { findStoragePath } from "@/packages/storage/server";
+import { storageRootsConfig } from "./storage-roots";
 import {
   OverlayContentRenderError,
   OverlayContentRendererService,
@@ -40,7 +43,13 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
       // where it is used turns a missing `.env` line into a failure that
       // appears minutes into an export, after the concat and normalize passes
       // have already run — see `CODING_STANDARDS.md`.
-      const cacheDir = yield* Config.string("OVERLAY_RENDER_CACHE_DIRECTORY");
+      // `overlay-renders/` on every Storage Root is read; new renders are
+      // written to the first root's.
+      const storageRoots = yield* storageRootsConfig;
+      const cacheDir = writeFolder(
+        storageRoots,
+        STORAGE_FOLDERS.overlayRenders
+      );
 
       /**
        * The path to this Overlay content's rendered `.mov`, rendering it
@@ -62,11 +71,15 @@ export class OverlayRenderCacheService extends Effect.Service<OverlayRenderCache
           resolveOverlayRenderPath(cacheDir, opts.courseId, opts.content)
         );
 
-        const alreadyRendered = yield* fs
-          .exists(cachedPath)
-          .pipe(Effect.mapError(cacheFailure(`inspect ${cachedPath}`)));
+        const alreadyRendered = yield* findStoragePath(
+          path.posix.join(
+            STORAGE_FOLDERS.overlayRenders,
+            path.basename(cachedPath)
+          ),
+          storageRoots
+        ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
-        if (alreadyRendered) return cachedPath;
+        if (Option.isSome(alreadyRendered)) return alreadyRendered.value;
 
         yield* fs
           .makeDirectory(cacheDir, { recursive: true })

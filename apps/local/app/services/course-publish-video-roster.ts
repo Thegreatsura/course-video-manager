@@ -1,11 +1,13 @@
-import { Config, Effect } from "effect";
+import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
 import { computeShippingSections } from "@/packages/course-json";
 import {
   computeExportHash,
-  resolveExportPath,
+  exportFilename,
   toExportClips,
 } from "./export-hash";
+import { locateExportedVideo } from "./finished-videos.server";
+import { storageRootsConfig } from "./storage-roots";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
 import { readExportDurationInSeconds } from "./export-sha256-sidecar";
 import {
@@ -85,9 +87,7 @@ export const findShippingVideos = Effect.fn("findShippingVideos")(function* (
 ) {
   const effectFs = yield* FileSystem.FileSystem;
   const versionOps = yield* VersionOperationsService;
-  const finishedVideosDirectory = yield* Config.string(
-    "FINISHED_VIDEOS_DIRECTORY"
-  );
+  const storageRoots = yield* storageRootsConfig;
 
   const version = yield* versionOps.getVersionWithSections(versionId);
   const courseId = version.repo.id;
@@ -118,13 +118,13 @@ export const findShippingVideos = Effect.fn("findShippingVideos")(function* (
         if (video.clips.length === 0) continue;
         const hash = computeExportHash(
           toExportClips(video.clips),
-          video.format
+          video.format,
+          storageRoots
         );
         if (!hash) continue;
-        const filePath = resolveExportPath(
-          finishedVideosDirectory,
-          courseId,
-          hash
+        const filePath = yield* locateExportedVideo(
+          storageRoots,
+          exportFilename(courseId, hash)
         );
         if (yield* isKnownSoundExport(effectFs, filePath, video.clips))
           continue;

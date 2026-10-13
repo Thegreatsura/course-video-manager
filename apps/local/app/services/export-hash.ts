@@ -1,7 +1,5 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { Effect } from "effect";
-import { FileSystem } from "@effect/platform";
 import { resolveVideoFormat } from "@/features/videos/video-format";
 import {
   clipSource,
@@ -26,6 +24,7 @@ import {
   bulletPanelHashPayload,
   type BulletPanelBullet,
 } from "@/features/videos/bullet-panel";
+import { toRootRelative } from "@/packages/storage";
 
 /**
  * Bump this constant to force re-export of all videos (e.g., after changing
@@ -169,6 +168,16 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
     );
 
 /**
+ * A Clip's Clip Source hash fields with `f` made root-relative. Overriding
+ * `f` in place keeps it the first key, so the payload's key order — which the
+ * address depends on — is the one `clipSourceHashFields` pins.
+ */
+const rootRelativeHashFields = <F extends { f: string }>(
+  fields: F,
+  storageRoots: readonly string[]
+): F => ({ ...fields, f: toRootRelative(fields.f, storageRoots) });
+
+/**
  * Compute the content-addressed export hash for a set of clips.
  * Returns null if there are no clips (not a real video).
  *
@@ -211,10 +220,18 @@ const toOverlayPayload = (overlays: ExportOverlay[]) =>
  * saved mic EQ (loaded with its Recording Session) and the layout version
  * join its entry (see
  * `clipSourceHashFields`). An OBS Clip's entry is untouched.
+ *
+ * The file a Clip's entry names (`f`) is its ROOT-RELATIVE path
+ * (`raw-footage/x.mp4`), never the drive it is on: a legacy absolute path
+ * under one of `storageRoots` is normalized first, so a row hashes the same
+ * before and after the data migration rewrites it, and moving a file between
+ * Storage Roots never changes an address. A path under no root (a Recording
+ * Session in `~/Videos`) is hashed exactly as stored, as it always was.
  */
 export const computeExportHash = (
   clips: ExportClip[],
-  format: string | null | undefined
+  format: string | null | undefined,
+  storageRoots: readonly string[]
 ): string | null => {
   if (clips.length === 0) return null;
 
@@ -222,7 +239,10 @@ export const computeExportHash = (
     v: EXPORT_VERSION,
     fmt: resolveVideoFormat(format),
     clips: clips.map((c) => ({
-      ...clipSourceHashFields(clipSource(c)),
+      ...rootRelativeHashFields(
+        clipSourceHashFields(clipSource(c)),
+        storageRoots
+      ),
       ...(c.pauseType === LONG_PAUSE ? { p: LONG_PAUSE } : {}),
       ...(resolveClipZoomType(c.zoomType) === DEFAULT_CLIP_ZOOM_TYPE
         ? {}
@@ -252,21 +272,3 @@ export const resolveExportPath = (
   courseId: string,
   hash: string
 ): string => path.join(finishedVideosDir, exportFilename(courseId, hash));
-
-/**
- * Check whether a file with the matching export hash exists on disk.
- */
-export const isExported = (
-  finishedVideosDir: string,
-  courseId: string,
-  clips: ExportClip[],
-  format: string | null | undefined
-) =>
-  Effect.gen(function* () {
-    const hash = computeExportHash(clips, format);
-    if (!hash) return false;
-
-    const fs = yield* FileSystem.FileSystem;
-    const filePath = resolveExportPath(finishedVideosDir, courseId, hash);
-    return yield* fs.exists(filePath);
-  });

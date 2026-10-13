@@ -43,3 +43,11 @@ standalone or pitch-bound Video belongs to no CourseVersion, and the guard
 already passes for that case rather than needing to be skipped. "This noun is
 not part of the published artifact" is not the test; "no row above this one
 reaches a CourseVersion" is.
+
+The one deliberate exception is the one-off path migration to root-relative
+paths (`packages/core/services/storage-path-migration.server.ts`, ADR 0040),
+which Matt runs by hand. It rewrites the Footage path on every Clip, Published
+Versions' included, with plain UPDATEs: a frozen Version names the same files
+as its Draft, and the rewrite changes no Export Hash, so nothing a frozen
+Version shows changes. It is a script, not an entry point, and nothing else
+may take this route.

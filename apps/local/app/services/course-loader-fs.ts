@@ -1,10 +1,12 @@
 import { FileSystem } from "@effect/platform";
-import { Config, Effect } from "effect";
+import { Effect, Option } from "effect";
 import {
   computeExportHash,
-  resolveExportPath,
+  exportFilename,
   type ExportClip,
 } from "./export-hash";
+import { findExportedVideo } from "./finished-videos.server";
+import { storageRootsConfig } from "./storage-roots";
 import { authoringVideoWarnings, computeVideoWarnings } from "./video-warnings";
 
 export const loadExportStatusMap = (opts: {
@@ -12,8 +14,7 @@ export const loadExportStatusMap = (opts: {
   videos: { id: string; format: string; clips: ExportClip[] }[];
 }) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const finishedVideosDir = yield* Config.string("FINISHED_VIDEOS_DIRECTORY");
+    const storageRoots = yield* storageRootsConfig;
 
     const hasExportedVideoMap: Record<string, boolean> = {};
 
@@ -21,17 +22,21 @@ export const loadExportStatusMap = (opts: {
       opts.videos,
       (video) =>
         Effect.gen(function* () {
-          const hash = computeExportHash(video.clips, video.format);
+          const hash = computeExportHash(
+            video.clips,
+            video.format,
+            storageRoots
+          );
           if (!hash) {
             hasExportedVideoMap[video.id] = false;
             return;
           }
-          const exportPath = resolveExportPath(
-            finishedVideosDir,
-            opts.courseId,
-            hash
+          hasExportedVideoMap[video.id] = Option.isSome(
+            yield* findExportedVideo(
+              storageRoots,
+              exportFilename(opts.courseId, hash)
+            )
           );
-          hasExportedVideoMap[video.id] = yield* fs.exists(exportPath);
         }),
       { concurrency: "unbounded" }
     );

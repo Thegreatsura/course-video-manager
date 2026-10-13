@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { ConfigProvider, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
@@ -65,7 +65,13 @@ describe("transcribing a CVM-recorder Clip that starts within the mic offset", (
             clipOps,
             whisper,
             NodeContext.layer,
-            SidecarContextTest
+            SidecarContextTest,
+            // Its Footage is under no Storage Root, so is read where it is.
+            Layer.setConfigProvider(
+              ConfigProvider.fromMap(
+                new Map([["STORAGE_ROOTS", "/no-such-storage-root"]])
+              )
+            )
           )
         )
       )
