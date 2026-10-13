@@ -1,4 +1,5 @@
 import type { TLStoreSnapshot } from "tldraw";
+import type { VideoFormat } from "@/features/videos/video-format";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import type { Snapshot } from "./snapshot-list";
 import {
@@ -46,13 +47,17 @@ export const openPage = () =>
 export const shown = (
   diagramId: string,
   headScene: TLStoreSnapshot | null,
-  opts: { stored?: StoredHead; centreCamera?: boolean } = {}
+  opts: {
+    stored?: StoredHead;
+    centreCamera?: boolean;
+    format?: VideoFormat;
+  } = {}
 ) => ({
   type: "show-head" as const,
   diagramId,
   scene: headScene,
   stored: opts.stored ?? storedHead(`head-${diagramId}`, T0),
-  centreCamera: opts.centreCamera ?? true,
+  centreFor: opts.centreCamera === false ? null : (opts.format ?? "landscape"),
 });
 
 /** Snapshot `id` of d1, preserved, its scene and hash named after it. */
