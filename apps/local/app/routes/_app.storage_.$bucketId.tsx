@@ -7,7 +7,7 @@ import {
   type bucketPageReducer,
 } from "@/features/storage/bucket-page-reducer";
 import { useBucketPage } from "@/features/storage/use-bucket-page";
-import type { StorageFileRole } from "@/packages/storage/buckets";
+import type { StorageFileRole } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage_.$bucketId";
 
 export const meta: Route.MetaFunction = () => [

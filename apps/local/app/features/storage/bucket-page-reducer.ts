@@ -7,7 +7,7 @@ import {
   type StorageBucketFile,
   type StorageBucketFilesMessage,
   type StorageRootReport,
-} from "@/packages/storage/buckets";
+} from "@/packages/storage/client";
 
 /**
  * THE PER-BUCKET PAGE (#2108): one Storage Bucket's files, largest first,

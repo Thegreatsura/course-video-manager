@@ -2,7 +2,7 @@ import { useEffectReducer } from "use-effect-reducer";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   type StorageBucketFilesMessage,
-} from "@/packages/storage/buckets";
+} from "@/packages/storage/client";
 import {
   bucketPageReducer,
   createInitialBucketPageState,

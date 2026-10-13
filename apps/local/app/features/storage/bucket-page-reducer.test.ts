@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
-import type { StorageFileFound } from "@/packages/storage/buckets";
+import type { StorageFileFound } from "@/packages/storage/client";
 import {
   bucketFiles,
   bucketPageReducer,
