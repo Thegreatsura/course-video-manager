@@ -2,6 +2,7 @@ import type {
   AutofillStage,
   BufferStage,
   DuplicateCourseStage,
+  StorageMoveStage,
   ExportStage,
   ExportUploadEntry,
   PublishStage,
@@ -112,6 +113,12 @@ export const DUPLICATE_COURSE_STAGE_BANDS: Record<
 > = {
   "copying-rows": { start: 2, width: 0 },
   "copying-files": { start: 10, width: 89 },
+};
+
+/** A Storage move: planning and its checks, then copying and verifying. */
+export const STORAGE_MOVE_STAGE_BANDS: Record<StorageMoveStage, StageBand> = {
+  checking: { start: 1, width: 0 },
+  copying: { start: 2, width: 97 },
 };
 
 /** A job that has said its final word: nothing may move it again. */

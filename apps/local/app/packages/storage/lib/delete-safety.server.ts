@@ -27,23 +27,38 @@ export const ENCODING_JOB_KINDS = [
   "publish",
 ] as const;
 
-/** Every encoding Job that is queued or running, oldest first. */
+/**
+ * What a Storage page delete waits for: every encoding Job, and a move of a
+ * Storage Bucket (#2109), which copies from the very folders a delete empties.
+ */
+export const STORAGE_BUSY_JOB_KINDS = [
+  ...ENCODING_JOB_KINDS,
+  "storage-move",
+] as const;
+
+/** Every encoding Job or Storage move that is queued or running, oldest first. */
 export const encodingJobs = (db: Database) =>
   db
     .select({ kind: jobs.kind, title: jobs.title })
     .from(jobs)
     .where(
       and(
-        inArray(jobs.kind, [...ENCODING_JOB_KINDS]),
+        inArray(jobs.kind, [...STORAGE_BUSY_JOB_KINDS]),
         inArray(jobs.status, ["queued", "running"])
       )
     );
 
 /** "Not deleted: an export is queued or running (…)". */
 export const encodingRefusalMessage = (
-  encoding: readonly { title: string }[]
-) =>
-  `Not deleted: ${encoding.length === 1 ? "an export is" : `${encoding.length} exports are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
+  encoding: readonly { kind: string; title: string }[]
+) => {
+  const what = encoding[0]!.kind === "storage-move" ? "a move" : "an export";
+  return `Not deleted: ${encoding.length === 1 ? `${what} is` : `${encoding.length} exports or moves are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`;
+};
+
+/** "Not deleted: a move is being started…": the in-process write hold. */
+export const storageBusyMessage = (heldBy: string) =>
+  `Not deleted: ${heldBy} is under way on the Storage page. Try again in a moment.`;
 
 export const messageOf = (e: unknown) =>
   e instanceof Error

@@ -1,5 +1,6 @@
 import nodeFs from "node:fs/promises";
 import path from "node:path";
+import { holdingStorageWrites } from "./storage-busy";
 import { Data, Effect } from "effect";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
 import { EXPORT_HASH_RENAME_MARKER } from "@/services/export-hash-rename";
@@ -13,6 +14,7 @@ import {
 import {
   encodingJobs,
   encodingRefusalMessage,
+  storageBusyMessage,
   fileRefusal,
   folderRefusal,
   listFiles,
@@ -54,7 +56,8 @@ export class StorageDeleteRefusedError extends Data.TaggedError(
   "StorageDeleteRefusedError"
 )<{
   readonly bucketId: string;
-  readonly reason: "not-deletable" | "export-running" | "exports-not-renamed";
+  readonly reason:
+    "not-deletable" | "export-running" | "exports-not-renamed" | "storage-busy";
   readonly message: string;
 }> {}
 
@@ -270,5 +273,17 @@ export const deleteOtherStorageBucket = (opts: {
       Effect.logInfo(
         `[storage] deleted ${r.bucketId}: ${r.deleted.reduce((n, d) => n + d.files, 0)} files, ${r.left.length} left`
       )
-    )
+    ),
+    // Never beside a move being started, or another delete (#2109).
+    (deletion) =>
+      holdingStorageWrites(
+        "a delete",
+        (heldBy) =>
+          new StorageDeleteRefusedError({
+            bucketId: opts.bucketId,
+            reason: "storage-busy",
+            message: storageBusyMessage(heldBy),
+          }),
+        deletion
+      )
   );

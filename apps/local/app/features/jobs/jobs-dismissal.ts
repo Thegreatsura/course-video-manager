@@ -15,6 +15,7 @@ const FINISHED: readonly jobsReducer.JobStatus[] = [
   "succeeded",
   "failed",
   "interrupted",
+  "cancelled",
 ];
 
 /** The Job a row belongs to: the row's own id, or a batch row's Job. */

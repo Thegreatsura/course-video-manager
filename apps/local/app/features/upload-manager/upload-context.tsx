@@ -26,6 +26,8 @@ export interface UploadContextType {
    * runs again (posts never retry on their own).
    */
   retryJob: (jobId: string) => void;
+  /** The author's Cancel on a Job that can be cancelled (a Storage move). */
+  cancelJob: (jobId: string) => void;
   /** Hide every succeeded Job: the Global Upload Progress's idle timer. */
   dismissFinishedJobs: () => void;
   /**
@@ -416,6 +418,7 @@ export function UploadProvider({
     subscribeToJobEvents,
     subscribeToJobJoins,
     retryJob,
+    cancelJob,
     dismissFinishedJobs,
     clearFinishedJobs,
   } = jobs;
@@ -425,6 +428,7 @@ export function UploadProvider({
       subscribeToJobEvents,
       subscribeToJobJoins,
       retryJob,
+      cancelJob,
       dismissFinishedJobs,
       clearFinished: clearFinishedJobs,
       clock,
@@ -447,6 +451,7 @@ export function UploadProvider({
       subscribeToJobEvents,
       subscribeToJobJoins,
       retryJob,
+      cancelJob,
       dismissFinishedJobs,
       clearFinishedJobs,
       clock,

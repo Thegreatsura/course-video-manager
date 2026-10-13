@@ -17,12 +17,14 @@ import { UnknownDBServiceError } from "./db-service-errors.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { createPostingJobOperations } from "./db-job-posting.server.js";
 export { POSTED_EVENT, POST_CHECK_EVENT } from "./db-job-posting.server.js";
+export { CANCEL_REQUESTED_EVENT } from "./db-job-cancel.server.js";
 import {
   createDismissJobOperations,
   notDismissed,
 } from "./db-job-dismiss.server.js";
 import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
 import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
+import { createCancelJobOperations } from "./db-job-cancel.server.js";
 import { createStageHistoryOperations } from "./db-job-stage-history.server.js";
 export { STAGE_HISTORY_JOBS_PER_KIND } from "./db-job-stage-history.server.js";
 import {
@@ -649,6 +651,7 @@ export const createJobOperations = (db: Database) => {
     completeJob,
     failJobAttempt,
     returnJobToQueue,
+    ...createCancelJobOperations(db, { failDependents }),
     ...createPostingJobOperations(db),
     recoverExpiredJobs,
     latestJobEventId,

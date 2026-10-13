@@ -46,8 +46,11 @@ export function UploadRow({
   post = null,
   publishRecoveryHref = null,
   onFollowLink = () => {},
+  onCancel = () => {},
 }: {
   upload: UploadEntry;
+  /** The author's Cancel, on a row that offers one (a Storage move). */
+  onCancel?: () => void;
   onDismiss: (e: React.MouseEvent, uploadId: string) => void;
   /** A failed or interrupted post's check and Retry; `null` otherwise. */
   post?: PostRowControls | null;
@@ -84,6 +87,19 @@ export function UploadRow({
           onFollowLink={onFollowLink}
         />
       </div>
+      {upload.uploadType === "storage-move" && upload.cancellable && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel();
+          }}
+          className="shrink-0 text-xs text-muted-foreground hover:text-destructive"
+          type="button"
+          data-testid="storage-move-cancel"
+        >
+          Cancel
+        </button>
+      )}
       {!(upload.uploadType === "export" && upload.isBatchEntry) && (
         <button
           onClick={(e) => onDismiss(e, upload.uploadId)}
@@ -230,6 +246,18 @@ function UploadStatusDetail({
     case "success":
       return <SuccessDetail upload={upload} onFollowLink={onFollowLink} />;
     case "error":
+      if (upload.uploadType === "storage-move" && upload.cancelled) {
+        // The author's Cancel, not a failure: no alarm.
+        return (
+          <p
+            className="text-xs text-muted-foreground mt-0.5"
+            title={upload.errorMessage ?? undefined}
+            data-testid="storage-move-cancelled"
+          >
+            {upload.errorMessage ?? "Cancelled"}
+          </p>
+        );
+      }
       if (publishRecoveryHref) {
         return (
           <PublishRecoveryDetail
@@ -270,6 +298,7 @@ function UploadStatusDetail({
           {upload.uploadType !== "publish" &&
             upload.uploadType !== "autofill" &&
             upload.uploadType !== "duplicate-course" &&
+            upload.uploadType !== "storage-move" &&
             !upload.parentUploadId && (
               <Link
                 to={`/videos/${upload.videoId}/post`}
@@ -499,6 +528,14 @@ function SuccessDetail({
           >
             Open Course
           </Link>
+        </SuccessBadge>
+      );
+    case "storage-move":
+      return (
+        <SuccessBadge label="Moved and verified">
+          <span className="text-xs text-muted-foreground">
+            Originals kept until you delete them
+          </span>
         </SuccessBadge>
       );
     case "autofill":

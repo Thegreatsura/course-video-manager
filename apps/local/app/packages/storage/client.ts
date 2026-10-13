@@ -49,3 +49,19 @@ export {
   type StorageScanMessage,
   type StorageSizeDelta,
 } from "./lib/scan-wire";
+export {
+  STORAGE_MOVED_EVENT,
+  STORAGE_MOVE_JOB_KIND,
+  STORAGE_MOVE_KINDS,
+  STORAGE_MOVE_KIND_LABELS,
+  STORAGE_MOVE_STAGES,
+  isStorageMoveStage,
+  movableKindsOf,
+  storageMoveTitle,
+  type StorageMoveKind,
+  type StorageMovePlan,
+  type StorageMoveRefusal,
+  type StorageMoveRefusalReason,
+  type StorageMoveResult,
+  type StorageMoveStage,
+} from "./lib/move-wire";

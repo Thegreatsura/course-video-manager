@@ -8,13 +8,11 @@ import {
 import { toJobsAction } from "./job-event-actions";
 import { applyStreamAction } from "./jobs-fold";
 import { announceVideoSettled } from "./job-video-toasts";
-import {
-  isSilentSettlement,
-  succeededToastOf,
-  type SucceededToast,
-} from "./job-succeeded-toast";
+import type { SucceededToast } from "./job-succeeded-toast";
+import { announceSettled, loadStageHistory } from "./jobs-settled";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome } from "./jobs-enqueue";
+import { reduceCancel } from "./jobs-cancel";
 import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
@@ -45,7 +43,9 @@ export namespace jobsReducer {
     | "retrying"
     | "succeeded"
     | "failed"
-    | "interrupted";
+    | "interrupted"
+    /** Stopped on the author's Cancel (a Storage move), its partials removed. */
+    | "cancelled";
 
   export interface JobView {
     id: string;
@@ -75,6 +75,8 @@ export namespace jobsReducer {
      * here may leave a Pending Version (`mayLeavePendingVersion`).
      */
     submitted: boolean;
+    /** The author asked it to stop; it ends `cancelled` once it has cleaned up. */
+    cancelRequested: boolean;
     /** The newest Job Event applied: an older or repeated one is ignored. */
     lastEventId: number;
     /**
@@ -199,6 +201,9 @@ export namespace jobsReducer {
     | StreamFact<"job-succeeded">
     | StreamFact<"job-failed", { message: string; tag: string | null }>
     | StreamFact<"job-interrupted", { message: string; tag: string | null }>
+    /** The author's Cancel reached the Job: it is cleaning up. */
+    | StreamFact<"job-cancel-requested">
+    | StreamFact<"job-cancelled", { message: string | null }>
     | StreamFact<"job-posted", { result: Record<string, unknown> }>
     /** A Publish's Submit landed: a Pending Version exists until Promote. */
     | StreamFact<"job-submitted">
@@ -257,6 +262,9 @@ export namespace jobsReducer {
     /** The author's Retry on a failed or interrupted post. */
     | { type: "press-retry"; id: string }
     | { type: "retry-failed"; id: string; message: string }
+    /** The author's Cancel on a Job that can be cancelled (a Storage move). */
+    | { type: "press-cancel"; id: string }
+    | { type: "cancel-failed"; id: string; message: string }
     /** Nothing has run for a while: the succeeded rows have been seen. */
     | { type: "idle-timeout-elapsed" }
     // The enqueue request's outcome
@@ -311,6 +319,8 @@ export namespace jobsReducer {
     | { type: "load-stage-history"; requestId: number }
     /** The server refuses a Retry of any run but `attempt`. */
     | { type: "retry-job"; id: string; attempt: number }
+    | { type: "cancel-job"; id: string }
+    | { type: "show-cancel-failed-toast"; title: string; message: string }
     /** Record the author's Dismiss on the server, so no tab sees them again. */
     | { type: "dismiss-jobs"; ids: string[] }
     | { type: "show-dismiss-failed-toast"; count: number; message: string }
@@ -361,42 +371,6 @@ export const createInitialJobsState = (): jobsReducer.State => ({
 /** The row id of one Video of a Batch export: `<job id>/<video id>`. */
 export const batchVideoRowId = (jobId: string, videoId: string) =>
   `${jobId}/${videoId}`;
-
-type Exec = Parameters<
-  EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
->[2];
-
-/** Ask for the stage history again: what is in hand may be out of date. */
-const loadStageHistory = (
-  state: jobsReducer.State,
-  exec: Exec
-): jobsReducer.State => {
-  const requestId = state.stageHistoryRequest + 1;
-  exec({ type: "load-stage-history", requestId });
-  return { ...state, stageHistoryRequest: requestId };
-};
-
-/** The toast for a Job that just settled. */
-const announceSettled = (exec: Exec, job: jobsReducer.JobView) => {
-  if (isSilentSettlement(job)) return;
-  if (job.status === "succeeded") {
-    exec({
-      type: "show-job-succeeded-toast",
-      jobId: job.id,
-      title: job.title,
-      toast: succeededToastOf(job),
-    });
-    return;
-  }
-  exec({
-    type: "show-job-failed-toast",
-    jobId: job.id,
-    kind: job.kind,
-    title: job.title,
-    message: job.errorMessage ?? "The job failed",
-    hasLog: true,
-  });
-};
 
 export const jobsReducer: EffectReducer<
   jobsReducer.State,
@@ -454,6 +428,7 @@ export const jobsReducer: EffectReducer<
             result: null,
             postCheck: null,
             submitted: false,
+            cancelRequested: false,
             lastEventId: 0,
             videos: null,
           },
@@ -478,6 +453,10 @@ export const jobsReducer: EffectReducer<
       exec({ type: "retry-job", id: job.id, attempt: job.attempt });
       return state;
     }
+
+    case "press-cancel":
+    case "cancel-failed":
+      return reduceCancel(state, action, exec);
 
     case "retry-failed": {
       const job = state.jobs[action.id];
@@ -559,6 +538,8 @@ export const jobsReducer: EffectReducer<
     case "job-succeeded":
     case "job-failed":
     case "job-interrupted":
+    case "job-cancel-requested":
+    case "job-cancelled":
     case "job-posted":
     case "job-post-checked":
     case "job-submitted":

@@ -120,6 +120,20 @@ export const isPostingJobKind = (kind: string) =>
   POSTING_JOB_KINDS.includes(kind);
 
 /** Where the author's Retry of a post is sent. */
+/** The author's Cancel on a Job that can be cancelled (a Storage move). */
+/**
+ * The kinds whose row offers Cancel: each cleans up after itself (a Storage
+ * move removes its partial copies). The server's list is
+ * `CANCELLABLE_JOB_KINDS` (`sidecar/job-specs.ts`).
+ */
+export const CANCELLABLE_JOB_KIND_NAMES: readonly string[] = ["storage-move"];
+
+export const isCancellableJobKind = (kind: string) =>
+  CANCELLABLE_JOB_KIND_NAMES.includes(kind);
+
+export const jobCancelHref = (jobId: string) =>
+  `/api/jobs/${encodeURIComponent(jobId)}/cancel`;
+
 export const jobRetryHref = (jobId: string) =>
   `/api/jobs/${encodeURIComponent(jobId)}/retry`;
 
