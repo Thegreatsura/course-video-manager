@@ -6,6 +6,7 @@ import type { SucceededToast } from "./job-succeeded-toast";
 vi.mock("@/components/ui/toast", () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -64,6 +65,24 @@ describe("showJobSucceededToast", () => {
       expect(options.cancel!.label).toBe("Go to Post");
       options.cancel!.onClick();
       expect(location.href).toBe("/videos/v1/post");
+    });
+
+    it("says so when the copy fails, instead of rejecting unheard", async () => {
+      const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+      const { options } = show({
+        shape: "youtube",
+        videoId: "v1",
+        youtubeVideoId: "yt-123",
+      });
+      options.action!.onClick();
+
+      await vi.waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          "Failed to copy YouTube Studio link"
+        )
+      );
     });
 
     it("omits the copy action when youtubeVideoId is null", () => {
