@@ -1,5 +1,6 @@
 import {
   calibrationValidity,
+  RECORDER_CAMERA_NAME,
   type CalibrationValidity,
   type LastPassedCalibration,
 } from "@/av-calibration-constants";
@@ -11,9 +12,11 @@ import {
  * from the loader; the clock ticks in as an event, so a calibration that
  * expires while the editor is open shows as expired.
  *
- * What the editor can see of the input device: on OBS, its getUserMedia mic
- * track's label. The CVM recorder's mic only the recorder service knows; it
- * checks it when Record starts, and its refusal says why.
+ * What the editor can see of the camera + mic pair: the camera the recorder
+ * service is configured with (`RECORDER_CAMERA_NAME`; OBS cannot say which
+ * it records), and on OBS its getUserMedia mic track's label. The CVM
+ * recorder's mic only the recorder service knows; it checks the pair when
+ * Record starts, and its refusal says why.
  */
 export namespace calibrationGateReducer {
   export type State = {
@@ -53,15 +56,29 @@ export const calibrationGateReducer = (
   }
 };
 
-/** The CVM recorder: fresh enough (its mic is the service's to check). */
+/**
+ * The CVM recorder: fresh enough, and taken on the recorder's camera (its
+ * mic is the service's to check).
+ */
 export const cvmRecorderGate = (
   state: calibrationGateReducer.State
 ): CalibrationValidity =>
-  calibrationValidity(state.lastPassed, {}, state.nowMs);
+  calibrationValidity(
+    state.lastPassed,
+    { camera: RECORDER_CAMERA_NAME },
+    state.nowMs
+  );
 
-/** OBS: fresh enough, and taken on the mic the editor's detector hears. */
+/**
+ * OBS: fresh enough, and taken on the mic the editor's detector hears and
+ * the recorder's camera.
+ */
 export const obsGate = (
   state: calibrationGateReducer.State,
   browserInputLabel: string | null
 ): CalibrationValidity =>
-  calibrationValidity(state.lastPassed, { browserInputLabel }, state.nowMs);
+  calibrationValidity(
+    state.lastPassed,
+    { browserInputLabel, camera: RECORDER_CAMERA_NAME },
+    state.nowMs
+  );

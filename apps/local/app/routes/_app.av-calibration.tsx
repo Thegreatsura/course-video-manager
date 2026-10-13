@@ -110,10 +110,10 @@ const GateStatus = (props: {
       className={`text-sm ${expired ? "font-semibold text-amber-500" : "text-muted-foreground"}`}
     >
       Last passed {formatCalibrationTime(props.lastPassed.createdAtMs)}, on{" "}
-      {props.lastPassed.recorderMic}.{" "}
+      {props.lastPassed.cameraDevice} and {props.lastPassed.recorderMic}.{" "}
       {expired
         ? `It expired ${formatCalibrationTime(expiresAtMs)}: recording is blocked until one passes.`
-        : `Recording is allowed until ${formatCalibrationTime(expiresAtMs)}, on the same mic.`}
+        : `Recording is allowed until ${formatCalibrationTime(expiresAtMs)}, on the same camera and mic.`}
     </p>
   );
 };
