@@ -31,12 +31,15 @@ import {
 } from "ai";
 import { Effect } from "effect";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { FileSystem } from "@effect/platform";
 import {
   buildVideoChaptersFromRows,
   toYouTubeChapters,
 } from "./video-chapters";
-import { getVideoFilePath, listVideoFiles } from "./video-files";
+import {
+  listVideoFiles,
+  readVideoFile,
+  readVideoFileString,
+} from "./video-files";
 import type { TextWritingAgentMode } from "@/routes/videos.$videoId.completions";
 
 export type TextWritingAgentCodeFile = {
@@ -277,7 +280,6 @@ export const acquireTextWritingContext = Effect.fn("acquireVideoContext")(
     includeDiagramText?: boolean;
   }) {
     const videoOps = yield* VideoOperationsService;
-    const fs = yield* FileSystem.FileSystem;
 
     const video = yield* videoOps.getVideoWithClipsById(props.videoId);
 
@@ -307,8 +309,6 @@ export const acquireTextWritingContext = Effect.fn("acquireVideoContext")(
 
       const allFiles = yield* Effect.forEach(filteredFiles, (filename) => {
         return Effect.gen(function* () {
-          const filePath = getVideoFilePath(video.lineageId, filename);
-
           const imageExtensions = [
             ".png",
             ".jpg",
@@ -323,14 +323,17 @@ export const acquireTextWritingContext = Effect.fn("acquireVideoContext")(
           );
 
           if (isImage) {
-            const fileContent = yield* fs.readFile(filePath);
+            const fileContent = yield* readVideoFile(video.lineageId, filename);
             return {
               type: "image" as const,
               path: filename,
               content: fileContent,
             };
           } else {
-            const fileContent = yield* fs.readFileString(filePath);
+            const fileContent = yield* readVideoFileString(
+              video.lineageId,
+              filename
+            );
             return {
               type: "text" as const,
               filePath: filename,

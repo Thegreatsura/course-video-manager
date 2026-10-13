@@ -18,7 +18,7 @@ import type { BeatKind } from "@/features/beats/beat-kinds";
 import { deriveVideoRole, type VideoRole } from "./lesson-warnings";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import { loadAnimaticLines } from "@/services/animatic-lines.server";
-import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
+import { listVideoFiles, videoFilesDirectory } from "@/services/video-files";
 import { projectVersionPaths } from "@/services/path-projection";
 import type {
   IndexedClip,
@@ -269,7 +269,7 @@ export const loadWriterContext = Effect.fn("loadWriterContext")(function* (
   const videoRole = deriveVideoRole(video.title);
   const lesson = video.lesson;
   const files = yield* listVideoFiles(video.lineageId);
-  const fullPath = path.resolve(getVideoFilePath(video.lineageId));
+  const fullPath = path.resolve(videoFilesDirectory(video.lineageId));
 
   if (!lesson) {
     return {

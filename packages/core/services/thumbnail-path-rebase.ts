@@ -2,9 +2,10 @@
  * Point a duplicated Thumbnail's stored paths at the duplicate's OWN Video
  * File directory.
  *
- * A Thumbnail stores ABSOLUTE paths — `filePath` for the composite, and one
- * per layer inside the `layers` JSON — all of them written under
- * `{VIDEO_FILES_DIR}/{lineageId}/` by the routes that create it. A duplicated
+ * A Thumbnail stores paths — `filePath` for the composite, and one per layer
+ * inside the `layers` JSON — all of them under `video-files/{lineageId}/`
+ * (root-relative since #2105; older rows absolute) by the routes that create
+ * it. A duplicated
  * Video gets a FRESH `lineageId`, so copying those paths verbatim does not
  * strand them: it ALIASES them onto the source Video's files. The copy renders
  * the source's picture, and editing the copy's Thumbnail writes over the

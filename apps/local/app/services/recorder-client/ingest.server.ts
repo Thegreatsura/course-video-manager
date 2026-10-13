@@ -5,6 +5,8 @@ import { asc, eq, inArray, or } from "drizzle-orm";
 import { clipRecordingSessionRelation } from "@cvm/core/services/clip-recording-session-relation";
 import { Effect } from "effect";
 import { sceneSegments } from "@/packages/scene-layout";
+import { toRootRelative } from "@/packages/storage";
+import { storageRootsConfig } from "@/services/storage-roots";
 import type { InsertionPoint } from "@/services/clip-service";
 import {
   dbCall,
@@ -90,6 +92,9 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
 ) {
   const recordingSessionId = event.recordingSessionId;
   if (event.type === "recording-started") {
+    // Stored relative to its Storage Root (`raw-footage/<session>/mic.mkv`),
+    // as every path is (ADR 0040); a folder under no root as it is.
+    const roots = yield* storageRootsConfig;
     // A Recording Session hangs off its Video, so the Video's Version must
     // be the Draft (docs/DRAFT_GUARD.md). Refused, it is never saved, and
     // nor is anything after it: the editor is told, not retried.
@@ -107,9 +112,9 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
             .values({
               id: recordingSessionId,
               videoId: event.videoId,
-              cameraFilePath: event.files.camera,
-              screenFilePath: event.files.screen,
-              micFilePath: event.files.mic,
+              cameraFilePath: toRootRelative(event.files.camera, roots),
+              screenFilePath: toRootRelative(event.files.screen, roots),
+              micFilePath: toRootRelative(event.files.mic, roots),
               micOffsetMs,
               status: "recording",
               startedAt: new Date(event.t0Ms),

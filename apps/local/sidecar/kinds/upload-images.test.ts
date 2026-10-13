@@ -29,7 +29,9 @@ let dbLayer: Layer.Layer<VideoOperationsService | JobOperationsService>;
 let videoId: string;
 let folder: string;
 let filesDir: string;
+let storageRoot: string;
 const previousFilesDir = process.env.VIDEO_FILES_DIR;
+const previousRoots = process.env.STORAGE_ROOTS;
 
 beforeAll(async () => {
   const result = await createTestDb();
@@ -38,13 +40,20 @@ beforeAll(async () => {
     VideoOperationsService.Default,
     JobOperationsService.Default
   ).pipe(Layer.provide(Layer.succeed(DrizzleService, testDb as never)));
-  filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "upload-images-"));
-  process.env.VIDEO_FILES_DIR = filesDir;
+  // Video Files are in video-files/ on a temp Storage Root; the legacy
+  // store (VIDEO_FILES_DIR) is a folder of its own that stays empty.
+  storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "upload-images-"));
+  filesDir = path.join(storageRoot, "video-files");
+  process.env.STORAGE_ROOTS = storageRoot;
+  process.env.VIDEO_FILES_DIR = path.join(storageRoot, "legacy");
 });
 
 afterAll(() => {
-  process.env.VIDEO_FILES_DIR = previousFilesDir;
-  fs.rmSync(filesDir, { recursive: true, force: true });
+  if (previousFilesDir === undefined) delete process.env.VIDEO_FILES_DIR;
+  else process.env.VIDEO_FILES_DIR = previousFilesDir;
+  if (previousRoots === undefined) delete process.env.STORAGE_ROOTS;
+  else process.env.STORAGE_ROOTS = previousRoots;
+  fs.rmSync(storageRoot, { recursive: true, force: true });
 });
 
 beforeEach(async () => {

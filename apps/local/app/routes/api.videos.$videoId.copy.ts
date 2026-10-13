@@ -47,7 +47,7 @@ export const action = makeAction({
       // `lineageId`, and both of the stores keyed by one are left behind:
       // its Clip Mockups keep their paths verbatim, so every frame and every
       // WAV would resolve into an empty directory (#1669), and
-      // `{VIDEO_FILES_DIR}/{lineageId}/` does not exist at all, so the copy
+      // `video-files/{lineageId}/` does not exist at all, so the copy
       // would open with none of the source's writer context (#1674).
       // `@cvm/core` cannot do either — it has no disk.
       const newVideo = yield* videoOps.getVideoRowById(newVideoId);

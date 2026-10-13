@@ -1,5 +1,6 @@
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { webFileStream } from "@/services/web-file-stream.server";
+import { locateStoredVideoFile } from "@/services/video-files";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
 import { data } from "react-router";
@@ -16,7 +17,17 @@ export const loader = makeLoader({
         );
       }
 
-      return new Response(webFileStream(record.filePath), {
+      // Root-relative: the first Storage Root that has it; legacy: as stored.
+      const onDisk = locateStoredVideoFile(record.filePath);
+      if (onDisk === null) {
+        return yield* Effect.die(
+          data("Thumbnail image not found on any Storage Root", {
+            status: 404,
+          })
+        );
+      }
+
+      return new Response(webFileStream(onDisk), {
         headers: {
           "Content-Type": "image/png",
           "Cache-Control": "no-cache",
