@@ -147,13 +147,17 @@ an ordinary Clip in every way — zoomable, movable, deletable, listed by
 ${MINIMUM_CLIP_LENGTH_SECONDS}s minimum clip length; an unknown --video is a
 not-found (exit 2).
 
+--source is a path as 'cvm footage list' prints it. One under a Storage Root is
+read by its root-relative form, so the Clip keeps working after its Footage is
+moved to another drive.
+
 Immediate — no confirmation (agent-facing tool). Like every clip write it needs
 the owning CourseVersion to be a Draft (a non-Draft is refused).
 
 Examples:
-  cvm footage transcribe /footage/take.mkv
-  cvm clip add --video vid_123 --source /footage/take.mkv --start 12.4 --end 40.0
-  cvm clip add --video vid_123 --source /footage/take.mkv --start 5 --end 9 --before clip_def`;
+  cvm footage transcribe /mnt/d/raw-footage/take.mkv
+  cvm clip add --video vid_123 --source /mnt/d/raw-footage/take.mkv --start 12.4 --end 40.0
+  cvm clip add --video vid_123 --source /mnt/d/raw-footage/take.mkv --start 5 --end 9 --before clip_def`;
 
 export const DELETE_HELP = `Archive (soft-delete) a Clip.
 

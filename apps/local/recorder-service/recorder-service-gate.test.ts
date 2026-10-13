@@ -16,7 +16,7 @@ import {
 /**
  * THE GATE (ADR 0038), where it bites: the recorder service refuses to start
  * a Recording Session, from the editor or the Stream Deck, without a fresh
- * AV Calibration on the mic it records. It never stops one running.
+ * AV Calibration on the camera + mic pair it records. It never stops one running.
  */
 
 const openRecorder = async () => {
@@ -41,6 +41,11 @@ describe("the AV Calibration gate on the recorder service", () => {
       "it was taken on another mic",
       { ...CALIBRATION, recorderMic: "Scarlett Solo USB" },
       'changed from "Scarlett Solo USB"',
+    ],
+    [
+      "it was taken on another camera",
+      { ...CALIBRATION, cameraDevice: "Elgato Facecam" },
+      'camera changed from "Elgato Facecam" to "Cam Link 4K"',
     ],
   ])(
     "refuses Record and a Stream Deck Record when %s",

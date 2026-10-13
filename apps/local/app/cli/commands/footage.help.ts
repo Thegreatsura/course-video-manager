@@ -7,11 +7,14 @@ export const HELP = `Footage — a raw recording on disk, before it is a Video.
 
 Footage is a source video FILE on the author's machine (an OBS capture, a screen
 recording) that has not been cut into Clips yet. Unlike every other noun in the
-domain model it has NO DATABASE ROW: its identity is its filesystem path, and
+domain model it has NO DATABASE ROW: its identity is its path RELATIVE TO A
+STORAGE ROOT ("raw-footage/take.mkv"; STORAGE_ROOTS lists the drives, first hit
+wins), so it is the same Footage whichever drive holds it, and
 its transcript is cached in a SIDECAR file next to it
 ("<path>.transcript.json") — the same "the filesystem is the state" convention
 as a Video File. There is no 'RawFootage' table and no id; you always address
-footage by path.
+footage by path: a root-relative path (looked up on each Storage Root in order),
+or an absolute one as 'footage list' prints it. Footage is never deleted.
 
 The point of transcribing footage is to read what was said BEFORE editing, so an
 agent can decide where Clips and Chapters should fall. The loop is:
@@ -53,7 +56,8 @@ recorder writes each Recording Session into a folder of its own in that director
 take: a CVM-recorder Clip's 'videoFilename' is that same mic file. Its transcript
 is in the mic file's own time; a Clip's source times are that plus the session's
 mic offset (default 150 ms). Each line carries:
-  path         absolute path to the file (feed straight to 'footage transcribe')
+  path         absolute path to the file, on whichever Storage Root it was
+               found (feed straight to 'footage transcribe')
   size         bytes
   transcribed  whether a transcript sidecar exists next to it
 
@@ -103,6 +107,7 @@ on STDERR (exit 4); a missing file is a ParseError (exit 3).
 "queued", path, sidecar, log }; read the result later with 'footage transcript'.
 
 Examples:
+  cvm footage transcribe raw-footage/take.mkv     # found on the first Storage Root that has it
   cvm footage transcribe /mnt/d/raw-footage/take.mkv
   cvm footage transcribe ./rec.mp4 | jq '{words, segments}'
   cvm footage transcribe --no-wait /mnt/d/raw-footage/take.mkv`;
@@ -119,5 +124,6 @@ bytes have changed since (its content hash no longer matches) — is a not-found
 (exit 2). Run 'footage transcribe' first.
 
 Examples:
+  cvm footage transcript raw-footage/take.mkv
   cvm footage transcript /mnt/d/raw-footage/take.mkv
   cvm footage transcript ./rec.mp4 | jq -r '.segments[].text'`;

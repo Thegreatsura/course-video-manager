@@ -13,6 +13,7 @@ import {
 } from "@/silence-detection-constants";
 import {
   calibrationValidity,
+  RECORDER_CAMERA_NAME,
   describeCalibrationRefusal,
   type LastPassedCalibration,
 } from "@/av-calibration-constants";
@@ -412,11 +413,16 @@ export const obsConnectorReducer: EffectReducer<
     case "recording-started": {
       if (state.type === "obs-connected") {
         // THE GATE (ADR 0038): a take OBS started without a fresh AV
-        // Calibration on this mic is stopped at once, and the editor says
-        // why. Only here, at its start: a take let through runs to its end.
+        // Calibration on this camera + mic pair is stopped at once, and the
+        // editor says why. OBS cannot say which camera it records: the
+        // recorder service's is taken as it. Only here, at its start: a take
+        // let through runs to its end.
         const gate = calibrationValidity(
           action.lastPassed,
-          { browserInputLabel: action.browserInputLabel },
+          {
+            browserInputLabel: action.browserInputLabel,
+            camera: RECORDER_CAMERA_NAME,
+          },
           action.nowMs
         );
         if (!gate.valid) {
