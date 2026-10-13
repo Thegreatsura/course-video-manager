@@ -50,9 +50,13 @@ describe("wakeSpacedesk", () => {
 
     const [packet] = fake.packets;
     expect(packet).toHaveLength(462);
-    expect(
-      [0, 4, 8, 12, 16, 48, 52, 56].map((o) => packet!.readInt32LE(o))
-    ).toEqual([0, 334, 4, 8, 1, 2, 1920, 1080]);
+    expect([0, 4, 8, 12, 16, 48].map((o) => packet!.readInt32LE(o))).toEqual([
+      0, 334, 4, 8, 1, 2,
+    ]);
+    // The client and custom resolutions: both the Short's 1080x1080 square.
+    expect([52, 88, 56, 92].map((o) => packet!.readInt32LE(o))).toEqual([
+      1080, 1080, 1080, 1080,
+    ]);
   });
 
   it("rejects with a SpacedeskWakeError when nothing listens", async () => {

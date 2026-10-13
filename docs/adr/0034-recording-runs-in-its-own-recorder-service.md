@@ -1,10 +1,12 @@
 ---
-status: superseded in part by 0035-the-recorder-service-starts-and-stops-with-pnpm-dev
+status: superseded in part by 0035-the-recorder-service-starts-and-stops-with-pnpm-dev and 0043-a-shorts-spacedesk-screen-is-1080x1080
 ---
 
 # Recording runs in its own recorder service
 
 > **Note (superseded in part):** decision 2 and the first consequence, the detached lifecycle, are superseded by [ADR 0035](0035-the-recorder-service-starts-and-stops-with-pnpm-dev.md): the service now starts and stops with `pnpm dev`. The rest stands.
+
+> **Note (superseded in part):** the Spacedesk display's shape in decision 9 (16:9, 1920x1080, the Short showing its left square) is superseded by [ADR 0043](0043-a-shorts-spacedesk-screen-is-1080x1080.md): the display is 1080x1080 and a Short draws all of it. The rest of decision 9 stands.
 
 > **Note (renamed):** the "new recorder" this ADR describes is now the **CVM recorder**, stored as `video.recorder = 'cvm'` (#1993). The wording below is kept as decided.
 

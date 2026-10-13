@@ -229,6 +229,29 @@ describe("centreCameraOnContent", () => {
       expect(calls[0]!.point).toMatchObject({ x: 150, y: 490, z: 1 });
     });
 
+    it.each([
+      ["1080x1080 at 100% scaling", 1080],
+      ["1080x1080 at 125% scaling (864 CSS px)", 864],
+    ])(
+      "on a square Spacedesk screen (%s), centres in the full viewport with only the padding",
+      (_, side) => {
+        const { editor, calls } = fakeEditor({
+          bounds: { x: 0, y: 0, w: side - 300, h: 100 },
+          viewport: { x: 0, y: 0, w: side, h: side },
+        });
+        withWindowWidth(side, () => centreCameraOnContent(editor, "short"));
+        // right inset = 0 + 150: the whole window is the Short's square, so
+        // nothing right of it is hidden, and there is no face-cam strip.
+        // safeWidth = side - 300, so the fit zoom is 1 and the diagram spans
+        // 150..side-150, centred; y = 120 + (side - 240 - 100)/2.
+        expect(calls[0]!.point).toMatchObject({
+          x: 150,
+          y: 120 + (side - 340) / 2,
+          z: 1,
+        });
+      }
+    );
+
     it("keeps the zoom cap", () => {
       const { editor, calls } = fakeEditor({
         bounds: { x: 0, y: 0, w: 10, h: 10 },

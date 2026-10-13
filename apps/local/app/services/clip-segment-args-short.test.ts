@@ -125,87 +125,98 @@ const pixel = (file: string, x: number, y: number) => [
 const near = (rgb: number[], expected: number[]) =>
   rgb.every((v, i) => Math.abs(v - expected[i]!) <= 40);
 
-describe.skipIf(!hasFfmpeg)("rendering a Short Code segment in ffmpeg", () => {
-  const dir = path.join(
-    os.tmpdir(),
-    `short-segment-${process.pid}-${Date.now()}`
-  );
-  const out = path.join(dir, "segment.mov");
+/**
+ * The Spacedesk display at the two sizes a Short accepts (ADR 0043): its left
+ * 1080x1080 square red with a white 100 px marker at (900,100), and any strip
+ * right of the square blue.
+ */
+const SPACEDESK_SCREENS = [
+  { name: "1080x1080, drawn whole", width: 1080 },
+  { name: "1920x1080, its left square", width: 1920 },
+] as const;
 
-  beforeAll(() => {
-    fs.mkdirSync(dir, { recursive: true });
-    const h264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p"];
-    // The Spacedesk display as it is, 1920x1080: its left 1080x1080 square
-    // red with a white 100 px marker at (900,100), the strip right of it blue.
-    lavfi(
-      path.join(dir, "screen.mkv"),
-      "color=c=blue:s=1920x1080:r=60:d=2," +
-        "drawbox=x=0:y=0:w=1080:h=1080:color=red:t=fill," +
-        "drawbox=x=900:y=100:w=100:h=100:color=white:t=fill",
-      h264
+describe.skipIf(!hasFfmpeg).each(SPACEDESK_SCREENS)(
+  "rendering a Short Code segment in ffmpeg, the screen $name",
+  ({ width }) => {
+    const dir = path.join(
+      os.tmpdir(),
+      `short-segment-${width}-${process.pid}-${Date.now()}`
     );
-    lavfi(
-      path.join(dir, "camera.mkv"),
-      "color=c=lime:s=384x216:r=30000/1001:d=2",
-      h264
-    );
-    lavfi(path.join(dir, "mic.mkv"), "sine=f=440:r=48000:d=2", [
-      "-c:a",
-      "aac",
-      "-ac",
-      "1",
-    ]);
-    execFileSync("ffmpeg", [
-      "-v",
-      "error",
-      ...clipSegmentArgs(
-        shortClip(dir, { scene: "Code", screenCaptured: true }),
-        SHORT,
-        out
-      ),
-    ]);
-  }, 60_000);
+    const out = path.join(dir, "segment.mov");
 
-  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+    beforeAll(() => {
+      fs.mkdirSync(dir, { recursive: true });
+      const h264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p"];
+      lavfi(
+        path.join(dir, "screen.mkv"),
+        `color=c=blue:s=${width}x1080:r=60:d=2,` +
+          "drawbox=x=0:y=0:w=1080:h=1080:color=red:t=fill," +
+          "drawbox=x=900:y=100:w=100:h=100:color=white:t=fill",
+        h264
+      );
+      lavfi(
+        path.join(dir, "camera.mkv"),
+        "color=c=lime:s=384x216:r=30000/1001:d=2",
+        h264
+      );
+      lavfi(path.join(dir, "mic.mkv"), "sine=f=440:r=48000:d=2", [
+        "-c:a",
+        "aac",
+        "-ac",
+        "1",
+      ]);
+      execFileSync("ffmpeg", [
+        "-v",
+        "error",
+        ...clipSegmentArgs(
+          shortClip(dir, { scene: "Code", screenCaptured: true }),
+          SHORT,
+          out
+        ),
+      ]);
+    }, 60_000);
 
-  it("is 1080x1920: the screen's left square 1:1 at 0..1080, the camera band below", () => {
-    const video = JSON.parse(
-      execFileSync(
-        "ffprobe",
-        [
-          "-v",
-          "error",
-          "-show_streams",
-          "-select_streams",
-          "v",
-          "-of",
-          "json",
-          out,
-        ],
-        { encoding: "utf8" }
-      )
-    ).streams[0];
-    expect(video).toMatchObject({ width: 1080, height: 1920 });
-    const RED = [255, 0, 0];
-    const WHITE = [255, 255, 255];
-    // The square fills 0..1080 on both axes, and none of the blue strip shows.
-    for (const [x, y] of [
-      [4, 4],
-      [540, 500],
-      [1076, 500],
-      [1076, 1074],
-      [4, 1074],
-    ])
-      expect(near(pixel(out, x!, y!), RED)).toBe(true);
-    // The marker is where it was, at its size: drawn 1:1, not stretched.
-    expect(near(pixel(out, 950, 150), WHITE)).toBe(true);
-    for (const [x, y] of [
-      [890, 150],
-      [1010, 150],
-      [950, 90],
-      [950, 210],
-    ])
-      expect(near(pixel(out, x!, y!), RED)).toBe(true);
-    expect(near(pixel(out, 540, 1500), [0, 255, 0])).toBe(true);
-  });
-});
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it("is 1080x1920: the screen's left square 1:1 at 0..1080, the camera band below", () => {
+      const video = JSON.parse(
+        execFileSync(
+          "ffprobe",
+          [
+            "-v",
+            "error",
+            "-show_streams",
+            "-select_streams",
+            "v",
+            "-of",
+            "json",
+            out,
+          ],
+          { encoding: "utf8" }
+        )
+      ).streams[0];
+      expect(video).toMatchObject({ width: 1080, height: 1920 });
+      const RED = [255, 0, 0];
+      const WHITE = [255, 255, 255];
+      // The square fills 0..1080 on both axes, and none of the blue strip shows.
+      for (const [x, y] of [
+        [4, 4],
+        [540, 500],
+        [1076, 500],
+        [1076, 1074],
+        [4, 1074],
+      ])
+        expect(near(pixel(out, x!, y!), RED)).toBe(true);
+      // The marker is where it was, at its size: drawn 1:1, not stretched.
+      expect(near(pixel(out, 950, 150), WHITE)).toBe(true);
+      for (const [x, y] of [
+        [890, 150],
+        [1010, 150],
+        [950, 90],
+        [950, 210],
+      ])
+        expect(near(pixel(out, x!, y!), RED)).toBe(true);
+      expect(near(pixel(out, 540, 1500), [0, 255, 0])).toBe(true);
+    });
+  }
+);

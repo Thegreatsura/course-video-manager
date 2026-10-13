@@ -139,7 +139,10 @@ export function getRightOffscreenWidth(
  * 1:1 at the top-left of its canvas, so it shows only the window's left
  * canvas-width square, and Matt's face sits below the diagram, not beside
  * it: everything right of that square is reserved instead, and there is no
- * face-cam strip. The padding is the same for both.
+ * face-cam strip. On the 1080x1080 Spacedesk screen (ADR 0043) the window is
+ * that square, so nothing is reserved and the diagram centres in the full
+ * viewport; a 1920x1080 one still reserves the strip right of 1080. The
+ * padding is the same for both.
  */
 export function getCentringInsets(
   settings: Pick<CenteringSettings, "faceCamWidth" | "paddingX" | "paddingY">,

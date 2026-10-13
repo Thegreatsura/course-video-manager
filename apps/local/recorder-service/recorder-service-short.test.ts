@@ -30,7 +30,7 @@ const openShort = async (windows = fakeWindows()) => {
 };
 
 describe("a Short", () => {
-  it("wakes Spacedesk when its display is not listed, previews it 16:9 like any screen, and records its output as the screen", async () => {
+  it("wakes Spacedesk when its display is not listed, still takes a 1920x1080 one (previewed 960x540), and records its output as the screen", async () => {
     const { windows, client, screen } = await openShort();
     // Waking first, while the camera opens beside it.
     expect(
@@ -65,6 +65,32 @@ describe("a Short", () => {
     });
   });
 
+  it("takes a 1080x1080 display as the screen, previews it square at 540x540, and records its output", async () => {
+    const { windows, client, screen } = await openShort(
+      fakeWindows({ spacedesk: { width: 1080, height: 1080 } })
+    );
+    expect(screen).toEqual({ kind: "ready" });
+    expect(argsOf(windows.screenPreviews.at(-1)!.launch)).toMatch(
+      /ddagrab=output_idx=2:.*scale=540:540,/
+    );
+
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...CALIBRATED,
+    });
+    expect(await client.next("recording-started")).toMatchObject({
+      format: "short",
+      screenCaptured: true,
+    });
+    expect(argsOf(windows.recorder("screen").launch)).toContain(
+      "ddagrab=output_idx=2:framerate=60:"
+    );
+    client.send({ type: "stop" });
+    await client.next("recording-stopped");
+  });
+
   it("does not wake Spacedesk when its display is already listed", async () => {
     const { windows, screen } = await openShort(
       fakeWindows({ spacedesk: { width: 1920, height: 1080, awake: true } })
@@ -73,14 +99,14 @@ describe("a Short", () => {
     expect(windows.wakes()).toBe(0);
   });
 
-  it("with a display that is not 16:9: unavailable naming its size, scenes that show the screen refused, Camera records camera and mic only", async () => {
+  it("with a display that is neither square nor 16:9: unavailable naming its size, scenes that show the screen refused, Camera records camera and mic only", async () => {
     const { windows, client, screen } = await openShort(
       fakeWindows({ spacedesk: { width: 1080, height: 1920, awake: true } })
     );
     expect(screen).toMatchObject({ kind: "unavailable" });
     const message = screen?.kind === "unavailable" ? screen.message : "";
     expect(message).toContain("1080x1920");
-    expect(message).toContain("set Spacedesk back to 1920x1080");
+    expect(message).toContain("set Spacedesk to 1080x1080");
     expect(windows.screenPreviews).toEqual([]);
 
     // The service starts in Code, which shows the screen.

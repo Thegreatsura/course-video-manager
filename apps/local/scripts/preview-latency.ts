@@ -2,7 +2,7 @@
  * Preview latency: how far behind the moment a frame was made the recorder's
  * live preview shows it in a browser (#2144).
  *
- *   pnpm --filter @cvm/local preview-latency [--scenario camera|screen|recording|floor|all]
+ *   pnpm --filter @cvm/local preview-latency [--scenario camera|screen|screen-square|recording|floor|all]
  *     [--seconds 10] [--client pull|multipart]
  *
  * Synthetic sources only: no capture device, no screen. Each scenario takes
@@ -16,6 +16,8 @@
  *
  *   camera     the Cam Link's preview-only process (`cameraPreviewArgs`), 4K NV12 in
  *   screen     the screen preview process (`screenPreviewArgs`), 1440p BGRA in
+ *   screen-square  the same for a Short's 1080x1080 Spacedesk display
+ *              (ADR 0043), previewed at 540x540
  *   recording  the camera + mic process of a Recording Session
  *              (`buildCaptureArgs`), which writes its camera.mkv and mic.mkv
  *              to a temporary folder, deleted after
@@ -42,7 +44,20 @@ import {
 import { startPreviewFeeds } from "../recorder-service/preview-feeds";
 import { findFfmpegExe } from "../recorder-service/windows-launcher";
 
-const SCENARIOS = ["floor", "camera", "screen", "recording"] as const;
+const SCENARIOS = [
+  "floor",
+  "camera",
+  "screen",
+  "screen-square",
+  "recording",
+] as const;
+
+/** Each screen scenario's synthetic screen, at its device's size. */
+const SCREENS = {
+  screen: { width: 2560, height: 1440 },
+  "screen-square": { width: 1080, height: 1080 },
+} as const;
+const isScreen = (s: Scenario): s is keyof typeof SCREENS => s in SCREENS;
 type Scenario = (typeof SCENARIOS)[number];
 
 const args = process.argv.slice(2);
@@ -175,10 +190,13 @@ const ffmpegArgs = (
       return withoutDevices(
         cameraPreviewArgs({ camera: "synthetic", port, stillPort })
       );
-    case "screen": {
+    case "screen":
+    case "screen-square": {
       // ddagrab's lavfi input becomes the pipe, and what followed its
-      // download a filter on the pipe.
-      const argv = screenPreviewArgs({ screenIndex: 0, port });
+      // download a filter on the pipe. The 320x180 clock is stretched to the
+      // screen's shape and back, so the browser still reads it whole.
+      const size = SCREENS[scenario];
+      const argv = screenPreviewArgs({ screenIndex: 0, port, size });
       const at = argv.findIndex((a) => a.startsWith("ddagrab="));
       const after = argv[at]!.replace(
         /^ddagrab=[^,]*,hwdownload,format=bgra,/,
@@ -188,7 +206,7 @@ const ffmpegArgs = (
         ...argv.slice(0, at - 3),
         ...pipedInput("30"),
         "-vf",
-        `${upscale("2560x1440", "bgra")},${after}`,
+        `${upscale(`${size.width}x${size.height}`, "bgra")},${after}`,
         ...argv.slice(at + 1),
       ];
     }
@@ -315,7 +333,7 @@ const measure = async (scenario: Scenario) => {
   if (!exe) throw new Error("ffmpeg.exe not found");
   const feeds = await startPreviewFeeds();
   const js = client === "pull" ? await frameLoopJs() : "";
-  const feed = scenario === "screen" ? "screen" : "camera";
+  const feed = isScreen(scenario) ? "screen" : "camera";
   const server = http.createServer((req, res) => {
     if (req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html" });
@@ -347,7 +365,7 @@ const measure = async (scenario: Scenario) => {
   const ffClosed = new Promise<void>((r) => ff.once("close", () => r()));
   const source = spawn(
     "ffmpeg",
-    sourceArgs(scenario === "screen" ? "30" : CAMERA_RATE),
+    sourceArgs(isScreen(scenario) ? "30" : CAMERA_RATE),
     { stdio: ["ignore", "pipe", "inherit"] }
   );
   source.stdout.pipe(ff.stdin);

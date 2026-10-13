@@ -56,8 +56,9 @@ import {
  * sub-region of it.
  *
  * `format` is the playground's Video's — what a take records. A Short
- * shows only the window's left square, so it centres in that square
- * (`getCentringInsets`) — same padding and zoom cap, no face-cam strip.
+ * shows only the window's left square (all of a square Spacedesk screen), so
+ * it centres in that square (`getCentringInsets`) — same padding and zoom
+ * cap, no face-cam strip.
  */
 export function centreCameraOnContent(
   editor: Editor,

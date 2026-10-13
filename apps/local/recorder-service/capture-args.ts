@@ -256,17 +256,34 @@ export const cameraPreviewArgs = (o: {
 ];
 
 /**
+ * The screen preview's size: 540 tall, as wide as the screen's shape (even),
+ * so the preview is never stretched: 960x540 for the DELL or a 1920x1080
+ * Spacedesk display, 540x540 for a 1080x1080 one (ADR 0043).
+ */
+export const screenPreviewSize = (screen: {
+  width: number;
+  height: number;
+}) => ({
+  width: Math.round((540 * screen.width) / screen.height / 2) * 2,
+  height: 540,
+});
+
+/**
  * The screen preview: a second Desktop Duplication session (Windows allows
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
- * without touching the screen recorder, at 960x540: the DELL and a Short's
- * Spacedesk display are both 16:9.
+ * without touching the screen recorder, at `screenPreviewSize`.
  */
-export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
+export const screenPreviewArgs = (o: {
+  screenIndex: number;
+  port: number;
+  /** The screen's own size, in pixels. */
+  size: { width: number; height: number };
+}) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=960:540,format=yuvj420p`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=${screenPreviewSize(o.size).width}:540,format=yuvj420p`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),
