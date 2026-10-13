@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NodeContext } from "@effect/platform-node";
-import { Effect, Layer, Logger } from "effect";
+import { Duration, Effect, Layer, Logger } from "effect";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,11 +13,12 @@ import {
   LANDSCAPE_VIDEO_ENCODE_ARGS,
   SHORTS_BURN_IN_CPU_FALLBACK_ENCODE_ARGS,
   SHORTS_BURN_IN_ENCODE_ARGS,
+  classifyGpuFailure,
   cpuFallbackArgs,
   withGpuDecode,
 } from "./ffmpeg-error";
 import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
-import { runFfmpegWithProgress } from "./ffmpeg-run";
+import { NvencSessionWaits, runFfmpegWithProgress } from "./ffmpeg-run";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { SidecarContextTest } from "./sidecar-context";
 
@@ -28,6 +29,16 @@ const CUDA_UNAVAILABLE_STDERR = [
   "[h264_nvenc @ 0x5b9380c58280] dl_fn->cuda_dl->cuCtxCreate(&ctx->cu_context_internal, 0, cu_device) failed -> CUDA_ERROR_UNKNOWN: unknown error",
   "[h264_nvenc @ 0x5b9380c58280] No capable devices found",
   "[vost#0:0/h264_nvenc @ 0x5b9380c57e80] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
+  "Conversion failed!",
+].join("\n");
+
+// What h264_nvenc prints when the GPU is fine but every encoder session the
+// driver allows is taken (OBS, the recorder, another encode): CUDA came up,
+// the session did not. Note the same "No capable devices found" line.
+const NVENC_SESSIONS_EXHAUSTED_STDERR = [
+  "[h264_nvenc @ 0x55d1c2a8e2c0] OpenEncodeSessionEx failed: out of memory (10): (no details)",
+  "[h264_nvenc @ 0x55d1c2a8e2c0] No capable devices found",
+  "[vost#0:0/h264_nvenc @ 0x55d1c2a8dd40] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
   "Conversion failed!",
 ].join("\n");
 
@@ -42,7 +53,35 @@ const landscapePass = (output: string) => [
   output,
 ];
 
+describe("classifyGpuFailure", () => {
+  it("tells a GPU that cannot open from one that is out of NVENC sessions", () => {
+    expect(classifyGpuFailure(CUDA_UNAVAILABLE_STDERR)).toBe("no-usable-gpu");
+    expect(classifyGpuFailure(NVENC_SESSIONS_EXHAUSTED_STDERR)).toBe(
+      "nvenc-sessions-exhausted"
+    );
+    // Older drivers report the session limit as a client-key error.
+    expect(
+      classifyGpuFailure(
+        "[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: incompatible client key (21): (no details)\n[h264_nvenc @ 0x1] No capable devices found"
+      )
+    ).toBe("nvenc-sessions-exhausted");
+    // A GPU that cannot encode at all is not "busy".
+    expect(
+      classifyGpuFailure(
+        "[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: unsupported device (2): (no details)\n[h264_nvenc @ 0x1] No capable devices found"
+      )
+    ).toBe("no-usable-gpu");
+    expect(classifyGpuFailure("in.mkv: No such file or directory")).toBeNull();
+  });
+});
+
 describe("cpuFallbackArgs", () => {
+  it("does not move a pass to the CPU when NVENC is only out of sessions", () => {
+    expect(
+      cpuFallbackArgs(landscapePass("out.mp4"), NVENC_SESSIONS_EXHAUSTED_STDERR)
+    ).toBeNull();
+  });
+
   it("swaps only the encoder block for libx264 when NVENC could not open", () => {
     const args = landscapePass("out.mp4");
     expect(cpuFallbackArgs(args, CUDA_UNAVAILABLE_STDERR)).toEqual([
@@ -198,7 +237,14 @@ exit 0
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  const run = (args: string[]) => {
+  const run = (
+    args: string[],
+    waits: readonly Duration.DurationInput[] = [
+      "10 millis",
+      "10 millis",
+      "10 millis",
+    ]
+  ) => {
     const warnings: string[] = [];
     const logs: string[][] = [];
     const logger = Logger.make(({ logLevel, message }) => {
@@ -214,6 +260,7 @@ exit 0
         errorPrefix: "Failed to create concatenated video",
       }).pipe(
         Effect.either,
+        Effect.provideService(NvencSessionWaits, waits),
         Effect.provide(
           Layer.mergeAll(
             NodeContext.layer,
@@ -293,5 +340,69 @@ exit 1
     expect(result._tag).toBe("Left");
     expect(runs()).toHaveLength(1);
     expect(warnings).toEqual([]);
+  });
+
+  // A stand-in whose NVENC runs are refused for want of a session the first
+  // `busyRuns` times, then succeed.
+  const busyGpu = (busyRuns: number) => {
+    fs.writeFileSync(
+      path.join(dir, "busy-stderr.txt"),
+      NVENC_SESSIONS_EXHAUSTED_STDERR
+    );
+    fs.writeFileSync(path.join(dir, "busy-left"), String(busyRuns));
+    fs.writeFileSync(
+      path.join(dir, "ffmpeg"),
+      `#!/bin/sh
+echo "$*" >> "${dir}/runs.txt"
+case " $* " in
+  *" h264_nvenc "*)
+    left=$(cat "${dir}/busy-left")
+    if [ "$left" -gt 0 ]; then
+      echo $((left - 1)) > "${dir}/busy-left"
+      cat "${dir}/busy-stderr.txt" >&2
+      exit 187
+    fi ;;
+esac
+exit 0
+`,
+      { mode: 0o755 }
+    );
+  };
+
+  it("waits and tries NVENC again when it is out of sessions, logging each wait", async () => {
+    busyGpu(2);
+    const { result, warnings, logs } = await run(landscapePass("out.mp4"));
+
+    expect(result._tag).toBe("Right");
+    expect(runs()).toHaveLength(3);
+    for (const line of runs()) {
+      expect(line).toContain("-c:v h264_nvenc");
+      expect(line).not.toContain("libx264");
+    }
+    expect(warnings).toEqual([
+      expect.stringContaining("NVENC has no free encoder session"),
+      expect.stringContaining("NVENC has no free encoder session"),
+    ]);
+    expect(warnings[0]).toContain("(1 of 3)");
+    expect(logs).toHaveLength(3);
+  });
+
+  it("fails clearly, never on the CPU, when NVENC is still busy after the last wait", async () => {
+    busyGpu(99);
+    const { result, warnings } = await run(landscapePass("out.mp4"), [
+      "10 millis",
+      "20 millis",
+    ]);
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left.message).toContain(
+        "NVENC still had no free encoder session after waiting 30ms (2 retries)"
+      );
+      expect(result.left.message).toContain("was not moved to the CPU");
+    }
+    expect(runs()).toHaveLength(3);
+    expect(runs().join("\n")).not.toContain("libx264");
+    expect(warnings).toHaveLength(2);
   });
 });

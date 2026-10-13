@@ -4,6 +4,7 @@ import { CAMERA_FPS } from "@/av-calibration-constants";
 import {
   CLAP_PREVIEW_ENCODE_ARGS,
   GPU_DECODE_ARGS,
+  classifyGpuFailure,
   cpuFallbackArgs,
 } from "@/services/ffmpeg-error";
 import { PLAY_LOOP_SECONDS } from "./clap-step";
@@ -44,7 +45,10 @@ const runOnce = (args: readonly string[]) =>
 /**
  * Runs ffmpeg, answering everything it wrote to stdout. A run that asked the
  * GPU for something (NVDEC, NVENC) and found none is run once more on the
- * CPU (`cpuFallbackArgs`).
+ * CPU (`cpuFallbackArgs`). One that found the GPU but no free NVENC session
+ * fails at once, saying so: the page is waited on, so it does not sit through
+ * `runFfmpegWithProgress`'s minutes of retries, and a busy GPU is never moved
+ * to the CPU (#2141). Clicking again retries.
  */
 const run = (args: string[]) =>
   Effect.gen(function* () {
@@ -54,6 +58,11 @@ const run = (args: string[]) =>
       if (fallbackArgs) result = yield* runOnce(fallbackArgs);
     }
     const { code, stdout, stderr } = result;
+    if (code !== 0 && classifyGpuFailure(stderr) === "nvenc-sessions-exhausted")
+      return yield* new ClapStepFfmpegError({
+        message:
+          "NVENC has no free encoder session (the GPU is busy — OBS, the recorder or an export); try again in a moment",
+      });
     if (code !== 0)
       return yield* new ClapStepFfmpegError({
         message: `ffmpeg exited ${code}: ${stderr.trim().split(/\r?\n/).slice(-2).join(" ")}`,

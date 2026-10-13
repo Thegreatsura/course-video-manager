@@ -235,13 +235,48 @@ export const withGpuDecode = (args: readonly string[]): string[] =>
  * encode. Not a bad parameter, not a bad input: the same command on the CPU
  * would run.
  */
-const GPU_UNAVAILABLE =
-  /cuCtxCreate|cuInit|CUDA_ERROR_|No (NVENC )?capable devices found|Cannot load libcuda|Cannot load libnvidia-encode|OpenEncodeSessionEx failed|Hardware device setup failed/i;
+const NO_USABLE_GPU =
+  /cuCtxCreate|cuInit|CUDA_ERROR_|Cannot load libcuda|Cannot load libnvidia-encode|Hardware device setup failed|OpenEncodeSessionEx failed: (no encode device|unsupported device)/i;
+
+/**
+ * What h264_nvenc prints when the GPU is there and working but will not give
+ * it an encoder session — every session the driver allows is taken (OBS, the
+ * recorder, another encode). The driver reports it as `out of memory (10)`
+ * or, on older drivers, `incompatible client key (21)`; anything else that
+ * fails at `OpenEncodeSessionEx` once CUDA is up is treated the same. ffmpeg
+ * follows it with `No capable devices found`, which is why that line alone
+ * says nothing.
+ */
+const NVENC_SESSION_REFUSED = /OpenEncodeSessionEx failed/i;
+
+/** ffmpeg's last resort line for either case above. */
+const NO_CAPABLE_DEVICE = /No (NVENC )?capable devices found/i;
+
+/**
+ * Why a pass that asked for the GPU failed, from its stderr:
+ *
+ * - `"no-usable-gpu"`: no device, no driver, no CUDA context. Re-run it on
+ *   the CPU ({@link cpuFallbackArgs}).
+ * - `"nvenc-sessions-exhausted"`: the GPU is fine but busy. Wait and try the
+ *   same pass on NVENC again (`runFfmpegWithProgress`); never the CPU.
+ * - `null`: not the GPU's doing.
+ */
+export type GpuFailure = "no-usable-gpu" | "nvenc-sessions-exhausted";
+
+export const classifyGpuFailure = (stderrTail: string): GpuFailure | null => {
+  if (NO_USABLE_GPU.test(stderrTail)) return "no-usable-gpu";
+  if (NVENC_SESSION_REFUSED.test(stderrTail)) return "nvenc-sessions-exhausted";
+  if (NO_CAPABLE_DEVICE.test(stderrTail)) return "no-usable-gpu";
+  return null;
+};
 
 /**
  * The one place a pass leaves the GPU: given the args of a pass that FAILED
  * and the stderr it left, the same pass on the CPU — or `null` when the
  * failure was not the GPU being unusable, or the pass asked nothing of it.
+ *
+ * A GPU that is merely out of NVENC sessions is NOT unusable: this answers
+ * `null` for it, so a busy GPU never silently becomes CPU load (#2141).
  *
  * Every {@link GPU_DECODE_ARGS} is dropped and every GPU encode block in
  * {@link GPU_ENCODES} is swapped for its CPU stand-in; inputs, filters, audio,
@@ -251,7 +286,7 @@ export const cpuFallbackArgs = (
   failedArgs: readonly string[],
   stderrTail: string
 ): string[] | null => {
-  if (!GPU_UNAVAILABLE.test(stderrTail)) return null;
+  if (classifyGpuFailure(stderrTail) !== "no-usable-gpu") return null;
   let args = withoutGpuDecode(failedArgs);
   for (const { gpu, cpu } of GPU_ENCODES) {
     const at = indexOfSequence(args, gpu);

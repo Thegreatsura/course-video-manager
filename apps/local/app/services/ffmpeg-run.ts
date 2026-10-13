@@ -1,5 +1,5 @@
 import { Command } from "@effect/platform";
-import { Effect, Ref, Stream } from "effect";
+import { Context, Duration, Effect, Ref, Stream } from "effect";
 import { registerFfmpegChild } from "./ffmpeg-child-registry";
 import { createFfmpegProgressParser } from "./ffmpeg-progress";
 import { appendBoundedTail, withStderrTail } from "./ffmpeg-log-capture";
@@ -7,9 +7,35 @@ import { SidecarContext } from "./sidecar-context";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import {
   FFmpegError,
+  classifyGpuFailure,
   cpuFallbackArgs,
   type FfmpegLogInfo,
 } from "./ffmpeg-error";
+
+/**
+ * How long a pass waits before each new try when NVENC had no free encoder
+ * session (#2141): 5 s, doubling to a minute, eight tries after the first —
+ * about five minutes in all. Long enough to outlast a sibling encode or a
+ * short burst of recording; short enough that an export stuck behind a whole
+ * filming session says so rather than sitting at 0% for an hour.
+ *
+ * A Context.Reference so a test can shrink it to milliseconds.
+ */
+export class NvencSessionWaits extends Context.Reference<NvencSessionWaits>()(
+  "NvencSessionWaits",
+  {
+    defaultValue: (): readonly Duration.DurationInput[] => [
+      "5 seconds",
+      "10 seconds",
+      "20 seconds",
+      "40 seconds",
+      "1 minute",
+      "1 minute",
+      "1 minute",
+      "1 minute",
+    ],
+  }
+) {}
 
 /**
  * How every long ffmpeg ENCODE in this app is started, and the three things
@@ -67,6 +93,17 @@ export {
  * is run once more, whole, on the CPU (`cpuFallbackArgs`), with a WARN in the
  * Job's log. Every caller gets it by construction; none decides for itself.
  *
+ * A GPU that is there but has no free NVENC session (OBS, the recorder or
+ * another encode holds them all) is different: the pass waits and tries
+ * again on the GPU, on the {@link NvencSessionWaits} schedule, with a WARN in
+ * the Job's log for each wait. If NVENC still will not open after the last
+ * one, the pass FAILS, saying so — it does not go to the CPU. The likeliest
+ * reason the sessions are gone is that Matt is recording, which is exactly
+ * when a libx264 encode would fight the recorder for the CPU; and a landscape
+ * pass encoded on libx264 has different bytes, so a Byte Hash moves and a
+ * Publish re-sends that Video (ADR 0027). A failed Job can be re-run once the
+ * GPU is free.
+ *
  * And it is where the process-wide limit on heavy encodes is kept: every run
  * takes one of `FfmpegPermitsService`'s encode slots (default 2) for its whole
  * length, fallback included, and logs when it has to wait for one. A Publish,
@@ -96,11 +133,39 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
       });
 
     // The slot is held across the fallback too: the CPU re-run is the
-    // hungrier of the two, and must not start outside the limit.
+    // hungrier of the two, and must not start outside the limit. And across
+    // the NVENC waits: a pass that let go of its slot to wait would only
+    // let in another encode that wants the same missing session.
     yield* withEncodeSlot(opts.errorPrefix)(
       Effect.gen(function* () {
-        const first = yield* runOnce(opts.args);
+        let first = yield* runOnce(opts.args);
         if (first.code === 0) return;
+
+        const waits = yield* NvencSessionWaits;
+        let waited = Duration.zero;
+        for (const [i, wait] of waits.entries()) {
+          if (
+            classifyGpuFailure(first.stderrTail) !== "nvenc-sessions-exhausted"
+          )
+            break;
+          yield* Effect.logWarning(
+            `ffmpeg: NVENC has no free encoder session (the GPU is busy — OBS, the recorder or another encode); waiting ${Duration.format(wait)} and trying again on the GPU (${i + 1} of ${waits.length})`,
+            { errorPrefix: opts.errorPrefix, exitCode: first.code }
+          );
+          yield* Effect.sleep(wait);
+          waited = Duration.sum(waited, wait);
+          first = yield* runOnce(opts.args);
+          if (first.code === 0) return;
+        }
+        if (
+          classifyGpuFailure(first.stderrTail) === "nvenc-sessions-exhausted"
+        ) {
+          return yield* toError(
+            null,
+            `, exit code: ${first.code}: NVENC still had no free encoder session after waiting ${Duration.format(waited)} (${waits.length} retries). The GPU is busy, not missing, so this pass was not moved to the CPU; free the GPU (stop recording, or let other encodes finish) and run the Job again`,
+            first.stderrTail
+          );
+        }
 
         const fallbackArgs = cpuFallbackArgs(opts.args, first.stderrTail);
         if (!fallbackArgs) {
