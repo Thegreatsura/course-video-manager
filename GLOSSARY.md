@@ -136,7 +136,7 @@ A segment of **Footage** within a Video, defined by a start time and an end time
 _Avoid_: Segment, Cut, Take
 
 **Footage**:
-A raw source video file (a camera capture, a screen recording) before it is cut into **Clips**: the input to editing, not a product of it. Unlike every other noun here, Footage is not a record: it is known only by where the file is on the author's machine. It is transcribed as a whole file, and a new **Clip** takes its text from that transcript. The transcription is a **Job** the **Sidecar** runs; a long file goes through Whisper in pieces, each kept beside the file once it is done, so a transcription cut off by a Sidecar restart picks up where it stopped instead of starting again. A Clip points at the Footage it was cut from.
+A raw source video file (a camera capture, a screen recording) before it is cut into **Clips**: the input to editing, not a product of it. Unlike every other noun here, Footage is not a record: it is known only by where the file is, its path relative to a **Storage Root**, whichever drive holds it. It is never deleted by CVM: it can only be moved between Storage Roots (ADR 0041). It is transcribed as a whole file, and a new **Clip** takes its text from that transcript. The transcription is a **Job** the **Sidecar** runs; a long file goes through Whisper in pieces, each kept beside the file once it is done, so a transcription cut off by a Sidecar restart picks up where it stopped instead of starting again. A Clip points at the Footage it was cut from.
 _Avoid_: Raw footage (informal prose ok), Source video
 
 **Effect Clip**:
@@ -244,8 +244,8 @@ A **Video** with no **Exported Video** for its current **Export Hash**: either t
 _Avoid_: Dirty video, Stale video
 
 **Purge**:
-Deliberately deleting an Exported Video's file, so that it becomes an Unexported Video again. Undone by exporting again.
-_Avoid_: Clear, Delete from file system, Unexport
+Deliberately deleting an Exported Video's file, so that it becomes an Unexported Video again. Undone by exporting again. It is also done from the Storage page, for a whole **Storage Bucket** or for chosen files, and only for a Video whose **Footage** is all found, so that it can always be exported again (ADR 0041).
+_Avoid_: Clear, Delete from file system, Unexport, Delete Exported Videos
 
 **Overlay Render Cache**:
 The kept renders of **Overlay** content: one render for each distinct piece of content, of any **Overlay Kind**. A render is named by exactly what it draws, plus the **Overlay Renderer Version**. It exists because a Video is exported again whenever any of its **Clips** moves, and rendering every Overlay again each time would be slow. Two Overlays with the same content in the same Course share one render. Everything in it can be made again from the Course, so losing it costs only render time.
@@ -260,6 +260,18 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 **Storage Root**:
 One of the drives CVM's files may be on (`/mnt/d`, `/mnt/e`), listed in order in the one `STORAGE_ROOTS` setting. Every Storage Root has the same fixed folders (`raw-footage/`, `finished-videos/`, `clip-mockups/`, `overlay-renders/`). The database stores a file's path relative to a Storage Root, with no drive in it. A file is read from the first Storage Root that has it, and a new file is written to the first. So moving a file between drives changes no row and no **Export Hash** (ADR 0040). A path under no Storage Root (a **Recording Session** in `~/Videos`) is used exactly as stored.
 _Avoid_: Drive (a Storage Root is the folder CVM uses on it), Storage location, Volume
+
+**Storage Bucket**:
+The unit the Storage page counts and moves: each **Course**, **Standalone Videos**, **Shorts**, **Shared Footage**, **Unused Footage**, and the Other buckets (**Clip Mockups**, the **Overlay Render Cache**, export scratch, and **Exported Videos** of no current Video). Every file CVM keeps is in exactly one. A Storage Bucket's size is counted fresh, on every **Storage Root**, each time the page is opened, and is never stored (ADR 0041). Its Footage or its Exported Videos are moved between Storage Roots as one.
+_Avoid_: Block, Group, Folder (a Storage Bucket is not a folder on disk)
+
+**Shared Footage**:
+The **Storage Bucket** of **Footage** used by **Clips** in more than one **Course**. It is counted once, lists the Courses that use it, and is moved as one, so moving one Course's Footage never moves Footage out from under another Course.
+_Avoid_: Common footage, Reused footage
+
+**Unused Footage**:
+The **Storage Bucket** of **Footage** under `raw-footage/` that no **Clip** and no **Recording Session** uses. It can be moved between **Storage Roots**, but never deleted, like all Footage (ADR 0041).
+_Avoid_: Orphaned footage, Unreferenced footage, Dead footage
 
 ### Recording
 

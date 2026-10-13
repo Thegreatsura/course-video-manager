@@ -20,6 +20,10 @@ D: holds every byte CVM makes and is 92% full. E: has room, but CVM could not us
 6. **The data migration goes around the Draft guard on purpose.** Version freeze is enforced in app code only (docs/DRAFT_GUARD.md). A Published Version's Clips name the same Footage as its Draft's, so they are rewritten too; their Export Hashes do not change, so no frozen content changes. It is idempotent, and a dry run by default.
 7. **Matt runs both scripts himself**, from main. Agents write and test them against temp directories and PGlite only.
 
+## Alternatives rejected
+
+- **Storing the drive on each row** (a root id beside the relative path). Every move between drives would rewrite rows, and the Export Hash would have to leave that column out. With no drive recorded, a move changes nothing in the database, and a file found on any root is the same file. How moves and deletes then work is [ADR 0041](0041-storage-moves-keep-originals-and-never-delete-footage.md).
+
 ## Consequences
 
 - Moving a file between roots changes no row and no Export Hash. Moving Footage and exports is the next Storage Manager ticket.
