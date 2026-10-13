@@ -31,8 +31,13 @@ export default function StoragePage() {
   const [state] = useStoragePage();
   const rows = storageRows(state);
   const locations = storageLocations(state);
-  const labelOf = (location: string) =>
-    state.roots?.find((r) => r.root === location)?.label ?? location;
+  // A drive reads "D:"; any other folder by its last segment (the full path
+  // is on the root's card).
+  const labelOf = (location: string) => {
+    const label =
+      state.roots?.find((r) => r.root === location)?.label ?? location;
+    return label.startsWith("/") ? `…/${label.split("/").pop()}` : label;
+  };
   const isRoot = (location: string) =>
     state.roots?.some((r) => r.root === location && r.online) ?? false;
 
@@ -55,9 +60,12 @@ export default function StoragePage() {
               data-testid="storage-root"
             >
               <div className="flex items-center gap-2 font-semibold">
-                <HardDrive className="w-4 h-4" />
-                {root.label}
-                <span className="text-xs text-muted-foreground font-normal">
+                <HardDrive className="w-4 h-4 shrink-0" />
+                {labelOf(root.root)}
+                <span
+                  className="text-xs text-muted-foreground font-normal truncate"
+                  title={root.root}
+                >
                   {root.root}
                 </span>
                 {!root.online && <Badge variant="destructive">Offline</Badge>}
@@ -147,11 +155,11 @@ function BucketRow({
           </div>
         )}
       </td>
-      <td className="py-2 pr-4 text-right font-medium tabular-nums">
+      <td className="py-2 pr-4 text-right font-medium tabular-nums whitespace-nowrap">
         {gb(row.totalBytes)}
       </td>
       {KINDS.map(({ kind }) => (
-        <td key={kind} className="py-2 pr-4 tabular-nums">
+        <td key={kind} className="py-2 pr-4 tabular-nums whitespace-nowrap">
           {row.bytes[kind] === 0 ? (
             <span className="text-muted-foreground">—</span>
           ) : (
