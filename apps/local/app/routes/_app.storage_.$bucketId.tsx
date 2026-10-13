@@ -1,11 +1,19 @@
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   bucketFiles,
   bucketTotals,
+  fileCanBeTicked,
+  selectedBytes,
   type bucketPageReducer,
 } from "@/features/storage/bucket-page-reducer";
+import { purgeIsBusy } from "@/features/storage/export-purge";
+import {
+  ExportPurgeConfirmation,
+  ExportPurgeStatus,
+} from "@/features/storage/export-purge-dialog";
 import { useBucketPage } from "@/features/storage/use-bucket-page";
 import type { StorageFileRole } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage_.$bucketId";
@@ -34,8 +42,9 @@ const ROLE_LABELS: Record<StorageFileRole, string> = {
 /**
  * The per-bucket page (#2108): one Storage Bucket's files, largest first,
  * each with what it is and the Storage Root(s) it is on (both, mid-move).
- * Read-only. Listed fresh on every visit and streamed in; leaving the page
- * stops the walk.
+ * Exported Videos can be ticked and deleted (#2111), if their Footage is all
+ * found; every other file is listed only. Listed fresh on every visit and
+ * streamed in; leaving the page stops the walk.
  */
 export default function StorageBucketPage({ params }: Route.ComponentProps) {
   // A new bucket is a new listing: remount rather than reuse the state.
@@ -43,8 +52,9 @@ export default function StorageBucketPage({ params }: Route.ComponentProps) {
 }
 
 function BucketPage({ bucketId }: { bucketId: string }) {
-  const [state] = useBucketPage(bucketId);
+  const [state, dispatch] = useBucketPage(bucketId);
   const files = bucketFiles(state);
+  const canTick = files.some((f) => fileCanBeTicked(state, f.path));
   const totals = bucketTotals(state);
   const labelOf = (location: string) => {
     const label =
@@ -73,6 +83,43 @@ function BucketPage({ bucketId }: { bucketId: string }) {
           )}
           <ListingStatus state={state} fileCount={files.length} />
         </div>
+
+        <ExportPurgeStatus
+          purge={state.purge}
+          labelOf={labelOf}
+          onDismiss={() => dispatch({ type: "purge-dismissed" })}
+        />
+        <ExportPurgeConfirmation
+          purge={state.purge}
+          onConfirm={() => dispatch({ type: "purge-confirmed" })}
+          onCancel={() => dispatch({ type: "purge-cancelled" })}
+        />
+
+        {canTick && (
+          <div className="flex items-center gap-4 text-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={
+                state.status !== "complete" ||
+                state.selected.length === 0 ||
+                purgeIsBusy(state.purge)
+              }
+              title={
+                state.status !== "complete"
+                  ? "Wait for the listing to finish"
+                  : "Delete the ticked Exported Videos whose Footage is all found. Footage is never deleted."
+              }
+              onClick={() => dispatch({ type: "purge-selected-clicked" })}
+              data-testid="bucket-purge-selected"
+            >
+              <Trash2 className="w-4 h-4" /> Delete selected Exported Videos
+            </Button>
+            <span className="text-muted-foreground">
+              {state.selected.length} ticked ({size(selectedBytes(state))})
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-4 text-sm">
           {totals.map((t) => (
@@ -115,6 +162,7 @@ function BucketPage({ bucketId }: { bucketId: string }) {
         <table className="w-full text-sm" data-testid="bucket-files">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
+              {canTick && <th className="py-2 pr-2 w-6" />}
               <th className="py-2 pr-4 font-medium">File</th>
               <th className="py-2 pr-4 font-medium">Kind</th>
               <th className="py-2 pr-4 font-medium text-right">Size</th>
@@ -128,6 +176,25 @@ function BucketPage({ bucketId }: { bucketId: string }) {
                 className="border-b align-top"
                 data-testid="bucket-file"
               >
+                {canTick && (
+                  <td className="py-2 pr-2">
+                    {fileCanBeTicked(state, file.path) && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Tick ${file.path}`}
+                        checked={state.selected.includes(file.path)}
+                        disabled={purgeIsBusy(state.purge)}
+                        onChange={() =>
+                          dispatch({
+                            type: "export-checkbox-toggled",
+                            path: file.path,
+                          })
+                        }
+                        data-testid="bucket-file-tick"
+                      />
+                    )}
+                  </td>
+                )}
                 <td className="py-2 pr-4 break-all">
                   <div>{file.path}</div>
                   {file.companionOf && (

@@ -11,7 +11,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  ExportPurgeConfirmation,
+  ExportPurgeStatus,
+} from "@/features/storage/export-purge-dialog";
+import { purgeIsBusy } from "@/features/storage/export-purge";
+import {
   driveWarnings,
+  rowCanBePurged,
   storageCells,
   storageRows,
   type StorageRow,
@@ -38,8 +44,10 @@ const KINDS: { kind: StorageFileKind; label: string }[] = [
 /**
  * The Storage page (#2107): each Storage Root with its free space, then one
  * row per Storage Bucket, largest first, split into Footage and Exported
- * Videos per root. Each bucket's name opens its per-bucket page. Read-only. Counted fresh on every visit and streamed in;
- * leaving the page stops the scan.
+ * Videos per root. Each bucket's name opens its per-bucket page. A Course's,
+ * Standalone Videos' or Shorts' Exported Videos can be deleted (#2111); the
+ * Other buckets that are rebuilt on demand can be deleted (#2112). Counted
+ * fresh on every visit and streamed in; leaving the page stops the scan.
  */
 export default function StoragePage() {
   const [state, dispatch] = useStoragePage();
@@ -68,6 +76,16 @@ export default function StoragePage() {
           state={state}
           labelOf={labelOf}
           onDismiss={() => dispatch({ type: "deletion-dismissed" })}
+        />
+        <ExportPurgeStatus
+          purge={state.purge}
+          labelOf={labelOf}
+          onDismiss={() => dispatch({ type: "purge-dismissed" })}
+        />
+        <ExportPurgeConfirmation
+          purge={state.purge}
+          onConfirm={() => dispatch({ type: "purge-confirmed" })}
+          onCancel={() => dispatch({ type: "purge-cancelled" })}
         />
         <DeleteConfirmation
           state={state}
@@ -170,6 +188,12 @@ export default function StoragePage() {
                     bucketId: row.bucket.id,
                   })
                 }
+                onPurge={() =>
+                  dispatch({
+                    type: "purge-bucket-clicked",
+                    bucketId: row.bucket.id,
+                  })
+                }
               />
             ))}
           </tbody>
@@ -202,11 +226,13 @@ function BucketRow({
   row,
   labelOf,
   onDelete,
+  onPurge,
 }: {
   state: storagePageReducer.State;
   row: StorageRow;
   labelOf: (location: string) => string;
   onDelete: () => void;
+  onPurge: () => void;
 }) {
   return (
     <tr className="border-b align-top" data-testid="storage-row">
@@ -266,6 +292,26 @@ function BucketRow({
             data-testid="storage-bucket-delete"
           >
             <Trash2 className="w-4 h-4" /> Delete
+          </Button>
+        )}
+        {rowCanBePurged(row) && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              state.status !== "complete" ||
+              purgeIsBusy(state.purge) ||
+              state.deletion?.status === "deleting"
+            }
+            title={
+              state.status !== "complete"
+                ? "Wait for the count to finish"
+                : `Delete ${row.bucket.name}'s Exported Videos whose Footage is all found. Footage is never deleted.`
+            }
+            onClick={onPurge}
+            data-testid="storage-bucket-purge"
+          >
+            <Trash2 className="w-4 h-4" /> Delete Exported Videos
           </Button>
         )}
       </td>
