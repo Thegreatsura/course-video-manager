@@ -14,6 +14,15 @@ import type {
 import type { ClapMark } from "@/packages/clap-detection/live";
 import type { CalibrationTimeline } from "./calibration-timeline";
 import { levelMeterReducer, STARTING_LEVEL_METER } from "./level-meter-reducer";
+import { loudnessMisses } from "@/av-calibration-constants";
+import type { ClapStepData } from "@/packages/clap-step";
+import {
+  clapStepOffsetMs,
+  clapStepReducer,
+  startingClapStep,
+} from "./clap-step-reducer";
+
+export { clapStepOffsetMs, soundRange, videoRange } from "./clap-step-reducer";
 
 /**
  * THE AV CALIBRATION PAGE (#2079): the level meter, then the scripted
@@ -80,9 +89,16 @@ export namespace avCalibrationReducer {
         kind: "result";
         calibration: SavedAVCalibration;
         timeline: Timeline;
+        /**
+         * The clap step (#2137): only on the latest calibration, once its
+         * loudness check passed; null otherwise.
+         */
+        clapStep: ClapStep | null;
       }
     /** The session could not go on (refused, ffmpeg quit, not stored). */
     | { kind: "failed"; message: string };
+
+  export type ClapStep = clapStepReducer.ClapStep;
 
   /** The result's review timeline, as far as it has loaded. */
   export type Timeline =
@@ -109,6 +125,8 @@ export namespace avCalibrationReducer {
 
   export type Action =
     | levelMeterReducer.Action
+    /** The page mounted (again, under Strict Mode): start listening to the meter. */
+    | { type: "page-opened" }
     /** The meter failed, and Matt asks for it again. */
     | { type: "try-again-clicked" }
     | { type: "start-clicked" }
@@ -135,8 +153,22 @@ export namespace avCalibrationReducer {
         calibration: SavedAVCalibration;
       }
     | { type: "calibration-not-saved"; calibrationId: string; message: string }
-    /** Matt opens a past calibration from the history. */
-    | { type: "past-calibration-clicked"; calibration: SavedAVCalibration }
+    /** Matt opens a past calibration from the history; `latest`: the newest one. */
+    | {
+        type: "past-calibration-clicked";
+        calibration: SavedAVCalibration;
+        latest: boolean;
+      }
+    | { type: "clap-step-loaded"; calibrationId: string; data: ClapStepData }
+    | { type: "clap-step-not-loaded"; calibrationId: string; message: string }
+    | clapStepReducer.Action
+    | { type: "save-mic-offset-clicked" }
+    | {
+        type: "mic-offset-saved";
+        calibrationId: string;
+        calibration: SavedAVCalibration;
+      }
+    | { type: "mic-offset-not-saved"; calibrationId: string; message: string }
     | {
         type: "timeline-loaded";
         calibrationId: string;
@@ -152,6 +184,8 @@ export namespace avCalibrationReducer {
     /** Open the browser detector's input and report its levels until stopped. */
     | { type: "capture-browser-levels" }
     | { type: "load-timeline"; calibrationId: string }
+    | { type: "load-clap-step"; calibrationId: string }
+    | { type: "save-mic-offset"; calibrationId: string; micOffsetMs: number }
     /** A calibration was stored: the page's history is out of date. */
     | { type: "refresh-history" };
 }
@@ -167,11 +201,14 @@ const noBrowser = (): avCalibrationReducer.Browser => ({
   capture: null,
 });
 
-export const createInitialAVCalibrationState = (
-  exec: (effect: Effect) => EffectEntity<State, Action>
-): State => ({
+/**
+ * Nothing listens yet: the page starts the meter once it has opened
+ * (`page-opened`), so a Strict Mode remount, which stops the first listener,
+ * gets one of its own (as the Storage page, #2136).
+ */
+export const createInitialAVCalibrationState = (): State => ({
   meter: STARTING_LEVEL_METER,
-  meterListener: exec({ type: "listen-to-meter" }),
+  meterListener: null,
   session: { kind: "meter" },
   browser: noBrowser(),
 });
@@ -229,16 +266,41 @@ const onReading = (
   };
 };
 
-/** A calibration's result, its timeline loading. */
+/**
+ * A calibration's result, its timeline loading, and its clap step when it
+ * is the latest and its loudness check passed (#2137).
+ */
 const showResult = (
   state: State,
   calibration: SavedAVCalibration,
+  latest: boolean,
   exec: Parameters<EffectReducer<State, Action, Effect>>[2]
 ): State => {
   exec({ type: "load-timeline", calibrationId: calibration.id });
+  const clapStep = latest && loudnessMisses(calibration).length === 0;
+  if (clapStep) exec({ type: "load-clap-step", calibrationId: calibration.id });
   return {
     ...state,
-    session: { kind: "result", calibration, timeline: { status: "loading" } },
+    session: {
+      kind: "result",
+      calibration,
+      timeline: { status: "loading" },
+      clapStep: clapStep ? { status: "loading" } : null,
+    },
+  };
+};
+
+/** Moves a slider of a ready clap step, or turns Play on or off. */
+const onClapStep = (state: State, action: clapStepReducer.Action): State => {
+  const session = state.session;
+  if (session.kind !== "result" || session.clapStep?.status !== "ready")
+    return state;
+  return {
+    ...state,
+    session: {
+      ...session,
+      clapStep: clapStepReducer(session.clapStep, action),
+    },
   };
 };
 
@@ -261,6 +323,13 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
     case "meter-started":
     case "meter-failed":
       return { ...state, meter: levelMeterReducer(state.meter, action) };
+    case "page-opened":
+      if (state.meterListener) exec.stop(state.meterListener);
+      return {
+        ...state,
+        meter: STARTING_LEVEL_METER,
+        meterListener: exec({ type: "listen-to-meter" }),
+      };
     case "try-again-clicked":
       if (state.meter.status !== "failed") return state;
       if (state.meterListener) exec.stop(state.meterListener);
@@ -394,10 +463,99 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       )
         return state;
       exec({ type: "refresh-history" });
-      return showResult(state, action.calibration, exec);
+      return showResult(state, action.calibration, true, exec);
     case "past-calibration-clicked": {
       if (!isSessionIdle(state.session)) return state;
-      return showResult(state, action.calibration, exec);
+      return showResult(state, action.calibration, action.latest, exec);
+    }
+    case "clap-step-loaded":
+    case "clap-step-not-loaded": {
+      const session = state.session;
+      if (
+        session.kind !== "result" ||
+        session.calibration.id !== action.calibrationId ||
+        session.clapStep?.status !== "loading"
+      )
+        return state;
+      if (action.type === "clap-step-not-loaded")
+        return {
+          ...state,
+          session: {
+            ...session,
+            clapStep: { status: "failed", message: action.message },
+          },
+        };
+      return {
+        ...state,
+        session: { ...session, clapStep: startingClapStep(action.data) },
+      };
+    }
+    case "sound-handle-dragged":
+    case "sound-arrow-clicked":
+    case "video-handle-dragged":
+    case "video-arrow-clicked":
+    case "play-clicked":
+    case "stop-clicked":
+      return onClapStep(state, action);
+    case "save-mic-offset-clicked": {
+      const session = state.session;
+      if (session.kind !== "result" || session.clapStep?.status !== "ready")
+        return state;
+      const step = session.clapStep;
+      if (step.save.status === "saving") return state;
+      const micOffsetMs = clapStepOffsetMs(step);
+      exec({
+        type: "save-mic-offset",
+        calibrationId: session.calibration.id,
+        micOffsetMs,
+      });
+      return {
+        ...state,
+        session: {
+          ...session,
+          clapStep: { ...step, save: { status: "saving", micOffsetMs } },
+        },
+      };
+    }
+    case "mic-offset-saved":
+    case "mic-offset-not-saved": {
+      const session = state.session;
+      if (
+        session.kind !== "result" ||
+        session.calibration.id !== action.calibrationId ||
+        session.clapStep?.status !== "ready" ||
+        session.clapStep.save.status !== "saving"
+      )
+        return state;
+      const step = session.clapStep;
+      const asked = session.clapStep.save.micOffsetMs;
+      if (action.type === "mic-offset-not-saved")
+        return {
+          ...state,
+          session: {
+            ...session,
+            clapStep: {
+              ...step,
+              save: { status: "failed", message: action.message },
+            },
+          },
+        };
+      // The gate and the history read the stored row: reload them.
+      exec({ type: "refresh-history" });
+      return {
+        ...state,
+        session: {
+          ...session,
+          calibration: action.calibration,
+          clapStep: {
+            ...step,
+            save: {
+              status: "saved",
+              micOffsetMs: action.calibration.micOffsetMs ?? asked,
+            },
+          },
+        },
+      };
     }
     case "timeline-loaded":
     case "timeline-not-loaded": {

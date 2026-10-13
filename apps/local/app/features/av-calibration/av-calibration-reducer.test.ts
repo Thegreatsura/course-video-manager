@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createMockExec, ReducerTester } from "@/test-utils/reducer-tester";
+import { describe, expect, it, vi } from "vitest";
+import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
   CLOSE_OBS_TO_CALIBRATE,
   SCRIPT_END_SECONDS,
@@ -8,6 +8,7 @@ import {
 import {
   avCalibrationReducer,
   createInitialAVCalibrationState,
+  clapStepOffsetMs,
   currentStep,
   liveClaps,
 } from "./av-calibration-reducer";
@@ -45,10 +46,18 @@ describe("the AV Calibration page's review timeline", () => {
   it("opens a past calibration's result and loads its timeline, ignoring a late one for a calibration it has left", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
-      createInitialAVCalibrationState(createMockExec())
+      createInitialAVCalibrationState()
     );
-    t.send({ type: "past-calibration-clicked", calibration: calibration("a") })
-      .send({ type: "past-calibration-clicked", calibration: calibration("b") })
+    t.send({
+      type: "past-calibration-clicked",
+      calibration: calibration("a"),
+      latest: false,
+    })
+      .send({
+        type: "past-calibration-clicked",
+        calibration: calibration("b"),
+        latest: false,
+      })
       .send({
         type: "timeline-loaded",
         calibrationId: "a",
@@ -88,7 +97,7 @@ describe("the AV Calibration page's session", () => {
   it("prompts 5 claps between the silence and the reading, on the files' clock from where the run went live, and sends the clap window to the analysis", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
-      createInitialAVCalibrationState(createMockExec())
+      createInitialAVCalibrationState()
     );
     t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
       .send({ type: "start-clicked" })
@@ -144,7 +153,7 @@ describe("the AV Calibration page's session", () => {
   it("says Close OBS to calibrate when another program holds the Cam Link, starts nothing, and starts once it is freed, without a reload", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
-      createInitialAVCalibrationState(createMockExec())
+      createInitialAVCalibrationState()
     );
     t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
       .send({ type: "start-clicked" })
@@ -177,7 +186,7 @@ describe("the AV Calibration page's session", () => {
   it("shows any other refused Start, such as a Cam Link that opens and sends nothing, as the session stopping", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
-      createInitialAVCalibrationState(createMockExec())
+      createInitialAVCalibrationState()
     );
     const notStarting =
       "Cam Link not starting: unplug and replug it, then press Retry.";
@@ -193,7 +202,7 @@ describe("the AV Calibration page's session", () => {
   it("shows the run's clap marks during the clap step only, ignoring another run's", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
-      createInitialAVCalibrationState(createMockExec())
+      createInitialAVCalibrationState()
     );
     const clapsAt = SCRIPT_SCHEDULE.find((s) => s.kind === "clap-ready")!;
     const readAt = SCRIPT_SCHEDULE.find((s) => s.kind === "read")!;
@@ -221,5 +230,147 @@ describe("the AV Calibration page's session", () => {
 
     t.send(reading(4.2 + readAt.startSeconds + 0.1));
     expect(liveClaps(t.getState())).toBeNull();
+  });
+});
+
+describe("the AV Calibration page opening", () => {
+  it("listens to the meter only once the page opens, and opened twice (Strict Mode remount) only the newest listener listens", () => {
+    const first = { stop: () => {} } as never;
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState()
+    );
+    expect(t.getState().meterListener).toBeNull();
+    vi.mocked(t.getExec()).mockReturnValue(first);
+    t.send({ type: "page-opened" }).send({ type: "page-opened" });
+    expect(t.getEffects()).toEqual([
+      { type: "listen-to-meter" },
+      { type: "listen-to-meter" },
+    ]);
+    expect(t.getExec().stop).toHaveBeenCalledWith(first);
+  });
+});
+
+describe("the clap step", () => {
+  const data = {
+    calibrationId: "latest",
+    loudestMs: 20_000,
+    waveform: { startMs: 19_500, peaks: new Array(1001).fill(0) },
+    micOffsetMs: 150,
+  };
+  const failedLoudness = (id: string): SavedAVCalibration => ({
+    ...calibration(id),
+    speechLufs: -21,
+  });
+  const opened = () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState()
+    );
+    t.send({
+      type: "past-calibration-clicked",
+      calibration: { ...calibration("latest"), micOffsetMs: null },
+      latest: true,
+    }).send({ type: "clap-step-loaded", calibrationId: "latest", data });
+    return t;
+  };
+  const step = (t: ReturnType<typeof opened>) => {
+    const session = t.getState().session;
+    if (session.kind !== "result" || session.clapStep?.status !== "ready")
+      throw new Error("no ready clap step");
+    return session.clapStep;
+  };
+
+  it("opens only on the latest calibration, and only once its loudness check passed", () => {
+    const t = new ReducerTester(
+      avCalibrationReducer,
+      createInitialAVCalibrationState()
+    );
+    t.send({
+      type: "past-calibration-clicked",
+      calibration: calibration("old"),
+      latest: false,
+    })
+      .send({
+        type: "past-calibration-clicked",
+        calibration: failedLoudness("loud"),
+        latest: true,
+      })
+      .send({
+        type: "past-calibration-clicked",
+        calibration: calibration("latest"),
+        latest: true,
+      });
+    expect(t.getEffects()).toEqual([
+      { type: "load-timeline", calibrationId: "old" },
+      { type: "load-timeline", calibrationId: "loud" },
+      { type: "load-timeline", calibrationId: "latest" },
+      { type: "load-clap-step", calibrationId: "latest" },
+    ]);
+  });
+
+  it("starts the sound at the loudest point and the video shifted by the current Mic Offset", () => {
+    const s = step(opened());
+    expect(s.soundMs).toBe(20_000);
+    // 20 150 ms is frame 603.9…: frame 604.
+    expect(s.videoFrame).toBe(604);
+    expect(clapStepOffsetMs(s)).toBe(Math.round((604 * 1001) / 30 - 20_000));
+  });
+
+  it("steps the sound 1 ms and the video one frame, the offset following live, within the window", () => {
+    const t = opened();
+    t.send({ type: "sound-arrow-clicked", direction: 1 }).send({
+      type: "video-arrow-clicked",
+      direction: -1,
+    });
+    expect(step(t)).toMatchObject({ soundMs: 20_001, videoFrame: 603 });
+    expect(clapStepOffsetMs(step(t))).toBe(
+      Math.round((603 * 1001) / 30 - 20_001)
+    );
+    t.send({ type: "sound-handle-dragged", ms: 99_999 });
+    expect(step(t).soundMs).toBe(20_500);
+  });
+
+  it("keeps Play on while the sliders move", () => {
+    const t = opened();
+    t.send({ type: "play-clicked" }).send({
+      type: "video-handle-dragged",
+      frame: 600,
+    });
+    expect(step(t)).toMatchObject({ playing: true, videoFrame: 600 });
+    t.send({ type: "stop-clicked" });
+    expect(step(t).playing).toBe(false);
+  });
+
+  it("saves the offset the sliders say, then shows the passed calibration and reloads the gate", () => {
+    const t = opened();
+    const offset = clapStepOffsetMs(step(t));
+    t.resetExec().send({ type: "save-mic-offset-clicked" });
+    expect(t.getEffects()).toEqual([
+      { type: "save-mic-offset", calibrationId: "latest", micOffsetMs: offset },
+    ]);
+    t.send({
+      type: "mic-offset-saved",
+      calibrationId: "latest",
+      calibration: { ...calibration("latest"), micOffsetMs: offset },
+    });
+    expect(t.getEffects()).toContainEqual({ type: "refresh-history" });
+    expect(step(t).save).toEqual({ status: "saved", micOffsetMs: offset });
+    expect(t.getState().session).toMatchObject({
+      calibration: { micOffsetMs: offset, outcome: "passed" },
+    });
+    // Moving a slider again makes it unsaved.
+    t.send({ type: "sound-arrow-clicked", direction: -1 });
+    expect(step(t).save).toEqual({ status: "idle" });
+  });
+
+  it("says why a Save was refused", () => {
+    const t = opened();
+    t.send({ type: "save-mic-offset-clicked" }).send({
+      type: "mic-offset-not-saved",
+      calibrationId: "latest",
+      message: "Only the latest AV Calibration's clap step can be saved",
+    });
+    expect(step(t).save).toMatchObject({ status: "failed" });
   });
 });

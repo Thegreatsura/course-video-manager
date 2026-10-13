@@ -100,9 +100,9 @@
       "reason": "Sidecar only: ffmpeg extracts the audio Whisper transcribes, for a Clip (the transcribe-clips Job), a vertical Short (the render-vertical Job) or a Footage file (the transcribe-footage Job, which `cvm footage transcribe` enqueues). Those ask for SidecarContext, and no module a route reaches may import it (apps/local/.dependency-cruiser.spawn.cjs)."
     },
     {
-      "file": "apps/local/app/packages/clap-detection/lib/ffmpeg-passes.ts",
+      "file": "apps/local/app/packages/clap-step/lib/ffmpeg.ts",
       "count": 1,
-      "reason": "Interactive: the AV Calibration page's finish waits on it. Two short ffmpeg reads (mic PCM, camera motion) of a ~9 s clap window, a few seconds, while Matt watches \"Measuring your mic and finding your claps\"."
+      "reason": "Interactive: the AV Calibration page's clap step (#2137) waits on each. A short read of the mic around the clap, one camera frame as a JPEG, or Play's 2 s clip (CPU libx264, 2 threads), while Matt lines up a clap."
     }
   ],
   "network": [

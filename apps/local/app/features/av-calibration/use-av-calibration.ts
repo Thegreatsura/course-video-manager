@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useRevalidator } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
 import { isMicDevice, MIC_NAME } from "@/mic-device";
@@ -8,6 +9,7 @@ import {
 import type { CalibrationTimeline } from "./calibration-timeline";
 import type { SavedAVCalibration } from "./calibration-wire";
 import { listenToMeter } from "./use-level-meter";
+import type { ClapStepData } from "@/packages/clap-step";
 
 const json = (body: unknown = {}): RequestInit => ({
   method: "POST",
@@ -133,12 +135,15 @@ const captureBrowserLevels = (
   };
 };
 
-/** The effect runner for `avCalibrationReducer`. */
+/**
+ * The effect runner for `avCalibrationReducer`, and the bridge that tells it
+ * the page has opened.
+ */
 export const useAVCalibration = () => {
   const revalidator = useRevalidator();
-  return useEffectReducer(
+  const [state, dispatch] = useEffectReducer(
     avCalibrationReducer,
-    createInitialAVCalibrationState,
+    createInitialAVCalibrationState(),
     {
       "listen-to-meter": (_state, _effect, dispatch) => listenToMeter(dispatch),
       "start-calibration": (_state, _effect, dispatch) => {
@@ -211,9 +216,54 @@ export const useAVCalibration = () => {
             })
           );
       },
+      "load-clap-step": (_state, { calibrationId }, dispatch) => {
+        fetch(
+          `/api/av-calibration/${encodeURIComponent(calibrationId)}/clap-step`
+        )
+          .then(answer)
+          .then(async (response) =>
+            dispatch({
+              type: "clap-step-loaded",
+              calibrationId,
+              data: (await response.json()) as ClapStepData,
+            })
+          )
+          .catch((error: unknown) =>
+            dispatch({
+              type: "clap-step-not-loaded",
+              calibrationId,
+              message: messageOf(error),
+            })
+          );
+      },
+      "save-mic-offset": (_state, { calibrationId, micOffsetMs }, dispatch) => {
+        fetch(
+          `/api/av-calibration/${encodeURIComponent(calibrationId)}/mic-offset`,
+          json({ micOffsetMs })
+        )
+          .then(answer)
+          .then(async (response) =>
+            dispatch({
+              type: "mic-offset-saved",
+              calibrationId,
+              calibration: (await response.json()) as SavedAVCalibration,
+            })
+          )
+          .catch((error: unknown) =>
+            dispatch({
+              type: "mic-offset-not-saved",
+              calibrationId,
+              message: messageOf(error),
+            })
+          );
+      },
       "refresh-history": () => {
         void revalidator.revalidate();
       },
     }
   );
+  useEffect(() => {
+    dispatch({ type: "page-opened" });
+  }, [dispatch]);
+  return [state, dispatch] as const;
 };
