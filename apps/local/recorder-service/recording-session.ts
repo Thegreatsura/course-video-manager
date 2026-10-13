@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { finished as streamFinished } from "node:stream/promises";
 import type { SilenceLength } from "../app/silence-detection-constants";
 import { quitProcess } from "./camera";
 import { buildCaptureArgs, FILE_NAMES } from "./capture-args";
@@ -183,7 +184,16 @@ export const startRecordingSession = (
     return {
       child,
       errors: () => errorTail(tail),
-      closeLog: () => ffmpegLog.end(),
+      /**
+       * Done once the log is on disk and closed. The stream opens and writes
+       * on libuv's threadpool, so without this its file could be created or
+       * written after the Recording Session says it stopped. A log that
+       * failed is done too: it was already reported.
+       */
+      closeLog: () => {
+        ffmpegLog.end();
+        return streamFinished(ffmpegLog).catch(() => {});
+      },
     };
   };
 
@@ -282,13 +292,17 @@ export const startRecordingSession = (
     camera.child.exited,
   ]);
 
+  /** The one stop, whoever asked first: done once `recording-stopped` is logged. */
+  let stopped: Promise<void> | undefined;
   const stopWith = (
     reason: Extract<
       RecordingSessionEvent,
       { type: "recording-stopped" }
     >["reason"]
-  ) => {
-    if (stopping) return finished.then(() => {});
+  ): Promise<void> => {
+    // A second stop (the service closing during a camera-lost stop) waits
+    // for the whole first one, not just the processes' exits.
+    if (stopped) return stopped;
     stopping = true;
     clearTimeout(cameraStart);
     speech.stopRequested();
@@ -296,7 +310,7 @@ export const startRecordingSession = (
       screen && quit(screen.child),
       quit(camera.child),
     ]);
-    return quitting.then(async () => {
+    stopped = quitting.then(async () => {
       const [screenCode, cameraCode] = await finished;
       // `q` closes every file with its duration. A process that quit on an
       // error or was killed may not have: its files are repaired now, so
@@ -306,6 +320,9 @@ export const startRecordingSession = (
         await repairFile(o.launch, files.camera);
         await repairFile(o.launch, files.mic);
       }
+      // Every file closed before the stop is told: a client hearing
+      // `recording-stopped` may move or remove the folder at once.
+      await Promise.all([screen?.closeLog(), camera.closeLog()]);
       const last = speech.stop(lastFileTime);
       if (last) log(last);
       log({
@@ -323,10 +340,9 @@ export const startRecordingSession = (
         ],
       });
       ended = true;
-      screen?.closeLog();
-      camera.closeLog();
       o.onEnded();
     });
+    return stopped;
   };
 
   /** The camera went: say so, then stop the whole Recording Session. */

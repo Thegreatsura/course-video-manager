@@ -13,6 +13,7 @@ import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import {
   connect,
+  holdThreadpool,
   readLog,
   recordOnce,
   start,
@@ -274,6 +275,30 @@ describe("a Recording Session", () => {
     expect(client.received.filter((m) => m.type.startsWith("speech"))).toEqual(
       []
     );
+  });
+
+  it("says the take stopped only once its ffmpeg logs are on disk and closed", async () => {
+    const { windows, client, started } = await recordOnce();
+    const ffmpegLog = path.join(
+      path.dirname(started.files.camera),
+      "ffmpeg-camera.log"
+    );
+    const pool = holdThreadpool();
+    windows.recorder("camera").stderr("[info] the camera's last line\r\n");
+    client.send({ type: "stop" });
+    const logWhenStopped = client
+      .next("recording-stopped")
+      .then(() =>
+        fs.existsSync(ffmpegLog) ? fs.readFileSync(ffmpegLog, "utf8") : ""
+      );
+    // Room for a stop told too early to arrive while the log cannot be
+    // written; a stop that waits for its log arrives only after the release.
+    await Promise.race([
+      logWhenStopped,
+      new Promise((r) => setTimeout(r, 100)),
+    ]);
+    await pool.release();
+    expect(await logWhenStopped).toContain("the camera's last line");
   });
 
   it("captures as the rig proved: separate processes, one T0, the Cam Link at 29.97 to 1440p", async () => {
