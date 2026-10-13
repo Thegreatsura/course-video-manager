@@ -82,3 +82,42 @@ describe("resolveStoragePath", () => {
     expect(findStoragePathSync("raw-footage/a.mkv", roots)).toBeNull();
   });
 });
+
+describe("an Offline root", () => {
+  const notFound = async (stored: string) => {
+    const result = await resolve(stored);
+    if (Either.isRight(result)) throw new Error("expected not found");
+    return result.left;
+  };
+
+  it("is named when it is a stale mount (there, but can't be listed)", async () => {
+    fs.rmSync(e, { recursive: true });
+    fs.writeFileSync(e, "stale");
+
+    const error = await notFound("raw-footage/a.mkv");
+
+    expect(error.offlineRoots).toEqual([e]);
+    expect(error.message).toBe(
+      `Footage not found (${e} offline?): raw-footage/a.mkv`
+    );
+  });
+
+  it("names a WSL drive by its letter", async () => {
+    roots = [d, "/mnt/zz-not-a-drive", "/mnt/y"] as unknown as StorageRoots;
+
+    const error = await notFound("raw-footage/a.mkv");
+
+    expect(error.message).toBe(
+      "Footage not found (/mnt/zz-not-a-drive, Y: offline?): raw-footage/a.mkv"
+    );
+  });
+
+  it("is not named when every root is online", async () => {
+    const error = await notFound("raw-footage/a.mkv");
+
+    expect(error.offlineRoots).toEqual([]);
+    expect(error.message).toBe(
+      "Footage not found on any Storage Root: raw-footage/a.mkv"
+    );
+  });
+});

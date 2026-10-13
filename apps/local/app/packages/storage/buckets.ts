@@ -19,7 +19,13 @@ export {
   type StorageOwnershipInput,
 } from "./lib/buckets";
 export {
+  windowsDriveOf,
+  parseDirtyQueryOutput,
+  type VolumeDirtyBit,
+} from "./lib/dirty-bit";
+export {
   STORAGE_SCAN_MESSAGE_TYPES,
+  moveTargetRefusal,
   type StorageRootReport,
   type StorageScanMessage,
   type StorageSizeDelta,

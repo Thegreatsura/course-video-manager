@@ -31,6 +31,20 @@ const notFoundMessage = (
     : `${what} not found (${offlineRoots.map(rootLabel).join(", ")} offline?): ${relative}`;
 
 /**
+ * Whether a Storage Root can be read right now. A root that is missing, not
+ * mounted, or a stale WSL mount (it exists but can't be listed) is Offline.
+ * Only lists the root's top level: it reads, never writes.
+ */
+export const rootIsOnline = (root: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return yield* fs.readDirectory(root).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false)
+    );
+  });
+
+/**
  * Where a stored path is on disk, as an Option: the first root that has it,
  * or None. An absolute path under no root is not CVM's to manage and is
  * returned as it is, whether or not it exists.
@@ -62,13 +76,9 @@ export const resolveStoragePath = (
   Effect.gen(function* () {
     const found = yield* findStoragePath(stored, roots);
     if (Option.isSome(found)) return found.value;
-    const fs = yield* FileSystem.FileSystem;
     const offlineRoots: string[] = [];
     for (const root of roots) {
-      const online = yield* fs
-        .exists(root)
-        .pipe(Effect.orElseSucceed(() => false));
-      if (!online) offlineRoots.push(root);
+      if (!(yield* rootIsOnline(root))) offlineRoots.push(root);
     }
     const relative = rootRelativePath(stored, roots) ?? stored;
     return yield* new StorageFileNotFoundError({

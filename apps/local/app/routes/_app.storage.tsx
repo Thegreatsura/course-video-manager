@@ -1,7 +1,8 @@
-import { HardDrive, Loader2 } from "lucide-react";
+import { AlertTriangle, HardDrive, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
-  storageLocations,
+  driveWarnings,
+  storageCells,
   storageRows,
   type StorageRow,
   type storagePageReducer,
@@ -30,7 +31,7 @@ const KINDS: { kind: StorageFileKind; label: string }[] = [
 export default function StoragePage() {
   const [state] = useStoragePage();
   const rows = storageRows(state);
-  const locations = storageLocations(state);
+  const warnings = driveWarnings(state);
   // A drive reads "D:"; any other folder by its last segment (the full path
   // is on the root's card).
   const labelOf = (location: string) => {
@@ -38,8 +39,6 @@ export default function StoragePage() {
       state.roots?.find((r) => r.root === location)?.label ?? location;
     return label.startsWith("/") ? `…/${label.split("/").pop()}` : label;
   };
-  const isRoot = (location: string) =>
-    state.roots?.some((r) => r.root === location && r.online) ?? false;
 
   return (
     <div className="flex-1 overflow-y-auto bg-background text-foreground">
@@ -51,6 +50,38 @@ export default function StoragePage() {
           </p>
           <ScanStatus state={state} />
         </div>
+
+        {(warnings.offline.length > 0 || warnings.dirty.length > 0) && (
+          <section className="space-y-2" data-testid="drive-warnings">
+            {warnings.offline.map((root) => (
+              <div
+                key={root.root}
+                className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm"
+                data-testid="drive-offline"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
+                <span>
+                  <strong>{labelOf(root.root)} is Offline.</strong> Its files
+                  can't be counted, played or exported, and nothing can be moved
+                  to it until it is plugged in.
+                </span>
+              </div>
+            ))}
+            {warnings.dirty.map((root) => (
+              <div
+                key={root.root}
+                className="flex items-center gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+                data-testid="drive-dirty"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                <span>
+                  <strong>{labelOf(root.root)} is Dirty:</strong> run chkdsk,
+                  keep originals.
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(state.roots ?? []).map((root) => (
@@ -69,6 +100,9 @@ export default function StoragePage() {
                   {root.root}
                 </span>
                 {!root.online && <Badge variant="destructive">Offline</Badge>}
+                {root.online && root.dirtyBit === "dirty" && (
+                  <Badge className="bg-amber-500 text-black">Dirty</Badge>
+                )}
                 {root.online && root.root in state.unreadableRoots && (
                   <Badge variant="destructive">Unreadable</Badge>
                 )}
@@ -79,7 +113,7 @@ export default function StoragePage() {
                   {gb(root.totalBytes - root.freeBytes)} used)
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground break-all">
                   {root.reason}
                 </div>
               )}
@@ -103,10 +137,9 @@ export default function StoragePage() {
             {rows.map((row) => (
               <BucketRow
                 key={row.bucket.id}
+                state={state}
                 row={row}
-                locations={locations}
                 labelOf={labelOf}
-                isRoot={isRoot}
               />
             ))}
           </tbody>
@@ -135,15 +168,13 @@ function ScanStatus({ state }: { state: storagePageReducer.State }) {
 }
 
 function BucketRow({
+  state,
   row,
-  locations,
   labelOf,
-  isRoot,
 }: {
+  state: storagePageReducer.State;
   row: StorageRow;
-  locations: string[];
   labelOf: (location: string) => string;
-  isRoot: (location: string) => boolean;
 }) {
   return (
     <tr className="border-b align-top" data-testid="storage-row">
@@ -160,23 +191,22 @@ function BucketRow({
       </td>
       {KINDS.map(({ kind }) => (
         <td key={kind} className="py-2 pr-4 tabular-nums whitespace-nowrap">
-          {row.bytes[kind] === 0 ? (
+          {row.bytes[kind] === 0 &&
+          !storageCells(state, row, kind).some((c) => c.type === "offline") ? (
             <span className="text-muted-foreground">—</span>
           ) : (
-            locations
-              .filter(
-                (location) =>
-                  isRoot(location) ||
-                  (row.byLocation[location]?.[kind] ?? 0) > 0
-              )
-              .map((location) => (
-                <div key={location}>
-                  <span className="text-muted-foreground">
-                    {labelOf(location)}
-                  </span>{" "}
-                  {gb(row.byLocation[location]?.[kind] ?? 0)}
-                </div>
-              ))
+            storageCells(state, row, kind).map((cell) => (
+              <div key={cell.location}>
+                <span className="text-muted-foreground">
+                  {labelOf(cell.location)}
+                </span>{" "}
+                {cell.type === "offline" ? (
+                  <span className="text-destructive">Offline</span>
+                ) : (
+                  gb(cell.bytes)
+                )}
+              </div>
+            ))
           )}
         </td>
       ))}

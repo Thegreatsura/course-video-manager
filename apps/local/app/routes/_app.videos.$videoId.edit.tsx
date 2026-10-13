@@ -34,6 +34,8 @@ import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { OverlayOperationsService } from "@/services/db-overlay-operations.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { runtimeLive } from "@/services/layer.server";
+import { findClipsWithMissingFootage } from "@/services/clip-source-files.server";
+import { storageRootsConfig } from "@/services/storage-roots";
 import { makeLoader } from "@/services/route-action.server";
 import { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
@@ -127,6 +129,12 @@ export const loader = makeLoader({
           })
         : [];
 
+      // Shown in place of the player: "Footage not found (E: offline?)".
+      const footageNotFound = yield* findClipsWithMissingFootage(
+        video.clips,
+        yield* storageRootsConfig
+      );
+
       const clipItems = video.clips.map((clip) => ({
         type: "clip" as const,
         order: clip.order,
@@ -189,6 +197,7 @@ export const loader = makeLoader({
         beats,
         animatic,
         overlays,
+        footageNotFound,
         lastPassedCalibration: yield* lastPassedCalibrationNow,
         checkedAtMs: Date.now(),
       };
@@ -463,6 +472,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       beats={props.loaderData.beats}
       animatic={props.loaderData.animatic}
       overlays={props.loaderData.overlays}
+      footageNotFound={props.loaderData.footageNotFound}
       hasScript={props.loaderData.hasScript}
       onAddReferenceChapterAt={({
         videoId,

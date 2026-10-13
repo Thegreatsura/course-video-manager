@@ -16,7 +16,7 @@ import {
 } from "@/test-utils/pglite";
 import type { StorageRoots } from "../index";
 import type { StorageScanMessage } from "../buckets";
-import { streamStorageScan } from "../scan";
+import { streamStorageScan, type DirtyBitReader } from "../scan";
 
 let testDb: TestDb;
 let base: string;
@@ -47,6 +47,8 @@ beforeEach(async () => {
   fs.mkdirSync(d);
   fs.mkdirSync(e);
   roots = [d, e];
+  dirtyRoots = new Set();
+  askedDirtyBit = [];
 });
 
 afterEach(() => {
@@ -103,6 +105,18 @@ const seedVideo = async (opts: {
   return video!.id;
 };
 
+/**
+ * The fake dirty-bit reader: `dirtyRoots` report Dirty, every other root
+ * clean. Records which roots were asked about.
+ */
+let dirtyRoots: Set<string>;
+let askedDirtyBit: string[];
+const fakeDirtyBit: DirtyBitReader = (root) =>
+  Effect.sync(() => {
+    askedDirtyBit.push(root);
+    return dirtyRoots.has(root) ? "dirty" : "clean";
+  });
+
 /** Run the scan to the end, keeping every message. */
 const scan = async () => {
   const messages: StorageScanMessage[] = [];
@@ -111,6 +125,7 @@ const scan = async () => {
       db: db(),
       roots,
       scratchDir: scratch,
+      readDirtyBit: fakeDirtyBit,
       emit: (m) => messages.push(m),
     }).pipe(Effect.provide(NodeContext.layer))
   );
@@ -242,6 +257,61 @@ describe("streamStorageScan", () => {
     });
   });
 
+  it("shows a root it can't list (a stale mount) as Offline", async () => {
+    // A stale WSL mount: the path is there, but listing it fails. A plain
+    // file standing in for the root fails the same way.
+    fs.rmSync(e, { recursive: true });
+    fs.writeFileSync(e, "not a directory");
+
+    const messages = await scan();
+
+    expect(messages[0]).toMatchObject({
+      type: "roots-measured",
+      roots: [
+        { root: d, online: true },
+        { root: e, online: false },
+      ],
+    });
+  });
+
+  it("reports each online root's dirty bit, and asks nothing of an Offline root", async () => {
+    dirtyRoots.add(e);
+    const f = path.join(base, "f");
+    roots = [d, e, f];
+
+    const messages = await scan();
+
+    expect(messages[0]).toMatchObject({
+      type: "roots-measured",
+      roots: [
+        { root: d, online: true, dirtyBit: "clean" },
+        { root: e, online: true, dirtyBit: "dirty" },
+        { root: f, online: false },
+      ],
+    });
+    expect(askedDirtyBit.sort()).toEqual([d, e].sort());
+  });
+
+  it("writes nothing to any root", async () => {
+    await seedVideo({ footage: ["raw-footage/s.mkv"] });
+    put(d, "raw-footage/s.mkv", 30);
+    put(e, "finished-videos/x.mp4", 5);
+    const snapshot = () =>
+      fs
+        .readdirSync(base, { recursive: true, withFileTypes: true })
+        .map((entry) => {
+          const full = path.join(entry.parentPath, entry.name);
+          const stat = fs.statSync(full);
+          return `${full}:${stat.size}:${stat.mtimeMs}`;
+        })
+        .sort();
+    const before = snapshot();
+
+    await scan();
+
+    expect(snapshot()).toEqual(before);
+  });
+
   it("stops the walk when the page closes the stream", async () => {
     for (let i = 0; i < 500; i++) put(d, `raw-footage/${i}.mkv`, 1);
     const lines: string[] = [];
@@ -260,6 +330,7 @@ describe("streamStorageScan", () => {
         streamStorageScan({
           db: db(),
           roots,
+          readDirtyBit: fakeDirtyBit,
           emit: (m) => sendEvent(m.type, m),
         }),
     });
