@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
 import { silenceRule, type SilenceLength } from "@/silence-detection-constants";
-import { createSilenceScanState, scanForSilence } from "./silence-scan";
+import {
+  createSpeechDetectorScan,
+  type SpeechDetectorScan,
+} from "./speech-detector-scan";
 import {
   createInitialSpeechDetectorState,
   isAwaitingLongEnoughSpeech,
@@ -34,8 +37,12 @@ export const useSpeechDetector = (opts: {
   const awaitingLongEnoughSpeech = useRef(false);
   awaitingLongEnoughSpeech.current = isAwaitingLongEnoughSpeech(state);
 
+  // The scan lives as long as the mic stream; Record restarts it.
+  const scan = useRef<SpeechDetectorScan | null>(null);
+
   useEffect(() => {
-    if (opts.isRecording) dispatch({ type: "recording-started" });
+    if (!opts.isRecording) return;
+    dispatch(scan.current?.recordingStarted() ?? { type: "recording-started" });
   }, [opts.isRecording]);
 
   useEffect(() => {
@@ -50,31 +57,22 @@ export const useSpeechDetector = (opts: {
     source.connect(processor);
     processor.connect(audioContext.destination);
 
-    let scan = createSilenceScanState();
+    const liveScan = createSpeechDetectorScan(rule);
+    scan.current = liveScan;
     processor.onaudioprocess = (e) => {
       const input = e.inputBuffer;
       const channels = Array.from({ length: input.numberOfChannels }, (_, c) =>
         input.getChannelData(c)
       );
-      const result = scanForSilence(scan, channels, rule, input.sampleRate);
-      scan = result.state;
-      for (const event of result.events) {
-        dispatch(
-          event.type === "silence-started"
-            ? { type: "silence-started", heardAtSeconds: event.heardAtSeconds }
-            : { type: "silence-ended", endSeconds: event.endSeconds }
-        );
-      }
-      if (awaitingLongEnoughSpeech.current) {
-        dispatch({
-          type: "audio-heard",
-          atSeconds: scan.frames / input.sampleRate,
-          soundDetectionId: crypto.randomUUID(),
-        });
-      }
+      const actions = liveScan.heard(channels, input.sampleRate, {
+        awaitingLongEnoughSpeech: awaitingLongEnoughSpeech.current,
+        newSoundDetectionId: () => crypto.randomUUID(),
+      });
+      for (const action of actions) dispatch(action);
     };
 
     return () => {
+      if (scan.current === liveScan) scan.current = null;
       source.disconnect();
       processor.disconnect();
       void audioContext.close();
