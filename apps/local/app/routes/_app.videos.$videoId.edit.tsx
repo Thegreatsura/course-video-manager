@@ -20,7 +20,6 @@ import { useRecorderChoice } from "@/features/video-editor/use-recorder-choice";
 import { useCvmRecorder } from "@/features/video-editor/use-cvm-recorder";
 import { useCalibrationGate } from "@/features/video-editor/use-calibration-gate";
 import { captureProps } from "@/features/video-editor/recorder-capture";
-import { useDiagramRecordingStatus } from "@/features/video-editor/use-diagram-recording-status";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
@@ -369,8 +368,6 @@ export const ComponentInner = (props: Route.ComponentProps) => {
   });
 
   const capture = captureProps(recorderChoice, obsConnector, cvmRecorder);
-
-  useDiagramRecordingStatus(capture.isRecordingActive);
 
   // Sync OBS recording state to clip-state-reducer sessions.
   const prevOBSStateTypeRef = useRef(obsConnector.state.type);

@@ -6,9 +6,11 @@
  */
 import { diagramChannel, type ChildToParentMessage } from "./diagram-protocol";
 import { diagramFocus } from "./focus-tracker";
+import type { VideoFormat } from "@/features/videos/video-format";
 
 let _activeDiagramId: string | null = null;
 let _recording = false;
+let _format: VideoFormat = "landscape";
 
 // Called once by the VideoEditor component on mount; returns a cleanup.
 // This is the listener that makes the playground's indicator authoritative —
@@ -22,6 +24,7 @@ export function enableVideoEditorMode(): () => void {
       diagramChannel.sendToChild({
         type: "recordingStatus",
         recording: _recording,
+        format: _format,
       });
     } else if (msg.type === "activeDiagramChanged") {
       _activeDiagramId = msg.diagramId;
@@ -44,11 +47,16 @@ export function enableVideoEditorMode(): () => void {
 /**
  * Called by the Video Editor whenever its Recorder (OBS or the CVM recorder)
  * starts or stops recording. The playground hides its sidebar while a
- * recording is in progress, and centres the diagram as one starts.
+ * recording is in progress, and centres the diagram as one starts, for the
+ * Video's `format`.
  */
-export function pushDiagramRecordingStatus(recording: boolean): void {
+export function pushDiagramRecordingStatus(
+  recording: boolean,
+  format: VideoFormat
+): void {
   _recording = recording;
-  diagramChannel.sendToChild({ type: "recordingStatus", recording });
+  _format = format;
+  diagramChannel.sendToChild({ type: "recordingStatus", recording, format });
 }
 
 export function openPlayground(): Window | null {

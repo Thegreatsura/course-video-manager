@@ -1,4 +1,6 @@
 import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
+import type { VideoFormat } from "@/features/videos/video-format";
+import { CANVASES } from "@/packages/scene-layout";
 
 /**
  * The presenter's face-cam is composited onto the recording by external
@@ -126,6 +128,25 @@ export function getRightOffscreenWidth(
   windowWidth: number
 ): number {
   return Math.max(windowWidth - (viewport.x + viewport.w), 0);
+}
+
+/**
+ * How wide a strip on the window's right the recording doesn't show the
+ * diagram through — what {@link getSafeAreaInsets} reserves as `faceCamWidth`.
+ *
+ * Landscape: the face-cam strip, as tuned. A Short draws the screen 1:1 at
+ * the top-left of its canvas, so it shows only the window's left
+ * canvas-width square and Matt's face sits below the diagram, not beside it:
+ * everything right of that square is hidden, and there is no face-cam strip.
+ */
+export function getHiddenRightWidth(
+  format: VideoFormat,
+  faceCamWidth: number,
+  windowWidth: number
+): number {
+  return format === "short"
+    ? Math.max(windowWidth - CANVASES.short.width, 0)
+    : faceCamWidth;
 }
 
 /**
