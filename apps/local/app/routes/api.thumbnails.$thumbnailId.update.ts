@@ -3,10 +3,13 @@ import { FileSystem } from "@effect/platform";
 import { ThumbnailOperationsService } from "@/services/db-thumbnail-operations.server";
 import { makeAction } from "@/services/route-action.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { getVideoFilePath, getVideoFilesBaseDir } from "@/services/video-files";
-import { assertUnderEffect, isUnder } from "@/services/assert-under";
+import {
+  removeStoredVideoFile,
+  videoFileRelativePathOf,
+  videoFileRowPath,
+  writeVideoFile,
+} from "@/services/video-files";
 import { data } from "react-router";
-import { removeUnderBestEffort } from "@/services/remove-best-effort";
 
 function decodeDataUrl(dataUrl: string): Uint8Array {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -58,44 +61,45 @@ export const action = makeAction({
         cutout?: { filePath?: string } | null;
       };
 
-      // Every path written here must lie under VIDEO_FILES_DIR. A stored path
-      // that does not (on a verify-cvm clone the row still names Matt's real
-      // file) is never written: the layer moves to its canonical address in
-      // this store instead, and the row is updated to point there.
-      const videoFilesDir = getVideoFilesBaseDir();
-      const layerPath = (stored: string | null | undefined, suffix: string) =>
-        stored && isUnder(videoFilesDir, stored)
-          ? stored
-          : getVideoFilePath(
-              video.lineageId,
-              `thumbnail-${thumbnailId}${suffix}.png`
-            );
-      yield* fs.makeDirectory(getVideoFilePath(video.lineageId), {
-        recursive: true,
-      });
+      // Every PNG is written as a Video File on the first Storage Root, and
+      // the row stores its root-relative path. A stored path in this Video's
+      // directory in any store keeps its name (a duplicated Thumbnail's PNG
+      // is named after its source's id); its older copy elsewhere is removed.
+      // A stored path in no store (on a verify-cvm clone the row still names
+      // Matt's real file; a broken `.worktrees` path) is never written: the
+      // layer moves to its canonical name instead.
+      const writeLayer = (
+        stored: string | null | undefined,
+        suffix: string,
+        bytes: Uint8Array
+      ) =>
+        Effect.gen(function* () {
+          const relativePath =
+            (stored && videoFileRelativePathOf(stored, video.lineageId)) ||
+            `thumbnail-${thumbnailId}${suffix}.png`;
+          yield* writeVideoFile(video.lineageId, relativePath, bytes);
+          return videoFileRowPath(video.lineageId, relativePath);
+        });
 
       const compositeBytes = decodeDataUrl(imageDataUrl as string);
-      const compositePath = yield* assertUnderEffect(
-        videoFilesDir,
-        layerPath(existing.filePath, "")
+      const compositePath = yield* writeLayer(
+        existing.filePath,
+        "",
+        compositeBytes
       );
-      yield* fs.writeFile(compositePath, compositeBytes);
 
       // A thumbnail made before layers existed has no background file of its
       // own: its composite stands in for it, as it always has.
       let bgPath = compositePath;
       if (existingLayers.backgroundPhoto?.filePath) {
-        const ownBgPath = yield* assertUnderEffect(
-          videoFilesDir,
-          layerPath(existingLayers.backgroundPhoto.filePath, "-bg")
-        );
-        const bgBytes =
+        bgPath = yield* writeLayer(
+          existingLayers.backgroundPhoto.filePath,
+          "-bg",
           typeof backgroundPhotoDataUrl === "string" &&
-          backgroundPhotoDataUrl.startsWith("data:")
+            backgroundPhotoDataUrl.startsWith("data:")
             ? decodeDataUrl(backgroundPhotoDataUrl)
-            : compositeBytes;
-        yield* fs.writeFile(ownBgPath, bgBytes);
-        bgPath = ownBgPath;
+            : compositeBytes
+        );
       }
 
       let diagramLayer = null;
@@ -103,22 +107,17 @@ export const action = makeAction({
         typeof diagramDataUrl === "string" &&
         diagramDataUrl.startsWith("data:")
       ) {
-        const diagPath = yield* assertUnderEffect(
-          videoFilesDir,
-          layerPath(existingLayers.diagram?.filePath, "-diagram")
-        );
-        yield* fs.writeFile(diagPath, decodeDataUrl(diagramDataUrl));
         diagramLayer = {
-          filePath: diagPath,
+          filePath: yield* writeLayer(
+            existingLayers.diagram?.filePath,
+            "-diagram",
+            decodeDataUrl(diagramDataUrl)
+          ),
           horizontalPosition:
             typeof diagramPosition === "number" ? diagramPosition : 50,
         };
       } else if (existingLayers.diagram?.filePath) {
-        yield* removeUnderBestEffort(
-          fs,
-          videoFilesDir,
-          existingLayers.diagram.filePath
-        );
+        yield* removeStoredVideoFile(fs, existingLayers.diagram.filePath);
       }
 
       let cutoutLayer = null;
@@ -126,22 +125,17 @@ export const action = makeAction({
         typeof cutoutDataUrl === "string" &&
         cutoutDataUrl.startsWith("data:")
       ) {
-        const cutoutPath = yield* assertUnderEffect(
-          videoFilesDir,
-          layerPath(existingLayers.cutout?.filePath, "-cutout")
-        );
-        yield* fs.writeFile(cutoutPath, decodeDataUrl(cutoutDataUrl));
         cutoutLayer = {
-          filePath: cutoutPath,
+          filePath: yield* writeLayer(
+            existingLayers.cutout?.filePath,
+            "-cutout",
+            decodeDataUrl(cutoutDataUrl)
+          ),
           horizontalPosition:
             typeof cutoutPosition === "number" ? cutoutPosition : 50,
         };
       } else if (existingLayers.cutout?.filePath) {
-        yield* removeUnderBestEffort(
-          fs,
-          videoFilesDir,
-          existingLayers.cutout.filePath
-        );
+        yield* removeStoredVideoFile(fs, existingLayers.cutout.filePath);
       }
 
       const layers = {

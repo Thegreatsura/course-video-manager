@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import { makeAction } from "@/services/route-action.server";
-import { getVideoFilePath } from "@/services/video-files";
+import { getVideoFilePath, videoFileExists } from "@/services/video-files";
 import { FileSystem } from "@effect/platform";
 import path from "node:path";
 import { SCENES } from "@/packages/scene-layout";
@@ -58,7 +58,8 @@ export const action = makeAction({
       let filename: string;
       do {
         filename = `screenshot-${counter}.png`;
-        const exists = yield* fs.exists(path.join(baseDir, filename));
+        // Any store: a legacy or other-drive screenshot-1.png is taken too.
+        const exists = yield* videoFileExists(video.lineageId, filename);
         if (!exists) break;
         counter++;
       } while (true);

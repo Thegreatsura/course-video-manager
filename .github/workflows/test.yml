@@ -15,6 +15,9 @@
 #   test-local  = pnpm run test:ci:local --shard=N/4   (@cvm/local, ~80% of test time)
 #   test-browser = pnpm run test:ci:browser     (@cvm/local's *.browser.test.tsx
 #                                                in headless Chromium)
+#   client-build = pnpm run check:client-build  (the production build `pnpm start`
+#                                                runs; vite.config.ts fails it when
+#                                                a node builtin reaches the browser)
 #
 # test-rest + test-local + test-browser together are exactly `pnpm run test`. If you add a
 # step to `check`, add it to one of these jobs too.
@@ -127,10 +130,25 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-headless-shell
       - run: pnpm run test:ci:browser
 
+  # The production client build. Typecheck and tests never bundle for the
+  # browser, so a server-only import reaching a component (node:path via
+  # packages/storage, #2127) passed every other job and broke `pnpm start`.
+  # Skips `generate-assets` (needs ffmpeg); the bundle does not read it.
+  client-build:
+    name: client build (@cvm/local)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm run check:client-build
+
   # The required status context. Green only if every job above succeeded, or —
   # on a docs-only PR — was skipped by the fast path.
   check:
-    needs: [changes, static, test-rest, test-local, test-browser]
+    needs: [changes, static, test-rest, test-local, test-browser, client-build]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

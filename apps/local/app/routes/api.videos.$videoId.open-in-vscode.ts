@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { OpenFolderService } from "@/services/open-folder-service";
 import { makeAction } from "@/services/route-action.server";
-import { getVideoFilePath } from "@/services/video-files";
+import { videoFilesDirectory } from "@/services/video-files";
 
 export const action = makeAction({
   errors: { NotFoundError: 404 },
@@ -12,7 +12,7 @@ export const action = makeAction({
       const openFolder = yield* OpenFolderService;
 
       const video = yield* videoOps.getVideoDeepById(params.videoId!);
-      const videoDir = getVideoFilePath(video.lineageId);
+      const videoDir = videoFilesDirectory(video.lineageId);
       yield* openFolder.openInVSCode(videoDir);
 
       return { success: true };

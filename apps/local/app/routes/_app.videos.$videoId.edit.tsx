@@ -50,7 +50,7 @@ import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { getBackButtonUrl } from "@/features/video-editor/video-editor-selectors";
 import { anyClipsMissingTranscriptWords } from "@/features/video-editor/transcript-word-status";
 import type { loader as parentLoader } from "./_app.videos.$videoId";
-import { getVideoFilePath, listVideoFiles } from "@/services/video-files";
+import { listVideoFiles, videoFilesDirectory } from "@/services/video-files";
 import { sortByOrder } from "@/lib/sort-by-order";
 import { createHttpClipService } from "@/services/clip-service";
 import path from "node:path";
@@ -64,7 +64,7 @@ export type FileMetadata = {
 const loadVideoEditorFsData = (opts: { lineageId: string }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const videoDir = getVideoFilePath(opts.lineageId);
+    const videoDir = videoFilesDirectory(opts.lineageId);
 
     const [hasExplainerFolder, dirExists] = yield* Effect.all([
       fs.exists(path.join(videoDir, "explainer")),

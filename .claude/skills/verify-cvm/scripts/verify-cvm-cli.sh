@@ -31,24 +31,28 @@ clone_app_env() {
   local dir="$1" url="$2" scratch="$1/scratch"
   mkdir -p "$scratch/video-files" "$scratch/clip-mockups" "$scratch/diagram-thumbnails" "$scratch/overlay-renders" \
            "$scratch/finished-videos" "$scratch/obs-recordings" "$scratch/dropbox"
-  # The run's scratch/ is its one Storage Root (ADR 0040): finished-videos/,
-  # clip-mockups/ and overlay-renders/ under it are the run's own. A clone's
-  # Clips name their Footage root-relative (raw-footage/…) once Matt has run
-  # the path migration, so raw-footage/ is a link to the real Footage folder,
-  # for the editor to READ — nothing in CVM writes Footage. Before the
-  # migration the rows are absolute and are read where they are.
-  local footage="${VERIFY_FOOTAGE_DIR:-/mnt/d/raw-footage}"
-  if [ -d "$footage" ] && [ ! -e "$scratch/raw-footage" ]; then
-    ln -s "$footage" "$scratch/raw-footage"
+  # The run's scratch/ is its FIRST Storage Root (ADR 0040), where every new
+  # file goes: finished-videos/, clip-mockups/, overlay-renders/,
+  # video-files/ and raw-footage/ (a CVM-recorder Recording Session) under it
+  # are the run's own. A clone's Clips name their Footage root-relative
+  # (raw-footage/…) once Matt has run the path migration, so a SECOND root,
+  # footage-root/, holds only a link to the real Footage folder, for the
+  # editor to READ: new files are written to the first root only, so nothing
+  # a run does lands in Matt's raw-footage/. Before the migration the rows are
+  # absolute and are read where they are.
+  local footage="${VERIFY_FOOTAGE_DIR:-/mnt/d/raw-footage}" footage_root="$1/footage-root"
+  mkdir -p "$scratch/raw-footage" "$footage_root"
+  if [ -d "$footage" ] && [ ! -e "$footage_root/raw-footage" ]; then
+    ln -s "$footage" "$footage_root/raw-footage"
   fi
   CLONE_APP_ENV=(
     "DATABASE_URL=$url"
     "DIRECT_DATABASE_URL=$url"
     "VIDEO_FILES_DIR=$scratch/video-files"
-    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated) adds roots after scratch,
+    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated) adds roots after these,
     # e.g. a directory that does not exist, to see an Offline drive. Never
     # name one of Matt's drives.
-    "STORAGE_ROOTS=$scratch${VERIFY_EXTRA_STORAGE_ROOTS:+,$VERIFY_EXTRA_STORAGE_ROOTS}"
+    "STORAGE_ROOTS=$scratch,$footage_root${VERIFY_EXTRA_STORAGE_ROOTS:+,$VERIFY_EXTRA_STORAGE_ROOTS}"
     "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
     "OBS_RECORDING_DIR=$scratch/obs-recordings"
     "DROPBOX_REMOTE_PATH=$scratch/dropbox"

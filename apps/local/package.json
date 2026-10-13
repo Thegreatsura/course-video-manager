@@ -32,6 +32,7 @@
     "db:backfill-search-text": "tsx scripts/backfill-search-text.ts",
     "storage:migrate-paths": "tsx scripts/storage-migrate-paths.ts",
     "storage:rename-exports": "tsx scripts/storage-rename-exports.ts",
+    "storage:relocate": "tsx scripts/storage-relocate.ts",
     "gen:lucide-icons": "tsx scripts/generate-lucide-icons.ts",
     "db:clone-local": "./scripts/clone-db-to-local.sh",
     "recorder-parity": "tsx scripts/recorder-parity.ts"
