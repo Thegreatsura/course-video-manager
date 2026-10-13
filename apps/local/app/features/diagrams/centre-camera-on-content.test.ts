@@ -212,6 +212,33 @@ describe("centreCameraOnContent", () => {
     });
   });
 
+  describe("a Short", () => {
+    it("centres in the window's left 1080px square with the same padding, and no face-cam strip", () => {
+      // The defaults: Landscape would reserve 492px for the face-cam here.
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 780, h: 100 },
+        viewport: { x: 0, y: 0, w: 1920, h: 1080 },
+      });
+      withWindowWidth(1920, () => centreCameraOnContent(editor, "short"));
+      // right inset = (1920 - 1080) + 150 = 990, left 150, top/bottom 120
+      // safeWidth = 1920 - 150 - 990 = 780, safeHeight = 1080 - 240 = 840
+      // fit zoom = min(780/780, 840/100) = 1 — width fills exactly.
+      // x = -0 + (150 + 0)/1 = 150: the diagram spans 150..930, padded
+      //     150px inside the 1080 square on both sides.
+      // y = -0 + (120 + (840 - 100)/2)/1 = 490
+      expect(calls[0]!.point).toMatchObject({ x: 150, y: 490, z: 1 });
+    });
+
+    it("keeps the zoom cap", () => {
+      const { editor, calls } = fakeEditor({
+        bounds: { x: 0, y: 0, w: 10, h: 10 },
+        viewport: { x: 0, y: 0, w: 1920, h: 1080 },
+      });
+      withWindowWidth(1920, () => centreCameraOnContent(editor, "short"));
+      expect(calls[0]!.point).toMatchObject({ z: 2.25 });
+    });
+  });
+
   describe("sidebar independence", () => {
     it("lands the diagram in exactly the same spot whether or not the Snapshot Timeline / Diagram Rail sidebar is eating the reserved strip", () => {
       // The sidebar (800px of canvas left, out of a 1000px window) happens to

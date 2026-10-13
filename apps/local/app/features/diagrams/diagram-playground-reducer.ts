@@ -20,6 +20,7 @@ import type {
   LeaveDestination,
   LeaveSaveOutcome,
   PendingRestore,
+  RecordingStatus,
   StatusError,
   StoredHead,
 } from "./diagram-playground-reducer.types";
@@ -172,10 +173,10 @@ export namespace diagramPlaygroundReducer {
     | { type: "window-blurred" }
     | { type: "focus-mode-changed"; isFocusMode: boolean }
     /**
-     * The video editor says whether it is recording. It repeats this on every
-     * heartbeat, so only a change is a recording starting or stopping.
+     * The video editor's status. It repeats this on every heartbeat, so only a
+     * change is a take starting or stopping.
      */
-    | { type: "recording-status-reported"; recording: boolean }
+    | ({ type: "recording-status-reported" } & RecordingStatus)
     // The status line
     /** Something on the page failed; `message` is what the author reads. */
     | { type: "error-reported"; message: string }
@@ -622,7 +623,9 @@ export const diagramPlaygroundReducer: EffectReducer<State, Action, Effect> = (
       // records, though the author can still toggle it by hand.
       exec({ type: "set-focus-mode", isFocusMode: action.recording });
       // Centre once as a take starts; the author may pan during it.
-      if (action.recording) exec({ type: "centre-camera-after-layout" });
+      if (action.recording) {
+        exec({ type: "centre-camera-after-layout", format: action.format });
+      }
       return { ...state, recording: action.recording };
 
     case "error-reported":

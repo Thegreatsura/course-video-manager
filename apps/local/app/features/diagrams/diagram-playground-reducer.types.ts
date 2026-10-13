@@ -1,6 +1,7 @@
 /** The Active Diagram page's data, as `diagramPlaygroundReducer` holds it. */
 
 import type { TLStoreSnapshot } from "tldraw";
+import type { VideoFormat } from "@/features/videos/video-format";
 import type { Snapshot } from "./snapshot-list";
 
 /**
@@ -88,6 +89,15 @@ export interface StatusError {
 }
 
 /** What `diagramPlaygroundReducer` asks its runner to do. */
+/**
+ * What the video editor reports on every heartbeat: whether a take is
+ * recording, and the Video's format, which says where a take-start centres.
+ */
+export interface RecordingStatus {
+  recording: boolean;
+  format: VideoFormat;
+}
+
 export type DiagramPlaygroundEffect =
   /**
    * Fetch `diagramId`'s head. With `saveOpenHeadFirst`, the head currently
@@ -152,6 +162,7 @@ export type DiagramPlaygroundEffect =
   /**
    * Centre the camera on the diagram (`centreCameraOnContent`) once the layout
    * has caught up with any sidebar change declared alongside it, so the fit
-   * uses the canvas's new size.
+   * uses the canvas's new size. `format` is the take's: a Short centres in
+   * the square it shows, with no face-cam strip.
    */
-  | { type: "centre-camera-after-layout" };
+  | { type: "centre-camera-after-layout"; format: VideoFormat };

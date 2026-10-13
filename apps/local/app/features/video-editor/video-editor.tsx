@@ -26,6 +26,7 @@ import { useWebSocket } from "./hooks/use-websocket";
 import { useClipboardOperations } from "./hooks/use-clipboard-operations";
 import { useCallback, type ReactNode, useEffect, useMemo } from "react";
 import { enableVideoEditorMode } from "@/lib/diagram-window";
+import { useDiagramRecordingStatus } from "./use-diagram-recording-status";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { useSubmit } from "react-router";
 import type {
@@ -188,6 +189,7 @@ export const VideoEditor = (props: {
   );
 
   useEffect(() => enableVideoEditorMode(), []);
+  useDiagramRecordingStatus(props.isRecordingActive, props.videoFormat);
 
   const { state, dispatch } = useVideoEditor({
     items: timelineItems,

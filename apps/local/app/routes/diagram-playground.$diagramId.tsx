@@ -122,6 +122,7 @@ export default function DiagramPlaygroundActive({
         dispatch({
           type: "recording-status-reported",
           recording: msg.recording,
+          format: msg.format,
         });
       }
     });
