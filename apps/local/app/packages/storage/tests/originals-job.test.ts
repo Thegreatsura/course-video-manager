@@ -218,7 +218,7 @@ describe("Delete originals runs as a storage-delete Job", () => {
         target: e,
       })
     );
-    expect(plan.refusals.map((r) => r.reason)).toContain("delete-running");
+    expect(plan.refusals.map((r) => r.reason)).toContain("storage-busy");
     const purged = failureOf(
       await Effect.runPromiseExit(
         purgeExportedVideos({ db: db(), roots, bucketId, dryRun: true })

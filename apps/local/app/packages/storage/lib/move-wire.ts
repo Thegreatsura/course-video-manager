@@ -57,7 +57,6 @@ export type StorageMoveRefusalReason =
   | "recording-active"
   | "voice-running"
   | "move-running"
-  | "delete-running"
   | "storage-busy"
   | "nothing-to-move";
 

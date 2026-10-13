@@ -136,7 +136,7 @@ A segment of **Footage** within a Video, defined by a start time and an end time
 _Avoid_: Segment, Cut, Take (a **Take** is the speech that leaves a Clip, before it is saved)
 
 **Footage**:
-A raw source video file (a camera capture, a screen recording) before it is cut into **Clips**: the input to editing, not a product of it. Unlike every other noun here, Footage is not a record: it is known only by where the file is, its path relative to a **Storage Root**, whichever drive holds it. It is never deleted by CVM: it can only be moved between Storage Roots, and the copy left behind removed by **Delete originals**, which never deletes the last copy (ADR 0041). It is transcribed as a whole file, and a new **Clip** takes its text from that transcript. The transcription is a **Job** the **Sidecar** runs; a long file goes through Whisper in pieces, each kept beside the file once it is done, so a transcription cut off by a Sidecar restart picks up where it stopped instead of starting again. A Clip points at the Footage it was cut from.
+A raw source video file (a camera capture, a screen recording) before it is cut into **Clips**: the input to editing, not a product of it. Unlike every other noun here, Footage is not a record: it is known only by where the file is, its path relative to a **Storage Root**, whichever drive holds it. CVM deletes it only two ways: **Unused Footage** through the **Trash** (ADR 0043), and the copy a move left behind, by **Delete originals**, which never deletes the last copy (ADR 0041). Otherwise it can only be moved between Storage Roots. It is transcribed as a whole file, and a new **Clip** takes its text from that transcript. The transcription is a **Job** the **Sidecar** runs; a long file goes through Whisper in pieces, each kept beside the file once it is done, so a transcription cut off by a Sidecar restart picks up where it stopped instead of starting again. A Clip points at the Footage it was cut from.
 _Avoid_: Raw footage (informal prose ok), Source video
 
 **Effect Clip**:
@@ -274,12 +274,16 @@ The **Storage Bucket** of **Footage** used by **Clips** in more than one **Cours
 _Avoid_: Common footage, Reused footage
 
 **Unused Footage**:
-The **Storage Bucket** of **Footage** under `raw-footage/` that no **Clip** and no **Recording Session** uses. It can be moved between **Storage Roots**, but never deleted, like all Footage (ADR 0041).
+The **Storage Bucket** of **Footage** under `raw-footage/` that no **Clip**, live or archived, in any **Video** uses. A **Recording Session** no Clip uses is Unused only once it has stopped and is at least 7 days old. It can be moved between **Storage Roots**, and it is the only Footage that can be deleted: first to the **Trash**, and only files at least 7 days old that no **AV Calibration** or Video names (ADR 0043).
 _Avoid_: Orphaned footage, Unreferenced footage, Dead footage
 
 **Delete originals**:
 The second step of freeing a drive after a move: deleting a **Storage Bucket**'s files on one **Storage Root** that have an identical copy on another. Each file is deleted only after both copies are read again in full and their checksums match, and only if they are different files on different roots; a file with no identical copy elsewhere stays, so the last copy of anything, **Footage** included, is never deleted. Always Matt's click on the per-bucket page, behind a confirmation with the count and GB, and never automatic; the deleting runs as a Storage delete **Job**, with progress and a Cancel. Refused while an export, a **Publish**, a move, a transcription or a **Recording Session** is under way. A file Windows holds open is left and reported: the Job fails with "N files still on D:, retry", and its Retry checks every file again (ADR 0041).
 _Avoid_: Cleanup, Finish the move, Delete source
+
+**Trash**:
+The `.cvm-trash/` folder at the top of each **Storage Root**, where deleted **Unused Footage** goes first. A file is renamed into it on its own Storage Root (never copied to another drive), can be put back where it was (Restore) for 14 days, and is then deleted for good; "Empty trash" deletes it all at once (ADR 0043). Nothing else on the Storage page goes to the Trash: everything else it deletes can be made again.
+_Avoid_: Recycle bin, Bin, Deleted footage
 
 ### Recording
 
