@@ -1,5 +1,6 @@
 import { realpathSync, statSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
+import { join as joinPath, resolve, sep } from "node:path";
 import { Config, ConfigError, Effect, Either } from "effect";
 import {
   InvalidStorageRootsError,
@@ -175,3 +176,12 @@ export const assertStorageRoots = (
 export const judgeStorageRootsOnDisk = (
   env: Readonly<Record<string, string | undefined>>
 ) => judgeStorageRoots(env, isDirectorySync);
+
+/**
+ * Export scratch: where exports are encoded before they reach
+ * `finished-videos/` (`ffmpeg-encode-commands.ts`, `ffmpeg-encode-segments.ts`).
+ * It is the OS temp folder, on no Storage Root, and a verify-cvm run shares it
+ * with Matt's own app.
+ */
+export const exportScratchDirectory = (): string =>
+  joinPath(tmpdir(), "video-processing");

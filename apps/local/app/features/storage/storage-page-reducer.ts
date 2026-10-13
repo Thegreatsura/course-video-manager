@@ -1,7 +1,9 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
+  bucketCanBeDeleted,
   moveTargetRefusal,
   type StorageBucket,
+  type StorageDeleteResult,
   type StorageFileKind,
   type StorageRootReport,
   type StorageScanMessage,
@@ -29,14 +31,33 @@ export namespace storagePageReducer {
     /** Roots the walk could not read, and why: shown with no sizes. */
     unreadableRoots: Record<string, string>;
     scan: EffectEntity<State, Action> | null;
+    /** Deleting an Other bucket's files (#2112): asked, under way, or done. */
+    deletion: Deletion | null;
   };
+
+  /**
+   * One delete at a time. `bytes` is what the scan counted in the bucket when
+   * Delete was clicked: the GB the confirmation says it frees.
+   */
+  export type Deletion =
+    | { status: "confirming"; bucket: StorageBucket; bytes: number }
+    | { status: "deleting"; bucket: StorageBucket; bytes: number }
+    | { status: "deleted"; bucket: StorageBucket; result: StorageDeleteResult }
+    | { status: "failed"; bucket: StorageBucket; message: string };
 
   export type Action =
     | StorageScanMessage
     | { type: "page-opened" }
-    | { type: "scan-failed"; message: string };
+    | { type: "scan-failed"; message: string }
+    | { type: "delete-bucket-clicked"; bucketId: string }
+    | { type: "delete-confirmed" }
+    | { type: "delete-cancelled" }
+    | { type: "bucket-deleted"; result: StorageDeleteResult }
+    | { type: "bucket-delete-failed"; bucketId: string; message: string }
+    | { type: "deletion-dismissed" };
 
-  export type Effect = { type: "listen-to-scan" };
+  export type Effect =
+    { type: "listen-to-scan" } | { type: "delete-bucket"; bucketId: string };
 }
 
 type State = storagePageReducer.State;
@@ -62,6 +83,7 @@ export const createInitialStoragePageState = (): State => ({
   totals: {},
   unreadableRoots: {},
   scan: null,
+  deletion: null,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
@@ -72,11 +94,106 @@ const stopScan = (
   if (state.scan) exec.stop(state.scan);
 };
 
+/** Count again from nothing: what a delete changed is counted afresh. */
+const rescan = (
+  state: State,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State => {
+  stopScan(state, exec);
+  return {
+    ...createInitialStoragePageState(),
+    deletion: state.deletion,
+    scan: exec({ type: "listen-to-scan" }),
+  };
+};
+
+/** The delete half of the page: Other buckets only, one at a time. */
+const deletionReducer = (
+  state: State,
+  action: Action,
+  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
+): State | null => {
+  const deletion = state.deletion;
+  switch (action.type) {
+    case "delete-bucket-clicked": {
+      // Offered once the count is complete, so the GB it frees is known.
+      if (state.status !== "complete") return state;
+      if (deletion?.status === "confirming" || deletion?.status === "deleting")
+        return state;
+      const row = storageRows(state).find(
+        (r) => r.bucket.id === action.bucketId
+      );
+      if (!row || !bucketCanBeDeleted(row.bucket)) return state;
+      return {
+        ...state,
+        deletion: {
+          status: "confirming",
+          bucket: row.bucket,
+          bytes: row.totalBytes,
+        },
+      };
+    }
+    case "delete-confirmed":
+      if (deletion?.status !== "confirming") return state;
+      exec({ type: "delete-bucket", bucketId: deletion.bucket.id });
+      return { ...state, deletion: { ...deletion, status: "deleting" } };
+    case "delete-cancelled":
+      if (deletion?.status !== "confirming") return state;
+      return { ...state, deletion: null };
+    case "bucket-deleted":
+      if (
+        deletion?.status !== "deleting" ||
+        deletion.bucket.id !== action.result.bucketId
+      )
+        return state;
+      return rescan(
+        {
+          ...state,
+          deletion: {
+            status: "deleted",
+            bucket: deletion.bucket,
+            result: action.result,
+          },
+        },
+        exec
+      );
+    case "bucket-delete-failed":
+      if (
+        deletion?.status !== "deleting" ||
+        deletion.bucket.id !== action.bucketId
+      )
+        return state;
+      return {
+        ...state,
+        deletion: {
+          status: "failed",
+          bucket: deletion.bucket,
+          message: action.message,
+        },
+      };
+    case "deletion-dismissed":
+      if (deletion?.status !== "deleted" && deletion?.status !== "failed")
+        return state;
+      return { ...state, deletion: null };
+    case "page-opened":
+    case "roots-measured":
+    case "buckets-listed":
+    case "sizes-counted":
+    case "root-unreadable":
+    case "scan-completed":
+    case "scan-failed":
+      // The scan's events: not the delete's.
+      return null;
+  }
+};
+
 export const storagePageReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
   exec
 ) => {
+  const afterDeletion = deletionReducer(state, action, exec);
+  if (afterDeletion !== null) return afterDeletion;
   // A message after the scan has settled (a late event, or the browser
   // reporting the closed stream) changes nothing.
   if (state.status !== "scanning") return state;
@@ -133,6 +250,14 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
         failure: action.message,
         scan: null,
       };
+    case "delete-bucket-clicked":
+    case "delete-confirmed":
+    case "delete-cancelled":
+    case "bucket-deleted":
+    case "bucket-delete-failed":
+    case "deletion-dismissed":
+      // The delete's events, handled above.
+      return state;
   }
 };
 
