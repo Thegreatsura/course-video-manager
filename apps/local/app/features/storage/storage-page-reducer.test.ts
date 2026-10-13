@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
-import type { StorageBucket } from "@/packages/storage/buckets";
+import type { StorageBucket } from "@/packages/storage/client";
 import {
   createInitialStoragePageState,
   storagePageReducer,

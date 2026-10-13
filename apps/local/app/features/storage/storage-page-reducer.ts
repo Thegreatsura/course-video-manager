@@ -4,7 +4,7 @@ import type {
   StorageFileKind,
   StorageRootReport,
   StorageScanMessage,
-} from "@/packages/storage/buckets";
+} from "@/packages/storage/client";
 
 /**
  * THE STORAGE PAGE (#2107): where the space is going, per Storage Bucket and
