@@ -92,7 +92,7 @@ export const decodeCommand = Schema.decodeUnknownEither(
  * A command that did not decode but must be answered, not dropped: a Record
  * (or the Stream Deck's prepare-record) with no `calibration`, from an app
  * server older than the AV Calibration gate, or with a calibration that
- * names no camera, from one older than the camera + mic gate (protocol 11).
+ * names no camera, from one older than the camera + mic gate (protocol 12).
  * Its sender hears why.
  */
 export const refusalOfUndecodable = (
