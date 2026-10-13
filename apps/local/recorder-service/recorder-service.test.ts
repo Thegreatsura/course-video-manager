@@ -210,6 +210,19 @@ describe("a Recording Session", () => {
         silenceLength: "short",
         folder,
       },
+      // Older than the camera + mic gate: a calibration naming no camera.
+      {
+        type: "record",
+        silenceLength: "short",
+        folder,
+        calibration: {
+          id: CALIBRATION.id,
+          createdAtMs: CALIBRATION.createdAtMs,
+          thresholdDb: CALIBRATION.thresholdDb,
+          recorderMic: CALIBRATION.recorderMic,
+          browserInputLabel: CALIBRATION.browserInputLabel,
+        },
+      },
     ]) {
       client.send(old as RecorderCommand);
       expect(await client.next("refused")).toEqual({
