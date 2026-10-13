@@ -1,4 +1,4 @@
-import { Command, FileSystem } from "@effect/platform";
+import { FileSystem } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import { Config, Effect, Option } from "effect";
 import crypto from "node:crypto";
@@ -107,14 +107,12 @@ export class VideoProcessingService extends Effect.Service<VideoProcessingServic
           return outputFile;
         }
 
-        const command = Command.make(
-          "ffmpeg",
+        yield* ffmpegCommands.runStill([
           ...clipFrameFfmpegArgs(frame, { seek }),
           "-frames:v",
           "1",
-          outputFile
-        );
-        yield* Command.exitCode(command);
+          outputFile,
+        ]);
 
         return outputFile;
       });

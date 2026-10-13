@@ -32,7 +32,7 @@ import {
   clipSource,
 } from "@/packages/clip-source";
 import { clipSegmentArgs, micEqFilters } from "@/services/clip-segment-args";
-import { landscapeCpuFallbackArgs } from "@/services/ffmpeg-error";
+import { cpuFallbackArgs } from "@/services/ffmpeg-error";
 import {
   BANDS,
   compareSides,
@@ -160,7 +160,7 @@ const renderSegment = (clip: typeof obsClip, name: string) => {
   );
   const run = spawnSync("ffmpeg", segmentArgs, { encoding: "utf8" });
   if (run.status !== 0) {
-    const fallback = landscapeCpuFallbackArgs(segmentArgs, run.stderr);
+    const fallback = cpuFallbackArgs(segmentArgs, run.stderr);
     if (!fallback)
       throw new Error(`Render of ${name} failed:\n${run.stderr.slice(-2000)}`);
     ffmpeg(fallback);

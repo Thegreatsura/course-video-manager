@@ -267,7 +267,7 @@ export const buildOverlayCompositeFilterGraph = (
  * the settings the finished file is written with.
  *
  * It encodes with {@link LANDSCAPE_VIDEO_ENCODE_ARGS} — what the concat pass
- * that MADE this file already used — rather than the Shorts burn-in's libx264,
+ * that MADE this file already used — rather than the Shorts burn-in's settings,
  * so a course video carrying a Definition Card comes out with the same
  * characteristics as one that does not. The audio is stream-copied: the
  * normalize pass has already had its say, and re-encoding it here would only

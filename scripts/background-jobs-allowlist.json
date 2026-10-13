@@ -71,7 +71,7 @@
     },
     {
       "file": "apps/local/app/services/ffmpeg-encode-commands.ts",
-      "count": 2,
+      "count": 1,
       "reason": "Sidecar only: the export and vertical-Short encodes. They ask for SidecarContext, and no module a route reaches may import them (apps/local/.dependency-cruiser.spawn.cjs)."
     },
     {
@@ -87,12 +87,7 @@
     {
       "file": "apps/local/app/services/ffmpeg-commands.ts",
       "count": 4,
-      "reason": "Shared by the app server and the Sidecar. On the app server: silence detection and an ffprobe frame rate for OBS clip ingestion (append-from-obs), which runs during the live Recording Session, not as background work; and one frame for the Article Writer's screenshot. In the Sidecar the same calls serve exports, the vertical Short and Footage transcription. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
-    },
-    {
-      "file": "apps/local/app/services/video-processing-service.ts",
-      "count": 1,
-      "reason": "Interactive, on the app server: a Clip's first or last frame for a thumbnail. Each is one request the author's page waits on. Whisper's audio extraction is in whisper-transcription-service.ts (Sidecar only)."
+      "reason": "Shared by the app server and the Sidecar. On the app server: silence detection and an ffprobe frame rate for OBS clip ingestion (append-from-obs), which runs during the live Recording Session, not as background work; one frame for the Article Writer's screenshot, and a Clip's first or last frame for a thumbnail (runStill, for video-processing-service.ts). In the Sidecar the same calls serve exports, the vertical Short and Footage transcription. The encodes are in ffmpeg-encode-commands.ts (Sidecar only)."
     },
     {
       "file": "apps/local/app/services/whisper-transcription-service.ts",
@@ -102,7 +97,7 @@
     {
       "file": "apps/local/app/packages/clap-step/lib/ffmpeg.ts",
       "count": 1,
-      "reason": "Interactive: the AV Calibration page's clap step (#2137) waits on each. A short read of the mic around the clap, one camera frame as a JPEG, or Play's 2 s clip (CPU libx264, 2 threads), while Matt lines up a clap."
+      "reason": "Interactive: the AV Calibration page's clap step (#2137) waits on each. A short read of the mic around the clap, one camera frame as a JPEG, or Play's 2 s clip (NVENC, or CPU libx264 with 2 threads when there is no usable GPU), while Matt lines up a clap."
     }
   ],
   "network": [

@@ -11,8 +11,8 @@ import { SidecarContextTest } from "./sidecar-context";
 // Publish Job 859b8689 ran six 100-input concats at once and the machine ran
 // out of memory. The limit on heavy encodes is one per process, so it has to
 // hold across Jobs, not just inside one: here two callers — a Publish-like
-// fan-out of concats and a Short's subtitle burn-in fan-out, the one encode
-// that does not go through runFfmpegWithProgress — share one Sidecar layer.
+// fan-out of concats and a Short's subtitle burn-in fan-out — share one
+// Sidecar layer.
 describe("encode slots — one limit across the whole Sidecar", () => {
   let dir: string;
   let originalPath: string | undefined;

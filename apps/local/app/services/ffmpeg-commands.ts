@@ -1,7 +1,13 @@
 import { Command } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import { Effect, Stream } from "effect";
-import { FFmpegError, type FfmpegLogInfo } from "./ffmpeg-error";
+import {
+  cpuFallbackArgs,
+  FFmpegError,
+  withGpuDecode,
+  type FfmpegLogInfo,
+} from "./ffmpeg-error";
+import { appendBoundedTail } from "./ffmpeg-log-capture";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { clipFrameFfmpegArgs, type ClipFrame } from "@/packages/clip-source";
 import {
@@ -113,6 +119,55 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         }
       );
 
+      /**
+       * One ffmpeg run, stderr teed to ours (a developer watching the
+       * terminal sees what they always have) and kept for the fallback check.
+       */
+      const runOnce = (args: readonly string[]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const child = yield* Command.start(
+              Command.make("ffmpeg", ...args).pipe(Command.stdout("inherit"))
+            );
+            const stderrTail = yield* child.stderr.pipe(
+              Stream.decodeText(),
+              Stream.tap((chunk) =>
+                Effect.sync(() => {
+                  try {
+                    process.stderr.write(chunk);
+                  } catch {
+                    // Best-effort tee only.
+                  }
+                })
+              ),
+              Stream.runFold("", (tail, chunk) =>
+                appendBoundedTail(tail, chunk)
+              )
+            );
+            const code = yield* child.exitCode;
+            return { code: Number(code), stderrTail };
+          })
+        );
+
+      /**
+       * A still (a screenshot, a Clip's first or last frame): every input
+       * decoded on the GPU (NVDEC), and run once more on the CPU when there is
+       * no usable GPU (`cpuFallbackArgs`). Answers ffmpeg's exit code.
+       */
+      const runStill = Effect.fn("runStill")(function* (
+        args: readonly string[]
+      ) {
+        const gpuArgs = withGpuDecode(args);
+        const first = yield* runOnce(gpuArgs);
+        if (first.code === 0) return 0;
+        const fallbackArgs = cpuFallbackArgs(gpuArgs, first.stderrTail);
+        if (!fallbackArgs) return first.code;
+        yield* Effect.logWarning(
+          "ffmpeg: no usable GPU to decode a still on; running it again on the CPU"
+        );
+        return (yield* runOnce(fallbackArgs)).code;
+      });
+
       const captureFrameAtTime = Effect.fn("captureFrameAtTime")(function* (
         frame: ClipFrame,
         outputPath: string
@@ -133,12 +188,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
 
         yield* cpuSemaphore.withPermits(1)(
           Effect.gen(function* () {
-            const code = yield* Command.exitCode(
-              Command.make("ffmpeg", ...args).pipe(
-                Command.stdout("inherit"),
-                Command.stderr("inherit")
-              )
-            ).pipe(
+            const code = yield* runStill(args).pipe(
               Effect.mapError(
                 (e) =>
                   new FFmpegError({
@@ -164,6 +214,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         getFPS,
         getVideoDurationInSeconds,
         captureFrameAtTime,
+        runStill,
       };
     }),
     dependencies: [NodeContext.layer, FfmpegPermitsService.Default],

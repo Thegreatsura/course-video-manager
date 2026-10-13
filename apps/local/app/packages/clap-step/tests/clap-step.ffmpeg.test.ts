@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loudestMs } from "@/packages/clap-step";
 import {
   cameraFrameJpeg,
@@ -263,5 +263,54 @@ describe.skipIf(!hasFfmpeg)("the clap step over real files", () => {
       .trim()
       .split("\n");
     expect(streams.sort()).toEqual(["audio", "video"]);
+  });
+
+  // NVDEC and NVENC first; on a machine with no usable GPU (CI, a driver
+  // gone after sleep) the same calls fall back to the CPU. Hiding the device
+  // from CUDA makes this machine one.
+  describe("with no usable GPU", () => {
+    beforeAll(() => {
+      vi.stubEnv("CUDA_VISIBLE_DEVICES", "-1");
+    });
+    afterAll(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("still answers a camera frame", async () => {
+      const jpeg = await run(
+        cameraFrameJpeg({ cameraFile: files.cameraFile, frame: 64 }).pipe(
+          Effect.provide(NodeContext.layer)
+        )
+      );
+      expect([...jpeg.subarray(0, 2)]).toEqual([0xff, 0xd8]);
+    });
+
+    it("still makes Play's clip, on libx264", async () => {
+      const mp4 = await run(
+        clapPreviewMp4({
+          ...files,
+          videoMs: 2133,
+          micOffsetMs: 120,
+        }).pipe(Effect.provide(NodeContext.layer))
+      );
+      const file = path.join(dir, "play-cpu.mp4");
+      writeFileSync(file, mp4);
+      const codec = execFileSync("ffprobe", [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=codec_name",
+        "-of",
+        "csv=p=0",
+        file,
+      ])
+        .toString()
+        .trim();
+      expect(codec).toBe("h264");
+      // libx264 signs its stream; NVENC does not.
+      expect(Buffer.from(mp4).includes("x264 - core")).toBe(true);
+    });
   });
 });
