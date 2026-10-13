@@ -143,6 +143,16 @@ export const busyRefusals = async (opts: {
     });
   }
 
+  // A delete Job (a Purge, a delete, the trash, "Delete originals") empties
+  // the very folders a move copies from (#2157).
+  const deleting = live.find((j) => j.kind === "storage-delete");
+  if (deleting) {
+    refusals.push({
+      reason: "storage-busy",
+      message: `"${deleting.title}" is queued or running; try again once it has finished`,
+    });
+  }
+
   if (opts.kind === "clip-mockups") {
     const voicing = live.find((j) => j.kind === "clip-mockup-voice");
     if (voicing) {

@@ -1,5 +1,10 @@
 import { Data, Effect } from "effect";
-import { clips, recordingSessions } from "@cvm/core/db/schema";
+import {
+  avCalibrations,
+  clips,
+  recordingSessions,
+  videos as videosTable,
+} from "@cvm/core/db/schema";
 import { listVideosForExportHash } from "@cvm/core/services/db-export-hash-videos.server";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
 import { computeExportHash, toExportClips } from "@/services/export-hash";
@@ -8,6 +13,7 @@ import {
   type StorageOwnership,
   type StorageOwnershipInput,
 } from "./buckets";
+import { UNUSED_FOOTAGE_MIN_AGE_MS } from "./trash-wire";
 
 /** Loading what owns which file failed; the scan cannot start. */
 export class StorageOwnershipLoadError extends Data.TaggedError(
@@ -19,14 +25,28 @@ export class StorageOwnershipLoadError extends Data.TaggedError(
  * Version, archived or not) with the names of its current Exported Video,
  * and every Footage path any Clip (archived ones too: they can come back) or
  * Recording Session uses. Read-only.
+ *
+ * A Recording Session no Clip points at uses its files only while it is
+ * still recording, or for 7 days after it started (#2157): after that, with
+ * no Clip, live or archived, drawn from it, its files are Unused Footage. An
+ * AV Calibration's files and a Video's original footage path are never
+ * Unused Footage to delete (`keptFootage`).
  */
 export const loadStorageOwnership = (
   db: Database,
-  roots: readonly string[]
+  roots: readonly string[],
+  now: Date = new Date()
 ): Effect.Effect<StorageOwnership, StorageOwnershipLoadError> =>
   Effect.tryPromise({
     try: async () => {
-      const [courses, videos, clipRows, sessionRows] = await Promise.all([
+      const [
+        courses,
+        videos,
+        clipRows,
+        sessionRows,
+        calibrationRows,
+        originalRows,
+      ] = await Promise.all([
         db.query.courses.findMany({ columns: { id: true, name: true } }),
         listVideosForExportHash(db),
         db
@@ -43,8 +63,20 @@ export const loadStorageOwnership = (
             camera: recordingSessions.cameraFilePath,
             screen: recordingSessions.screenFilePath,
             mic: recordingSessions.micFilePath,
+            status: recordingSessions.status,
+            startedAt: recordingSessions.startedAt,
           })
           .from(recordingSessions),
+        db
+          .select({
+            mic: avCalibrations.micFilePath,
+            trace: avCalibrations.browserTracePath,
+            camera: avCalibrations.cameraFilePath,
+          })
+          .from(avCalibrations),
+        db
+          .select({ original: videosTable.originalFootagePath })
+          .from(videosTable),
       ]);
 
       const footageUses: StorageOwnershipInput["footageUses"][number][] = [];
@@ -64,9 +96,15 @@ export const loadStorageOwnership = (
           });
         }
       }
-      // A Recording Session no Clip points at still uses its files.
+      // A Recording Session no Clip points at still uses its files while it
+      // is recording, and for 7 days after it started; then they are Unused.
+      const youngerThan = now.getTime() - UNUSED_FOOTAGE_MIN_AGE_MS;
       for (const session of sessionRows) {
         if (sessionsWithClips.has(session.id)) continue;
+        const stillInUse =
+          session.status === "recording" ||
+          session.startedAt.getTime() > youngerThan;
+        if (!stillInUse) continue;
         for (const stored of [session.camera, session.screen, session.mic]) {
           footageUses.push({
             stored,
@@ -94,6 +132,14 @@ export const loadStorageOwnership = (
           };
         }),
         footageUses,
+        keptFootage: [
+          ...calibrationRows.flatMap((c) =>
+            [c.mic, c.trace, c.camera].filter(
+              (p): p is string => p !== null && p !== ""
+            )
+          ),
+          ...originalRows.map((v) => v.original).filter((p) => p !== ""),
+        ],
       };
       return assignStorageBuckets(input, roots);
     },

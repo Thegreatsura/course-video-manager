@@ -41,9 +41,10 @@ import {
  * Why a Storage Bucket's files were not deleted. Nothing was deleted.
  *
  * - `not-deletable`: only the Overlay Render Cache, export scratch and
- *   Exported Videos of no current Video can be deleted. Footage of any kind
- *   (Unused Footage included), Clip Mockups and a Course's, Standalone
- *   Videos' or Shorts' buckets never can be from here (ADR 0041).
+ *   Exported Videos of no current Video can be deleted here. Footage of any
+ *   kind, Clip Mockups and a Course's, Standalone Videos' or Shorts' buckets
+ *   never can be (ADR 0041); Unused Footage goes to the trash instead
+ *   (`./trash.server.ts`, ADR 0043).
  * - `export-running`: an export, a vertical render or a Publish is queued or
  *   running; it writes export scratch, reads Overlay renders and writes into
  *   `finished-videos/`.
@@ -109,9 +110,9 @@ const inBucket = (
  * Exported Videos of no current Video (#1493's standalone orphans and
  * legacy flat files of deleted Videos included).
  *
- * Every other bucket is refused outright: raw Footage, Unused Footage
- * included, is never deletable, and Clip Mockups are only viewed and moved
- * (ADR 0041). What owns each file is read fresh from the database here, never
+ * Every other bucket is refused outright: raw Footage is never deleted here
+ * (Unused Footage goes to the trash, ADR 0043), and Clip Mockups are only
+ * viewed and moved (ADR 0041). What owns each file is read fresh from the database here, never
  * taken from the page. Each file is checked on disk first (`refusalFor`);
  * one that fails the check, or that Windows won't let go of, is left and
  * reported, and the rest still go.
@@ -127,6 +128,18 @@ export const deleteOtherStorageBucket = (opts: {
    * its export scratch is the OS temp folder Matt's own app encodes in.
    */
   readonly confineTo?: string;
+  /**
+   * Keep the delete to these files (`path` relative to `location`, as the
+   * per-bucket page lists them); absent, the whole bucket. Each must still be
+   * the bucket's.
+   */
+  readonly files?: readonly { location: string; path: string }[];
+  /** Delete nothing; answer what would go (the confirmation). */
+  readonly dryRun?: boolean;
+  /** The delete Job doing this: not a reason for it to refuse itself. */
+  readonly selfJobId?: string | null;
+  /** Called after each file, deleted or not. */
+  readonly onProgress?: (done: number, total: number) => void;
 }): Effect.Effect<
   StorageDeleteResult,
   StorageDeleteRefusedError | StorageDeleteFailedError
@@ -144,7 +157,7 @@ export const deleteOtherStorageBucket = (opts: {
     }
 
     const encoding = yield* Effect.tryPromise({
-      try: () => encodingJobs(opts.db),
+      try: () => encodingJobs(opts.db, opts.selfJobId),
       catch: (cause) =>
         new StorageDeleteFailedError({
           bucketId,
@@ -201,14 +214,35 @@ export const deleteOtherStorageBucket = (opts: {
           deleted: [],
           left: [],
         };
+        const dryRun = opts.dryRun ?? false;
+        const named =
+          opts.files === undefined
+            ? null
+            : new Set(opts.files.map((f) => `${f.location}\0${f.path}`));
+        const listed: { at: Location; files: string[] }[] = [];
         for (const at of locationsOf(bucketId, opts.roots, opts.scratchDir)) {
-          let files: string[];
           try {
             // A root or folder that is missing or Offline has nothing to delete.
-            files = await listFiles(at.folder);
+            const all = await listFiles(at.folder);
+            listed.push({
+              at,
+              files:
+                named === null
+                  ? all
+                  : all.filter((file) =>
+                      named.has(
+                        `${at.location}\0${path.relative(at.location, file).split(path.sep).join("/")}`
+                      )
+                    ),
+            });
           } catch {
             continue;
           }
+        }
+        const total = listed.reduce((n, l) => n + l.files.length, 0);
+        let progressed = 0;
+        for (const { at, files } of listed) {
+          if (named !== null && files.length === 0) continue;
           const unsafe = await folderRefusal(at, realRoots, realConfine);
           if (unsafe !== null) {
             result.left.push({
@@ -221,6 +255,8 @@ export const deleteOtherStorageBucket = (opts: {
           let count = 0;
           let bytes = 0;
           for (const file of files) {
+            progressed += 1;
+            opts.onProgress?.(progressed, total);
             // GC's switch, not an export: never deleted, and not news.
             if (path.basename(file) === EXPORT_HASH_RENAME_MARKER) continue;
             if (!inBucket(bucketId, at, file, ownership)) continue;
@@ -244,7 +280,7 @@ export const deleteOtherStorageBucket = (opts: {
             }
             try {
               const size = (await nodeFs.lstat(file)).size;
-              await nodeFs.unlink(file);
+              if (!dryRun) await nodeFs.unlink(file);
               count += 1;
               bytes += size;
             } catch (error) {
@@ -259,7 +295,7 @@ export const deleteOtherStorageBucket = (opts: {
           if (count > 0) {
             result.deleted.push({ location: at.location, files: count, bytes });
           }
-          if (bucketId !== ORPHANED_EXPORTS_BUCKET.id) {
+          if (!dryRun && bucketId !== ORPHANED_EXPORTS_BUCKET.id) {
             await removeEmptyFolders(at.folder);
           }
         }
@@ -270,9 +306,11 @@ export const deleteOtherStorageBucket = (opts: {
     });
   }).pipe(
     Effect.tap((r) =>
-      Effect.logInfo(
-        `[storage] deleted ${r.bucketId}: ${r.deleted.reduce((n, d) => n + d.files, 0)} files, ${r.left.length} left`
-      )
+      opts.dryRun
+        ? Effect.void
+        : Effect.logInfo(
+            `[storage] deleted ${r.bucketId}: ${r.deleted.reduce((n, d) => n + d.files, 0)} files, ${r.left.length} left`
+          )
     ),
     // Never beside a move being started, or another delete (#2109).
     (deletion) =>
