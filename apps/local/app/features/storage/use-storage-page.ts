@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
+import { planPurge, purgeExports } from "./export-purge-effects";
 import {
   STORAGE_SCAN_MESSAGE_TYPES,
   type StorageDeleteResult,
@@ -92,6 +93,9 @@ export const useStoragePage = () => {
       "listen-to-scan": (_state, _effect, dispatch) => listenToScan(dispatch),
       "delete-bucket": (_state, effect, dispatch) =>
         deleteBucket(effect.bucketId, dispatch),
+      "plan-purge": (_state, effect, dispatch) => planPurge(effect, dispatch),
+      "purge-exports": (_state, effect, dispatch) =>
+        purgeExports(effect, dispatch),
     }
   );
   useEffect(() => {

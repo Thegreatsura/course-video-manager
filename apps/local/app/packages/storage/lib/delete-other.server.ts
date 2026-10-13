@@ -1,10 +1,7 @@
 import nodeFs from "node:fs/promises";
 import path from "node:path";
-import { and, inArray } from "drizzle-orm";
 import { Data, Effect } from "effect";
-import { jobs } from "@cvm/core/db/schema";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
-import { assertUnder } from "@/services/assert-under";
 import { EXPORT_HASH_RENAME_MARKER } from "@/services/export-hash-rename";
 import {
   classifyStorageFile,
@@ -13,6 +10,18 @@ import {
   OVERLAY_RENDER_CACHE_BUCKET,
   type StorageOwnership,
 } from "./buckets";
+import {
+  encodingJobs,
+  encodingRefusalMessage,
+  fileRefusal,
+  folderRefusal,
+  listFiles,
+  messageOf,
+  realConfineOf,
+  realRootsAndFootage,
+  removeEmptyFolders,
+  type DeleteLocation,
+} from "./delete-safety.server";
 import { loadStorageOwnership } from "./ownership.server";
 import {
   DELETABLE_STORAGE_BUCKETS,
@@ -54,82 +63,7 @@ export class StorageDeleteFailedError extends Data.TaggedError(
   "StorageDeleteFailedError"
 )<{ readonly bucketId: string; readonly message: string }> {}
 
-/**
- * The Job kinds that encode: each writes export scratch, and the export and
- * the vertical render read (and write) the Overlay Render Cache and write
- * `finished-videos/`. A Publish exports its Videos.
- */
-const ENCODING_JOB_KINDS = [
-  "export",
-  "batch-export",
-  "render-vertical",
-  "publish",
-] as const;
-
-const messageOf = (e: unknown) =>
-  e instanceof Error
-    ? e.message
-    : typeof e === "object" && e !== null && "message" in e
-      ? String((e as { message: unknown }).message)
-      : String(e);
-
-const isInside = (base: string, target: string) => {
-  const relative = path.relative(base, target);
-  return (
-    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-};
-
-const isAtOrInside = (base: string, target: string) =>
-  base === target || isInside(base, target);
-
-const realpathOrNull = async (p: string) => {
-  try {
-    return await nodeFs.realpath(p);
-  } catch {
-    return null;
-  }
-};
-
-/** Every regular file under `dir` (symlinks are listed, never followed). */
-const listFiles = async (dir: string): Promise<string[]> => {
-  const out: string[] = [];
-  const entries = await nodeFs.readdir(dir, { withFileTypes: true });
-  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await listFiles(full)));
-    else out.push(full);
-  }
-  return out;
-};
-
-/** Empty folders left under `dir` once its files are gone; `dir` itself stays. */
-const removeEmptyFolders = async (dir: string) => {
-  const entries = await nodeFs
-    .readdir(dir, { withFileTypes: true })
-    .catch(() => []);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const sub = path.join(dir, entry.name);
-    await removeEmptyFolders(sub);
-    // rmdir only ever removes an EMPTY folder.
-    await nodeFs.rmdir(sub).catch(() => undefined);
-  }
-};
-
-/**
- * One place the bucket's files are: a folder, and what it must really be on
- * disk. `realFolder` is checked before anything in it is touched.
- */
-type Location = {
-  /** Where the file is reported as being (a Storage Root, or export scratch). */
-  readonly location: string;
-  /** The folder walked. */
-  readonly folder: string;
-  /** Root-relative paths are classified against this root; null for scratch. */
-  readonly root: string | null;
-};
+type Location = DeleteLocation;
 
 const locationsOf = (
   bucketId: DeletableStorageBucketId,
@@ -148,86 +82,6 @@ const locationsOf = (
     folder: path.join(root, folder),
     root,
   }));
-};
-
-/** An Exported Video or its companion (`x.mp4`, `x.mp4.sha256`). */
-const looksLikeAnExport = (name: string) =>
-  !name.startsWith(".") && /\.mp4(\..+)?$/.test(name);
-
-/**
- * Why the bucket's folder at `at` must not be touched at all, or null. It must
- * really be where it is named: `<root>/overlay-renders` itself, not a link to
- * `raw-footage/` or anywhere else; export scratch must hold no Storage Root
- * and be on none. With `realConfine` (a verify-cvm run's own directory) it
- * must be inside that too.
- */
-const folderRefusal = async (
-  at: Location,
-  realRoots: readonly string[],
-  realConfine: string | null
-): Promise<string | null> => {
-  const realFolder = await realpathOrNull(at.folder);
-  if (realFolder === null) return "it can't be resolved";
-  if (realConfine !== null && !isAtOrInside(realConfine, realFolder)) {
-    return `${realFolder} is outside ${realConfine}, the only place this run may delete`;
-  }
-  if (at.root === null) {
-    if (realRoots.some((r) => isAtOrInside(r, realFolder))) {
-      return `export scratch ${realFolder} is on a Storage Root`;
-    }
-    if (realRoots.some((r) => isAtOrInside(realFolder, r))) {
-      return `export scratch ${realFolder} holds a Storage Root`;
-    }
-    return null;
-  }
-  const realRoot = await realpathOrNull(at.root);
-  const expected =
-    realRoot === null
-      ? null
-      : path.join(realRoot, path.relative(at.root, at.folder));
-  return realFolder === expected
-    ? null
-    : `${at.folder} really is ${realFolder}, not ${expected}`;
-};
-
-/**
- * Why the file at `file` is not one this bucket may delete, or null when it
- * is. It must be a regular file, not a link; its real path (every symlink
- * followed) must be strictly inside the bucket's real folder and under no
- * root's `raw-footage/`, whatever else holds; and an Exported Video of no
- * current Video must be named as one (`x.mp4`, `x.mp4.sha256`).
- */
-const fileRefusal = async (opts: {
-  readonly bucketId: DeletableStorageBucketId;
-  readonly at: Location;
-  readonly file: string;
-  readonly realFootageFolders: readonly string[];
-}): Promise<string | null> => {
-  const { at, file } = opts;
-  const info = await nodeFs.lstat(file).catch(() => null);
-  if (info === null) return "it is gone";
-  if (!info.isFile()) return "it is not a regular file (a link?)";
-  try {
-    assertUnder(at.folder, file);
-  } catch (error) {
-    return messageOf(error);
-  }
-  const realFolder = await realpathOrNull(at.folder);
-  const realFile = await realpathOrNull(file);
-  if (realFolder === null || realFile === null) return "it can't be resolved";
-  if (!isInside(realFolder, realFile)) {
-    return `it really is ${realFile}, outside ${realFolder}`;
-  }
-  if (opts.realFootageFolders.some((f) => isAtOrInside(f, realFile))) {
-    return `it really is ${realFile}, raw Footage, which is never deleted`;
-  }
-  if (
-    opts.bucketId === ORPHANED_EXPORTS_BUCKET.id &&
-    !looksLikeAnExport(path.basename(file))
-  ) {
-    return "it is not an Exported Video or its companion";
-  }
-  return null;
 };
 
 /**
@@ -287,16 +141,7 @@ export const deleteOtherStorageBucket = (opts: {
     }
 
     const encoding = yield* Effect.tryPromise({
-      try: () =>
-        opts.db
-          .select({ kind: jobs.kind, title: jobs.title })
-          .from(jobs)
-          .where(
-            and(
-              inArray(jobs.kind, [...ENCODING_JOB_KINDS]),
-              inArray(jobs.status, ["queued", "running"])
-            )
-          ),
+      try: () => encodingJobs(opts.db),
       catch: (cause) =>
         new StorageDeleteFailedError({
           bucketId,
@@ -307,7 +152,7 @@ export const deleteOtherStorageBucket = (opts: {
       return yield* new StorageDeleteRefusedError({
         bucketId,
         reason: "export-running",
-        message: `Not deleted: ${encoding.length === 1 ? "an export is" : `${encoding.length} exports are`} queued or running (${encoding[0]!.title}). Try again once it has finished.`,
+        message: encodingRefusalMessage(encoding),
       });
     }
 
@@ -344,21 +189,10 @@ export const deleteOtherStorageBucket = (opts: {
 
     return yield* Effect.tryPromise({
       try: async (): Promise<StorageDeleteResult> => {
-        const realRoots = (
-          await Promise.all(opts.roots.map(realpathOrNull))
-        ).filter((r): r is string => r !== null);
-        const realFootageFolders = (
-          await Promise.all(
-            opts.roots.map((r) =>
-              realpathOrNull(path.join(r, STORAGE_FOLDERS.rawFootage))
-            )
-          )
-        ).filter((r): r is string => r !== null);
-
-        const realConfine =
-          opts.confineTo === undefined
-            ? null
-            : ((await realpathOrNull(opts.confineTo)) ?? opts.confineTo);
+        const { realRoots, realFootageFolders } = await realRootsAndFootage(
+          opts.roots
+        );
+        const realConfine = await realConfineOf(opts.confineTo);
         const result: StorageDeleteResult = {
           bucketId,
           deleted: [],
@@ -392,10 +226,10 @@ export const deleteOtherStorageBucket = (opts: {
               .split(path.sep)
               .join("/");
             const refusal = await fileRefusal({
-              bucketId,
               at,
               file,
               realFootageFolders,
+              exportsOnly: bucketId === ORPHANED_EXPORTS_BUCKET.id,
             });
             if (refusal !== null) {
               result.left.push({
