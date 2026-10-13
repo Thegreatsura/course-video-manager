@@ -44,23 +44,41 @@ describe("a take starting on either Recorder", () => {
         .send({
           type: "recording-status-reported",
           recording: idle.isRecording,
+          format: "landscape",
         })
         .send({
           type: "recording-status-reported",
           recording: recording.isRecording,
+          format: "landscape",
         })
         .send({ type: "focus-mode-changed", isFocusMode: true })
         // The heartbeat repeats the status mid-take; the author has panned.
         .send({
           type: "recording-status-reported",
           recording: recording.isRecording,
+          format: "landscape",
         });
 
       expect(tester.getState().recording).toBe(true);
       expect(tester.getEffects()).toEqual([
         { type: "set-focus-mode", isFocusMode: true },
-        { type: "centre-camera-after-layout" },
+        { type: "centre-camera-after-layout", format: "landscape" },
       ]);
     }
   );
+});
+
+describe("a take starting on a Short", () => {
+  it("centres for the Short's format", () => {
+    const tester = openPage().resetExec().send({
+      type: "recording-status-reported",
+      recording: true,
+      format: "short",
+    });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "set-focus-mode", isFocusMode: true },
+      { type: "centre-camera-after-layout", format: "short" },
+    ]);
+  });
 });

@@ -1,6 +1,8 @@
 import type { Editor } from "tldraw";
+import type { VideoFormat } from "@/features/videos/video-format";
 import {
   getCenteringSettings,
+  getHiddenRightWidth,
   getRightOffscreenWidth,
   getSafeAreaInsets,
 } from "./diagram-centering-settings";
@@ -54,8 +56,16 @@ import {
  * fit-and-clamp math is reimplemented by hand here because it only fits
  * into the full viewport, centred, and can't target an off-centre
  * sub-region of it.
+ *
+ * `format` is what a take starting now records. A Short shows only the
+ * window's left square, so the reserved strip becomes everything right of
+ * that square (`getHiddenRightWidth`) — same padding and zoom cap, no
+ * face-cam strip. Every caller but the take-start recentre is Landscape.
  */
-export function centreCameraOnContent(editor: Editor): void {
+export function centreCameraOnContent(
+  editor: Editor,
+  format: VideoFormat = "landscape"
+): void {
   const bounds = editor.getCurrentPageBounds();
   if (!bounds) return;
 
@@ -67,7 +77,14 @@ export function centreCameraOnContent(editor: Editor): void {
   const windowWidth =
     typeof window !== "undefined" ? window.innerWidth : viewport.x + viewport.w;
   const insets = getSafeAreaInsets(
-    settings,
+    {
+      ...settings,
+      faceCamWidth: getHiddenRightWidth(
+        format,
+        settings.faceCamWidth,
+        windowWidth
+      ),
+    },
     getRightOffscreenWidth(viewport, windowWidth)
   );
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VIDEO_FORMATS } from "@/features/videos/video-format";
 import { createPopupChannel } from "./popup-channel";
 
 export const ParentToChild = z.discriminatedUnion("type", [
@@ -7,8 +8,16 @@ export const ParentToChild = z.discriminatedUnion("type", [
   z.object({ type: z.literal("pong") }),
   z.object({ type: z.literal("editorConnected") }),
   z.object({ type: z.literal("editorDisconnected") }),
-  /** Sent when recording starts or stops, and repeated with every pong. */
-  z.object({ type: z.literal("recordingStatus"), recording: z.boolean() }),
+  /**
+   * Sent when recording starts or stops, and repeated with every pong.
+   * `format` is the Video's, so the playground centres for what the take
+   * shows (a Short shows only the screen's left square).
+   */
+  z.object({
+    type: z.literal("recordingStatus"),
+    recording: z.boolean(),
+    format: z.enum(VIDEO_FORMATS),
+  }),
   z.object({
     type: z.literal("snapshotForClip"),
     diagramId: z.string(),
