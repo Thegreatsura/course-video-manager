@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { open } from "node:fs/promises";
 import path from "node:path";
 import { FileSystem } from "@effect/platform";
 import { Data, Effect } from "effect";
@@ -117,18 +117,24 @@ class FileReadError extends Data.TaggedError("FileReadError")<{
 /** A file's size and SHA-256: what "the same file" means here. */
 export const fingerprint = (file: string) =>
   Effect.tryPromise({
-    try: () =>
-      new Promise<string>((resolve, reject) => {
-        const hash = createHash("sha256");
+    try: async () => {
+      // Read in chunks through a handle: a session's files are gigabytes.
+      const hash = createHash("sha256");
+      const handle = await open(file, "r");
+      try {
+        const buffer = Buffer.alloc(8 * 1024 * 1024);
         let size = 0;
-        createReadStream(file)
-          .on("data", (chunk) => {
-            size += chunk.length;
-            hash.update(chunk);
-          })
-          .on("error", reject)
-          .on("end", () => resolve(`${size}:${hash.digest("hex")}`));
-      }),
+        for (;;) {
+          const { bytesRead } = await handle.read(buffer, 0, buffer.length);
+          if (bytesRead === 0) break;
+          size += bytesRead;
+          hash.update(buffer.subarray(0, bytesRead));
+        }
+        return `${size}:${hash.digest("hex")}`;
+      } finally {
+        await handle.close();
+      }
+    },
     catch: (e) =>
       new FileReadError({
         message: `could not read ${file}: ${e instanceof Error ? e.message : String(e)}`,
