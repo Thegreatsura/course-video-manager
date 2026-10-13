@@ -25,3 +25,13 @@ When he films a Short, Matt puts windows full screen on the Spacedesk display. A
 
 - Landscape is unchanged: its layout, its pinned filtergraph (`landscape-pin.test.ts`), the DELL's recording and its 960x540 preview.
 - The 1080x1080 size is set on the PC, not in CVM. Spacedesk's manual does not list a square resolution among its custom resolutions, so it is unproven until Matt sets it and the recorder reports the display ready.
+
+## If 1080x1080 isn't offered
+
+If Windows does not offer 1080x1080 for the Spacedesk display, the recorder keeps working at 1920x1080 and the Short shows its left square, as before. The ways out, none chosen yet:
+
+- Another virtual display driver that takes arbitrary custom resolutions, found by the recorder in place of Spacedesk's adapter.
+- A custom resolution added on the PC through the graphics driver's or Windows' own tools, if the Spacedesk display accepts one.
+- Keep 1920x1080, and frame what Matt shows inside the left 1080 px.
+
+Each one changes the PC's setup, so Matt decides and does it, never an agent.
