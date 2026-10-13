@@ -82,8 +82,10 @@ const renders: StorageBucket = {
 };
 
 const menu = (tester: ReturnType<typeof listed>, path: string) =>
-  fileActions(tester.getState(), tester.getState().files[path]!).map(
-    (a) => [a.label, a.refusal] as const
+  fileActions(tester.getState(), tester.getState().files[path]!).map((a) =>
+    a.description === undefined
+      ? ([a.label, a.refusal] as const)
+      : ([`${a.label} (${a.description})`, a.refusal] as const)
   );
 
 describe("a file's action menu", () => {
@@ -92,9 +94,9 @@ describe("a file's action menu", () => {
       found("finished-videos/x.mp4", D, GB, "exported-video"),
     ]);
     expect(menu(t, "finished-videos/x.mp4")).toEqual([
-      ["Delete Exported Video…", null],
-      ["Move to E:…", null],
-      ["Show in Explorer (D:)", null],
+      ["Delete Exported Video", null],
+      ["Move to E:", null],
+      ["Reveal in File System (D:)", null],
     ]);
   });
 
@@ -106,22 +108,22 @@ describe("a file's action menu", () => {
       found("raw-footage/half.mkv", E, GB / 2),
     ]);
     expect(menu(t, "raw-footage/a.mkv")).toEqual([
-      ["Delete the original on D:…", null],
-      ["Delete the original on E:…", null],
-      ["Show in Explorer (D:)", null],
-      ["Show in Explorer (E:)", null],
+      ["Delete Original on D:", null],
+      ["Delete Original on E:", null],
+      ["Reveal in File System (D:)", null],
+      ["Reveal in File System (E:)", null],
     ]);
     expect(menu(t, "raw-footage/half.mkv")).toEqual([
-      ["Show in Explorer (D:)", null],
-      ["Show in Explorer (E:)", null],
+      ["Reveal in File System (D:)", null],
+      ["Reveal in File System (E:)", null],
     ]);
   });
 
   it("offers a move to an Offline drive only as refused, and refuses the click", () => {
     const t = listed(course, [found("raw-footage/a.mkv", D, GB)], false);
     expect(menu(t, "raw-footage/a.mkv")).toEqual([
-      ["Move to E:…", "E: is Offline"],
-      ["Show in Explorer (D:)", null],
+      ["Move to E:", "E: is Offline"],
+      ["Reveal in File System (D:)", null],
     ]);
     t.send({
       type: "file-action-clicked",
@@ -137,10 +139,7 @@ describe("a file's action menu", () => {
       found("raw-footage/u.mkv", D, GB),
       found("raw-footage/u.mkv", E, GB),
     ]);
-    expect(menu(t, "raw-footage/u.mkv")[0]).toEqual([
-      "Move to the Trash…",
-      null,
-    ]);
+    expect(menu(t, "raw-footage/u.mkv")[0]).toEqual(["Move to Trash", null]);
     t.send({
       type: "file-action-clicked",
       path: "raw-footage/u.mkv",
@@ -193,7 +192,7 @@ describe("a file's action menu", () => {
     });
   });
 
-  it("Show in Explorer asks for the file and starts no action", () => {
+  it("Reveal in File System asks for the file and starts no action", () => {
     const t = listed(course, [found("raw-footage/a.mkv", D, GB)]);
     t.send({
       type: "file-action-clicked",

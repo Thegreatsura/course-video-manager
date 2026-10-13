@@ -67,7 +67,7 @@ describe("storage Jobs on the Storage pages", () => {
       ["a", true, true, 40],
     ]);
     expect(views[0]!.summary).toBe(
-      "2 deleted (2.0 GB); 1 file still on its drive, retry"
+      "2 moved to the Trash (2.0 GB); 1 file still on its drive, retry"
     );
     expect(views[0]!.left).toEqual([
       { path: "D: raw-footage/x.mkv", message: "EBUSY" },

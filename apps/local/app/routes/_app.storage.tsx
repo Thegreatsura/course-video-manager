@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  ArrowRight,
   HardDrive,
   Loader2,
   MoreHorizontal,
@@ -11,11 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import {
   StorageActionDialog,
   StorageActionFailure,
@@ -51,10 +49,10 @@ const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 const size = (bytes: number) =>
   bytes >= 1024 ** 3 ? gb(bytes) : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 
-const KINDS: { kind: StorageFileKind; label: string }[] = [
-  { kind: "footage", label: "Footage" },
-  { kind: "exported-videos", label: "Exported Videos" },
-  { kind: "other", label: "Other files" },
+const KINDS: { kind: StorageFileKind; heading: string }[] = [
+  { kind: "footage", heading: "Footage" },
+  { kind: "exported-videos", heading: "Exported Videos" },
+  { kind: "other", heading: "Other files" },
 ];
 
 /**
@@ -188,9 +186,9 @@ export default function StoragePage() {
             <tr className="border-b text-left text-muted-foreground">
               <th className="py-2 pr-4 font-medium">Storage Bucket</th>
               <th className="py-2 pr-4 font-medium text-right">Total</th>
-              {KINDS.map(({ kind, label }) => (
+              {KINDS.map(({ kind, heading }) => (
                 <th key={kind} className="py-2 pr-4 font-medium">
-                  {label}
+                  {heading}
                 </th>
               ))}
               <th className="py-2 w-10" />
@@ -313,53 +311,40 @@ function BucketRow({
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {moves.map(({ kind, target, refusal }) => (
-                <DropdownMenuItem
-                  key={`${kind}:${target.root}`}
-                  disabled={refusal !== null}
-                  onSelect={() =>
-                    onChoose({ type: "move", kind, target: target.root })
-                  }
-                  data-testid="storage-row-move"
-                >
-                  Move {STORAGE_MOVE_KIND_LABELS[kind]}{" "}
-                  <ArrowRight className="w-3 h-3" /> {labelOf(target.root)}
-                  {refusal !== null && (
-                    <span className="text-xs text-muted-foreground">
-                      ({refusal})
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              ))}
-              {moves.length > 0 && (canDelete || canPurge || canTrash) && (
-                <DropdownMenuSeparator />
-              )}
-              {canPurge && (
-                <DropdownMenuItem
-                  onSelect={() => onChoose({ type: "purge" })}
-                  data-testid="storage-row-purge"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete Exported Videos…
-                </DropdownMenuItem>
-              )}
-              {canDelete && (
-                <DropdownMenuItem
-                  onSelect={() => onChoose({ type: "delete-bucket" })}
-                  data-testid="storage-row-delete"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete {row.bucket.name}…
-                </DropdownMenuItem>
-              )}
-              {canTrash && (
-                <DropdownMenuItem
-                  onSelect={() => onChoose({ type: "trash-unused" })}
-                  data-testid="storage-row-trash"
-                >
-                  <Trash2 className="w-4 h-4" /> Move to the Trash…
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
+            <ActionMenuContent
+              menu="dropdown"
+              align="end"
+              groups={{
+                move: moves.map(({ kind, target, refusal }) => ({
+                  label: `Move ${STORAGE_MOVE_KIND_LABELS[kind]} to ${labelOf(target.root)}`,
+                  icon: STANDARD_ACTIONS.moveTo.icon,
+                  opensDialog: true,
+                  disabled: refusal !== null,
+                  ...(refusal === null ? {} : { description: refusal }),
+                  onSelect: () =>
+                    onChoose({ type: "move", kind, target: target.root }),
+                })),
+                danger: [
+                  canPurge && {
+                    label: "Delete Exported Videos",
+                    icon: Trash2,
+                    opensDialog: true,
+                    onSelect: () => onChoose({ type: "purge" }),
+                  },
+                  canDelete && {
+                    ...STANDARD_ACTIONS.delete,
+                    opensDialog: true,
+                    onSelect: () => onChoose({ type: "delete-bucket" }),
+                  },
+                  canTrash && {
+                    label: "Move to Trash",
+                    icon: Trash2,
+                    opensDialog: true,
+                    onSelect: () => onChoose({ type: "trash-unused" }),
+                  },
+                ],
+              }}
+            />
           </DropdownMenu>
         )}
       </td>

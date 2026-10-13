@@ -11,15 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuContent } from "@/features/action-menu/action-menu";
+import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
+import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import {
   bucketFiles,
   bucketTotals,
   fileActions,
   fileCanBeTicked,
+  type FileAction,
   originalsOffers,
   selectedBytes,
   type bucketPageReducer,
@@ -264,6 +266,41 @@ function BucketPage({ bucketId }: { bucketId: string }) {
   );
 }
 
+/**
+ * A file's menu (#2157): Reveal in File System, its moves, then its deletes
+ * last. Each move and delete confirms first.
+ */
+const fileMenuGroups = (
+  actions: readonly FileAction[],
+  onChoose: (choice: bucketPageReducer.FileChoice) => void
+): ActionMenuGroups => {
+  const leaf = (a: FileAction, icon: typeof Trash2, opensDialog: boolean) => ({
+    label: a.label,
+    icon,
+    opensDialog,
+    disabled: a.refusal !== null,
+    ...(a.refusal !== null
+      ? { description: a.refusal }
+      : a.description !== undefined
+        ? { description: a.description }
+        : {}),
+    onSelect: () => onChoose(a.choice),
+  });
+  return {
+    open: actions
+      .filter((a) => a.choice.type === "reveal")
+      .map((a) => leaf(a, STANDARD_ACTIONS.revealInFileSystem.icon, false)),
+    move: actions
+      .filter((a) => a.choice.type === "move")
+      .map((a) => leaf(a, STANDARD_ACTIONS.moveTo.icon, true)),
+    danger: actions
+      .filter(
+        (a) => a.choice.type === "delete" || a.choice.type === "delete-original"
+      )
+      .map((a) => leaf(a, a.choice.type === "delete" ? Trash2 : CopyX, true)),
+  };
+};
+
 function FileRow({
   state,
   file,
@@ -331,29 +368,17 @@ function FileRow({
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {actions.map((a) => (
-                <DropdownMenuItem
-                  key={JSON.stringify(a.choice)}
-                  disabled={a.refusal !== null}
-                  onSelect={() =>
-                    dispatch({
-                      type: "file-action-clicked",
-                      path: file.path,
-                      choice: a.choice,
-                    })
-                  }
-                  data-testid={`bucket-file-${a.choice.type}`}
-                >
-                  {a.label}
-                  {a.refusal !== null && (
-                    <span className="text-xs text-muted-foreground">
-                      ({a.refusal})
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
+            <ActionMenuContent
+              menu="dropdown"
+              align="end"
+              groups={fileMenuGroups(actions, (choice) =>
+                dispatch({
+                  type: "file-action-clicked",
+                  path: file.path,
+                  choice,
+                })
+              )}
+            />
           </DropdownMenu>
         )}
       </td>

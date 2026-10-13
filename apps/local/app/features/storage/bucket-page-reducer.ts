@@ -179,7 +179,10 @@ const moveKindOf = (file: StorageBucketFile): StorageMoveKind | null => {
 /** One entry of a file's action menu. */
 export type FileAction = {
   readonly choice: bucketPageReducer.FileChoice;
+  /** Verb-first Title Case, no ellipsis (the menu adds it). */
   readonly label: string;
+  /** Which drive it is about, when that needs saying. */
+  readonly description?: string;
   /** Why it is offered but can't be done now, or null. */
   readonly refusal: string | null;
 };
@@ -201,11 +204,11 @@ export const fileActions = (
   const kind = moveKindOf(file);
   const deletable =
     bucket.kind === UNUSED_FOOTAGE
-      ? "Move to the Trash…"
+      ? "Move to Trash"
       : bucketCanBePurged(bucket) && file.role === "exported-video"
-        ? "Delete Exported Video…"
+        ? "Delete Exported Video"
         : bucketCanBeDeleted(bucket) && file.role !== "export-companion"
-          ? "Delete…"
+          ? "Delete"
           : null;
   if (deletable !== null) {
     out.push({ choice: { type: "delete" }, label: deletable, refusal: null });
@@ -215,7 +218,7 @@ export const fileActions = (
       if (root.root in file.copies) continue;
       out.push({
         choice: { type: "move", target: root.root },
-        label: `Move to ${root.label}…`,
+        label: `Move to ${root.label}`,
         refusal: root.online ? null : `${root.label} is Offline`,
       });
     }
@@ -228,7 +231,7 @@ export const fileActions = (
       if (!copied) continue;
       out.push({
         choice: { type: "delete-original", from },
-        label: `Delete the original on ${labelOfRoot(state, from)}…`,
+        label: `Delete Original on ${labelOfRoot(state, from)}`,
         refusal: null,
       });
     }
@@ -236,7 +239,8 @@ export const fileActions = (
   for (const location of Object.keys(file.copies)) {
     out.push({
       choice: { type: "reveal", location },
-      label: `Show in Explorer (${labelOfRoot(state, location)})`,
+      label: "Reveal in File System",
+      description: labelOfRoot(state, location),
       refusal: null,
     });
   }

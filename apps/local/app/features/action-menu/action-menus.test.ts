@@ -44,6 +44,10 @@ const NOT_ENTITY_MENUS: Record<string, string> = {
     "acts on a calendar week, not an entity",
   "features/video-posting/skills-changelog-helpers.tsx":
     "an image-upload chooser",
+  "routes/_app.storage.tsx":
+    "acts on a Storage Bucket (a count of files, not an entity with a page link)",
+  "routes/_app.storage_.$bucketId.tsx":
+    "acts on one file on disk in a Storage Bucket, not an entity",
 };
 
 const APP_ROOT = join(import.meta.dirname, "..", "..");
