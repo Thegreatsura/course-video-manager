@@ -57,22 +57,26 @@ describe("start-up checks", () => {
   });
 });
 
-/** The first bytes a browser gets from a preview feed. */
-const firstPreviewBytes = (port: number, feed: "camera" | "screen") =>
-  new Promise<{ type: string | undefined; body: string }>((resolve) => {
-    const req = http.get(`http://127.0.0.1:${port}/preview/${feed}`, (res) => {
-      res.once("data", (chunk: Buffer) => {
-        resolve({
-          type: res.headers["content-type"],
-          body: chunk.toString("latin1"),
-        });
-        req.destroy();
-      });
-    });
-  });
+/** A frame a browser pulls from a preview feed. */
+const pullPreview = (port: number, feed: "camera" | "screen", after = "") =>
+  new Promise<{ status: number; type: string | undefined; seq: string }>(
+    (resolve) => {
+      http.get(
+        `http://127.0.0.1:${port}/preview/${feed}?after=${after}`,
+        (res) => {
+          res.resume();
+          resolve({
+            status: res.statusCode ?? 0,
+            type: res.headers["content-type"],
+            seq: String(res.headers["x-frame-seq"]),
+          });
+        }
+      );
+    }
+  );
 
 describe("the Cam Link", () => {
-  it("opens with the recorder and is live on its first frame, with raw camera and screen previews", async () => {
+  it("opens with the recorder and is live on its first frame, with camera and screen previews pulled a frame at a time", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
@@ -83,9 +87,12 @@ describe("the Cam Link", () => {
     expect(windows.cameraPreviews).toHaveLength(1);
 
     for (const feed of ["camera", "screen"] as const) {
-      const { type, body } = await firstPreviewBytes(port, feed);
-      expect(type).toContain("multipart/x-mixed-replace");
-      expect(body).toContain("Content-Type: image/jpeg");
+      const first = await pullPreview(port, feed);
+      expect(first).toMatchObject({ status: 200, type: "image/jpeg" });
+      // Asking after that frame waits for a newer one.
+      const next = await pullPreview(port, feed, first.seq);
+      expect(next.status).toBe(200);
+      expect(Number(next.seq)).toBeGreaterThan(Number(first.seq));
     }
   });
 

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { canRetryCamera } from "@/features/video-editor/cvm-recorder-reducer";
+import { LatestFrameCanvas } from "@/features/video-editor/components/latest-frame-canvas";
 import { cameraWaitText } from "./recorder-still-reducer";
 import { useRecorderStill } from "./use-recorder-still";
 
@@ -72,9 +73,9 @@ function RecorderCameraBody({
             className="h-full w-full object-contain"
           />
         ) : !waitText && preview ? (
-          <img
-            src={preview}
-            alt="Camera preview"
+          <LatestFrameCanvas
+            url={preview}
+            aria-label="Camera preview"
             className="h-full w-full object-contain"
           />
         ) : (
