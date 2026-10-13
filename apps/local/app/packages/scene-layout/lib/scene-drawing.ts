@@ -1,6 +1,7 @@
 import type { VideoFormat } from "@/features/videos/video-format";
 import {
   LAYOUTS,
+  type Crop,
   type LayoutItem,
   type LayoutSource,
   type Scene,
@@ -90,6 +91,30 @@ export const drawnSources = (
   return SOURCES.filter((source) => drawn.has(source));
 };
 
+/** A crop in the source's own pixels. */
+const cropPixels = (crop: Crop, { width, height }: SourceSize) => {
+  if (crop === "left-square") {
+    const side = Math.min(width, height);
+    return { sx: 0, sy: 0, sw: side, sh: side };
+  }
+  return {
+    sx: Math.round(crop.x * width),
+    sy: Math.round(crop.y * height),
+    sw: Math.round(crop.w * width),
+    sh: Math.round(crop.h * height),
+  };
+};
+
+/** The same crop as an ffmpeg `crop` filter. */
+const cropFilter = (crop: Crop) => {
+  if (crop === "left-square") {
+    const side = "min(iw\\,ih)";
+    return `crop=w=${side}:h=${side}:x=0:y=0`;
+  }
+  const { x, y, w, h } = crop;
+  return `crop=w=iw*${w}:h=ih*${h}:x=iw*${x}:y=ih*${y}`;
+};
+
 const missingSource = (source: LayoutSource, format: VideoFormat) =>
   new Error(`The ${format} layout draws the ${source}, but it was not given`);
 
@@ -105,13 +130,9 @@ export const drawInstructions = (
   placements(scene, format).map(({ item, dx, dy, dw, dh }) => {
     const size = sources[item.source];
     if (!size) throw missingSource(item.source, format);
-    const { width, height } = size;
     return {
       source: item.source,
-      sx: Math.round(item.crop.x * width),
-      sy: Math.round(item.crop.y * height),
-      sw: Math.round(item.crop.w * width),
-      sh: Math.round(item.crop.h * height),
+      ...cropPixels(item.crop, size),
       dx,
       dy,
       dw,
@@ -180,10 +201,9 @@ export const sceneFilterGraph = ({
     );
     placements(segment.scene, format).forEach(({ item, dx, dy, dw, dh }, j) => {
       const branch = take(item.source);
-      const { x, y, w, h } = item.crop;
       chains.push(
         `[${branch}]trim=start=${start}:end=${end},setpts=PTS-STARTPTS,fps=${FPS},` +
-          `crop=w=iw*${w}:h=ih*${h}:x=iw*${x}:y=ih*${y},scale=${dw}:${dh}:flags=${ITEM_SCALE_FLAGS}[item${k}_${j}]`
+          `${cropFilter(item.crop)},scale=${dw}:${dh}:flags=${ITEM_SCALE_FLAGS}[item${k}_${j}]`
       );
       const next = `seg${k}_${j}`;
       chains.push(

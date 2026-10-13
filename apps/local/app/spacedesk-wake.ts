@@ -2,8 +2,9 @@ import net from "node:net";
 import crypto from "node:crypto";
 
 /**
- * Wakes the spacedesk virtual display (the TikTok-shaped monitor a Short is
- * filmed on) with no browser, no viewer window and nothing on screen.
+ * Wakes the spacedesk virtual display (the 1080x1080 monitor a Short is
+ * filmed on, ADR 0043) with no browser, no viewer window and nothing on
+ * screen.
  *
  * Plain Node (`net`, `crypto`) and Promise-based, with no Effect and no `@/`
  * import, so both the app server's `SpacedeskService` and the recorder
@@ -37,8 +38,13 @@ import crypto from "node:crypto";
  *     header[48] = 2 (custom-resolution mode), [52]/[88] = width/height,
  *                  [56]/[92] = custom width/height
  *     payload    = fixed "1111122222" magic prefix, then a UTF-16LE client name
- *                  starting at offset 78. (The exact values are cosmetic for our
- *                  purpose — the display's real shape is defined server-side.)
+ *                  starting at offset 78.
+ *   width/height is the viewer's "client resolution", the size it asks the
+ *   display to have in Extension mode; custom width/height is its "custom
+ *   resolution" (for Duplication). Both are 1080x1080, the Short's square.
+ *   They are a request: the size the display actually has is the one set for
+ *   it on the PC (Windows Display settings), and the recorder checks that size
+ *   (`recorder-service/screen-side.ts`), not this one.
  *
  * The spacedesk server binds to the PC's LAN interface, not loopback, so
  * connecting to 127.0.0.1 does NOT work: the host is the PC's fixed LAN IP.
@@ -62,6 +68,9 @@ export const spacedeskAddress = (
   host: SPACEDESK_HOST,
   port: Number(env.SPACEDESK_PORT) || SPACEDESK_DEFAULT_PORT,
 });
+
+/** The size the handshake asks the display to have: a Short's square. */
+export const SPACEDESK_SIZE = { width: 1080, height: 1080 } as const;
 
 // spacedesk protocol v4.8 packet layout.
 const HEADER_LENGTH = 128;
@@ -108,10 +117,10 @@ const buildIdentificationPacket = (): Buffer => {
   writeInt32LE(header, 32, 40); // quality
   writeInt16LE(header, 44, 0); // frame rate
   writeInt32LE(header, 48, 2); // custom-resolution mode
-  writeInt32LE(header, 52, 1920); // width
-  writeInt32LE(header, 88, 1080); // height
-  writeInt32LE(header, 56, 1080); // custom width
-  writeInt32LE(header, 92, 1920); // custom height
+  writeInt32LE(header, 52, SPACEDESK_SIZE.width); // width
+  writeInt32LE(header, 88, SPACEDESK_SIZE.height); // height
+  writeInt32LE(header, 56, SPACEDESK_SIZE.width); // custom width
+  writeInt32LE(header, 92, SPACEDESK_SIZE.height); // custom height
 
   const payload = packet.subarray(HEADER_LENGTH);
   // Fixed "1111122222" magic prefix (one byte per UTF-16LE char, low byte only).

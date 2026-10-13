@@ -6,14 +6,19 @@
 //
 // Short: copied from OBS's TikTok Face / TikTok Code / TikTok Code No Face
 // (profile TikTok, canvas 1080x1920), as the visible part of each item (PRD
-// #2052, "Layout module"). The screen is the Spacedesk display, 1920x1080
-// landscape like every other screen: OBS draws it 1:1 at (0,0), so a Short
-// shows its left 1080x1080 square and the rest falls off the canvas.
+// #2052, "Layout module"). The screen is the Spacedesk display, 1080x1080
+// (ADR 0043), drawn whole and 1:1 at the top of the canvas. A 1920x1080
+// Spacedesk display is still accepted while Matt switches: OBS drew it 1:1 at
+// (0,0), so a Short shows its left 1080x1080 square and the rest falls off
+// the canvas. Both are the screen's left square (`"left-square"`).
 //
 // - `crop` is a fraction of the source frame, so one definition holds for the
 //   camera (opened at 4K, recorded at 2560x1440), the screen recording
-//   (1920x1080 at 60 fps: the DELL or Spacedesk display at its native size)
-//   and the low-res previews alike.
+//   (60 fps at its native size: the DELL's 1920x1080, Spacedesk's 1080x1080)
+//   and the low-res previews alike. `"left-square"` is the source's left
+//   square, as tall as the source: the whole of a square source, the left
+//   1080 of a 1920x1080 one. The Short's screen is one or the other, so its
+//   crop cannot be a fixed fraction.
 // - `dest` is canvas pixels (OBS pos and cropped size x scale).
 // - Items are bottom to top, as in OBS. Items fully off the canvas are kept so
 //   the definition stays a faithful copy of OBS; they are never drawn.
@@ -37,9 +42,15 @@ export interface Rect {
   readonly h: number;
 }
 
+/**
+ * A fraction of the source frame, or its left square: a square source whole,
+ * a landscape one's left part as wide as it is tall.
+ */
+export type Crop = Rect | "left-square";
+
 export interface LayoutItem {
   readonly source: LayoutSource;
-  readonly crop: Rect;
+  readonly crop: Crop;
   readonly dest: Rect;
 }
 
@@ -97,6 +108,9 @@ const SHORT = {
   // 2: the screen is the Spacedesk display's left 1080x1080 square, 1:1, not
   // the whole frame stretched to 1080x1920.
   // 3: items scaled bilinear, as OBS draws them (was ffmpeg's bicubic).
+  // (The screen's crop became "left-square" for a 1080x1080 Spacedesk display,
+  // ADR 0043, with no bump: a 1920x1080 screen draws exactly as in 3, and no
+  // square screen was ever recorded before.)
   version: 3,
   canvas: { width: 1080, height: 1920 },
   scenes: {
@@ -109,13 +123,14 @@ const SHORT = {
         dest: { x: 0, y: 0, w: 1080, h: 1920 },
       },
     ],
-    // TikTok Code: the 1920x1080 screen at scale 1 at (0,0), so its left
-    // 1080x1080 square fills the top of the canvas; the camera, cropped 92 px
-    // off the top and scaled by 0.498 (1913x1030) at x=-393, y=1080, below it.
+    // TikTok Code: the screen's left square at scale 1 at (0,0), filling the
+    // top of the canvas (all of a 1080x1080 screen, the left 1080 of a
+    // 1920x1080 one); the camera, cropped 92 px off the top and scaled by
+    // 0.498 (1913x1030) at x=-393, y=1080, below it.
     Code: [
       {
         source: "screen",
-        crop: { x: 0, y: 0, w: 0.5625, h: 1 },
+        crop: "left-square",
         dest: { x: 0, y: 0, w: 1080, h: 1080 },
       },
       {
@@ -129,7 +144,7 @@ const SHORT = {
     "No Face": [
       {
         source: "screen",
-        crop: { x: 0, y: 0, w: 0.5625, h: 1 },
+        crop: "left-square",
         dest: { x: 0, y: 0, w: 1080, h: 1080 },
       },
     ],

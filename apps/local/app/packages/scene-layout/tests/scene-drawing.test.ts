@@ -94,6 +94,34 @@ describe("drawInstructions", () => {
     ]);
   });
 
+  it.each([
+    ["the 1080x1080 Spacedesk display", { width: 1080, height: 1080 }, 1080],
+    ["its 540x540 preview", { width: 540, height: 540 }, 540],
+    [
+      "the 960x540 preview of a 1920x1080 one",
+      { width: 960, height: 540 },
+      540,
+    ],
+  ])(
+    "draws %s whole as a Short's square, 1:1 at the top, in Code and No Face",
+    (_, screen, side) => {
+      for (const scene of ["Code", "No Face"] as const)
+        expect(
+          drawInstructions(scene, { ...shortSources, screen }, "short")[0]
+        ).toEqual({
+          source: "screen",
+          sx: 0,
+          sy: 0,
+          sw: side,
+          sh: side,
+          dx: 0,
+          dy: 0,
+          dw: 1080,
+          dh: 1080,
+        });
+    }
+  );
+
   it("refuses to draw a scene without a source it draws", () => {
     expect(() =>
       drawInstructions("Code", { camera: shortSources.camera }, "short")

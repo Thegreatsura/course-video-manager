@@ -12,26 +12,28 @@ import { listScreens, type Screen } from "./windows-devices";
  * and previewed. Landscape records the DELL, found by its EDID name and
  * checked at Record. A Short records the Spacedesk virtual display, found by
  * its display adapter's name (its monitor has no EDID name), woken only when
- * it is not listed. It is landscape 1920x1080 like any screen: the Short
- * layout shows its left square, so it is usable at any 16:9 size and refused
- * only at another shape, which the square would come out stretched from.
- * Its preview is 960x540, like the DELL's. Unavailable, a Short
- * records camera and mic only, and the scenes that draw the screen are
- * refused (`refuseScreenlessScene`).
+ * it is not listed. It is square, 1080x1080 (ADR 0043): the Short layout
+ * draws the screen's left square, which is all of it. A 16:9 display is still
+ * accepted while Matt switches Spacedesk over, and the Short shows its left
+ * square; any other shape is refused. Its preview keeps its shape (540x540,
+ * or 960x540 like the DELL's). Unavailable, a Short records camera and mic
+ * only, and the scenes that draw the screen are refused
+ * (`refuseScreenlessScene`).
  */
 
 export const SCREEN_NAME = "DELL U2424H";
 /** A Short's screen, found by its display adapter: its monitor has no EDID name. */
 export const SPACEDESK_ADAPTER = "spacedesk";
 /**
- * Why the Spacedesk display cannot be a Short's screen, if it cannot: the
- * Short layout crops its left square as a fraction of a 16:9 frame, so any
- * other shape would come out stretched.
+ * Why the Spacedesk display cannot be a Short's screen, if it cannot. The
+ * Short layout draws the screen's left square: all of a square display, the
+ * left part of a 16:9 one (accepted until Matt has switched to 1080x1080, ADR
+ * 0043). A portrait display has no left square as tall as it is.
  */
 const unusableSize = (screen: Screen) =>
-  screen.width * 9 === screen.height * 16
+  screen.width === screen.height || screen.width * 9 === screen.height * 16
     ? undefined
-    : `The Spacedesk display is ${screen.width}x${screen.height}, not landscape 16:9: set Spacedesk back to 1920x1080, then wake it again.`;
+    : `The Spacedesk display is ${screen.width}x${screen.height}, neither square nor 16:9: set Spacedesk to 1080x1080, then wake it again.`;
 
 /** Refuses a scene that draws the screen while a Short's screen is unavailable. */
 export const refuseScreenlessScene = (
@@ -80,11 +82,15 @@ export const createScreenSide = (o: {
   /** Bumped whenever the screen side starts again: an older check's answer is dropped. */
   let generation = 0;
 
-  const startPreview = (screenIndex: number) => {
+  const startPreview = (screen: Screen) => {
     if (!o.format() || preview) return;
     const p = o.launch({
       tool: "ffmpeg",
-      args: screenPreviewArgs({ screenIndex, port: o.previewPort() }),
+      args: screenPreviewArgs({
+        screenIndex: screen.index,
+        port: o.previewPort(),
+        size: screen,
+      }),
       cwd: "/mnt/c",
     });
     preview = p;
@@ -156,7 +162,7 @@ export const createScreenSide = (o: {
       if (format === "landscape") {
         const screens = await listScreens(o.launch);
         const dell = findByName(screens, (s) => s.name, SCREEN_NAME);
-        if (dell && current()) startPreview(dell.index);
+        if (dell && current()) startPreview(dell);
         return;
       }
       if (format !== "short") return;
@@ -164,7 +170,7 @@ export const createScreenSide = (o: {
       if (!current()) return;
       if (found.kind === "unavailable") return o.setStatus(found);
       o.setStatus({ kind: "ready" });
-      startPreview(found.screen.index);
+      startPreview(found.screen);
     } catch (e) {
       console.error("recorder: could not start the screen side", e);
       if (current())
