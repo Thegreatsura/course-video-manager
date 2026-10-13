@@ -3,7 +3,11 @@ import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { CAM_LINK_FRAME_INTERVAL, dshowFrameInterval } from "./capture-args";
+import {
+  CAM_LINK_FRAME_INTERVAL,
+  dshowFrameInterval,
+  micOnClock,
+} from "./capture-args";
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
 import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
@@ -283,7 +287,7 @@ describe("a Recording Session", () => {
     const t0 = `PTS-${(T0_MS / 1000).toFixed(3)}/TB`;
     expect(s).toContain(`setpts=${t0}`);
     expect(c).toContain(`setpts=${t0}`);
-    expect(c).toContain(`asetpts=${t0}`);
+    expect(c).toContain(`${micOnClock((T0_MS / 1000).toFixed(3))},asplit`);
     expect(c).toContain("silencedetect=n=-38dB:d=2");
   });
 
