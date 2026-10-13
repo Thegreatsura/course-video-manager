@@ -2,7 +2,7 @@ import { useEffectReducer } from "use-effect-reducer";
 import {
   STORAGE_SCAN_MESSAGE_TYPES,
   type StorageScanMessage,
-} from "@/packages/storage/buckets";
+} from "@/packages/storage/client";
 import {
   createInitialStoragePageState,
   storagePageReducer,

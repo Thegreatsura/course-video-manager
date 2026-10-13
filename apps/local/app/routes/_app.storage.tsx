@@ -7,7 +7,7 @@ import {
   type storagePageReducer,
 } from "@/features/storage/storage-page-reducer";
 import { useStoragePage } from "@/features/storage/use-storage-page";
-import type { StorageFileKind } from "@/packages/storage/buckets";
+import type { StorageFileKind } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage";
 
 export const meta: Route.MetaFunction = () => [{ title: "CVM - Storage" }];
