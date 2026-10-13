@@ -228,6 +228,13 @@ const joinRecordingInProgress = (
  * editor's insertion point moved, or a chapter added there was saved (a
  * Stream Deck "add chapter" mid-recording), or recording started. A
  * `recorder-status` re-sends it itself.
+ *
+ * The editor's point is the one truth; the app server only moves its own
+ * after each Clip it saves (for a Stream Deck take with no editor). So
+ * after `clips-saved` the server's point is after the last Clip saved, and
+ * the editor's is sent if it is anywhere else: a take deleted before its
+ * Clip was saved leaves the editor's point where it was, while the server's
+ * would name the deleted Clip (#2163).
  */
 export const tellRecorderOfInsertionPoint = (
   before: InsertionPoint | null,
@@ -235,13 +242,28 @@ export const tellRecorderOfInsertionPoint = (
   action: ClipReducerAction,
   exec: ClipReducerExec
 ) => {
-  if (
-    action.type === "cvm-recorder-message-heard" &&
-    action.message.type === "recorder-status"
-  )
+  if (action.type !== "cvm-recorder-message-heard") {
+    send(before, after, exec);
     return;
+  }
+  const message = action.message;
+  if (message.type === "recorder-status") return;
+  const last = message.type === "clips-saved" ? message.clips.at(-1) : null;
+  send(
+    last ? { type: "after-clip", databaseClipId: last.id } : before,
+    after,
+    exec
+  );
+};
+
+/** Tells the app server the editor's point, unless it already has it. */
+const send = (
+  server: InsertionPoint | null,
+  after: ClipReducerState,
+  exec: ClipReducerExec
+) => {
   const point = recorderInsertionPoint(after);
-  if (!point || (before && samePoint(before, point))) return;
+  if (!point || (server && samePoint(server, point))) return;
   exec({ type: "send-recorder-insertion-point", insertionPoint: point });
 };
 

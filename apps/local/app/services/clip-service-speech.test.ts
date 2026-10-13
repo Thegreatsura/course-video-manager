@@ -126,6 +126,85 @@ describe("placeSpeechAsClips", () => {
     ]);
   });
 
+  // #2163: a Stream Deck delete archived the Clip the app server was about
+  // to save after. The save must still land, where that Clip stood.
+  it("places the Clips where an archived Clip stood, when the insertion point names it", async () => {
+    const video = await clipService.createVideo("speech");
+    const [, deleted] = await clipService.appendClips({
+      videoId: video.id,
+      insertionPoint: start,
+      items: [],
+      clips: [
+        { inputVideo: "first.mp4", startTime: 0, endTime: 1 },
+        { inputVideo: "deleted.mp4", startTime: 0, endTime: 1 },
+        { inputVideo: "last.mp4", startTime: 0, endTime: 1 },
+      ],
+    });
+    await clipService.archiveClips([deleted!.id]);
+
+    await place({
+      videoId: video.id,
+      footagePath: MIC,
+      insertionPoint: { type: "after-clip", databaseClipId: deleted!.id },
+      recordingSession: null,
+      fps: 60,
+      speech: [{ startTime: 10, endTime: 12 }],
+    });
+
+    expect((await clipBounds(video.id)).map((c) => c.videoFilename)).toEqual([
+      "first.mp4",
+      MIC,
+      "last.mp4",
+    ]);
+    // Restored, the deleted Clip is back where it was: before what followed it.
+    await clipService.unarchiveClips([deleted!.id]);
+    expect((await clipBounds(video.id)).map((c) => c.videoFilename)).toEqual([
+      "first.mp4",
+      "deleted.mp4",
+      MIC,
+      "last.mp4",
+    ]);
+  });
+
+  it("places the Clips at the end when the insertion point names an item that is gone", async () => {
+    const video = await clipService.createVideo("speech");
+    await clipService.appendClips({
+      videoId: video.id,
+      insertionPoint: start,
+      items: [],
+      clips: [{ inputVideo: "first.mp4", startTime: 0, endTime: 1 }],
+    });
+
+    await place({
+      videoId: video.id,
+      footagePath: MIC,
+      insertionPoint: {
+        type: "after-clip",
+        databaseClipId: "00000000-0000-0000-0000-000000000000",
+      },
+      recordingSession: null,
+      fps: 60,
+      speech: [{ startTime: 10, endTime: 12 }],
+    });
+    await place({
+      videoId: video.id,
+      footagePath: "/next.mkv",
+      insertionPoint: {
+        type: "after-chapter",
+        chapterId: "00000000-0000-0000-0000-000000000000",
+      },
+      recordingSession: null,
+      fps: 60,
+      speech: [{ startTime: 10, endTime: 12 }],
+    });
+
+    expect((await clipBounds(video.id)).map((c) => c.videoFilename)).toEqual([
+      "first.mp4",
+      MIC,
+      "/next.mkv",
+    ]);
+  });
+
   it("enqueues one transcribe-clips Job for the new Clips", async () => {
     const video = await clipService.createVideo("speech");
 

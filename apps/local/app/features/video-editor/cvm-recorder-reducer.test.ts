@@ -453,3 +453,96 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
     expect(captureOf(t.getState())).toBe("silence");
   });
 });
+
+describe("events from a Recording Session that is not the current one (#2163)", () => {
+  const started = (id: string) =>
+    heard({
+      type: "recording-started",
+      recordingSessionId: id,
+      silenceLength: "long",
+      micFile: `${id}.mkv`,
+    });
+  /** s1 recorded and was stopped; its last events were held behind a failed save. */
+  const stoppedWithEventsHeld = () =>
+    recording()
+      .send(heard({ type: "warmed-up", recordingSessionId: "s1" }))
+      .send(status({ recordingSessionId: "s1" }))
+      .send({ type: "press-stop" })
+      .send(status());
+
+  it("is idle once the recorder says s1 stopped, and a replay of s1 never makes it recording again", () => {
+    const t = stoppedWithEventsHeld();
+    expect(t.getState().phase).toBe("idle");
+
+    // The held events are saved at last, replayed from s1's start.
+    t.send(started("s1"))
+      .send(heard({ type: "speech-started", recordingSessionId: "s1" }))
+      .send(heard({ type: "speech-ended", recordingSessionId: "s1" }));
+    expect(t.getState().phase).toBe("idle");
+    expect(captureOf(t.getState())).toBe("not-recording");
+    expect(canRecord(t.getState())).toBe(true);
+    expect(t.getEffects().map((e) => e.type)).toEqual([
+      "start-recording",
+      "stop-recording",
+    ]);
+  });
+
+  it("keeps recording the new Recording Session while the old one's held events arrive", () => {
+    const t = stoppedWithEventsHeld()
+      .send(pressRecord)
+      .send(status({ recordingSessionId: "s2" }))
+      .send(started("s2"))
+      .send(heard({ type: "warmed-up", recordingSessionId: "s2" }))
+      .send(heard({ type: "speech-started", recordingSessionId: "s2" }));
+    const before = t.getState();
+    const effects = t.getEffects().length;
+
+    t.send(started("s1"))
+      .send(heard({ type: "warmed-up", recordingSessionId: "s1" }))
+      .send(heard({ type: "speech-started", recordingSessionId: "s1" }))
+      .send(heard({ type: "speech-ended", recordingSessionId: "s1" }))
+      .send(
+        heard({ type: "camera-lost", recordingSessionId: "s1", errors: [] })
+      )
+      .send(heard(stoppedMessage({ recordingSessionId: "s1" })));
+
+    expect(t.getState()).toEqual(before);
+    expect(t.getEffects()).toHaveLength(effects);
+    expect(t.getState().phase).toBe("recording");
+    expect(captureOf(t.getState())).toBe("speaking-detected");
+  });
+
+  it("ignores the old Recording Session's events while a new Record is starting", () => {
+    const t = stoppedWithEventsHeld().send(pressRecord);
+    t.send(started("s1")).send(
+      heard(stoppedMessage({ recordingSessionId: "s1" }))
+    );
+    expect(t.getState().phase).toBe("starting");
+  });
+
+  it("still shows what the stop of the Recording Session just recorded says, after the recorder said it stopped", () => {
+    const t = recording()
+      .send(status({ recordingSessionId: "s1" }))
+      .send(status())
+      .send(
+        heard(
+          stoppedMessage({
+            errors: ["ffmpeg died"],
+            framesLost: { camera: 2, screen: 0 },
+          })
+        )
+      );
+    expect(t.getState()).toMatchObject({
+      phase: "idle",
+      error: "ffmpeg died",
+      framesLost: { camera: 2, screen: 0 },
+    });
+
+    const lost = recording()
+      .send(status())
+      .send(
+        heard({ type: "camera-lost", recordingSessionId: "s1", errors: [] })
+      );
+    expect(lost.getState().alert).toContain("Cam Link");
+  });
+});
