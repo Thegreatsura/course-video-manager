@@ -33,6 +33,7 @@ let dbLayer: Layer.Layer<
 >;
 let frames: { dir: string };
 let filesDir: string;
+let legacyDir: string;
 const previousFilesDir = process.env.VIDEO_FILES_DIR;
 const previousRoots = process.env.STORAGE_ROOTS;
 let storageRoot: string;
@@ -48,16 +49,21 @@ beforeAll(async () => {
   frames = { dir: path.join(storageRoot, "clip-mockups") };
   fs.mkdirSync(frames.dir);
   process.env.STORAGE_ROOTS = storageRoot;
-  filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "duplicate-course-"));
-  process.env.VIDEO_FILES_DIR = filesDir;
+  // Video Files are in video-files/ on the Storage Root; the legacy store
+  // (VIDEO_FILES_DIR) is an empty folder of its own.
+  filesDir = path.join(storageRoot, "video-files");
+  fs.mkdirSync(filesDir);
+  legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), "duplicate-course-"));
+  process.env.VIDEO_FILES_DIR = legacyDir;
 });
 
 afterAll(() => {
   if (previousRoots === undefined) delete process.env.STORAGE_ROOTS;
   else process.env.STORAGE_ROOTS = previousRoots;
   fs.rmSync(storageRoot, { recursive: true, force: true });
-  process.env.VIDEO_FILES_DIR = previousFilesDir;
-  fs.rmSync(filesDir, { recursive: true, force: true });
+  if (previousFilesDir === undefined) delete process.env.VIDEO_FILES_DIR;
+  else process.env.VIDEO_FILES_DIR = previousFilesDir;
+  fs.rmSync(legacyDir, { recursive: true, force: true });
 });
 
 let sourceCourseId: string;

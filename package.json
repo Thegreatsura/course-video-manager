@@ -30,6 +30,7 @@
     "db:backfill-search-text": "pnpm --filter @cvm/local run db:backfill-search-text",
     "storage:migrate-paths": "pnpm --filter @cvm/local run storage:migrate-paths",
     "storage:rename-exports": "pnpm --filter @cvm/local run storage:rename-exports",
+    "storage:relocate": "pnpm --filter @cvm/local run storage:relocate",
     "db:studio": "pnpm --filter @cvm/core run db:studio",
     "db:clone-local": "pnpm --filter @cvm/local run db:clone-local",
     "db:verify-snapshot": "./scripts/verify-snapshot.sh",
