@@ -34,7 +34,9 @@ export namespace bucketPageReducer {
   };
 
   export type Action =
-    StorageBucketFilesMessage | { type: "listing-failed"; message: string };
+    | StorageBucketFilesMessage
+    | { type: "page-opened" }
+    | { type: "listing-failed"; message: string };
 
   export type Effect = { type: "listen-to-listing"; bucketId: string };
 }
@@ -43,18 +45,21 @@ type State = bucketPageReducer.State;
 type Action = bucketPageReducer.Action;
 type Effect = bucketPageReducer.Effect;
 
-export const createInitialBucketPageState =
-  (bucketId: string) =>
-  (exec: (effect: Effect) => EffectEntity<State, Action>): State => ({
-    bucketId,
-    status: "listing",
-    failure: null,
-    roots: null,
-    bucket: null,
-    files: {},
-    unreadableRoots: {},
-    listing: exec({ type: "listen-to-listing", bucketId }),
-  });
+/**
+ * The page starts listening on `page-opened`, not here: a listener started
+ * from the initial state is stopped by React Strict Mode's mount → unmount →
+ * mount (client-side navigation in dev) and never started again.
+ */
+export const createInitialBucketPageState = (bucketId: string): State => ({
+  bucketId,
+  status: "listing",
+  failure: null,
+  roots: null,
+  bucket: null,
+  files: {},
+  unreadableRoots: {},
+  listing: null,
+});
 
 export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
   state,
@@ -65,6 +70,13 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
   // reporting the closed stream) changes nothing.
   if (state.status !== "listing") return state;
   switch (action.type) {
+    case "page-opened":
+      // Opened again (Strict Mode remounts): one listener, the newest.
+      if (state.listing) exec.stop(state.listing);
+      return {
+        ...state,
+        listing: exec({ type: "listen-to-listing", bucketId: state.bucketId }),
+      };
     case "roots-measured":
       return { ...state, roots: action.roots };
     case "bucket-identified":

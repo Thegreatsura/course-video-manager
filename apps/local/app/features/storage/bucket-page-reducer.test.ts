@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import type { StorageFileFound } from "@/packages/storage/client";
 import {
@@ -26,14 +26,14 @@ const footage = (
 
 const start = (bucketId = "course:a") => {
   const listener = { stop: () => {} } as never;
-  const effects: bucketPageReducer.Effect[] = [];
   const tester = new ReducerTester(
     bucketPageReducer,
-    createInitialBucketPageState(bucketId)((effect) => {
-      effects.push(effect);
-      return listener;
-    })
+    createInitialBucketPageState(bucketId)
   );
+  vi.mocked(tester.getExec()).mockReturnValue(listener);
+  tester.send({ type: "page-opened" });
+  const effects = tester.getEffects();
+  tester.resetExec();
   tester
     .send({
       type: "roots-measured",
@@ -67,7 +67,24 @@ const rows = (state: bucketPageReducer.State) =>
   bucketFiles(state).map((f) => [f.path, f.bytes, Object.keys(f.copies)]);
 
 describe("bucketPageReducer", () => {
-  it("listens to the bucket's listing as soon as the page opens", () => {
+  it("opened twice (Strict Mode remount), only the newest listener listens", () => {
+    const first = { stop: () => {} } as never;
+    const tester = new ReducerTester(
+      bucketPageReducer,
+      createInitialBucketPageState("shared-footage")
+    );
+    expect(tester.getState().listing).toBeNull();
+    vi.mocked(tester.getExec()).mockReturnValue(first);
+    tester.send({ type: "page-opened" }).send({ type: "page-opened" });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "listen-to-listing", bucketId: "shared-footage" },
+      { type: "listen-to-listing", bucketId: "shared-footage" },
+    ]);
+    expect(tester.getExec().stop).toHaveBeenCalledWith(first);
+  });
+
+  it("listens to the bucket's listing once the page opens", () => {
     const { tester, effects } = start("shared-footage");
     expect(effects).toEqual([
       { type: "listen-to-listing", bucketId: "shared-footage" },

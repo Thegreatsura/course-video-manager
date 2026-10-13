@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useEffectReducer } from "use-effect-reducer";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
@@ -44,9 +45,21 @@ const listenToListing = (
   };
 };
 
-/** The effect runner for `bucketPageReducer`. Remount it for another bucket. */
-export const useBucketPage = (bucketId: string) =>
-  useEffectReducer(bucketPageReducer, createInitialBucketPageState(bucketId), {
-    "listen-to-listing": (_state, effect, dispatch) =>
-      listenToListing(effect.bucketId, dispatch),
-  });
+/**
+ * The effect runner for `bucketPageReducer`, and the bridge that tells it the
+ * page has opened. Remount it for another bucket.
+ */
+export const useBucketPage = (bucketId: string) => {
+  const [state, dispatch] = useEffectReducer(
+    bucketPageReducer,
+    createInitialBucketPageState(bucketId),
+    {
+      "listen-to-listing": (_state, effect, dispatch) =>
+        listenToListing(effect.bucketId, dispatch),
+    }
+  );
+  useEffect(() => {
+    dispatch({ type: "page-opened" });
+  }, [dispatch]);
+  return [state, dispatch] as const;
+};

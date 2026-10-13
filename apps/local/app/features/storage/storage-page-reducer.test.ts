@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import type { StorageBucket } from "@/packages/storage/client";
 import {
@@ -21,12 +21,19 @@ const buckets: StorageBucket[] = [
   { id: "unused-footage", kind: "unused-footage", name: "Unused Footage" },
 ];
 
-const start = () => {
+/** The page opens: it starts listening to the scan. */
+const opened = () => {
   const listener = { stop: () => {} } as never;
   const tester = new ReducerTester(
     storagePageReducer,
-    createInitialStoragePageState(() => listener)
+    createInitialStoragePageState()
   );
+  vi.mocked(tester.getExec()).mockReturnValue(listener);
+  return tester.send({ type: "page-opened" }).resetExec();
+};
+
+const start = () => {
+  const tester = opened();
   return tester
     .send({
       type: "roots-measured",
@@ -56,6 +63,24 @@ const names = (tester: ReturnType<typeof start>) =>
   storageRows(tester.getState()).map((r) => [r.bucket.name, r.totalBytes]);
 
 describe("storagePageReducer", () => {
+  it("listens to the scan once the page opens, once even when opened twice (Strict Mode remount)", () => {
+    const first = { stop: () => {} } as never;
+    const tester = new ReducerTester(
+      storagePageReducer,
+      createInitialStoragePageState()
+    );
+    expect(tester.getState().scan).toBeNull();
+    vi.mocked(tester.getExec()).mockReturnValue(first);
+    tester.send({ type: "page-opened" }).send({ type: "page-opened" });
+
+    expect(tester.getEffects()).toEqual([
+      { type: "listen-to-scan" },
+      { type: "listen-to-scan" },
+    ]);
+    // The first listener is stopped: only the newest listens.
+    expect(tester.getExec().stop).toHaveBeenCalledWith(first);
+  });
+
   it("adds streamed sizes up into rows, largest first, re-ordering as totals arrive", () => {
     const tester = start();
     expect(storageRows(tester.getState())).toEqual([]);
@@ -224,11 +249,7 @@ describe("storagePageReducer", () => {
 
 describe("Offline and Dirty drives", () => {
   const measured = (roots: storagePageReducer.State["roots"]) => {
-    const listener = { stop: () => {} } as never;
-    return new ReducerTester(
-      storagePageReducer,
-      createInitialStoragePageState(() => listener)
-    )
+    return opened()
       .send({ type: "roots-measured", roots: roots! })
       .send({ type: "buckets-listed", buckets });
   };
