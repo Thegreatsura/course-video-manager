@@ -10,7 +10,6 @@ import {
 import { usePreserveSnapshotShortcut } from "@/features/diagrams/preserve-snapshot-shortcut";
 import { useSnapshotStepShortcut } from "@/features/diagrams/use-snapshot-step-shortcut";
 import { useRecentreDiagramShortcut } from "@/features/diagrams/use-recentre-diagram-shortcut";
-import { centreCameraOnContent } from "@/features/diagrams/centre-camera-on-content";
 import { DiagramCenteringDebug } from "@/features/diagrams/diagram-centering-debug";
 import { copyDiagramContents } from "@/features/diagrams/copy-scene-to-clipboard";
 import { TimelinePanel } from "@/features/diagrams/timeline-panel";
@@ -80,10 +79,10 @@ export default function DiagramPlaygroundActive({
     [dispatch]
   );
 
-  const recentreDiagram = useCallback(() => {
-    const ed = editorRef.current;
-    if (ed) centreCameraOnContent(ed);
-  }, []);
+  const recentreDiagram = useCallback(
+    () => dispatch({ type: "recentre-requested" }),
+    [dispatch]
+  );
 
   usePreserveSnapshotShortcut(diagramId ? preserveSnapshot : null);
   useSnapshotStepShortcut({
@@ -337,7 +336,13 @@ export default function DiagramPlaygroundActive({
             editorConnected={state.videoEditorConnected}
             windowFocused={state.windowFocused}
           />
-          {diagramId && <DiagramCenteringDebug editorRef={editorRef} />}
+          {diagramId && (
+            <DiagramCenteringDebug
+              editorRef={editorRef}
+              format={state.format}
+              onRecentre={recentreDiagram}
+            />
+          )}
         </div>
         {!isFocusMode && (
           <div className="flex w-64 shrink-0 flex-col border-l border-zinc-700 bg-zinc-900">

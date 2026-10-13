@@ -92,7 +92,7 @@ describe("centreCameraOnContent", () => {
     const { editor, calls } = fakeEditor({
       bounds: { x: 100, y: 200, w: 400, h: 300 },
     });
-    centreCameraOnContent(editor);
+    centreCameraOnContent(editor, "landscape");
     expect(calls).toHaveLength(1);
     // zoom = min(1000/400, 800/300) = 2.5 — width is the constraining axis,
     // so it fills exactly; height has 50px of slack split above and below.
@@ -115,7 +115,7 @@ describe("centreCameraOnContent", () => {
     const { editor, calls } = fakeEditor({
       bounds: { x: 0, y: 0, w: 100, h: 100 },
     });
-    centreCameraOnContent(editor);
+    centreCameraOnContent(editor, "landscape");
     // safeWidth = 1000 - 200 = 800, safeHeight = 800 (full height, unaffected)
     // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
     // x = -0 + (0 + (800 - 100*8)/2)/8 = 0
@@ -133,7 +133,7 @@ describe("centreCameraOnContent", () => {
     const { editor, calls } = fakeEditor({
       bounds: { x: 0, y: 0, w: 200, h: 100 },
     });
-    centreCameraOnContent(editor);
+    centreCameraOnContent(editor, "landscape");
     // safeWidth = 1000 - 200 = 800, safeHeight = 800 - 200 = 600
     // fit zoom = min(800/200, 600/100) = 4 — width is the constraining axis.
     // x = -0 + (100 + (800 - 200*4)/2)/4 = 25 — and 25 * 4 = 100 = paddingX
@@ -162,7 +162,7 @@ describe("centreCameraOnContent", () => {
       bounds: { x: 0, y: 0, w: 10, h: 10 },
       baseZoom: 2,
     });
-    centreCameraOnContent(editor);
+    centreCameraOnContent(editor, "landscape");
     expect(calls[0]!.point).toMatchObject({ z: 16 });
   });
 
@@ -170,7 +170,7 @@ describe("centreCameraOnContent", () => {
     // Restoring an empty snapshot has nothing to centre on; moving the camera
     // to some arbitrary spot would just lose the author's place.
     const { editor, calls } = fakeEditor({ bounds: undefined });
-    centreCameraOnContent(editor);
+    centreCameraOnContent(editor, "landscape");
     expect(calls).toHaveLength(0);
   });
 
@@ -183,7 +183,7 @@ describe("centreCameraOnContent", () => {
       const { editor, calls } = fakeEditor({
         bounds: { x: 0, y: 0, w: 10, h: 10 },
       });
-      centreCameraOnContent(editor);
+      centreCameraOnContent(editor, "landscape");
       // insets: left 150, right 492 + 150 = 642, top/bottom 120.
       // safeWidth = 1000 - 150 - 642 = 208, safeHeight = 800 - 120 - 120 = 560
       // fit zoom = min(208/10, 560/10) = 20.8 — far past the default 225%
@@ -197,7 +197,7 @@ describe("centreCameraOnContent", () => {
       const { editor, calls } = fakeEditor({
         bounds: { x: 0, y: 0, w: 10, h: 10 },
       });
-      centreCameraOnContent(editor);
+      centreCameraOnContent(editor, "landscape");
       expect(calls[0]!.point).toMatchObject({ z: 1.5 });
     });
 
@@ -207,7 +207,7 @@ describe("centreCameraOnContent", () => {
         bounds: { x: 0, y: 0, w: 10, h: 10 },
         zoomSteps: [0.1, 2],
       });
-      centreCameraOnContent(editor);
+      centreCameraOnContent(editor, "landscape");
       expect(calls[0]!.point).toMatchObject({ z: 2 });
     });
   });
@@ -257,7 +257,9 @@ describe("centreCameraOnContent", () => {
         bounds: { x: 0, y: 0, w: 100, h: 100 },
         viewport: { x: 0, y: 0, w: 800, h: 800 },
       });
-      withWindowWidth(1000, () => centreCameraOnContent(withSidebar));
+      withWindowWidth(1000, () =>
+        centreCameraOnContent(withSidebar, "landscape")
+      );
       // safeWidth = 800 - 0 = 800, safeHeight = 800
       // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
       // x = -0 + (0 + (800 - 100*8)/2)/8 = 0
@@ -269,7 +271,9 @@ describe("centreCameraOnContent", () => {
         bounds: { x: 0, y: 0, w: 100, h: 100 },
         viewport: { x: 0, y: 0, w: 1000, h: 800 },
       });
-      withWindowWidth(1000, () => centreCameraOnContent(noSidebar));
+      withWindowWidth(1000, () =>
+        centreCameraOnContent(noSidebar, "landscape")
+      );
       // safeWidth = 1000 - 200 = 800, safeHeight = 800 — identical to above.
       expect(noSidebarCalls[0]!.point).toMatchObject({ x: 0, y: 0, z: 8 });
     });
@@ -287,7 +291,7 @@ describe("centreCameraOnContent", () => {
         bounds: { x: 0, y: 0, w: 100, h: 100 },
         viewport: { x: 0, y: 0, w: 900, h: 800 },
       });
-      withWindowWidth(1000, () => centreCameraOnContent(editor));
+      withWindowWidth(1000, () => centreCameraOnContent(editor, "landscape"));
       // right inset = max(200 - 100, 0) = 100
       // safeWidth = 900 - 100 = 800, safeHeight = 800
       // fit zoom = min(800/100, 800/100) = 8 — both axes fill exactly.
@@ -308,7 +312,7 @@ describe("centreCameraOnContent", () => {
         bounds: { x: 0, y: 0, w: 75, h: 100 },
         viewport: { x: 0, y: 0, w: 800, h: 800 },
       });
-      centreCameraOnContent(editor);
+      centreCameraOnContent(editor, "landscape");
       // safeWidth = 800 - 200 = 600, safeHeight = 800
       // fit zoom = min(600/75, 800/100) = 8 — both axes fill exactly.
       // x = -0 + (0 + (600 - 75*8)/2)/8 = 0

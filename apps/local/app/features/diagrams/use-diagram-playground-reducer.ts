@@ -137,7 +137,7 @@ export function useDiagramPlaygroundReducer() {
         if (!ed) return;
         if (effect.scene) {
           loadSnapshot(ed.store, { document: effect.scene });
-          if (effect.centreCamera) centreCameraOnContent(ed);
+          if (effect.centreFor) centreCameraOnContent(ed, effect.centreFor);
         } else {
           clearCanvas(ed);
         }
