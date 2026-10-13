@@ -261,6 +261,18 @@ _Avoid_: Renderer version, Export Version Key (that addresses the export; this a
 One of the drives CVM's files may be on (`/mnt/d`, `/mnt/e`), listed in order in the one `STORAGE_ROOTS` setting. Every Storage Root has the same fixed folders (`raw-footage/`, `finished-videos/`, `clip-mockups/`, `overlay-renders/`). The database stores a file's path relative to a Storage Root, with no drive in it. A file is read from the first Storage Root that has it, and a new file is written to the first. So moving a file between drives changes no row and no **Export Hash** (ADR 0040). A path under no Storage Root (a **Recording Session** in `~/Videos`) is used exactly as stored.
 _Avoid_: Drive (a Storage Root is the folder CVM uses on it), Storage location, Volume
 
+**Storage Bucket**:
+The unit the Storage page counts space in, one row each: every **Course**, Standalone Videos, Shorts, **Shared Footage**, **Unused Footage**, and the Other buckets (**Clip Mockups**, the **Overlay Render Cache**, export scratch, and orphaned exports: files in `finished-videos/` that are no Video's current **Exported Video**). A Video's **Footage** and **Exported Video** belong to its Video's bucket. Each bucket's size is split into Footage and Exported Videos, per **Storage Root**. Sizes are counted fresh on every visit; nothing is saved.
+_Avoid_: Block, Group, Category
+
+**Shared Footage**:
+The one **Storage Bucket** for **Footage** whose **Clips** (or **Recording Sessions**) fall in more than one bucket, such as Cohorts reusing a Crash Course's takes. It lists the Courses that use it. It is counted once, and moves as one, so it is never moved out from under another Course.
+_Avoid_: Common footage, Reused footage
+
+**Unused Footage**:
+The **Storage Bucket** for files under `raw-footage/` that no **Clip** and no **Recording Session** uses (a transcript kept beside used Footage counts with it). It can be moved, never deleted.
+_Avoid_: Orphaned footage, Dead footage
+
 ### Recording
 
 **Recording Session**:
