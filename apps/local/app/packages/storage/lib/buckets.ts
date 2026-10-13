@@ -30,6 +30,22 @@ export type StorageBucket = {
 /** What a counted file is, inside its bucket. */
 export type StorageFileKind = "footage" | "exported-videos" | "other";
 
+/**
+ * What a file is, finer than its kind, for the per-bucket page: a take, a
+ * Recording Session's camera/screen/mic file, a transcript or Whisper piece
+ * kept beside Footage, an Exported Video or its companion (`.sha256`), or one
+ * of the Other buckets' files.
+ */
+export type StorageFileRole =
+  | "footage"
+  | "recording-session"
+  | "footage-companion"
+  | "exported-video"
+  | "export-companion"
+  | "clip-mockup"
+  | "overlay-render"
+  | "export-scratch";
+
 export const STANDALONE_VIDEOS_BUCKET: StorageBucket = {
   id: "standalone-videos",
   kind: "standalone-videos",
@@ -80,7 +96,12 @@ export type StorageOwnershipInput = {
     exportNames: readonly string[];
   }[];
   /** Every stored Footage path a Clip or Recording Session of a Video uses. */
-  readonly footageUses: readonly { stored: string; videoId: string | null }[];
+  readonly footageUses: readonly {
+    stored: string;
+    videoId: string | null;
+    /** A Recording Session's camera, screen or mic file. */
+    recordingSession?: boolean;
+  }[];
 };
 
 export type StorageOwnership = {
@@ -89,6 +110,8 @@ export type StorageOwnership = {
   readonly footage: ReadonlyMap<string, string>;
   /** Export file name (no companion suffix) → bucket id. */
   readonly exports: ReadonlyMap<string, string>;
+  /** Root-relative paths of Recording Sessions' camera, screen and mic files. */
+  readonly recordingSessionFootage: ReadonlySet<string>;
 };
 
 /**
@@ -124,9 +147,11 @@ export const assignStorageBuckets = (
   }
 
   const users = new Map<string, Set<StorageBucket>>();
+  const recordingSessionFootage = new Set<string>();
   for (const use of input.footageUses) {
     const relative = rootRelativePath(use.stored, roots);
     if (relative === null) continue;
+    if (use.recordingSession) recordingSessionFootage.add(relative);
     const bucket =
       (use.videoId !== null ? bucketOfVideo.get(use.videoId) : undefined) ??
       STANDALONE_VIDEOS_BUCKET;
@@ -176,6 +201,7 @@ export const assignStorageBuckets = (
     ],
     footage,
     exports,
+    recordingSessionFootage,
   };
 };
 
@@ -184,22 +210,35 @@ export const assignStorageBuckets = (
  * transcript or Whisper piece kept beside it (`a.mkv.transcript.json`) — the
  * longest used Footage path it extends.
  */
-const footageBucket = (ownership: StorageOwnership, relative: string) => {
+const footageOwner = (
+  ownership: StorageOwnership,
+  relative: string
+): { bucketId: string; companionOf: string | null } => {
   const exact = ownership.footage.get(relative);
-  if (exact !== undefined) return exact;
+  if (exact !== undefined) return { bucketId: exact, companionOf: null };
   for (let i = relative.length - 1; i > 0; i--) {
     const ch = relative[i];
     if (ch !== "." && ch !== "/") continue;
-    const owner = ownership.footage.get(relative.slice(0, i));
-    if (owner !== undefined) return owner;
+    const footage = relative.slice(0, i);
+    const owner = ownership.footage.get(footage);
+    if (owner !== undefined) return { bucketId: owner, companionOf: footage };
   }
-  return UNUSED_FOOTAGE_BUCKET.id;
+  return { bucketId: UNUSED_FOOTAGE_BUCKET.id, companionOf: null };
 };
 
 /** `x.mp4.sha256` and other companions are counted with `x.mp4`. */
 const exportName = (file: string) => {
   const at = file.indexOf(".mp4");
   return at === -1 ? file : file.slice(0, at + ".mp4".length);
+};
+
+/** Which bucket a file is counted in, as what, and (for a companion) beside what. */
+export type StorageFileClass = {
+  readonly bucketId: string;
+  readonly kind: StorageFileKind;
+  readonly role: StorageFileRole;
+  /** A companion's file (root-relative): the Footage or Exported Video it sits beside. */
+  readonly companionOf: string | null;
 };
 
 /**
@@ -210,22 +249,45 @@ const exportName = (file: string) => {
 export const classifyStorageFile = (
   ownership: StorageOwnership,
   relative: string
-): { bucketId: string; kind: StorageFileKind } | null => {
+): StorageFileClass | null => {
   const folder = relative.split("/")[0] ?? "";
   switch (folder) {
-    case STORAGE_FOLDERS.rawFootage:
-      return { bucketId: footageBucket(ownership, relative), kind: "footage" };
-    case STORAGE_FOLDERS.finishedVideos:
+    case STORAGE_FOLDERS.rawFootage: {
+      const owner = footageOwner(ownership, relative);
+      const role: StorageFileRole =
+        owner.companionOf !== null
+          ? "footage-companion"
+          : ownership.recordingSessionFootage.has(relative)
+            ? "recording-session"
+            : "footage";
+      return { ...owner, kind: "footage", role };
+    }
+    case STORAGE_FOLDERS.finishedVideos: {
+      const name = exportName(path.posix.basename(relative));
+      const isCompanion = name !== path.posix.basename(relative);
       return {
-        bucketId:
-          ownership.exports.get(exportName(path.posix.basename(relative))) ??
-          ORPHANED_EXPORTS_BUCKET.id,
+        bucketId: ownership.exports.get(name) ?? ORPHANED_EXPORTS_BUCKET.id,
         kind: "exported-videos",
+        role: isCompanion ? "export-companion" : "exported-video",
+        companionOf: isCompanion
+          ? path.posix.join(path.posix.dirname(relative), name)
+          : null,
       };
+    }
     case STORAGE_FOLDERS.clipMockups:
-      return { bucketId: CLIP_MOCKUPS_BUCKET.id, kind: "other" };
+      return {
+        bucketId: CLIP_MOCKUPS_BUCKET.id,
+        kind: "other",
+        role: "clip-mockup",
+        companionOf: null,
+      };
     case STORAGE_FOLDERS.overlayRenders:
-      return { bucketId: OVERLAY_RENDER_CACHE_BUCKET.id, kind: "other" };
+      return {
+        bucketId: OVERLAY_RENDER_CACHE_BUCKET.id,
+        kind: "other",
+        role: "overlay-render",
+        companionOf: null,
+      };
     default:
       return null;
   }

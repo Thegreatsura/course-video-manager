@@ -1,4 +1,8 @@
-import type { StorageBucket, StorageFileKind } from "./buckets";
+import type {
+  StorageBucket,
+  StorageFileKind,
+  StorageFileRole,
+} from "./buckets";
 import type { VolumeDirtyBit } from "./dirty-bit";
 
 /**
@@ -58,3 +62,40 @@ export const STORAGE_SCAN_MESSAGE_TYPES = [
   "root-unreadable",
   "scan-completed",
 ] as const satisfies readonly StorageScanMessage["type"][];
+
+/**
+ * One file the per-bucket listing found: a file in the bucket, at one
+ * location. A file on two roots (mid-move) is found twice, once per root.
+ * `path` is root-relative (or, for export scratch, relative to that folder).
+ */
+export type StorageFileFound = {
+  readonly path: string;
+  readonly location: string;
+  readonly bytes: number;
+  readonly role: StorageFileRole;
+  readonly companionOf: string | null;
+};
+
+/**
+ * What the per-bucket listing streams to the per-bucket page, one SSE event
+ * each, named by its `type`. The same walk as the Storage page's scan, kept
+ * to one Storage Bucket and reported file by file. Nothing is saved.
+ */
+export type StorageBucketFilesMessage =
+  | { readonly type: "roots-measured"; readonly roots: StorageRootReport[] }
+  | { readonly type: "bucket-identified"; readonly bucket: StorageBucket }
+  | { readonly type: "files-found"; readonly files: StorageFileFound[] }
+  | {
+      readonly type: "root-unreadable";
+      readonly root: string;
+      readonly message: string;
+    }
+  | { readonly type: "scan-completed" };
+
+export const STORAGE_BUCKET_FILES_MESSAGE_TYPES = [
+  "roots-measured",
+  "bucket-identified",
+  "files-found",
+  "root-unreadable",
+  "scan-completed",
+] as const satisfies readonly StorageBucketFilesMessage["type"][];

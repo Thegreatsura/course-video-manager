@@ -6,7 +6,9 @@
 // use), Unused Footage (Footage under `raw-footage/` no Clip and no
 // Recording Session uses), and the Other buckets (Clip Mockups, the Overlay
 // Render Cache, export scratch, Exported Videos of no current Video). The scan streams
-// `StorageScanMessage`s; the page adds them up. Running the scan is
+// `StorageScanMessage`s; the page adds them up. The per-bucket page's
+// listing streams `StorageBucketFilesMessage`s, gathered with `addFoundFiles`
+// and shown `largestFirst`. Running the scan is
 // `./scan.ts`.
 export {
   assignStorageBuckets,
@@ -14,7 +16,9 @@ export {
   courseBucketId,
   type StorageBucket,
   type StorageBucketKind,
+  type StorageFileClass,
   type StorageFileKind,
+  type StorageFileRole,
   type StorageOwnership,
   type StorageOwnershipInput,
 } from "./lib/buckets";
@@ -24,8 +28,17 @@ export {
   type VolumeDirtyBit,
 } from "./lib/dirty-bit";
 export {
+  addFoundFiles,
+  dropFilesAt,
+  largestFirst,
+  type StorageBucketFile,
+} from "./lib/bucket-files";
+export {
+  STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   STORAGE_SCAN_MESSAGE_TYPES,
   moveTargetRefusal,
+  type StorageBucketFilesMessage,
+  type StorageFileFound,
   type StorageRootReport,
   type StorageScanMessage,
   type StorageSizeDelta,
