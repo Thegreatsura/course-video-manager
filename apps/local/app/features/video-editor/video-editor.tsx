@@ -1,3 +1,4 @@
+import type { FootageNotFound } from "@/services/clip-source-files.server";
 import { EditorCompactHeader } from "./components/editor-compact-header";
 import { EditorVideoMenuProvider } from "./editor-video-menu";
 import { EditorModals } from "./components/editor-modals";
@@ -116,6 +117,11 @@ export const VideoEditor = (props: {
   animatic: AnimaticLine[];
   /** Every Overlay on this Video — the loader's own read, no in-UI authoring. */
   overlays: ClipOverlay[];
+  /**
+   * Clips whose Footage is on no reachable Storage Root, by Clip database
+   * id, with the message shown in place of the player.
+   */
+  footageNotFound: Record<string, FootageNotFound>;
   /** Does this video have a teleprompter script? Enables "Copy script". */
   hasScript: boolean;
   referenceCandidates: ReferenceCandidate[];
@@ -425,6 +431,7 @@ export const VideoEditor = (props: {
       allItems: props.items,
       overlays: props.overlays,
       overlaysByClipId,
+      footageNotFound: props.footageNotFound,
       sessions: props.sessions,
       sessionPanels,
       videoTitle: props.videoTitle,
@@ -522,6 +529,7 @@ export const VideoEditor = (props: {
       props.items,
       props.overlays,
       overlaysByClipId,
+      props.footageNotFound,
       props.videoTitle,
       props.videoId,
       props.repoName,

@@ -1,9 +1,10 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
-import type {
-  StorageBucket,
-  StorageFileKind,
-  StorageRootReport,
-  StorageScanMessage,
+import {
+  moveTargetRefusal,
+  type StorageBucket,
+  type StorageFileKind,
+  type StorageRootReport,
+  type StorageScanMessage,
 } from "@/packages/storage/client";
 
 /**
@@ -180,3 +181,55 @@ export const storageLocations = (state: State): string[] => {
   }
   return [...roots, ...[...others].sort()];
 };
+
+/**
+ * The drive warnings at the top of the page: roots that are Offline
+ * (unplugged, or can't be read), and online roots Windows reports Dirty.
+ */
+export const driveWarnings = (
+  state: State
+): {
+  offline: StorageRootReport[];
+  dirty: StorageRootReport[];
+} => {
+  const roots = state.roots ?? [];
+  return {
+    offline: roots.filter((r) => !r.online),
+    dirty: roots.filter((r) => r.online && r.dirtyBit === "dirty"),
+  };
+};
+
+/** What one location shows in a row's Footage or Exported Videos cell. */
+export type StorageCell =
+  | { location: string; type: "offline" }
+  | { location: string; type: "bytes"; bytes: number };
+
+/**
+ * A row's cell for one kind: a line per Storage Root (an Offline root reads
+ * "Offline", never 0 GB, since its files can't be counted), plus any other
+ * location that holds bytes of that kind.
+ */
+export const storageCells = (
+  state: State,
+  row: StorageRow,
+  kind: StorageFileKind
+): StorageCell[] =>
+  storageLocations(state).flatMap((location): StorageCell[] => {
+    const root = state.roots?.find((r) => r.root === location);
+    if (root && !root.online) return [{ location, type: "offline" }];
+    const bytes = row.byLocation[location]?.[kind] ?? 0;
+    if (!root && bytes === 0) return [];
+    return [{ location, type: "bytes", bytes }];
+  });
+
+/**
+ * Each Storage Root as a move target, with why a move may not go there (an
+ * Offline root), or null when it may.
+ */
+export const moveTargets = (
+  state: State
+): { root: StorageRootReport; refusal: string | null }[] =>
+  (state.roots ?? []).map((root) => ({
+    root,
+    refusal: moveTargetRefusal(root),
+  }));

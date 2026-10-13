@@ -44,6 +44,7 @@ back. Nothing you do can reach Matt's data, his files or the outside world:
   so every row in your [Write Ledger](#the-write-ledger) is yours.
 - File writes (Video files, Clip Mockups, renders, finished videos) go to
   `scratch/` in the run directory, never Matt's disk.
+  An Offline drive: `VERIFY_EXTRA_STORAGE_ROOTS=<missing dir> $V launch`.
 - Every external service's credential is replaced with a dud, so Buffer, S3,
   Dropbox, YouTube, Anthropic and AI Hero all fail closed. A feature
   whose point is an external call shows its error path here, not its success.

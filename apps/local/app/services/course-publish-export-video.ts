@@ -190,6 +190,7 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
       // re-encoded, which repairs the backlog without touching the exports
       // that are sound.
       stage = "checking-existing-export";
+      let shortExportPath: string | null = null;
       if (yield* effectFs.exists(existingPath)) {
         const durationInSeconds = yield* ensureExportDuration(
           effectFs,
@@ -208,8 +209,9 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
         ) {
           return { targetPath: existingPath, owner };
         }
-        yield* removeQuietly(existingPath);
-        yield* removeQuietly(sidecarPath(existingPath));
+        // Removed only once every Clip's Footage is found (below): Footage
+        // on an unplugged drive must never cost the export already there.
+        shortExportPath = existingPath;
       }
 
       // Each Clip's files found on a Storage Root. One that is on none
@@ -237,6 +239,10 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
           (error) => new ExportError({ message: error.message, cause: error })
         )
       );
+      if (shortExportPath !== null) {
+        yield* removeQuietly(shortExportPath);
+        yield* removeQuietly(sidecarPath(shortExportPath));
+      }
 
       // Where every Overlay on this Video lands on the flattened timeline. The
       // Clips are in playback order with the archived ones already gone, so a

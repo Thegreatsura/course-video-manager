@@ -21,6 +21,10 @@ import {
 } from "@/features/video-posting/shorts-posting-modal";
 
 export const PortraitStudioPanel = () => {
+  const footageNotFound = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.footageNotFound
+  );
   const videoTitle = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.videoTitle
@@ -154,6 +158,7 @@ export const PortraitStudioPanel = () => {
                 // `OVERLAY_RENDER_FRAME` in `overlay-render-cache.ts`); the
                 // Shorts studio has no overlay preview of its own yet.
                 overlaysByClipId={NO_OVERLAYS}
+                footageNotFound={footageNotFound}
               />
             </div>
 

@@ -8,8 +8,8 @@
 // pulled `node:path` into the client bundle and failed the production build.
 // Same split as `course-json/client.ts`.
 //
-// Everything here comes from `lib/scan-wire`, whose only import is type-only
-// (erased), plus the bucket TYPES the messages carry. Import THIS from a
+// Everything here comes from `lib/scan-wire`, whose only imports are
+// type-only (erased), plus the bucket TYPES the messages carry. Import THIS from a
 // component, a hook, or a route's default export; import `buckets.ts` from a
 // loader, a service or the scan.
 export type {
@@ -19,6 +19,7 @@ export type {
 } from "./lib/buckets";
 export {
   STORAGE_SCAN_MESSAGE_TYPES,
+  moveTargetRefusal,
   type StorageRootReport,
   type StorageScanMessage,
   type StorageSizeDelta,

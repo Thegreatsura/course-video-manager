@@ -49,7 +49,10 @@ clone_app_env() {
     "DATABASE_URL=$url"
     "DIRECT_DATABASE_URL=$url"
     "VIDEO_FILES_DIR=$scratch/video-files"
-    "STORAGE_ROOTS=$scratch,$footage_root"
+    # VERIFY_EXTRA_STORAGE_ROOTS (comma-separated) adds roots after these,
+    # e.g. a directory that does not exist, to see an Offline drive. Never
+    # name one of Matt's drives.
+    "STORAGE_ROOTS=$scratch,$footage_root${VERIFY_EXTRA_STORAGE_ROOTS:+,$VERIFY_EXTRA_STORAGE_ROOTS}"
     "DIAGRAM_THUMBNAILS_DIR=$scratch/diagram-thumbnails"
     "OBS_RECORDING_DIR=$scratch/obs-recordings"
     "DROPBOX_REMOTE_PATH=$scratch/dropbox"

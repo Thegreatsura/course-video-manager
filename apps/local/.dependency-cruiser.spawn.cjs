@@ -72,6 +72,10 @@ const INTERACTIVE_CHILD_PROCESS = [
   // memoized per process, when `DrizzleService` first connects, so a worktree
   // never writes to a remote database. Milliseconds, once — not a Job.
   "^\\.\\./\\.\\./packages/core/git-worktree\\.ts$",
+  // The Storage page's scan: one read-only `fsutil dirty query` (then
+  // `chkntfs <drive>`, display only) per drive, 5 s timeout, while the page
+  // is open, to warn when a drive is Dirty.
+  "^app/packages/storage/lib/dirty-bit\\.server\\.ts$",
 ].join("|");
 
 /** The Sidecar starts its own processes: that is what it is for. */

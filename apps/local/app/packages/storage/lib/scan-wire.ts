@@ -1,4 +1,13 @@
 import type { StorageBucket, StorageFileKind } from "./buckets";
+import type { VolumeDirtyBit } from "./dirty-bit";
+
+/**
+ * Why a move must not go to this root, or null when it may. An Offline root
+ * takes no files: it is unplugged or can't be read, so a copy to it can't be
+ * written or verified. (A Dirty root is warned about, not refused.)
+ */
+export const moveTargetRefusal = (target: StorageRootReport): string | null =>
+  target.online ? null : `${target.label} is Offline`;
 
 /**
  * What the storage scan streams to the Storage page, one SSE event each,
@@ -12,6 +21,8 @@ export type StorageRootReport =
       readonly online: true;
       readonly totalBytes: number;
       readonly freeBytes: number;
+      /** Windows' dirty bit for the drive: `dirty` warns on the page. */
+      readonly dirtyBit: VolumeDirtyBit;
     }
   | {
       readonly root: string;
