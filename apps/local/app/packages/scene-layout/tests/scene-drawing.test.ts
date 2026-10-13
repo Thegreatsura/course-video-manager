@@ -95,7 +95,11 @@ describe("drawInstructions", () => {
   });
 
   it.each([
-    ["the 1080x1080 Spacedesk display", { width: 1080, height: 1080 }, 1080],
+    [
+      "the 1080x1080 Spacedesk display (all of it)",
+      { width: 1080, height: 1080 },
+      1080,
+    ],
     ["its 540x540 preview", { width: 540, height: 540 }, 540],
     [
       "the 960x540 preview of a 1920x1080 one",
@@ -103,7 +107,7 @@ describe("drawInstructions", () => {
       540,
     ],
   ])(
-    "draws %s whole as a Short's square, 1:1 at the top, in Code and No Face",
+    "draws the left square of %s as a Short's screen, 1:1 at the top, in Code and No Face",
     (_, screen, side) => {
       for (const scene of ["Code", "No Face"] as const)
         expect(
