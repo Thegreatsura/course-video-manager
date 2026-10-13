@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import { homedir } from "node:os";
-import path from "node:path";
 import { DEAD_DESK_URL, isMainCheckout } from "live-desk/live-desk";
 import { RECORDER_SERVICE_PORT } from "recorder-service/protocol";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { runtimeLive } from "@/services/layer.server";
+import { STORAGE_FOLDERS, writeFolder } from "@/packages/storage";
+import { readStorageRootsSync } from "@/services/storage-roots";
 import { lastPassedCalibrationNow } from "@/services/av-calibration.server";
 import { createRecorderClient, type RecorderClient } from "./client.server";
 import {
@@ -31,9 +31,14 @@ const recorderServiceUrl = () =>
     ? `ws://127.0.0.1:${RECORDER_SERVICE_PORT}`
     : DEAD_DESK_URL);
 
-/** The folder (WSL path) each Recording Session's folder goes in: beside the OBS recordings. */
+/**
+ * The folder (WSL path) each Recording Session's folder goes in:
+ * `raw-footage/` on the first Storage Root, beside the OBS recordings (ADR
+ * 0040), never `~/Videos` on C:. AV Calibration runs go in its
+ * `av-calibrations/`.
+ */
 export const recordingFolder = () =>
-  process.env.OBS_RECORDING_DIR || path.join(homedir(), "Videos");
+  writeFolder(readStorageRootsSync(), STORAGE_FOLDERS.rawFootage);
 
 export const recorderClient = (): RecorderClient => {
   const store = globalThis as unknown as Record<

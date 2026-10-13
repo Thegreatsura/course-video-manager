@@ -94,6 +94,10 @@ const RUN_BOUNDARIES: ReadonlyArray<readonly [RegExp, string]> = [
     /^apps\/local\/scripts\/storage-rename-exports\.ts$/,
     "the one-off Exported Video rename (#2104): its entry point runs the plan",
   ],
+  [
+    /^apps\/local\/scripts\/storage-relocate\.ts$/,
+    "the one-off relocation onto a Storage Root (#2105): its entry point runs the plan",
+  ],
 ];
 
 export const isRunBoundary = (file: string): boolean =>
