@@ -1,23 +1,26 @@
 /**
  * Preview latency: how far behind the moment a frame was made the recorder's
- * live preview shows it in a browser (#2144).
+ * live preview shows it in a browser (#2144, #2192).
  *
- *   pnpm --filter @cvm/local preview-latency [--scenario camera|screen|screen-square|recording|floor|all]
- *     [--seconds 10] [--client pull|multipart]
+ *   pnpm --filter @cvm/local preview-latency [--scenario camera|camera-cpu|screen|screen-square|recording|floor|all]
+ *     [--seconds 10]
  *
  * Synthetic sources only: no capture device, no screen. Each scenario takes
  * the real ffmpeg.exe arguments (`capture-args.ts`) and swaps the device
  * input for a synthetic one of the same size and rate with the time it was
  * made burned in (`sourceArgs`). ffmpeg.exe then sends the preview through
  * the real tee to the real preview feeds (`preview-feeds.ts`), and a
- * headless Chromium draws it as the editor's composite does, reading the
- * time back each animation frame: latency = when a frame is first drawn
- * less the time burned into it.
+ * headless Chromium decodes it (`latest-frame.ts`, WebCodecs) and draws it as
+ * the editor's composite does, reading the time back each animation frame:
+ * latency = when a frame is first drawn less the time burned into it.
  *
  *   camera     the Cam Link's preview-only process (`cameraPreviewArgs`), 4K NV12 in
- *   screen     the screen preview process (`screenPreviewArgs`), 1440p BGRA in
+ *   camera-cpu the camera preview's encode at its size (1440p, 29.97 fps)
+ *              without the CUDA scale: the camera's cost with no GPU
+ *   screen     the screen preview process (`screenPreviewArgs`), the
+ *              DELL's 1080p BGRA in at 60 fps, previewed unscaled
  *   screen-square  the same for a Short's 1080x1080 Spacedesk display
- *              (ADR 0043), previewed at 540x540
+ *              (ADR 0043)
  *   recording  the camera + mic process of a Recording Session
  *              (`buildCaptureArgs`), which writes its camera.mkv and mic.mkv
  *              to a temporary folder, deleted after
@@ -25,11 +28,9 @@
  *              frame costs (the pipe in, encode, tee, TCP, browser), for
  *              reading the others against
  *
- * `--client multipart` reads the feed the old way (`<img>` on a
- * multipart/x-mixed-replace stream), for comparing against a service that
- * still serves it. Uses the GPU (CUDA, NVENC) for camera and recording.
+ * Uses the GPU (CUDA, NVENC) for camera and recording only.
  */
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -47,6 +48,7 @@ import { findFfmpegExe } from "../recorder-service/windows-launcher";
 const SCENARIOS = [
   "floor",
   "camera",
+  "camera-cpu",
   "screen",
   "screen-square",
   "recording",
@@ -54,7 +56,7 @@ const SCENARIOS = [
 
 /** Each screen scenario's synthetic screen, at its device's size. */
 const SCREENS = {
-  screen: { width: 2560, height: 1440 },
+  screen: { width: 1920, height: 1080 },
   "screen-square": { width: 1080, height: 1080 },
 } as const;
 const isScreen = (s: Scenario): s is keyof typeof SCREENS => s in SCREENS;
@@ -67,7 +69,6 @@ const flag = (name: string, fallback: string) => {
 };
 const scenarioFlag = flag("--scenario", "all");
 const seconds = Number(flag("--seconds", "10"));
-const client = flag("--client", "pull") as "pull" | "multipart";
 const WARMUP_SECONDS = 3;
 
 /**
@@ -181,10 +182,22 @@ const ffmpegArgs = (
         "warning",
         ...pipedInput(CAMERA_RATE),
         "-vf",
-        upscale("640x360", "yuvj420p"),
+        upscale("640x360", "yuv420p"),
         "-map",
         "0:v",
-        ...previewOutput(port),
+        ...previewOutput(port, 30),
+      ];
+    case "camera-cpu":
+      return [
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        ...pipedInput(CAMERA_RATE),
+        "-vf",
+        upscale("2560x1440", "yuv420p"),
+        "-map",
+        "0:v",
+        ...previewOutput(port, 30),
       ];
     case "camera":
       return withoutDevices(
@@ -192,21 +205,18 @@ const ffmpegArgs = (
       );
     case "screen":
     case "screen-square": {
-      // ddagrab's lavfi input becomes the pipe, and what followed its
-      // download a filter on the pipe. The 320x180 clock is stretched to the
-      // screen's shape and back, so the browser still reads it whole.
+      // ddagrab's lavfi input becomes the pipe, stretched to the screen's
+      // shape and size: the preview sends it unscaled, so the browser still
+      // reads the 320x180 clock whole once it scales it back.
       const size = SCREENS[scenario];
-      const argv = screenPreviewArgs({ screenIndex: 0, port, size });
+      const argv = screenPreviewArgs({ screenIndex: 0, port });
       const at = argv.findIndex((a) => a.startsWith("ddagrab="));
-      const after = argv[at]!.replace(
-        /^ddagrab=[^,]*,hwdownload,format=bgra,/,
-        ""
-      );
+      const rate = argv[at]!.match(/framerate=(\d+)/)?.[1] ?? "60";
       return [
         ...argv.slice(0, at - 3),
-        ...pipedInput("30"),
+        ...pipedInput(rate),
         "-vf",
-        `${upscale(`${size.width}x${size.height}`, "bgra")},${after}`,
+        upscale(`${size.width}x${size.height}`, "bgra"),
         ...argv.slice(at + 1),
       ];
     }
@@ -226,26 +236,16 @@ const ffmpegArgs = (
   }
 };
 
-const page = (o: { feed: string; client: string }) => `<!doctype html>
+const page = (o: { feed: string }) => `<!doctype html>
 <canvas id="c" width="320" height="180"></canvas>
 <script type="module">
 const BITS = ${BITS};
 const MOD = 2 ** BITS;
 const ctx = document.getElementById("c").getContext("2d", { willReadFrequently: true });
-let source;
-${
-  o.client === "multipart"
-    ? `const img = document.createElement("img");
-img.crossOrigin = "anonymous";
-img.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none";
-img.src = "/preview/${o.feed}";
-document.body.append(img);
-const current = () => (img.naturalWidth > 0 ? img : undefined);`
-    : `const { watchLatestFrame } = await import("/frame-loop.js");
-let bitmap;
-watchLatestFrame("/preview/${o.feed}", (b) => { bitmap?.close(); bitmap = b; });
-const current = () => bitmap;`
-}
+const { watchLatestFrame } = await import("/frame-loop.js");
+let frame;
+watchLatestFrame("/preview/${o.feed}", (f) => { frame?.close(); frame = f; });
+const current = () => frame;
 window.__latencies = [];
 let last = -1;
 const draw = () => {
@@ -281,41 +281,6 @@ const frameLoopJs = async () => {
   return code;
 };
 
-/** The time burned into a JPEG, read with Linux ffmpeg. */
-const stampOf = (jpeg: Buffer) => {
-  const gray = execFileSync(
-    "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-f",
-      "mjpeg",
-      "-i",
-      "-",
-      "-vf",
-      "scale=320:180",
-      "-f",
-      "rawvideo",
-      "-pix_fmt",
-      "gray",
-      "-",
-    ],
-    { input: jpeg }
-  );
-  let v = 0;
-  for (let k = 0; k < BITS; k++) {
-    const x = 20 + (k % 7) * 40 + 20;
-    const y = 10 + Math.floor(k / 7) * 40 + 20;
-    if (gray[y * 320 + x]! > 128) v += 2 ** k;
-  }
-  return v;
-};
-
-const sinceStamp = (atMs: number, stamp: number) => {
-  const mod = 2 ** BITS;
-  return ((((atMs % mod) - stamp) % mod) + mod) % mod;
-};
-
 const stats = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   const at = (q: number) => s[Math.min(s.length - 1, Math.floor(q * s.length))];
@@ -332,12 +297,12 @@ const measure = async (scenario: Scenario) => {
   const exe = findFfmpegExe();
   if (!exe) throw new Error("ffmpeg.exe not found");
   const feeds = await startPreviewFeeds();
-  const js = client === "pull" ? await frameLoopJs() : "";
+  const js = await frameLoopJs();
   const feed = isScreen(scenario) ? "screen" : "camera";
   const server = http.createServer((req, res) => {
     if (req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(page({ feed, client }));
+      res.end(page({ feed }));
       return;
     }
     if (req.url === "/frame-loop.js") {
@@ -365,18 +330,16 @@ const measure = async (scenario: Scenario) => {
   const ffClosed = new Promise<void>((r) => ff.once("close", () => r()));
   const source = spawn(
     "ffmpeg",
-    sourceArgs(isScreen(scenario) ? "30" : CAMERA_RATE),
+    sourceArgs(isScreen(scenario) ? "60" : CAMERA_RATE),
     { stdio: ["ignore", "pipe", "inherit"] }
   );
   source.stdout.pipe(ff.stdin);
 
-  // Every 10th frame the service gets while measuring, and when it got it.
-  const arrivals: { atMs: number; jpeg: Buffer }[] = [];
+  // How many frames the service relays while measuring.
   let measuring = false;
-  let count = 0;
+  let relayed = 0;
   const unsubscribe = feeds.onFrame(feed, () => {
-    const latest = feeds.latest(feed);
-    if (measuring && latest && count++ % 10 === 0) arrivals.push(latest);
+    if (measuring) relayed += 1;
   });
 
   const browser = await chromium.launch();
@@ -395,10 +358,9 @@ const measure = async (scenario: Scenario) => {
     );
     if (latencies.length === 0)
       throw new Error(`${scenario}: no frames drawn. ffmpeg said:\n${log}`);
-    const atService = arrivals.map((a) => sinceStamp(a.atMs, stampOf(a.jpeg)));
     return {
       ...stats(latencies),
-      serviceMedianMs: stats(atService).medianMs,
+      relayedFps: Number((relayed / seconds).toFixed(1)),
     };
   } finally {
     unsubscribe();

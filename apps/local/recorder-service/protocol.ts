@@ -20,11 +20,10 @@ import type { ClapMark } from "../app/packages/clap-detection/live";
  * - **Status messages** have no `seq` and are not logged: the greeting, the
  *   recorder's state, a refused command and the end of a replay.
  *
- * The same port serves the previews over HTTP, straight to the browser, a
- * JPEG at a time: `GET /preview/camera?after=<seq>` and `GET
- * /preview/screen?after=<seq>` answer with the newest frame after the one
- * the browser has (`preview-feeds.ts`), and the camera's still for the
- * thumbnail camera: `GET /still` (`STILL_PATH`).
+ * The same port serves the previews over HTTP, straight to the browser, as
+ * low-latency H.264 streams the browser decodes itself: `GET
+ * /preview/camera` and `GET /preview/screen` (`preview-feeds.ts`), and the
+ * camera's still for the thumbnail camera: `GET /still` (`STILL_PATH`).
  *
  * TIME BASE. Every process stamps its frames with the one Windows wall clock,
  * less the Recording Session's T0, so a file time is seconds since T0. The
@@ -36,7 +35,7 @@ import type { ClapMark } from "../app/packages/clap-detection/live";
  * the same clock.
  */
 
-/** The WebSocket and the MJPEG previews' HTTP port. */
+/** The WebSocket and the previews' HTTP port. */
 export const RECORDER_SERVICE_PORT = 5177;
 
 /**
@@ -51,14 +50,22 @@ export const RECORDER_SERVICE_PORT = 5177;
  * mic timed by sample count, which an older service's recordings are not, so
  * the app refuses to record through one; 12: Record's calibration names its
  * camera, and Record is gated on the camera + mic pair; 13: the previews are
- * pulled a frame at a time, not streamed as multipart). The app server reloads on a change and the service does not
+ * pulled a frame at a time, not streamed as multipart; 14: the previews are
+ * H.264 streams, not JPEGs). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 13;
+export const RECORDER_PROTOCOL_VERSION = 14;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
+
+/**
+ * No frame for this long and a preview counts as stalled: the service starts
+ * a preview-only process again (`preview-watchdog.ts`), and the browser
+ * stops showing the frozen frame and says so.
+ */
+export const PREVIEW_STALL_MS = 3_000;
 
 /** The path the service serves a preview feed on. */
 export const previewPath = (feed: PreviewFeed) => `/preview/${feed}`;

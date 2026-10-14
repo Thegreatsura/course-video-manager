@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import type { Launch, LaunchedProcess, Launcher } from "../launcher";
+import { flvHeader, flvVideoTag } from "./flv";
 
 /**
  * A fake Footage file: `fakeFootage(12.5)` is a file ffmpeg reads as 12.5 s
@@ -43,8 +44,8 @@ const probeAnswer = (file: string) => {
  * the one seam they fake. Its ffmpeg.exe answers -version and -list_devices,
  * and its recorders print what a test tells them to and quit on `q`. Its
  * camera preview processes behave as the test scripts each try at the Cam
- * Link (`CameraTry`); one that gets frames sends a few tiny JPEGs a second to
- * the service's preview feed, as ffmpeg's mpjpeg would.
+ * Link (`CameraTry`); one that gets frames sends fake frames every 20 ms to
+ * the service's preview feeds, as ffmpeg's flv and mpjpeg muxers would.
  * Nothing here opens a real device.
  */
 
@@ -67,6 +68,8 @@ export type FakeProcess = LaunchedProcess & {
   onQuit?: () => void;
   /** Ignores `q`, and a kill ends only its WSL side. */
   stuck?: boolean;
+  /** A preview that stalled: still running, sending nothing. */
+  frozen?: boolean;
 };
 
 const fakeProcess = (launch: Launch): FakeProcess => {
@@ -166,41 +169,53 @@ const calibrationAnalysisStderr = (a: {
     "",
   ].join("\r\n");
 
-const TINY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-
 /** What the camera preview process sends to the still feed (its second output). */
 export const FAKE_STILL_JPEG = Buffer.from([0xff, 0xd8, 0x57, 0xff, 0xd9]);
 
+/** The fake H.264 the preview feeds carry: opaque bytes, which the service relays as they are. */
+export const FAKE_AVCC = Buffer.from([1, 0x42, 0xc0, 0x28, 0xff]);
+export const fakePreviewFrame = (n: number) =>
+  Buffer.from([0, 0, 0, 1, n & 0xff]);
+
 /**
- * Sends a "JPEG" to each feed in the args every 20 ms until exit: `jpegs[i]`
- * to the i-th `tcp://` output.
+ * Sends frames to each feed in the args every 20 ms until exit, in the
+ * format its tee output names: FLV (the config, then a frame each time, a
+ * keyframe every fifth) to a preview feed, mpjpeg (`FAKE_STILL_JPEG`) to the
+ * still feed.
  */
-const sendFrames = (
-  p: FakeProcess,
-  args: readonly string[],
-  jpegs: Buffer[]
-) => {
-  const ports = [...args.join(" ").matchAll(/tcp:\/\/127\.0\.0\.1:(\d+)/g)].map(
-    (m) => Number(m[1])
-  );
-  const sockets = ports.map((port) => {
-    const socket = net.connect(port, "127.0.0.1");
+const sendFrames = (p: FakeProcess, args: readonly string[]) => {
+  const outputs = [
+    ...args.join(" ").matchAll(/\[f=(\w+)[^\]]*\]tcp:\/\/127\.0\.0\.1:(\d+)/g),
+  ].map((m) => {
+    const socket = net.connect(Number(m[2]), "127.0.0.1");
     socket.on("error", () => {});
-    return socket;
-  });
-  const timer = setInterval(() => {
-    sockets.forEach((socket, i) => {
-      const jpeg = jpegs[i] ?? TINY_JPEG;
+    if (m[1] === "flv")
       socket.write(
-        `--ffmpeg\r\nContent-Type: image/jpeg\r\nContent-length: ${jpeg.length}\r\n\r\n`
+        Buffer.concat([flvHeader(), flvVideoTag({ config: FAKE_AVCC })])
       );
-      socket.write(jpeg);
+    return { flv: m[1] === "flv", socket };
+  });
+  let n = 0;
+  const timer = setInterval(() => {
+    if (p.frozen) return;
+    for (const { flv, socket } of outputs) {
+      if (flv) {
+        socket.write(
+          flvVideoTag({ key: n % 5 === 0, data: fakePreviewFrame(n) })
+        );
+        continue;
+      }
+      socket.write(
+        `--ffmpeg\r\nContent-Type: image/jpeg\r\nContent-length: ${FAKE_STILL_JPEG.length}\r\n\r\n`
+      );
+      socket.write(FAKE_STILL_JPEG);
       socket.write("\r\n");
-    });
+    }
+    n += 1;
   }, 20);
   void p.exited.then(() => {
     clearInterval(timer);
-    sockets.forEach((socket) => socket.destroy());
+    outputs.forEach(({ socket }) => socket.destroy());
   });
 };
 
@@ -216,8 +231,6 @@ export const fakeWindows = (
     driver?: string;
     /** Each try at the Cam Link in turn; every try after these gets frames. */
     cameraTries?: CameraTry[];
-    /** A real JPEG per preview and for the still, for a browser to show (verify-cvm). */
-    jpeg?: { camera: Buffer; screen: Buffer; still?: Buffer };
     /** The recording's camera + mic process: its first frame comes at once, or never. */
     recordingCamera?: "frames" | "silent";
     /**
@@ -335,11 +348,7 @@ export const fakeWindows = (
       cameraPreviews.push(p);
       const next = cameraTries.shift() ?? "frames";
       p.stuck = next === "stuck";
-      if (next === "frames")
-        sendFrames(p, l.args, [
-          o.jpeg?.camera ?? TINY_JPEG,
-          o.jpeg?.still ?? FAKE_STILL_JPEG,
-        ]);
+      if (next === "frames") sendFrames(p, l.args);
       if (next === "busy") {
         // What dshow says when OBS has the Cam Link.
         return answer(p, {
@@ -352,7 +361,7 @@ export const fakeWindows = (
     }
     if (isPreview(l, "ddagrab")) {
       screenPreviews.push(p);
-      sendFrames(p, l.args, [o.jpeg?.screen ?? TINY_JPEG]);
+      sendFrames(p, l.args);
       return p;
     }
     // An AV Calibration's analysis of its mic file (calibration-run.ts).

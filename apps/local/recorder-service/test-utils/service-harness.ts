@@ -99,13 +99,18 @@ afterEach(() => {
   clock.ms = T0_MS;
 });
 
-export const start = async (windows = fakeWindows(), stateDir = tmp()) => {
+export const start = async (
+  windows = fakeWindows(),
+  stateDir = tmp(),
+  o: { previewStallMs?: number } = {}
+) => {
   const service = await startRecorderService({
     port: 0,
     launch: windows.launch,
     now: () => clock.ms,
     stateDir,
     cameraStartTimeoutMs: 100,
+    previewStallMs: o.previewStallMs,
     wakeSpacedesk: windows.wakeSpacedesk,
   });
   cleanups.unshift(() => service.close());

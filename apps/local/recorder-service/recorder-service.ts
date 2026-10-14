@@ -15,15 +15,13 @@ import { CAMERA_START_TIMEOUT_MS, openCamera, type Camera } from "./camera";
 import type { Launcher } from "./launcher";
 import { DEFAULT_SCENE, type Scene } from "../app/packages/scene-layout";
 import { startPreviewFeeds } from "./preview-feeds";
+import { serveStill } from "./still";
 import { createMeterSide } from "./level-meter";
 import {
   CALIBRATION_WHILE_RECORDING,
   METER_WHILE_RECORDING,
   RECORD_WHILE_METERING,
-  STILL_NO_PICTURE,
   STILL_PATH,
-  STILL_RECORDER_CLOSED,
-  STILL_WHILE_RECORDING,
   RECENT_SESSIONS,
   RECORDER_PROTOCOL_VERSION,
   type CameraStatus,
@@ -79,9 +77,6 @@ import {
 /** The devices the rig proved, found by name. */
 export const CAMERA_NAME = RECORDER_CAMERA_NAME;
 
-/** A still older than this is not the camera now: the preview process stalled or quit. */
-const STILL_MAX_AGE_MS = 2_000;
-
 export type RecorderServiceOptions = {
   /** 0 picks a free port (tests). */
   port: number;
@@ -92,6 +87,8 @@ export type RecorderServiceOptions = {
   stateDir: string;
   /** How long one try at the Cam Link waits for its first frame. */
   cameraStartTimeoutMs?: number;
+  /** `PREVIEW_STALL_MS` (tests). */
+  previewStallMs?: number;
   /**
    * Wakes the Spacedesk display (`app/spacedesk-wake.ts`); rejects with a
    * message that says why it could not.
@@ -128,35 +125,6 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   let camera: Camera | undefined;
   const feeds = await startPreviewFeeds();
 
-  /** `GET /still`: the camera's latest still, or why there is none. */
-  const serveStill = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    const headers = {
-      "Cache-Control": "no-store",
-      ...corsHeaders(req.headers.origin),
-    };
-    const still = feeds.latest("still");
-    const refusal =
-      state.kind === "closed"
-        ? STILL_RECORDER_CLOSED
-        : state.kind === "recording"
-          ? STILL_WHILE_RECORDING
-          : state.camera.kind !== "live" ||
-              !still ||
-              Date.now() - still.atMs > STILL_MAX_AGE_MS
-            ? STILL_NO_PICTURE
-            : undefined;
-    if (refusal || !still) {
-      res.writeHead(state.kind === "open" ? 503 : 409, {
-        ...headers,
-        "Content-Type": "text/plain; charset=utf-8",
-      });
-      res.end(refusal);
-      return;
-    }
-    res.writeHead(200, { ...headers, "Content-Type": "image/jpeg" });
-    res.end(still.jpeg);
-  };
-
   const server = http.createServer((req, res) => {
     if (!isAllowedOrigin(req.headers.origin)) {
       res.writeHead(403, { Vary: "Origin" }).end();
@@ -164,7 +132,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     }
     if (feeds.serve(req, res, corsHeaders(req.headers.origin))) return;
     if (req.method === "GET" && req.url === STILL_PATH)
-      return serveStill(req, res);
+      return serveStill(req, res, state, feeds.latestStill());
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ service: "recorder", pid: process.pid, state }));
@@ -201,6 +169,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       feeds,
       findCamera,
       startTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
+      previewStallMs: o.previewStallMs,
       onStatus: (status) => {
         if (state.kind === "open") setState({ ...state, camera: status });
       },
@@ -238,6 +207,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const screenSide = createScreenSide({
     launch: o.launch,
     previewPort: () => feeds.port("screen"),
+    onPreviewFrame: (listener) => feeds.onFrame("screen", listener),
+    previewStallMs: o.previewStallMs,
     wakeSpacedesk: o.wakeSpacedesk,
     format: () => (state.kind === "closed" ? undefined : state.format),
     setStatus: (screen) => {

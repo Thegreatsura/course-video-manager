@@ -16,11 +16,13 @@ export const LatestFrameCanvas = (props: {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    return watchLatestFrame(props.url, (bitmap) => {
-      if (canvas.width !== bitmap.width) canvas.width = bitmap.width;
-      if (canvas.height !== bitmap.height) canvas.height = bitmap.height;
-      ctx.drawImage(bitmap, 0, 0);
-      bitmap.close();
+    return watchLatestFrame(props.url, (frame) => {
+      if (canvas.width !== frame.displayWidth)
+        canvas.width = frame.displayWidth;
+      if (canvas.height !== frame.displayHeight)
+        canvas.height = frame.displayHeight;
+      ctx.drawImage(frame, 0, 0);
+      frame.close();
     });
   }, [props.url]);
   return (

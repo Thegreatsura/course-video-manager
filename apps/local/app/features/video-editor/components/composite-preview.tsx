@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { VideoFormat } from "@/features/videos/video-format";
-import { CANVASES, type Scene } from "@/packages/scene-layout";
+import { CANVASES, drawnSources, type Scene } from "@/packages/scene-layout";
+import { PREVIEW_STALL_MS } from "recorder-service/protocol";
 import { drawComposite } from "../draw-composite";
 import { useLatestFrame } from "../use-latest-frame";
 
@@ -9,10 +10,33 @@ import { useLatestFrame } from "../use-latest-frame";
  * feeds drawn on a canvas by the layout module's draw instructions for the
  * scene the recorder is in. Each feed's newest frame is pulled as it comes
  * (`useLatestFrame`); the canvas redraws them every animation frame. A feed with no frame yet
- * is left out (black). It fills the editor's live frame, where OBS's
+ * is left out (black). A feed whose newest frame is older than
+ * `PREVIEW_STALL_MS` is left out too, and the canvas says it stalled: the
+ * service is starting it again, and a frozen frame would look live (#2192). It fills the editor's live frame, where OBS's
  * Virtual Camera would be (`LivePreviewFrame`). A Short is drawn in its own
  * 9:16 layout.
  */
+/** "Screen preview stalled — restarting", over the black where it was. */
+const drawStalled = (
+  ctx: CanvasRenderingContext2D,
+  feeds: readonly ("screen" | "camera")[],
+  canvas: { width: number; height: number }
+) => {
+  ctx.save();
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${Math.round(canvas.width / 30)}px sans-serif`;
+  feeds.forEach((feed, i) =>
+    ctx.fillText(
+      `${feed === "screen" ? "Screen" : "Camera"} preview stalled — restarting`,
+      canvas.width / 2,
+      canvas.height / 2 + i * (canvas.width / 20)
+    )
+  );
+  ctx.restore();
+};
+
 export const CompositePreview = (props: {
   previews: { camera: string; screen: string };
   scene: Scene;
@@ -35,16 +59,24 @@ export const CompositePreview = (props: {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     let frame = 0;
-    const draw = () => {
+    const drawn = drawnSources([{ scene }], format);
+    const draw = (nowMs: number) => {
       frame = requestAnimationFrame(draw);
-      drawComposite(
-        ctx,
-        scene,
-        { camera: camera.current, screen: screen.current },
-        format
+      const live = (f: typeof camera.current) =>
+        f && nowMs - f.atMs < PREVIEW_STALL_MS ? f.source : undefined;
+      const sources = {
+        camera: live(camera.current),
+        screen: live(screen.current),
+      };
+      drawComposite(ctx, scene, sources, format);
+      // Had a frame, and it went stale: stalled, not just not started yet.
+      const feeds = { camera: camera.current, screen: screen.current };
+      const stalled = (["screen", "camera"] as const).filter(
+        (s) => drawn.includes(s) && feeds[s] && !sources[s]
       );
+      if (stalled.length > 0) drawStalled(ctx, stalled, CANVASES[format]);
     };
-    draw();
+    draw(performance.now());
     return () => cancelAnimationFrame(frame);
   }, [scene, format, camera, screen]);
 

@@ -3,9 +3,10 @@ import { drawnSources, type Scene } from "../app/packages/scene-layout";
 import { quitProcess } from "./camera";
 import { PREVIEW_TAGS, screenPreviewArgs } from "./capture-args";
 import type { LaunchedProcess, Launcher } from "./launcher";
-import type { ScreenStatus } from "./protocol";
+import { PREVIEW_STALL_MS, type ScreenStatus } from "./protocol";
 import { findByName, Refusal } from "./refusal";
 import { listScreens, type Screen } from "./windows-devices";
+import { watchPreview } from "./preview-watchdog";
 
 /**
  * THE RECORDER'S SCREEN, per Video format: which ddagrab output is recorded
@@ -15,8 +16,8 @@ import { listScreens, type Screen } from "./windows-devices";
  * it is not listed. It is square, 1080x1080 (ADR 0043): the Short layout
  * draws the screen's left square, which is all of it. A 16:9 display is still
  * accepted while Matt switches Spacedesk over, and the Short shows its left
- * square; any other shape is refused. Its preview keeps its shape (540x540,
- * or 960x540 like the DELL's). Unavailable, a Short records camera and mic
+ * square; any other shape is refused. Its preview is the display at its
+ * own size. Unavailable, a Short records camera and mic
  * only, and the scenes that draw the screen are refused
  * (`refuseScreenlessScene`).
  */
@@ -77,10 +78,19 @@ export const createScreenSide = (o: {
   format: () => VideoFormat | undefined;
   /** A Short's screen status, for the state. */
   setStatus: (screen: ScreenStatus) => void;
+  /** Subscribes to the screen preview feed's frames, for its watchdog. */
+  onPreviewFrame: (listener: () => void) => () => void;
+  /** No frame for this long and the screen preview is started again. */
+  previewStallMs?: number;
 }) => {
   let preview: LaunchedProcess | undefined;
   /** Bumped whenever the screen side starts again: an older check's answer is dropped. */
   let generation = 0;
+
+  /** How many times a stalled or quit screen preview was started again, since the service started. */
+  let restarts = 0;
+  /** Waited before starting a preview that quit again, so one that cannot start is not a hot loop. */
+  const RESTART_DELAY_MS = 1_000;
 
   const startPreview = (screen: Screen) => {
     if (!o.format() || preview) return;
@@ -89,15 +99,39 @@ export const createScreenSide = (o: {
       args: screenPreviewArgs({
         screenIndex: screen.index,
         port: o.previewPort(),
-        size: screen,
       }),
       cwd: "/mnt/c",
     });
     preview = p;
+    const startedFor = generation;
+    /** Starts it again for the same screen, unless the screen side moved on. */
+    const again = (why: string) => {
+      restarts += 1;
+      console.error(
+        `recorder: the screen preview ${why}; starting it again (restart ${restarts})`
+      );
+      setTimeout(() => {
+        if (generation === startedFor && !preview) startPreview(screen);
+      }, RESTART_DELAY_MS);
+    };
+    watchPreview({
+      name: "screen preview",
+      process: p,
+      onFrame: o.onPreviewFrame,
+      stallMs: o.previewStallMs,
+      onStall: () => {
+        if (preview !== p) return;
+        void stopPreview().then(() =>
+          again(
+            `stalled (no frame for ${o.previewStallMs ?? PREVIEW_STALL_MS} ms)`
+          )
+        );
+      },
+    });
     void p.exited.then((code) => {
       if (preview !== p) return;
       preview = undefined;
-      console.error(`recorder: the screen preview quit (exit ${code})`);
+      again(`quit (exit ${code})`);
     });
   };
 

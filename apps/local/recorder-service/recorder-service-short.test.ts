@@ -30,7 +30,7 @@ const openShort = async (windows = fakeWindows()) => {
 };
 
 describe("a Short", () => {
-  it("wakes Spacedesk when its display is not listed, still takes a 1920x1080 one (previewed 960x540), and records its output as the screen", async () => {
+  it("wakes Spacedesk when its display is not listed, still takes a 1920x1080 one (previewed at its own size), and records its output as the screen", async () => {
     const { windows, client, screen } = await openShort();
     // Waking first, while the camera opens beside it.
     expect(
@@ -44,7 +44,7 @@ describe("a Short", () => {
     expect(screen).toEqual({ kind: "ready" });
     expect(windows.wakes()).toBe(1);
     expect(argsOf(windows.screenPreviews.at(-1)!.launch)).toMatch(
-      /ddagrab=output_idx=2:.*scale=960:540/
+      /ddagrab=output_idx=2:framerate=60,hwdownload,format=bgra /
     );
 
     client.send({
@@ -65,13 +65,13 @@ describe("a Short", () => {
     });
   });
 
-  it("takes a 1080x1080 display as the screen, previews it square at 540x540, and records its output", async () => {
+  it("takes a 1080x1080 display as the screen, previews it at its own size, and records its output", async () => {
     const { windows, client, screen } = await openShort(
       fakeWindows({ spacedesk: { width: 1080, height: 1080 } })
     );
     expect(screen).toEqual({ kind: "ready" });
     expect(argsOf(windows.screenPreviews.at(-1)!.launch)).toMatch(
-      /ddagrab=output_idx=2:.*scale=540:540,/
+      /ddagrab=output_idx=2:framerate=60,hwdownload,format=bgra /
     );
 
     client.send({
@@ -196,7 +196,9 @@ describe("a Short", () => {
     await new Promise((r) => setTimeout(r, 50));
     const running = windows.screenPreviews.filter((p) => p.running);
     expect(running.map((p) => argsOf(p.launch))).toEqual([
-      expect.stringMatching(/output_idx=1:.*scale=960:540/),
+      expect.stringMatching(
+        /output_idx=1:framerate=60,hwdownload,format=bgra /
+      ),
     ]);
     client.send({
       type: "record",
