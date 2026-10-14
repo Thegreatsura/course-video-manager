@@ -3,6 +3,7 @@ import { drawnSources, type Scene } from "../app/packages/scene-layout";
 import { quitProcess } from "./camera";
 import { PREVIEW_TAGS, screenPreviewArgs } from "./capture-args";
 import type { LaunchedProcess, Launcher } from "./launcher";
+import type { PreviewEncoders } from "./preview-encoders";
 import { PREVIEW_STALL_MS, type ScreenStatus } from "./protocol";
 import { findByName, Refusal } from "./refusal";
 import { listScreens, type Screen } from "./windows-devices";
@@ -71,6 +72,8 @@ export const refuseWakingScene = (
 
 export const createScreenSide = (o: {
   launch: Launcher;
+  /** What encodes the screen preview; one whose NVENC would not open is started again on libx264. */
+  encoders: PreviewEncoders;
   /** The service's screen preview feed. */
   previewPort: () => number;
   wakeSpacedesk: () => Promise<void>;
@@ -99,10 +102,13 @@ export const createScreenSide = (o: {
       args: screenPreviewArgs({
         screenIndex: screen.index,
         port: o.previewPort(),
+        encoder: o.encoders.get("screen"),
       }),
       cwd: "/mnt/c",
     });
     preview = p;
+    let stderr = "";
+    p.onStderr((chunk) => (stderr = (stderr + chunk).slice(-8192)));
     const startedFor = generation;
     /** Starts it again for the same screen, unless the screen side moved on. */
     const again = (why: string) => {
@@ -131,6 +137,10 @@ export const createScreenSide = (o: {
     void p.exited.then((code) => {
       if (preview !== p) return;
       preview = undefined;
+      if (o.encoders.quit("screen", stderr)) {
+        if (generation === startedFor) startPreview(screen);
+        return;
+      }
       again(`quit (exit ${code})`);
     });
   };

@@ -60,3 +60,44 @@ describe("the preview watchdog", () => {
     await client.camera("live");
   });
 });
+
+/**
+ * A preview whose NVENC will not open (every session taken) is started
+ * again on libx264, and a take then carries the camera preview on libx264
+ * too, so the recording's own NVENC sessions are the only ones it asks for
+ * (#2194).
+ */
+describe("a preview whose NVENC will not open", () => {
+  it("moves that feed to libx264, without spending a Cam Link try, and the take's camera preview with it", async () => {
+    const windows = fakeWindows({ nvencBusy: true, cameraTries: ["frames"] });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { port } = await start(windows, tmp());
+    const client = await connect(port);
+    await client.next("hello");
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    await vi.waitFor(() => expect(windows.screenPreviews).toHaveLength(2));
+
+    const encoders = (ps: typeof windows.screenPreviews) =>
+      ps.map((p) => (p.launch.args.includes("h264_nvenc") ? "nvenc" : "x264"));
+    expect(encoders(windows.cameraPreviews)).toEqual(["nvenc", "x264"]);
+    expect(encoders(windows.screenPreviews)).toEqual(["nvenc", "x264"]);
+    expect(windows.screenPreviews[1]!.running).toBe(true);
+    expect(
+      errors.mock.calls.filter((c) =>
+        String(c[0]).includes("could not open NVENC")
+      )
+    ).toHaveLength(2);
+
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...CALIBRATED,
+    });
+    await client.next("recording-started");
+    const take = windows.recorder("camera").launch.args;
+    expect(take.filter((a) => a === "h264_nvenc")).toHaveLength(1);
+    expect(take).toContain("libx264");
+  });
+});

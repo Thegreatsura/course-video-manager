@@ -4,7 +4,11 @@ import path from "node:path";
 import { finished as streamFinished } from "node:stream/promises";
 import type { SilenceLength } from "../app/silence-detection-constants";
 import { quitProcess } from "./camera";
-import { buildCaptureArgs, FILE_NAMES } from "./capture-args";
+import {
+  buildCaptureArgs,
+  FILE_NAMES,
+  type PreviewEncoder,
+} from "./capture-args";
 import {
   lineSplitter,
   runToEnd,
@@ -71,6 +75,8 @@ export type RecordingSessionOptions = {
   format: VideoFormat;
   /** The service's camera preview feed, which the camera process sends to. */
   cameraPreviewPort: number;
+  /** What encodes that camera preview (`preview-encoders.ts`). */
+  cameraPreviewEncoder: PreviewEncoder;
   /**
    * How long after Record the Cam Link may take to send its first frame
    * before the camera counts as lost.
@@ -160,6 +166,7 @@ export const startRecordingSession = (
     silenceLength: o.silenceLength,
     thresholdDb: o.thresholdDb,
     cameraPreviewPort: o.cameraPreviewPort,
+    cameraPreviewEncoder: o.cameraPreviewEncoder,
   });
 
   const speech = createSpeechDetector();

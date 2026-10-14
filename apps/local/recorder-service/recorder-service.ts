@@ -44,6 +44,7 @@ import {
   refuseScreenlessScene,
   refuseWakingScene,
 } from "./screen-side";
+import { createPreviewEncoders } from "./preview-encoders";
 
 /**
  * THE RECORDER SERVICE (ADR 0034): a long-running process of its own in WSL
@@ -124,6 +125,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   let session: RecordingSession | undefined;
   let camera: Camera | undefined;
   const feeds = await startPreviewFeeds();
+  const encoders = createPreviewEncoders();
 
   const server = http.createServer((req, res) => {
     if (!isAllowedOrigin(req.headers.origin)) {
@@ -167,6 +169,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     camera = openCamera({
       launch: o.launch,
       feeds,
+      encoders,
       findCamera,
       startTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
       previewStallMs: o.previewStallMs,
@@ -206,6 +209,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
 
   const screenSide = createScreenSide({
     launch: o.launch,
+    encoders,
     previewPort: () => feeds.port("screen"),
     onPreviewFrame: (listener) => feeds.onFrame("screen", listener),
     previewStallMs: o.previewStallMs,
@@ -291,6 +295,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         screenIndex,
         format,
         cameraPreviewPort: feeds.port("camera"),
+        cameraPreviewEncoder: encoders.get("camera"),
         cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,

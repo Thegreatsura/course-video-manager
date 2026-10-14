@@ -1,6 +1,7 @@
 import { cameraPreviewArgs, PREVIEW_TAGS } from "./capture-args";
 import { runToEnd, type LaunchedProcess, type Launcher } from "./launcher";
 import type { PreviewFeeds } from "./preview-feeds";
+import type { PreviewEncoders } from "./preview-encoders";
 import type { CameraStatus } from "./protocol";
 import { watchPreview } from "./preview-watchdog";
 
@@ -78,6 +79,8 @@ export const quitProcess = (
 export type CameraOptions = {
   launch: Launcher;
   feeds: PreviewFeeds;
+  /** What encodes the camera preview; a try whose NVENC would not open is made again on libx264. */
+  encoders: PreviewEncoders;
   /** The Cam Link's DirectShow name, looked up afresh on each try (a replug may change it); undefined when it is missing. */
   findCamera: () => Promise<string | undefined>;
   onStatus: (status: CameraStatus) => void;
@@ -132,6 +135,7 @@ export const openCamera = (o: CameraOptions): Camera => {
           camera,
           port: o.feeds.port("camera"),
           stillPort: o.feeds.port("still"),
+          encoder: o.encoders.get("camera"),
         }),
         cwd: "/mnt/c",
       });
@@ -158,12 +162,15 @@ export const openCamera = (o: CameraOptions): Camera => {
         });
         // Lost while open and not recording: open it again from the start.
         void p.exited.then(() => {
+          o.encoders.quit("camera", stderr);
           if (!released && current === p) void attempt(1);
         });
         return;
       }
       await quitProcess(p, quitting);
       if (released) return;
+      // NVENC would not open: not the Cam Link's fault, so not a try.
+      if (o.encoders.quit("camera", stderr)) return attempt(n);
       if (saysDeviceBusy(stderr)) {
         return set({ kind: "busy", message: CAM_LINK_BUSY });
       }
