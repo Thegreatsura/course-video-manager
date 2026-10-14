@@ -13,7 +13,6 @@ import {
 import { Effect } from "effect";
 import { jobEvents, jobs, sidecarLease } from "../db/schema.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
-import { UnknownDBServiceError } from "./db-service-errors.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { createPostingJobOperations } from "./db-job-posting.server.js";
 export { POSTED_EVENT, POST_CHECK_EVENT } from "./db-job-posting.server.js";
@@ -22,7 +21,13 @@ import {
   createDismissJobOperations,
   notDismissed,
 } from "./db-job-dismiss.server.js";
-import { dependencyFailure, makeDbCall } from "./db-job-calls.server.js";
+import { makeDbCall } from "./db-job-calls.server.js";
+import {
+  failDependents,
+  insertEvent,
+  settleFailure,
+} from "./db-job-settle.server.js";
+export { FREE_LOST_RUNS } from "./db-job-settle.server.js";
 import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
 import { createCancelJobOperations } from "./db-job-cancel.server.js";
 import { createStageHistoryOperations } from "./db-job-stage-history.server.js";
@@ -45,7 +50,9 @@ export { dependencyFailedMessage } from "./db-job-calls.server.js";
  * attempt goes back to `queued` as `attempt + 1` while `attempt < max_attempts`,
  * and is final otherwise — and ALWAYS final for a kind the caller names as
  * one that must never run again on its own (a posting kind: Matt's decision
- * 5). Only `retryJob`, the author's Retry, runs such a Job again. A Job that ends any way but `succeeded` fails every
+ * 5). Only `retryJob`, the author's Retry, runs such a Job again. A LOST
+ * run (not a failure) of a resumable kind goes back at the same attempt, up to
+ * `FREE_LOST_RUNS` times (#2167). A Job that ends any way but `succeeded` fails every
  * Job still queued behind it. Both copy the Upload Manager — see
  * docs/plans/background-jobs-sidecar.md, "What the sidecar copies".
  */
@@ -86,6 +93,8 @@ export interface JobFailure {
 /** What became of an attempt that did not succeed. */
 export type FailureOutcome =
   | "retrying"
+  /** A resumable kind's lost run, back in the queue at the same attempt. */
+  | "requeued"
   | "failed"
   | "interrupted"
   /** The Job was no longer this holder's to settle (recovered, or finished). */
@@ -102,97 +111,6 @@ export const INTERRUPTED_POST_MESSAGE =
   "Interrupted — check before retrying: the post was cut off, so it may or may not have gone out";
 
 export const createJobOperations = (db: Database) => {
-  const insertEvent = (
-    handle: Database,
-    jobId: string,
-    type: string,
-    data: Record<string, unknown> = {}
-  ) => makeDbCall(() => handle.insert(jobEvents).values({ jobId, type, data }));
-
-  /**
-   * Fail every Job still queued behind `parent`, and every Job queued behind
-   * those, in the caller's transaction. Each names the Job it was waiting on.
-   */
-  const failDependents = (
-    tx: Database,
-    parent: Pick<Job, "id" | "title">
-  ): Effect.Effect<void, UnknownDBServiceError> =>
-    Effect.gen(function* () {
-      const failure = dependencyFailure(parent.title);
-      const doomed = yield* makeDbCall(() =>
-        tx
-          .update(jobs)
-          .set({
-            status: "failed",
-            error: failure,
-            finishedAt: sql`now()`,
-            updatedAt: sql`now()`,
-          })
-          .where(and(eq(jobs.dependsOn, parent.id), eq(jobs.status, "queued")))
-          .returning({ id: jobs.id, title: jobs.title })
-      );
-      for (const child of doomed) {
-        yield* insertEvent(tx, child.id, "failed", { error: failure });
-        yield* failDependents(tx, child);
-      }
-    });
-
-  /**
-   * The retry rule. `job` is locked by the caller's transaction. `mayRetry`
-   * false (a posting kind) makes this attempt final whatever the counts say.
-   */
-  const settleFailure = (
-    tx: Database,
-    job: Job,
-    failure: JobFailure,
-    interrupted: boolean,
-    mayRetry: boolean
-  ): Effect.Effect<FailureOutcome, UnknownDBServiceError> =>
-    Effect.gen(function* () {
-      if (mayRetry && job.attempt < job.maxAttempts) {
-        yield* makeDbCall(() =>
-          tx
-            .update(jobs)
-            .set({
-              status: "queued",
-              attempt: job.attempt + 1,
-              holder: null,
-              leaseUntil: null,
-              error: failure,
-              updatedAt: sql`now()`,
-            })
-            .where(eq(jobs.id, job.id))
-        );
-        yield* insertEvent(tx, job.id, "retrying", {
-          failedAttempt: job.attempt,
-          nextAttempt: job.attempt + 1,
-          interrupted,
-          error: failure,
-        });
-        return "retrying" as const;
-      }
-      const status = interrupted ? "interrupted" : "failed";
-      yield* makeDbCall(() =>
-        tx
-          .update(jobs)
-          .set({
-            status,
-            holder: null,
-            leaseUntil: null,
-            error: failure,
-            finishedAt: sql`now()`,
-            updatedAt: sql`now()`,
-          })
-          .where(eq(jobs.id, job.id))
-      );
-      yield* insertEvent(tx, job.id, status, {
-        attempt: job.attempt,
-        error: failure,
-      });
-      yield* failDependents(tx, job);
-      return status;
-    });
-
   /** The running Job `jobId`, locked, if `holder` still holds it. */
   const lockHeld = (tx: Database, jobId: string, holder: string) =>
     makeDbCall(() =>
@@ -326,6 +244,8 @@ export const createJobOperations = (db: Database) => {
     failure: JobFailure;
     interrupted: boolean;
     mayRetry: boolean;
+    /** A resumable kind: a lost run goes back at the same attempt (#2167). */
+    resumable?: boolean;
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
@@ -336,7 +256,8 @@ export const createJobOperations = (db: Database) => {
           job,
           input.failure,
           input.interrupted,
-          input.mayRetry
+          input.mayRetry,
+          input.resumable ?? false
         );
       })
     );
@@ -391,6 +312,8 @@ export const createJobOperations = (db: Database) => {
   const recoverExpiredJobs = Effect.fn("recoverExpiredJobs")(function* (input: {
     neverRetryKinds: { readonly [kind: string]: string };
     stillRunning: readonly string[];
+    /** Kinds whose lost run resumes: back at the same attempt (#2167). */
+    resumableKinds?: readonly string[];
   }) {
     return yield* withDbTransaction(db, (tx) =>
       Effect.gen(function* () {
@@ -428,7 +351,14 @@ export const createJobOperations = (db: Database) => {
           };
           recovered.push({
             jobId: job.id,
-            outcome: yield* settleFailure(tx, job, failure, true, mayRetry),
+            outcome: yield* settleFailure(
+              tx,
+              job,
+              failure,
+              true,
+              mayRetry,
+              input.resumableKinds?.includes(job.kind) ?? false
+            ),
           });
         }
         return recovered;

@@ -18,6 +18,8 @@ import { formatFailureCause } from "@/services/format-failure-cause";
 import {
   isNeverReRun,
   isPostingKind,
+  isResumable,
+  resumableKindsOf,
   interruptedFailureOf,
   neverReRunMessagesOf,
   type JobContext,
@@ -256,7 +258,7 @@ export const runSidecar = <R>(opts: {
             // edit, Ctrl-C, verify-cvm's cleanup) is not the Job failing, so
             // it costs no attempt: the Job goes back to the queue as it was.
             // A sidecar that dies instead is settled by recovery, which does
-            // spend one — as a dropped stream did in the browser.
+            // spend one (a resumable kind's does not, #2167).
             // A POST is never put back (decision 5): it may already have gone
             // out, so it ends `interrupted` and waits for the author's Retry.
             // Nor is a Publish (section 7.2): cut off after Submit, it leaves a
@@ -299,6 +301,7 @@ export const runSidecar = <R>(opts: {
                   interrupted,
                   // Never put back: never re-run by a lost lease either.
                   mayRetry: !posting && !(neverReRun && interrupted),
+                  resumable: isResumable(kindOf(job.kind)),
                 })
               ),
               Effect.flatMap((outcome) =>
@@ -434,6 +437,7 @@ export const runSidecar = <R>(opts: {
         // The Jobs running in this sidecar right now, read at each sweep.
         ops.recoverExpiredJobs({
           neverRetryKinds: neverReRunMessagesOf(registry),
+          resumableKinds: resumableKindsOf(registry),
           stillRunning: [...running.keys()],
         })
       ).pipe(
