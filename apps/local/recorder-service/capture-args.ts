@@ -25,9 +25,10 @@ import {
  *       process (camera upload, scale, NVENC or a read-back) made ddagrab
  *       miss frames, 55-58 fps against 59.7-59.8 split (#1992).
  *
- * Each relay is NUT over loopback TCP, behind tee's dropping, retrying fifo:
- * the capture never waits on a consumer, so a preview that dies or stalls
- * cannot touch camera.mkv, and a writer that dies cannot freeze the preview.
+ * Each relay is Matroska over loopback TCP (`RELAY_FORMAT`), behind tee's
+ * dropping, retrying fifo: the capture never waits on a consumer, so a
+ * preview that dies or stalls cannot touch camera.mkv, and a writer that
+ * dies cannot freeze the preview.
  * A frame the writer's relay drops shows as a gap the writer logs
  * (`FRAME_GAP_SECONDS`), so a loss is never silent.
  *
@@ -156,15 +157,33 @@ const feedSlave = (port: number, format: string) =>
   `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1`;
 
 /**
- * A raw relay (#2207): NUT over loopback TCP to a consumer that listens on
- * Windows (the camera preview, or the take's writer), behind the same
- * dropping, retrying fifo as a preview feed. A consumer that is gone or
- * stalls costs only its own packets; the capture never waits on it.
+ * What each raw relay is muxed as (#2211, ADR 0048). Its consumer comes and
+ * goes (a writer per take, a preview started again), and the fifo opens the
+ * relay again for the next. NUT cannot be opened twice: it took the whole
+ * capture down. The writer's is Matroska, for the mic and the stamps. The
+ * preview's is bare frames, stamped as they arrive: Matroska held each
+ * frame until the next (+35 ms).
  */
-const teeToRelay = (port: number, queueSize: number) =>
+export const RELAY_FORMAT = {
+  writer: "matroska",
+  preview: "rawvideo",
+} as const;
+
+/**
+ * A raw relay (#2207): loopback TCP to a consumer that listens on Windows
+ * (the camera preview, or the take's writer), behind the same dropping,
+ * retrying fifo as a preview feed. A consumer that is gone or stalls costs
+ * only its own packets; the capture never waits on it, and the next
+ * consumer on the port gets the relay from its next packet.
+ */
+const teeToRelay = (
+  relay: keyof typeof RELAY_FORMAT,
+  port: number,
+  queueSize: number
+) =>
   teeWith(
     queueSize,
-    `[f=nut:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+    `[f=${RELAY_FORMAT[relay]}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
   );
 
 /** Where a camera capture's relays go: Windows loopback ports its consumers listen on. */
@@ -348,6 +367,9 @@ export const micInput = (mic: string) => [
   `audio=${mic}`,
 ];
 
+/** The size of the picture both relays carry: camera.mkv's. */
+const CAMERA_RELAY_SIZE = "2560x1440";
+
 /** The picture both relays carry: camera.mkv's size, scaled on the GPU as the recording always scaled it. */
 const CAMERA_RELAY_PICTURE =
   "hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12";
@@ -401,7 +423,7 @@ export const cameraCaptureArgs = (o: {
   "filter",
   ...RAW_RELAY,
   ...tagged(CAPTURE_TAG),
-  ...teeToRelay(o.relays.preview, PREVIEW_RELAY_QUEUE),
+  ...teeToRelay("preview", o.relays.preview, PREVIEW_RELAY_QUEUE),
   "-map",
   "[rec]",
   "-map",
@@ -414,19 +436,32 @@ export const cameraCaptureArgs = (o: {
   "-c:a",
   "pcm_s16le",
   ...tagged(CAPTURE_TAG),
-  ...teeToRelay(o.relays.writer, WRITER_RELAY_QUEUE),
+  ...teeToRelay("writer", o.relays.writer, WRITER_RELAY_QUEUE),
 ];
 
 /** A relay's consumer: it listens on Windows' loopback for the capture's relay. */
-export const relayInput = (port: number) => [
-  // NUT's header says all there is to know: probing would only hold back
-  // the first packets, a backlog the consumer never catches up on.
+export const relayInput = (relay: keyof typeof RELAY_FORMAT, port: number) => [
+  // The header (or, bare, these arguments) says all there is: probing would
+  // only hold back the first packets, a backlog never caught up on.
   "-probesize",
   "32",
   "-analyzeduration",
   "0",
+  ...(relay === "preview"
+    ? [
+        // Bare frames carry no stamps: each is stamped as it arrives.
+        "-use_wallclock_as_timestamps",
+        "1",
+        "-pix_fmt",
+        "nv12",
+        "-video_size",
+        CAMERA_RELAY_SIZE,
+        "-framerate",
+        "30000/1001",
+      ]
+    : []),
   "-f",
-  "nut",
+  RELAY_FORMAT[relay],
   "-i",
   `tcp://127.0.0.1:${port}?listen=1&tcp_nodelay=1`,
 ];
@@ -457,7 +492,7 @@ export const cameraPreviewArgs = (o: {
   ...PREVIEW_HEAD,
   "-fflags",
   "nobuffer",
-  ...relayInput(o.relayPort),
+  ...relayInput("preview", o.relayPort),
   "-filter_complex",
   `[0:v]${o.encoder === "nvenc" ? "hwupload_cuda," : ""}split[prev][s];[s]${cameraStillChain[o.encoder]}[still]`,
   "-map",

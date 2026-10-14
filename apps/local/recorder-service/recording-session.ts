@@ -40,11 +40,19 @@ import { createSpeechDetector } from "./speech-detector";
 const STOP_TIMEOUT_MS = 20_000;
 
 /**
- * Stop waits this long before it quits the writer: frames already captured
- * but still on their way through the relay reach the file, so it keeps
- * everything up to the press.
+ * Stop waits at least this long before it quits the writer: frames already
+ * captured but still on their way through the relay reach the file.
  */
 export const STOP_TAIL_MS = 250;
+
+/**
+ * And until the writer has written past the press (#2211): one that runs
+ * behind (NVENC opening at Record, a slow disk) still has the end of the
+ * take in the relay's queue, which `q` would throw away. A writer that never
+ * gets there (the Cam Link went at the press) is quit after this long, and
+ * the take says how short it fell.
+ */
+export const STOP_CATCH_UP_MS = 5_000;
 
 /**
  * Seconds with no new camera frame written, once frames have come, before
@@ -60,6 +68,9 @@ export const CAMERA_STALL_BLOCKS = Math.round(
 
 /** The Cam Link's frame rate: how many frames a gap the writer logs was. */
 const CAMERA_FPS = 30000 / 1001;
+
+/** How far short of the press a stopped take may end before it says so (a frame and a bit). */
+const SHORT_OF_PRESS = 0.05;
 
 export const EVENT_LOG_NAME = "events.jsonl";
 
@@ -134,7 +145,17 @@ export type RecordingSession = {
   lastSeq: () => number;
   /** Logs a scene change at the picture time it is asked for. */
   switchScene: (scene: Scene) => void;
+  /**
+   * Stops the take at this moment; done once `recording-stopped` is logged.
+   * The files close in the background: the take keeps everything up to the
+   * press, however long the writer takes to get there.
+   */
   stop: () => Promise<void>;
+  /**
+   * Done once the camera writer has quit, so the capture's writer relay is
+   * free for the next take's writer.
+   */
+  writerQuit: Promise<void>;
 };
 
 /** The last few error lines a process printed, for why it quit. */
@@ -149,7 +170,7 @@ const namesCamera = (line: string) =>
   /\bin#0\b|\[video input\]|video=/.test(line);
 
 /** What the writer prints once it has the relay: its input opened. */
-const READS_RELAY = /Input #0, nut, from 'tcp:/;
+const READS_RELAY = /Input #0, .*from 'tcp:/;
 
 /** A gap the writer logged, in seconds (`FRAME_GAP_SECONDS`). */
 const GAP = /\[warning\] -(\d+(?:\.\d+)?)\s*$/;
@@ -386,6 +407,10 @@ const beginTake = (
   let cameraFrames = 0;
   let framesAtLastBlock = 0;
   let stalledBlocks = 0;
+  /** What the writer has written: both files' time, and the camera's frames. */
+  const writtenTo = () => Math.min(lastFileTime, cameraFrames / CAMERA_FPS);
+  /** Told of each -progress block, while Stop waits for the writer. */
+  let onProgress: (() => void) | undefined;
   camera.child.onStdout(
     lineSplitter((line) => {
       if (ended) return;
@@ -397,9 +422,10 @@ const beginTake = (
         if (take) log(take);
       }
       const frame = line.match(/^frame=(\d+)/);
-      if (frame) cameraFrames = Number(frame[1]);
+      if (frame) cameraFrames = Math.max(cameraFrames, Number(frame[1]));
       if (cameraFrames > 0) clearTimeout(cameraStart);
       if (!line.startsWith("progress=")) return;
+      onProgress?.();
       stalledBlocks =
         cameraFrames > 0 && cameraFrames === framesAtLastBlock
           ? stalledBlocks + 1
@@ -461,6 +487,34 @@ const beginTake = (
     camera.child.exited,
   ]);
 
+  /**
+   * Done once the writer has written up to `fileTime`, has quit, or has had
+   * `STOP_CATCH_UP_MS` to get there.
+   */
+  const writtenPast = (fileTime: number) =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        onProgress = undefined;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, STOP_CATCH_UP_MS);
+      onProgress = () => {
+        if (writtenTo() >= fileTime) done();
+      };
+      void camera.child.exited.then(done);
+      onProgress();
+    });
+
+  const pressTime = () => {
+    try {
+      return (o.now() - t0Ms) / 1000;
+    } catch (e) {
+      console.error("recorder: Stop could not read the clock", e);
+      return lastFileTime;
+    }
+  };
+
   /** The one stop, whoever asked first: done once `recording-stopped` is logged. */
   let stopped: Promise<void> | undefined;
   const stopWith = (
@@ -475,11 +529,19 @@ const beginTake = (
     stopping = true;
     clearTimeout(cameraStart);
     speech.stopRequested();
+    /**
+     * The press, in file time: the take keeps everything up to it. A clock
+     * that cannot be read must not stop the Stop: the tail alone then.
+     */
+    const pressedAt = pressTime();
     // On request, the frames still on their way through the relay are
     // waited for; a failure stops at once.
     const tail =
       reason === "requested"
-        ? new Promise((r) => setTimeout(r, STOP_TAIL_MS))
+        ? Promise.all([
+            new Promise((r) => setTimeout(r, STOP_TAIL_MS)),
+            writtenPast(pressedAt),
+          ])
         : Promise.resolve();
     const quitting = tail.then(() =>
       Promise.all([screen && quit(screen.child), quit(camera.child)])
@@ -517,6 +579,12 @@ const beginTake = (
         },
         errors: [
           ...(logFailure ? [logFailure] : []),
+          ...(reason === "requested" &&
+          lastFileTime < pressedAt - SHORT_OF_PRESS
+            ? [
+                `camera.mkv and mic.mkv end ${(pressedAt - lastFileTime).toFixed(1)} s before Stop was pressed: the writer had not caught up in ${STOP_CATCH_UP_MS / 1000} s (ffmpeg-camera.log).`,
+              ]
+            : []),
           ...(cameraGapFrames > 0
             ? [
                 `camera.mkv is missing about ${cameraGapFrames} frame(s): gaps in the Cam Link's frames reaching the writer (ffmpeg-camera.log).`,
@@ -571,5 +639,6 @@ const beginTake = (
       log({ type: "scene-changed", scene, fileTime: (o.now() - t0Ms) / 1000 });
     },
     stop: () => stopWith("requested"),
+    writerQuit: camera.child.exited.then(() => {}),
   };
 };

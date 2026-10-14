@@ -1,16 +1,11 @@
 import { Either } from "effect";
 import { decodeCommand, refusalOfUndecodable } from "./command-schema";
-import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import { corsHeaders, isAllowedOrigin } from "./allowed-origin";
-import {
-  readJsonLines,
-  recoverCrashedSessions,
-  type IndexEntry,
-} from "./crash-recovery";
+import { recoverCrashedSessions } from "./crash-recovery";
 import { CAMERA_START_TIMEOUT_MS, openCamera, type Camera } from "./camera";
 import type { Launcher } from "./launcher";
 import { DEFAULT_SCENE, type Scene } from "../app/packages/scene-layout";
@@ -22,7 +17,6 @@ import {
   METER_WHILE_RECORDING,
   RECORD_WHILE_METERING,
   STILL_PATH,
-  RECENT_SESSIONS,
   RECORDER_PROTOCOL_VERSION,
   type CameraStatus,
   type RecorderCommand,
@@ -33,6 +27,8 @@ import {
 } from "./protocol";
 import type { RecordingSession, TakeSettings } from "./recording-session";
 import { createTakeArming } from "./take-arming";
+import { createTakeStopping } from "./take-stopping";
+import { createSessionIndex } from "./session-index";
 import { checkFfmpeg, checkNvidiaDriver } from "./windows-devices";
 import { Refusal } from "./refusal";
 import { RECORDER_CAMERA_NAME } from "../app/av-calibration-constants";
@@ -104,15 +100,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     if (driver) warnings.push(driver);
   }
 
-  const indexFile = path.join(o.stateDir, "recording-sessions.jsonl");
-  fs.mkdirSync(o.stateDir, { recursive: true });
-  /** Every Recording Session the service has started, oldest first. */
-  const readIndex = (): IndexEntry[] =>
-    fs.existsSync(indexFile) ? readJsonLines<IndexEntry>(indexFile) : [];
-  /** Where a Recording Session's event log is, from the index the service keeps. */
-  const eventLogOf = (recordingSessionId: string) =>
-    readIndex().find((e) => e.recordingSessionId === recordingSessionId)
-      ?.eventLog;
+  const index = createSessionIndex(o.stateDir);
 
   let state: RecorderState = { kind: "closed" };
   /** The scene the picture is drawn in; kept while the service runs. */
@@ -122,6 +110,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     Extract<RecorderCommand, { type: "prepare-record" }> | undefined;
   let listening: () => void = () => {};
   let session: RecordingSession | undefined;
+  /** Takes stopped and still closing their files (#2211). */
+  const stopping = createTakeStopping({ rearm: () => rearm() });
   let camera: Camera | undefined;
   const feeds = await startPreviewFeeds();
   const encoders = createPreviewEncoders();
@@ -169,6 +159,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     if (
       state.kind !== "open" ||
       session ||
+      stopping.relayHeld() ||
       !capture ||
       recordWith?.videoId !== state.videoId ||
       !recordWith.calibration
@@ -208,6 +199,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   const releaseCamera = async () => {
+    // A take still closing its files reads the capture until it is done.
+    await stopping.finished();
     const released = camera;
     camera = undefined;
     await Promise.all([arming.disarm(), released?.release()]);
@@ -251,7 +244,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   });
 
   const onEvent = (event: RecordingSessionEvent) => {
-    if (state.kind === "recording") state = { ...state, lastSeq: event.seq };
+    // A stopped take's last events can come after the next take started.
+    if (
+      state.kind === "recording" &&
+      state.recordingSessionId === event.recordingSessionId
+    )
+      state = { ...state, lastSeq: event.seq };
     broadcast(event);
   };
 
@@ -269,6 +267,19 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       camera: camera?.status() ?? startCamera(),
     });
     rearm();
+  };
+
+  /** Stop (`take-stopping.ts`): open again at the press, the take finalising behind. */
+  const stopTake = () => {
+    if (!session || state.kind !== "recording")
+      throw new Refusal("Not recording.");
+    const startedMs = Date.now();
+    stopping.stop(session);
+    session = undefined;
+    reopen(state.videoId);
+    console.log(
+      `recorder: Stop took ${Date.now() - startedMs} ms to open again; the take finalises in the background, preview untouched`
+    );
   };
 
   const record = async (
@@ -306,6 +317,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       scene
     );
     const screenMs = Date.now();
+    // Straight after a Stop the last take's writer may still hold the relay.
+    const relayWasHeld = stopping.relayHeld();
+    await stopping.relayFree();
     const wasArmed = arming.isArmed();
     const take = await arming.takeFor({
       folder: command.folder,
@@ -315,7 +329,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     });
     const armedMs = Date.now();
     try {
-      session = take.begin({
+      const begun: RecordingSession = take.begin({
         videoId,
         avCalibrationId: calibration.id,
         capture,
@@ -324,27 +338,22 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
+        // A take that stopped on its own (the camera lost, a process quit);
+        // one stopped on request was let go at the press (`stopTake`).
         onEnded: () => {
+          if (session !== begun) return;
           session = undefined;
           reopen(videoId);
         },
       });
+      session = begun;
     } catch (e) {
       reopen(videoId);
       throw e;
     }
-    // The session is already recording: a failed index write must not turn
-    // into a refusal that leaves it running unseen. It only costs replay.
-    try {
-      fs.appendFileSync(
-        indexFile,
-        `${JSON.stringify({ recordingSessionId: session.id, eventLog: session.eventLog })}\n`
-      );
-    } catch (e) {
-      console.error("recorder: could not index the Recording Session", e);
-    }
+    index.add({ recordingSessionId: session.id, eventLog: session.eventLog });
     console.log(
-      `recorder: Record took ${armedMs - startedMs} ms to T0 (devices ${devicesMs - startedMs} ms${fromCache ? ", cached" : ""}, screen ${screenMs - devicesMs} ms, writer ${armedMs - screenMs} ms, ${wasArmed && armedMs - screenMs < 5 ? "armed" : "armed at Record"}); no device reopened, preview untouched`
+      `recorder: Record took ${armedMs - startedMs} ms to T0 (devices ${devicesMs - startedMs} ms${fromCache ? ", cached" : ""}, screen ${screenMs - devicesMs} ms, writer ${armedMs - screenMs} ms, ${wasArmed && armedMs - screenMs < 5 ? "armed" : relayWasHeld ? "armed at Record: the last take's writer still held the relay" : "armed at Record"}); no device reopened, preview untouched`
     );
     setState({
       kind: "recording",
@@ -362,17 +371,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     recordingSessionId: string,
     afterSeq: number
   ) => {
-    const eventLog = eventLogOf(recordingSessionId);
-    if (!eventLog || !fs.existsSync(eventLog)) {
-      throw new Refusal(
-        `No event log for Recording Session ${recordingSessionId}.`
-      );
-    }
-    let lastSeq = 0;
-    for (const event of readJsonLines<RecordingSessionEvent>(eventLog)) {
-      lastSeq = Math.max(lastSeq, event.seq);
-      if (event.seq > afterSeq) send(ws, event);
-    }
+    const { events, lastSeq } = index.replay(recordingSessionId, afterSeq);
+    for (const event of events) send(ws, event);
     send(ws, { type: "replay-done", recordingSessionId, lastSeq });
   };
 
@@ -462,8 +462,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       case "record":
         return record(command);
       case "stop":
-        if (!session) throw new Refusal("Not recording.");
-        return session.stop();
+        return stopTake();
       case "prepare-record":
         recordWith = command;
         return rearm();
@@ -505,16 +504,6 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   };
 
   let recovered: string[] = [];
-  const recentSessions = () => {
-    try {
-      return readIndex()
-        .slice(-RECENT_SESSIONS)
-        .map((e) => e.recordingSessionId);
-    } catch (e) {
-      console.error("recorder: could not read the Recording Session index", e);
-      return [];
-    }
-  };
   // Crash recovery runs before any command and any greeting, so a client
   // hears of every Recording Session it repaired. Only once listening: a
   // second service that cannot take the port must not touch the files.
@@ -526,7 +515,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     try {
       recovered = await recoverCrashedSessions({
         launch: o.launch,
-        index: readIndex(),
+        index: index.read(),
       });
     } catch (e) {
       console.error("recorder: crash recovery failed", e);
@@ -553,7 +542,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         warnings,
         state,
         recovered,
-        recent: recentSessions(),
+        recent: index.recent(),
       })
     );
     ws.on("message", (data) => {
@@ -592,6 +581,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     close: async () => {
       await queue;
       if (session) await session.stop();
+      // releaseCamera waits for every take still closing its files.
       await Promise.all([releaseCamera(), screenSide.close(), meter.stop()]);
       await feeds.close();
       for (const ws of wss.clients) ws.terminate();

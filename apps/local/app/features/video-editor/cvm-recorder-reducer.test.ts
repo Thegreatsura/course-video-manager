@@ -114,11 +114,13 @@ describe("the CVM recorder's Record and Stop", () => {
 
     t.send({ type: "press-stop" }).send(heard(stoppedMessage()));
     expect(t.getState()).toMatchObject({ phase: "idle" });
-    // The clip reducer hears the OBS path's start and stop.
+    // The clip reducer hears the OBS path's start and stop; a take ended
+    // mid-speech closes its audio window first.
     expect(t.getEffects().map((e) => e.type)).toEqual([
       "start-recording",
       "start-session",
       "stop-recording",
+      "close-take-window",
       "stop-session",
     ]);
   });
@@ -456,6 +458,32 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
         })
       );
     expect(captureOf(t.getState())).toBe("warming-up");
+  });
+
+  it("closes the take's audio window when Stop lets the take go mid-speech, and places the speech when its end arrives after (#2211)", () => {
+    const t = recording()
+      .send(warmedUp)
+      .send(speechStarted)
+      .send(takeStarted())
+      .send({ type: "press-stop" });
+    // The recorder is open again at once; the take's files still closing.
+    t.send(status());
+    expect(captureOf(t.getState())).toBe("not-recording");
+    expect(canRecord(t.getState())).toBe(true);
+    expect(t.getEffects().slice(-2)).toEqual([
+      { type: "close-take-window" },
+      { type: "stop-session" },
+    ]);
+
+    // Its last speech ends where the take did, once the files are closed.
+    t.send(speechEnded);
+    expect(t.getEffects().at(-1)).toEqual({
+      type: "place-take",
+      recordingSessionId: "s1",
+    });
+    expect(captureOf(t.getState())).toBe("not-recording");
+    t.send(heard(stoppedMessage({ framesLost: { camera: 2, screen: null } })));
+    expect(t.getState().framesLost).toEqual({ camera: 2, screen: null });
   });
 
   it("joins a take already recording as warming up, and keeps what it hears on later status", () => {
