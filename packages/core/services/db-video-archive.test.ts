@@ -15,7 +15,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 // ===========================================================================
 // `deleteVideo` — the Video soft delete behind both the UI's delete-video

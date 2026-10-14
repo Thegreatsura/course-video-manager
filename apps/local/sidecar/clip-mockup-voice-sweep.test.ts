@@ -5,7 +5,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";

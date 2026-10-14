@@ -22,7 +22,7 @@ import {
   createUnreachableDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { RemoteServices } from "./rpc-layer";
 import {
   buildWriteLayer,

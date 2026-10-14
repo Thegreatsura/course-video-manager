@@ -9,7 +9,7 @@ import {
   FrameCaptureError,
   FrameCaptureService,
 } from "@/services/frame-capture-service";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
+import { createTestDb, type TestDb } from "@/test-utils/test-db";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   buildWriteLayer,

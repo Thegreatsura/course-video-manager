@@ -16,7 +16,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { POSTING_JOB_KINDS } from "@/features/jobs/job-wire";
 import {
   defineJobKind,

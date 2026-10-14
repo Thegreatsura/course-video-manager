@@ -13,12 +13,12 @@ import {
   truncateAllTables,
   withQueryLog,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import { isVisibleInTimeline } from "../lib/timeline-visibility.js";
-import type { PGlite } from "@electric-sql/pglite";
+import type { TestDbClient } from "../test-utils/test-db.js";
 
 let testDb: TestDb;
-let pglite: PGlite;
+let client: TestDbClient;
 let testLayer: Layer.Layer<
   | DiagramOperationsService
   | VideoOperationsService
@@ -29,7 +29,7 @@ let testLayer: Layer.Layer<
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
-  pglite = result.pglite;
+  client = result.client;
 
   const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
   testLayer = Layer.mergeAll(
@@ -275,7 +275,7 @@ describe("addSnapshotToHead", () => {
     );
 
     const queries: string[] = [];
-    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
+    const loggedDb = withQueryLog(client, (q) => queries.push(q.toLowerCase()));
     const loggedLayer = DiagramOperationsService.Default.pipe(
       Layer.provide(Layer.succeed(DrizzleService, loggedDb as any)),
       Layer.provide(DiagramThumbnailStore.noop)

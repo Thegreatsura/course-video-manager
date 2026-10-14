@@ -10,7 +10,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 // ===========================================================================
 // What the `clip-mockup-voice` Job writes once the row exists: ready with its

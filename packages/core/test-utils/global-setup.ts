@@ -1,33 +1,66 @@
 import { pushSchema } from "drizzle-kit/api";
-import * as schema from "../db/schema.js";
-import { createBlankDb } from "./pglite.js";
-import { writeFileSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { TestProject } from "vitest/node";
-import "./pglite-snapshot.js";
+import * as schema from "../db/schema.js";
+import {
+  connectAdmin,
+  DB_PREFIX,
+  dropDatabasesWithPrefix,
+  dropOrphanedDatabases,
+  machineTag,
+  makeTestPool,
+  startTestServer,
+  testDrizzle,
+  urlForDatabase,
+} from "./test-postgres.js";
+import "./test-db-context.js";
 
-let snapshotPath: string | undefined;
+let serverUrl: string | undefined;
+let runPrefix: string | undefined;
 
+/**
+ * Once per run: make sure the test Postgres is up, then build this run's
+ * TEMPLATE database — the schema pushed once. Every `createTestDb()` is then a
+ * `CREATE DATABASE … TEMPLATE` clone of it, which copies files rather than
+ * replaying DDL (ADR 0046).
+ */
 export default async function setup(project: TestProject) {
-  const { pglite, db } = createBlankDb();
-  const { apply } = await pushSchema(schema, db as any);
-  await apply();
+  serverUrl = await startTestServer();
+  runPrefix = `${DB_PREFIX}${machineTag}_${process.pid}_`;
+  const template = `${runPrefix}template`;
 
-  const blob = await pglite.dumpDataDir("none");
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  await pglite.close();
+  const admin = await connectAdmin(serverUrl);
+  try {
+    await dropOrphanedDatabases(admin);
+    await dropDatabasesWithPrefix(admin, runPrefix);
+    await admin.query(`CREATE DATABASE "${template}"`);
+  } finally {
+    await admin.end();
+  }
 
-  snapshotPath = join(tmpdir(), `pglite-snapshot-${process.pid}.tar`);
-  writeFileSync(snapshotPath, buffer);
+  const pool = makeTestPool(urlForDatabase(serverUrl, template), 1);
+  try {
+    const { apply } = await pushSchema(schema, testDrizzle(pool) as any);
+    await apply();
+  } finally {
+    await pool.end();
+  }
 
-  project.provide("pgliteSnapshotPath", snapshotPath);
+  project.provide("testDatabase", { serverUrl, runPrefix, template });
+  // Returned, not exported: vitest ignores a named `teardown` export when the
+  // file has a default export.
+  return teardown;
 }
 
-export async function teardown() {
-  if (snapshotPath) {
+async function teardown() {
+  if (!serverUrl || !runPrefix) return;
+  try {
+    const admin = await connectAdmin(serverUrl);
     try {
-      unlinkSync(snapshotPath);
-    } catch {}
+      await dropDatabasesWithPrefix(admin, runPrefix);
+    } finally {
+      await admin.end();
+    }
+  } catch {
+    // The next run's orphan sweep drops whatever this one could not.
   }
 }

@@ -15,7 +15,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 let testDb: TestDb;
 let testLayer: Layer.Layer<JobOperationsService>;

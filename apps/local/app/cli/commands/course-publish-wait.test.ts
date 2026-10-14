@@ -7,7 +7,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { waitForPublishJob } from "./course-publish-wait";
 
 // `cvm course publish --wait` follows the Publish Job the Sidecar runs and

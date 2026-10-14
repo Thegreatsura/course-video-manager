@@ -4,7 +4,7 @@ import { NodeContext } from "@effect/platform-node";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
+import { createTestDb, type TestDb } from "@/test-utils/test-db";
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import { DrizzleService } from "@/services/drizzle-service.server";

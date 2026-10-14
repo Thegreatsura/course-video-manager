@@ -4,7 +4,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import type { Database } from "./drizzle-service.server.js";
 import { migrateStoragePaths } from "./storage-path-migration.server.js";
 

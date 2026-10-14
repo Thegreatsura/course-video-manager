@@ -16,7 +16,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { enqueueJob } from "./job-kinds";
 import { noopJobKind } from "./kinds/noop";
 import { runSidecar } from "./sidecar";

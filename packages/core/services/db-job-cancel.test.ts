@@ -11,7 +11,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 /**
  * The author's Cancel (#2109): the first use of the `cancelled` Job status.

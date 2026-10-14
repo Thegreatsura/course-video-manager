@@ -3,7 +3,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import * as schema from "../db/schema.js";
 import { copyVideoImpl } from "./db-video-operations.copy.server.js";
 import {

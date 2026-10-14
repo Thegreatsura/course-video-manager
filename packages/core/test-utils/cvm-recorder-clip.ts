@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema.js";
 import { clipRecordingSessionRelation } from "../services/clip-recording-session-relation.js";
-import type { TestDb } from "./pglite.js";
+import type { TestDb } from "./test-db.js";
 
 /**
  * A CVM-recorder Clip on `videoId`: a Recording Session with a two-event

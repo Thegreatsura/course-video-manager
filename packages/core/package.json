@@ -26,7 +26,6 @@
   },
   "devDependencies": {
     "@effect/vitest": "^0.27.0",
-    "@electric-sql/pglite": "^0.3.15",
     "@tldraw/store": "5.2.4",
     "@tldraw/tlschema": "5.2.4",
     "@tldraw/validate": "5.2.4",

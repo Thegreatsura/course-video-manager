@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schedule } from "effect";
 import fs from "node:fs";
 import path from "node:path";
 import { CoursePublishService } from "@/services/course-publish-service";
@@ -172,12 +172,24 @@ describe("CoursePublishService — export/upload pipelining", () => {
     const processing = Layer.succeed(VideoExportService, {
       exportVideoClips: (opts: { videoId: string }) =>
         opts.videoId === doomedVideoId
-          ? Effect.fail(
-              new FFmpegError({
-                cause: null,
-                message:
-                  "Failed to create concatenated video, exit code: 187\n--- ffmpeg stderr (tail) ---\nNo capable devices found",
-              })
+          ? // Fails once another encode is under way, so there is one to stop:
+            // which export starts first is up to the database's timing.
+            Effect.sync(() => started.length > 0).pipe(
+              Effect.repeat({
+                until: (anyStarted) => anyStarted,
+                schedule: Schedule.spaced("5 millis"),
+              }),
+              Effect.timeout("2 seconds"),
+              Effect.ignore,
+              Effect.andThen(
+                Effect.fail(
+                  new FFmpegError({
+                    cause: null,
+                    message:
+                      "Failed to create concatenated video, exit code: 187\n--- ffmpeg stderr (tail) ---\nNo capable devices found",
+                  })
+                )
+              )
             )
           : Effect.sync(() => started.push(opts.videoId)).pipe(
               Effect.andThen(Effect.never),

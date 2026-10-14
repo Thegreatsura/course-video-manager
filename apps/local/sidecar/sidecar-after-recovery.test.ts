@@ -10,7 +10,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { noopJobKind } from "./kinds/noop";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, type SidecarTiming } from "./sidecar";

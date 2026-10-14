@@ -21,7 +21,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { JobContext } from "../job-kind";
 import { publishJobKind } from "./publish";
 import { PUBLISH_REFUSED_TAG } from "@/cli/commands/course-publish-wait";

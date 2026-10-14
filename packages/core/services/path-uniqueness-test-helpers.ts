@@ -6,7 +6,7 @@ import {
   videos,
 } from "../db/schema.js";
 import { sql } from "drizzle-orm";
-import type { TestDb } from "../test-utils/pglite.js";
+import type { TestDb } from "../test-utils/test-db.js";
 
 export async function dropUniqueIndexes(testDb: TestDb) {
   await testDb.execute(sql`DROP INDEX IF EXISTS "section_version_order_uniq"`);

@@ -13,7 +13,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { defineJobKind, JobCancelledError } from "./job-kind";
 import { enqueueJob, type JobKindRegistry } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";

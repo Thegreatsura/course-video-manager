@@ -7,7 +7,7 @@ import {
   shortName,
   tablesBelow,
 } from "../services/version-copy-manifest.js";
-import type { TestDb } from "./pglite.js";
+import type { TestDb } from "./test-db.js";
 
 /**
  * The machinery behind the schema-generated round-trip tests of the copy

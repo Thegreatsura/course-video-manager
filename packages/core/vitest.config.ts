@@ -9,7 +9,7 @@ const maxForks = isCI ? Math.max(1, os.availableParallelism()) : 5;
 
 /**
  * The domain database's own suite. Every test here runs the real services over
- * PGlite (ADR 0014), nothing mocks a module, so one shared non-isolated project
+ * a database of its own on the one test Postgres (ADR 0046), nothing mocks a module, so one shared non-isolated project
  * is enough — the `isolated` project apps/local needs has no counterpart here.
  */
 export default defineConfig({
@@ -18,6 +18,7 @@ export default defineConfig({
     poolOptions: { forks: { maxForks } },
     isolate: false,
     globalSetup: ["./test-utils/global-setup.ts"],
+    setupFiles: ["./test-utils/release-test-dbs.setup.ts"],
     exclude: ["**/node_modules/**", "**/dist/**"],
   },
 });
