@@ -29,6 +29,7 @@ import { ClipboardIcon, VideoOffIcon } from "lucide-react";
 import { useFetcher, useNavigate } from "react-router";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { useEditorVideoActions } from "../editor-video-menu";
+import { useNewShortAction } from "../new-short-action";
 import { useContextSelector } from "use-context-selector";
 import {
   VideoEditorContext,
@@ -189,6 +190,7 @@ export const VideoPlayerPanel = () => {
   );
   const openInVSCodeFetcher = useFetcher();
   const editorVideoActions = useEditorVideoActions();
+  const newShort = useNewShortAction();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<
@@ -291,6 +293,7 @@ export const VideoPlayerPanel = () => {
     autofillDescription: lessonId
       ? () => setIsSeoDescriptionOpen(true)
       : undefined,
+    newShort,
     autofillChapters: {
       onSelect: onOpenAutofillChaptersModal,
       disabled: !allClipsHaveText,

@@ -26,6 +26,7 @@ import { storageRootsConfig } from "@/services/storage-roots";
 import { Clapperboard, Plus, VideoIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useFetcher } from "react-router";
+import { NEW_SHORT_ACTION, newShortFormData } from "@/lib/new-short";
 import type { Route } from "./+types/_app.shorts._index";
 
 export const meta: Route.MetaFunction = () => {
@@ -70,14 +71,9 @@ function RecordTile() {
       type="button"
       disabled={isCreating}
       onClick={() => {
-        const formData = new FormData();
-        formData.set("title", `Short ${new Date().toLocaleDateString()}`);
-        formData.set("format", "short");
-        // No Recorder: a Short records with the CVM recorder only (ADR 0037).
-        formData.set("redirectTo", "/videos/{id}/edit");
-        fetcher.submit(formData, {
+        fetcher.submit(newShortFormData(), {
           method: "post",
-          action: "/api/videos/create",
+          action: NEW_SHORT_ACTION,
         });
       }}
       className="group flex flex-col rounded-lg border border-dashed border-muted-foreground/30 bg-card overflow-hidden hover:border-foreground/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
