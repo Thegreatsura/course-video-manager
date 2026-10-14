@@ -198,26 +198,16 @@ export const createScreenSide = (o: {
     return screen.index;
   };
 
-  /**
-   * A Short's screen output, listed again at Record; null to record camera
-   * and mic only, which the scene must allow.
-   */
-  const shortIndex = async (screen: ScreenStatus | null, scene: Scene) => {
-    if (screen?.kind === "waking")
-      throw new Refusal(
-        "Spacedesk is still waking: wait for the screen before recording."
-      );
-    let status = screen;
-    if (status?.kind === "ready") {
-      const spacedesk = await findSpacedesk();
-      const problem = spacedesk
-        ? unusableSize(spacedesk)
-        : "The Spacedesk display is no longer among the screens: wake it again.";
-      if (spacedesk && !problem) return spacedesk.index;
-      status = { kind: "unavailable", message: problem ?? "" };
-      o.setStatus(status);
-      await stopPreview();
-    }
+  /** A ready Short's screen output, listed again at Record; null to record camera and mic only. */
+  const readyShortIndex = async (scene: Scene) => {
+    const spacedesk = await findSpacedesk();
+    const problem = spacedesk
+      ? unusableSize(spacedesk)
+      : "The Spacedesk display is no longer among the screens: wake it again.";
+    if (spacedesk && !problem) return spacedesk.index;
+    const status = { kind: "unavailable", message: problem ?? "" } as const;
+    o.setStatus(status);
+    await stopPreview();
     refuseScreenlessScene(scene, "short", status);
     return null;
   };
@@ -229,12 +219,25 @@ export const createScreenSide = (o: {
       generation += 1;
       return stopPreview();
     },
-    /** The ddagrab output to record, or null for none; refuses with why. */
+    /**
+     * The ddagrab output to record, or null for none; refuses with why. What
+     * it can refuse without a lookup (a Short still waking, or unavailable
+     * under a scene that draws the screen) it throws at once, so Record
+     * refuses before the Cam Link leaves the preview.
+     */
     recordIndex: (
       format: VideoFormat,
       screen: ScreenStatus | null,
       scene: Scene
-    ): Promise<number | null> =>
-      format === "short" ? shortIndex(screen, scene) : dellIndex(),
+    ): Promise<number | null> => {
+      if (format !== "short") return dellIndex();
+      if (screen?.kind === "waking")
+        throw new Refusal(
+          "Spacedesk is still waking: wait for the screen before recording."
+        );
+      if (screen?.kind === "ready") return readyShortIndex(scene);
+      refuseScreenlessScene(scene, "short", screen);
+      return Promise.resolve(null);
+    },
   };
 };

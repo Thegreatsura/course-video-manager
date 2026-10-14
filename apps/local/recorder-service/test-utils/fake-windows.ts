@@ -103,16 +103,18 @@ const fakeProcess = (launch: Launch): FakeProcess => {
   return p;
 };
 
-/** Answers a short-lived process on the next tick, then exits it. */
+/** Answers a short-lived process on the next tick (or after `afterMs`), then exits it. */
 const answer = (
   p: FakeProcess,
-  o: { stdout?: string; stderr?: string; code?: number }
+  o: { stdout?: string; stderr?: string; code?: number; afterMs?: number }
 ) => {
-  setImmediate(() => {
+  const reply = () => {
     if (o.stdout) p.stdout(o.stdout);
     if (o.stderr) p.stderr(o.stderr);
     p.exit(o.code ?? 0);
-  });
+  };
+  if (o.afterMs) setTimeout(reply, o.afterMs);
+  else setImmediate(reply);
   return p;
 };
 
@@ -225,6 +227,8 @@ export const fakeWindows = (
      */
     spacedesk?: { width: number; height: number; awake?: boolean };
     wakeFails?: string;
+    /** How long screens.ps1 takes to answer (PowerShell's start-up); default the next tick. */
+    screensListingMs?: number;
     /**
      * A synthetic mic for the level meter: its short-term loudness (LUFS) at
      * each second, printed as ebur128 would every 100 ms. Absent, the meter
@@ -280,6 +284,7 @@ export const fakeWindows = (
       // The older 7-column listing for the first two, as a Windows with an
       // old screens.ps1 would print them; the adapter column after that.
       return answer(p, {
+        afterMs: o.screensListingMs,
         stdout:
           "0\t0\t0\t2560\t1440\t\\\\.\\DISPLAY1\tLG HDR QHD\r\n1\t2560\t0\t1920\t1080\t\\\\.\\DISPLAY2\tDELL U2424H\r\n" +
           (spacedesk.awake
