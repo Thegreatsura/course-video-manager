@@ -326,11 +326,17 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         catchUp(message.recovered, message.recent);
         meter.restart();
         return publishStatus();
-      case "state":
+      case "state": {
+        const letGo =
+          state.kind === "recording" && message.state.kind !== "recording";
         state = message.state;
         reconcile();
         prepare();
+        // Stop lets a take go at the press (ADR 0048): the editors hear the
+        // take's events so far, still being saved, before they hear it is over.
+        if (letGo) return void (ingesting = ingesting.then(publishStatus));
         return publishStatus();
+      }
       case "stream-deck-ignored":
         for (const videoId of listeners.keys())
           publish(videoId, {
