@@ -74,6 +74,7 @@ export {
   STORAGE_MOVE_STAGES,
   isStorageMoveStage,
   movableKindsOf,
+  storageMoveSubject,
   storageMoveTitle,
   type StorageMoveKind,
   type StorageMovePlan,
