@@ -21,11 +21,6 @@ import {
   isRecordingAction,
 } from "./clip-state-reducer-recording";
 import {
-  handleCvmRecorderMessage,
-  recorderInsertionPoint,
-  tellRecorderOfInsertionPoint,
-} from "./clip-state-reducer-cvm-recorder";
-import {
   handleChapterAction,
   isChapterAction,
 } from "./clip-state-reducer-chapters";
@@ -53,21 +48,6 @@ export const clipStateReducer: EffectReducer<
   clipStateReducer.Action,
   clipStateReducer.Effect
 > = (state, action, exec) => {
-  const recorderPoint = recorderInsertionPoint(state);
-  const next = reduceClipState(state, action, exec);
-  tellRecorderOfInsertionPoint(recorderPoint, next, action, exec);
-  return next;
-};
-
-const reduceClipState = (
-  state: clipStateReducer.State,
-  action: clipStateReducer.Action,
-  exec: Parameters<typeof clipStateReducer>[2]
-): clipStateReducer.State => {
-  if (action.type === "cvm-recorder-message-heard") {
-    return handleCvmRecorderMessage(state, action, exec);
-  }
-
   if (action.type === "set-scene-override") {
     return handleSetSceneOverride(state, action, exec);
   }

@@ -26,16 +26,14 @@ describe("clipStateReducer", () => {
       const stateWithClips = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 1",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 2",
             soundDetectionId: "sound-2",
           })
@@ -58,8 +56,7 @@ describe("clipStateReducer", () => {
       const stateWithOneMoreClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 3",
             soundDetectionId: "sound-3",
           })
@@ -81,8 +78,7 @@ describe("clipStateReducer", () => {
       const stateWithTwoMoreClips = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 4",
             soundDetectionId: "sound-4",
           })
@@ -151,16 +147,14 @@ describe("clipStateReducer", () => {
       const stateWithClips = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 1",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 2",
             soundDetectionId: "sound-2",
           })
@@ -184,8 +178,7 @@ describe("clipStateReducer", () => {
       const stateWithOneMoreClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 3",
             soundDetectionId: "sound-3",
           })
@@ -238,16 +231,14 @@ describe("clipStateReducer", () => {
       const stateWithClips = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 1",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Scene 2",
             soundDetectionId: "sound-2",
           })
@@ -287,6 +278,63 @@ describe("clipStateReducer", () => {
           scene: "Scene 2",
         },
       ]);
+    });
+
+    it("Should move the insertion point to the previous clip when the latest inserted clip is deleted", async () => {
+      const tester = new ReducerTester(clipStateReducer, createInitialState());
+
+      const stateWithClips = tester
+        .send(
+          fromPartial({
+            type: "new-optimistic-clip-detected",
+            scene: "Scene 1",
+            soundDetectionId: "sound-1",
+          })
+        )
+        .send(
+          fromPartial({
+            type: "new-optimistic-clip-detected",
+            scene: "Scene 2",
+            soundDetectionId: "sound-2",
+          })
+        )
+        .getState();
+
+      const stateWithLatestInsertedClipDeleted = tester
+        .send({
+          type: "set-insertion-point-after",
+          clipId: stateWithClips.items[0]!.frontendId,
+        })
+        .send(
+          fromPartial({
+            type: "new-optimistic-clip-detected",
+            scene: "Scene 3",
+            soundDetectionId: "sound-3",
+          })
+        )
+        .send({
+          type: "delete-latest-inserted-clip",
+        })
+        .getState();
+
+      expect(stateWithLatestInsertedClipDeleted.items).toMatchObject([
+        {
+          scene: "Scene 1",
+        },
+        {
+          scene: "Scene 3",
+          shouldArchive: true,
+        },
+        {
+          scene: "Scene 2",
+        },
+      ]);
+
+      // The insertion point should be after the first clip
+      expect(stateWithLatestInsertedClipDeleted.insertionPoint).toEqual({
+        type: "after-clip",
+        frontendClipId: stateWithClips.items[0]!.frontendId,
+      });
     });
   });
 });

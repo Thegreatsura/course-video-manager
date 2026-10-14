@@ -1,9 +1,12 @@
 import { recordingSessions, recordingSessionSceneEvents } from "@/db/schema";
 import type { DatabaseId } from "@cvm/core/db/ids";
-import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
+import type {
+  CvmRecorderMessage,
+  PlacedTake,
+} from "@/features/video-editor/cvm-recorder-wire";
 import { asc, eq, inArray, or } from "drizzle-orm";
 import { clipRecordingSessionRelation } from "@cvm/core/services/clip-recording-session-relation";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { sceneSegments } from "@/packages/scene-layout";
 import { toRootRelative } from "@/packages/storage";
 import { storageRootsConfig } from "@/services/storage-roots";
@@ -38,17 +41,28 @@ export type IngestResult = {
   /** The Video the event is about; null when it means nothing to an editor. */
   videoId: string | null;
   messages: CvmRecorderMessage[];
-  /** Where the next Clip of this Video goes, when the event moved it. */
-  insertionPoint: InsertionPoint | null;
+  /** The Clips saved where an editor said (`AskEditor`): its answer. */
+  placed?: PlacedTake;
   /** The Recording Session was refused: nothing of it is saved. */
   refused?: boolean;
 };
 
-const nothing: IngestResult = {
-  videoId: null,
-  messages: [],
-  insertionPoint: null,
-};
+/**
+ * Asks the editors open on a Video where to save a Recording Session's
+ * speech that just ended (telling them `speech-ended`), as OBS's polling
+ * says where with each save. Null: no editor answered.
+ */
+export type AskEditor = (
+  videoId: string,
+  recordingSessionId: string
+) => Promise<InsertionPoint | null>;
+
+/** Asking an editor where failed: the speech is saved anyway. */
+class NoEditorAnswerError extends Data.TaggedError("NoEditorAnswerError")<{
+  readonly cause: unknown;
+}> {}
+
+const nothing: IngestResult = { videoId: null, messages: [] };
 
 /** After the Video's last item: where Clips go when no editor said. */
 const endOfVideo = Effect.fn("endOfVideo")(function* (
@@ -87,8 +101,7 @@ const sceneAt = Effect.fn("sceneAt")(function* (
 export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
   db: Database,
   event: SequencedEvent,
-  /** The insertion point the editor last gave for a Video, if any. */
-  insertionPointFor: (videoId: string) => InsertionPoint | undefined
+  askEditor: AskEditor
 ) {
   const recordingSessionId = event.recordingSessionId;
   if (event.type === "recording-started") {
@@ -140,7 +153,6 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
               "This Video's Version is not the Draft, so this recording is not saved.",
           },
         ],
-        insertionPoint: null,
         refused: true,
       } satisfies IngestResult;
     return {
@@ -153,7 +165,6 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           micFile: event.files.mic,
         },
       ],
-      insertionPoint: null,
     } satisfies IngestResult;
   }
 
@@ -187,13 +198,11 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
       return {
         videoId,
         messages: [{ type: "warmed-up", recordingSessionId }],
-        insertionPoint: null,
       } satisfies IngestResult;
     case "speech-started":
       return {
         videoId,
         messages: [{ type: "speech-started", recordingSessionId }],
-        insertionPoint: null,
       } satisfies IngestResult;
     case "speech-ended": {
       // Speech is heard in mic file time; Clips are cut in the picture's,
@@ -203,12 +212,27 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         startTime: event.startFileTime + offset,
         endTime: event.fileTime + offset,
       };
-      const insertionPoint =
-        insertionPointFor(videoId) ?? (yield* endOfVideo(db, videoId));
+      // Asked only for speech not saved yet (a replay saves nothing twice).
+      let asked = false;
+      let answered = false;
+      const whereTo = Effect.tryPromise({
+        try: () => {
+          asked = true;
+          return askEditor(videoId, recordingSessionId);
+        },
+        catch: (cause) => new NoEditorAnswerError({ cause }),
+      }).pipe(
+        // No answer, however it failed: saved after the Video's last item.
+        Effect.orElseSucceed(() => null),
+        Effect.flatMap((point) => {
+          answered = point !== null;
+          return point ? Effect.succeed(point) : endOfVideo(db, videoId);
+        })
+      );
       const placed = yield* placeSpeechAsClips(db, {
         videoId,
         footagePath: session.micFilePath,
-        insertionPoint,
+        insertionPoint: whereTo,
         fps: CVM_RECORDER_FPS,
         speech: [speech],
         recordingSession: {
@@ -216,37 +240,34 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           scene: yield* sceneAt(db, recordingSessionId, speech.startTime),
         },
       });
-      const last = placed.clips.at(-1);
-      // clips-saved goes first: the editor's take is filled in by it, or,
-      // at speech-ended with none, ends unsaved (clip-state-reducer-take.ts).
-      const messages: CvmRecorderMessage[] = [];
-      if (last && placed.transcriptionJobId) {
-        const recordingSession = yield* dbCall(() =>
-          db.query.recordingSessions.findFirst({
-            where: eq(recordingSessions.id, recordingSessionId),
-            ...clipRecordingSessionRelation,
-          })
-        );
-        messages.push({
-          type: "clips-saved",
-          recordingSessionId,
-          clips: placed.clips.map((c) => ({
-            ...c,
-            id: c.id as DatabaseId,
-            recordingSession: recordingSession!,
-          })),
-          placedAt: insertionPoint,
-          transcriptionJobId: placed.transcriptionJobId,
-        });
-      }
-      messages.push({ type: "speech-ended", recordingSessionId });
-      return {
-        videoId,
-        messages,
-        insertionPoint: last
-          ? { type: "after-clip", databaseClipId: last.id }
-          : null,
-      } satisfies IngestResult;
+      // Asking told the editors already.
+      const messages: CvmRecorderMessage[] = asked
+        ? []
+        : [{ type: "speech-ended", recordingSessionId }];
+      if (placed.clips.length === 0 || !placed.transcriptionJobId)
+        return { videoId, messages } satisfies IngestResult;
+      const recordingSession = yield* dbCall(() =>
+        db.query.recordingSessions.findFirst({
+          where: eq(recordingSessions.id, recordingSessionId),
+          ...clipRecordingSessionRelation,
+        })
+      );
+      const take: PlacedTake = {
+        clips: placed.clips.map((c) => ({
+          ...c,
+          id: c.id as DatabaseId,
+          recordingSession: recordingSession!,
+        })),
+        transcriptionJobId: placed.transcriptionJobId,
+      };
+      if (answered) return { videoId, messages, placed: take };
+      messages.push({
+        type: "clips-saved",
+        recordingSessionId,
+        clips: take.clips,
+        transcriptionJobId: placed.transcriptionJobId,
+      });
+      return { videoId, messages } satisfies IngestResult;
     }
     case "camera-lost":
       return {
@@ -254,7 +275,6 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         messages: [
           { type: "camera-lost", recordingSessionId, errors: event.errors },
         ],
-        insertionPoint: null,
       } satisfies IngestResult;
     case "recording-stopped":
       yield* dbCall(() =>
@@ -279,7 +299,6 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
             framesLost: event.framesLost,
           },
         ],
-        insertionPoint: null,
       } satisfies IngestResult;
     case "recording-crashed":
       // Its Clips so far are already saved; a take still going at the crash
@@ -301,7 +320,6 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
             framesLost: null,
           },
         ],
-        insertionPoint: null,
       } satisfies IngestResult;
   }
 });

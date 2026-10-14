@@ -8,6 +8,8 @@ status: superseded in part by 0035-the-recorder-service-starts-and-stops-with-pn
 
 > **Note (superseded in part):** the Spacedesk display's shape in decision 9 (16:9, 1920x1080, the Short showing its left square) is superseded by [ADR 0043](0043-a-shorts-spacedesk-screen-is-1080x1080.md): the display is 1080x1080 and a Short draws all of it. The rest of decision 9 stands.
 
+> **Note (amended):** where the recorder client saves a speech's Clips is amended by [ADR 0044](0044-the-cvm-recorder-is-an-adapter-onto-obs-clip-logic.md): it asks the editor for its Insertion Point when the speech ends, and keeps none of its own.
+
 > **Note (renamed):** the "new recorder" this ADR describes is now the **CVM recorder**, stored as `video.recorder = 'cvm'` (#1993). The wording below is kept as decided.
 
 Today OBS records every **Video**, and the app reads the file it writes. The new recorder (PRD #1994, decisions in #1993) replaces OBS for Videos that choose it: ffmpeg.exe 8.0.1 on Windows records the camera, the screen and the mic as three files for one **Recording Session**, on one shared clock. Something has to start those ffmpeg processes, hold them while a Recording Session runs, read their silence detection, and stop them cleanly. This ADR records where that runs.

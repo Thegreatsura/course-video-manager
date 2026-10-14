@@ -14,7 +14,10 @@ import {
 } from "@/av-calibration-constants";
 import { requireFreshAVCalibration } from "../av-calibration.server";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
-import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
+import type {
+  CvmRecorderMessage,
+  PlacedTake,
+} from "@/features/video-editor/cvm-recorder-wire";
 import {
   setupClipServiceTests,
   clipService,
@@ -70,7 +73,6 @@ describe("the recorder client", () => {
 
     await client.startRecording(video.id, {
       silenceLength: "short",
-      insertionPoint: { type: "start" },
       folder: tmp(),
     });
     const camera = windows.recorder("camera");
@@ -173,7 +175,6 @@ describe("the recorder client", () => {
       expect(
         client.startRecording(video.id, {
           silenceLength: "short",
-          insertionPoint: { type: "start" },
           folder: "relative/folder",
         })
       ).rejects.toThrow("The folder must be an absolute path")
@@ -191,12 +192,12 @@ describe("the recorder client", () => {
       closeGraceMs: 0,
       folder: "/tmp",
       retryMs: 0,
+      placeTimeoutMs: 0,
     });
     try {
       await expect(
         client.startRecording("v1", {
           silenceLength: "short",
-          insertionPoint: { type: "start" },
           folder: "/tmp",
         })
       ).rejects.toThrow("The recorder service is not running");
@@ -301,12 +302,12 @@ describe("the recorder client", () => {
 
   it("saves a take whose save failed, in its place, by asking for it again", async () => {
     let failed = false;
-    const { windows, client } = await setup((event, insertionPointFor) => {
+    const { windows, client } = await setup((event, askEditor) => {
       if (event.type === "speech-ended" && !failed) {
         failed = true;
         return Promise.reject(new Error("the database blinked"));
       }
-      return saveEvent(event, insertionPointFor);
+      return saveEvent(event, askEditor);
     });
     const video = await recordOn(client);
     const camera = windows.recorder("camera");
@@ -321,42 +322,52 @@ describe("the recorder client", () => {
     );
   });
 
-  it("puts the next take where the editor moved the insertion point to while a take was saving", async () => {
-    let release!: () => void;
-    const placedAt: unknown[] = [];
-    const { windows, client } = await setup(
-      async (event, insertionPointFor) => {
-        if (event.type !== "speech-ended")
-          return { videoId: null, messages: [], insertionPoint: null };
-        placedAt.push(insertionPointFor("v1"));
-        if (placedAt.length === 1)
-          await new Promise<void>((r) => (release = r));
-        return {
-          videoId: "v1",
-          messages: [],
-          insertionPoint: { type: "after-clip", databaseClipId: "clip-1" },
-        };
-      }
-    );
-    client.subscribe("v1", () => {});
+  it("saves each take where the editor says when the speech ends, and answers it with the Clips", async () => {
+    const { windows, client } = await setup();
+    const video = await clipService.createVideo("CVM recorder");
+    const [first] = await clipService.appendClips({
+      videoId: video.id,
+      insertionPoint: { type: "start" },
+      items: [],
+      clips: [
+        { inputVideo: "first.mp4", startTime: 0, endTime: 1 },
+        { inputVideo: "last.mp4", startTime: 0, endTime: 1 },
+      ],
+    });
+    const heard: CvmRecorderMessage[] = [];
+    const answers: Promise<PlacedTake>[] = [];
+    client.subscribe(video.id, (m) => {
+      heard.push(m);
+      if (m.type === "speech-ended")
+        answers.push(
+          client.placeTake(video.id, m.recordingSessionId, {
+            type: "after-clip",
+            databaseClipId: first!.id,
+          })
+        );
+    });
     await vi.waitFor(() =>
-      client.startRecording("v1", {
-        silenceLength: "short",
-        insertionPoint: { type: "start" },
-        folder: tmp(),
-      })
+      client.startRecording(video.id, { silenceLength: "short", folder: tmp() })
     );
     const camera = windows.recorder("camera");
     camera.stderr("[silencedetect @ 1] silence_start: -0.0001\r\n");
     speak(camera, [2, 5]);
-    await vi.waitFor(() => expect(placedAt).toHaveLength(1));
 
-    client.setInsertionPoint("v1", { type: "after-chapter", chapterId: "Q" });
-    release();
-    speak(camera, [7, 10]);
-
-    await vi.waitFor(() => expect(placedAt).toHaveLength(2));
-    expect(placedAt[1]).toEqual({ type: "after-chapter", chapterId: "Q" });
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    const placed = await answers[0]!;
+    expect(placed.clips.map((c) => c.sourceStartTime)).toEqual([2.15]);
+    expect(
+      (await clipService.getTimeline(video.id)).flatMap((i) =>
+        i.type === "clip" ? [i.data.videoFilename] : []
+      )
+    ).toEqual(["first.mp4", expect.stringMatching(/mic\.mkv$/), "last.mp4"]);
+    expect(heard.map((m) => m.type)).not.toContain("clips-saved");
+    // Asked again for the same speech (another tab), nothing waits.
+    expect(
+      await client.placeTake(video.id, placed.clips[0]!.recordingSessionId!, {
+        type: "start",
+      })
+    ).toEqual({ clips: [], transcriptionJobId: null });
   });
 
   it("records from the Stream Deck with the editor's Silence Length, and the editor hears it as its own Record", async () => {
@@ -495,7 +506,6 @@ describe("the recorder client, gated on the AV Calibration (ADR 0038)", () => {
       expect(
         client.startRecording(video.id, {
           silenceLength: "short",
-          insertionPoint: { type: "start" },
           folder: tmp(),
         })
       ).rejects.toThrow(

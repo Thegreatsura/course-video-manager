@@ -42,15 +42,13 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -91,15 +89,13 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         )
@@ -134,8 +130,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -174,8 +169,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -195,8 +189,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -228,15 +221,13 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -271,8 +262,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -300,15 +290,13 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -413,8 +401,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -433,8 +420,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -463,15 +449,13 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         );
@@ -504,8 +488,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );

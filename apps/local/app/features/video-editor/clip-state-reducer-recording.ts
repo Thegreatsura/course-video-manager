@@ -1,19 +1,26 @@
-import { WEB_LINK_DWELL_MS, type CapturedWebLink } from "@/lib/clip-web-link";
+import type { DB } from "@/db/schema";
+import type { PauseType } from "@/services/video-processing-service";
+import { holdForRequestedJob } from "./clip-state-reducer-transcription-jobs";
+import { resolveClipZoomType } from "@/features/videos/clip-zoom";
+import { DEFAULT_SILENCE_LENGTH } from "@/silence-detection-constants";
+import {
+  isCapturableUrl,
+  WEB_LINK_DWELL_MS,
+  type CapturedWebLink,
+} from "@/lib/clip-web-link";
 import type {
+  ClipOnDatabase,
+  ClipOptimisticallyAdded,
   ClipReducerAction,
   ClipReducerExec,
   ClipReducerState,
+  DatabaseId,
+  FrontendInsertionPoint,
   RecordingSession,
-  SessionId,
+  TimelineItem,
 } from "./clip-state-reducer.types";
-import { createSessionId } from "./clip-state-reducer.types";
-import {
-  effectiveWebLink,
-  endUnsavedTakes,
-  handleTakeStarted,
-  nextDisplayNumber,
-  saveTake,
-} from "./clip-state-reducer-take";
+import { createFrontendId, createSessionId } from "./clip-state-reducer.types";
+import { insertAtPoint } from "./insert-at-point";
 
 type RecordingAction = Extract<
   ClipReducerAction,
@@ -22,7 +29,7 @@ type RecordingAction = Extract<
       | "recording-started"
       | "recording-stopped"
       | "session-polling-complete"
-      | "take-started"
+      | "new-optimistic-clip-detected"
       | "new-database-clips"
       | "clip-audio-window-closed"
       | "browser-event";
@@ -33,7 +40,7 @@ const RECORDING_ACTION_TYPES: ReadonlySet<string> = new Set([
   "recording-started",
   "recording-stopped",
   "session-polling-complete",
-  "take-started",
+  "new-optimistic-clip-detected",
   "new-database-clips",
   "clip-audio-window-closed",
   "browser-event",
@@ -57,8 +64,8 @@ export const handleRecordingAction = (
       return handleRecordingStopped(state, exec);
     case "session-polling-complete":
       return handleSessionPollingComplete(state, action, exec);
-    case "take-started":
-      return handleTakeStarted(state, action, exec);
+    case "new-optimistic-clip-detected":
+      return handleNewOptimisticClipDetected(state, action, exec);
     case "new-database-clips":
       return handleNewDatabaseClips(state, action, exec);
     case "clip-audio-window-closed":
@@ -66,6 +73,20 @@ export const handleRecordingAction = (
     case "browser-event":
       return handleBrowserEvent(state, action);
   }
+};
+
+/**
+ * The single web page currently visible on screen, folded from the live browser
+ * focus + URL state. Null when Chrome does not hold OS focus or the URL is not a
+ * capturable web page (http/https).
+ */
+const effectiveWebLink = (
+  focused: boolean,
+  url: string | null | undefined,
+  title: string | null | undefined
+): { url: string; title: string | null } | null => {
+  if (!focused || url == null || !isCapturableUrl(url)) return null;
+  return { url, title: title ?? null };
 };
 
 /**
@@ -107,9 +128,14 @@ const handleRecordingStarted = (
   action: Extract<ClipReducerAction, { type: "recording-started" }>,
   exec: ClipReducerExec
 ): ClipReducerState => {
+  const nextDisplayNumber =
+    state.sessions.length > 0
+      ? Math.max(...state.sessions.map((s) => s.displayNumber)) + 1
+      : 1;
+
   const newSession: RecordingSession = {
     id: createSessionId(),
-    displayNumber: nextDisplayNumber(state.sessions),
+    displayNumber: nextDisplayNumber,
     status: "recording",
     outputPath: action.outputPath,
     startedAt: Date.now(),
@@ -123,6 +149,9 @@ const handleRecordingStarted = (
     outputPath: action.outputPath,
     silenceLength: action.silenceLength,
     silenceThresholdDb: action.silenceThresholdDb,
+    ...(action.recordingSessionId
+      ? { recordingSessionId: action.recordingSessionId }
+      : {}),
   });
 
   exec({
@@ -175,38 +204,365 @@ const handleSessionPollingComplete = (
     exec({ type: "revalidate-loader" });
   }
 
-  return endUnsavedTakes(
-    {
-      ...state,
-      sessions: state.sessions.map((s) =>
-        s.id === action.sessionId ? { ...s, status: "done" } : s
-      ),
-    },
-    action.sessionId
-  );
+  return {
+    ...state,
+    sessions: state.sessions.map((s) =>
+      s.id === action.sessionId ? { ...s, status: "done" } : s
+    ),
+    items: state.items.map((item) => {
+      if (
+        item.type === "optimistically-added" &&
+        item.sessionId === action.sessionId &&
+        !item.shouldArchive
+      ) {
+        return { ...item, isOrphaned: true };
+      }
+      return item;
+    }),
+  };
 };
 
-/** OBS polling found saved Clips: they fill in this session's takes. */
+const handleNewOptimisticClipDetected = (
+  state: ClipReducerState,
+  action: Extract<ClipReducerAction, { type: "new-optimistic-clip-detected" }>,
+  exec: ClipReducerExec
+): ClipReducerState => {
+  const existingClip = state.items.find(
+    (c) =>
+      c.type === "optimistically-added" &&
+      c.soundDetectionId === action.soundDetectionId
+  );
+  if (existingClip) {
+    return state;
+  }
+
+  let sessions = state.sessions;
+  let activeSession = sessions.find((s) => s.status === "recording");
+  if (!activeSession) {
+    const nextDisplayNumber =
+      sessions.length > 0
+        ? Math.max(...sessions.map((s) => s.displayNumber)) + 1
+        : 1;
+    activeSession = {
+      id: createSessionId(),
+      displayNumber: nextDisplayNumber,
+      status: "recording",
+      outputPath: "",
+      startedAt: Date.now(),
+      silenceLength: DEFAULT_SILENCE_LENGTH,
+    };
+    sessions = [...sessions, activeSession];
+  }
+
+  const newFrontendId = createFrontendId();
+  // Seed the clip with the page already on screen when narration begins (e.g.
+  // one shown during silent setup). Further pages switched to while the clip
+  // records are appended by `browser-event`.
+  const seed = effectiveWebLink(
+    state.browserFocus ?? false,
+    state.browserUrl,
+    state.browserTitle
+  );
+  const newClip: ClipOptimisticallyAdded = {
+    type: "optimistically-added",
+    frontendId: newFrontendId,
+    scene: action.scene,
+    profile: action.profile,
+    insertionOrder: state.insertionOrder + 1,
+    pauseType: "none",
+    soundDetectionId: action.soundDetectionId,
+    sessionId: activeSession.id,
+    pendingWebLinks: seed
+      ? [{ url: seed.url, title: seed.title, capturedAt: Date.now() }]
+      : undefined,
+  };
+
+  const { items, insertionPoint } = insertAtPoint(
+    state.items,
+    newClip,
+    state.insertionPoint
+  );
+
+  exec({
+    type: "scroll-to-insertion-point",
+  });
+
+  return {
+    ...state,
+    items,
+    insertionOrder: state.insertionOrder + 1,
+    insertionPoint,
+    sessions,
+    recordingClipFrontendId: newFrontendId,
+  };
+};
+
+type PendingSnapshotEffect = {
+  diagramId: string;
+  clipId: DatabaseId;
+};
+
+const collectSnapshotForClip = (
+  frontendClip: TimelineItem | undefined,
+  databaseClipId: DatabaseId
+): PendingSnapshotEffect | null => {
+  if (
+    frontendClip?.type !== "optimistically-added" ||
+    !frontendClip.pendingSnapshot ||
+    !frontendClip.pendingSnapshot.activeDiagramId ||
+    // Snapshot only a diagram the author actually looked at during the clip.
+    !frontendClip.pendingSnapshot.diagramFocused
+  ) {
+    return null;
+  }
+  return {
+    diagramId: frontendClip.pendingSnapshot.activeDiagramId,
+    clipId: databaseClipId,
+  };
+};
+
+const emitSnapshotForClipEffects = (
+  snapshots: PendingSnapshotEffect[],
+  exec: ClipReducerExec
+) => {
+  for (const snapshot of snapshots) {
+    exec({
+      type: "snapshot-for-clip",
+      diagramId: snapshot.diagramId,
+      clipId: snapshot.clipId,
+    });
+  }
+};
+
+type PendingWebLinksEffect = {
+  clipId: DatabaseId;
+  links: CapturedWebLink[];
+};
+
+const collectWebLinksForClip = (
+  frontendClip: TimelineItem | undefined,
+  databaseClipId: DatabaseId
+): PendingWebLinksEffect | null => {
+  if (
+    frontendClip?.type !== "optimistically-added" ||
+    !frontendClip.pendingWebLinks ||
+    frontendClip.pendingWebLinks.length === 0
+  ) {
+    return null;
+  }
+  return { clipId: databaseClipId, links: frontendClip.pendingWebLinks };
+};
+
+const emitPersistWebLinksEffects = (
+  webLinks: PendingWebLinksEffect[],
+  exec: ClipReducerExec
+) => {
+  for (const entry of webLinks) {
+    exec({
+      type: "persist-web-links",
+      clipId: entry.clipId,
+      links: entry.links,
+    });
+  }
+};
+
 const handleNewDatabaseClips = (
   state: ClipReducerState,
   action: Extract<ClipReducerAction, { type: "new-database-clips" }>,
   exec: ClipReducerExec
-): ClipReducerState =>
-  saveTake(
-    state,
+): ClipReducerState => {
+  let newClipsState: TimelineItem[] = [...state.items];
+
+  const clipsToArchive = new Set<DatabaseId>();
+  const databaseClipIdsToTranscribe = new Set<DatabaseId>();
+  const snapshotsToCreate: PendingSnapshotEffect[] = [];
+  const webLinksToPersist: PendingWebLinksEffect[] = [];
+  const clipsToUpdateScene = new Map<
+    DatabaseId,
+    { scene: string; profile: string; pauseType: PauseType }
+  >();
+  const pausesToUpdate: { clipId: DatabaseId; pauseType: PauseType }[] = [];
+  /**
+   * The saved Clip takes its Optimistic Clip's scene, profile and pause. A
+   * CVM recorder take has no scene or profile (the app server stamped the
+   * Clip with its own), so only a pause changed meanwhile is sent.
+   */
+  const stampClip = (
+    databaseClip: DB.Clip,
+    frontendClip: ClipOptimisticallyAdded
+  ) => {
+    if (frontendClip.scene !== null && frontendClip.profile !== null) {
+      clipsToUpdateScene.set(databaseClip.id, {
+        scene: frontendClip.scene,
+        profile: frontendClip.profile,
+        pauseType: frontendClip.pauseType,
+      });
+    } else if (frontendClip.pauseType !== databaseClip.pauseType) {
+      pausesToUpdate.push({
+        clipId: databaseClip.id,
+        pauseType: frontendClip.pauseType,
+      });
+    }
+  };
+
+  let newInsertionPoint: FrontendInsertionPoint = state.insertionPoint;
+
+  const scopeBySession = action.outputPath !== undefined;
+  const matchingSessionId = scopeBySession
+    ? state.sessions.find((s) => s.outputPath === action.outputPath)?.id
+    : undefined;
+
+  const optimisticClipsSortedByInsertionOrder = newClipsState
+    .filter(
+      (c): c is ClipOptimisticallyAdded =>
+        c.type === "optimistically-added" &&
+        (!scopeBySession || c.sessionId === matchingSessionId)
+    )
+    .sort((a, b) => {
+      return a.insertionOrder! - b.insertionOrder!;
+    });
+
+  for (const databaseClip of action.clips) {
+    const firstOfSortedClips = optimisticClipsSortedByInsertionOrder.shift();
+    const index = newClipsState.findIndex(
+      (c) =>
+        c.type === "optimistically-added" &&
+        c.insertionOrder === firstOfSortedClips?.insertionOrder
+    );
+
+    if (firstOfSortedClips) {
+      const frontendClip = newClipsState[index];
+
+      const pendingSnapshot = collectSnapshotForClip(
+        frontendClip,
+        databaseClip.id
+      );
+      if (pendingSnapshot) snapshotsToCreate.push(pendingSnapshot);
+
+      const pendingWebLinks = collectWebLinksForClip(
+        frontendClip,
+        databaseClip.id
+      );
+      if (pendingWebLinks) webLinksToPersist.push(pendingWebLinks);
+
+      if (
+        frontendClip?.type === "optimistically-added" &&
+        frontendClip?.shouldArchive
+      ) {
+        const archivedDatabaseClip: ClipOnDatabase = {
+          ...databaseClip,
+          type: "on-database",
+          frontendId: frontendClip.frontendId,
+          databaseId: databaseClip.id,
+          scene: frontendClip.scene ?? databaseClip.scene,
+          profile: frontendClip.profile ?? databaseClip.profile,
+          insertionOrder: frontendClip.insertionOrder,
+          pauseType: frontendClip.pauseType,
+          zoomType: resolveClipZoomType(databaseClip.zoomType),
+          diagramSnapshotId: databaseClip.diagramSnapshotId ?? null,
+          diagramName: null,
+          webLinks: [],
+          shouldArchive: true,
+          sessionId: frontendClip.sessionId,
+        };
+        newClipsState[index] = archivedDatabaseClip;
+        clipsToArchive.add(databaseClip.id);
+        stampClip(databaseClip, frontendClip);
+        databaseClipIdsToTranscribe.add(databaseClip.id);
+      } else if (frontendClip?.type === "optimistically-added") {
+        const newDatabaseClip: ClipOnDatabase = {
+          ...databaseClip,
+          type: "on-database",
+          frontendId: frontendClip.frontendId,
+          databaseId: databaseClip.id,
+          scene: frontendClip.scene ?? databaseClip.scene,
+          profile: frontendClip.profile ?? databaseClip.profile,
+          insertionOrder: frontendClip.insertionOrder,
+          pauseType: frontendClip.pauseType,
+          zoomType: resolveClipZoomType(databaseClip.zoomType),
+          diagramSnapshotId: databaseClip.diagramSnapshotId ?? null,
+          diagramName: null,
+          webLinks: [],
+          sessionId: frontendClip.sessionId,
+        };
+        newClipsState[index] = newDatabaseClip;
+        stampClip(databaseClip, frontendClip);
+        databaseClipIdsToTranscribe.add(databaseClip.id);
+      }
+    } else {
+      const newFrontendId = createFrontendId();
+
+      const newDatabaseClip: ClipOnDatabase = {
+        type: "on-database",
+        ...databaseClip,
+        frontendId: newFrontendId,
+        databaseId: databaseClip.id,
+        insertionOrder: state.insertionOrder + 1,
+        pauseType: databaseClip.pauseType as PauseType,
+        zoomType: resolveClipZoomType(databaseClip.zoomType),
+        diagramSnapshotId: databaseClip.diagramSnapshotId ?? null,
+        diagramName: null,
+        webLinks: [],
+      };
+
+      const result = insertAtPoint(
+        newClipsState,
+        newDatabaseClip,
+        state.insertionPoint
+      );
+
+      newClipsState = result.items;
+      newInsertionPoint = result.insertionPoint;
+
+      databaseClipIdsToTranscribe.add(databaseClip.id);
+    }
+  }
+
+  if (clipsToUpdateScene.size > 0) {
+    exec({
+      type: "update-clips",
+      clips: Array.from(clipsToUpdateScene.entries()),
+    });
+  }
+
+  for (const pause of pausesToUpdate) exec({ type: "update-pause", ...pause });
+
+  if (action.clips.length > 0) {
+    exec({
+      type: "scroll-to-insertion-point",
+    });
+  }
+
+  if (clipsToArchive.size > 0) {
+    exec({
+      type: "archive-clips",
+      clipIds: Array.from(clipsToArchive),
+    });
+  }
+
+  if (databaseClipIdsToTranscribe.size > 0) {
+    exec({
+      type: "transcribe-clips",
+      jobId: action.transcriptionJobId,
+      clipIds: Array.from(databaseClipIdsToTranscribe),
+    });
+  }
+
+  emitSnapshotForClipEffects(snapshotsToCreate, exec);
+  emitPersistWebLinksEffects(webLinksToPersist, exec);
+
+  // The transcribe-clips Job is asked for with this commit, so these Clips
+  // are transcribing, and belong to it, until its Job Events settle them.
+  return holdForRequestedJob(
     {
-      sessionId:
-        action.outputPath === undefined
-          ? undefined
-          : (state.sessions.find((s) => s.outputPath === action.outputPath)
-              ?.id ?? ("" as SessionId)),
-      clips: action.clips,
-      transcriptionJobId: action.transcriptionJobId,
-      requestTranscription: true,
-      unpaired: { at: state.insertionPoint, insertionPointFollows: true },
+      ...state,
+      items: newClipsState,
+      insertionPoint: newInsertionPoint,
     },
-    exec
+    Array.from(databaseClipIdsToTranscribe),
+    action.transcriptionJobId
   );
+};
 
 const handleClipAudioWindowClosed = (
   state: ClipReducerState,

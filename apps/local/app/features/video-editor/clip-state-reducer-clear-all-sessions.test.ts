@@ -43,8 +43,7 @@ const recordTwoSessions = () => {
     })
     .send(
       fromPartial({
-        type: "take-started",
-        at: 0,
+        type: "new-optimistic-clip-detected",
         soundDetectionId: "sound-1",
       })
     );
@@ -59,15 +58,13 @@ const recordTwoSessions = () => {
     })
     .send(
       fromPartial({
-        type: "take-started",
-        at: 0,
+        type: "new-optimistic-clip-detected",
         soundDetectionId: "sound-2",
       })
     )
     .send(
       fromPartial({
-        type: "take-started",
-        at: 0,
+        type: "new-optimistic-clip-detected",
         soundDetectionId: "sound-3",
       })
     );

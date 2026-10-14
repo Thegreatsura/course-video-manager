@@ -45,7 +45,6 @@ const live = heard({ type: "camera-went-live" });
 const pressRecord = {
   type: "press-record",
   silenceLength: "long",
-  insertionPoint: { type: "start" },
 } as const;
 
 const stoppedMessage = (
@@ -89,7 +88,6 @@ describe("the CVM recorder's Record and Stop", () => {
       {
         type: "start-recording",
         silenceLength: "long",
-        insertionPoint: { type: "start" },
       },
     ]);
     expect(t.getState().phase).toBe("starting");
@@ -116,17 +114,27 @@ describe("the CVM recorder's Record and Stop", () => {
 
     t.send({ type: "press-stop" }).send(heard(stoppedMessage()));
     expect(t.getState()).toMatchObject({ phase: "idle" });
+    // The clip reducer hears the OBS path's start and stop.
     expect(t.getEffects().map((e) => e.type)).toEqual([
       "start-recording",
+      "start-session",
       "time-speech",
       "stop-recording",
+      "stop-session",
     ]);
   });
 
   it("shows a recording it did not start, and can stop it", () => {
     const t = tester();
     t.send(status({ recordingSessionId: "s1" })).send({ type: "press-stop" });
-    expect(t.getEffects()).toEqual([{ type: "stop-recording" }]);
+    expect(t.getEffects()).toEqual([
+      {
+        type: "start-session",
+        recordingSessionId: "s1",
+        silenceLength: "short",
+      },
+      { type: "stop-recording" },
+    ]);
   });
 
   it("shows why Record was refused and lets it be pressed again", () => {
@@ -320,7 +328,13 @@ describe("the Stream Deck on the CVM recorder", () => {
       phase: "recording",
       scene: "Camera",
     });
-    expect(deck.getEffects()).toEqual([]);
+    expect(deck.getEffects()).toEqual([
+      {
+        type: "start-session",
+        recordingSessionId: "s1",
+        silenceLength: "short",
+      },
+    ]);
 
     buttons
       .send({ type: "press-stop" })
@@ -358,11 +372,7 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
   const speechEnded = heard({ type: "speech-ended", recordingSessionId: "s1" });
   const warmedUp = heard({ type: "warmed-up", recordingSessionId: "s1" });
   const longEnough = (speechCount: number) =>
-    ({
-      type: "speech-long-enough",
-      speechCount,
-      recordingSessionId: "s1",
-    }) as const;
+    ({ type: "speech-long-enough", speechCount }) as const;
 
   it("walks the OBS path's states: warming up, silence, speaking, long enough for a Clip, silence", () => {
     const t = tester().send(status()).send(live);
@@ -390,7 +400,6 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
     expect(t.getEffects().at(-1)).toEqual({
       type: "time-speech",
       speechCount: 1,
-      recordingSessionId: "s1",
     });
 
     t.send(longEnough(1));
@@ -400,12 +409,16 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
     // The speech is a take now: the clip reducer shows its Optimistic Clip.
     expect(t.getEffects().at(-1)).toEqual({
       type: "start-take",
-      recordingSessionId: "s1",
       soundDetectionId: "cvm-recorder-speech-1",
     });
 
     t.send(speechEnded);
     expect(captureOf(t.getState())).toBe("silence");
+    // Its audio window closes, and the app server is told where to save it.
+    expect(t.getEffects().slice(-2)).toEqual([
+      { type: "close-take-window" },
+      { type: "place-take", recordingSessionId: "s1" },
+    ]);
 
     t.send({ type: "press-stop" });
     // Still recording until the recorder has stopped, as OBS is.
@@ -473,6 +486,7 @@ describe("events from a Recording Session that is not the current one (#2163)", 
   it("is idle once the recorder says s1 stopped, and a replay of s1 never makes it recording again", () => {
     const t = stoppedWithEventsHeld();
     expect(t.getState().phase).toBe("idle");
+    const effects = t.getEffects().length;
 
     // The held events are saved at last, replayed from s1's start.
     t.send(started("s1"))
@@ -481,9 +495,10 @@ describe("events from a Recording Session that is not the current one (#2163)", 
     expect(t.getState().phase).toBe("idle");
     expect(captureOf(t.getState())).toBe("not-recording");
     expect(canRecord(t.getState())).toBe(true);
-    expect(t.getEffects().map((e) => e.type)).toEqual([
-      "start-recording",
-      "stop-recording",
+    // Its stop has not come, so its last speech is still placed; nothing
+    // records again.
+    expect(t.getEffects().slice(effects)).toEqual([
+      { type: "place-take", recordingSessionId: "s1" },
     ]);
   });
 
