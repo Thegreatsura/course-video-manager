@@ -37,18 +37,10 @@ import {
   startRecordingSession,
   type RecordingSession,
 } from "./recording-session";
-import {
-  checkFfmpeg,
-  checkNvidiaDriver,
-  listDshowDevices,
-} from "./windows-devices";
-import { findByName, Refusal } from "./refusal";
-import { MIC_NAME } from "../app/mic-device";
-import {
-  calibrationValidity,
-  RECORDER_CAMERA_NAME,
-  describeCalibrationRefusal,
-} from "../app/av-calibration-constants";
+import { checkFfmpeg, checkNvidiaDriver } from "./windows-devices";
+import { Refusal } from "./refusal";
+import { RECORDER_CAMERA_NAME } from "../app/av-calibration-constants";
+import { createRecordingDevices } from "./recording-devices";
 import {
   createScreenSide,
   refuseScreenlessScene,
@@ -199,14 +191,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     broadcast({ type: "state", state });
   };
 
-  const findCamera = async () => {
-    const { devices } = await listDshowDevices(o.launch);
-    return findByName(
-      devices.filter((d) => d.kind === "video").map((d) => d.name),
-      (n) => n,
-      CAMERA_NAME
-    );
-  };
+  const devices = createRecordingDevices(o.launch);
+  const findCamera = devices.findCamera;
 
   /** Opens the Cam Link for the open recorder; its status goes in the state. */
   const startCamera = (): CameraStatus => {
@@ -296,37 +282,30 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         `The folder must be an absolute path: ${command.folder}`
       );
     }
-    const { devices, raw } = await listDshowDevices(o.launch);
-    const names = (kind: "video" | "audio") =>
-      devices.filter((d) => d.kind === kind).map((d) => d.name);
-    const camera = findByName(names("video"), (n) => n, CAMERA_NAME);
-    const mic = findByName(names("audio"), (n) => n, MIC_NAME);
-    if (!camera || !mic) {
-      const missing = !camera
-        ? `${CAMERA_NAME} (video)`
-        : `${MIC_NAME} (audio)`;
-      throw new Refusal(
-        `${missing} is not among the DirectShow devices. Found: ${devices.map((d) => `${d.name} (${d.kind})`).join(", ") || `none. ffmpeg said: ${raw.slice(0, 500)}`}`
-      );
-    }
-    // THE GATE (ADR 0038), at the one moment it applies: the start. The
-    // camera + mic pair is compared here because only the service knows
-    // which pair it records.
-    const gate = calibrationValidity(
+    const startedMs = Date.now();
+    const { camera, mic, calibration, fromCache } = await devices.forRecord(
       command.calibration,
-      { recorderMic: mic, camera },
-      o.now()
+      o.now
     );
-    if (!gate.valid) throw new Refusal(describeCalibrationRefusal(gate.reason));
+    const devicesMs = Date.now();
     const { videoId, format } = state;
-    const screenIndex = await screenSide.recordIndex(
-      format,
-      state.screen,
-      scene
-    );
+    // Refuses at once what it knows without a lookup, before the Cam Link
+    // is let go; the lookup itself runs while the preview hands it over.
+    const screenLookup = screenSide.recordIndex(format, state.screen, scene);
     // The Cam Link opens in one process at a time: the recording's takes it
     // over from the preview, and hands it back when it ends.
-    await releaseCamera();
+    const [screen, handedOver] = await Promise.allSettled([
+      screenLookup,
+      releaseCamera(),
+    ]);
+    if (screen.status === "rejected" || handedOver.status === "rejected") {
+      reopen(videoId);
+      throw screen.status === "rejected"
+        ? screen.reason
+        : (handedOver as PromiseRejectedResult).reason;
+    }
+    const screenIndex = screen.value;
+    const handedOverMs = Date.now();
     try {
       session = startRecordingSession({
         launch: o.launch,
@@ -334,8 +313,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         videoId,
         folder: command.folder,
         silenceLength: command.silenceLength,
-        thresholdDb: gate.calibration.thresholdDb,
-        avCalibrationId: gate.calibration.id,
+        thresholdDb: calibration.thresholdDb,
+        avCalibrationId: calibration.id,
         camera,
         mic,
         screenIndex,
@@ -363,6 +342,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
     } catch (e) {
       console.error("recorder: could not index the Recording Session", e);
     }
+    console.log(
+      `recorder: Record took ${Date.now() - startedMs} ms to T0 (devices ${devicesMs - startedMs} ms${fromCache ? ", cached" : ""}, screen + camera hand-off ${handedOverMs - devicesMs} ms, start ${Date.now() - handedOverMs} ms)`
+    );
     setState({
       kind: "recording",
       videoId,

@@ -259,6 +259,42 @@ describe("a Recording Session", () => {
     );
   });
 
+  it("starts from the devices the preview listed, looking up the screen while the preview lets go of the Cam Link", async () => {
+    const windows = fakeWindows({ screensListingMs: 50 });
+    const order: string[] = [];
+    const launch = windows.launch;
+    windows.launch = (l) => {
+      const p = launch(l);
+      if (l.tool === "powershell" && l.script === "screens.ps1")
+        void p.exited.then(() => order.push("screen listed"));
+      return p;
+    };
+    const listings = () =>
+      windows.launched.filter(
+        (l) => l.tool === "ffmpeg" && l.args.includes("-list_devices")
+      ).length;
+    const { port } = await start(windows);
+    const client = await connect(port);
+    client.send({ type: "open", videoId: "video-1" });
+    await client.camera("live");
+    const listedAtOpen = listings();
+    void windows.cameraPreviews[0]?.exited.then(() =>
+      order.push("camera released")
+    );
+
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...CALIBRATED,
+    });
+    await client.next("recording-started");
+    expect(listings()).toBe(listedAtOpen);
+    // The hand-off finished while the (slow) screen lookup was still running.
+    expect(order).toContain("camera released");
+    expect(order.at(-1)).toBe("screen listed");
+  });
+
   it("records camera, screen and mic to three files and stops on request", async () => {
     const { windows, client, started, folder } = await recordOnce();
     // A file that closes in silence gets one last silence_end: not speech.
