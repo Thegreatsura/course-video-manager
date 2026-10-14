@@ -12,6 +12,20 @@ import {
 } from "react";
 import { useFetcher } from "react-router";
 import { toast } from "@/components/ui/toast";
+import {
+  resolveForVideo,
+  type ResolverTimelineItem,
+} from "@/lib/diagram-action-resolver";
+import { fetchMeta } from "@/features/diagrams/use-diagram-snapshot-scene";
+import {
+  openPlayground,
+  openPlaygroundWithDiagram,
+} from "@/lib/diagram-window";
+import { teleprompterChannel } from "@/lib/teleprompter-protocol";
+import type {
+  FrontendInsertionPoint,
+  TimelineItem,
+} from "./clip-state-reducer";
 import { useContextSelector } from "use-context-selector";
 import { useRetranscribeAllClips } from "./components/transcript-word-actions";
 import { VideoEditorContext } from "./video-editor-context";
@@ -85,6 +99,11 @@ export function useEditorVideoActions(): {
     VideoEditorContext,
     (ctx) => ctx.modalDispatch
   );
+  const items = useContextSelector(VideoEditorContext, (ctx) => ctx.items);
+  const insertionPoint = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.insertionPoint
+  );
   const { startExportUpload, startRenderVerticalUpload } = useUploadActions();
   const retranscribeAllClips = useRetranscribeAllClips();
   const revealVideoFetcher = useFetcher();
@@ -99,6 +118,9 @@ export function useEditorVideoActions(): {
   }, [videoId]);
 
   const common: VideoMenuActions = {
+    openTeleprompter: () => teleprompterChannel.open(),
+    openDiagramPlayground: () =>
+      void openDiagramPlaygroundAt(items, insertionPoint),
     rename: () => modalDispatch({ type: "rename-video-clicked" }),
     duplicate: () => modalDispatch({ type: "copy-video-clicked" }),
     export: () => startExportUpload(videoId, videoTitle),
@@ -133,6 +155,55 @@ export function useEditorVideoActions(): {
     copyLogPath: () => void copyLogPath(videoId),
   };
   return { common, rare };
+}
+
+/**
+ * Opens the Diagram Playground on the Diagram the timeline shows at the
+ * insertion point, or empty when there is none.
+ */
+async function openDiagramPlaygroundAt(
+  items: TimelineItem[],
+  insertionPoint: FrontendInsertionPoint
+) {
+  const resolverItems: ResolverTimelineItem[] = items.map((item) => {
+    if (item.type === "on-database" || item.type === "optimistically-added") {
+      return {
+        frontendId: item.frontendId as string,
+        kind: "clip" as const,
+        diagramSnapshotId:
+          item.type === "on-database" ? (item.diagramSnapshotId ?? null) : null,
+      };
+    }
+    return {
+      frontendId: item.frontendId as string,
+      kind: "chapter" as const,
+      diagramSnapshotId: null,
+    };
+  });
+
+  const snapshotIds = new Set(
+    resolverItems
+      .filter((i) => i.diagramSnapshotId)
+      .map((i) => i.diagramSnapshotId!)
+  );
+  const snapshotMap = new Map<string, string>();
+  await Promise.all(
+    [...snapshotIds].map(async (sid) => {
+      const meta = await fetchMeta(sid);
+      if (meta.diagramId) snapshotMap.set(sid, meta.diagramId);
+    })
+  );
+
+  const result = resolveForVideo(
+    resolverItems,
+    insertionPoint,
+    (sid) => snapshotMap.get(sid) ?? null
+  );
+  if (result.kind === "diagram") {
+    openPlaygroundWithDiagram(result.diagramId);
+  } else {
+    openPlayground();
+  }
 }
 
 async function copyLogPath(videoId: string) {
