@@ -6,10 +6,7 @@ import {
   resolveVideoFormat,
   type VideoFormat,
 } from "@/features/videos/video-format";
-import {
-  MINIMUM_CLIP_LENGTH_SECONDS,
-  type SilenceLength,
-} from "@/silence-detection-constants";
+import type { SilenceLength } from "@/silence-detection-constants";
 import { resolveInsertionPoint } from "@/services/clip-service";
 import type {
   ClipReducerAction,
@@ -187,17 +184,6 @@ export const useCvmRecorder = (o: {
               error
             )
           );
-      },
-      "time-speech": (_state, effect, dispatch) => {
-        const timer = setTimeout(
-          () =>
-            dispatch({
-              type: "speech-long-enough",
-              speechCount: effect.speechCount,
-            }),
-          MINIMUM_CLIP_LENGTH_SECONDS * 1000
-        );
-        return () => clearTimeout(timer);
       },
       "start-session": (_state, effect) => {
         o.clipDispatch({

@@ -51,11 +51,12 @@ export const RECORDER_SERVICE_PORT = 5177;
  * the app refuses to record through one; 12: Record's calibration names its
  * camera, and Record is gated on the camera + mic pair; 13: the previews are
  * pulled a frame at a time, not streamed as multipart; 14: the previews are
- * H.264 streams, not JPEGs). The app server reloads on a change and the service does not
+ * H.264 streams, not JPEGs; 15: `take-started`, without which the editor
+ * shows no Take). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 14;
+export const RECORDER_PROTOCOL_VERSION = 15;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -304,6 +305,12 @@ export type RecordingSessionEvent = Logged<
   | { type: "warmed-up"; fileTime: number }
   /** Speech in the mic file, in seconds of file time. */
   | { type: "speech-started"; fileTime: number }
+  /**
+   * The speech going now is long enough to be a Clip: a Take
+   * (speech-detector.ts). Its `speech-ended` makes a Clip; speech that ends
+   * with no `take-started` makes none. `fileTime`: when it was decided.
+   */
+  | { type: "take-started"; fileTime: number }
   | { type: "speech-ended"; fileTime: number }
   /**
    * The camera process quit on its own, or the Cam Link stopped sending

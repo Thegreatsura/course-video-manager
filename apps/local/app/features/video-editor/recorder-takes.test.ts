@@ -229,9 +229,6 @@ const cvmAdapter = (e: Editor) => {
         case "stop-session":
           e.send({ type: "recording-stopped" });
           break;
-        case "time-speech":
-          hear({ type: "speech-long-enough", speechCount: effect.speechCount });
-          break;
         case "start-take":
           e.send({
             type: "new-optimistic-clip-detected",
@@ -287,10 +284,21 @@ const cvmAdapter = (e: Editor) => {
     recorder.send(action);
     run();
   };
+  let takes = 0;
+  const heard = (message: CvmRecorderMessage) =>
+    hear({ type: "recorder-message-heard", message });
   return {
     recorder,
-    hear: (message: CvmRecorderMessage) =>
-      hear({ type: "recorder-message-heard", message }),
+    hear: heard,
+    /** Speech the recorder service calls a Take: `speech-started`, then `take-started`. */
+    take: (recordingSessionId: string) => {
+      heard({ type: "speech-started", recordingSessionId });
+      heard({
+        type: "take-started",
+        recordingSessionId,
+        takeId: `${recordingSessionId}:${++takes}`,
+      });
+    },
     /** The next speech that ends makes this Clip. */
     willSave: (clipId: string) => pending.push(clipId),
   };
@@ -329,8 +337,7 @@ const cvm: Recorder = {
         });
         adapter.hear({ type: "warmed-up", recordingSessionId: id });
       },
-      startTake: () =>
-        adapter.hear({ type: "speech-started", recordingSessionId: id }),
+      startTake: () => adapter.take(id),
       saveTake: (clipId) => {
         adapter.willSave(clipId);
         adapter.hear({ type: "speech-ended", recordingSessionId: id });
@@ -509,7 +516,7 @@ describe("the CVM recorder's adapter", () => {
     adapter.hear(status(null));
     adapter.hear(status(SESSION));
     adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
-    adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
+    adapter.take(SESSION);
     expect(adapter.recorder.getState().phase).toBe("recording");
 
     adapter.hear(status(null));
@@ -522,6 +529,37 @@ describe("the CVM recorder's adapter", () => {
     expect(adapter.recorder.getState().phase).toBe("idle");
   });
 
+  it("shows no Optimistic Clip for an 'um' the recorder never called a Take, and the next take fills its own", () => {
+    const e = editor(["a"]);
+    const adapter = cvmAdapter(e);
+    adapter.hear({
+      type: "recording-started",
+      recordingSessionId: SESSION,
+      silenceLength: "short",
+      micFile: "mic.mkv",
+    });
+    adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
+    // The um: speech, then silence, and no take-started.
+    adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
+    adapter.hear({ type: "speech-ended", recordingSessionId: SESSION });
+    expect(e.clips.getState().items.map((i) => i.type)).toEqual([
+      "on-database",
+    ]);
+    expect(
+      adapter.recorder.getEffects().filter((x) => x.type === "place-take")
+    ).toEqual([]);
+
+    adapter.take(SESSION);
+    expect(e.clips.getState().items.map((i) => i.type)).toEqual([
+      "on-database",
+      "optimistically-added",
+    ]);
+    adapter.willSave("c1");
+    adapter.hear({ type: "speech-ended", recordingSessionId: SESSION });
+    expect(shown(e)).toEqual(["a", "c1"]);
+    expect(e.database()).toEqual(["a", "c1"]);
+  });
+
   it("shows Clips the app server saved without the editor in their take", () => {
     const e = editor(["a"]);
     const adapter = cvmAdapter(e);
@@ -532,7 +570,7 @@ describe("the CVM recorder's adapter", () => {
       micFile: "mic.mkv",
     });
     adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
-    adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
+    adapter.take(SESSION);
     // The editor's answer never arrived: saved after the Video's last item.
     adapter.hear({ type: "speech-ended", recordingSessionId: SESSION });
     adapter.hear({
@@ -564,12 +602,12 @@ describe("the CVM recorder's adapter", () => {
       micFile: "mic.mkv",
     });
     adapter.hear({ type: "warmed-up", recordingSessionId: current });
-    adapter.hear({ type: "speech-started", recordingSessionId: current });
+    adapter.take(current);
     const take = e.clips.getState().items.at(-1)!;
     const before = e.clips.getEffects().length;
 
     adapter.willSave("never");
-    adapter.hear({ type: "speech-started", recordingSessionId: old });
+    adapter.take(old);
     adapter.hear({ type: "speech-ended", recordingSessionId: old });
     adapter.hear({
       type: "clips-saved",
@@ -607,7 +645,7 @@ describe("the CVM recorder's adapter", () => {
 
     // The speech heard before the stop landed is saved where the editor says.
     adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
-    adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
+    adapter.take(SESSION);
     adapter.willSave("c");
     adapter.hear({ type: "speech-ended", recordingSessionId: SESSION });
     adapter.hear(status(null));

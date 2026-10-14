@@ -38,6 +38,39 @@ export const UNCALIBRATED_SILENCE_THRESHOLD: SilenceThreshold = {
 export const MINIMUM_CLIP_LENGTH_SECONDS = 1;
 
 /**
+ * Slack for floating point only: a speech cut to exactly the minimum, then
+ * moved by a mic offset, can come out a hair under it.
+ */
+const CLIP_LENGTH_TOLERANCE_SECONDS = 1e-6;
+
+/**
+ * THE rule for whether speech from `startTime` to `endTime` (seconds, one
+ * clock) is long enough to be a Clip. `speechToClipBounds` cuts with it, and
+ * the CVM recorder's speech detector starts a Take with it
+ * (`takeStartsAt`), so the two can never disagree about a speech.
+ */
+export const isLongEnoughForClip = (
+  startTime: number,
+  endTime: number
+): boolean =>
+  endTime - startTime >=
+  MINIMUM_CLIP_LENGTH_SECONDS - CLIP_LENGTH_TOLERANCE_SECONDS;
+
+/**
+ * The file time from which speech that started at `speechStart` and has not
+ * been reported silent is provably long enough to be a Clip
+ * (`isLongEnoughForClip`): silencedetect reports a silence only once it has
+ * lasted `minSilenceSeconds`, so any silence that started before
+ * `speechStart + MINIMUM_CLIP_LENGTH_SECONDS` would have been reported by
+ * now. The CVM recorder's Take starts here, a Silence Length after the
+ * minimum Clip length.
+ */
+export const takeStartsAt = (
+  speechStart: number,
+  minSilenceSeconds: number
+): number => speechStart + MINIMUM_CLIP_LENGTH_SECONDS + minSilenceSeconds;
+
+/**
  * Seconds of room left at the end of an auto-edited Clip, so a cut does not
  * land on the last syllable.
  *

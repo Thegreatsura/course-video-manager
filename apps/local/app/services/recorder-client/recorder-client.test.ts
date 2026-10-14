@@ -25,6 +25,7 @@ import {
 } from "../clip-service-test-setup";
 import { avCalibrations } from "@/db/schema";
 import { createRecorderClient } from "./client.server";
+
 import {
   clipTimes,
   connectClient,
@@ -118,12 +119,17 @@ describe("the recorder client", () => {
     expect(
       heard
         .map((m) => m.type)
-        .filter((t) => t === "warmed-up" || t.startsWith("speech-"))
+        .filter(
+          (t) =>
+            t === "warmed-up" || t === "take-started" || t.startsWith("speech-")
+        )
     ).toEqual([
       "warmed-up",
       "speech-started",
+      "take-started",
       "speech-ended",
       "speech-started",
+      "take-started",
       "speech-ended",
     ]);
     const session = await testDb.query.recordingSessions.findFirst();

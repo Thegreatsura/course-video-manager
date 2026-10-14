@@ -358,6 +358,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       case "screen-recorder-tuned":
       case "warmed-up":
       case "speech-started":
+      case "take-started":
       case "speech-ended":
       case "camera-lost":
       case "recording-stopped":

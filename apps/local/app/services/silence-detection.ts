@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { FFmpegCommandsService } from "./ffmpeg-commands";
 import {
-  MINIMUM_CLIP_LENGTH_SECONDS,
+  isLongEnoughForClip,
   silenceRule,
   DEFAULT_SILENCE_LENGTH,
   DEFAULT_SILENCE_THRESHOLD_DB,
@@ -17,7 +17,8 @@ export interface SpeechSegment {
 
 /**
  * The one rule for what of some speech becomes a Clip, whichever Recorder
- * found it: speech shorter than the minimum Clip length is dropped, and the
+ * found it: speech shorter than the minimum Clip length is dropped
+ * (`isLongEnoughForClip`, the rule the CVM recorder starts a Take by), and the
  * rest is snapped to the picture's frames, padded at the end so a cut never
  * lands on the last syllable, and rounded to hundredths.
  */
@@ -27,7 +28,7 @@ export function speechToClipBounds(
 ): SpeechSegment[] {
   const endPaddingFrames = Math.round(AUTO_EDITED_END_PADDING_SECONDS * fps);
   return speech
-    .filter((s) => s.endTime - s.startTime >= MINIMUM_CLIP_LENGTH_SECONDS)
+    .filter((s) => isLongEnoughForClip(s.startTime, s.endTime))
     .map((s) => {
       const startFrame = Math.max(0, Math.round(s.startTime * fps));
       const endFrame = Math.round(s.endTime * fps) + endPaddingFrames;
