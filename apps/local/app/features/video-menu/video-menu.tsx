@@ -7,6 +7,7 @@ import type { BeatKind } from "@/features/beats/beat-kinds";
 import { beatKindLeaves } from "@/features/beats/beat-menu-items";
 import {
   BookOpenIcon,
+  Clapperboard,
   ClipboardCopy,
   CodeIcon,
   Combine,
@@ -63,6 +64,8 @@ export interface VideoMenuActions {
   duplicate?: VideoAction;
   addVideoToLesson?: VideoAction;
   createConcatenatedVideo?: VideoAction;
+  /** Creates a Short and opens it, its back button returning here. */
+  newShort?: VideoAction;
   // move
   moveToLesson?: VideoAction;
   moveToCourse?: VideoAction;
@@ -171,6 +174,7 @@ export function videoMenuGroups(a: VideoMenuActions): ActionMenuGroups {
         { label: "Create Concatenated Video", icon: Combine },
         a.createConcatenatedVideo
       ),
+      leaf({ label: "New Short", icon: Clapperboard }, a.newShort),
     ],
     move: [
       leaf(

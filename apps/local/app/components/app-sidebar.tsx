@@ -36,6 +36,7 @@ import {
 import { useEffect, useMemo } from "react";
 import type { appSidebarReducer } from "./app-sidebar-reducer";
 import { useAppSidebarReducer } from "./use-app-sidebar-reducer";
+import { NEW_SHORT_ACTION, newShortFormData } from "@/lib/new-short";
 
 type AppSidebarModal = appSidebarReducer.Modal;
 import {
@@ -219,13 +220,9 @@ export function AppSidebar({ variant }: AppSidebarProps) {
         href="/shorts"
         active={onShortsPath}
         onAdd={() => {
-          const formData = new FormData();
-          formData.set("title", `Short ${new Date().toLocaleDateString()}`);
-          formData.set("format", "short");
-          formData.set("redirectTo", "/videos/{id}/edit");
-          createShortFetcher.submit(formData, {
+          createShortFetcher.submit(newShortFormData(), {
             method: "post",
-            action: "/api/videos/create",
+            action: NEW_SHORT_ACTION,
           });
         }}
         addDisabled={createShortFetcher.state !== "idle"}

@@ -35,4 +35,22 @@ describe("EditorCompactHeader", () => {
 
     expect(html).not.toContain("/videos/v1/animatic");
   });
+
+  it("goes back to the Video a Short was created from, surviving a reload", () => {
+    const html = renderInRouter(
+      <EditorCompactHeader {...props} hasAnimatic={false} />,
+      "/?returnTo=video-1"
+    );
+
+    expect(html).toContain('href="/videos/video-1/edit"');
+    expect(html).not.toContain('href="/courses/c1"');
+  });
+
+  it("goes to its usual back target without one", () => {
+    const html = renderInRouter(
+      <EditorCompactHeader {...props} hasAnimatic={false} />
+    );
+
+    expect(html).toContain('href="/courses/c1"');
+  });
 });
