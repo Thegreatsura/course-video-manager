@@ -23,6 +23,7 @@ import { captureProps } from "@/features/video-editor/recorder-capture";
 import { VideoEditor } from "@/features/video-editor/video-editor";
 import { toClipOverlay } from "@/features/video-editor/clip-overlay-row";
 import { createEditEffectHandlers } from "@/features/video-editor/edit-effect-handlers";
+import { saveClipDiagramPin } from "@/features/video-editor/save-clip-diagram-pin";
 import { useClipTranscriptionJobs } from "@/features/video-editor/use-clip-transcription-jobs";
 import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
@@ -425,6 +426,9 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       onToggleZoomForClip={(clipId) => {
         dispatch({ type: "toggle-zoom-for-clip", clipId });
       }}
+      onEditClipText={(clipId, text) => {
+        dispatch({ type: "clip-text-edited", clipId, text });
+      }}
       onMoveClip={(clipId, direction) => {
         dispatch({ type: "move-clip", clipId, direction });
       }}
@@ -538,20 +542,15 @@ export const ComponentInner = (props: Route.ComponentProps) => {
         diagramSnapshotId,
         diagramName
       ) => {
-        fetch(`/api/clips/${clipDatabaseId}/diagram-pin`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ diagramSnapshotId }),
-        })
-          .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        saveClipDiagramPin(clipDatabaseId, diagramSnapshotId)
+          .then(() =>
             dispatch({
               type: "update-clip-diagram-pin",
               clipId: clipFrontendId,
               diagramSnapshotId,
               diagramName,
-            });
-          })
+            })
+          )
           .catch((error) => {
             console.error("Failed to update diagram pin", error);
           });

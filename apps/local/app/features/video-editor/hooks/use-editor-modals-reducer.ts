@@ -34,6 +34,7 @@ export function useEditorModalsReducer() {
       "copy-video": dismiss("copy-video"),
       "create-video-from-selection": dismiss("create-video-from-selection"),
       "mic-settings": dismiss("mic-settings"),
+      "edit-transcript": dismiss("edit-transcript"),
     };
   }, [dispatch]);
 

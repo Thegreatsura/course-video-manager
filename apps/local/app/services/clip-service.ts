@@ -374,6 +374,11 @@ export interface ClipService {
    */
   updateZoom(clipId: string, zoomType: string): Promise<void>;
   /**
+   * Edit a Clip's text by hand. Its Transcript Words are rewritten to match
+   * in the same write (`writeClipText`).
+   */
+  updateClipText(clipId: string, text: string): Promise<void>;
+  /**
    * Set (or clear, with null) a CVM-recorder Clip's Scene Override. Refused on
    * an OBS Clip. Drops the Clip Zoom when the effective scene is not a camera
    * scene.
@@ -439,6 +444,7 @@ export type ClipServiceEvent =
   | { type: "update-clips"; clips: readonly UpdateClipInput[] }
   | { type: "update-pause"; clipId: string; pauseType: string }
   | { type: "update-zoom"; clipId: string; zoomType: string }
+  | { type: "update-clip-text"; clipId: string; text: string }
   | {
       type: "update-scene-override";
       clipId: string;
@@ -559,6 +565,10 @@ export function createClipService(send: ClipServiceTransport): ClipService {
 
     async updateZoom(clipId, zoomType) {
       await send({ type: "update-zoom", clipId, zoomType });
+    },
+
+    async updateClipText(clipId, text) {
+      await send({ type: "update-clip-text", clipId, text });
     },
 
     async updateSceneOverride(clipId, sceneOverride) {

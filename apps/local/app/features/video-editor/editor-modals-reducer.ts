@@ -15,12 +15,15 @@ export namespace editorModalsReducer {
     | "rename-video"
     | "copy-video"
     | "create-video-from-selection"
-    | "mic-settings";
+    | "mic-settings"
+    | "edit-transcript";
 
   export interface State {
     openModal: Modal | null;
     /** The CVM-recorder Clip the Mic Settings dialog is open on. */
     micSettingsClipId: FrontendId | null;
+    /** The Clip the Edit Transcript dialog is open on. */
+    editTranscriptClipId: FrontendId | null;
     /** What the Suggestions panel last reported, shown under the timeline. */
     suggestion: SuggestionState;
   }
@@ -32,6 +35,7 @@ export namespace editorModalsReducer {
     | { type: "copy-video-clicked" }
     | { type: "create-video-from-selection-clicked" }
     | { type: "mic-settings-clicked"; clipId: FrontendId }
+    | { type: "edit-transcript-clicked"; clipId: FrontendId }
     /** A dialog asked to close (Escape, overlay click, Cancel, or done). */
     | { type: "modal-dismissed"; modal: Modal }
     | { type: "suggestion-changed"; suggestion: SuggestionState };
@@ -45,6 +49,7 @@ export const createInitialEditorModalsState =
   (): editorModalsReducer.State => ({
     openModal: null,
     micSettingsClipId: null,
+    editTranscriptClipId: null,
     suggestion: {
       suggestionText: "",
       isStreaming: false,
@@ -76,6 +81,12 @@ export const editorModalsReducer: EffectReducer<
         openModal: "mic-settings",
         micSettingsClipId: action.clipId,
       };
+    case "edit-transcript-clicked":
+      return {
+        ...state,
+        openModal: "edit-transcript",
+        editTranscriptClipId: action.clipId,
+      };
     case "modal-dismissed":
       // Pasting a file writes it to disk, so the file list refreshes whenever
       // the paste dialog closes, whether or not it is still the open one.
@@ -85,7 +96,12 @@ export const editorModalsReducer: EffectReducer<
       // A late close from a dialog that has already been replaced must not
       // shut the one now on screen.
       if (state.openModal !== action.modal) return state;
-      return { ...state, openModal: null, micSettingsClipId: null };
+      return {
+        ...state,
+        openModal: null,
+        micSettingsClipId: null,
+        editTranscriptClipId: null,
+      };
     case "suggestion-changed":
       return { ...state, suggestion: action.suggestion };
   }

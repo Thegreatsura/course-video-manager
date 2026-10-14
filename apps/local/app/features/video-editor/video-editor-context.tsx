@@ -133,6 +133,8 @@ export type VideoEditorContextType = {
   onMoveClip: (clipId: FrontendId, direction: "up" | "down") => void;
   onTogglePauseForClip: (clipId: FrontendId) => void;
   onToggleZoomForClip: (clipId: FrontendId) => void;
+  /** Save a hand-edited text for a Clip (Edit Transcript, #2184). */
+  onEditClipText: (clipId: FrontendId, text: string) => void;
   onAddChapter: (name: string) => void;
   onUpdateChapter: (chapterId: FrontendId, name: string) => void;
   onAddChapterAt: (
@@ -171,6 +173,8 @@ export type VideoEditorContextType = {
   openModal: editorModalsReducer.Modal | null;
   /** The CVM-recorder Clip the Mic Settings dialog is open on. */
   micSettingsClipId: FrontendId | null;
+  /** The Clip the Edit Transcript dialog is open on. */
+  editTranscriptClipId: FrontendId | null;
   modalDispatch: (action: editorModalsReducer.Action) => void;
   /** Each dialog's `onOpenChange`; stable, so a dialog may list it in an effect. */
   onModalOpenChange: Record<editorModalsReducer.Modal, (open: boolean) => void>;

@@ -45,6 +45,10 @@ export type LogEvent =
       pauseType: string;
     }
   | {
+      type: "clip-text-updated";
+      clipId: string;
+    }
+  | {
       type: "zoom-updated";
       clipId: string;
       zoomType: string;
