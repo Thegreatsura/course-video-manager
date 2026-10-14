@@ -145,7 +145,8 @@ describe.skipIf(!hasFfmpeg)("a preview from the real ffmpeg", () => {
         "2",
         "-map",
         "0:v",
-        ...previewOutput(f.port("camera"), 30),
+        // libx264, the fallback: CI has no GPU.
+        ...previewOutput(f.port("camera"), 30, "x264"),
       ],
       { stdio: "ignore" }
     );

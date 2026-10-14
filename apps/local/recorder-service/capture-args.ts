@@ -30,8 +30,8 @@ import {
  * stamps only anchor it: its audio is timed by sample count (`micOnClock`).
  *
  * PREVIEWS: every process that sees a picture also sends it, full size, as
- * a low-latency H.264 stream to the service (`previewOutput`), which relays
- * it to the browser
+ * a low-latency H.264 stream (NVENC, or libx264 as a fallback) to the
+ * service (`previewOutput`), which relays it to the browser
  * (`preview-feeds.ts`). While the recorder is open but not recording, the
  * camera has a preview-only process of its own (`cameraPreviewArgs`); while
  * recording, the camera + mic process carries the camera preview. The screen
@@ -150,22 +150,52 @@ const teeToFeed = (port: number, format: string, queueSize: number) => [
 ];
 
 /**
- * A preview output: the picture at full size as a low-latency H.264 stream
- * to the service's TCP feed for it (#2192), which relays it to the browser
- * to decode in hardware (`preview-feeds.ts`). Encoded on the CPU with
- * libx264, never NVENC: the recording's encoder budget stays the
- * recording's. ultrafast + zerolatency: no B-frames, no lookahead, each
- * frame out as soon as it is in. A keyframe a second, so a browser that
- * joins late (or loses a packet) is whole within a second. In FLV, whose
- * tags carry their own lengths: the service hands a frame on the moment its
- * last byte is in, with no container to wait on.
- *
- * The fifo may hold a few frames: a dropped packet breaks the picture until
- * the next keyframe, so it drops only when the service has stopped reading.
+ * What encodes a preview stream (#2194): NVENC, or libx264 on the CPU once
+ * NVENC would not open for that feed (`preview-encoders.ts`).
  */
-export const previewOutput = (port: number, gopFrames: number) => [
-  "-fps_mode",
-  "passthrough",
+export type PreviewEncoder = "nvenc" | "x264";
+
+/**
+ * The preview's NVENC encode, tuned for latency: the fastest preset, the
+ * ultra-low-latency tune, no B-frames, no lookahead, no reordering delay, a
+ * keyframe exactly every `gopFrames` (IDR, no scene cuts). High profile and
+ * 4:2:0 whatever comes in (the screen is BGRA), which WebCodecs decodes in
+ * hardware. Constant QP 21 is near-transparent at preview size.
+ */
+const previewNvenc = (gopFrames: number) => [
+  "-c:v",
+  "h264_nvenc",
+  "-preset",
+  "p1",
+  "-tune",
+  "ull",
+  "-zerolatency",
+  "1",
+  "-delay",
+  "0",
+  "-rc-lookahead",
+  "0",
+  "-bf",
+  "0",
+  "-rc",
+  "constqp",
+  "-qp",
+  String(PREVIEW_QP),
+  "-profile:v",
+  "high",
+  "-g",
+  String(gopFrames),
+  "-forced-idr",
+  "1",
+  "-no-scenecut",
+  "1",
+];
+
+/**
+ * The CPU fallback, as #2192 shipped it: libx264 ultrafast + zerolatency,
+ * no B-frames, no lookahead, each frame out as soon as it is in.
+ */
+const previewX264 = (gopFrames: number) => [
   "-c:v",
   "libx264",
   "-preset",
@@ -178,16 +208,41 @@ export const previewOutput = (port: number, gopFrames: number) => [
   "yuv420p",
   "-g",
   String(gopFrames),
+  "-x264-params",
+  `keyint_min=${gopFrames}:scenecut=0:threads=${PREVIEW_THREADS}`,
+];
+
+/**
+ * A preview output: the picture at full size as a low-latency H.264 stream
+ * to the service's TCP feed for it (#2192), which relays it to the browser
+ * to decode in hardware (`preview-feeds.ts`). On NVENC (#2194), with libx264
+ * as the fallback (`PreviewEncoder`). A keyframe a second, so a browser that
+ * joins late (or loses a packet) is whole within a second. In FLV, whose
+ * tags carry their own lengths: the service hands a frame on the moment its
+ * last byte is in, with no container to wait on.
+ *
+ * The fifo may hold a few frames: a dropped packet breaks the picture until
+ * the next keyframe, so it drops only when the service has stopped reading.
+ */
+export const previewOutput = (
+  port: number,
+  gopFrames: number,
+  encoder: PreviewEncoder
+) => [
+  "-fps_mode",
+  "passthrough",
+  ...(encoder === "nvenc" ? previewNvenc(gopFrames) : previewX264(gopFrames)),
   // The tee hides FLV's need for the SPS/PPS up front: ask for them.
   "-flags",
   "+global_header",
-  "-x264-params",
-  `keyint_min=${gopFrames}:scenecut=0:threads=${PREVIEW_THREADS}`,
   ...teeToFeed(port, "flv", 8),
 ];
 
-/** Near-transparent: the preview is not to look any softer than the Footage. */
+/** libx264's quality: near-transparent, the preview is not to look any softer than the Footage. */
 const PREVIEW_CRF = 18;
+
+/** NVENC's: about libx264's CRF 18 at the preview's sizes. */
+const PREVIEW_QP = 21;
 
 /** libx264's threads per preview: enough for 1440p30 or 1080p60 in real time, short of every core. */
 const PREVIEW_THREADS = 4;
@@ -226,10 +281,11 @@ const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 
 /**
  * The camera preview at the size camera.mkv gets (1440p), scaled on the GPU
- * as the recording scales it, then down to the CPU for libx264.
+ * as the recording scales it. NVENC takes the CUDA frame as it is; libx264
+ * needs it down on the CPU.
  */
-const CAMERA_PREVIEW_SCALE =
-  "scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12";
+const cameraPreviewScale = (encoder: PreviewEncoder) =>
+  `scale_cuda=2560:1440:interp_algo=bicubic${encoder === "nvenc" ? "" : ",hwdownload,format=nv12"}`;
 
 /** A keyframe a second at the Cam Link's 29.97 fps. */
 const CAMERA_PREVIEW_GOP = 30;
@@ -296,15 +352,16 @@ export const cameraPreviewArgs = (o: {
   camera: string;
   port: number;
   stillPort: number;
+  encoder: PreviewEncoder;
 }) => [
   ...PREVIEW_HEAD,
   ...camLinkInput(o.camera, RTBUF.preview),
   "-filter_complex",
-  `[0:v]hwupload_cuda,split[p][s];[p]${CAMERA_PREVIEW_SCALE}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
+  `[0:v]hwupload_cuda,split[p][s];[p]${cameraPreviewScale(o.encoder)}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
   "-map",
   "[prev]",
   ...tagged(PREVIEW_TAGS.camera),
-  ...previewOutput(o.port, CAMERA_PREVIEW_GOP),
+  ...previewOutput(o.port, CAMERA_PREVIEW_GOP, o.encoder),
   "-map",
   "[still]",
   ...stillOutput(o.stillPort),
@@ -315,18 +372,31 @@ export const cameraPreviewArgs = (o: {
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
  * without touching the screen recorder. At the screen's own size and 60
  * fps, as the screen is recorded and as OBS previews it: nothing is scaled
- * (#2192).
+ * (#2192). For NVENC (#2194) the frame stays on the GPU, made NV12 there as
+ * the screen recorder makes it: NVENC fed BGRA converts each frame itself
+ * and fell behind 60 fps (41-49 fps, synthetic). libx264 needs it down on
+ * the CPU.
  */
-export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
+/** What the screen preview does to ddagrab's D3D11 BGRA frame before its encoder. */
+export const SCREEN_PREVIEW_CHAIN: Record<PreviewEncoder, string> = {
+  nvenc: "scale_d3d11=format=nv12",
+  x264: "hwdownload,format=bgra",
+};
+
+export const screenPreviewArgs = (o: {
+  screenIndex: number;
+  port: number;
+  encoder: PreviewEncoder;
+}) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=60,hwdownload,format=bgra`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=60,${SCREEN_PREVIEW_CHAIN[o.encoder]}`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),
-  ...previewOutput(o.port, 60),
+  ...previewOutput(o.port, 60, o.encoder),
 ];
 
 /** The camera (input 0) stamped in file time: wall time less T0. */
@@ -456,6 +526,11 @@ export type CaptureOptions = {
   thresholdDb: number;
   /** The service's camera preview feed, which this process also sends to. */
   cameraPreviewPort: number;
+  /**
+   * What encodes that camera preview: the camera feed's encoder, so one that
+   * fell back to libx264 never asks NVENC for a session inside a take.
+   */
+  cameraPreviewEncoder: PreviewEncoder;
 };
 
 export const buildCaptureArgs = (o: CaptureOptions) => {
@@ -500,7 +575,7 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   const cameraGraph = [
     `${cameraOnT0(t0)},hwupload_cuda,split[camr][camp]`,
     `[camr]${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
-    `[camp]${CAMERA_PREVIEW_SCALE}[camprev]`,
+    `[camp]${cameraPreviewScale(o.cameraPreviewEncoder)}[camprev]`,
     `${micOnClock(t0)},asplit=2[mic][sd]`,
     `[sd]${silence},anullsink`,
   ].join(";");
@@ -531,7 +606,11 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     FILE_NAMES.mic,
     "-map",
     "[camprev]",
-    ...previewOutput(o.cameraPreviewPort, CAMERA_PREVIEW_GOP),
+    ...previewOutput(
+      o.cameraPreviewPort,
+      CAMERA_PREVIEW_GOP,
+      o.cameraPreviewEncoder
+    ),
   ];
   return { screen, camera };
 };
