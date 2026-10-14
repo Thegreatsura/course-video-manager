@@ -4,6 +4,7 @@ import { UnknownDBServiceError } from "./db-service-errors.js";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { requireDraftVersionForClip } from "./draft-guard.server.js";
+import { retextTranscriptWords } from "../features/videos/retext-transcript-words.js";
 
 const makeDbCall = <T>(fn: () => Promise<T>) => {
   return Effect.tryPromise({
@@ -57,6 +58,35 @@ export const writeTranscriptWords = (
   });
 
 /**
+ * Edit a Clip's text by hand (#2184), rewriting its Transcript Words in the
+ * same write so they never disagree with it: re-mapped onto the old timings,
+ * or the old span shared out by letter count (`retextTranscriptWords`).
+ * Footage, source times and the Transcription status are never touched.
+ *
+ * A plain function like `writeTranscriptWords`: the caller runs it inside the
+ * transaction that already holds the Clip's Draft guard.
+ */
+export const writeClipText = (db: Database, clipId: string, text: string) =>
+  Effect.gen(function* () {
+    const oldWords = yield* makeDbCall(() =>
+      db.query.clipTranscriptWords.findMany({
+        where: eq(clipTranscriptWords.clipId, clipId),
+        orderBy: [asc(clipTranscriptWords.start), asc(clipTranscriptWords.end)],
+      })
+    );
+    const [clip] = yield* makeDbCall(() =>
+      db.update(clips).set({ text }).where(eq(clips.id, clipId)).returning()
+    );
+    if (!clip) return undefined;
+    yield* writeTranscriptWords(
+      db,
+      clipId,
+      retextTranscriptWords(text, oldWords)
+    );
+    return clip;
+  });
+
+/**
  * Transcript Word read/write operations, merged into `ClipOperationsService`'s
  * single surface by db-clip-operations.server.ts (the same treatment Chapters
  * get) — split into its own module only to stay under the per-file token
@@ -65,7 +95,8 @@ export const writeTranscriptWords = (
  * A Transcript Word is never edited in place: a transcription produces the
  * whole set for a Clip at once, so the only write is
  * `replaceTranscriptWords`, whose result is exactly what a later
- * `listTranscriptWords` returns.
+ * `listTranscriptWords` returns (and `writeClipText`, which rewrites the whole
+ * set to match a hand-edited text).
  */
 export const createTranscriptWordOperationsUnwrapped = (db: Database) => {
   /**

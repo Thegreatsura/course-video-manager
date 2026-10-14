@@ -8,6 +8,7 @@ import { ChapterNamingModal as ChapterNamingModalComponent } from "./chapter-nam
 import { CreateVideoFromSelectionModal } from "./create-video-from-selection-modal";
 import { DeferredVideoFilePasteModal } from "./deferred-fs-panels";
 import { MicSettingsModal } from "./mic-settings-modal";
+import { EditClipTranscriptModal } from "./edit-clip-transcript-modal";
 
 /**
  * Every dialog the editor keeps mounted alongside its panels. They live in one
@@ -72,6 +73,13 @@ export const EditorModals = (props: {
         (ctx.cvmRecorder.micOffsetRefusal?.clipId ?? ctx.micSettingsClipId)
     )
   );
+  const editTranscriptClip = useContextSelector(VideoEditorContext, (ctx) =>
+    ctx.clips.find((c) => c.frontendId === ctx.editTranscriptClipId)
+  );
+  const onEditClipText = useContextSelector(
+    VideoEditorContext,
+    (ctx) => ctx.onEditClipText
+  );
   const onSubmitMicSettings = useContextSelector(
     VideoEditorContext,
     (ctx) => ctx.cvmRecorder.onSubmitMicSettings
@@ -133,6 +141,17 @@ export const EditorModals = (props: {
         onSubmit={(settings) =>
           micSettingsClip &&
           onSubmitMicSettings(micSettingsClip.frontendId, settings)
+        }
+      />
+      <EditClipTranscriptModal
+        open={openModal === "edit-transcript"}
+        onOpenChange={onModalOpenChange["edit-transcript"]}
+        clip={
+          editTranscriptClip?.type === "on-database" ? editTranscriptClip : null
+        }
+        onSubmit={(text) =>
+          editTranscriptClip &&
+          onEditClipText(editTranscriptClip.frontendId, text)
         }
       />
       {props.autofillChaptersModal}

@@ -26,6 +26,7 @@ import {
 } from "./clip-state-reducer-chapters";
 import { DELETED_CLIPS_SESSION_ID } from "./video-editor-selectors";
 import { canZoomClip, type ClipZoomType } from "@/features/videos/clip-zoom";
+import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { handleSetSceneOverride } from "./clip-state-reducer-scene-override";
 import {
@@ -336,6 +337,26 @@ export const clipStateReducer: EffectReducer<
           (item.type === "on-database" || item.type === "optimistically-added")
             ? { ...item, pauseType: newPauseType }
             : item
+        ),
+      };
+    }
+    case "clip-text-edited": {
+      const item = state.items.find((c) => c.frontendId === action.clipId);
+      const text = action.text.trim();
+      // Only a saved Clip has text to edit, and not mid-Transcription: the
+      // Transcription landing would overwrite the edit.
+      if (
+        item?.type !== "on-database" ||
+        isTranscriptionPending(item.transcriptionStatus) ||
+        item.text === text
+      ) {
+        return state;
+      }
+      exec({ type: "update-clip-text", clipId: item.databaseId, text });
+      return {
+        ...state,
+        items: state.items.map((clip) =>
+          clip === item ? { ...item, text } : clip
         ),
       };
     }
