@@ -316,6 +316,58 @@ describe("a storage-move Job", () => {
     expect(moved?.data).toMatchObject({ verified: { files: 1 } });
   });
 
+  it("on resume, trusts a copy it placed while both sizes and mtimes match its proof, and checks any other in full (#2179)", async () => {
+    const jobId = await newJob({ bucketId, kind: "footage", target: e });
+    const runJob = () =>
+      run(
+        storageMoveJobKind.runRaw(
+          { bucketId, kind: "footage", target: e },
+          ctxFor(jobId)
+        )
+      );
+    expect(Exit.isSuccess(await runJob())).toBe(true);
+    // Each placed copy was recorded with its proof: the source's SHA-256.
+    const proofs = (await eventsOf(jobId))
+      .filter((ev) => ev.type === "move-placed")
+      .map((ev) => ev.data as { path: string; sha256: string });
+    expect(proofs.map((p) => p.path).sort()).toEqual(
+      FOOTAGE.map((f) => path.join(e, f)).sort()
+    );
+    for (const p of proofs) {
+      expect(p.sha256).toBe(sha(path.join(d, path.relative(e, p.path))));
+    }
+
+    // One copy can no longer be read (its mtime unchanged): the proof holds,
+    // so it is not read again, and that is the saving. Another changed
+    // behind the Job's back at the same size, its mtime moved: it is
+    // hashed in full, and caught.
+    const unreadable = path.join(e, "raw-footage/take.mkv");
+    fs.chmodSync(unreadable, 0o000);
+    const changed = path.join(e, "raw-footage/s1/camera.mkv");
+    const { atime, mtime } = fs.statSync(changed);
+    const bytes = fs.readFileSync(changed);
+    bytes[0] = bytes[0]! ^ 1;
+    fs.writeFileSync(changed, bytes);
+    fs.utimesSync(changed, atime, new Date(mtime.getTime() + 5000));
+
+    const exit = await runJob();
+    expect(Exit.isFailure(exit)).toBe(true);
+    const result = (await eventsOf(jobId))
+      .filter((ev) => ev.type === STORAGE_MOVED_EVENT)
+      .at(-1)?.data as {
+      verified: { files: number };
+      left: { path: string; message: string }[];
+    };
+    expect(result.verified.files).toBe(FOOTAGE.length - 1);
+    expect(result.left).toEqual([
+      {
+        path: "raw-footage/s1/camera.mkv",
+        message: expect.stringMatching(/different checksum.*never overwritten/),
+      },
+    ]);
+    fs.chmodSync(unreadable, 0o644);
+  });
+
   it("cancelled, removes partial copies, leaves originals, and ends cancelled", async () => {
     // A lost run of this Job left a partial, and recorded it (#2169).
     const own = put(e, `raw-footage/take.mkv${MOVE_PARTIAL_SUFFIX}`, "half");

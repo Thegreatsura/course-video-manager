@@ -4,7 +4,9 @@ import { DrizzleService } from "@/services/drizzle-service.server";
 import { storageRootsConfig } from "@/services/storage-roots";
 import {
   partialRecorder,
+  placementRecorder,
   recordedPartials,
+  recordedPlacements,
   runStorageMove,
 } from "@/packages/storage/move";
 import { STORAGE_MOVED_EVENT } from "@/packages/storage/client";
@@ -63,6 +65,9 @@ export const storageMoveJobKind = defineJobKind({
         // own are ever deleted (#2169).
         const ownPartials = yield* recordedPartials(db, ctx.jobId);
         const recordPartial = partialRecorder(db, ctx.jobId);
+        // Every copy placed is recorded with its proof, so a resumed run
+        // re-checks it by size and mtime, not by reading it again (#2179).
+        const placed = yield* recordedPlacements(db, ctx.jobId);
 
         yield* ctx.emit("stage", { stage: "checking" });
         const result = yield* runStorageMove({
@@ -76,6 +81,8 @@ export const storageMoveJobKind = defineJobKind({
           cancelRequested: () => cancelRequested,
           recordPartial,
           ownPartials,
+          placed,
+          recordPlaced: placementRecorder(db, ctx.jobId),
           onProgress: (p) => {
             percent = p;
           },

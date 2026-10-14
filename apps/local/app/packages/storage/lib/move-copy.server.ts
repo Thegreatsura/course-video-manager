@@ -14,6 +14,7 @@ import {
   type StorageMoveDisk,
 } from "./move-io.server";
 import type { PlannedFile } from "./move-plan.server";
+import type { MovePlacedProof } from "./move-wire";
 import { rootLabel } from "./storage-roots";
 
 /** Copying and verifying one file of a Storage move. */
@@ -91,9 +92,14 @@ export const placeNoReplace = async (partial: string, dest: string) => {
   return "placed" as const;
 };
 
+type Placed = {
+  readonly bytes: number;
+  /** New proof to record; absent when an earlier run's proof held. */
+  readonly proof?: MovePlacedProof;
+};
 export type FileOutcome =
-  | { readonly type: "copied"; readonly bytes: number }
-  | { readonly type: "verified"; readonly bytes: number }
+  | ({ readonly type: "copied" } & Placed)
+  | ({ readonly type: "verified" } & Placed)
   | { readonly type: "left"; readonly message: string };
 
 /** Copy (or check) one file. Throws only Cancelled, Interrupted, DestinationFull or PartialNotRecorded. */
@@ -112,6 +118,8 @@ export const moveOne = async (opts: {
    * (#2169). Throws `PartialNotRecorded` when it could not record it.
    */
   readonly recordPartial: (partial: string) => Promise<void>;
+  /** Copies this Job placed in earlier runs, by their absolute path (#2179). */
+  readonly placed: ReadonlyMap<string, MovePlacedProof>;
 }): Promise<FileOutcome> => {
   const { file, control } = opts;
   const label = rootLabel(opts.target);
@@ -156,6 +164,17 @@ export const moveOne = async (opts: {
         `a different file (${destInfo.size} bytes, not ${size}) is already at ${label}; never overwritten`
       );
     }
+    // This Job placed it, after a full read-back match, and neither file
+    // has changed since: no need to read 2 × its size again (#2179).
+    const proof = opts.placed.get(dest);
+    if (
+      proof !== undefined &&
+      proof.size === size &&
+      proof.sourceMtimeMs === Number(srcInfo.mtimeMs) &&
+      proof.destMtimeMs === Number(destInfo.mtimeMs)
+    ) {
+      return { type: "verified", bytes: size };
+    }
     // A lost run's copy, or one made by hand: kept only if it is identical.
     const [a, b] = [
       await hashFile(src, control, opts.onBytes),
@@ -167,7 +186,17 @@ export const moveOne = async (opts: {
       );
     }
     await removePartial(partial);
-    return { type: "verified", bytes: size };
+    return {
+      type: "verified",
+      bytes: size,
+      proof: {
+        path: dest,
+        size,
+        sourceMtimeMs: Number(srcInfo.mtimeMs),
+        destMtimeMs: Number(destInfo.mtimeMs),
+        sha256: a,
+      },
+    };
   }
 
   await nodeFs.mkdir(path.dirname(dest), { recursive: true });
@@ -207,15 +236,30 @@ export const moveOne = async (opts: {
   await opts.recordPartial(partial);
   const out = await nodeFs.open(partial, offset > 0 ? "r+" : "wx");
   const input = await nodeFs.open(src, "r");
+  // Read-ahead (#2179): the next chunk is read from the source while this one
+  // is written to the target, so the two drives work at once. Two buffers:
+  // one is never read into while its write is still in flight.
+  const buffers = [
+    Buffer.allocUnsafe(CHUNK_BYTES),
+    Buffer.allocUnsafe(CHUNK_BYTES),
+  ];
+  const readAt = (i: number, at: number) => {
+    const read = input.read(buffers[i]!, 0, CHUNK_BYTES, at);
+    read.catch(() => undefined); // awaited below, or abandoned on a throw
+    return read;
+  };
+  let current = 0;
+  let reading = readAt(current, 0);
   try {
-    const buffer = Buffer.allocUnsafe(CHUNK_BYTES);
     let position = 0;
     for (;;) {
       checkpoint(control);
-      const { bytesRead } = await input.read(buffer, 0, CHUNK_BYTES, position);
+      const { bytesRead } = await reading;
       if (bytesRead === 0) break;
-      const chunk = buffer.subarray(0, bytesRead);
+      const chunk = buffers[current]!.subarray(0, bytesRead);
       sourceHash.update(chunk);
+      current = 1 - current;
+      reading = readAt(current, position + bytesRead);
       if (position + bytesRead > offset) {
         // Only the part past what the lost run already wrote.
         const skip = Math.max(0, offset - position);
@@ -239,13 +283,15 @@ export const moveOne = async (opts: {
     }
     throw error;
   } finally {
+    await reading.catch(() => undefined);
     await out.close().catch(() => undefined);
     await input.close().catch(() => undefined);
   }
 
   // Verify: what is on the target, read back, against the original.
   const copiedHash = await hashFile(partial, control, () => undefined);
-  if (copiedHash !== sourceHash.digest("hex")) {
+  const sha256 = sourceHash.digest("hex");
+  if (copiedHash !== sha256) {
     await removePartial(partial);
     return left(
       `checksum mismatch: the copy on ${label} did not match the original, so it was removed; the original is untouched`
@@ -275,5 +321,15 @@ export const moveOne = async (opts: {
       `the copy at ${label} is ${placed?.size ?? "missing"} bytes, not ${size}`
     );
   }
-  return { type: "copied", bytes: size };
+  return {
+    type: "copied",
+    bytes: size,
+    proof: {
+      path: dest,
+      size,
+      sourceMtimeMs: Number(srcInfo.mtimeMs),
+      destMtimeMs: Number(placed.mtimeMs),
+      sha256,
+    },
+  };
 };

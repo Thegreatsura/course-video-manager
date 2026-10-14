@@ -24,3 +24,7 @@ export {
   sweepEndedMovePartials,
   type PartialsRemoved,
 } from "./lib/move-partials.server";
+export {
+  placementRecorder,
+  recordedPlacements,
+} from "./lib/move-placed.server";

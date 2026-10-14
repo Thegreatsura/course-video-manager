@@ -121,6 +121,20 @@ export const STORAGE_MOVED_EVENT = "storage-moved";
 export const MOVE_PARTIAL_EVENT = "move-partial";
 /** Every partial the Job recorded is gone, `{ files, bytes }` (#2169). */
 export const MOVE_PARTIALS_SWEPT_EVENT = "move-partials-swept";
+/**
+ * A copy the Job placed (or verified by checksum) at its real name, with its
+ * proof (#2179): a resumed run trusts it while both sizes and mtimes match.
+ */
+export const MOVE_PLACED_EVENT = "move-placed";
+export type MovePlacedProof = {
+  /** The copy's absolute path on the target. */
+  readonly path: string;
+  readonly size: number;
+  readonly sourceMtimeMs: number;
+  readonly destMtimeMs: number;
+  /** SHA-256 of the source, which the copy's read-back matched. */
+  readonly sha256: string;
+};
 
 /**
  * What a whole-bucket move moves: "AI Coding Crash Course Footage", "Clip
