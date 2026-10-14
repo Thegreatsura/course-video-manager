@@ -1,4 +1,5 @@
 import path from "node:path";
+import { MOVE_PARTIAL_SUFFIX } from "./move-wire";
 import { rootRelativePath, STORAGE_FOLDERS } from "./storage-roots";
 
 /**
@@ -18,7 +19,8 @@ export type StorageBucketKind =
   | "clip-mockups"
   | "overlay-render-cache"
   | "export-scratch"
-  | "orphaned-exports";
+  | "orphaned-exports"
+  | "move-partials";
 
 export type StorageBucket = {
   readonly id: string;
@@ -45,7 +47,8 @@ export type StorageFileRole =
   | "export-companion"
   | "clip-mockup"
   | "overlay-render"
-  | "export-scratch";
+  | "export-scratch"
+  | "move-partial";
 
 export const STANDALONE_VIDEOS_BUCKET: StorageBucket = {
   id: "standalone-videos",
@@ -76,6 +79,16 @@ export const EXPORT_SCRATCH_BUCKET: StorageBucket = {
   id: "export-scratch",
   kind: "export-scratch",
   name: "Export scratch",
+};
+/**
+ * A Storage move's `.cvm-move-partial` copies (#2169): counted on their own,
+ * never as Footage, so wasted space shows. The Sidecar removes each once the
+ * move that made it has ended; the page never deletes or moves them.
+ */
+export const MOVE_PARTIALS_BUCKET: StorageBucket = {
+  id: "move-partials",
+  kind: "move-partials",
+  name: "Unfinished move copies",
 };
 export const ORPHANED_EXPORTS_BUCKET: StorageBucket = {
   id: "orphaned-exports",
@@ -233,6 +246,7 @@ export const assignStorageBuckets = (
       OVERLAY_RENDER_CACHE_BUCKET,
       EXPORT_SCRATCH_BUCKET,
       ORPHANED_EXPORTS_BUCKET,
+      MOVE_PARTIALS_BUCKET,
     ],
     footage,
     exports,
@@ -282,6 +296,12 @@ export type StorageFileClass = {
   readonly companionOf: string | null;
 };
 
+/** The folders a Storage move writes partial copies into. */
+const isMoveFolder = (folder: string) =>
+  folder === STORAGE_FOLDERS.rawFootage ||
+  folder === STORAGE_FOLDERS.finishedVideos ||
+  folder === STORAGE_FOLDERS.clipMockups;
+
 /**
  * Which bucket a file under a Storage Root is counted in, and as what.
  * `relative` is root-relative (`raw-footage/a.mkv`). Null for a file outside
@@ -292,6 +312,14 @@ export const classifyStorageFile = (
   relative: string
 ): StorageFileClass | null => {
   const folder = relative.split("/")[0] ?? "";
+  if (relative.endsWith(MOVE_PARTIAL_SUFFIX) && isMoveFolder(folder)) {
+    return {
+      bucketId: MOVE_PARTIALS_BUCKET.id,
+      kind: "other",
+      role: "move-partial",
+      companionOf: null,
+    };
+  }
   switch (folder) {
     case STORAGE_FOLDERS.rawFootage: {
       const owner = footageOwner(ownership, relative);

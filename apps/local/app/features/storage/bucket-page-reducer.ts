@@ -172,6 +172,7 @@ const moveKindOf = (file: StorageBucketFile): StorageMoveKind | null => {
     case "export-companion":
     case "overlay-render":
     case "export-scratch":
+    case "move-partial":
       return null;
   }
 };

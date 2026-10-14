@@ -2,7 +2,6 @@ import nodeFs from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
-import { assertUnder } from "@/services/assert-under";
 import type { StorageMoveKind, StorageMoveResult } from "./move-wire";
 import {
   gb,
@@ -16,13 +15,14 @@ import {
   type StorageMoveDisk,
 } from "./move-io.server";
 import { FOLDER_OF, gather } from "./move-plan.server";
+import { removeOwnPartials } from "./move-partials.server";
 import {
   Cancelled,
   checkpoint,
   DestinationFull,
   Interrupted,
   moveOne,
-  removePartial,
+  PartialNotRecorded,
   type Control,
   type FileOutcome,
 } from "./move-copy.server";
@@ -55,8 +55,13 @@ export { startStorageMove } from "./move-start.server";
  *   symlinked folder), and every file path to stay inside it.
  * - No database row and no Export Hash changes: paths are root-relative
  *   (ADR 0040), so the copy is found as soon as the original goes.
- * - Cancel removes the partials (this run's and any a lost run left) and
- *   leaves every original and every verified copy alone.
+ * - Every partial is RECORDED by the Job (a `move-partial` Job Event) before
+ *   it is created, and only recorded partials are ever deleted (#2169). Every
+ *   end but an interruption (Cancel, a full drive, a refusal, a failure,
+ *   success with files left) removes the Job's partials; an interruption keeps
+ *   them for the next run to resume, and once the Job has ended for good the
+ *   Sidecar's sweep (`sweepEndedMovePartials`) removes whatever is left.
+ * - Cancel leaves every original and every verified copy alone.
  */
 
 /**
@@ -79,6 +84,13 @@ export const runStorageMove = (opts: {
   readonly cancelRequested: () => boolean;
   readonly onProgress?: (percent: number) => void;
   readonly disk?: StorageMoveDisk;
+  /**
+   * Record a partial's path before it is made (#2169); rejects when it could
+   * not, and the move stops. Absent (tests of the copy alone): kept in memory.
+   */
+  readonly recordPartial?: (partial: string) => Promise<void>;
+  /** Partials this Job recorded in earlier runs: its own to resume or remove. */
+  readonly ownPartials?: readonly string[];
 }): Effect.Effect<
   StorageMoveResult,
   StorageMoveRefusedError | StorageMoveFailedError | StorageMoveCancelledError
@@ -92,21 +104,31 @@ export const runStorageMove = (opts: {
     });
     const folder = FOLDER_OF[opts.kind];
     const targetFolder = path.join(opts.target, folder);
-    const partialsOf = () =>
-      files
-        .filter((f) => f.state === "copy")
-        .map((f) => `${path.join(opts.target, f.path)}${MOVE_PARTIAL_SUFFIX}`);
-    const sweepPartials = async () => {
-      for (const partial of partialsOf()) {
-        try {
-          await removePartial(assertUnder(targetFolder, partial));
-        } catch {
-          // Outside the target's folder: never touched.
-        }
+    // The partials this Job made, in any of its runs: the only ones it may
+    // delete. Never a pattern match over the drive.
+    const own = new Set(
+      (opts.ownPartials ?? []).filter((p) => p.endsWith(MOVE_PARTIAL_SUFFIX))
+    );
+    const recordPartial = async (partial: string) => {
+      if (own.has(partial)) return;
+      try {
+        await opts.recordPartial?.(partial);
+      } catch (error) {
+        throw new PartialNotRecorded(
+          `could not record the partial copy ${partial} before making it (${messageOf(error)})`
+        );
       }
+      own.add(partial);
     };
+    const sweepPartials = () =>
+      removeOwnPartials({ partials: [...own], target: opts.target, folder });
 
     if (plan.refusals.length > 0) {
+      yield* Effect.tryPromise({
+        try: sweepPartials,
+        catch: (cause) =>
+          new StorageMoveFailedError({ message: messageOf(cause) }),
+      }).pipe(Effect.ignore);
       return yield* new StorageMoveRefusedError({
         refusals: plan.refusals,
         message: `Not moved: ${plan.refusals.map((r) => r.message).join("; ")}`,
@@ -168,20 +190,27 @@ export const runStorageMove = (opts: {
                 disk,
                 control,
                 onBytes,
+                recordPartial,
               });
             } catch (error) {
               if (
                 error instanceof Cancelled ||
                 error instanceof Interrupted ||
-                error instanceof DestinationFull
+                error instanceof DestinationFull ||
+                error instanceof PartialNotRecorded
               ) {
                 throw error;
               }
               // A read or write error on this file (E: retrying I/O, say):
               // its partial goes, its original stays, the rest carry on.
-              await removePartial(
-                `${path.join(opts.target, file.path)}${MOVE_PARTIAL_SUFFIX}`
-              ).catch(() => undefined);
+              const partial = `${path.join(opts.target, file.path)}${MOVE_PARTIAL_SUFFIX}`;
+              if (own.has(partial)) {
+                await removeOwnPartials({
+                  partials: [partial],
+                  target: opts.target,
+                  folder,
+                });
+              }
               outcome = { type: "left", message: messageOf(error) };
             }
             done = before + file.bytes;
@@ -213,8 +242,13 @@ export const runStorageMove = (opts: {
               message: `${error.message}. ${copied.files} files were copied and verified; partial copies were removed and every original is untouched`,
             });
           }
+          // Any other end: the run is over, and so are its partials.
+          await sweepPartials();
           throw error;
         }
+        // Every file placed, verified or left: a partial still here (a lost
+        // run's, for a file now gone or in conflict) has nothing to resume.
+        await sweepPartials();
         opts.onProgress?.(100);
         return {
           bucketId: plan.bucketId,

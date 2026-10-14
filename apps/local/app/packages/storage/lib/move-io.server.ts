@@ -5,8 +5,7 @@ import type { StorageMoveRefusal } from "./move-wire";
 
 /** The disk, the errors and the small file helpers a Storage move shares. */
 
-/** A copy in progress; never a file anything reads. */
-export const MOVE_PARTIAL_SUFFIX = ".cvm-move-partial";
+export { MOVE_PARTIAL_SUFFIX } from "./move-wire";
 
 export const CHUNK_BYTES = 8 * 1024 * 1024;
 

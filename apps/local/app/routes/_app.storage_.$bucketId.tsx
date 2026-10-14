@@ -61,6 +61,7 @@ const ROLE_LABELS: Record<StorageFileRole, string> = {
   "clip-mockup": "Clip Mockup",
   "overlay-render": "Overlay render",
   "export-scratch": "Export scratch",
+  "move-partial": "Unfinished move copy",
 };
 
 /**

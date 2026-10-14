@@ -67,6 +67,8 @@ export {
   type StorageOriginalsResult,
 } from "./lib/originals-wire";
 export {
+  MOVE_PARTIAL_EVENT,
+  MOVE_PARTIALS_SWEPT_EVENT,
   STORAGE_MOVED_EVENT,
   STORAGE_MOVE_JOB_KIND,
   STORAGE_MOVE_KINDS,
