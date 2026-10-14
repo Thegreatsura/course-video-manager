@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { repairFiles } from "./footage-repair";
 import { stopTagged } from "./camera";
-import { METER_TAG, PREVIEW_TAGS } from "./capture-args";
+import { CAPTURE_TAG, METER_TAG, PREVIEW_TAGS } from "./capture-args";
 import type { Launcher } from "./launcher";
 import type { RecordingSessionEvent } from "./protocol";
 import { recorderTag } from "./recording-session";
@@ -77,12 +77,13 @@ export const recoverCrashedSessions = async (o: {
   });
 
   // A service that died leaves its ffmpeg.exe processes running on Windows:
-  // previews holding the Cam Link, a level meter holding the mic, recorders holding their files. None can
+  // the camera capture holding the Cam Link and the mic, previews, a level meter holding the mic, recorders holding their files. None can
   // be asked to finish, so they are stopped, and the files repaired like any
   // other cut off.
   await stopTagged(o.launch, [
     PREVIEW_TAGS.camera,
     PREVIEW_TAGS.screen,
+    CAPTURE_TAG,
     METER_TAG,
     ...cutOff.map((s) => recorderTag(s.recordingSessionId)),
   ]);

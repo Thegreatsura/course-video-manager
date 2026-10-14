@@ -31,10 +31,8 @@ import {
   type RecordingSessionEvent,
   type StreamDeckPress,
 } from "./protocol";
-import {
-  startRecordingSession,
-  type RecordingSession,
-} from "./recording-session";
+import type { RecordingSession, TakeSettings } from "./recording-session";
+import { createTakeArming } from "./take-arming";
 import { checkFfmpeg, checkNvidiaDriver } from "./windows-devices";
 import { Refusal } from "./refusal";
 import { RECORDER_CAMERA_NAME } from "../app/av-calibration-constants";
@@ -56,10 +54,11 @@ import { createPreviewEncoders } from "./preview-encoders";
  * Commands are handled one at a time, in the order they arrive, so a `stop`
  * can never overtake the `record` it stops.
  *
- * It holds the Cam Link only while the recorder is open for a Video: opening
- * opens it (`camera.ts`) and the screen preview; Record is refused until the
- * camera is live; Record hands the Cam Link from the preview process to the
- * recording, and the end of the recording hands it back; closing lets it go.
+ * It holds the Cam Link and the mic only while the recorder is open for a
+ * Video, in the camera capture (`camera.ts`); Record is refused until it is
+ * live. Record and Stop never reopen a device or touch a preview (#2207):
+ * the next take's writer is armed once the editor says what it records with
+ * (`prepare-record`, `take-arming.ts`), and Record tells it T0.
  *
  * The screen depends on the Video's format. Landscape records the DELL,
  * checked at Record. A Short records the Spacedesk virtual display: opening
@@ -164,17 +163,45 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const devices = createRecordingDevices(o.launch);
   const findCamera = devices.findCamera;
 
-  /** Opens the Cam Link for the open recorder; its status goes in the state. */
+  /** What the next take records with, if the recorder can arm it now. */
+  const wantedTake = (): TakeSettings | undefined => {
+    const capture = camera?.capture();
+    if (
+      state.kind !== "open" ||
+      session ||
+      !capture ||
+      recordWith?.videoId !== state.videoId ||
+      !recordWith.calibration
+    )
+      return undefined;
+    return {
+      folder: recordWith.folder,
+      silenceLength: recordWith.silenceLength,
+      thresholdDb: recordWith.calibration.thresholdDb,
+      relayPort: capture.writerRelay,
+    };
+  };
+
+  const arming = createTakeArming({
+    launch: o.launch,
+    now: o.now,
+    wanted: wantedTake,
+  });
+  const rearm = arming.rearm;
+
+  /** Opens the Cam Link and the mic for the open recorder; its status goes in the state. */
   const startCamera = (): CameraStatus => {
     camera = openCamera({
       launch: o.launch,
       feeds,
       encoders,
-      findCamera,
+      findDevices: devices.findPair,
       startTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
       previewStallMs: o.previewStallMs,
+      recording: () => session !== undefined,
       onStatus: (status) => {
         if (state.kind === "open") setState({ ...state, camera: status });
+        rearm();
       },
     });
     return camera.status();
@@ -183,7 +210,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
   const releaseCamera = async () => {
     const released = camera;
     camera = undefined;
-    await released?.release();
+    await Promise.all([arming.disarm(), released?.release()]);
   };
 
   const meter = createMeterSide<WebSocket>({
@@ -230,7 +257,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
 
   const screenStatus = () => (state.kind === "closed" ? null : state.screen);
 
-  /** Open again after a Recording Session, with the camera back in the preview. */
+  /** Open again after a Recording Session, the next take armed. */
   const reopen = (videoId: string) => {
     if (state.kind === "closed") return;
     setState({
@@ -239,8 +266,9 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       format: state.format,
       scene,
       screen: state.screen,
-      camera: startCamera(),
+      camera: camera?.status() ?? startCamera(),
     });
+    rearm();
   };
 
   const record = async (
@@ -258,43 +286,41 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       );
     }
     const startedMs = Date.now();
-    const { camera, mic, calibration, fromCache } = await devices.forRecord(
-      command.calibration,
-      o.now
-    );
+    const capture = camera?.capture();
+    if (!capture) throw new Refusal("The camera is not live yet.");
+    const {
+      camera: cameraName,
+      mic,
+      calibration,
+      fromCache,
+    } = await devices.forRecord(command.calibration, o.now);
+    if (cameraName !== capture.devices.camera || mic !== capture.devices.mic)
+      throw new Refusal(
+        `The recorder opened ${capture.devices.camera} and ${capture.devices.mic}, but the devices now listed are ${cameraName} and ${mic}: close the recorder and open it again.`
+      );
     const devicesMs = Date.now();
     const { videoId, format } = state;
-    // Refuses at once what it knows without a lookup, before the Cam Link
-    // is let go; the lookup itself runs while the preview hands it over.
-    const screenLookup = screenSide.recordIndex(format, state.screen, scene);
-    // The Cam Link opens in one process at a time: the recording's takes it
-    // over from the preview, and hands it back when it ends.
-    const [screen, handedOver] = await Promise.allSettled([
-      screenLookup,
-      releaseCamera(),
-    ]);
-    if (screen.status === "rejected" || handedOver.status === "rejected") {
-      reopen(videoId);
-      throw screen.status === "rejected"
-        ? screen.reason
-        : (handedOver as PromiseRejectedResult).reason;
-    }
-    const screenIndex = screen.value;
-    const handedOverMs = Date.now();
+    const screenIndex = await screenSide.recordIndex(
+      format,
+      state.screen,
+      scene
+    );
+    const screenMs = Date.now();
+    const wasArmed = arming.isArmed();
+    const take = await arming.takeFor({
+      folder: command.folder,
+      silenceLength: command.silenceLength,
+      thresholdDb: calibration.thresholdDb,
+      relayPort: capture.writerRelay,
+    });
+    const armedMs = Date.now();
     try {
-      session = startRecordingSession({
-        launch: o.launch,
-        now: o.now,
+      session = take.begin({
         videoId,
-        folder: command.folder,
-        silenceLength: command.silenceLength,
-        thresholdDb: calibration.thresholdDb,
         avCalibrationId: calibration.id,
-        camera,
-        mic,
+        capture,
         screenIndex,
         format,
-        cameraPreviewPort: feeds.port("camera"),
         cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
@@ -318,7 +344,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
       console.error("recorder: could not index the Recording Session", e);
     }
     console.log(
-      `recorder: Record took ${Date.now() - startedMs} ms to T0 (devices ${devicesMs - startedMs} ms${fromCache ? ", cached" : ""}, screen + camera hand-off ${handedOverMs - devicesMs} ms, start ${Date.now() - handedOverMs} ms)`
+      `recorder: Record took ${armedMs - startedMs} ms to T0 (devices ${devicesMs - startedMs} ms${fromCache ? ", cached" : ""}, screen ${screenMs - devicesMs} ms, writer ${armedMs - screenMs} ms, ${wasArmed && armedMs - screenMs < 5 ? "armed" : "armed at Record"}); no device reopened, preview untouched`
     );
     setState({
       kind: "recording",
@@ -394,9 +420,12 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         const format = command.format ?? "landscape";
         const screen = format === "short" ? { kind: "waking" as const } : null;
         if (state.kind === "open") {
-          if (state.format === format)
-            return setState({ ...state, videoId: command.videoId });
+          if (state.format === format) {
+            setState({ ...state, videoId: command.videoId });
+            return rearm();
+          }
           setState({ ...state, videoId: command.videoId, format, screen });
+          rearm();
           return void screenSide.restart();
         }
         setState({
@@ -437,7 +466,7 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         return session.stop();
       case "prepare-record":
         recordWith = command;
-        return;
+        return rearm();
       case "stream-deck":
         // Whatever the reason, the press does nothing; every client hears why.
         return press(ws, command.press).catch((e: unknown) => {

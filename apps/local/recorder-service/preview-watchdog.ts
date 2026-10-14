@@ -5,14 +5,14 @@ import { PREVIEW_STALL_MS } from "./protocol";
  * THE PREVIEW WATCHDOG (#2192). A preview ffmpeg.exe can stall while still
  * running (a Short's screen preview stopped sending at 75 s and only a
  * restart of `pnpm dev` brought it back), and the browser kept showing its
- * last frame. So each preview-only process is watched: no frame for
+ * last frame. So each preview process is watched: no frame for
  * `PREVIEW_STALL_MS` (a longer wait for its first) and it is stalled, and
  * its owner restarts it. Its stderr goes into the service's log (a preview
  * logs warnings and errors only), a few lines a minute at most.
  *
- * Only preview-only processes are watched. The camera preview a recording
- * carries is never restarted: the recording's own watch (camera-lost) is
- * what answers for that process.
+ * A preview process holds no device and writes no Footage (#2207), so
+ * restarting one never touches a take. The camera's owner restarts the
+ * camera capture too only while no take runs (`camera.ts`).
  */
 
 /** A new preview gets this long for its first frame (ddagrab, a 4K dshow open, x264). */

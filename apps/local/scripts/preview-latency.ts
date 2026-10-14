@@ -14,16 +14,19 @@
  * the editor's composite does, reading the time back each animation frame:
  * latency = when a frame is first drawn less the time burned into it.
  *
- *   camera     the Cam Link's preview-only process (`cameraPreviewArgs`), 4K NV12 in
+ *   camera     the camera capture (`cameraCaptureArgs`, 4K NV12 in) and its
+ *              preview process (`cameraPreviewArgs`), with no take
  *   camera-cpu the camera preview's encode at its size (1440p, 29.97 fps)
  *              without the CUDA scale: the camera's cost with no GPU
  *   screen     the screen preview process (`screenPreviewArgs`), the
  *              DELL's 1080p BGRA in at 60 fps, previewed unscaled
  *   screen-square  the same for a Short's 1080x1080 Spacedesk display
  *              (ADR 0043)
- *   recording  the camera + mic process of a Recording Session
- *              (`buildCaptureArgs`), which writes its camera.mkv and mic.mkv
- *              to a temporary folder, deleted after
+ *   recording  the same, with a take's armed writer (`cameraWriterArgs`)
+ *              started (`takeStartCommand`) as measuring starts: it writes
+ *              camera.mkv and mic.mkv to a temporary folder, deleted after.
+ *              The preview is the same process either way (#2207), so this
+ *              should read as `camera` does
  *   floor      a 640x360 source straight to the preview output: what any
  *              frame costs (the pipe in, encode, tee, TCP, browser), for
  *              reading the others against
@@ -37,14 +40,19 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
+import { pickRelays } from "../recorder-service/camera";
 import {
-  buildCaptureArgs,
+  cameraCaptureArgs,
   cameraPreviewArgs,
   previewOutput,
   screenPreviewArgs,
   SCREEN_PREVIEW_CHAIN,
   type PreviewEncoder,
 } from "../recorder-service/capture-args";
+import {
+  cameraWriterArgs,
+  takeStartCommand,
+} from "../recorder-service/take-args";
 import { startPreviewFeeds } from "../recorder-service/preview-feeds";
 import { findFfmpegExe } from "../recorder-service/windows-launcher";
 
@@ -134,6 +142,9 @@ const CAMERA_RATE = "30000/1001";
 const TO_4K =
   "format=nv12,hwupload_cuda,scale_cuda=3840:2160:interp_algo=nearest,hwdownload,format=nv12";
 
+/** The piped source made the Cam Link's 4K on the GPU, for a graph that uploads it anyway. */
+const ON_GPU_4K = "scale_cuda=3840:2160:interp_algo=nearest";
+
 const SYNTH_MIC =
   "sine=f=440:sample_rate=48000:samples_per_frame=960,arealtime,aformat=channel_layouts=stereo";
 
@@ -162,8 +173,15 @@ const withoutDevices = (argv: readonly string[]) => {
       continue;
     }
     if (argv[i - 1] === "-filter_complex") {
+      // A graph that uploads the Cam Link's frame gets the source's 4K
+      // there, on the GPU: one upload, as the real device's frame has.
       out.push(
-        `[0:v]${TO_4K}[synth];` + argv[i]!.replaceAll("[0:v]", "[synth]")
+        argv[i]!.includes("[0:v]hwupload_cuda,")
+          ? argv[i]!.replace(
+              "[0:v]hwupload_cuda,",
+              `[0:v]format=nv12,hwupload_cuda,${ON_GPU_4K},`
+            )
+          : `[0:v]${TO_4K}[synth];` + argv[i]!.replaceAll("[0:v]", "[synth]")
       );
       continue;
     }
@@ -172,11 +190,42 @@ const withoutDevices = (argv: readonly string[]) => {
   return out;
 };
 
-const ffmpegArgs = (
+/**
+ * The ffmpeg.exe processes of a scenario, consumers first (they listen for
+ * the capture's relays); the one reading `pipe:0` gets the synthetic source.
+ * `writer`: the index of a take's armed writer, started once measuring does.
+ */
+const ffmpegProcesses = (
   scenario: Scenario,
   port: number,
-  stillPort: number,
-  t0Ms: number
+  stillPort: number
+): { processes: string[][]; writer?: number } => {
+  if (scenario === "camera" || scenario === "recording") {
+    const relays = pickRelays();
+    const preview = cameraPreviewArgs({
+      relayPort: relays.preview,
+      port,
+      stillPort,
+      encoder,
+    });
+    const capture = withoutDevices(
+      cameraCaptureArgs({ camera: "synthetic", mic: "synthetic", relays })
+    );
+    if (scenario === "camera") return { processes: [preview, capture] };
+    const writer = cameraWriterArgs({
+      relayPort: relays.writer,
+      tag: "cvm-preview-latency",
+      silenceLength: "short",
+      thresholdDb: -40,
+    });
+    return { processes: [preview, writer, capture], writer: 1 };
+  }
+  return { processes: [ffmpegArgs(scenario, port)] };
+};
+
+const ffmpegArgs = (
+  scenario: Exclude<Scenario, "camera" | "recording">,
+  port: number
 ): string[] => {
   switch (scenario) {
     case "floor":
@@ -203,10 +252,6 @@ const ffmpegArgs = (
         "0:v",
         ...previewOutput(port, 30, encoder),
       ];
-    case "camera":
-      return withoutDevices(
-        cameraPreviewArgs({ camera: "synthetic", port, stillPort, encoder })
-      );
     case "screen":
     case "screen-square": {
       // ddagrab's lavfi input becomes the pipe, stretched to the screen's
@@ -231,19 +276,6 @@ const ffmpegArgs = (
         ...argv.slice(at + 1),
       ];
     }
-    case "recording":
-      return withoutDevices(
-        buildCaptureArgs({
-          t0Ms,
-          tag: "cvm-preview-latency",
-          screenIndex: null,
-          camera: "synthetic",
-          mic: "synthetic",
-          silenceLength: "short",
-          thresholdDb: -40,
-          cameraPreviewPort: port,
-        }).camera
-      );
   }
 };
 
@@ -327,18 +359,25 @@ const measure = async (scenario: Scenario) => {
   const httpPort = (server.address() as { port: number }).port;
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preview-latency-"));
-  const ff = spawn(
-    exe,
-    ffmpegArgs(scenario, feeds.port(feed), feeds.port("still"), Date.now()),
-    { cwd: dir, stdio: ["pipe", "ignore", "pipe"] }
+  const { processes, writer } = ffmpegProcesses(
+    scenario,
+    feeds.port(feed),
+    feeds.port("still")
   );
   let log = "";
-  ff.stderr.on(
-    "data",
-    (d: Buffer) => (log = (log + d.toString()).slice(-4000))
+  const ffs = processes.map((argv) => {
+    const p = spawn(exe, argv, { cwd: dir, stdio: ["pipe", "ignore", "pipe"] });
+    p.stderr.on(
+      "data",
+      (d: Buffer) => (log = (log + d.toString()).slice(-4000))
+    );
+    p.stdin.on("error", () => {});
+    return p;
+  });
+  const ff = ffs[processes.findIndex((a) => a.includes("pipe:0"))]!;
+  const ffClosed = Promise.all(
+    ffs.map((p) => new Promise<void>((r) => p.once("close", () => r())))
   );
-  ff.stdin.on("error", () => {});
-  const ffClosed = new Promise<void>((r) => ff.once("close", () => r()));
   const source = spawn(
     "ffmpeg",
     sourceArgs(isScreen(scenario) ? "60" : CAMERA_RATE),
@@ -361,6 +400,10 @@ const measure = async (scenario: Scenario) => {
     await tab.evaluate(() => {
       (window as unknown as { __latencies: number[] }).__latencies = [];
     });
+    // A take starts as measuring does: T0 now, on the WSL clock (as
+    // Windows' would be, give or take).
+    if (writer !== undefined)
+      ffs[writer]!.stdin.write(takeStartCommand(Date.now()));
     measuring = true;
     await new Promise((r) => setTimeout(r, seconds * 1000));
     measuring = false;
@@ -376,9 +419,11 @@ const measure = async (scenario: Scenario) => {
   } finally {
     unsubscribe();
     await browser.close();
-    // The source ending ends ffmpeg.exe's input, and so ffmpeg.exe.
+    // The source ending ends the capture's input, and so the capture; the
+    // others are asked to quit.
     source.kill();
-    const kill = setTimeout(() => ff.kill("SIGKILL"), 5000);
+    for (const p of ffs) if (p !== ff) p.stdin.write("q");
+    const kill = setTimeout(() => ffs.forEach((p) => p.kill("SIGKILL")), 5000);
     await ffClosed;
     clearTimeout(kill);
     server.closeAllConnections();

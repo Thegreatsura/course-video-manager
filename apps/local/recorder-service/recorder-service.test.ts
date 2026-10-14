@@ -6,9 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CAM_LINK_FRAME_INTERVAL,
   dshowFrameInterval,
-  micOnClock,
+  micAnchor,
 } from "./capture-args";
+import { takeStartCommand } from "./take-args";
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
+import { CAMERA_STALL_BLOCKS } from "./recording-session";
 import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import { previewChunks } from "./test-utils/flv";
@@ -155,15 +157,29 @@ describe("the Cam Link", () => {
     await client.camera("live");
   });
 
-  it("is held only while the recorder is open, by the preview or the recording", async () => {
+  it("is opened once with the recorder and held across takes: Record and Stop neither reopen it nor touch the preview (#2207)", async () => {
     const { windows, client } = await recordOnce();
     expect(windows.camerasRunning()).toBe(1);
-    expect(windows.cameraPreviews.every((p) => !p.running)).toBe(true);
+    expect(windows.cameraCaptures).toHaveLength(1);
+    expect(windows.cameraPreviews).toHaveLength(1);
+    expect(windows.cameraPreviews[0]!.running).toBe(true);
 
     client.send({ type: "stop" });
     await client.next("recording-stopped");
     await client.camera("live");
-    expect(windows.camerasRunning()).toBe(1);
+    client.send({
+      type: "record",
+      silenceLength: "long",
+      folder: tmp(),
+      ...CALIBRATED,
+    });
+    await client.next("recording-started");
+    client.send({ type: "stop" });
+    await client.next("recording-stopped");
+    expect(windows.cameraCaptures).toHaveLength(1);
+    expect(windows.cameraPreviews).toHaveLength(1);
+    expect(windows.cameraCaptures[0]!.running).toBe(true);
+    expect(windows.cameraPreviews[0]!.running).toBe(true);
 
     client.send({ type: "close" });
     await client.next("state", (m) => m.state.kind === "closed");
@@ -261,42 +277,6 @@ describe("a Recording Session", () => {
     );
   });
 
-  it("starts from the devices the preview listed, looking up the screen while the preview lets go of the Cam Link", async () => {
-    const windows = fakeWindows({ screensListingMs: 50 });
-    const order: string[] = [];
-    const launch = windows.launch;
-    windows.launch = (l) => {
-      const p = launch(l);
-      if (l.tool === "powershell" && l.script === "screens.ps1")
-        void p.exited.then(() => order.push("screen listed"));
-      return p;
-    };
-    const listings = () =>
-      windows.launched.filter(
-        (l) => l.tool === "ffmpeg" && l.args.includes("-list_devices")
-      ).length;
-    const { port } = await start(windows);
-    const client = await connect(port);
-    client.send({ type: "open", videoId: "video-1" });
-    await client.camera("live");
-    const listedAtOpen = listings();
-    void windows.cameraPreviews[0]?.exited.then(() =>
-      order.push("camera released")
-    );
-
-    client.send({
-      type: "record",
-      silenceLength: "long",
-      folder: tmp(),
-      ...CALIBRATED,
-    });
-    await client.next("recording-started");
-    expect(listings()).toBe(listedAtOpen);
-    // The hand-off finished while the (slow) screen lookup was still running.
-    expect(order).toContain("camera released");
-    expect(order.at(-1)).toBe("screen listed");
-  });
-
   it("records camera, screen and mic to three files and stops on request", async () => {
     const { windows, client, started, folder } = await recordOnce();
     // A file that closes in silence gets one last silence_end: not speech.
@@ -349,15 +329,22 @@ describe("a Recording Session", () => {
   it("captures as the rig proved: separate processes, one T0, the Cam Link at 29.97 to 1440p", async () => {
     const { windows } = await recordOnce();
     const screen = windows.recorder("screen").launch;
-    const camera = windows.recorder("camera").launch;
-    if (screen.tool !== "ffmpeg" || camera.tool !== "ffmpeg")
+    const writer = windows.recorder("camera");
+    const camera = windows.cameraCaptures[0]!.launch;
+    if (
+      screen.tool !== "ffmpeg" ||
+      camera.tool !== "ffmpeg" ||
+      writer.launch.tool !== "ffmpeg"
+    )
       throw new Error("not ffmpeg");
     const s = screen.args.join(" ");
     const c = camera.args.join(" ");
+    const w = writer.launch.args.join(" ");
 
     expect(s).toContain("ddagrab=output_idx=1");
     expect(s).not.toContain("dshow");
     expect(c).not.toContain("ddagrab");
+    expect(w).not.toContain("dshow");
 
     const at = (args: readonly string[], flag: string) =>
       args[args.indexOf(flag) + 1];
@@ -367,11 +354,12 @@ describe("a Recording Session", () => {
     );
     expect(c).toContain("scale_cuda=2560:1440");
 
+    // One T0: the screen recorder's own, and the one Record told the writer.
     const t0 = `PTS-${(T0_MS / 1000).toFixed(3)}/TB`;
     expect(s).toContain(`setpts=${t0}`);
-    expect(c).toContain(`setpts=${t0}`);
-    expect(c).toContain(`${micOnClock((T0_MS / 1000).toFixed(3))},asplit`);
-    expect(c).toContain("silencedetect=n=-38dB:d=2");
+    expect(writer.written).toBe(takeStartCommand(T0_MS));
+    expect(c).toContain(`${micAnchor()}[mic]`);
+    expect(w).toContain("silencedetect=n=-38dB:d=2");
   });
 
   it("turns silencedetect lines into speech events in file time, numbered in order", async () => {
@@ -429,22 +417,25 @@ describe("a Recording Session", () => {
     expect(stopped.errors.join("\n")).toContain("Failed to capture frame");
   });
 
-  it("stops the whole Recording Session and says the camera was lost when the camera process dies", async () => {
+  it("stops the whole Recording Session and says the camera was lost when the camera capture dies", async () => {
     const { windows, client, started } = await recordOnce();
-    const camera = windows.recorder("camera");
-    camera.stdout("frame=300\nout_time_us=10000000\nprogress=continue\n");
-    camera.stderr(
+    windows
+      .recorder("camera")
+      .stdout("frame=300\nout_time_us=10000000\nprogress=continue\n");
+    const capture = windows.cameraCaptures[0]!;
+    capture.stderr(
       "[in#0/dshow @ 0001] [error] Error during demuxing: I/O error\r\n"
     );
-    camera.exit(1);
+    capture.exit(1);
 
     const lost = await client.next("camera-lost");
     expect(lost.fileTime).toBe(10);
     expect(lost.errors.join("\n")).toContain("I/O error");
     const stopped = await client.next("recording-stopped");
     expect(stopped.reason).toBe("camera-lost");
-    // The screen was asked to close its file, not killed.
-    expect(stopped.exitCodes).toEqual({ screen: 0, camera: 1 });
+    // The writer closed its files on the relay's end; the screen was asked
+    // to close its file, not killed.
+    expect(stopped.exitCodes).toEqual({ screen: 0, camera: 0 });
     expect(stopped.files).toEqual(started.files);
     expect(stopped.seq).toBeGreaterThan(lost.seq);
   });
@@ -466,29 +457,28 @@ describe("a Recording Session", () => {
   it("says the camera was lost when it stops sending frames for 3 s", async () => {
     const { windows, client } = await recordOnce();
     const camera = windows.recorder("camera");
+    // The writer reports every 0.05 s: 3 s is CAMERA_STALL_BLOCKS of them.
     const block = (frame: number, seconds: number) =>
       camera.stdout(
-        `frame=${frame}\nout_time_us=${seconds * 1_000_000}\nprogress=continue\n`
+        `frame=${frame}\nout_time_us=${Math.round(seconds * 1_000_000)}\nprogress=continue\n`
       );
     // The Cam Link takes a while to send its first frame: not a loss.
-    block(0, 1);
-    block(0, 2);
-    block(0, 3);
-    block(0, 4);
-    block(30, 5);
-    block(60, 6);
-    block(60, 7);
-    block(60, 8);
+    for (let i = 1; i <= 80; i++) block(0, i * 0.05);
+    block(30, 4.05);
+    block(60, 4.1);
+    for (let i = 1; i < CAMERA_STALL_BLOCKS; i++) block(60, 4.1 + i * 0.05);
     expect(client.received.map((m) => m.type)).not.toContain("camera-lost");
-    block(60, 9);
+    block(60, 7.1);
 
-    expect((await client.next("camera-lost")).fileTime).toBe(9);
+    expect((await client.next("camera-lost")).fileTime).toBe(7.1);
     expect((await client.next("recording-stopped")).reason).toBe("camera-lost");
   });
 
-  it("reports the Cam Link's dropped frames when it stops, and the screen's as not measured", async () => {
+  it("reports the Cam Link's dropped frames and any gap reaching the writer when it stops, and the screen's as not measured", async () => {
     const { windows, client } = await recordOnce();
-    const camera = windows.recorder("camera");
+    const camera = windows.cameraCaptures[0]!;
+    // A gap of 0.233 s in the frames reaching the writer: about 6 missing.
+    windows.recorder("camera").stderr("[warning] -0.233000\r\n");
     camera.stderr(
       "[dshow @ 0001] [warning] real-time buffer [Cam Link 4K] [video input] too full or near too full (101% of size: 1500000000 [rtbufsize parameter])! frame dropped!\r\n"
     );
@@ -498,10 +488,11 @@ describe("a Recording Session", () => {
     );
 
     client.send({ type: "stop" });
-    expect((await client.next("recording-stopped")).framesLost).toEqual({
-      camera: 1,
-      screen: null,
-    });
+    const stopped = await client.next("recording-stopped");
+    expect(stopped.framesLost).toEqual({ camera: 7, screen: null });
+    expect(stopped.errors.join("\n")).toContain(
+      "camera.mkv is missing about 6 frame(s)"
+    );
   });
 
   it("replays the logged events after a given sequence number to a client that missed them", async () => {

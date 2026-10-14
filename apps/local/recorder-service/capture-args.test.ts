@@ -1,46 +1,94 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCaptureArgs,
+  cameraCaptureArgs,
   cameraPreviewArgs,
+  micAnchor,
   previewOutput,
   screenPreviewArgs,
 } from "./capture-args";
+import {
+  cameraWriterArgs,
+  screenRecorderArgs,
+  takeStartCommand,
+} from "./take-args";
+
+const relays = { preview: 23000, writer: 23001 };
 
 const capture = () =>
-  buildCaptureArgs({
-    t0Ms: 1_000_000,
+  cameraCaptureArgs({ camera: "Cam Link 4K", mic: "Mic", relays });
+
+const writer = () =>
+  cameraWriterArgs({
+    relayPort: relays.writer,
     tag: "t",
-    screenIndex: 0,
-    camera: "Cam Link 4K",
-    mic: "Mic",
     silenceLength: "short",
     thresholdDb: -40,
-    cameraPreviewPort: 9,
   });
 
+/** A filter graph's chains: split on the `;` between them, not those quoted in an expression. */
 const graphOf = (args: readonly string[]) =>
-  args[args.indexOf("-filter_complex") + 1]!.split(";");
+  args[args.indexOf("-filter_complex") + 1]!.split(/;(?=\[)/);
 
-describe("the previews (#2144)", () => {
-  it("send camera.mkv's own packets as the take's camera preview, with no encoder of its own (#2203)", () => {
-    const take = capture().camera;
-    // camera.mkv keeps its chain: CFR, BT.709, 1440p.
-    expect(graphOf(take)).toContain(
-      "[0:v]setpts=PTS-1000.000/TB,hwupload_cuda,fps=30000/1001:start_time=0,setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale_cuda=2560:1440:interp_algo=bicubic[cam]"
-    );
-    const args = take.join(" ");
-    expect(args.match(/h264_nvenc/g)).toHaveLength(1);
-    expect(args).toContain("-bf 2 -g 60 -fps_mode passthrough -delay 1");
-    expect(args).not.toContain("libx264");
-    // The file is written straight (no fifo) and fails the take if it
-    // cannot be; the feed drops, retries and is ignored when it fails.
+describe("the camera capture (#2207)", () => {
+  it("holds the Cam Link and the mic and encodes nothing: the picture goes raw to the preview's relay and the writer's, the mic to the writer's", () => {
+    const args = capture().join(" ");
+    expect(args).toContain("video=Cam Link 4K");
+    expect(args).toContain("audio=Mic");
+    expect(args).not.toMatch(/h264_nvenc|libx264|mjpeg|aac/);
+    expect(graphOf(capture())).toEqual([
+      "[0:v]hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12,split[prev][rec]",
+      `${micAnchor()}[mic]`,
+    ]);
+    // Each relay drops and retries rather than wait: a consumer gone or
+    // stalled never holds up the capture, or the other relay.
     expect(args).toContain(
-      "[f=matroska:use_fifo=0:onfail=abort:cluster_time_limit=1000:flush_packets=1]camera.mkv|[f=flv:onfail=ignore]tcp://127.0.0.1:9"
+      `[f=nut:onfail=ignore]tcp://127.0.0.1:${relays.preview}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
     );
-    expect(args).toContain("drop_pkts_on_overflow=1");
+    expect(args).toContain(
+      `[f=nut:onfail=ignore]tcp://127.0.0.1:${relays.writer}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+    );
+    expect(args.match(/drop_pkts_on_overflow=1/g)).toHaveLength(2);
   });
 
-  it("stream each as low-latency H.264 on NVENC: no B-frames, no lookahead, a keyframe a second (#2194)", () => {
+  it("relays the frames as they come: wall-clock stamps to the 100 ns, no frame-threaded encoder holding one back", () => {
+    const args = capture().join(" ");
+    expect(args).toContain("-copyts");
+    expect(
+      args.match(/-enc_time_base:v filter -c:v rawvideo -threads:v 1/g)
+    ).toHaveLength(2);
+    // A take must never drop a frame: DirectShow may hold about four seconds.
+    const argv = capture();
+    expect(argv[argv.indexOf("-rtbufsize") + 1]).toBe("1500M");
+  });
+});
+
+describe("the camera preview (#2207)", () => {
+  it("listens for the capture's preview relay and streams it, the same process recording or not", () => {
+    const preview = cameraPreviewArgs({
+      relayPort: relays.preview,
+      port: 9,
+      stillPort: 10,
+      encoder: "nvenc",
+    }).join(" ");
+    expect(preview).toContain(
+      `-f nut -i tcp://127.0.0.1:${relays.preview}?listen=1&tcp_nodelay=1`
+    );
+    expect(preview).not.toContain("dshow");
+    expect(preview).toContain("[f=flv:onfail=ignore]tcp://127.0.0.1:9");
+    expect(preview).toContain("[f=mpjpeg:onfail=ignore]tcp://127.0.0.1:10");
+  });
+
+  it("takes the 1440p picture on the GPU for NVENC, and as it comes for libx264", () => {
+    const graph = (encoder: "nvenc" | "x264") =>
+      graphOf(
+        cameraPreviewArgs({ relayPort: 1, port: 2, stillPort: 3, encoder })
+      )[0]!;
+    expect(graph("nvenc")).toMatch(/^\[0:v\]hwupload_cuda,split\[prev\]\[s\]/);
+    expect(graph("x264")).toMatch(/^\[0:v\]split\[prev\]\[s\]/);
+    expect(graph("x264")).not.toContain("cuda");
+  });
+
+  it("streams each as low-latency H.264 on NVENC: no B-frames, no lookahead, a keyframe a second (#2194)", () => {
     const out = previewOutput(9, 30, "nvenc").join(" ");
     expect(out).toContain(
       "-c:v h264_nvenc -preset p1 -tune ull -zerolatency 1 -delay 0 -rc-lookahead 0 -bf 0"
@@ -51,7 +99,7 @@ describe("the previews (#2144)", () => {
     expect(out).not.toContain("libx264");
   });
 
-  it("fall back to #2192's libx264, with the frames brought down to the CPU for it", () => {
+  it("falls back to #2192's libx264", () => {
     const out = previewOutput(9, 30, "x264").join(" ");
     expect(out).toContain("-c:v libx264 -preset ultrafast -tune zerolatency");
     expect(out).toContain("keyint_min=30:scenecut=0");
@@ -64,48 +112,58 @@ describe("the previews (#2144)", () => {
     expect(screen("nvenc")).toContain(
       "ddagrab=output_idx=1:framerate=60,scale_d3d11=format=nv12 -map"
     );
-    const camera = (encoder: "nvenc" | "x264") =>
-      graphOf(
-        cameraPreviewArgs({ camera: "c", port: 1, stillPort: 2, encoder })
-      ).find((chain) => chain.endsWith("[prev]"))!;
-    expect(camera("x264")).toContain("hwdownload");
-    expect(camera("nvenc")).not.toContain("hwdownload");
+  });
+});
+
+describe("a take's camera writer (#2207)", () => {
+  it("listens for the writer relay and writes camera.mkv and mic.mkv as the take process always did", () => {
+    const args = writer().join(" ");
+    expect(args).toContain(
+      `-f nut -i tcp://127.0.0.1:${relays.writer}?listen=1&tcp_nodelay=1`
+    );
+    expect(args).toContain(
+      "-c:v h264_nvenc -preset p5 -tune hq -rc constqp -qp 23 -profile:v high -bf 2 -g 60 -fps_mode passthrough"
+    );
+    expect(args).toContain(
+      "-cluster_time_limit 1000 -flush_packets 1 -f matroska camera.mkv"
+    );
+    expect(args).toContain("-c:a aac -b:a 192k -ar 48000");
+    expect(args).toContain("-f matroska mic.mkv");
+    expect(args).not.toMatch(/dshow|libx264/);
   });
 
-  it("are full size: the camera at camera.mkv's 1440p, the screen unscaled at 60 fps", () => {
-    expect(
-      graphOf(
-        cameraPreviewArgs({
-          camera: "c",
-          port: 1,
-          stillPort: 2,
-          encoder: "nvenc",
-        })
-      ).join(";")
-    ).toContain("[p]scale_cuda=2560:1440");
-    const screen = screenPreviewArgs({
-      screenIndex: 1,
-      port: 9,
-      encoder: "nvenc",
-    }).join(" ");
-    expect(screen).toContain(
-      "ddagrab=output_idx=1:framerate=60,scale_d3d11=format=nv12 -map"
+  it("drops everything until Record, then keeps both clocks from T0 on: CFR 29.97 and BT.709, the mic from file time 0 with no warm-up trim", () => {
+    const [camera, mic, silence] = graphOf(writer());
+    expect(camera).toBe(
+      "[0:v]setpts@t0=PTS-1e10/TB,select='if(gte(t,0)*gte(prev_selected_t,0)*gt(t-prev_selected_t,0.1),print(-(t-prev_selected_t),24));1',fps=30000/1001:start_time=0,setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709[cam]"
+    );
+    expect(mic).toBe(
+      "[0:a]asetpts@t0=PTS-1e10/TB,atrim=start=0,aresample=async=50:min_hard_comp=0.1:first_pts=0,asplit=2[mic][sd]"
+    );
+    expect(silence).toContain("silencedetect=n=-40dB");
+    // Record's T0 reaches both clocks in one command, applied from the
+    // first frame stamped T0 or later.
+    expect(takeStartCommand(1_760_000_000_123)).toBe(
+      "Call 1760000000.123 expr PTS-1760000000.123/TB\n"
     );
   });
 
-  it("let only the preview-only Cam Link drop frames it falls behind on", () => {
-    const rtbuf = (args: readonly string[]) =>
-      args[args.indexOf("-rtbufsize") + 1];
-    expect(
-      rtbuf(
-        cameraPreviewArgs({
-          camera: "c",
-          port: 1,
-          stillPort: 2,
-          encoder: "nvenc",
-        })
-      )
-    ).toBe("64M");
-    expect(rtbuf(capture().camera)).toBe("1500M");
+  it("looks for Record on its stdin every 50 ms", () => {
+    const argv = writer();
+    expect(argv[argv.indexOf("-stats_period") + 1]).toBe("0.05");
+  });
+});
+
+describe("a take's screen recorder", () => {
+  it("is ddagrab on the shared clock, as the rig proved", () => {
+    const args = screenRecorderArgs({
+      t0Ms: 1_000_000,
+      tag: "t",
+      screenIndex: 1,
+    }).join(" ");
+    expect(args).toContain("ddagrab=output_idx=1:framerate=60:dup_frames=1");
+    expect(args).toContain("setpts=PTS-1000.000/TB,fps=60:start_time=0");
+    expect(args).toContain("-g 120");
+    expect(args).toContain("screen.mkv");
   });
 });

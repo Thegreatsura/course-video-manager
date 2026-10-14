@@ -87,6 +87,12 @@ export const createScreenSide = (o: {
   previewStallMs?: number;
 }) => {
   let preview: LaunchedProcess | undefined;
+  /**
+   * The DELL's output as the screen side last found it, checked as Record
+   * checks it: Record records it without listing the screens again (a
+   * PowerShell start-up, about 0.6 s). Found afresh on every restart.
+   */
+  let dell: number | undefined;
   /** Bumped whenever the screen side starts again: an older check's answer is dropped. */
   let generation = 0;
 
@@ -197,6 +203,7 @@ export const createScreenSide = (o: {
    */
   const restart = async () => {
     const check = (generation += 1);
+    dell = undefined;
     const format = o.format();
     const current = () => check === generation && o.format() === format;
     if (format === "short") o.setStatus({ kind: "waking" });
@@ -205,8 +212,11 @@ export const createScreenSide = (o: {
       if (!current()) return;
       if (format === "landscape") {
         const screens = await listScreens(o.launch);
-        const dell = findByName(screens, (s) => s.name, SCREEN_NAME);
-        if (dell && current()) startPreview(dell);
+        const found = findByName(screens, (s) => s.name, SCREEN_NAME);
+        if (found && current()) {
+          if (found.width === 1920 && found.height === 1080) dell = found.index;
+          startPreview(found);
+        }
         return;
       }
       if (format !== "short") return;
@@ -261,6 +271,7 @@ export const createScreenSide = (o: {
     /** The recorder closed: drops any check under way and stops the preview. */
     close: () => {
       generation += 1;
+      dell = undefined;
       return stopPreview();
     },
     /**
@@ -274,7 +285,8 @@ export const createScreenSide = (o: {
       screen: ScreenStatus | null,
       scene: Scene
     ): Promise<number | null> => {
-      if (format !== "short") return dellIndex();
+      if (format !== "short")
+        return dell === undefined ? dellIndex() : Promise.resolve(dell);
       if (screen?.kind === "waking")
         throw new Refusal(
           "Spacedesk is still waking: wait for the screen before recording."
