@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import type { TestDb } from "@/test-utils/pglite";
+import type { TestDb } from "@/test-utils/test-db";
 import * as schema from "@/db/schema";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";

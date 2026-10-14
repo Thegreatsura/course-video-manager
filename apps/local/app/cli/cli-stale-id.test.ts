@@ -3,7 +3,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import * as schema from "@/db/schema";
 import {
   buildReadLayer,

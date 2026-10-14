@@ -9,29 +9,27 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/pglite/migrator";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { pushSchema } from "drizzle-kit/api";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema.js";
-import { createBlankDb, type TestDb } from "../test-utils/pglite.js";
+import { createBlankDb, type TestDb } from "../test-utils/test-db.js";
 
 const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
 
 /**
- * Each of these boots a fresh PGlite and replays every migration, which is the
+ * Each of these creates a fresh database and replays every migration, which is the
  * slowest thing in the suite by an order of magnitude. Vitest's 5s default left
  * no headroom on a loaded machine, so the budget is stated rather than relied on.
  */
 const MIGRATION_TIMEOUT_MS = 60_000;
 
 /**
- * A fresh PGlite migrated to just before `tag`: replays a copy of the folder
+ * A fresh database migrated to just before `tag`: replays a copy of the folder
  * whose journal stops short of it, so a test can seed rows the migration then
  * rewrites when the real folder is run.
  */
-async function migrateUpTo(
-  tag: string
-): Promise<ReturnType<typeof createBlankDb>> {
+async function migrateUpTo(tag: string): ReturnType<typeof createBlankDb> {
   const before = mkdtempSync(join(tmpdir(), "cvm-migrations-"));
   cpSync(MIGRATIONS_FOLDER, before, { recursive: true });
   const journalPath = join(before, "meta/_journal.json");
@@ -43,7 +41,7 @@ async function migrateUpTo(
     journalPath,
     JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut) })
   );
-  const testDb = createBlankDb();
+  const testDb = await createBlankDb();
   await migrate(testDb.db, { migrationsFolder: before });
   rmSync(before, { recursive: true, force: true });
   return testDb;
@@ -65,7 +63,7 @@ describe("drizzle migrations", () => {
         .update(sqlContent)
         .digest("hex");
 
-      const { pglite, db } = createBlankDb();
+      const { close, db } = await createBlankDb();
       await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
       const rows = await db.execute<{ hash: string; created_at: string }>(
@@ -75,7 +73,7 @@ describe("drizzle migrations", () => {
       expect(rows.rows[0]!.hash).toBe(expectedHash);
       expect(Number(rows.rows[0]!.created_at)).toBe(baseline.when);
 
-      await pglite.close();
+      await close();
     },
     MIGRATION_TIMEOUT_MS
   );
@@ -99,11 +97,11 @@ describe("drizzle migrations", () => {
         return result.rows.map((r) => `${r.table_name}.${r.column_name}`);
       };
 
-      const { pglite: migratePg, db: migrateDb } = createBlankDb();
+      const { close: closeMigrateDb, db: migrateDb } = await createBlankDb();
       await migrate(migrateDb, { migrationsFolder: MIGRATIONS_FOLDER });
       const migrateColumns = new Set(await getPublicColumns(migrateDb));
 
-      const { pglite: pushPg, db: pushDb } = createBlankDb();
+      const { close: closePushDb, db: pushDb } = await createBlankDb();
       const { apply } = await pushSchema(schema, pushDb as any);
       await apply();
       const pushColumns = await getPublicColumns(pushDb);
@@ -111,8 +109,8 @@ describe("drizzle migrations", () => {
       expect(pushColumns.length).toBeGreaterThan(0);
       expect(pushColumns.filter((c) => !migrateColumns.has(c))).toEqual([]);
 
-      await migratePg.close();
-      await pushPg.close();
+      await closeMigrateDb();
+      await closePushDb();
     },
     MIGRATION_TIMEOUT_MS
   );
@@ -146,9 +144,7 @@ describe("drizzle migrations", () => {
     async () => {
       // Migrate to just before 0028, seed the Clips, then run the real folder
       // for 0028.
-      const { pglite, db } = await migrateUpTo(
-        "0028_clip_transcription_status"
-      );
+      const { close, db } = await migrateUpTo("0028_clip_transcription_status");
 
       // Clip rows only: the Video they point at is beside the point here.
       await db.execute(sql`SET session_replication_role = replica`);
@@ -175,7 +171,7 @@ describe("drizzle migrations", () => {
         { id: "never-transcribed", status: "failed" },
       ]);
 
-      await pglite.close();
+      await close();
     },
     MIGRATION_TIMEOUT_MS
   );
@@ -183,7 +179,7 @@ describe("drizzle migrations", () => {
   it(
     "0033 renames the New recorder's stored value to `cvm` and refuses the old one",
     async () => {
-      const { pglite, db } = await migrateUpTo("0033_video_recorder_cvm");
+      const { close, db } = await migrateUpTo("0033_video_recorder_cvm");
 
       await db.execute(sql`
         INSERT INTO "course-video-manager_video"
@@ -210,7 +206,7 @@ describe("drizzle migrations", () => {
         )
       ).rejects.toThrow();
 
-      await pglite.close();
+      await close();
     },
     MIGRATION_TIMEOUT_MS
   );

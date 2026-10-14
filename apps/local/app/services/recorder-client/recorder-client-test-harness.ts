@@ -27,7 +27,7 @@ import {
  * The recorder client end to end, without hardware: the real recorder
  * service on a scripted Windows (its fake ffmpeg.exe, via the service's own
  * test harness, whose `afterEach` stops it), the app server's recorder
- * client, and the database on PGlite (the test file calls
+ * client, and the test database (the test file calls
  * `setupClipServiceTests()`).
  */
 
@@ -51,7 +51,7 @@ export const startService = async (
 
 export type Ingest = RecorderClientOptions["ingest"];
 
-/** The real ingest, on PGlite. */
+/** The real ingest, on the test database. */
 export const saveEvent: Ingest = (event, askEditor) =>
   Effect.runPromise(
     ingestRecorderEvent(testDb as never, event, askEditor).pipe(
@@ -101,7 +101,24 @@ export const freshCalibration: LastPassed = async () => {
   return CALIBRATION;
 };
 
-/** The latest calibration passed under today's rules, from PGlite, as the app reads it. */
+/**
+ * {@link freshCalibration}, with a way to wait for its latest read. The client
+ * prepares the recorder for a Stream Deck Record only once the read is done:
+ * close the client before then and the Stream Deck has nothing to record with.
+ */
+export const trackedCalibration = () => {
+  let latest: Promise<unknown> = Promise.resolve();
+  return {
+    read: (() => {
+      const read = freshCalibration();
+      latest = read;
+      return read;
+    }) satisfies LastPassed,
+    settled: () => latest,
+  };
+};
+
+/** The latest calibration passed under today's rules, from the test database, as the app reads it. */
 export const calibrationFromDatabase: LastPassed = () =>
   Effect.runPromise(lastPassedCalibration(testDb as never));
 
@@ -132,6 +149,20 @@ export const connectClient = (
 };
 
 export type TestRecorderClient = ReturnType<typeof connectClient>;
+
+/** The recorder service on a scripted Windows, and an app server's client connected to it. */
+export const startServiceAndClient = async (
+  ingest?: Ingest,
+  lastPassed?: LastPassed
+) => {
+  const { windows, port, stateDir } = await startService();
+  return {
+    windows,
+    client: connectClient(port, ingest, lastPassed),
+    port,
+    stateDir,
+  };
+};
 
 export const readSession = () => testDb.query.recordingSessions.findFirst();
 

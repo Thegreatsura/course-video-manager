@@ -8,7 +8,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";

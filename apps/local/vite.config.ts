@@ -166,7 +166,11 @@ export default defineConfig(({ command, mode }) => ({
   test: {
     // The suite runs from agents' worktrees, where `isLocalMachine()` is
     // always false; the tests decide local-or-not with CVM_LOCAL_MACHINE alone.
-    setupFiles: ["./app/test-utils/not-a-worktree.setup.ts"],
+    setupFiles: [
+      "./app/test-utils/not-a-worktree.setup.ts",
+      // Drops the test databases a file created when it finishes (ADR 0046).
+      "../../packages/core/test-utils/release-test-dbs.setup.ts",
+    ],
     pool: "forks",
     poolOptions: {
       forks: {

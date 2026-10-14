@@ -4,7 +4,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import * as schema from "../db/schema.js";
 import {
   DEFAULT_MIC_OFFSET_MS,

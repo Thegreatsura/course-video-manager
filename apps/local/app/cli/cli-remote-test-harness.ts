@@ -4,7 +4,7 @@ import { generateApiToken } from "@cvm/core/lib/api-token.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import * as schema from "@/db/schema";
 import { Layer, ManagedRuntime } from "effect";
-import type { TestDb } from "@/test-utils/pglite";
+import type { TestDb } from "@/test-utils/test-db";
 import type { SchemaVersionClaim } from "./rpc-client";
 import { makeRemoteLayer, type RemoteServices } from "./rpc-layer";
 

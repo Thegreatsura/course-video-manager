@@ -138,7 +138,7 @@
       // The app keeps importing it at the path it always has.
       "@/packages/lucide-icons": ["../../packages/lucide-icons/index"],
       "@/packages/lucide-icons/tldraw": ["../../packages/lucide-icons/tldraw"],
-      "@/test-utils/pglite": ["../../packages/core/test-utils/pglite"],
+      "@/test-utils/test-db": ["../../packages/core/test-utils/test-db"],
 
       "@/*": ["./app/*"],
       "*": ["./*"]

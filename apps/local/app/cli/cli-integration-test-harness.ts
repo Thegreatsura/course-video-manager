@@ -1,5 +1,5 @@
 import * as schema from "@/db/schema";
-import type { TestDb } from "@/test-utils/pglite";
+import type { TestDb } from "@/test-utils/test-db";
 
 export interface IntegrationSeed {
   courseAId: string;

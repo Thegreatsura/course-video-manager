@@ -7,7 +7,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import {
   BULLET_PANEL_ANIMATION_IN_SECONDS,
   lastBulletRevealAtInSeconds,

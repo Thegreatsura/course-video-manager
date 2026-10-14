@@ -4,7 +4,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { CLIP_TRANSCRIPTION_EVENTS } from "@/features/video-editor/transcribe-clips-response";

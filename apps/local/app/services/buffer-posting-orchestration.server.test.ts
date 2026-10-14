@@ -17,7 +17,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 
 const UPLOADED_URL =
   "https://cvm-bucket.s3.eu-west-2.amazonaws.com/cvm/buffer-posts/test.mp4";

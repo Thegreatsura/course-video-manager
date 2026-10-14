@@ -36,8 +36,8 @@ import {
   STREAM_DECK_FOLDER,
   tmp,
   calibrationFromDatabase,
-  type Ingest,
-  type LastPassed,
+  trackedCalibration,
+  startServiceAndClient as setup,
 } from "./recorder-client-test-harness";
 
 /**
@@ -46,16 +46,6 @@ import {
  */
 
 setupClipServiceTests();
-
-const setup = async (ingest?: Ingest, lastPassed?: LastPassed) => {
-  const { windows, port, stateDir } = await startService();
-  return {
-    windows,
-    client: connectClient(port, ingest, lastPassed),
-    port,
-    stateDir,
-  };
-};
 
 describe("the recorder client", () => {
   it("records on a CVM recorder Video: scene, Record, speech, Stop yields saved Clips, live", async () => {
@@ -271,7 +261,8 @@ describe("the recorder client", () => {
   });
 
   it("saves a take filmed wholly from the Stream Deck while the app server was down", async () => {
-    const { windows, client, port } = await setup();
+    const calibration = trackedCalibration();
+    const { windows, client, port } = await setup(undefined, calibration.read);
     const video = await clipService.createVideo("CVM recorder");
     const heard: CvmRecorderMessage[] = [];
     client.subscribe(video.id, (m) => heard.push(m));
@@ -280,6 +271,7 @@ describe("the recorder client", () => {
     );
     client.setSilenceLength(video.id, "short");
     await client.settled();
+    await calibration.settled();
     const deck = await connect(port);
     const health = async () =>
       (await (await fetch(`http://127.0.0.1:${port}/health`)).json()).state;

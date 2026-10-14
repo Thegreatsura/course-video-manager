@@ -60,7 +60,7 @@ Neither `packages/core` nor `apps/remote` may import anything filesystem-bound �
 
 ### Testing
 
-Two tiers — don't run a package's full suite by hand. While iterating, run only the specific test file(s) that cover your change, directly via `pnpm --filter <package> test -- path/to/thing.test.ts`; the full unfiltered suite runs in CI on every PR (`.github/workflows/test.yml`), so targeting locally never leaves a change unverified. See `docs/agents/testing.md` for the mechanics and known PGlite flakiness under a sandboxed agent workspace's CPU load. That file is how to RUN them; [`docs/TESTING_STANDARDS.md`](./docs/TESTING_STANDARDS.md) is how to WRITE them — mock at system boundaries only, never an internal collaborator.
+Two tiers — don't run a package's full suite by hand. While iterating, run only the specific test file(s) that cover your change, directly via `pnpm --filter <package> test -- path/to/thing.test.ts`; the full unfiltered suite runs in CI on every PR (`.github/workflows/test.yml`), so targeting locally never leaves a change unverified. See `docs/agents/testing.md` for the mechanics; DB-backed tests need Docker Desktop running (one shared `cvm-test-postgres` container, ADR 0046). That file is how to RUN them; [`docs/TESTING_STANDARDS.md`](./docs/TESTING_STANDARDS.md) is how to WRITE them — mock at system boundaries only, never an internal collaborator.
 
 ### Checks
 

@@ -9,17 +9,17 @@ import {
   truncateAllTables,
   withQueryLog,
   type TestDb,
-} from "../test-utils/pglite.js";
-import type { PGlite } from "@electric-sql/pglite";
+} from "../test-utils/test-db.js";
+import type { TestDbClient } from "../test-utils/test-db.js";
 
 let testDb: TestDb;
-let pglite: PGlite;
+let client: TestDbClient;
 let testLayer: Layer.Layer<DiagramOperationsService>;
 
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
-  pglite = result.pglite;
+  client = result.client;
 
   const drizzleLayer = Layer.succeed(DrizzleService, testDb as any);
   testLayer = DiagramOperationsService.Default.pipe(
@@ -183,7 +183,7 @@ describe("restoreFromSearch", () => {
     );
 
     const queries: string[] = [];
-    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
+    const loggedDb = withQueryLog(client, (q) => queries.push(q.toLowerCase()));
     const loggedLayer = DiagramOperationsService.Default.pipe(
       Layer.provide(Layer.succeed(DrizzleService, loggedDb as any)),
       Layer.provide(DiagramThumbnailStore.noop)
