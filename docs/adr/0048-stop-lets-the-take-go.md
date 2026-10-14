@@ -23,6 +23,6 @@ Stop also blocked the command queue until the take's files closed, so the editor
 ## Consequences
 
 - On synthetic sources, the preview's longest frame gap across Stop is 40-65 ms, the same as idle. It was 582-637 ms. The capture never exits.
-- The editor goes idle and can Record at once. The take's last `speech-ended` and `recording-stopped` now arrive after the status that says the recorder is open. The editor closes a take's audio window when its session ends mid-speech, and places the speech when its end arrives.
+- The editor goes idle and can Record at once. The take's last `speech-ended` and `recording-stopped` now arrive after the status that says the recorder is open. The editor closes a take's audio window when its session ends mid-speech, and places the speech when its end arrives. The app server publishes the status that ends a take only after that take's earlier events are saved, so the editor never hears a take is over before it hears the take.
 - A Record within about a second of Stop waits for the relay, then arms a writer on the spot.
 - Closing the recorder, a calibration taking the Cam Link, and the service closing all wait for takes still finalising.
