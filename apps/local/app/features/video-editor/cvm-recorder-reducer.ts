@@ -43,9 +43,11 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * (`FrontendSpeechDetectorState`), so the editor and the teleprompter show a
  * take the same whichever Recorder films it. Record warms up until the
  * recorder hears the first silence (`warmed-up`); speech shows as speaking,
- * then as long enough for a Clip once it has lasted the minimum Clip length
- * (timed here, as the OBS path's browser detector times it); a silence as
- * long as the Silence Length (`speech-ended`) closes it.
+ * then as long enough for a Clip when the recorder says it is a Take
+ * (`take-started`). The editor never times speech itself: the recorder
+ * service alone decides what is a Take, by the rule its Clip is cut with, so
+ * every Optimistic Clip gets a Clip. A silence as long as the Silence Length
+ * (`speech-ended`) closes it.
  *
  * Attaching: a page stops a take it finds going, as OBS does on connect
  * (`cvm-recorder-attach.ts`).
@@ -62,9 +64,9 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * the placing (`clip-state-reducer-recording.ts`; ADR 0044). It sends the
  * clip reducer the events OBS's connector and polling send: a Recording
  * Session followed starts and stops one there (`start-session`,
- * `stop-session`), speech long enough is an Optimistic Clip (`start-take`),
- * silence closes its audio window (`close-take-window`), and at a speech's
- * end the editor tells the app server where to save it, as OBS's polling
+ * `stop-session`), a Take is an Optimistic Clip (`start-take`), silence
+ * closes its audio window (`close-take-window`), and at a Take's end the
+ * editor tells the app server where to save it, as OBS's polling
  * does, and hears back the saved Clips (`place-take`). The app server's
  * status can say a Recording Session stopped before its last speech is
  * saved, so the editor places a Recording Session's speech from when it
@@ -98,8 +100,6 @@ export namespace cvmRecorderReducer {
     previews: { camera: string; screen: string } | null;
     /** What the recorder's silence detection hears; read while recording. */
     speech: FrontendSpeechDetectorState;
-    /** Speeches heard so far, so a stale long-enough timer is ignored. */
-    speechCount: number;
     /** The scene the recorder draws; null while it is not open for this Video. */
     scene: Scene | null;
     /** A Short's screen; null while not open for this Video, and for Landscape. */
@@ -128,6 +128,11 @@ export namespace cvmRecorderReducer {
      * follows the next. Any other's late events are a replay to ignore.
      */
     placing: string | null;
+    /**
+     * The Recording Session placed has a Take whose speech has not ended
+     * (`take-started`): its end is placed. Speech that was no Take is not.
+     */
+    placingTake: boolean;
   };
 
   export type Action =
@@ -136,8 +141,6 @@ export namespace cvmRecorderReducer {
     | { type: "press-record"; silenceLength: SilenceLength }
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
-    /** A speech has lasted the minimum Clip length. */
-    | { type: "speech-long-enough"; speechCount: number }
     | { type: "press-retry" }
     | { type: "press-scene"; scene: Scene }
     | { type: "press-wake-spacedesk" }
@@ -153,8 +156,6 @@ export namespace cvmRecorderReducer {
     | { type: "send-silence-length"; silenceLength: SilenceLength }
     | { type: "retry-camera" }
     | { type: "retry-screen" }
-    /** Report `speech-long-enough` once the minimum Clip length has passed. */
-    | { type: "time-speech"; speechCount: number }
     /** The OBS path's `recording-started`, for a CVM recorder Recording Session. */
     | {
         type: "start-session";
@@ -195,7 +196,6 @@ export const createInitialCvmRecorderState = (
   retrying: false,
   previews: null,
   speech: { type: "warming-up" },
-  speechCount: 0,
   scene: null,
   screen: null,
   wakingAgain: false,
@@ -206,6 +206,7 @@ export const createInitialCvmRecorderState = (
   recordingSessionId: null,
   endedRecordingSessionIds: [],
   placing: null,
+  placingTake: false,
 });
 
 export const CAMERA_LOST_ALERT =
@@ -290,6 +291,7 @@ const follows = (
       );
     case "warmed-up":
     case "speech-started":
+    case "take-started":
     case "speech-ended":
     case "clips-saved":
       return false;
@@ -371,10 +373,15 @@ const heard = (
     case "warmed-up":
       return { ...state, speech: SILENCE };
     case "speech-started":
+      return { ...state, speech: { type: "speaking-detected" } };
+    case "take-started":
+      // The speech is a take now, as OBS's detector makes it one.
       return {
         ...state,
-        speech: { type: "speaking-detected" },
-        speechCount: state.speechCount + 1,
+        speech: {
+          type: "long-enough-speaking-for-clip-detected",
+          soundDetectionId: message.takeId,
+        },
       };
     case "speech-ended":
       return { ...state, speech: SILENCE };
@@ -418,6 +425,7 @@ const placeClips = (
   exec: (effect: cvmRecorderReducer.Effect) => void
 ): cvmRecorderReducer.State => {
   let placing = after.placing;
+  let placingTake = after.placingTake;
   const followed = before.recordingSessionId;
   const follows = after.recordingSessionId;
   if (followed !== follows) {
@@ -432,6 +440,7 @@ const placeClips = (
             : (after.silenceLength ?? DEFAULT_SILENCE_LENGTH),
       });
       placing = follows;
+      placingTake = false;
     }
   }
   // OBS's detector closes the audio window whenever it goes silent.
@@ -444,8 +453,19 @@ const placeClips = (
     message.recordingSessionId === placing
   ) {
     switch (message.type) {
+      case "take-started":
+        // Shown only while the editor follows it: after its stop, the clip
+        // reducer has no session left to show it in, and its Clip is
+        // simply inserted when it comes.
+        if (follows === message.recordingSessionId)
+          exec({ type: "start-take", soundDetectionId: message.takeId });
+        placingTake = true;
+        break;
       case "speech-ended":
-        exec({ type: "place-take", recordingSessionId: placing });
+        // Only a Take is saved; the app server asks about nothing else.
+        if (placingTake)
+          exec({ type: "place-take", recordingSessionId: placing });
+        placingTake = false;
         break;
       case "clips-saved":
         exec({
@@ -458,6 +478,7 @@ const placeClips = (
       case "recording-stopped":
       case "camera-lost":
         placing = null;
+        placingTake = false;
         break;
       case "recording-started":
       case "warmed-up":
@@ -465,7 +486,9 @@ const placeClips = (
         break;
     }
   }
-  return placing === after.placing ? after : { ...after, placing };
+  return placing === after.placing && placingTake === after.placingTake
+    ? after
+    : { ...after, placing, placingTake };
 };
 
 export const cvmRecorderReducer: EffectReducer<
@@ -476,9 +499,6 @@ export const cvmRecorderReducer: EffectReducer<
   switch (action.type) {
     case "recorder-message-heard": {
       const followed = heard(state, action.message);
-      // Not for a speech of a Recording Session the editor ignores.
-      if (action.message.type === "speech-started" && followed !== state)
-        exec({ type: "time-speech", speechCount: followed.speechCount });
       const next = attach(
         placeClips(state, followed, action.message, exec),
         action.message,
@@ -519,24 +539,6 @@ export const cvmRecorderReducer: EffectReducer<
       };
     case "dismiss-alert":
       return { ...state, alert: null };
-    case "speech-long-enough":
-      if (
-        action.speechCount !== state.speechCount ||
-        state.speech.type !== "speaking-detected"
-      )
-        return state;
-      {
-        const soundDetectionId = `cvm-recorder-speech-${action.speechCount}`;
-        // The speech is a take now, as OBS's detector makes it one.
-        exec({ type: "start-take", soundDetectionId });
-        return {
-          ...state,
-          speech: {
-            type: "long-enough-speaking-for-clip-detected",
-            soundDetectionId,
-          },
-        };
-      }
     case "press-stop":
       if (!canStop(state)) return state;
       exec({ type: "stop-recording" });

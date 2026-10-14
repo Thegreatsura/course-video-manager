@@ -5,6 +5,7 @@ import { CAPTURE_TAG, METER_TAG, PREVIEW_TAGS } from "./capture-args";
 import type { Launcher } from "./launcher";
 import type { RecordingSessionEvent } from "./protocol";
 import { recorderTag } from "./recording-session";
+import { endSpeech } from "./speech-detector";
 
 /**
  * CRASH RECOVERY, at the recorder service's start-up. A Recording Session
@@ -96,19 +97,29 @@ export const recoverCrashedSessions = async (o: {
       let seq = Math.max(...session.events.map((e) => e.seq));
       const append = (event: RecordingSessionEvent) =>
         appendJsonLine(session.eventLog, event);
-      const lastSpeech = session.events.findLast(
+      const lastSpeech = session.events.findLastIndex(
         (e) => e.type === "speech-started" || e.type === "speech-ended"
       );
+      const cutOffSpeech = session.events[lastSpeech];
       if (
-        lastSpeech?.type === "speech-started" &&
+        cutOffSpeech?.type === "speech-started" &&
         repaired.mic.duration !== null
       ) {
-        append({
-          type: "speech-ended",
+        // Ended as the detector ends any speech: a Take's Clip only for
+        // speech that is, or was already, a Take.
+        const ended = endSpeech({
+          startedAt: cutOffSpeech.fileTime,
+          takeStarted: session.events
+            .slice(lastSpeech)
+            .some((e) => e.type === "take-started"),
           fileTime: repaired.mic.duration,
-          seq: (seq += 1),
-          recordingSessionId: session.recordingSessionId,
         });
+        for (const event of ended)
+          append({
+            ...event,
+            seq: (seq += 1),
+            recordingSessionId: session.recordingSessionId,
+          });
       }
       append({
         type: "recording-crashed",

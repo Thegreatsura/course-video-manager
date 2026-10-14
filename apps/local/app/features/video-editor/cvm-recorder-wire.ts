@@ -72,8 +72,21 @@ export type CvmRecorderMessage =
   | { type: "warmed-up"; recordingSessionId: string }
   | { type: "speech-started"; recordingSessionId: string }
   /**
-   * A speech ended. Sent before its Clip is saved: an editor following the
-   * Recording Session answers with where to save it (`place-take`).
+   * The speech going now is long enough to be a Clip: a Take, decided by
+   * the recorder service alone (speech-detector.ts), by the rule its Clip is
+   * cut with. The editor shows its Optimistic Clip on this and nothing else.
+   */
+  | {
+      type: "take-started";
+      recordingSessionId: string;
+      /** Unique to the Take: its Optimistic Clip's sound detection id. */
+      takeId: string;
+    }
+  /**
+   * A speech ended. A Take's is sent before its Clip is saved: an editor
+   * following the Recording Session answers with where to save it
+   * (`place-take`). Speech that was no Take makes no Clip, and is not asked
+   * about.
    */
   | { type: "speech-ended"; recordingSessionId: string }
   | {
@@ -129,6 +142,7 @@ export const CVM_RECORDER_MESSAGE_TYPES = [
   "recording-started",
   "warmed-up",
   "speech-started",
+  "take-started",
   "speech-ended",
   "clips-saved",
   "camera-lost",

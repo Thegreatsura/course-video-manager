@@ -118,7 +118,6 @@ describe("the CVM recorder's Record and Stop", () => {
     expect(t.getEffects().map((e) => e.type)).toEqual([
       "start-recording",
       "start-session",
-      "time-speech",
       "stop-recording",
       "stop-session",
     ]);
@@ -371,8 +370,8 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
   });
   const speechEnded = heard({ type: "speech-ended", recordingSessionId: "s1" });
   const warmedUp = heard({ type: "warmed-up", recordingSessionId: "s1" });
-  const longEnough = (speechCount: number) =>
-    ({ type: "speech-long-enough", speechCount }) as const;
+  const takeStarted = (takeId = "s1:5") =>
+    heard({ type: "take-started", recordingSessionId: "s1", takeId });
 
   it("walks the OBS path's states: warming up, silence, speaking, long enough for a Clip, silence", () => {
     const t = tester().send(status()).send(live);
@@ -397,19 +396,17 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
 
     t.send(speechStarted);
     expect(captureOf(t.getState())).toBe("speaking-detected");
-    expect(t.getEffects().at(-1)).toEqual({
-      type: "time-speech",
-      speechCount: 1,
-    });
+    // Speech alone is no take: the editor times nothing itself.
+    expect(t.getEffects().at(-1)?.type).not.toBe("start-take");
 
-    t.send(longEnough(1));
+    t.send(takeStarted());
     expect(captureOf(t.getState())).toBe(
       "long-enough-speaking-for-clip-detected"
     );
     // The speech is a take now: the clip reducer shows its Optimistic Clip.
     expect(t.getEffects().at(-1)).toEqual({
       type: "start-take",
-      soundDetectionId: "cvm-recorder-speech-1",
+      soundDetectionId: "s1:5",
     });
 
     t.send(speechEnded);
@@ -427,20 +424,22 @@ describe("silence detection on the CVM recorder, as the glass shows it", () => {
     expect(captureOf(t.getState())).toBe("not-recording");
   });
 
-  it("never turns long enough for a speech that ended, or for an earlier speech's timer", () => {
-    const t = recording()
-      .send(warmedUp)
-      .send(speechStarted)
-      .send(speechEnded)
-      .send(longEnough(1));
+  it("shows no take, and places nothing, for speech the recorder never called a Take (an 'um')", () => {
+    const t = recording().send(warmedUp).send(speechStarted);
+    const effects = t.getEffects().length;
+    t.send(speechEnded);
     expect(captureOf(t.getState())).toBe("silence");
+    expect(t.getEffects().slice(effects)).toEqual([
+      { type: "close-take-window" },
+    ]);
 
-    t.send(speechStarted).send(longEnough(1));
-    expect(captureOf(t.getState())).toBe("speaking-detected");
-    t.send(longEnough(2));
-    expect(captureOf(t.getState())).toBe(
-      "long-enough-speaking-for-clip-detected"
-    );
+    // The next speech that is a Take is placed.
+    t.send(speechStarted).send(takeStarted("s1:9")).send(speechEnded);
+    expect(t.getEffects().slice(effects + 1)).toEqual([
+      { type: "start-take", soundDetectionId: "s1:9" },
+      { type: "close-take-window" },
+      { type: "place-take", recordingSessionId: "s1" },
+    ]);
   });
 
   it("warms up again on the next Record", () => {
@@ -491,6 +490,9 @@ describe("events from a Recording Session that is not the current one (#2163)", 
     // The held events are saved at last, replayed from s1's start.
     t.send(started("s1"))
       .send(heard({ type: "speech-started", recordingSessionId: "s1" }))
+      .send(
+        heard({ type: "take-started", recordingSessionId: "s1", takeId: "t" })
+      )
       .send(heard({ type: "speech-ended", recordingSessionId: "s1" }));
     expect(t.getState().phase).toBe("idle");
     expect(captureOf(t.getState())).toBe("not-recording");

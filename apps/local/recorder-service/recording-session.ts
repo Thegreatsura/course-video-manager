@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { finished as streamFinished } from "node:stream/promises";
-import type { SilenceLength } from "../app/silence-detection-constants";
+import {
+  silenceLengthToSeconds,
+  type SilenceLength,
+} from "../app/silence-detection-constants";
 import { quitProcess, type Capture } from "./camera";
 import { FILE_NAMES } from "./capture-args";
 import {
@@ -329,7 +332,9 @@ const beginTake = (
     o.emit(logged);
   };
 
-  const speech = createSpeechDetector();
+  const speech = createSpeechDetector(
+    silenceLengthToSeconds(o.settings.silenceLength)
+  );
   let lastFileTime = 0;
   let stopping = false;
   let ended = false;
@@ -373,8 +378,7 @@ const beginTake = (
         );
         return;
       }
-      const change = speech.line(line);
-      if (change) log(change);
+      for (const change of speech.line(line)) log(change);
     })
   );
   // -progress pipe:1: blocks of key=value lines ending `progress=…`;
@@ -386,7 +390,12 @@ const beginTake = (
     lineSplitter((line) => {
       if (ended) return;
       const time = line.match(/^out_time_us=(\d+)/);
-      if (time) lastFileTime = Math.max(lastFileTime, Number(time[1]) / 1e6);
+      if (time) {
+        lastFileTime = Math.max(lastFileTime, Number(time[1]) / 1e6);
+        // The file's own time is the Take's clock, not the wall's.
+        const take = speech.progress(lastFileTime);
+        if (take) log(take);
+      }
       const frame = line.match(/^frame=(\d+)/);
       if (frame) cameraFrames = Number(frame[1]);
       if (cameraFrames > 0) clearTimeout(cameraStart);
@@ -494,8 +503,7 @@ const beginTake = (
         camera.closeLog(),
         streamFinished(captureLog).catch(() => {}),
       ]);
-      const last = speech.stop(lastFileTime);
-      if (last) log(last);
+      for (const last of speech.stop(lastFileTime)) log(last);
       const captureErrors = o.capture.quitWith() ?? [];
       log({
         type: "recording-stopped",

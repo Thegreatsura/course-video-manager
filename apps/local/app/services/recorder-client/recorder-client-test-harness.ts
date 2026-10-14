@@ -196,3 +196,50 @@ export const clipTimes = async (videoId: string) =>
   (await clipService.getTimeline(videoId)).flatMap((i) =>
     i.type === "clip" ? [[i.data.sourceStartTime, i.data.sourceEndTime]] : []
   );
+
+/**
+ * The camera writer as it runs over a synthetic mic: sound over each
+ * [from, to] (`to` may run past `until`), silence between. Its file time
+ * advances in 0.05 s progress blocks up to `until`, and silencedetect
+ * speaks as the real one does: a silence's `silence_start` (its start) once
+ * it has lasted `silenceSeconds`, and its `silence_end` as the sound
+ * returns. A quiet gap shorter than `silenceSeconds` is no silence at all.
+ * The file opens in silence.
+ */
+export const film = (
+  camera: {
+    stderr: (text: string) => void;
+    stdout: (text: string) => void;
+  },
+  o: { silenceSeconds: number; sound: [number, number][]; until: number }
+) => {
+  const lines: { at: number; line: string }[] = [];
+  const silence = (from: number, to: number) => {
+    if (to - from < o.silenceSeconds) return;
+    lines.push({
+      at: from + o.silenceSeconds,
+      line: `[silencedetect @ 1] silence_start: ${from === 0 ? -0.0001 : from}\r\n`,
+    });
+    if (to <= o.until)
+      lines.push({
+        at: to,
+        line: `[silencedetect @ 1] silence_end: ${to} | silence_duration: ${to - from}\r\n`,
+      });
+  };
+  let quietFrom = 0;
+  for (const [from, to] of o.sound) {
+    silence(quietFrom, from);
+    quietFrom = to;
+  }
+  silence(quietFrom, Infinity);
+  lines.sort((a, b) => a.at - b.at);
+  const blocks = Math.round(o.until / 0.05);
+  for (let i = 0; i <= blocks; i++) {
+    const t = Math.round(i * 0.05 * 1000) / 1000;
+    while (lines.length > 0 && lines[0]!.at <= t)
+      camera.stderr(lines.shift()!.line);
+    camera.stdout(
+      `frame=${i + 1}\nout_time_us=${Math.round(t * 1e6)}\nprogress=continue\n`
+    );
+  }
+};

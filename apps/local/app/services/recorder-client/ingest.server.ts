@@ -22,11 +22,12 @@ import { withDbTransaction } from "@/services/with-db-transaction.server";
 import { pairMicOffsetMs } from "@/services/av-calibration.server";
 import { DEFAULT_MIC_OFFSET_MS } from "@cvm/core/features/videos/recorder";
 import type { SequencedEvent } from "./sequencer";
+import { isLongEnoughForClip } from "@/silence-detection-constants";
 
 /**
  * What one recorder event means for the database: a Recording Session row
  * when it starts, stops (with its frames lost) or is found crashed, a scene
- * event row per scene change, Clips when speech ends. Idempotent, so an
+ * event row per scene change, Clips when a Take's speech ends. Idempotent, so an
  * event replayed after a restart changes nothing it already changed.
  *
  * Scene events and Clip bounds are both in picture time; speech arrives in
@@ -204,7 +205,25 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
         videoId,
         messages: [{ type: "speech-started", recordingSessionId }],
       } satisfies IngestResult;
+    case "take-started":
+      return {
+        videoId,
+        messages: [
+          {
+            type: "take-started",
+            recordingSessionId,
+            takeId: `${recordingSessionId}:${event.seq}`,
+          },
+        ],
+      } satisfies IngestResult;
     case "speech-ended": {
+      // Not a Take (no `take-started` came for it, by the same rule): no
+      // Clip, so no editor is asked where.
+      if (!isLongEnoughForClip(event.startFileTime, event.fileTime))
+        return {
+          videoId,
+          messages: [{ type: "speech-ended", recordingSessionId }],
+        } satisfies IngestResult;
       // Speech is heard in mic file time; Clips are cut in the picture's,
       // which the mic runs ahead of by its offset.
       const offset = session.micOffsetMs / 1000;
