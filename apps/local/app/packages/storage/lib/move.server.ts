@@ -2,7 +2,11 @@ import nodeFs from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 import type { Database } from "@cvm/core/services/drizzle-service.server";
-import type { StorageMoveKind, StorageMoveResult } from "./move-wire";
+import type {
+  MovePlacedProof,
+  StorageMoveKind,
+  StorageMoveResult,
+} from "./move-wire";
 import {
   gb,
   messageOf,
@@ -61,6 +65,10 @@ export { startStorageMove } from "./move-start.server";
  *   success with files left) removes the Job's partials; an interruption keeps
  *   them for the next run to resume, and once the Job has ended for good the
  *   Sidecar's sweep (`sweepEndedMovePartials`) removes whatever is left.
+ * - Every copy placed (or verified by checksum) is RECORDED with its proof (a
+ *   `move-placed` Job Event: path, size, both mtimes, SHA-256; #2179). A
+ *   resumed run accepts a copy this Job placed while the source's and the
+ *   copy's size and mtime still match it, and hashes any other in full.
  * - Cancel leaves every original and every verified copy alone.
  */
 
@@ -91,6 +99,13 @@ export const runStorageMove = (opts: {
   readonly recordPartial?: (partial: string) => Promise<void>;
   /** Partials this Job recorded in earlier runs: its own to resume or remove. */
   readonly ownPartials?: readonly string[];
+  /** Copies this Job placed in earlier runs, with their proof (#2179). */
+  readonly placed?: readonly MovePlacedProof[];
+  /**
+   * Record a copy just placed or verified by checksum. Best-effort: a proof
+   * it could not record only means a full check on the next run.
+   */
+  readonly recordPlaced?: (proof: MovePlacedProof) => Promise<void>;
 }): Effect.Effect<
   StorageMoveResult,
   StorageMoveRefusedError | StorageMoveFailedError | StorageMoveCancelledError
@@ -120,6 +135,7 @@ export const runStorageMove = (opts: {
       }
       own.add(partial);
     };
+    const placed = new Map((opts.placed ?? []).map((p) => [p.path, p]));
     const sweepPartials = () =>
       removeOwnPartials({ partials: [...own], target: opts.target, folder });
 
@@ -191,6 +207,7 @@ export const runStorageMove = (opts: {
                 control,
                 onBytes,
                 recordPartial,
+                placed,
               });
             } catch (error) {
               if (
@@ -212,6 +229,9 @@ export const runStorageMove = (opts: {
                 });
               }
               outcome = { type: "left", message: messageOf(error) };
+            }
+            if (outcome.type !== "left" && outcome.proof !== undefined) {
+              await opts.recordPlaced?.(outcome.proof).catch(() => undefined);
             }
             done = before + file.bytes;
             onBytes(0);
