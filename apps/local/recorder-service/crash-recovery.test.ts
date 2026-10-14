@@ -120,7 +120,12 @@ describe("a preview that ignores q", () => {
     const windows = fakeWindows({ cameraTries: ["stuck"] });
     const preview = windows.launch({
       tool: "ffmpeg",
-      args: cameraPreviewArgs({ camera: "Cam Link 4K", port: 1, stillPort: 2 }),
+      args: cameraPreviewArgs({
+        camera: "Cam Link 4K",
+        port: 1,
+        stillPort: 2,
+        encoder: "nvenc",
+      }),
       cwd: "/mnt/c",
     });
     const quitting = quitProcess(preview, {

@@ -219,6 +219,18 @@ const sendFrames = (p: FakeProcess, args: readonly string[]) => {
   });
 };
 
+/** What ffmpeg 8.0.1's h264_nvenc prints when every session is taken. */
+const NVENC_BUSY_STDERR = [
+  "[h264_nvenc @ 0001] [error] OpenEncodeSessionEx failed: out of memory (10): (no details)",
+  "[h264_nvenc @ 0001] [error] No capable devices found",
+  "[vost#0:0/h264_nvenc @ 0002] [error] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
+  "",
+].join("\r\n");
+
+/** Whether a process writes `file`: as an output of its own, or a tee's slave (`recordedAndPreviewed`). */
+export const writesFile = (args: readonly string[], file: string) =>
+  args.some((a) => a === file || a.includes(`]${file}|`));
+
 const isPreview = (l: Launch, input: string) =>
   l.tool === "ffmpeg" &&
   l.args.some((a) => a.includes("tcp://")) &&
@@ -231,6 +243,12 @@ export const fakeWindows = (
     driver?: string;
     /** Each try at the Cam Link in turn; every try after these gets frames. */
     cameraTries?: CameraTry[];
+    /**
+     * NVENC has no free session: every preview launched with h264_nvenc
+     * exits at once saying so, as ffmpeg 8.0.1 does. Recordings are not
+     * affected.
+     */
+    nvencBusy?: boolean;
     /** The recording's camera + mic process: its first frame comes at once, or never. */
     recordingCamera?: "frames" | "silent";
     /**
@@ -344,6 +362,14 @@ export const fakeWindows = (
     // 8.0.1 exits 0 after listing, on stderr.
     if (l.args.includes("-list_devices"))
       return answer(p, { stderr: DEVICE_LISTING, code: 0 });
+    if (
+      o.nvencBusy &&
+      (isPreview(l, "video=") || isPreview(l, "ddagrab")) &&
+      l.args.includes("h264_nvenc")
+    ) {
+      (isPreview(l, "ddagrab") ? screenPreviews : cameraPreviews).push(p);
+      return answer(p, { stderr: NVENC_BUSY_STDERR, code: 1 });
+    }
     if (isPreview(l, "video=")) {
       cameraPreviews.push(p);
       const next = cameraTries.shift() ?? "frames";
@@ -398,7 +424,7 @@ export const fakeWindows = (
     if (l.args.at(-2) === "-i")
       return answer(p, probeAnswer(path.join(l.cwd, l.args.at(-1) ?? "")));
     recorders.push(p);
-    if (l.args.includes("camera.mkv") && o.recordingCamera !== "silent")
+    if (writesFile(l.args, "camera.mkv") && o.recordingCamera !== "silent")
       setImmediate(() =>
         p.stdout("frame=1\nout_time_us=0\nprogress=continue\n")
       );
@@ -414,7 +440,8 @@ export const fakeWindows = (
     );
   const recorder = (kind: "screen" | "camera") => {
     const p = recorders.find(
-      (r) => r.launch.tool === "ffmpeg" && r.launch.args.includes(`${kind}.mkv`)
+      (r) =>
+        r.launch.tool === "ffmpeg" && writesFile(r.launch.args, `${kind}.mkv`)
     );
     if (!p) throw new Error(`no ${kind} recorder was launched`);
     return p;

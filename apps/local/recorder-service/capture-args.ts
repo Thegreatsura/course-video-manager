@@ -30,11 +30,13 @@ import {
  * stamps only anchor it: its audio is timed by sample count (`micOnClock`).
  *
  * PREVIEWS: every process that sees a picture also sends it, full size, as
- * a low-latency H.264 stream to the service (`previewOutput`), which relays
- * it to the browser
+ * a low-latency H.264 stream (NVENC, or libx264 as a fallback) to the
+ * service (`previewOutput`), which relays it to the browser
  * (`preview-feeds.ts`). While the recorder is open but not recording, the
  * camera has a preview-only process of its own (`cameraPreviewArgs`); while
- * recording, the camera + mic process carries the camera preview. The screen
+ * recording, the camera + mic process sends camera.mkv's own packets as the
+ * camera preview (`recordedAndPreviewed`), with no encoder of the preview's
+ * own that could fail the take. The screen
  * preview is always its own process (`screenPreviewArgs`): reading a D3D11
  * frame back in the screen recorder would cost it frames.
  */
@@ -98,6 +100,16 @@ const nvenc = (gopFrames: number) => [
 ];
 
 /**
+ * camera.mkv's NVENC hands each frame on one frame behind, rather than
+ * holding a queue of them (ffmpeg's default; the take's camera preview,
+ * which is camera.mkv's stream (#2203), drew 510-550 ms late with it and
+ * 286 ms at one frame, synthetic). The packets are the same either way
+ * (same framemd5 at the default, 0, 1 and 2, synthetic 1440p29.97), and it
+ * kept real time.
+ */
+const CAMERA_TAKE_DELAY = ["-delay", "1"];
+
+/**
  * MKV, not fragmented MP4 (which put the first video frame two frames late),
  * with 1 s clusters: a cluster is held in memory until it closes, so the
  * cluster time bounds what a hard kill loses.
@@ -139,33 +151,89 @@ const WALLCLOCK = [
  * null output keeps the tee alive. The socket sends each packet as soon as
  * it is written (no Nagle).
  */
-const teeToFeed = (port: number, format: string, queueSize: number) => [
+const teeToFeed = (port: number, format: string, queueSize: number) =>
+  teeWith(queueSize, `${feedSlave(port, format)}|[f=null:use_fifo=0]-`);
+
+const teeWith = (queueSize: number, slaves: string) => [
   "-f",
   "tee",
   "-use_fifo",
   "1",
   "-fifo_options",
   `attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=${queueSize}`,
-  `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`,
+  slaves,
+];
+
+const feedSlave = (port: number, format: string) =>
+  `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1`;
+
+/**
+ * A Footage file that is also a preview feed (#2203): the recording's own
+ * encoded packets, written to `file` exactly as `MKV` writes them (no fifo,
+ * and a failure there fails the recording, as it always has), and copied to
+ * the service's feed in FLV behind the same dropping, retrying fifo as any
+ * preview. No second encoder, so nothing about the preview (its encoder
+ * failing, its consumer gone or stalled) can stop or slow the file. The
+ * packets in the file are the ones a plain matroska output writes (checked:
+ * the same framemd5, size and CodecPrivate, synthetic). Global headers, as
+ * matroska asks for them anyway: FLV needs the SPS/PPS up front.
+ */
+export const recordedAndPreviewed = (file: string, port: number) => [
+  "-flags",
+  "+global_header",
+  ...teeWith(
+    8,
+    `[f=matroska:use_fifo=0:onfail=abort:cluster_time_limit=1000:flush_packets=1]${file}|${feedSlave(port, "flv")}`
+  ),
 ];
 
 /**
- * A preview output: the picture at full size as a low-latency H.264 stream
- * to the service's TCP feed for it (#2192), which relays it to the browser
- * to decode in hardware (`preview-feeds.ts`). Encoded on the CPU with
- * libx264, never NVENC: the recording's encoder budget stays the
- * recording's. ultrafast + zerolatency: no B-frames, no lookahead, each
- * frame out as soon as it is in. A keyframe a second, so a browser that
- * joins late (or loses a packet) is whole within a second. In FLV, whose
- * tags carry their own lengths: the service hands a frame on the moment its
- * last byte is in, with no container to wait on.
- *
- * The fifo may hold a few frames: a dropped packet breaks the picture until
- * the next keyframe, so it drops only when the service has stopped reading.
+ * What encodes a preview stream (#2194): NVENC, or libx264 on the CPU once
+ * NVENC would not open for that feed (`preview-encoders.ts`).
  */
-export const previewOutput = (port: number, gopFrames: number) => [
-  "-fps_mode",
-  "passthrough",
+export type PreviewEncoder = "nvenc" | "x264";
+
+/**
+ * The preview's NVENC encode, tuned for latency: the fastest preset, the
+ * ultra-low-latency tune, no B-frames, no lookahead, no reordering delay, a
+ * keyframe exactly every `gopFrames` (IDR, no scene cuts). High profile and
+ * 4:2:0 whatever comes in (the screen is BGRA), which WebCodecs decodes in
+ * hardware. Constant QP 21 is near-transparent at preview size.
+ */
+const previewNvenc = (gopFrames: number) => [
+  "-c:v",
+  "h264_nvenc",
+  "-preset",
+  "p1",
+  "-tune",
+  "ull",
+  "-zerolatency",
+  "1",
+  "-delay",
+  "0",
+  "-rc-lookahead",
+  "0",
+  "-bf",
+  "0",
+  "-rc",
+  "constqp",
+  "-qp",
+  String(PREVIEW_QP),
+  "-profile:v",
+  "high",
+  "-g",
+  String(gopFrames),
+  "-forced-idr",
+  "1",
+  "-no-scenecut",
+  "1",
+];
+
+/**
+ * The CPU fallback, as #2192 shipped it: libx264 ultrafast + zerolatency,
+ * no B-frames, no lookahead, each frame out as soon as it is in.
+ */
+const previewX264 = (gopFrames: number) => [
   "-c:v",
   "libx264",
   "-preset",
@@ -178,16 +246,41 @@ export const previewOutput = (port: number, gopFrames: number) => [
   "yuv420p",
   "-g",
   String(gopFrames),
+  "-x264-params",
+  `keyint_min=${gopFrames}:scenecut=0:threads=${PREVIEW_THREADS}`,
+];
+
+/**
+ * A preview output: the picture at full size as a low-latency H.264 stream
+ * to the service's TCP feed for it (#2192), which relays it to the browser
+ * to decode in hardware (`preview-feeds.ts`). On NVENC (#2194), with libx264
+ * as the fallback (`PreviewEncoder`). A keyframe a second, so a browser that
+ * joins late (or loses a packet) is whole within a second. In FLV, whose
+ * tags carry their own lengths: the service hands a frame on the moment its
+ * last byte is in, with no container to wait on.
+ *
+ * The fifo may hold a few frames: a dropped packet breaks the picture until
+ * the next keyframe, so it drops only when the service has stopped reading.
+ */
+export const previewOutput = (
+  port: number,
+  gopFrames: number,
+  encoder: PreviewEncoder
+) => [
+  "-fps_mode",
+  "passthrough",
+  ...(encoder === "nvenc" ? previewNvenc(gopFrames) : previewX264(gopFrames)),
   // The tee hides FLV's need for the SPS/PPS up front: ask for them.
   "-flags",
   "+global_header",
-  "-x264-params",
-  `keyint_min=${gopFrames}:scenecut=0:threads=${PREVIEW_THREADS}`,
   ...teeToFeed(port, "flv", 8),
 ];
 
-/** Near-transparent: the preview is not to look any softer than the Footage. */
+/** libx264's quality: near-transparent, the preview is not to look any softer than the Footage. */
 const PREVIEW_CRF = 18;
+
+/** NVENC's: about libx264's CRF 18 at the preview's sizes. */
+const PREVIEW_QP = 21;
 
 /** libx264's threads per preview: enough for 1440p30 or 1080p60 in real time, short of every core. */
 const PREVIEW_THREADS = 4;
@@ -226,10 +319,11 @@ const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 
 /**
  * The camera preview at the size camera.mkv gets (1440p), scaled on the GPU
- * as the recording scales it, then down to the CPU for libx264.
+ * as the recording scales it. NVENC takes the CUDA frame as it is; libx264
+ * needs it down on the CPU.
  */
-const CAMERA_PREVIEW_SCALE =
-  "scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12";
+const cameraPreviewScale = (encoder: PreviewEncoder) =>
+  `scale_cuda=2560:1440:interp_algo=bicubic${encoder === "nvenc" ? "" : ",hwdownload,format=nv12"}`;
 
 /** A keyframe a second at the Cam Link's 29.97 fps. */
 const CAMERA_PREVIEW_GOP = 30;
@@ -296,15 +390,16 @@ export const cameraPreviewArgs = (o: {
   camera: string;
   port: number;
   stillPort: number;
+  encoder: PreviewEncoder;
 }) => [
   ...PREVIEW_HEAD,
   ...camLinkInput(o.camera, RTBUF.preview),
   "-filter_complex",
-  `[0:v]hwupload_cuda,split[p][s];[p]${CAMERA_PREVIEW_SCALE}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
+  `[0:v]hwupload_cuda,split[p][s];[p]${cameraPreviewScale(o.encoder)}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
   "-map",
   "[prev]",
   ...tagged(PREVIEW_TAGS.camera),
-  ...previewOutput(o.port, CAMERA_PREVIEW_GOP),
+  ...previewOutput(o.port, CAMERA_PREVIEW_GOP, o.encoder),
   "-map",
   "[still]",
   ...stillOutput(o.stillPort),
@@ -315,18 +410,31 @@ export const cameraPreviewArgs = (o: {
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
  * without touching the screen recorder. At the screen's own size and 60
  * fps, as the screen is recorded and as OBS previews it: nothing is scaled
- * (#2192).
+ * (#2192). For NVENC (#2194) the frame stays on the GPU, made NV12 there as
+ * the screen recorder makes it: NVENC fed BGRA converts each frame itself
+ * and fell behind 60 fps (41-49 fps, synthetic). libx264 needs it down on
+ * the CPU.
  */
-export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
+/** What the screen preview does to ddagrab's D3D11 BGRA frame before its encoder. */
+export const SCREEN_PREVIEW_CHAIN: Record<PreviewEncoder, string> = {
+  nvenc: "scale_d3d11=format=nv12",
+  x264: "hwdownload,format=bgra",
+};
+
+export const screenPreviewArgs = (o: {
+  screenIndex: number;
+  port: number;
+  encoder: PreviewEncoder;
+}) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=60,hwdownload,format=bgra`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=60,${SCREEN_PREVIEW_CHAIN[o.encoder]}`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),
-  ...previewOutput(o.port, 60),
+  ...previewOutput(o.port, 60, o.encoder),
 ];
 
 /** The camera (input 0) stamped in file time: wall time less T0. */
@@ -454,7 +562,7 @@ export type CaptureOptions = {
   silenceLength: SilenceLength;
   /** The silence threshold silencedetect cuts with, in dB. */
   thresholdDb: number;
-  /** The service's camera preview feed, which this process also sends to. */
+  /** The service's camera preview feed, which this process also sends camera.mkv's stream to. */
   cameraPreviewPort: number;
 };
 
@@ -494,13 +602,11 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   const silence = silencedetectFilter(
     silenceRule(o.silenceLength, o.thresholdDb)
   );
-  // The preview splits off as soon as the camera is on the GPU, before the
-  // shared clock's CFR (#2144): the fps filter holds each frame until the
-  // next one comes, and the preview need not wait on the 1440p scale.
+  // The camera preview during a take is camera.mkv's own stream
+  // (`recordedAndPreviewed`, #2203): a preview encoder of its own in this
+  // process could fail the whole process, and the take with it.
   const cameraGraph = [
-    `${cameraOnT0(t0)},hwupload_cuda,split[camr][camp]`,
-    `[camr]${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
-    `[camp]${CAMERA_PREVIEW_SCALE}[camprev]`,
+    `${cameraOnT0(t0)},hwupload_cuda,${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
     `${micOnClock(t0)},asplit=2[mic][sd]`,
     `[sd]${silence},anullsink`,
   ].join(";");
@@ -513,10 +619,10 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     "-map",
     "[cam]",
     ...nvenc(60),
+    ...CAMERA_TAKE_DELAY,
     "-metadata",
     `comment=${o.tag}`,
-    ...MKV,
-    FILE_NAMES.camera,
+    ...recordedAndPreviewed(FILE_NAMES.camera, o.cameraPreviewPort),
     "-map",
     "[mic]",
     "-c:a",
@@ -529,9 +635,6 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     `comment=${o.tag}`,
     ...MKV,
     FILE_NAMES.mic,
-    "-map",
-    "[camprev]",
-    ...previewOutput(o.cameraPreviewPort, CAMERA_PREVIEW_GOP),
   ];
   return { screen, camera };
 };

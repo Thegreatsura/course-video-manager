@@ -3,7 +3,7 @@
  * live preview shows it in a browser (#2144, #2192).
  *
  *   pnpm --filter @cvm/local preview-latency [--scenario camera|camera-cpu|screen|screen-square|recording|floor|all]
- *     [--seconds 10]
+ *     [--seconds 10] [--encoder nvenc|x264]
  *
  * Synthetic sources only: no capture device, no screen. Each scenario takes
  * the real ffmpeg.exe arguments (`capture-args.ts`) and swaps the device
@@ -28,7 +28,8 @@
  *              frame costs (the pipe in, encode, tee, TCP, browser), for
  *              reading the others against
  *
- * Uses the GPU (CUDA, NVENC) for camera and recording only.
+ * The previews encode on NVENC unless `--encoder x264` (#2194); the camera
+ * and recording scenarios use CUDA either way.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -41,6 +42,8 @@ import {
   cameraPreviewArgs,
   previewOutput,
   screenPreviewArgs,
+  SCREEN_PREVIEW_CHAIN,
+  type PreviewEncoder,
 } from "../recorder-service/capture-args";
 import { startPreviewFeeds } from "../recorder-service/preview-feeds";
 import { findFfmpegExe } from "../recorder-service/windows-launcher";
@@ -69,6 +72,7 @@ const flag = (name: string, fallback: string) => {
 };
 const scenarioFlag = flag("--scenario", "all");
 const seconds = Number(flag("--seconds", "10"));
+const encoder = flag("--encoder", "nvenc") as PreviewEncoder;
 const WARMUP_SECONDS = 3;
 
 /**
@@ -185,7 +189,7 @@ const ffmpegArgs = (
         upscale("640x360", "yuv420p"),
         "-map",
         "0:v",
-        ...previewOutput(port, 30),
+        ...previewOutput(port, 30, encoder),
       ];
     case "camera-cpu":
       return [
@@ -197,11 +201,11 @@ const ffmpegArgs = (
         upscale("2560x1440", "yuv420p"),
         "-map",
         "0:v",
-        ...previewOutput(port, 30),
+        ...previewOutput(port, 30, encoder),
       ];
     case "camera":
       return withoutDevices(
-        cameraPreviewArgs({ camera: "synthetic", port, stillPort })
+        cameraPreviewArgs({ camera: "synthetic", port, stillPort, encoder })
       );
     case "screen":
     case "screen-square": {
@@ -209,14 +213,21 @@ const ffmpegArgs = (
       // shape and size: the preview sends it unscaled, so the browser still
       // reads the 320x180 clock whole once it scales it back.
       const size = SCREENS[scenario];
-      const argv = screenPreviewArgs({ screenIndex: 0, port });
+      const argv = screenPreviewArgs({ screenIndex: 0, port, encoder });
+      // For NVENC the BGRA goes up to the GPU as D3D11, as ddagrab gives
+      // it, and through the preview's own chain there.
       const at = argv.findIndex((a) => a.startsWith("ddagrab="));
       const rate = argv[at]!.match(/framerate=(\d+)/)?.[1] ?? "60";
+      const bgra = upscale(`${size.width}x${size.height}`, "bgra");
+      const d3d11 = encoder === "nvenc";
       return [
         ...argv.slice(0, at - 3),
+        ...(d3d11
+          ? ["-init_hw_device", "d3d11va=d3d", "-filter_hw_device", "d3d"]
+          : []),
         ...pipedInput(rate),
         "-vf",
-        upscale(`${size.width}x${size.height}`, "bgra"),
+        d3d11 ? `${bgra},hwupload,${SCREEN_PREVIEW_CHAIN.nvenc}` : bgra,
         ...argv.slice(at + 1),
       ];
     }
