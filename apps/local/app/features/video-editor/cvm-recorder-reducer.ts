@@ -7,6 +7,7 @@ import {
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
 import { isSceneAvailable, isScreenWaking } from "./cvm-recorder-screen";
+import { attach } from "./cvm-recorder-attach";
 import type {
   CvmRecorderMessage,
   SavedRecorderClip,
@@ -46,6 +47,9 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * (timed here, as the OBS path's browser detector times it); a silence as
  * long as the Silence Length (`speech-ended`) closes it.
  *
+ * Attaching: a page stops a take it finds going, as OBS does on connect
+ * (`cvm-recorder-attach.ts`).
+ *
  * Sessions: the editor follows one Recording Session at a time, the one the
  * recorder says is recording (`recorder-status`) or that just started. A
  * Recording Session's events can arrive late (held behind a save that
@@ -82,6 +86,8 @@ export namespace cvmRecorderReducer {
     format: VideoFormat;
     /** Null until the app server first says. */
     reachable: boolean | null;
+    /** The recorder has reported in to this page (Attaching). */
+    attached: boolean;
     /** Why the recorder cannot record at all (a wrong ffmpeg). */
     problem: string | null;
     phase: Phase;
@@ -182,6 +188,7 @@ export const createInitialCvmRecorderState = (
 ): cvmRecorderReducer.State => ({
   format,
   reachable: null,
+  attached: false,
   problem: null,
   phase: "idle",
   camera: { kind: "closed" },
@@ -472,7 +479,11 @@ export const cvmRecorderReducer: EffectReducer<
       // Not for a speech of a Recording Session the editor ignores.
       if (action.message.type === "speech-started" && followed !== state)
         exec({ type: "time-speech", speechCount: followed.speechCount });
-      const next = placeClips(state, followed, action.message, exec);
+      const next = attach(
+        placeClips(state, followed, action.message, exec),
+        action.message,
+        exec
+      );
       // A new or restarted app server knows nothing of the editor's choice.
       if (
         action.message.type === "recorder-status" &&
