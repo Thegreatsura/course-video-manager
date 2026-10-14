@@ -52,9 +52,9 @@ export const startService = async (
 export type Ingest = RecorderClientOptions["ingest"];
 
 /** The real ingest, on PGlite. */
-export const saveEvent: Ingest = (event, insertionPointFor) =>
+export const saveEvent: Ingest = (event, askEditor) =>
   Effect.runPromise(
-    ingestRecorderEvent(testDb as never, event, insertionPointFor).pipe(
+    ingestRecorderEvent(testDb as never, event, askEditor).pipe(
       Effect.provide(
         JobOperationsService.Default.pipe(
           Layer.provide(Layer.succeed(DrizzleService, testDb as never))
@@ -123,6 +123,8 @@ export const connectClient = (
     commandTimeoutMs: 5_000,
     closeGraceMs: 50,
     retryMs: 20,
+    // A listener here never answers `speech-ended` unless its test does.
+    placeTimeoutMs: 30,
     folder: STREAM_DECK_FOLDER,
   });
   clients.push(client);
@@ -140,7 +142,6 @@ export const recordOn = async (client: TestRecorderClient) => {
   await vi.waitFor(() =>
     client.startRecording(video.id, {
       silenceLength: "short",
-      insertionPoint: { type: "start" },
       folder: tmp(),
     })
   );

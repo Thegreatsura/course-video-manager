@@ -45,7 +45,18 @@ export type RetryingJobPolicy = {
   readonly lane: LaneName;
   readonly posting?: false;
 } & (
-  | { readonly maxAttempts: number; readonly neverRequeued?: undefined }
+  | {
+      readonly maxAttempts: number;
+      readonly neverRequeued?: undefined;
+      /**
+       * `true` for a kind whose run picks up where a lost run left off (a
+       * storage move resumes each file by size). A LOST run — its sidecar
+       * died, or lost its lease — then goes back to the queue at the same
+       * attempt, up to `FREE_LOST_RUNS` times, instead of spending one
+       * (#2167). A run that FAILS still spends an attempt.
+       */
+      readonly resumable?: boolean;
+    }
   | {
       /**
        * A kind that must never run again on its own has exactly one attempt:
@@ -193,6 +204,7 @@ export const IMAGE_UPLOAD_POLICY = {
 export const COURSE_DUPLICATE_POLICY = {
   lane: "default",
   maxAttempts: 2,
+  resumable: true,
 } as const satisfies RetryingJobPolicy;
 
 /**
@@ -200,10 +212,13 @@ export const COURSE_DUPLICATE_POLICY = {
  * checking each by checksum. 2 attempts, like a Course duplicate: a lost run
  * resumes each file by size, and a copy already in place is checked, never
  * copied again. A stop puts it back. The author's Cancel ends it `cancelled`.
+ * Resumable: a lost run (a Sidecar restart, a lapsed lease) spends no attempt,
+ * so a move of 100+ GB outlasts restarts (#2167).
  */
 export const STORAGE_MOVE_POLICY = {
   lane: "default",
   maxAttempts: 2,
+  resumable: true,
 } as const satisfies RetryingJobPolicy;
 
 /**

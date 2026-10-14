@@ -174,9 +174,9 @@ describe("the recorder client, cut off mid-take", () => {
     // Up again, twice over; each start replays the whole Recording Session.
     for (let restart = 0; restart < 2; restart++) {
       let speechEnds = 0;
-      const counting: Ingest = (event, insertionPointFor) => {
+      const counting: Ingest = (event, askEditor) => {
         if (event.type === "speech-ended") speechEnds++;
-        return saveEvent(event, insertionPointFor);
+        return saveEvent(event, askEditor);
       };
       const client = connectClient(port, counting);
       await vi.waitFor(() => expect(speechEnds).toBe(2));

@@ -31,8 +31,7 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 1",
             soundDetectionId: "sound-1",
           })
@@ -43,8 +42,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
@@ -54,8 +52,7 @@ describe("clipStateReducer", () => {
       const state = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 3",
             soundDetectionId: "sound-3",
           })
@@ -78,8 +75,7 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 1",
             soundDetectionId: "sound-1",
           })
@@ -90,8 +86,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
@@ -151,24 +146,21 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip A",
             soundDetectionId: "sound-a",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip B",
             soundDetectionId: "sound-b",
           })
         )
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip C",
             soundDetectionId: "sound-c",
           })
@@ -266,8 +258,7 @@ describe("clipStateReducer", () => {
       // Add first clip
       tester.send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           scene: "Clip 1",
           soundDetectionId: "sound-1",
         })
@@ -290,8 +281,7 @@ describe("clipStateReducer", () => {
       const stateWithClip2 = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
@@ -308,8 +298,7 @@ describe("clipStateReducer", () => {
       const stateWithClip3 = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 3",
             soundDetectionId: "sound-3",
           })
@@ -532,8 +521,7 @@ describe("clipStateReducer", () => {
       tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 1",
             soundDetectionId: "sound-1",
           })
@@ -544,8 +532,7 @@ describe("clipStateReducer", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })

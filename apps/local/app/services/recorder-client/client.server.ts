@@ -5,7 +5,6 @@ import {
   type RecorderState,
 } from "recorder-service/protocol";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
-import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { LastPassedCalibration } from "@/av-calibration-constants";
 import type { Scene } from "@/packages/scene-layout";
@@ -17,7 +16,8 @@ import {
   serviceUrls,
 } from "./editor-messages";
 import { helloProblem } from "./service-version";
-import type { IngestResult } from "./ingest.server";
+import type { AskEditor, IngestResult } from "./ingest.server";
+import { createTakePlacer } from "./take-placer";
 import {
   RecorderRefusedError,
   RecorderUnavailableError,
@@ -34,9 +34,8 @@ import { streamDeckPreparation } from "./stream-deck-prepare";
  * recorder's events mean (`ingest.server.ts`) one at a time and in order,
  * and passes what was saved on to the editors open on that Video.
  *
- * It keeps, per Video, where the next Clip goes: the editor's insertion point
- * as sent with Record (and whenever it moves), then after each Clip placed,
- * unless the editor moved it while that Clip was being saved.
+ * It holds no insertion point: each speech is saved where an editor says
+ * (`take-placer.ts`), as on OBS.
  *
  * An event it could not save is not lost: the rest of that Recording Session
  * waits, and after a pause the whole of it is asked for again (saving is
@@ -65,8 +64,10 @@ export type RecorderClientOptions = {
   /** Saves one event; the client runs one at a time. */
   ingest: (
     event: SequencedEvent,
-    insertionPointFor: (videoId: string) => InsertionPoint | undefined
+    askEditor: AskEditor
   ) => Promise<IngestResult>;
+  /** How long a save waits for an editor to say where (`placeTake`). */
+  placeTimeoutMs: number;
   /**
    * The Recording Sessions the database still has as recording, and those of
    * `candidates` it has no row for. Each is replayed whenever the recorder
@@ -99,7 +100,6 @@ type Waiter = {
 
 export const createRecorderClient = (o: RecorderClientOptions) => {
   const listeners = new Map<string, Set<Listener>>();
-  const insertionPoints = new Map<string, InsertionPoint>();
   const sequencer = createRecorderEventSequencer();
   let waiters: Waiter[] = [];
   let socket: WebSocket | undefined;
@@ -122,6 +122,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   const publish = (videoId: string, message: CvmRecorderMessage) => {
     for (const listener of listeners.get(videoId) ?? []) listener(message);
   };
+  const placer = createTakePlacer({ timeoutMs: o.placeTimeoutMs, publish });
   const statusFor = (videoId: string): CvmRecorderMessage => ({
     type: "recorder-status",
     reachable,
@@ -245,19 +246,16 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
     const generation = generations.get(id) ?? 0;
     ingesting = ingesting.then(async () => {
       if ((generations.get(id) ?? 0) !== generation) return;
-      /** The insertion point each Video's Clip was placed at. */
-      const used = new Map<string, InsertionPoint | undefined>();
+      const { askEditor, settle } = placer.forEvent();
       let result: IngestResult;
       try {
-        result = await o.ingest(event, (videoId) => {
-          const point = insertionPoints.get(videoId);
-          used.set(videoId, point);
-          return point;
-        });
+        result = await o.ingest(event, askEditor);
       } catch (error) {
+        settle();
         saveFailed(event, error);
         return;
       }
+      settle(result.placed);
       if ((failing.get(id)?.seq ?? Infinity) <= event.seq) failing.delete(id);
       if (!result.videoId) return;
       // Refused (a Stream Deck Record outside the Draft): a take that is
@@ -268,12 +266,6 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         state.recordingSessionId === id
       )
         send({ type: "stop" });
-      // Moved by the editor while this Clip saved: the editor's point stands.
-      if (
-        result.insertionPoint &&
-        insertionPoints.get(result.videoId) === used.get(result.videoId)
-      )
-        insertionPoints.set(result.videoId, result.insertionPoint);
       for (const message of result.messages) publish(result.videoId, message);
     });
   };
@@ -511,7 +503,6 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       videoId: string,
       request: {
         silenceLength: SilenceLength;
-        insertionPoint: InsertionPoint;
         /** The folder (WSL path) each Recording Session's folder goes in. */
         folder: string;
         /** The Video's format: a Short records the Short layout's sources. */
@@ -519,7 +510,6 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       }
     ) {
       if (problem) throw new RecorderRefusedError(problem);
-      insertionPoints.set(videoId, request.insertionPoint);
       const format = request.format ?? "landscape";
       formats.set(videoId, format);
       await command({ type: "open", videoId, format }, (m) =>
@@ -604,10 +594,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       reconcile();
     },
 
-    /** The editor moved its insertion point: the next Clip goes there. */
-    setInsertionPoint(videoId: string, insertionPoint: InsertionPoint) {
-      insertionPoints.set(videoId, insertionPoint);
-    },
+    placeTake: placer.placeTake,
 
     subscribeMeter: meter.subscribe,
 

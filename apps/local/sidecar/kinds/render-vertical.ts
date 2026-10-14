@@ -7,7 +7,7 @@ import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 
 /**
  * **Vertical Shorts render** (#8 in docs/plans/background-jobs-sidecar.md):
- * concat → Whisper subtitles → Remotion overlay → composite, through the same
+ * concat → subtitles from the Clips → Remotion overlay → composite, through the same
  * `RenderVerticalVideoService.renderVerticalVideo` the `render-vertical-sse`
  * route used to run. Driven by the sidecar, so closing the tab no longer stops
  * it, and its failure lands in the Job's log as well as the Video's. Each

@@ -263,6 +263,16 @@ export const neverReRunMessagesOf = (
   return messages;
 };
 
+/** Whether a lost run of a kind resumes, and so spends no attempt (#2167). */
+export const isResumable = (kind: object | undefined): boolean =>
+  kind !== undefined && "resumable" in kind && kind.resumable === true;
+
+/** The kinds in `registry` whose lost runs resume: what recovery is told. */
+export const resumableKindsOf = (
+  registry: Readonly<Record<string, object>>
+): string[] =>
+  Object.keys(registry).filter((name) => isResumable(registry[name]));
+
 /** Whether a kind posts: 1 attempt, never re-queued, Retry by hand only. */
 export const isPostingKind = (
   kind: { readonly posting?: boolean } | JobPolicy | undefined
@@ -280,7 +290,10 @@ export const defineJobKind = <P, I, R = never>(
           neverRequeued: true as const,
           interruptedMessage: definition.interruptedMessage,
         }
-      : { maxAttempts: definition.maxAttempts }),
+      : {
+          maxAttempts: definition.maxAttempts,
+          ...(definition.resumable ? { resumable: true as const } : {}),
+        }),
     decodeParams: decode,
     runRaw: (raw, ctx) =>
       Effect.flatMap(decode(raw), (params) => definition.run(params, ctx)),

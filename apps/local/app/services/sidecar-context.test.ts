@@ -80,17 +80,13 @@ describe("SidecarContext", () => {
     expectTypeOf<NeedsSidecar<typeof render>>().toEqualTypeOf<SidecarContext>();
   });
 
-  it("a Clip transcription and a whole-Video transcription need the Sidecar", () => {
+  it("a Clip transcription needs the Sidecar", () => {
     const clips = Effect.flatMap(WhisperTranscriptionService, (whisper) =>
       whisper.transcribeClips([
         { id: "a-clip", inputVideo: "a.mp4", startTime: 0, duration: 1 },
       ])
     );
     expectTypeOf<NeedsSidecar<typeof clips>>().toEqualTypeOf<SidecarContext>();
-    const video = Effect.flatMap(WhisperTranscriptionService, (whisper) =>
-      whisper.transcribeVideoFile("a.mp4")
-    );
-    expectTypeOf<NeedsSidecar<typeof video>>().toEqualTypeOf<SidecarContext>();
   });
 
   it("a Batch export, a Video export and a Publish need the Sidecar", () => {

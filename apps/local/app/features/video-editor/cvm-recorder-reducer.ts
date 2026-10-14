@@ -1,11 +1,16 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
-import type { InsertionPoint } from "@/services/clip-service";
-import type { SilenceLength } from "@/silence-detection-constants";
+import {
+  DEFAULT_SILENCE_LENGTH,
+  type SilenceLength,
+} from "@/silence-detection-constants";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
 import { isSceneAvailable, isScreenWaking } from "./cvm-recorder-screen";
-import type { CvmRecorderMessage } from "./cvm-recorder-wire";
+import type {
+  CvmRecorderMessage,
+  SavedRecorderClip,
+} from "./cvm-recorder-wire";
 import type { FrontendSpeechDetectorState } from "./use-speech-detector";
 
 /**
@@ -48,6 +53,19 @@ import type { FrontendSpeechDetectorState } from "./use-speech-detector";
  * Session is ignored, and one the recorder has said is over never makes the
  * editor record again (#2163). The stop of the one just recorded still
  * reports its errors and frames lost when it lands after the status.
+ *
+ * Clips: this is an adapter onto the OBS path's clip logic, which does all
+ * the placing (`clip-state-reducer-recording.ts`; ADR 0044). It sends the
+ * clip reducer the events OBS's connector and polling send: a Recording
+ * Session followed starts and stops one there (`start-session`,
+ * `stop-session`), speech long enough is an Optimistic Clip (`start-take`),
+ * silence closes its audio window (`close-take-window`), and at a speech's
+ * end the editor tells the app server where to save it, as OBS's polling
+ * does, and hears back the saved Clips (`place-take`). The app server's
+ * status can say a Recording Session stopped before its last speech is
+ * saved, so the editor places a Recording Session's speech from when it
+ * follows it until that Recording Session's own stop, or the next one
+ * starts (`placing`).
  */
 export namespace cvmRecorderReducer {
   export type Phase = "idle" | "starting" | "recording" | "stopping";
@@ -97,24 +115,23 @@ export namespace cvmRecorderReducer {
     recordingSessionId: string | null;
     /** Recording Sessions the recorder has said are over, oldest first. */
     endedRecordingSessionIds: readonly string[];
+    /**
+     * The Recording Session whose speech this editor places: from when it
+     * follows one until that one's own `recording-stopped` (or
+     * `camera-lost`), which comes after its last speech, or until it
+     * follows the next. Any other's late events are a replay to ignore.
+     */
+    placing: string | null;
   };
 
   export type Action =
     | { type: "recorder-message-heard"; message: CvmRecorderMessage }
     | { type: "silence-length-chosen"; silenceLength: SilenceLength }
-    | {
-        type: "press-record";
-        silenceLength: SilenceLength;
-        insertionPoint: InsertionPoint;
-      }
+    | { type: "press-record"; silenceLength: SilenceLength }
     | { type: "press-stop" }
     | { type: "dismiss-alert" }
     /** A speech has lasted the minimum Clip length. */
-    | {
-        type: "speech-long-enough";
-        speechCount: number;
-        recordingSessionId: string;
-      }
+    | { type: "speech-long-enough"; speechCount: number }
     | { type: "press-retry" }
     | { type: "press-scene"; scene: Scene }
     | { type: "press-wake-spacedesk" }
@@ -125,22 +142,37 @@ export namespace cvmRecorderReducer {
     | { type: "stop-recording-failed"; message: string };
 
   export type Effect =
-    | {
-        type: "start-recording";
-        silenceLength: SilenceLength;
-        insertionPoint: InsertionPoint;
-      }
+    | { type: "start-recording"; silenceLength: SilenceLength }
     | { type: "stop-recording" }
     | { type: "send-silence-length"; silenceLength: SilenceLength }
     | { type: "retry-camera" }
     | { type: "retry-screen" }
     /** Report `speech-long-enough` once the minimum Clip length has passed. */
-    | { type: "time-speech"; speechCount: number; recordingSessionId: string }
-    /** Tell the clip reducer a Take started (`clip-state-reducer-take.ts`). */
+    | { type: "time-speech"; speechCount: number }
+    /** The OBS path's `recording-started`, for a CVM recorder Recording Session. */
     | {
-        type: "start-take";
+        type: "start-session";
         recordingSessionId: string;
-        soundDetectionId: string;
+        silenceLength: SilenceLength;
+      }
+    /** The OBS path's `recording-stopped`. */
+    | { type: "stop-session" }
+    /** The OBS path's `new-optimistic-clip-detected`. */
+    | { type: "start-take"; soundDetectionId: string }
+    /** The OBS path's `clip-audio-window-closed`. */
+    | { type: "close-take-window" }
+    /**
+     * Tell the app server where to save this Recording Session's speech
+     * (the editor's insertion point, as OBS's polling sends it), and hand
+     * the saved Clips to the clip reducer as `new-database-clips`.
+     */
+    | { type: "place-take"; recordingSessionId: string }
+    /** Clips the app server saved without the editor: `new-database-clips`. */
+    | {
+        type: "show-saved-clips";
+        recordingSessionId: string;
+        clips: SavedRecorderClip[];
+        transcriptionJobId: string;
       }
     | { type: "switch-scene"; scene: Scene };
 }
@@ -166,6 +198,7 @@ export const createInitialCvmRecorderState = (
   silenceLength: null,
   recordingSessionId: null,
   endedRecordingSessionIds: [],
+  placing: null,
 });
 
 export const CAMERA_LOST_ALERT =
@@ -367,6 +400,67 @@ const heard = (
   }
 };
 
+/**
+ * The clip reducer's half of a message (see Clips, above), given the
+ * recorder state before and after it.
+ */
+const placeClips = (
+  before: cvmRecorderReducer.State,
+  after: cvmRecorderReducer.State,
+  message: CvmRecorderMessage,
+  exec: (effect: cvmRecorderReducer.Effect) => void
+): cvmRecorderReducer.State => {
+  let placing = after.placing;
+  const followed = before.recordingSessionId;
+  const follows = after.recordingSessionId;
+  if (followed !== follows) {
+    if (followed !== null) exec({ type: "stop-session" });
+    if (follows !== null && follows !== placing) {
+      exec({
+        type: "start-session",
+        recordingSessionId: follows,
+        silenceLength:
+          message.type === "recording-started"
+            ? message.silenceLength
+            : (after.silenceLength ?? DEFAULT_SILENCE_LENGTH),
+      });
+      placing = follows;
+    }
+  }
+  // OBS's detector closes the audio window whenever it goes silent.
+  if (before.speech.type !== "silence" && after.speech.type === "silence")
+    exec({ type: "close-take-window" });
+
+  if (
+    "recordingSessionId" in message &&
+    message.type !== "recorder-status" &&
+    message.recordingSessionId === placing
+  ) {
+    switch (message.type) {
+      case "speech-ended":
+        exec({ type: "place-take", recordingSessionId: placing });
+        break;
+      case "clips-saved":
+        exec({
+          type: "show-saved-clips",
+          recordingSessionId: placing,
+          clips: message.clips,
+          transcriptionJobId: message.transcriptionJobId,
+        });
+        break;
+      case "recording-stopped":
+      case "camera-lost":
+        placing = null;
+        break;
+      case "recording-started":
+      case "warmed-up":
+      case "speech-started":
+        break;
+    }
+  }
+  return placing === after.placing ? after : { ...after, placing };
+};
+
 export const cvmRecorderReducer: EffectReducer<
   cvmRecorderReducer.State,
   cvmRecorderReducer.Action,
@@ -374,14 +468,11 @@ export const cvmRecorderReducer: EffectReducer<
 > = (state, action, exec) => {
   switch (action.type) {
     case "recorder-message-heard": {
-      const next = heard(state, action.message);
+      const followed = heard(state, action.message);
       // Not for a speech of a Recording Session the editor ignores.
-      if (action.message.type === "speech-started" && next !== state)
-        exec({
-          type: "time-speech",
-          speechCount: next.speechCount,
-          recordingSessionId: action.message.recordingSessionId,
-        });
+      if (action.message.type === "speech-started" && followed !== state)
+        exec({ type: "time-speech", speechCount: followed.speechCount });
+      const next = placeClips(state, followed, action.message, exec);
       // A new or restarted app server knows nothing of the editor's choice.
       if (
         action.message.type === "recorder-status" &&
@@ -407,11 +498,7 @@ export const cvmRecorderReducer: EffectReducer<
       return { ...state, silenceLength: action.silenceLength };
     case "press-record":
       if (!canRecord(state)) return state;
-      exec({
-        type: "start-recording",
-        silenceLength: action.silenceLength,
-        insertionPoint: action.insertionPoint,
-      });
+      exec({ type: "start-recording", silenceLength: action.silenceLength });
       return {
         ...state,
         phase: "starting",
@@ -430,11 +517,7 @@ export const cvmRecorderReducer: EffectReducer<
       {
         const soundDetectionId = `cvm-recorder-speech-${action.speechCount}`;
         // The speech is a take now, as OBS's detector makes it one.
-        exec({
-          type: "start-take",
-          recordingSessionId: action.recordingSessionId,
-          soundDetectionId,
-        });
+        exec({ type: "start-take", soundDetectionId });
         return {
           ...state,
           speech: {

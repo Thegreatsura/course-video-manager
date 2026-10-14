@@ -32,7 +32,7 @@ const ingest = (event: RecordingSessionEvent) =>
     ingestRecorderEvent(
       testDb as never,
       createRecorderEventSequencer().accept(event).ready[0]!,
-      () => undefined
+      async () => null
     ).pipe(
       Effect.provide(
         Layer.mergeAll(

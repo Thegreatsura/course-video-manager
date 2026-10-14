@@ -122,6 +122,22 @@ export const MOVE_PARTIAL_EVENT = "move-partial";
 /** Every partial the Job recorded is gone, `{ files, bytes }` (#2169). */
 export const MOVE_PARTIALS_SWEPT_EVENT = "move-partials-swept";
 
+/**
+ * What a whole-bucket move moves: "AI Coding Crash Course Footage", "Clip
+ * Mockups". A bucket whose name already says what it holds is not said twice:
+ * "Unused Footage", never "Unused Footage Footage" (#2166).
+ */
+export const storageMoveSubject = (
+  bucketName: string,
+  kind: StorageMoveKind
+) => {
+  if (kind === "clip-mockups") return STORAGE_MOVE_KIND_LABELS[kind];
+  const label = STORAGE_MOVE_KIND_LABELS[kind];
+  return bucketName.toLowerCase().endsWith(label.toLowerCase())
+    ? bucketName
+    : `${bucketName} ${label}`;
+};
+
 /** The Job's title: "Move AI Coding Crash Course Footage to E:". */
 export const storageMoveTitle = (
   bucketName: string,
@@ -132,6 +148,4 @@ export const storageMoveTitle = (
 ) =>
   paths !== undefined && paths.length > 0
     ? `Move ${paths.length === 1 ? paths[0]!.split("/").pop() : `${paths.length} ${bucketName} files`} to ${targetLabel}`
-    : kind === "clip-mockups"
-      ? `Move Clip Mockups to ${targetLabel}`
-      : `Move ${bucketName} ${STORAGE_MOVE_KIND_LABELS[kind]} to ${targetLabel}`;
+    : `Move ${storageMoveSubject(bucketName, kind)} to ${targetLabel}`;

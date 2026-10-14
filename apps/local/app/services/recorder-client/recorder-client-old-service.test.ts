@@ -61,7 +61,6 @@ const recordLandscape = (
 ) =>
   client.startRecording(id, {
     silenceLength: "short",
-    insertionPoint: { type: "start" },
     folder: tmp(),
     format: "landscape",
   });

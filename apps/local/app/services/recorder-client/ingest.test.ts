@@ -18,7 +18,10 @@ import { JobOperationsService } from "@cvm/core/services/db-job-operations.serve
 import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
 import { transcribeAndStoreClips } from "@/services/clip-transcription.server";
 import type { RecordingSessionEvent } from "recorder-service/protocol";
-import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
+import type {
+  CvmRecorderMessage,
+  PlacedTake,
+} from "@/features/video-editor/cvm-recorder-wire";
 import type { InsertionPoint } from "@/services/clip-service";
 import {
   setupClipServiceTests,
@@ -27,7 +30,7 @@ import {
   start,
 } from "../clip-service-test-setup";
 import { seedCourseVersion } from "@/test-utils/autofill-service-test-setup";
-import { ingestRecorderEvent } from "./ingest.server";
+import { ingestRecorderEvent, type AskEditor } from "./ingest.server";
 import { requireRecordableVideo } from "./record-guard.server";
 import { createRecorderEventSequencer } from "./sequencer";
 
@@ -54,27 +57,33 @@ const layer = () =>
   ).pipe(Layer.provide(Layer.succeed(DrizzleService, testDb as never)));
 
 /** Feeds events through the sequencer and ingest, as the recorder client does. */
-const recorderIngest = (
-  insertionPointFor: (videoId: string) => InsertionPoint | undefined = () =>
-    undefined
-) => {
+const recorderIngest = (askEditor: AskEditor = async () => null) => {
   const sequencer = createRecorderEventSequencer();
   const messages: CvmRecorderMessage[] = [];
   const replays: { afterSeq: number }[] = [];
+  const placed: PlacedTake[] = [];
   return {
     messages,
     replays,
+    placed,
     feed: async (...events: RecordingSessionEvent[]) => {
       for (const event of events) {
         const { ready, replay } = sequencer.accept(event);
         if (replay) replays.push({ afterSeq: replay.afterSeq });
         for (const next of ready) {
           const result = await Effect.runPromise(
-            ingestRecorderEvent(testDb as never, next, insertionPointFor).pipe(
-              Effect.provide(layer())
-            )
+            ingestRecorderEvent(
+              testDb as never,
+              next,
+              // As the recorder client asks: telling the editors first.
+              (videoId, recordingSessionId) => {
+                messages.push({ type: "speech-ended", recordingSessionId });
+                return askEditor(videoId, recordingSessionId);
+              }
+            ).pipe(Effect.provide(layer()))
           );
           messages.push(...result.messages);
+          if (result.placed) placed.push(result.placed);
         }
       }
     },
@@ -143,10 +152,6 @@ const stopped = (
   framesLost: { camera: 0, screen: 0 },
   errors: [],
 });
-
-function never(): never {
-  throw new Error("unreachable");
-}
 
 const savedClips = async (videoId: string) =>
   (await clipService.getTimeline(videoId)).flatMap((item) =>
@@ -217,8 +222,9 @@ describe("recorder ingest", () => {
     expect(ingest.messages.map((m) => m.type)).toEqual([
       "recording-started",
       "speech-started",
-      "clips-saved",
+      // Asked where (none answered), then saved after the Video's last item.
       "speech-ended",
+      "clips-saved",
       "recording-stopped",
     ]);
   });
@@ -233,7 +239,7 @@ describe("recorder ingest", () => {
     expect(ingest.messages.map((m) => m.type)).not.toContain("clips-saved");
   });
 
-  it("places Clips at the editor's insertion point, each after the last", async () => {
+  it("asks the editor where to save each speech, saves it there, and hands it the Clips", async () => {
     const video = await clipService.createVideo("CVM recorder");
     const [first] = await clipService.appendClips({
       videoId: video.id,
@@ -248,22 +254,48 @@ describe("recorder ingest", () => {
       type: "after-clip",
       databaseClipId: first!.id,
     };
-    const ingest = recorderIngest(() => point);
+    const asked: string[] = [];
+    const ingest = recorderIngest(async (videoId, recordingSessionId) => {
+      asked.push(`${videoId}:${recordingSessionId}`);
+      return point;
+    });
 
     await ingest.feed(started(video.id), ...speech(2, 2, 5));
-    const saved = ingest.messages.find((m) => m.type === "clips-saved");
+    // The editor that said where gets the Clips back: no `clips-saved`.
+    expect(ingest.messages.map((m) => m.type)).not.toContain("clips-saved");
     point = {
       type: "after-clip",
-      databaseClipId:
-        saved?.type === "clips-saved" ? saved.clips[0]!.id : never(),
+      databaseClipId: ingest.placed[0]!.clips[0]!.id,
     };
     await ingest.feed(...speech(4, 8, 10));
 
+    expect(asked).toEqual([`${video.id}:${SESSION}`, `${video.id}:${SESSION}`]);
+    expect(ingest.placed.map((p) => p.clips.length)).toEqual([1, 1]);
     expect((await savedClips(video.id)).map((c) => c.videoFilename)).toEqual([
       "first.mp4",
       MIC,
       MIC,
       "last.mp4",
+    ]);
+  });
+
+  it("with no editor answering, saves after the Video's last item and says so", async () => {
+    const video = await clipService.createVideo("CVM recorder");
+    await clipService.appendClips({
+      videoId: video.id,
+      insertionPoint: start,
+      items: [],
+      clips: [{ inputVideo: "first.mp4", startTime: 0, endTime: 1 }],
+    });
+    const ingest = recorderIngest();
+
+    await ingest.feed(started(video.id), ...speech(2, 2, 5));
+
+    expect(ingest.placed).toEqual([]);
+    expect(ingest.messages.map((m) => m.type)).toContain("clips-saved");
+    expect((await savedClips(video.id)).map((c) => c.videoFilename)).toEqual([
+      "first.mp4",
+      MIC,
     ]);
   });
 

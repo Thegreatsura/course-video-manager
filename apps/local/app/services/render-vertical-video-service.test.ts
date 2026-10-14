@@ -1,10 +1,10 @@
 import { describe, it, expect } from "@effect/vitest";
 import { beforeAll, beforeEach } from "vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
-import { NodeContext } from "@effect/platform-node";
+import { ConfigProvider, Effect, Layer, Stream } from "effect";
+import { Command, CommandExecutor } from "@effect/platform";
+import { readFileSync } from "node:fs";
+import { NodeContext, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { WhisperTranscriptionService } from "@/services/whisper-transcription-service";
-import { LocalWhisperUnavailable } from "@/services/local-whisper-engine";
 import { FFmpegCommandsService } from "@/services/ffmpeg-commands";
 import { FFmpegEncodeService } from "@/services/ffmpeg-encode-commands";
 import { DrizzleService } from "@/services/drizzle-service.server";
@@ -20,63 +20,10 @@ import {
   type TestDb,
 } from "@/test-utils/pglite";
 import {
-  buildSubtitles,
   RenderVerticalError,
   RenderVerticalVideoService,
 } from "./render-vertical-video-service";
 import { SidecarContextTest } from "./sidecar-context";
-
-describe("buildSubtitles", () => {
-  it("keeps a short segment as a single subtitle and converts to frames", () => {
-    // "Hello world" is 11 chars (<= 32), so it passes through untouched.
-    const segments = [{ start: 0, end: 1, text: "Hello world" }];
-
-    const result = buildSubtitles(segments, 60);
-
-    expect(result).toEqual([
-      { startFrame: 0, endFrame: 60, text: "Hello world" },
-    ]);
-  });
-
-  it("splits a long segment into phrases with evenly divided timing", () => {
-    // 43 chars > 32 → numChunks = ceil(43/32) = 2; 9 words →
-    // wordsPerChunk = ceil(9/2) = 5. Duration 10s / 2 = 5s per chunk.
-    const segments = [
-      {
-        start: 0,
-        end: 10,
-        text: "The quick brown fox jumps over the lazy dog",
-      },
-    ];
-
-    const result = buildSubtitles(segments, 1);
-
-    expect(result).toEqual([
-      { startFrame: 0, endFrame: 5, text: "The quick brown fox jumps" },
-      { startFrame: 5, endFrame: 10, text: "over the lazy dog" },
-    ]);
-  });
-
-  it("flattens multiple segments and trims Whisper's leading spaces", () => {
-    // Whisper segment text is typically prefixed with a space; floor() is used
-    // for the seconds → frames conversion.
-    const segments = [
-      { start: 0, end: 0.9, text: " Hi there" },
-      { start: 1, end: 2, text: " again" },
-    ];
-
-    const result = buildSubtitles(segments, 1);
-
-    expect(result).toEqual([
-      { startFrame: 0, endFrame: 0, text: "Hi there" },
-      { startFrame: 1, endFrame: 2, text: "again" },
-    ]);
-  });
-
-  it("returns an empty array when there are no segments", () => {
-    expect(buildSubtitles([], 60)).toEqual([]);
-  });
-});
 
 describe("RenderVerticalVideoService", () => {
   let testDb: TestDb;
@@ -90,28 +37,48 @@ describe("RenderVerticalVideoService", () => {
     await truncateAllTables(testDb);
   });
 
-  function buildTestLayer(overrides?: {
-    exportResult?: string;
-    getFpsResult?: number;
-  }) {
+  type OverlayProps = {
+    durationInFrames: number;
+    subtitles: { startFrame: number; endFrame: number; text: string }[];
+  };
+
+  /**
+   * The render with every encode faked, down to the overlay renderer's
+   * subprocess: `overlays` collects the props each render hands it, which is
+   * where the subtitles end up.
+   */
+  function buildTestLayer(overlays: OverlayProps[] = []) {
     const dbLayer = Layer.succeed(DrizzleService, testDb as any);
 
-    const fakeWhisper = Layer.succeed(WhisperTranscriptionService, {
-      transcribeVideoFile: () =>
-        Effect.succeed({
-          words: [
-            { start: 0, end: 0.5, text: "hello" },
-            { start: 0.6, end: 1.0, text: "world" },
-          ],
-          segments: [{ start: 0, end: 1.0, text: "hello world" }],
-        }),
-      exportVideoClips: () =>
-        Effect.succeed(overrides?.exportResult ?? "/tmp/fake-concatenated.mp4"),
-    } as any);
-
     const fakeFfmpeg = Layer.succeed(FFmpegCommandsService, {
-      getFPS: () => Effect.succeed(overrides?.getFpsResult ?? 60),
+      getFPS: () => Effect.succeed(10),
     } as any);
+    const fakeEncode = Layer.succeed(FFmpegEncodeService, {
+      createAndConcatenateVideoClipsSinglePass: () =>
+        Effect.succeed("/tmp/fake-concatenated.mp4"),
+      normalizeAudio: () => Effect.succeed("/tmp/fake-normalized.mp4"),
+      compositeOverlay: () => Effect.void,
+    } as any);
+    // Stands in for `node bin.mjs --props-file <file>`, reading the props.
+    const fakeOverlayRenderer = Layer.succeed(
+      CommandExecutor.CommandExecutor,
+      CommandExecutor.makeExecutor((command) =>
+        Effect.sync(() => {
+          const args = (command as Command.StandardCommand).args;
+          const propsFile = args[args.indexOf("--props-file") + 1]!;
+          overlays.push(JSON.parse(readFileSync(propsFile, "utf8")));
+          return {
+            [CommandExecutor.ProcessTypeId]: CommandExecutor.ProcessTypeId,
+            pid: CommandExecutor.ProcessId(0),
+            exitCode: Effect.succeed(CommandExecutor.ExitCode(0)),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            stdout: Stream.empty,
+            stderr: Stream.empty,
+          } as unknown as CommandExecutor.Process;
+        })
+      )
+    );
 
     const configLayer = Layer.setConfigProvider(
       ConfigProvider.fromMap(
@@ -122,22 +89,178 @@ describe("RenderVerticalVideoService", () => {
     const depsLayer = Layer.mergeAll(
       VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
       ClipOperationsService.Default.pipe(Layer.provide(dbLayer)),
-      fakeWhisper,
       fakeFfmpeg,
-      Layer.succeed(FFmpegEncodeService, {} as any),
+      fakeEncode,
+      Layer.succeed(VideoEditorLoggerService, {
+        log: () => Effect.void,
+      } as any),
       configLayer,
-      NodeContext.layer
+      // The real file system, but no real processes: nothing is spawned.
+      NodeFileSystem.layer,
+      NodePath.layer,
+      fakeOverlayRenderer
     );
 
     return Layer.mergeAll(
       depsLayer,
       // A render runs only in the Sidecar; a test stands in for it.
       SidecarContextTest,
-      RenderVerticalVideoService.Default.pipe(
-        Layer.provide(Layer.merge(depsLayer, LocalWhisperUnavailable))
+      RenderVerticalVideoService.DefaultWithoutDependencies.pipe(
+        Layer.provide(depsLayer)
       )
     );
   }
+
+  /** A Short whose Clips are `clips`, in order, each with its Transcript Words. */
+  const seedShort = (
+    clips: {
+      text: string;
+      seconds: number;
+      pauseType?: "long";
+      words?: { start: number; end: number; text: string }[];
+    }[]
+  ) =>
+    Effect.gen(function* () {
+      const [video] = yield* Effect.promise(() =>
+        testDb
+          .insert(schema.videos)
+          .values({
+            title: "Short",
+            originalFootagePath: "/f",
+            format: "short",
+          })
+          .returning()
+      );
+      const clipOps = yield* ClipOperationsService;
+      const ids: string[] = [];
+      for (const [index, clip] of clips.entries()) {
+        const [row] = yield* Effect.promise(() =>
+          testDb
+            .insert(schema.clips)
+            .values({
+              videoId: video!.id,
+              videoFilename: "/footage/a.mp4",
+              sourceStartTime: 100,
+              sourceEndTime: 100 + clip.seconds,
+              order: `a${index}`,
+              text: clip.text,
+              pauseType: clip.pauseType ?? "none",
+            })
+            .returning()
+        );
+        yield* clipOps.replaceTranscriptWords(row!.id, clip.words ?? []);
+        ids.push(row!.id);
+      }
+      return { videoId: video!.id, clipIds: ids };
+    });
+
+  it.effect(
+    "subtitles a Short from its Clips' text, timed by their Transcript Words",
+    () => {
+      const overlays: OverlayProps[] = [];
+      return Effect.gen(function* () {
+        const { videoId, clipIds } = yield* seedShort([
+          {
+            text: "Hello there.",
+            seconds: 2,
+            words: [
+              { start: 0.5, end: 0.9, text: "Hello" },
+              { start: 1.2, end: 1.6, text: "there." },
+            ],
+          },
+          {
+            // Whisper split the hyphen; the Clip's text is what is shown.
+            text: "This sentence is long enough to split in two halves",
+            seconds: 3,
+            words: [
+              { start: 0.2, end: 0.4, text: "This" },
+              { start: 0.4, end: 0.6, text: "sentence" },
+              { start: 0.6, end: 0.8, text: "is" },
+              { start: 0.8, end: 1, text: "long" },
+              { start: 1, end: 1.2, text: "enough" },
+              { start: 1.6, end: 1.8, text: "to" },
+              { start: 1.8, end: 2, text: "split" },
+              { start: 2, end: 2.2, text: "in" },
+              { start: 2.2, end: 2.4, text: "two" },
+              { start: 2.4, end: 2.6, text: "halves" },
+            ],
+          },
+        ]);
+        const service = yield* RenderVerticalVideoService;
+        yield* service.renderVerticalVideo({ videoId });
+
+        // 10 fps. The second Clip starts at 2 s; its second phrase at the
+        // word "to", 1.6 s into it.
+        expect(overlays[0]!.subtitles).toEqual([
+          { startFrame: 0, endFrame: 22, text: "Hello there." },
+          {
+            startFrame: 22,
+            endFrame: 36,
+            text: "This sentence is long enough",
+          },
+          { startFrame: 36, endFrame: 50, text: "to split in two halves" },
+        ]);
+
+        // Editing a Clip's text changes the Short's subtitles.
+        const clipOps = yield* ClipOperationsService;
+        yield* clipOps.updateClip(clipIds[0]!, { text: "Hi there." });
+        yield* service.renderVerticalVideo({ videoId });
+        expect(overlays[1]!.subtitles[0]).toEqual({
+          startFrame: 0,
+          endFrame: 22,
+          text: "Hi there.",
+        });
+      }).pipe(Effect.provide(buildTestLayer(overlays)));
+    }
+  );
+
+  it.effect(
+    "leaves no gap: from frame 0 to the Short's last, one subtitle is always showing",
+    () => {
+      const overlays: OverlayProps[] = [];
+      return Effect.gen(function* () {
+        const { videoId } = yield* seedShort([
+          // Silence before, between and after its words.
+          {
+            text: "First words. Then much later, more words.",
+            seconds: 6,
+            words: [
+              { start: 1, end: 1.3, text: "First" },
+              { start: 1.3, end: 1.6, text: "words." },
+              { start: 4, end: 4.2, text: "Then" },
+              { start: 4.2, end: 4.4, text: "much" },
+              { start: 4.4, end: 4.6, text: "later," },
+              { start: 4.6, end: 4.8, text: "more" },
+              { start: 4.8, end: 5, text: "words." },
+            ],
+            pauseType: "long",
+          },
+          // Filmed before Transcript Words existed: it has none.
+          {
+            text: "A Clip with no word timings at all, still subtitled",
+            seconds: 4,
+          },
+        ]);
+        const service = yield* RenderVerticalVideoService;
+        yield* service.renderVerticalVideo({ videoId });
+
+        const { subtitles, durationInFrames } = overlays[0]!;
+        // 6 s + the long Pause's 0.18 s + 4 s, at 10 fps.
+        expect(durationInFrames).toBe(102);
+        expect(subtitles[0]!.startFrame).toBe(0);
+        expect(subtitles.at(-1)!.endFrame).toBe(durationInFrames);
+        for (const [index, subtitle] of subtitles.entries()) {
+          expect(subtitle.endFrame).toBeGreaterThan(subtitle.startFrame);
+          if (index > 0) {
+            expect(subtitle.startFrame).toBe(subtitles[index - 1]!.endFrame);
+          }
+        }
+        expect(subtitles.map((s) => s.text).join(" ")).toBe(
+          "First words. Then much later, more words. A Clip with no word timings at all, still subtitled"
+        );
+      }).pipe(Effect.provide(buildTestLayer(overlays)));
+    }
+  );
 
   it.effect("rejects when video has no clips", () =>
     Effect.gen(function* () {
@@ -180,7 +303,7 @@ describe("RenderVerticalVideoService", () => {
       const dbLayer = Layer.succeed(DrizzleService, testDb as any);
       const depsLayer = Layer.mergeAll(
         VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
-        Layer.succeed(WhisperTranscriptionService, {} as any),
+        ClipOperationsService.Default.pipe(Layer.provide(dbLayer)),
         Layer.succeed(FFmpegCommandsService, {} as any),
         Layer.succeed(FFmpegEncodeService, {
           createAndConcatenateVideoClipsSinglePass: () =>
@@ -268,7 +391,7 @@ describe("RenderVerticalVideoService", () => {
       const dbLayer = Layer.succeed(DrizzleService, testDb as any);
       const depsLayer = Layer.mergeAll(
         VideoOperationsService.Default.pipe(Layer.provide(dbLayer)),
-        Layer.succeed(WhisperTranscriptionService, {} as any),
+        ClipOperationsService.Default.pipe(Layer.provide(dbLayer)),
         Layer.succeed(FFmpegCommandsService, {} as any),
         Layer.succeed(FFmpegEncodeService, {
           concatenateClipSegments: (clips: unknown) => {
