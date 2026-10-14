@@ -19,6 +19,7 @@
     "lint:boundaries": "turbo run lint:boundaries --filter=!@cvm/overlay-renderer",
     "lint": "oxlint --type-aware",
     "test:root": "vitest run",
+    "recorder:scorecard": "pnpm --filter @cvm/local recorder:scorecard",
     "typecheck:root": "tsc",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
