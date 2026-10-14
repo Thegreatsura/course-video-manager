@@ -7,8 +7,12 @@ import { createMemoryRouter, RouterProvider } from "react-router";
  * `Link`) to static markup. A memory router with the component as its one route
  * is the cheapest way to give it that context.
  */
-export function renderInRouter(element: ReactNode): string {
+export function renderInRouter(element: ReactNode, url = "/"): string {
   return renderToStaticMarkup(
-    <RouterProvider router={createMemoryRouter([{ path: "/", element }])} />
+    <RouterProvider
+      router={createMemoryRouter([{ path: "/", element }], {
+        initialEntries: [url],
+      })}
+    />
   );
 }

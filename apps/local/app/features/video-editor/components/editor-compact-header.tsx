@@ -10,7 +10,8 @@ import {
   PlayIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { returnToVideoUrl } from "@/lib/new-short";
 import { useEditorVideoMenuRef } from "../editor-video-menu";
 
 export const EditorCompactHeader = (props: {
@@ -25,6 +26,9 @@ export const EditorCompactHeader = (props: {
   hasAnimatic: boolean;
 }) => {
   const videoMenu = useEditorVideoMenuRef();
+  // A Short made with the editor's New Short goes back to its Video.
+  const [searchParams] = useSearchParams();
+  const backUrl = returnToVideoUrl(searchParams) ?? props.backButtonUrl;
   // Re-renders as the menu opens, so it reads the latest published groups.
   const [, setIsMenuOpen] = useState(false);
   const tabs = [
@@ -40,7 +44,7 @@ export const EditorCompactHeader = (props: {
   return (
     <div className="flex items-center gap-2 px-1 shrink-0">
       <Button variant="ghost" size="icon" className="size-8" asChild>
-        <Link to={props.backButtonUrl}>
+        <Link to={backUrl}>
           <ChevronLeftIcon className="size-5" />
         </Link>
       </Button>

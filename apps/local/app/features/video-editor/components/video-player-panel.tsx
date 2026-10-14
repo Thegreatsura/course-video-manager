@@ -29,6 +29,7 @@ import { ClipboardIcon, VideoOffIcon } from "lucide-react";
 import { useFetcher, useNavigate } from "react-router";
 import { videoMenuGroups } from "@/features/video-menu/video-menu";
 import { useEditorVideoActions } from "../editor-video-menu";
+import { useNewShortAction } from "../new-short-action";
 import { useContextSelector } from "use-context-selector";
 import {
   VideoEditorContext,
@@ -41,16 +42,6 @@ import {
   useCallback,
   type ChangeEvent,
 } from "react";
-import {
-  resolveForVideo,
-  type ResolverTimelineItem,
-} from "@/lib/diagram-action-resolver";
-import { fetchMeta } from "@/features/diagrams/use-diagram-snapshot-scene";
-import {
-  openPlayground,
-  openPlaygroundWithDiagram,
-} from "@/lib/diagram-window";
-import { teleprompterChannel } from "@/lib/teleprompter-protocol";
 
 export const VideoPlayerPanel = () => {
   const lessonId = useContextSelector(
@@ -189,6 +180,7 @@ export const VideoPlayerPanel = () => {
   );
   const openInVSCodeFetcher = useFetcher();
   const editorVideoActions = useEditorVideoActions();
+  const newShort = useNewShortAction();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<
@@ -218,50 +210,6 @@ export const VideoPlayerPanel = () => {
     showVideoPlayer
   );
 
-  const handleOpenDiagramPlayground = useCallback(async () => {
-    const resolverItems: ResolverTimelineItem[] = items.map((item) => {
-      if (item.type === "on-database" || item.type === "optimistically-added") {
-        return {
-          frontendId: item.frontendId as string,
-          kind: "clip" as const,
-          diagramSnapshotId:
-            item.type === "on-database"
-              ? (item.diagramSnapshotId ?? null)
-              : null,
-        };
-      }
-      return {
-        frontendId: item.frontendId as string,
-        kind: "chapter" as const,
-        diagramSnapshotId: null,
-      };
-    });
-
-    const snapshotIds = new Set(
-      resolverItems
-        .filter((i) => i.diagramSnapshotId)
-        .map((i) => i.diagramSnapshotId!)
-    );
-    const snapshotMap = new Map<string, string>();
-    await Promise.all(
-      [...snapshotIds].map(async (sid) => {
-        const meta = await fetchMeta(sid);
-        if (meta.diagramId) snapshotMap.set(sid, meta.diagramId);
-      })
-    );
-
-    const result = resolveForVideo(
-      resolverItems,
-      insertionPoint,
-      (sid) => snapshotMap.get(sid) ?? null
-    );
-    if (result.kind === "diagram") {
-      openPlaygroundWithDiagram(result.diagramId);
-    } else {
-      openPlayground();
-    }
-  }, [items, insertionPoint]);
-
   const isReferenceOpen =
     referenceVideoId !== null &&
     referenceCandidates.some((c) => c.id === referenceVideoId);
@@ -280,8 +228,6 @@ export const VideoPlayerPanel = () => {
   });
   const menuGroups = videoMenuGroups({
     ...editorVideoActions.common,
-    openTeleprompter: () => teleprompterChannel.open(),
-    openDiagramPlayground: () => void handleOpenDiagramPlayground(),
     reference: isReferenceOpen
       ? { close: () => setReferenceVideoId(null) }
       : { candidates: referenceCandidates, open: setReferenceVideoId },
@@ -291,6 +237,7 @@ export const VideoPlayerPanel = () => {
     autofillDescription: lessonId
       ? () => setIsSeoDescriptionOpen(true)
       : undefined,
+    newShort,
     autofillChapters: {
       onSelect: onOpenAutofillChaptersModal,
       disabled: !allClipsHaveText,
