@@ -471,12 +471,12 @@ describe("jobsReducer", () => {
       tester
         .send(render("queued"))
         .send(render("started", { attempt: 1 }))
-        .send(render("stage", { stage: "transcribing" }));
+        .send(render("stage", { stage: "rendering-overlay" }));
       // Each stage is a floor of the bar, as the browser render drew it.
       expect(row(tester.getState())).toMatchObject({
         status: "uploading",
-        renderVerticalStage: "transcribing",
-        progress: 30,
+        renderVerticalStage: "rendering-overlay",
+        progress: 60,
       });
 
       tester.send(render("stage", { stage: "compositing" }));
@@ -493,9 +493,9 @@ describe("jobsReducer", () => {
     it("a render that fails every attempt toasts once, with its log", () => {
       const error = {
         error: {
-          tag: "CouldNotTranscribeError",
-          message: "Whisper API call failed: 401",
-          cause: "Whisper API call failed: 401",
+          tag: "RenderVerticalError",
+          message: "Overlay renderer exited with code 1",
+          cause: "Overlay renderer exited with code 1",
         },
       };
       const tester = newTester()
@@ -508,7 +508,7 @@ describe("jobsReducer", () => {
       tester.send(render("failed", error));
       expect(row(tester.getState())).toMatchObject({
         status: "error",
-        errorMessage: "Whisper API call failed: 401",
+        errorMessage: "Overlay renderer exited with code 1",
       });
       expect(tester.getEffects()).toEqual([
         {
@@ -516,7 +516,7 @@ describe("jobsReducer", () => {
           jobId: JOB_ID,
           kind: "render-vertical",
           title: "My Short",
-          message: "Whisper API call failed: 401",
+          message: "Overlay renderer exited with code 1",
           hasLog: true,
         },
       ]);

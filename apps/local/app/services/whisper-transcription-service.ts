@@ -196,26 +196,6 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
       });
 
       /**
-       * Transcribe an entire, already-concatenated video in a single Whisper
-       * pass. Extracts the full audio track and transcribes it once.
-       *
-       * Unlike {@link transcribeClips}, the returned segment timestamps are on
-       * the video's own final timeline, so downstream callers need no per-clip
-       * offset — matching the original Total TypeScript renderer, which
-       * transcribed a single concatenated audio file.
-       */
-      const transcribeVideoFile = Effect.fn("transcribeVideoFile")(function* (
-        inputVideo: string
-      ) {
-        // The vertical Short's subtitles: part of the `render-vertical` Job.
-        yield* SidecarContext;
-        const audioPath = yield* extractAudio(inputVideo, undefined);
-        const transcription = yield* transcribeAudioFile(audioPath);
-        yield* removeBestEffort(effectFs, audioPath);
-        return transcription;
-      });
-
-      /**
        * Transcribe a whole raw FOOTAGE file (see GLOSSARY.md "Footage"): a file on
        * disk that is not — and never becomes — a database row. The
        * silence-chunking orchestration lives in {@link transcribeFootage}; it
@@ -245,7 +225,6 @@ export class WhisperTranscriptionService extends Effect.Service<WhisperTranscrip
 
       return {
         transcribeClips,
-        transcribeVideoFile,
         transcribeFootageFile,
       };
     }),
