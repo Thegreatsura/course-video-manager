@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cameraPreviewArgs, METER_TAG, PREVIEW_TAGS } from "./capture-args";
+import {
+  CAPTURE_TAG,
+  cameraCaptureArgs,
+  METER_TAG,
+  PREVIEW_TAGS,
+} from "./capture-args";
 import { quitProcess } from "./camera";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
 import { connect, recordOnce, start, tmp } from "./test-utils/service-harness";
@@ -55,7 +60,7 @@ describe("crash recovery", () => {
         script: "stop-recorders.ps1",
         args: [
           "-Tags",
-          `${PREVIEW_TAGS.camera},${PREVIEW_TAGS.screen},${METER_TAG},cvm-recorder-${recordingSessionId}`,
+          `${PREVIEW_TAGS.camera},${PREVIEW_TAGS.screen},${CAPTURE_TAG},${METER_TAG},cvm-recorder-${recordingSessionId}`,
         ],
       })
     );
@@ -112,25 +117,24 @@ describe("crash recovery", () => {
   });
 });
 
-describe("a preview that ignores q", () => {
+describe("a camera capture that ignores q", () => {
   afterEach(() => void vi.useRealTimers());
 
   it("is stopped on Windows by its tag, not only killed on the WSL side", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const windows = fakeWindows({ cameraTries: ["stuck"] });
-    const preview = windows.launch({
+    const capture = windows.launch({
       tool: "ffmpeg",
-      args: cameraPreviewArgs({
+      args: cameraCaptureArgs({
         camera: "Cam Link 4K",
-        port: 1,
-        stillPort: 2,
-        encoder: "nvenc",
+        mic: "Mic",
+        relays: { preview: 1, writer: 2 },
       }),
       cwd: "/mnt/c",
     });
-    const quitting = quitProcess(preview, {
+    const quitting = quitProcess(capture, {
       launch: windows.launch,
-      tag: PREVIEW_TAGS.camera,
+      tag: CAPTURE_TAG,
     });
     await vi.advanceTimersByTimeAsync(5_000);
     await quitting;

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
+import { CAPTURE_TAG, PREVIEW_TAGS } from "../capture-args";
 import type { Launch, LaunchedProcess, Launcher } from "../launcher";
 import { flvHeader, flvVideoTag } from "./flv";
 
@@ -66,6 +67,14 @@ export type FakeProcess = LaunchedProcess & {
   readonly running: boolean;
   /** What it prints between `q` and exiting. */
   onQuit?: () => void;
+  /** Hears whatever is written to its stdin. */
+  onStdin?: (text: string) => void;
+  /** A camera capture whose Cam Link sends frames. */
+  sending?: boolean;
+  /** A take writer that has had Record's T0. */
+  begun?: boolean;
+  /** Everything written to its stdin. */
+  written: string;
   /** Ignores `q`, and a kill ends only its WSL side. */
   stuck?: boolean;
   /** A preview that stalled: still running, sending nothing. */
@@ -82,7 +91,10 @@ const fakeProcess = (launch: Launch): FakeProcess => {
     launch,
     onStdout: (l) => void out.push(l),
     onStderr: (l) => void err.push(l),
+    written: "",
     writeStdin: (text) => {
+      p.written += text;
+      p.onStdin?.(text);
       // ffmpeg closes its files and exits 0 on `q`.
       if (text === "q" && !p.stuck) {
         setImmediate(() => {
@@ -183,7 +195,11 @@ export const fakePreviewFrame = (n: number) =>
  * keyframe every fifth) to a preview feed, mpjpeg (`FAKE_STILL_JPEG`) to the
  * still feed.
  */
-const sendFrames = (p: FakeProcess, args: readonly string[]) => {
+const sendFrames = (
+  p: FakeProcess,
+  args: readonly string[],
+  source: () => boolean = () => true
+) => {
   const outputs = [
     ...args.join(" ").matchAll(/\[f=(\w+)[^\]]*\]tcp:\/\/127\.0\.0\.1:(\d+)/g),
   ].map((m) => {
@@ -197,7 +213,7 @@ const sendFrames = (p: FakeProcess, args: readonly string[]) => {
   });
   let n = 0;
   const timer = setInterval(() => {
-    if (p.frozen) return;
+    if (p.frozen || !source()) return;
     for (const { flv, socket } of outputs) {
       if (flv) {
         socket.write(
@@ -236,6 +252,19 @@ const isPreview = (l: Launch, input: string) =>
   l.args.some((a) => a.includes("tcp://")) &&
   !l.args.some((a) => a.endsWith(".mkv")) &&
   l.args.some((a) => a.includes(input));
+
+const tagged = (l: Launch, tag: string) =>
+  l.tool === "ffmpeg" && l.args.includes(`comment=${tag}`);
+
+/** The loopback ports a process sends a relay to, or listens on for one. */
+const relayPorts = (args: readonly string[]) =>
+  [
+    ...args
+      .join(" ")
+      .matchAll(
+        /(?:\[f=nut[^\]]*\]|^|\s)tcp:\/\/127\.0\.0\.1:(\d+)\?(?:timeout|listen)/g
+      ),
+  ].map((m) => Number(m[1]));
 
 export const fakeWindows = (
   o: {
@@ -302,6 +331,7 @@ export const fakeWindows = (
     spacedesk.awake = true;
   };
   const recorders: FakeProcess[] = [];
+  const cameraCaptures: FakeProcess[] = [];
   const cameraPreviews: FakeProcess[] = [];
   const screenPreviews: FakeProcess[] = [];
   const cameraTries = [...(o.cameraTries ?? [])];
@@ -364,17 +394,44 @@ export const fakeWindows = (
       return answer(p, { stderr: DEVICE_LISTING, code: 0 });
     if (
       o.nvencBusy &&
-      (isPreview(l, "video=") || isPreview(l, "ddagrab")) &&
+      (tagged(l, PREVIEW_TAGS.camera) || isPreview(l, "ddagrab")) &&
       l.args.includes("h264_nvenc")
     ) {
       (isPreview(l, "ddagrab") ? screenPreviews : cameraPreviews).push(p);
       return answer(p, { stderr: NVENC_BUSY_STDERR, code: 1 });
     }
-    if (isPreview(l, "video=")) {
+    // A camera preview: the frames its capture's relay brings, on to the feeds.
+    if (tagged(l, PREVIEW_TAGS.camera)) {
       cameraPreviews.push(p);
+      const [relay] = relayPorts(l.args);
+      sendFrames(p, l.args, () =>
+        cameraCaptures.some(
+          (c) =>
+            c.running && c.sending && relayPorts(c.launch.args)[0] === relay
+        )
+      );
+      return p;
+    }
+    // A camera capture: one try at the Cam Link (and the mic).
+    if (tagged(l, CAPTURE_TAG)) {
+      cameraCaptures.push(p);
       const next = cameraTries.shift() ?? "frames";
       p.stuck = next === "stuck";
-      if (next === "frames") sendFrames(p, l.args);
+      p.sending = next === "frames";
+      // Its writer relay's consumer reads EOF when it goes, and quits.
+      const writerRelay = relayPorts(l.args)[1];
+      void p.exited.then(() =>
+        setImmediate(() =>
+          recorders
+            .filter(
+              (r) =>
+                r.running &&
+                writesFile(r.launch.args, "camera.mkv") &&
+                relayPorts(r.launch.args)[0] === writerRelay
+            )
+            .forEach((r) => r.exit(0))
+        )
+      );
       if (next === "busy") {
         // What dshow says when OBS has the Cam Link.
         return answer(p, {
@@ -424,10 +481,24 @@ export const fakeWindows = (
     if (l.args.at(-2) === "-i")
       return answer(p, probeAnswer(path.join(l.cwd, l.args.at(-1) ?? "")));
     recorders.push(p);
-    if (writesFile(l.args, "camera.mkv") && o.recordingCamera !== "silent")
+    // A take's camera writer: reads the relay at once; its first frame
+    // comes once Record has told it T0.
+    if (writesFile(l.args, "camera.mkv")) {
+      const [relay] = relayPorts(l.args);
       setImmediate(() =>
-        p.stdout("frame=1\nout_time_us=0\nprogress=continue\n")
+        p.stderr(
+          `[info] Input #0, nut, from 'tcp://127.0.0.1:${relay}?listen=1&tcp_nodelay=1':\r\n`
+        )
       );
+      p.onStdin = (text) => {
+        if (!text.startsWith("Call ")) return;
+        p.begun = true;
+        if (o.recordingCamera !== "silent")
+          setImmediate(() =>
+            p.stdout("frame=1\nout_time_us=0\nprogress=continue\n")
+          );
+      };
+    }
     return p;
   };
   /** The level meter's ffmpeg.exe, while one runs. */
@@ -438,22 +509,34 @@ export const fakeWindows = (
         p.launch.tool === "ffmpeg" &&
         p.launch.args.some((a) => a.includes("ebur128=framelog=info"))
     );
+  /** The latest take's process writing `kind`.mkv (an armed writer only once it has begun). */
   const recorder = (kind: "screen" | "camera") => {
-    const p = recorders.find(
+    const p = recorders.findLast(
       (r) =>
-        r.launch.tool === "ffmpeg" && writesFile(r.launch.args, `${kind}.mkv`)
+        r.launch.tool === "ffmpeg" &&
+        writesFile(r.launch.args, `${kind}.mkv`) &&
+        (kind === "screen" || r.begun)
     );
     if (!p) throw new Error(`no ${kind} recorder was launched`);
     return p;
   };
-  /** How many camera processes (preview or recording) hold the Cam Link now. */
+  /** How many processes hold the Cam Link now. */
   const camerasRunning = () =>
-    [...cameraPreviews, ...recorders].filter(
+    launchedProcesses.filter(
       (p) =>
         p.running &&
         p.launch.tool === "ffmpeg" &&
         p.launch.args.some((a) => a.startsWith("video="))
     ).length;
+  /** The take writers armed and not yet begun or quit: none has had Record's T0. */
+  const armedWriters = () =>
+    recorders.filter(
+      (r) =>
+        r.running &&
+        !r.begun &&
+        r.launch.tool === "ffmpeg" &&
+        writesFile(r.launch.args, "camera.mkv")
+    );
   const launched: Launch[] = [];
   const recording: Launcher = (l) => {
     launched.push(l);
@@ -464,8 +547,10 @@ export const fakeWindows = (
     launched,
     recorders,
     recorder,
+    cameraCaptures,
     cameraPreviews,
     screenPreviews,
+    armedWriters,
     camerasRunning,
     meter,
     wakeSpacedesk,

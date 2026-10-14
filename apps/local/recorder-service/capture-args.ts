@@ -1,44 +1,42 @@
 import {
-  silenceRule,
-  silencedetectFilter,
-  type SilenceLength,
-} from "../app/silence-detection-constants";
-import {
   MOTION_FILTERS,
   MOTION_KEY,
 } from "../app/packages/clap-detection/live";
 
 /**
- * THE CAPTURE, AS THE RIG (#1992) PROVED IT: two ffmpeg.exe processes writing
- * three files for one Recording Session.
+ * THE CAPTURE (#2207): the devices open once, when the recorder opens, and
+ * stay open; Record and Stop only start and stop writing. Three kinds of
+ * ffmpeg.exe:
  *
- *   screen process:        ddagrab (the DELL for Landscape, the Spacedesk
- *                          display for a Short; whole output) -> screen.mkv
- *                          (none for a Short whose display is unavailable)
- *   camera + mic process:  Cam Link 4K -> camera.mkv, mic -> mic.mkv,
- *                          and silencedetect on the mic audio it writes
+ *   camera capture (long-lived):  Cam Link 4K + mic, nothing encoded. The
+ *       picture, at camera.mkv's size (1440p, scaled on the GPU), goes out
+ *       raw on two relays: to the camera preview, and to the take's writer.
+ *       The mic, on its clock (`micAnchor`), goes to the writer's relay.
+ *   camera preview (long-lived):  the preview relay -> the preview stream
+ *       (`previewOutput`) and the thumbnail camera's still. The same process,
+ *       encoder and settings whether a take is running or not.
+ *   camera writer (one per take): the writer relay -> camera.mkv + mic.mkv,
+ *       and silencedetect on the mic audio it writes. Armed before Record,
+ *       it drops every frame until Record says when T0 is
+ *       (`takeStartCommand`).
+ *   screen recorder (one per take): ddagrab -> screen.mkv (none for a Short
+ *       whose display is unavailable). The screen preview is its own process
+ *       (`screenPreviewArgs`): any second GPU stream in the screen recorder's
+ *       process (camera upload, scale, NVENC or a read-back) made ddagrab
+ *       miss frames, 55-58 fps against 59.7-59.8 split (#1992).
  *
- * Screen and camera are separate processes: any second GPU stream in the
- * screen's process (camera upload, scale or NVENC) made ddagrab miss frames,
- * 55-58 fps against 59.7-59.8 split.
+ * Each relay is NUT over loopback TCP, behind tee's dropping, retrying fifo:
+ * the capture never waits on a consumer, so a preview that dies or stalls
+ * cannot touch camera.mkv, and a writer that dies cannot freeze the preview.
+ * A frame the writer's relay drops shows as a gap the writer logs
+ * (`FRAME_GAP_SECONDS`), so a loss is never silent.
  *
  * ONE SHARED CLOCK. Every input is stamped with Windows wall time
- * (-use_wallclock_as_timestamps), -copyts keeps ffmpeg from zeroing each
- * input on its own, and every stream subtracts the same T0. File time t then
- * means wall time T0 + t in all three files. fps=…:start_time=0 and
- * aresample=…:first_pts=0 make each file CFR from exactly t=0. The mic's
- * stamps only anchor it: its audio is timed by sample count (`micOnClock`).
- *
- * PREVIEWS: every process that sees a picture also sends it, full size, as
- * a low-latency H.264 stream (NVENC, or libx264 as a fallback) to the
- * service (`previewOutput`), which relays it to the browser
- * (`preview-feeds.ts`). While the recorder is open but not recording, the
- * camera has a preview-only process of its own (`cameraPreviewArgs`); while
- * recording, the camera + mic process sends camera.mkv's own packets as the
- * camera preview (`recordedAndPreviewed`), with no encoder of the preview's
- * own that could fail the take. The screen
- * preview is always its own process (`screenPreviewArgs`): reading a D3D11
- * frame back in the screen recorder would cost it frames.
+ * (-use_wallclock_as_timestamps), -copyts keeps every process from zeroing
+ * it, and every file subtracts the same T0. File time t then means wall time
+ * T0 + t in all three files. fps=…:start_time=0 and aresample=…:first_pts=0
+ * make each file CFR from exactly t=0. The mic's stamps only anchor it: its
+ * audio is timed by sample count (`micAnchor`).
  */
 
 export const FILE_NAMES = {
@@ -71,14 +69,14 @@ export const dshowFrameInterval = (rate: string): number => {
 
 export const CAM_DSHOW_FRAMERATE = "29.97";
 
-const BT709 =
+export const BT709 =
   "setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709";
 
 /**
  * OBS's "Landscape Recording": NVENC H.264, CQP 23, p5 + hq, High, 2
  * B-frames. GOP 2 s, so a crash loses at most one GOP.
  */
-const nvenc = (gopFrames: number) => [
+export const nvenc = (gopFrames: number) => [
   "-c:v",
   "h264_nvenc",
   "-preset",
@@ -100,21 +98,11 @@ const nvenc = (gopFrames: number) => [
 ];
 
 /**
- * camera.mkv's NVENC hands each frame on one frame behind, rather than
- * holding a queue of them (ffmpeg's default; the take's camera preview,
- * which is camera.mkv's stream (#2203), drew 510-550 ms late with it and
- * 286 ms at one frame, synthetic). The packets are the same either way
- * (same framemd5 at the default, 0, 1 and 2, synthetic 1440p29.97), and it
- * kept real time.
- */
-const CAMERA_TAKE_DELAY = ["-delay", "1"];
-
-/**
  * MKV, not fragmented MP4 (which put the first video frame two frames late),
  * with 1 s clusters: a cluster is held in memory until it closes, so the
  * cluster time bounds what a hard kill loses.
  */
-const MKV = [
+export const MKV = [
   "-cluster_time_limit",
   "1000",
   "-flush_packets",
@@ -123,7 +111,7 @@ const MKV = [
   "matroska",
 ];
 
-const HEAD = [
+export const HEAD = [
   "-hide_banner",
   "-nostats",
   "-loglevel",
@@ -136,7 +124,7 @@ const HEAD = [
   "-copyts",
 ];
 
-const WALLCLOCK = [
+export const WALLCLOCK = [
   "-use_wallclock_as_timestamps",
   "1",
   "-thread_queue_size",
@@ -168,24 +156,19 @@ const feedSlave = (port: number, format: string) =>
   `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1`;
 
 /**
- * A Footage file that is also a preview feed (#2203): the recording's own
- * encoded packets, written to `file` exactly as `MKV` writes them (no fifo,
- * and a failure there fails the recording, as it always has), and copied to
- * the service's feed in FLV behind the same dropping, retrying fifo as any
- * preview. No second encoder, so nothing about the preview (its encoder
- * failing, its consumer gone or stalled) can stop or slow the file. The
- * packets in the file are the ones a plain matroska output writes (checked:
- * the same framemd5, size and CodecPrivate, synthetic). Global headers, as
- * matroska asks for them anyway: FLV needs the SPS/PPS up front.
+ * A raw relay (#2207): NUT over loopback TCP to a consumer that listens on
+ * Windows (the camera preview, or the take's writer), behind the same
+ * dropping, retrying fifo as a preview feed. A consumer that is gone or
+ * stalls costs only its own packets; the capture never waits on it.
  */
-export const recordedAndPreviewed = (file: string, port: number) => [
-  "-flags",
-  "+global_header",
-  ...teeWith(
-    8,
-    `[f=matroska:use_fifo=0:onfail=abort:cluster_time_limit=1000:flush_packets=1]${file}|${feedSlave(port, "flv")}`
-  ),
-];
+const teeToRelay = (port: number, queueSize: number) =>
+  teeWith(
+    queueSize,
+    `[f=nut:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+  );
+
+/** Where a camera capture's relays go: Windows loopback ports its consumers listen on. */
+export type CameraRelays = { preview: number; writer: number };
 
 /**
  * What encodes a preview stream (#2194): NVENC, or libx264 on the CPU once
@@ -310,6 +293,9 @@ export const PREVIEW_TAGS = {
   screen: "cvm-recorder-preview-screen",
 } as const;
 
+/** In the camera capture's command line, for the same reason: it never exits by itself. */
+export const CAPTURE_TAG = "cvm-recorder-capture-camera";
+
 /** In the level meter's command line, for the same reason: it never exits by itself. */
 export const METER_TAG = "cvm-recorder-meter";
 
@@ -317,31 +303,22 @@ const tagged = (tag: string) => ["-metadata", `comment=${tag}`];
 
 const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 
-/**
- * The camera preview at the size camera.mkv gets (1440p), scaled on the GPU
- * as the recording scales it. NVENC takes the CUDA frame as it is; libx264
- * needs it down on the CPU.
- */
-const cameraPreviewScale = (encoder: PreviewEncoder) =>
-  `scale_cuda=2560:1440:interp_algo=bicubic${encoder === "nvenc" ? "" : ",hwdownload,format=nv12"}`;
-
 /** A keyframe a second at the Cam Link's 29.97 fps. */
 const CAMERA_PREVIEW_GOP = 30;
 
 /**
  * How many bytes of frames DirectShow may hold for ffmpeg: 4K NV12 is 12.4 MB
- * a frame. A recording must never drop one, so it may hold about four
- * seconds' worth. The preview-only process holds about five frames (#2144):
- * a preview that falls behind drops frames instead of showing them late.
+ * a frame. The capture feeds every take, which must never drop one, so it
+ * may hold about four seconds' worth.
  */
-const RTBUF = { recording: "1500M", preview: "64M" } as const;
+const RTBUF = "1500M";
 
 /** The Cam Link 4K as DirectShow opens it, for recording and preview alike. */
-const camLinkInput = (camera: string, rtbuf: string = RTBUF.recording) => [
+const camLinkInput = (camera: string) => [
   "-f",
   "dshow",
   "-rtbufsize",
-  rtbuf,
+  RTBUF,
   "-video_size",
   "3840x2160",
   "-framerate",
@@ -371,31 +348,118 @@ export const micInput = (mic: string) => [
   `audio=${mic}`,
 ];
 
-/**
- * The thumbnail camera's still (#2012): 1280x720, the size the OBS Virtual
- * Camera gave it, a few times a second at a high JPEG quality. Scaled on the
- * GPU like the preview; the rate is cut after the download, so no filter
- * here has to take CUDA frames that the preview's own chain does not.
- */
-const CAMERA_STILL_SCALE =
-  "scale_cuda=1280:720:interp_algo=bicubic,hwdownload,format=nv12,fps=4,format=yuvj420p";
+/** The picture both relays carry: camera.mkv's size, scaled on the GPU as the recording always scaled it. */
+const CAMERA_RELAY_PICTURE =
+  "hwupload_cuda,scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12";
 
 /**
- * The camera while the recorder is open and not recording: the Cam Link in
- * the very mode the recording opens it in, to a preview only, plus the
- * thumbnail camera's still feed. Its first preview frame is how the service
- * knows the camera is live.
+ * The relays' raw picture. One thread: ffmpeg's rawvideo encoder is
+ * frame-threaded, and its threads hold each frame until the next one comes,
+ * a whole frame (33 ms) late on every relay (#2207, measured).
+ */
+const RAW_RELAY = ["-c:v", "rawvideo", "-threads:v", "1"];
+
+/** Packets the preview relay may queue: a preview that falls behind drops frames instead of showing them late. */
+const PREVIEW_RELAY_QUEUE = 4;
+
+/**
+ * Packets (frames and 20 ms mic buffers) the writer relay may queue: about
+ * two seconds, room for camera.mkv's NVENC to open at Record (#2207).
+ */
+const WRITER_RELAY_QUEUE = 160;
+
+/**
+ * THE CAMERA CAPTURE (#2207): the Cam Link and the mic, opened when the
+ * recorder opens and held until it closes, with no encoder of its own that
+ * could fail. The picture goes raw to the camera preview's relay and to the
+ * writer's; the mic, on its clock, to the writer's. Logged at info, so a mic
+ * stall (`micAnchor`) and DirectShow's dropped frames show.
+ */
+export const cameraCaptureArgs = (o: {
+  camera: string;
+  mic: string;
+  relays: CameraRelays;
+}) => [
+  "-hide_banner",
+  "-nostats",
+  "-loglevel",
+  "level+info",
+  "-copyts",
+  ...WALLCLOCK,
+  ...camLinkInput(o.camera),
+  ...WALLCLOCK,
+  ...micInput(o.mic),
+  "-filter_complex",
+  `[0:v]${CAMERA_RELAY_PICTURE},split[prev][rec];${micAnchor()}[mic]`,
+  "-map",
+  "[prev]",
+  "-fps_mode",
+  "passthrough",
+  // The stamps as they come (100 ns from DirectShow), not rounded to the
+  // frame rate's ticks: T0 and the gaps are read to the frame and below.
+  "-enc_time_base:v",
+  "filter",
+  ...RAW_RELAY,
+  ...tagged(CAPTURE_TAG),
+  ...teeToRelay(o.relays.preview, PREVIEW_RELAY_QUEUE),
+  "-map",
+  "[rec]",
+  "-map",
+  "[mic]",
+  "-fps_mode",
+  "passthrough",
+  "-enc_time_base:v",
+  "filter",
+  ...RAW_RELAY,
+  "-c:a",
+  "pcm_s16le",
+  ...tagged(CAPTURE_TAG),
+  ...teeToRelay(o.relays.writer, WRITER_RELAY_QUEUE),
+];
+
+/** A relay's consumer: it listens on Windows' loopback for the capture's relay. */
+export const relayInput = (port: number) => [
+  // NUT's header says all there is to know: probing would only hold back
+  // the first packets, a backlog the consumer never catches up on.
+  "-probesize",
+  "32",
+  "-analyzeduration",
+  "0",
+  "-f",
+  "nut",
+  "-i",
+  `tcp://127.0.0.1:${port}?listen=1&tcp_nodelay=1`,
+];
+
+/**
+ * The thumbnail camera's still (#2012): 1280x720, the size the OBS Virtual
+ * Camera gave it, a few times a second at a high JPEG quality.
+ */
+const cameraStillChain: Record<PreviewEncoder, string> = {
+  nvenc:
+    "scale_cuda=1280:720:interp_algo=bicubic,hwdownload,format=nv12,fps=4,format=yuvj420p",
+  x264: "scale=1280:720:flags=bicubic,fps=4,format=yuvj420p",
+};
+
+/**
+ * THE CAMERA PREVIEW (#2207): the capture's preview relay to the preview
+ * stream, plus the thumbnail camera's still feed. One process for as long as
+ * the capture runs, recording or not: Record and Stop never touch it. Its
+ * first frame is how the service knows the camera is live. NVENC takes the
+ * picture on the GPU; libx264 takes it as it comes.
  */
 export const cameraPreviewArgs = (o: {
-  camera: string;
+  relayPort: number;
   port: number;
   stillPort: number;
   encoder: PreviewEncoder;
 }) => [
   ...PREVIEW_HEAD,
-  ...camLinkInput(o.camera, RTBUF.preview),
+  "-fflags",
+  "nobuffer",
+  ...relayInput(o.relayPort),
   "-filter_complex",
-  `[0:v]hwupload_cuda,split[p][s];[p]${cameraPreviewScale(o.encoder)}[prev];[s]${CAMERA_STILL_SCALE}[still]`,
+  `[0:v]${o.encoder === "nvenc" ? "hwupload_cuda," : ""}split[prev][s];[s]${cameraStillChain[o.encoder]}[still]`,
   "-map",
   "[prev]",
   ...tagged(PREVIEW_TAGS.camera),
@@ -441,7 +505,7 @@ export const screenPreviewArgs = (o: {
 const cameraOnT0 = (t0: string) => `[0:v]setpts=PTS-${t0}/TB`;
 
 /** CFR 29.97 from exactly t=0. */
-const CAMERA_CFR = "fps=30000/1001:start_time=0";
+export const CAMERA_CFR = "fps=30000/1001:start_time=0";
 
 /**
  * The camera (input 0) on the shared clock: wall time less T0, then CFR
@@ -462,7 +526,7 @@ const MIC_ANCHOR_RISE = 0.0005;
 const MIC_STALL_LOGGED = 0.05;
 
 /**
- * The mic (input 1) on the shared clock, timed by sample count (#2120).
+ * The mic on Windows wall time, timed by sample count (#2120).
  *
  * Its wall-time stamps cannot be trusted one by one: ffmpeg sometimes stops
  * reading the mic for 100-400 ms, then reads the backlog all stamped "now".
@@ -476,23 +540,35 @@ const MIC_STALL_LOGGED = 0.05;
  * either way. With no stall a buffer keeps its stamp, give or take the
  * jitter in how soon ffmpeg reads it.
  *
- * Audio queued while the camera was opening arrives in one burst stamped
- * "now", before the anchor has settled: dropping the first 1.5 s (padded
- * back with silence by first_pts=0) keeps it from becoming an offset.
- * Recordings and AV Calibration runs both time the mic with this.
- *
  * The first buffer of a stall (read more than `MIC_STALL_LOGGED` late)
  * logs how late it was as a bare number of seconds ("[info] 0.391306"), so
- * a take's ffmpeg log still shows the stalls its mic file no longer does.
+ * the log still shows the stalls the mic file no longer does.
+ *
+ * The camera capture runs it from the moment the mic opens, for every take
+ * after (#2207); an AV Calibration's run, from its own start (`micOnClock`).
  */
-export const micOnClock = (t0: string, input = "1:a") => {
-  const startedAt = `PTS*TB-${t0}-N/SR`;
+export const micAnchor = (input = "1:a") => {
+  const startedAt = "PTS*TB-N/SR";
   const anchor = `st(0,if(N,min(ld(0)+${MIC_ANCHOR_RISE}*(N-ld(1))/SR,${startedAt}),${startedAt}))`;
   // ld(2): how late this buffer was read; logged on the first of a stall.
   const late = `st(3,ld(2));st(2,${startedAt}-ld(0))`;
   const stallLog = `if(gt(ld(2),${MIC_STALL_LOGGED})*lte(ld(3),${MIC_STALL_LOGGED}),print(ld(2),32))`;
-  return `[${input}]asetpts='${anchor};${late};${stallLog};st(1,N);(ld(0)+N/SR)/TB',atrim=start=1.5,aresample=async=50:min_hard_comp=0.1:first_pts=0`;
+  return `[${input}]asetpts='${anchor};${late};${stallLog};st(1,N);(ld(0)+N/SR)/TB'`;
 };
+
+/** The mic file's CFR audio from exactly t=0. */
+export const MIC_FROM_ZERO = "aresample=async=50:min_hard_comp=0.1:first_pts=0";
+
+/**
+ * The mic (input 1) on the shared clock, as an AV Calibration's run opens
+ * it: anchored (`micAnchor`), less T0. Audio queued while the camera was
+ * opening arrives in one burst stamped "now", before the anchor has settled:
+ * dropping the first 1.5 s (padded back with silence by first_pts=0) keeps
+ * it from becoming an offset. A take needs no such drop: its mic has been
+ * open, and anchored, since the recorder opened.
+ */
+export const micOnClock = (t0: string, input = "1:a") =>
+  `${micAnchor(input)},asetpts=PTS-${t0}/TB,atrim=start=1.5,${MIC_FROM_ZERO}`;
 
 /**
  * AN AV CALIBRATION'S RUN (`calibration-run.ts`): one ffmpeg.exe, the Cam
@@ -545,96 +621,4 @@ export const calibrationCaptureArgs = (o: {
     ...MKV,
     o.cameraFile,
   ];
-};
-
-export type CaptureOptions = {
-  t0Ms: number;
-  /** Put in each file's metadata and command line, so a process can be found by it. */
-  tag: string;
-  /**
-   * ddagrab's output_idx for the screen (the DELL, or a Short's Spacedesk
-   * display); null records no screen (`screen` is then null too).
-   */
-  screenIndex: number | null;
-  /** DirectShow names, as the device listing gave them. */
-  camera: string;
-  mic: string;
-  silenceLength: SilenceLength;
-  /** The silence threshold silencedetect cuts with, in dB. */
-  thresholdDb: number;
-  /** The service's camera preview feed, which this process also sends camera.mkv's stream to. */
-  cameraPreviewPort: number;
-};
-
-export const buildCaptureArgs = (o: CaptureOptions) => {
-  const t0 = (o.t0Ms / 1000).toFixed(3);
-
-  // dup_frames=1: with 0, ddagrab emits nothing while the screen is static,
-  // which stalls the graph. Its pacing needs the 1 ms timer the service
-  // raises right after start (timer-resolution.ps1).
-  const screen =
-    o.screenIndex === null
-      ? null
-      : [
-          ...HEAD,
-          ...WALLCLOCK,
-          "-f",
-          "lavfi",
-          "-i",
-          `ddagrab=output_idx=${o.screenIndex}:framerate=60:dup_frames=1:draw_mouse=1,settb=AVTB`,
-          "-filter_complex",
-          `[0:v]setpts=PTS-${t0}/TB,fps=60:start_time=0,${BT709},scale_d3d11=format=nv12[scr]`,
-          "-map",
-          "[scr]",
-          ...nvenc(120),
-          "-metadata",
-          `comment=${o.tag}`,
-          ...MKV,
-          FILE_NAMES.screen,
-        ];
-
-  // The Cam Link 4K offers only 2160p29.97 or 1080p59.94 raw, so open 4K NV12
-  // and scale to 1440p on the GPU: no 4K reaches the disk.
-  const cameraIn = [...WALLCLOCK, ...camLinkInput(o.camera)];
-  const micIn = [...WALLCLOCK, ...micInput(o.mic)];
-  // silencedetect reads the very audio mic.mkv gets, so its times are mic
-  // file time; anullsink ends that branch inside the graph.
-  const silence = silencedetectFilter(
-    silenceRule(o.silenceLength, o.thresholdDb)
-  );
-  // The camera preview during a take is camera.mkv's own stream
-  // (`recordedAndPreviewed`, #2203): a preview encoder of its own in this
-  // process could fail the whole process, and the take with it.
-  const cameraGraph = [
-    `${cameraOnT0(t0)},hwupload_cuda,${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
-    `${micOnClock(t0)},asplit=2[mic][sd]`,
-    `[sd]${silence},anullsink`,
-  ].join(";");
-  const camera = [
-    ...HEAD,
-    ...cameraIn,
-    ...micIn,
-    "-filter_complex",
-    cameraGraph,
-    "-map",
-    "[cam]",
-    ...nvenc(60),
-    ...CAMERA_TAKE_DELAY,
-    "-metadata",
-    `comment=${o.tag}`,
-    ...recordedAndPreviewed(FILE_NAMES.camera, o.cameraPreviewPort),
-    "-map",
-    "[mic]",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-ar",
-    "48000",
-    "-metadata",
-    `comment=${o.tag}`,
-    ...MKV,
-    FILE_NAMES.mic,
-  ];
-  return { screen, camera };
 };

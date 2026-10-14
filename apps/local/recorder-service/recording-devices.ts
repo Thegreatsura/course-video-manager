@@ -54,6 +54,19 @@ export const createRecordingDevices = (launch: Launcher) => {
         (n) => n,
         RECORDER_CAMERA_NAME
       ),
+    /**
+     * The Cam Link's and the mic's DirectShow names, from a fresh listing:
+     * the camera capture opens both (#2207).
+     */
+    findPair: async () => {
+      const names = (kind: "video" | "audio") =>
+        listing.devices.filter((d) => d.kind === kind).map((d) => d.name);
+      const listing = await list();
+      return {
+        camera: findByName(names("video"), (n) => n, RECORDER_CAMERA_NAME),
+        mic: findByName(names("audio"), (n) => n, MIC_NAME),
+      };
+    },
     /** The pair Record records, gated; refuses with why. */
     forRecord: async (
       calibration: LastPassedCalibration | null,
