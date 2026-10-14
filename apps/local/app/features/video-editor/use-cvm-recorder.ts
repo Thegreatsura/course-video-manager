@@ -94,6 +94,43 @@ export const useRecorderEvents = (
 };
 
 /**
+ * Stop as the page goes away (#2182): a refresh, closing the tab, or leaving
+ * the editor. `pagehide` gives no time for a render, so whether this editor
+ * is recording is read from a ref, and Stop goes with `keepalive` to outlive
+ * the page. The take is kept: Stop closes the files as the Stop button does,
+ * and the app server saves every speech with or without an editor. Window
+ * blur does not stop: a take is filmed with focus elsewhere, and OBS mode
+ * does not stop on it either. The next page stops whatever is still going
+ * (`cvmRecorderReducer`, Attaching).
+ */
+const useStopRecordingOnLeave = (
+  videoId: string,
+  enabled: boolean,
+  recording: boolean
+) => {
+  const recordingRef = useRef(recording);
+  recordingRef.current = recording;
+  useEffect(() => {
+    if (!enabled) return;
+    const stop = () => {
+      if (!recordingRef.current) return;
+      recordingRef.current = false;
+      fetch(`/api/videos/${videoId}/recorder/stop`, {
+        method: "POST",
+        keepalive: true,
+      }).catch(() => {
+        // The next page's Attaching stops it.
+      });
+    };
+    window.addEventListener("pagehide", stop);
+    return () => {
+      window.removeEventListener("pagehide", stop);
+      stop();
+    };
+  }, [videoId, enabled]);
+};
+
+/**
  * The effect runner for `cvmRecorderReducer`, and the bridge from the app
  * server's recorder events (`GET /api/videos/:id/recorder/events`) into it.
  * Its clip effects reach the clip reducer as the OBS path's events. Listens only on a CVM recorder Video, and its
@@ -274,6 +311,8 @@ export const useCvmRecorder = (o: {
         silenceLength: o.silenceLength,
       });
   }, [o.enabled, o.silenceLength, dispatch]);
+
+  useStopRecordingOnLeave(videoId, o.enabled, canStop(state));
 
   useRecorderEvents(videoId, o.enabled, (message) => {
     dispatch({ type: "recorder-message-heard", message });
