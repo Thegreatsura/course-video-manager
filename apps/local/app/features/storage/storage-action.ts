@@ -1,5 +1,6 @@
 import {
   purgedFiles,
+  storageMoveSubject,
   trashDoneFiles,
   type StorageBucket,
   type StorageDeleteResult,
@@ -222,7 +223,7 @@ export const storageActionLabel = (
         : `${paths.length} files`;
   switch (request.type) {
     case "move":
-      return `Move ${one(request.paths, `${request.bucket.name} ${request.kind === "footage" ? "Footage" : request.kind === "exported-videos" ? "Exported Videos" : "Clip Mockups"}`)} to ${labelOf(request.target)}`;
+      return `Move ${one(request.paths, storageMoveSubject(request.bucket.name, request.kind))} to ${labelOf(request.target)}`;
     case "purge":
       return `Delete ${one(request.exportPaths, `${request.bucket.name}'s Exported Videos`)}`;
     case "delete-bucket":
