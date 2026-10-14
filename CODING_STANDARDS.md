@@ -183,6 +183,24 @@ allowlist. Interactive streams (the Article Writer, a modal the author watches)
 stay, by name. The plan and the order the jobs move in:
 [`docs/plans/background-jobs-sidecar.md`](./docs/plans/background-jobs-sidecar.md).
 
+### A script, harness or test starts Windows processes only through the Windows guard
+
+Before a script, harness or test starts any Windows-side process
+(`ffmpeg.exe`, PowerShell, any `.exe`), it calls `guardWindows()` from
+`apps/local/scripts/windows-guard.ts`, and it starts every such process
+through what that returns (`windows.spawn(exe, args, { cwd })`,
+`windows.powershell(command)`). From a shell, use
+`pnpm --filter @cvm/local windows-guard -- <exe> [args…]`, or
+`windows-guard --check` (exit 3: refuse). The guard refuses, saying why,
+while the recorder service, a recorder `ffmpeg.exe` or OBS is running. It
+also starts every Windows process at Idle priority on cores 6–9.
+`nice` and `taskset` stop at WSL's edge, so never `spawn` a `.exe` directly
+from a harness: one at Normal priority starved the Cam Link capture and
+lost a take 212 frames (#2214). Prefer Linux `ffmpeg` with synthetic
+sources (`lavfi`), and never open a real device. The recorder service's own
+launcher (`recorder-service/windows-launcher.ts`) is the one exception,
+because it is the recorder.
+
 ## Entities and their actions
 
 ### Every entity is right-clickable
