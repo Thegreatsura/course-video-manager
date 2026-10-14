@@ -80,13 +80,13 @@ describe("UploadRow progress indicator", () => {
   it("labels an in-flight vertical render with its stage", () => {
     const html = render({
       ...base,
-      progress: 30,
+      progress: 60,
       uploadType: "render-vertical",
-      renderVerticalStage: "transcribing",
+      renderVerticalStage: "rendering-overlay",
     });
 
-    expect(bars(html)).toEqual([30]);
-    expect(html).toContain("Transcribing audio");
+    expect(bars(html)).toEqual([60]);
+    expect(html).toContain("Rendering subtitles");
   });
 
   it("shows a bare progress bar for a stageless upload", () => {

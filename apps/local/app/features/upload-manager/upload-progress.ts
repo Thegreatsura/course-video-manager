@@ -101,7 +101,6 @@ export const RENDER_VERTICAL_STAGE_BANDS: Record<
   StageBand
 > = {
   "concatenating-clips": { start: 10, width: 0 },
-  transcribing: { start: 30, width: 0 },
   "rendering-overlay": { start: 60, width: 0 },
   compositing: { start: 85, width: 0 },
 };
