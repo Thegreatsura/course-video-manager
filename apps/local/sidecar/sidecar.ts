@@ -24,6 +24,7 @@ import {
 } from "./job-kind";
 import { makeKindCleanup } from "./kind-cleanup";
 import { settleCancelled } from "./settle-cancelled";
+import { retryingSettleOps } from "./settle-retry";
 import { makePostChecks } from "./post-checks";
 import { makeJobEventFeed, type JobEventFeed } from "./job-event-feed";
 import {
@@ -47,33 +48,8 @@ import { LANE_NAMES, LANES, laneHasRoom, type LaneName } from "./lanes";
  * own failures and carries on. A handler never has to remember to log.
  */
 
-export interface SidecarTiming {
-  /** How long the sidecar lease lasts without a renewal. */
-  readonly leaseMs: number;
-  readonly leaseRenewMs: number;
-  /** How long a running Job's lease lasts without a heartbeat. */
-  readonly jobLeaseMs: number;
-  readonly jobHeartbeatMs: number;
-  /** How often an idle lane looks for work when nothing nudges it. */
-  readonly pollMs: number;
-  /** How often expired Jobs are swept up. */
-  readonly recoverEveryMs: number;
-  /** How long to wait for a live lease held by another sidecar to lapse. */
-  readonly lapseWaitMs: number;
-  /** How long one look for an interrupted post at its service may take. */
-  readonly postCheckTimeoutMs: number;
-}
-
-export const SIDECAR_TIMING: SidecarTiming = {
-  leaseMs: 15_000,
-  leaseRenewMs: 5_000,
-  jobLeaseMs: 30_000,
-  jobHeartbeatMs: 10_000,
-  pollMs: 1_000,
-  recoverEveryMs: 15_000,
-  lapseWaitMs: 20_000,
-  postCheckTimeoutMs: 30_000,
-};
+export { SIDECAR_TIMING, type SidecarTiming } from "./sidecar-timing";
+import type { SidecarTiming } from "./sidecar-timing";
 
 export { POST_CHECK_EVENT } from "./post-checks";
 
@@ -164,7 +140,11 @@ export const runSidecar = <R>(opts: {
   Effect.scoped(
     Effect.gen(function* () {
       const { identity, registry, timing, stop } = opts;
-      const ops = yield* JobOperationsService;
+      // Settling writes retry through a DB blip (#2168).
+      const ops = retryingSettleOps(
+        yield* JobOperationsService,
+        timing.jobLeaseMs
+      );
 
       // -- The lease ---------------------------------------------------------
       const take = ops.acquireSidecarLease({
