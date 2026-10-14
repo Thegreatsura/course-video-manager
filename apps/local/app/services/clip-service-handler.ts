@@ -18,6 +18,7 @@ import {
 } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { getFootageStats } from "@cvm/core/services/db-footage-stats.server";
+import { writeClipText } from "@cvm/core/services/db-transcript-word-operations.server";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
 import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
@@ -265,6 +266,19 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
             pauseType: event.pauseType,
           });
         }
+        return;
+      }
+
+      case "update-clip-text": {
+        const clip = yield* writeClipText(db, event.clipId, event.text);
+        if (!clip) {
+          throw new Error(`Clip not found: ${event.clipId}`);
+        }
+        yield* touchVideoUpdatedAt(db, clip.videoId);
+        logger.log(clip.videoId, {
+          type: "clip-text-updated",
+          clipId: event.clipId,
+        });
         return;
       }
 

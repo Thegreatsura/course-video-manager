@@ -27,25 +27,19 @@ import {
   getIsClipPortrait,
 } from "../video-editor-selectors";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
-import {
-  useDiagramSnapshotMeta,
-  fetchMeta,
-} from "@/features/diagrams/use-diagram-snapshot-scene";
-import { resolveForClip } from "@/lib/diagram-action-resolver";
+import { useDiagramSnapshotMeta } from "@/features/diagrams/use-diagram-snapshot-scene";
 import { getWebLinkLabel } from "@/lib/clip-web-link";
 import { canZoomClip } from "@/features/videos/clip-zoom";
 import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { clipScenePicker } from "./clip-scene-picker";
+import { clipEditTranscriptAction } from "./clip-edit-transcript-action";
+import { openDiagramPlaygroundForClip } from "./open-diagram-playground-for-clip";
 import { clipStillUrl } from "../clip-still-url";
 import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   overlayKindLabel,
   resolveOverlayKind,
 } from "@/features/videos/overlay-kind";
-import {
-  openPlayground,
-  openPlaygroundWithDiagram,
-} from "@/lib/diagram-window";
 
 /**
  * Props for the ClipItem component
@@ -449,6 +443,12 @@ const ClipMenuContent = (props: {
         // badge, and Open Diagram Playground on the Video's Actions menu
         // (rule 9: keep the menu near a dozen items).
         edit: [
+          clipEditTranscriptAction(clip, () =>
+            modalDispatch({
+              type: "edit-transcript-clicked",
+              clipId: clip.frontendId,
+            })
+          ),
           {
             label: clip.pauseType === "long" ? "Remove Pause" : "Add Pause",
             icon: PauseIcon,
@@ -510,24 +510,6 @@ const ClipMenuContent = (props: {
       }}
     />
   );
-};
-
-/** Opens the Diagram Playground on the Clip's pinned Diagram, or empty. */
-const openDiagramPlaygroundForClip = async (snapshotId: string | null) => {
-  let resolvedDiagramId: string | null = null;
-  if (snapshotId) {
-    const meta = await fetchMeta(snapshotId);
-    resolvedDiagramId = meta.diagramId;
-  }
-  const result = resolveForClip(
-    { diagramSnapshotId: snapshotId },
-    () => resolvedDiagramId
-  );
-  if (result.kind === "diagram") {
-    openPlaygroundWithDiagram(result.diagramId);
-  } else {
-    openPlayground();
-  }
 };
 
 /**

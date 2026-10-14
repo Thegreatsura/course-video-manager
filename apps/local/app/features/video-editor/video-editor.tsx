@@ -145,19 +145,12 @@ export const VideoEditor = (props: {
   onTogglePause: () => void;
   onTogglePauseForClip: (clipId: FrontendId) => void;
   onToggleZoomForClip: (clipId: FrontendId) => void;
+  onEditClipText: VideoEditorContextType["onEditClipText"];
   onMoveClip: (clipId: FrontendId, direction: "up" | "down") => void;
   onAddChapter: (name: string) => void;
   onUpdateChapter: (chapterId: FrontendId, name: string) => void;
-  onAddChapterAt: (
-    name: string,
-    position: "before" | "after",
-    itemId: FrontendId
-  ) => void;
-  onAddEffectClipAt: (
-    effectType: "white-noise",
-    position: "before" | "after",
-    itemId: FrontendId
-  ) => void;
+  onAddChapterAt: VideoEditorContextType["onAddChapterAt"];
+  onAddEffectClipAt: VideoEditorContextType["onAddEffectClipAt"];
   onRestoreClip: (clipId: FrontendId) => void;
   onPermanentlyRemoveArchived: (scope: SessionId | "all") => void;
   error: EditorError | null;
@@ -471,6 +464,7 @@ export const VideoEditor = (props: {
       onMoveClip: props.onMoveClip,
       onTogglePauseForClip: props.onTogglePauseForClip,
       onToggleZoomForClip: props.onToggleZoomForClip,
+      onEditClipText: props.onEditClipText,
       onAddChapter: props.onAddChapter,
       onUpdateChapter: props.onUpdateChapter,
       onAddChapterAt: props.onAddChapterAt,
@@ -500,6 +494,7 @@ export const VideoEditor = (props: {
       // From editorModalsReducer
       openModal: modalsState.openModal,
       micSettingsClipId: modalsState.micSettingsClipId,
+      editTranscriptClipId: modalsState.editTranscriptClipId,
       modalDispatch,
       onModalOpenChange,
       suggestionState: modalsState.suggestion,
@@ -560,6 +555,7 @@ export const VideoEditor = (props: {
       props.onMoveClip,
       props.onTogglePauseForClip,
       props.onToggleZoomForClip,
+      props.onEditClipText,
       props.onAddChapter,
       props.onUpdateChapter,
       props.onAddChapterAt,

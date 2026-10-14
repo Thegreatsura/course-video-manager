@@ -388,6 +388,12 @@ export type ClipReducerAction =
       clipId: FrontendId;
     }
   | {
+      /** The author saved a hand-edited text for this Clip (#2184). */
+      type: "clip-text-edited";
+      clipId: FrontendId;
+      text: string;
+    }
+  | {
       type: "set-scene-override";
       clipId: FrontendId;
       sceneOverride: Scene | null;
@@ -534,6 +540,11 @@ export type ClipReducerEffect =
       type: "update-zoom";
       clipId: DatabaseId;
       zoomType: ClipZoomType;
+    }
+  | {
+      type: "update-clip-text";
+      clipId: DatabaseId;
+      text: string;
     }
   | {
       type: "update-scene-override";

@@ -165,6 +165,11 @@ export const ClipServiceEventSchema = Schema.Union(
     pauseType: Schema.String,
   }),
   Schema.Struct({
+    type: Schema.Literal("update-clip-text"),
+    clipId: Schema.String,
+    text: Schema.String,
+  }),
+  Schema.Struct({
     type: Schema.Literal("update-zoom"),
     clipId: Schema.String,
     zoomType: Schema.String,

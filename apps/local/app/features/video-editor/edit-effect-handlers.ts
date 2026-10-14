@@ -117,6 +117,18 @@ export function createEditEffectHandlers(
         });
       });
     },
+    "update-clip-text": (_state, effect, dispatch) => {
+      clipService.updateClipText(effect.clipId, effect.text).catch((error) => {
+        dispatch({
+          type: "effect-failed",
+          effectType: "update-clip-text",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to save the Clip's transcript",
+        });
+      });
+    },
     "update-scene-override": (_state, effect, dispatch) => {
       clipService
         .updateSceneOverride(effect.clipId, effect.sceneOverride)
