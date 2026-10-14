@@ -76,6 +76,7 @@ const put = (dir: string, relative: string, content: Buffer | string) => {
   const full = path.join(dir, relative);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, content);
+  return full;
 };
 
 const bytes = (n: number, seed: number) =>
@@ -253,6 +254,15 @@ describe("a storage-move Job", () => {
       left: [],
     });
     expect(events.some((ev) => ev.type === "progress")).toBe(true);
+    // Each partial was recorded as this Job's before it was made (#2169).
+    expect(
+      events
+        .filter((ev) => ev.type === "move-partial")
+        .map((ev) => (ev.data as { path: string }).path)
+        .sort()
+    ).toEqual(
+      FOOTAGE.map((f) => `${path.join(e, f)}${MOVE_PARTIAL_SUFFIX}`).sort()
+    );
   });
 
   it("moves Exported Videos: the Export Hash is unchanged and the Video is still exported once the original goes", async () => {
@@ -307,9 +317,12 @@ describe("a storage-move Job", () => {
   });
 
   it("cancelled, removes partial copies, leaves originals, and ends cancelled", async () => {
-    // A lost run's partial is waiting to be resumed.
-    put(e, `raw-footage/take.mkv${MOVE_PARTIAL_SUFFIX}`, "half");
+    // A lost run of this Job left a partial, and recorded it (#2169).
+    const own = put(e, `raw-footage/take.mkv${MOVE_PARTIAL_SUFFIX}`, "half");
     const jobId = await newJob({ bucketId, kind: "footage", target: e });
+    await testDb
+      .insert(schema.jobEvents)
+      .values({ jobId, type: "move-partial", data: { path: own } });
     await run(
       Effect.flatMap(JobOperationsService, (ops) =>
         Effect.zipRight(

@@ -2,7 +2,11 @@ import { Data, Effect, Schedule } from "effect";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { storageRootsConfig } from "@/services/storage-roots";
-import { runStorageMove } from "@/packages/storage/move";
+import {
+  partialRecorder,
+  recordedPartials,
+  runStorageMove,
+} from "@/packages/storage/move";
 import { STORAGE_MOVED_EVENT } from "@/packages/storage/client";
 import { defineJobKind, JobCancelledError } from "../job-kind";
 import { JOB_PARAMS } from "../job-params";
@@ -55,6 +59,11 @@ export const storageMoveJobKind = defineJobKind({
           Effect.repeat(tick, Schedule.spaced(CANCEL_POLL_MS))
         );
 
+        // Every partial is recorded before it is made, so only this Job's
+        // own are ever deleted (#2169).
+        const ownPartials = yield* recordedPartials(db, ctx.jobId);
+        const recordPartial = partialRecorder(db, ctx.jobId);
+
         yield* ctx.emit("stage", { stage: "checking" });
         const result = yield* runStorageMove({
           db,
@@ -65,6 +74,8 @@ export const storageMoveJobKind = defineJobKind({
           ...(params.paths === undefined ? {} : { paths: params.paths }),
           jobId: ctx.jobId,
           cancelRequested: () => cancelRequested,
+          recordPartial,
+          ownPartials,
           onProgress: (p) => {
             percent = p;
           },

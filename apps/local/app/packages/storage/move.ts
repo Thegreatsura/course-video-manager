@@ -17,3 +17,10 @@ export {
   startStorageMove,
   type StorageMoveDisk,
 } from "./lib/move.server";
+export {
+  partialRecorder,
+  recordedPartials,
+  removeOwnPartials,
+  sweepEndedMovePartials,
+  type PartialsRemoved,
+} from "./lib/move-partials.server";

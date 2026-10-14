@@ -39,6 +39,7 @@ export const movableKindsOf = (bucket: StorageBucket): StorageMoveKind[] => {
     case "overlay-render-cache":
     case "export-scratch":
     case "orphaned-exports":
+    case "move-partials":
       return [];
   }
 };
@@ -112,8 +113,14 @@ export const STORAGE_MOVE_STAGES = ["checking", "copying"] as const;
 export type StorageMoveStage = (typeof STORAGE_MOVE_STAGES)[number];
 export const isStorageMoveStage = (stage: string): stage is StorageMoveStage =>
   (STORAGE_MOVE_STAGES as readonly string[]).includes(stage);
+/** A copy in progress; never a file anything reads. */
+export const MOVE_PARTIAL_SUFFIX = ".cvm-move-partial";
 /** The move finished: its `StorageMoveResult`, as a Job Event. */
 export const STORAGE_MOVED_EVENT = "storage-moved";
+/** A partial copy the Job is about to make, `{ path }`: its to delete (#2169). */
+export const MOVE_PARTIAL_EVENT = "move-partial";
+/** Every partial the Job recorded is gone, `{ files, bytes }` (#2169). */
+export const MOVE_PARTIALS_SWEPT_EVENT = "move-partials-swept";
 
 /** The Job's title: "Move AI Coding Crash Course Footage to E:". */
 export const storageMoveTitle = (

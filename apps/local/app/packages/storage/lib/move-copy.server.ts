@@ -21,6 +21,8 @@ import { rootLabel } from "./storage-roots";
 export class Cancelled extends Error {}
 export class Interrupted extends Error {}
 export class DestinationFull extends Error {}
+/** The Job could not record a partial copy it was about to make: stop. */
+export class PartialNotRecorded extends Error {}
 
 export type Control = {
   readonly cancelRequested: () => boolean;
@@ -94,7 +96,7 @@ export type FileOutcome =
   | { readonly type: "verified"; readonly bytes: number }
   | { readonly type: "left"; readonly message: string };
 
-/** Copy (or check) one file. Throws only Cancelled, Interrupted or DestinationFull. */
+/** Copy (or check) one file. Throws only Cancelled, Interrupted, DestinationFull or PartialNotRecorded. */
 export const moveOne = async (opts: {
   readonly file: PlannedFile;
   readonly target: string;
@@ -104,6 +106,12 @@ export const moveOne = async (opts: {
   readonly disk: StorageMoveDisk;
   readonly control: Control;
   readonly onBytes: (n: number) => void;
+  /**
+   * Called with a partial's path BEFORE it is created or written, so the Job
+   * has a record of every partial it made: only those are ever deleted
+   * (#2169). Throws `PartialNotRecorded` when it could not record it.
+   */
+  readonly recordPartial: (partial: string) => Promise<void>;
 }): Promise<FileOutcome> => {
   const { file, control } = opts;
   const label = rootLabel(opts.target);
@@ -196,6 +204,7 @@ export const moveOne = async (opts: {
   }
 
   const sourceHash = createHash("sha256");
+  await opts.recordPartial(partial);
   const out = await nodeFs.open(partial, offset > 0 ? "r+" : "wx");
   const input = await nodeFs.open(src, "r");
   try {
