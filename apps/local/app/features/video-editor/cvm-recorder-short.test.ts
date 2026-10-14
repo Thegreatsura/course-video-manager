@@ -62,7 +62,6 @@ describe("a Short on the CVM recorder", () => {
     t.send({
       type: "press-record",
       silenceLength: "long",
-      insertionPoint: { type: "start" },
     });
     expect(t.getEffects()).toEqual([]);
 
@@ -95,7 +94,6 @@ describe("a Short on the CVM recorder", () => {
     t.send({
       type: "press-record",
       silenceLength: "long",
-      insertionPoint: { type: "start" },
     });
     expect(t.getEffects()).toEqual([]);
 

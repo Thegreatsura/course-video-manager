@@ -35,8 +35,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -69,8 +68,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-1",
           })
         );
@@ -85,8 +83,7 @@ describe("clipStateReducer — diagram snapshot pinning", () => {
         })
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             soundDetectionId: "sound-2",
           })
         )

@@ -49,13 +49,16 @@ export const recorderClient = (): RecorderClient => {
   if (existing) return existing;
   const client = createRecorderClient({
     url: recorderServiceUrl(),
-    ingest: (event, insertionPointFor) =>
+    ingest: (event, askEditor) =>
       runtimeLive.runPromise(
         Effect.gen(function* () {
           const db = yield* DrizzleService;
-          return yield* ingestRecorderEvent(db, event, insertionPointFor);
+          return yield* ingestRecorderEvent(db, event, askEditor);
         })
       ),
+    // An editor answers at once (its SSE, then one POST); one that has not
+    // in this long is not there.
+    placeTimeoutMs: 5_000,
     unfinishedRecordingSessions: (candidates) =>
       runtimeLive.runPromise(
         Effect.gen(function* () {

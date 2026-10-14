@@ -73,7 +73,7 @@ const fakeExport = (outputDirectory: string) => {
 describe("a Video mixing OBS and CVM-recorder Clips", () => {
   it("switches to the CVM recorder with an OBS Clip on it, records, and exports both Clips", async () => {
     const video = await clipService.createVideo("Mixed");
-    const [obsClip] = await clipService.appendClips({
+    await clipService.appendClips({
       videoId: video.id,
       insertionPoint: { type: "start" },
       items: [],
@@ -100,7 +100,6 @@ describe("a Video mixing OBS and CVM-recorder Clips", () => {
     );
     await client.startRecording(video.id, {
       silenceLength: "short",
-      insertionPoint: { type: "after-clip", databaseClipId: obsClip!.id },
       folder: tmp(),
       format,
     });
