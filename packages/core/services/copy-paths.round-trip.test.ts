@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import * as schema from "../db/schema.js";
 import { COPY_PATHS, type CopyPathName } from "./version-copy-manifest.js";
 import {

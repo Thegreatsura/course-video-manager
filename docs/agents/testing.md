@@ -22,14 +22,14 @@ This is deliberately manual rather than diff-derived — no `turbo --affected`, 
 
 `.github/workflows/test.yml` runs everything `pnpm run check` runs on every PR (split into parallel jobs, with `@cvm/local`'s suite sharded four ways, all rolled up into the one required `check` context) — `typecheck`, `oxlint`, `lint:boundaries`, the four `scripts/` guards and the **unfiltered** `pnpm run test` — every package, every test file, every time. That's what makes it safe to stay targeted locally: nothing merges without the exhaustive run passing regardless of what you ran (or skipped) by hand. Reach for the full `pnpm run test` yourself only if you have a specific reason to distrust your own targeting for this change (e.g. you suspect a cross-package regression the test files you picked wouldn't catch).
 
-## Known noise: `packages/core`'s PGlite suite can look flaky under load
+## The test database: one Postgres container, a database per test file
 
-`packages/core` runs its DB-backed tests over in-process PGlite with up to 5 parallel forks (ADR 0014). On a CPU-constrained box (a shared/sandboxed agent workspace, not CI) that can produce sporadic per-test timeouts in otherwise-unrelated files — a symptom of contention, not a regression. Before treating a failure as real:
+Every DB-backed test (`createTestDb()` from `test-utils/test-db.ts`) gets a database of its own on one shared Postgres server (ADR 0046): the `cvm-test-postgres` Docker container, on `127.0.0.1:54329`, data on a tmpfs. The global setup starts it the first time (and whenever it is stopped), pushes the schema into a per-run TEMPLATE database, and every test file clones that with `CREATE DATABASE … TEMPLATE`. The file's databases are dropped when it finishes; a run's are dropped at teardown; a killed run's are swept by the next run.
 
-1. Re-run just that file in isolation (`npx vitest run <file>` from `packages/core`, or `apps/local`) — if it passes alone, that's contention, not a bug.
-2. If still unsure, `git stash` your changes and re-run the same file against `main` — if it fails identically there, it's pre-existing.
-
-Do **not** chase this by re-running the full suite with `--no-file-parallelism`; serializing ~150+ test files can take 10+ minutes and gives no more signal than step 1.
+- **Docker Desktop must be running** (with WSL integration on). Without it the run stops at once with `Docker is not running.` and what to do.
+- Point the suite at another local server with `CVM_TEST_DATABASE_URL` (admin URL, database `postgres`). Only `127.0.0.1`, `localhost`, `::1` and `host.docker.internal` are accepted. Sandcastle sandboxes set it to the host's container.
+- The container is safe to stop or remove at any time (`docker rm -f cvm-test-postgres`); the next run recreates it. Nothing else in Docker is touched.
+- A test that passed on PGlite and fails here is usually an order the query never promised (`IN (…)` or a join without `ORDER BY`), or a race the in-process database used to win. Fix the query or the race, not the database.
 
 ## One build-order gotcha
 

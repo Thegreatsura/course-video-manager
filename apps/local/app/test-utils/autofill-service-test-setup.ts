@@ -26,7 +26,7 @@ import { CourseOperationsService } from "@/services/db-course-operations.server"
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { SidecarContextTest } from "@/services/sidecar-context";
 import { createFakeTextGeneration } from "@/test-utils/fake-text-generation";
-import type { TestDb } from "@/test-utils/pglite";
+import type { TestDb } from "@/test-utils/test-db";
 
 export type VideoSpec = {
   readonly title?: string;

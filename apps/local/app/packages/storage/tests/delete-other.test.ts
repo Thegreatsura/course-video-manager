@@ -12,7 +12,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { StorageRoots } from "../index";
 import { bucketCanBeDeleted, type StorageBucket } from "../client";
 import { deleteOtherStorageBucket } from "../delete";

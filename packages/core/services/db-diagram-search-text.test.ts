@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 import { diagrams } from "../db/schema.js";
 
 let testDb: TestDb;

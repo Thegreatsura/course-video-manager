@@ -12,7 +12,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { courseBucketId } from "../buckets";
 import type { StorageRoots } from "../index";
 import {

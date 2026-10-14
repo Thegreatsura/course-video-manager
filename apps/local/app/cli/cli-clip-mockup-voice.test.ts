@@ -8,7 +8,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
 import { CLIP_MOCKUP_VOICING_EVENT } from "@cvm/core/features/clip-mockups/voice-status";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";

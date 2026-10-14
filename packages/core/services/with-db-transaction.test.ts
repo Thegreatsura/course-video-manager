@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 class ForcedTestError extends Data.TaggedError("ForcedTestError")<{
   message: string;

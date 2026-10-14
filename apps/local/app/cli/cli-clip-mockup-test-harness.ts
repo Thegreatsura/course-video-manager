@@ -4,7 +4,7 @@ import os from "node:os";
 import nodePath from "node:path";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";
-import type { TestDb } from "@/test-utils/pglite";
+import type { TestDb } from "@/test-utils/test-db";
 import {
   ClipMockupSpeechService,
   pcmToWav,

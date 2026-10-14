@@ -19,7 +19,7 @@
 #   one-off DB scripts  scriptPgClient() / scriptDrizzle()
 #                       (apps/local/scripts/script-database-url.ts)
 #   tests               createTestDb() / createBlankDb() / withQueryLog()
-#                       (packages/core/test-utils/pglite.ts)
+#                       (packages/core/test-utils/test-db.ts)
 #   the URL alone       resolveDatabaseUrl() (@cvm/core/db/database-url)
 #
 # Default: staged files (pre-commit). `--all`: every tracked file (CI), which
@@ -38,8 +38,9 @@ ALLOWLIST=(
   # Vercel build step: plain .mjs (no TypeScript, no workspace imports) and no
   # git checkout, so the guard would be a no-op there. One read-only SELECT.
   apps/remote/scripts/assert-migrations-applied.mjs
-  # The PGlite test setup: in-memory databases with no network at all.
-  packages/core/test-utils/pglite.ts
+  # The test Postgres (ADR 0046): builds every test client, and refuses any
+  # server but a local one before it connects.
+  packages/core/test-utils/test-postgres.ts
   # verify-cvm: psql against its localhost clones and the local template;
   # production only with PGOPTIONS default_transaction_read_only=on.
   .claude/skills/verify-cvm/scripts/verify-db.sh
@@ -131,7 +132,7 @@ if [ "$found_violations" -eq 1 ]; then
   echo "which stops a git worktree opening a writable connection to production. Use a factory:"
   echo "  app / server code   DrizzleService"
   echo "  one-off DB scripts  scriptPgClient() / scriptDrizzle() from apps/local/scripts/script-database-url.ts"
-  echo "  tests               createTestDb() / createBlankDb() / withQueryLog() from packages/core/test-utils/pglite.ts"
+  echo "  tests               createTestDb() / createBlankDb() / withQueryLog() from packages/core/test-utils/test-db.ts"
   echo "  the URL alone       resolveDatabaseUrl() from @cvm/core/db/database-url"
   echo "Do not add to the ALLOWLIST in $SELF."
   exit 1

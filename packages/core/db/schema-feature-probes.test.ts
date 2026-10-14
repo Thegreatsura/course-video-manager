@@ -1,31 +1,30 @@
 import { join } from "node:path";
-import type { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/pglite/migrator";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createBlankDb, type TestDb } from "../test-utils/pglite.js";
+import { createBlankDb, type TestDb } from "../test-utils/test-db.js";
 import { SCHEMA_FEATURE_PROBES } from "./schema-feature-probes.js";
 
 const MIGRATIONS_FOLDER = join(import.meta.dirname, "migrations");
 
 /**
  * The probes are the executable form of the hand-verification checklist for a
- * hosted Postgres (PlanetScale). PGlite cannot prove PlanetScale compatibility
+ * hosted Postgres (PlanetScale). The test container cannot prove PlanetScale compatibility
  * — that run is manual, via `pnpm run db:verify-features` — but it can prove
  * the probes themselves are right: they must all pass against this repo's own
  * migrations.
  */
 describe("schema feature probes", () => {
-  let pglite: PGlite;
+  let close: () => Promise<void>;
   let db: TestDb;
 
   beforeAll(async () => {
-    ({ pglite, db } = createBlankDb());
+    ({ close, db } = await createBlankDb());
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
   });
 
   afterAll(async () => {
-    await pglite.close();
+    await close();
   });
 
   it("fails every probe against a database with none of the features", () => {

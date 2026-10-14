@@ -20,7 +20,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { enqueueJob } from "../job-kinds";
 import { makeJsonLogger } from "../json-logger";
 import { runSidecar, type SidecarTiming } from "../sidecar";

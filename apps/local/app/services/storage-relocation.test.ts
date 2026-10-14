@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { Database } from "@/services/drizzle-service.server";
 import type { StorageRoots } from "@/packages/storage";
 import { listVideosForExportHash } from "@cvm/core/services/db-export-hash-videos.server";

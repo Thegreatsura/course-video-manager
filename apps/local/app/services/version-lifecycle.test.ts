@@ -4,7 +4,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";

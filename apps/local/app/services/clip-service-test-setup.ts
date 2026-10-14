@@ -18,7 +18,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 
 export let testDb: TestDb;
 export let clipService: ClipService;

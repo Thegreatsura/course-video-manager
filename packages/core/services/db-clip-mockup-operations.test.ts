@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "../test-utils/pglite.js";
+} from "../test-utils/test-db.js";
 
 // ===========================================================================
 // The row half of a Clip Mockup. The frame half is in apps/local, and so is

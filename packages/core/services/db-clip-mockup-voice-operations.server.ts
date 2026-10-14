@@ -50,7 +50,11 @@ const namedByLiveVoiceJob = (exceptJobId: string | null) =>
   sql`exists (select 1 from ${jobs} where ${jobs.kind} = ${CLIP_MOCKUP_VOICE_JOB_KIND}${exceptJobId === null ? sql`` : sql` and ${jobs.id} <> ${exceptJobId}`} and ${jobs.status} in ('queued', 'running') and ${jobs.params} -> 'clipMockupIds' @> jsonb_build_array(${clipMockups.id}))`;
 
 const createClipMockupVoiceOperations = (db: Database) => {
-  /** The Clip Mockups named, with their Video's `lineageId`; unknown ids are left out. */
+  /**
+   * The Clip Mockups named, with their Video's `lineageId`, in the order they
+   * were named; unknown ids are left out. The order is put back in JS: `IN`
+   * promises none, and on a real Postgres the join returns them in any order.
+   */
   const listClipMockupsToVoice = (ids: readonly string[]) =>
     ids.length === 0
       ? Effect.succeed([] as ClipMockupToVoice[])
@@ -66,6 +70,10 @@ const createClipMockupVoiceOperations = (db: Database) => {
             .from(clipMockups)
             .innerJoin(videos, eq(videos.id, clipMockups.videoId))
             .where(inArray(clipMockups.id, [...ids]))
+        ).pipe(
+          Effect.map((rows) =>
+            rows.toSorted((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
+          )
         );
 
   /**

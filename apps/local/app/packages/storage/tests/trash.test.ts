@@ -9,7 +9,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { StorageRoots } from "../index";
 import { classifyStorageFile } from "../buckets";
 import { loadStorageOwnership } from "../scan";

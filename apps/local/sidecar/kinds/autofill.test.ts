@@ -12,7 +12,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import type { JobContext } from "../job-kind";
 import { UPLOAD_MANAGER_POLICIES } from "../retry-policy";
 import { autofillJobKind } from "./autofill";

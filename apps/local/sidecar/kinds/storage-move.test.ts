@@ -17,7 +17,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { listVideosForExportHash } from "@cvm/core/services/db-export-hash-videos.server";

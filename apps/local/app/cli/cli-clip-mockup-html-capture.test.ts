@@ -13,7 +13,7 @@ import {
   createTestDb,
   truncateAllTables,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { LOCAL_MACHINE_ENV_KEY } from "./env";
 import {
   buildWriteLayer,

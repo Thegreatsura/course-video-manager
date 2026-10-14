@@ -1,6 +1,19 @@
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
+/**
+ * A sandbox runs the test suite against the host's test Postgres (ADR 0046):
+ * the `cvm-test-postgres` container, reached from inside Docker Desktop
+ * through `host.docker.internal`. A sandbox has no Docker of its own to start it.
+ */
+const dockerSandbox = () =>
+  docker({
+    env: {
+      CVM_TEST_DATABASE_URL:
+        "postgres://postgres@host.docker.internal:54329/postgres",
+    },
+  });
+
 const MAX_ITERATIONS = 10;
 const MAX_PARALLEL = 4;
 
@@ -9,7 +22,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   // Phase 1: Plan — orchestrator agent analyzes issues and picks parallelizable work
   const plan = await sandcastle.run({
-    sandbox: docker(),
+    sandbox: dockerSandbox(),
     name: "Planner",
     agent: sandcastle.claudeCode("claude-opus-5"),
     promptFile: "./.sandcastle/plan-prompt.md",
@@ -62,7 +75,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       await acquire();
       try {
         await using sandbox = await sandcastle.createSandbox({
-          sandbox: docker(),
+          sandbox: dockerSandbox(),
           branch: issue.branch,
           hooks: {
             host: {
@@ -142,7 +155,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   // Phase 3: Merge — one agent merges all branches together
   await sandcastle.run({
-    sandbox: docker(),
+    sandbox: dockerSandbox(),
     name: "Merger",
     maxIterations: 10,
     agent: sandcastle.claudeCode("claude-opus-5"),

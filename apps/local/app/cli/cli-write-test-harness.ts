@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
-import { createTestDb, type TestDb } from "@/test-utils/pglite";
+import { createTestDb, type TestDb } from "@/test-utils/test-db";
 import * as schema from "@/db/schema";
 import { buildProgram } from "@/cli/main";
 import { makeTestCliOutput } from "@/cli/output";

@@ -11,13 +11,13 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { Effect, Exit, Layer } from "effect";
-import type { PGlite } from "@electric-sql/pglite";
+import type { TestDbClient } from "@/test-utils/test-db";
 import {
   createTestDb,
   truncateAllTables,
   withQueryLog,
   type TestDb,
-} from "@/test-utils/pglite";
+} from "@/test-utils/test-db";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
 import { VersionOperationsService } from "@/services/db-version-operations.server";
@@ -30,14 +30,14 @@ import { clips as clipsTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 let testDb: TestDb;
-let pglite: PGlite;
+let client: TestDbClient;
 
 beforeAll(async () => {
   // An OBS append compares Footage paths in their root-relative form.
   process.env.STORAGE_ROOTS = "/mnt/t";
   const result = await createTestDb();
   testDb = result.testDb;
-  pglite = result.pglite as PGlite;
+  client = result.client;
 });
 
 const makeRunner = (db: TestDb) => {
@@ -197,7 +197,7 @@ describe("clips-during-publish race (#1403)", () => {
     // A second drizzle handle over the same PGlite, with a query logger:
     // the mechanism assertion is on the emitted SQL, not on timing.
     const queries: string[] = [];
-    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
+    const loggedDb = withQueryLog(client, (q) => queries.push(q.toLowerCase()));
 
     await Effect.runPromise(
       createClipOperations(loggedDb as any).appendClips({
@@ -221,7 +221,7 @@ describe("clips-during-publish race (#1403)", () => {
     const { course, version } = await setup();
 
     const queries: string[] = [];
-    const loggedDb = withQueryLog(pglite, (q) => queries.push(q.toLowerCase()));
+    const loggedDb = withQueryLog(client, (q) => queries.push(q.toLowerCase()));
     const runLogged = makeRunner(loggedDb as any);
 
     await runLogged(
