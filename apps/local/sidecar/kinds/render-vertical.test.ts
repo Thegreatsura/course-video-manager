@@ -11,7 +11,6 @@ import { renderVerticalJobKind } from "./render-vertical";
 
 const STAGES = [
   "concatenating-clips",
-  "transcribing",
   "rendering-overlay",
   "compositing",
 ] as const;

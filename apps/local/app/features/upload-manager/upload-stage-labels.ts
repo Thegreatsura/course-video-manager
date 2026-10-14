@@ -45,7 +45,6 @@ const AUTOFILL_STAGE_LABELS: Record<AutofillStage, string> = {
 
 const RENDER_VERTICAL_STAGE_LABELS: Record<RenderVerticalStage, string> = {
   "concatenating-clips": "Concatenating clips",
-  transcribing: "Transcribing audio",
   "rendering-overlay": "Rendering subtitles",
   compositing: "Compositing video",
 };

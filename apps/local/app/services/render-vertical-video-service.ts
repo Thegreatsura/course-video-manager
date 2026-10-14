@@ -11,17 +11,14 @@ import path from "node:path";
 import { tmpdir } from "os";
 import crypto from "node:crypto";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { WhisperTranscriptionService } from "./whisper-transcription-service";
+import { ClipOperationsService } from "@/services/db-clip-operations.server";
 import { FFmpegEncodeService } from "./ffmpeg-encode-commands";
 import { FFmpegCommandsService } from "./ffmpeg-commands";
 import { VideoEditorLoggerService } from "./video-editor-logger-service";
 import { makeFfmpegLogger } from "./ffmpeg-video-logger";
 import { VIDEO_FORMAT_DIMENSIONS } from "@/features/videos/video-format";
 import { overlayRendererBinPath } from "./overlay-renderer-bin";
-import {
-  splitSubtitleSegments,
-  type SubtitleSegment,
-} from "@/lib/subtitle-chunks";
+import { loadShortSubtitles } from "./short-subtitles";
 import { removeBestEffort } from "@/services/remove-best-effort";
 import { formatFailureCause } from "./format-failure-cause";
 import { SidecarContext } from "./sidecar-context";
@@ -30,7 +27,7 @@ import { resolveClipSourceFiles } from "./clip-source-files.server";
 import { STORAGE_FOLDERS, writeFolder } from "@/packages/storage";
 
 export type RenderVerticalStage =
-  "concatenating-clips" | "transcribing" | "rendering-overlay" | "compositing";
+  "concatenating-clips" | "rendering-overlay" | "compositing";
 
 export class RenderVerticalError extends Data.TaggedError(
   "RenderVerticalError"
@@ -44,7 +41,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
   {
     effect: Effect.gen(function* () {
       const videoOps = yield* VideoOperationsService;
-      const whisper = yield* WhisperTranscriptionService;
+      const clipOps = yield* ClipOperationsService;
       const ffmpegCommands = yield* FFmpegCommandsService;
       const ffmpegEncode = yield* FFmpegEncodeService;
       const effectFs = yield* FileSystem.FileSystem;
@@ -153,6 +150,8 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
                 const duration = clipExportDurationInSeconds(input);
                 return {
                   ...input,
+                  id: clip.id,
+                  text: clip.text,
                   // A CVM-recorder Clip's picture is drawn from its Recording
                   // Session, over everything it outputs (long Pause included).
                   composite: clipComposite(source, {
@@ -179,7 +178,9 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
                   concatExtras
                 )
               : yield* ffmpegEncode.createAndConcatenateVideoClipsSinglePass(
-                  renderClips.map(({ composite: _, ...clip }) => clip),
+                  renderClips.map(
+                    ({ composite: _, id: _id, text: _text, ...clip }) => clip
+                  ),
                   dimensions,
                   concatExtras
                 );
@@ -191,26 +192,18 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
             // Clean up raw concatenated file
             yield* removeBestEffort(effectFs, rawConcatenatedPath);
 
-            // Step 2: Transcribe the concatenated video in a single pass. Because
-            // Whisper runs on the already concatenated + normalized audio, its
-            // segment timestamps are on the final timeline — no per-clip offset,
-            // and the long-pause padding / audio normalization are accounted for.
-            enterStage("transcribing");
-            const transcription =
-              yield* whisper.transcribeVideoFile(concatenatedPath);
-
-            // Step 3: Get FPS from the concatenated video
+            // Step 2: The subtitles, from the Clips' own text and Transcript
+            // Words (#2172) — never a second transcription. Each Clip takes the
+            // seconds the concat was asked for, so the two timelines match.
             const fps = yield* ffmpegCommands.getFPS(concatenatedPath);
-
-            // Step 4: Split long segments into short phrases and convert to frames
-            const subtitles = buildSubtitles(transcription.segments, fps);
-
-            // Compute total duration in frames
-            const totalDuration = video.clips.reduce(
-              (acc, clip) => acc + (clip.sourceEndTime - clip.sourceStartTime),
-              0
-            );
-            const durationInFrames = Math.ceil(totalDuration * fps);
+            const { subtitles, durationInFrames } = yield* loadShortSubtitles(
+              renderClips.map((clip) => ({
+                id: clip.id,
+                text: clip.text,
+                durationSeconds: clipExportDurationInSeconds(clip),
+              })),
+              fps
+            ).pipe(Effect.provideService(ClipOperationsService, clipOps));
 
             // The call-to-action pill pops up at the very start and fades out over
             // the length of the first clip, capped at 5 seconds so a long opening
@@ -225,7 +218,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
               Math.min(firstClipDuration, CTA_MAX_SECONDS) * fps
             );
 
-            // Step 5: Render Remotion overlay
+            // Step 3: Render Remotion overlay
             enterStage("rendering-overlay");
             const overlayDir = path.join(tmpdir(), "cvm-overlay-render");
             yield* effectFs.makeDirectory(overlayDir, { recursive: true });
@@ -247,7 +240,7 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
 
             yield* renderOverlay(effectFs, propsJson, overlayPath);
 
-            // Step 6: Composite overlay onto concatenated video
+            // Step 4: Composite overlay onto concatenated video
             enterStage("compositing");
             const outputPath = path.join(
               FINISHED_VIDEOS_DIRECTORY,
@@ -277,33 +270,12 @@ export class RenderVerticalVideoService extends Effect.Service<RenderVerticalVid
     }),
     dependencies: [
       NodeContext.layer,
-      WhisperTranscriptionService.Default,
       FFmpegCommandsService.Default,
       FFmpegEncodeService.Default,
       VideoEditorLoggerService.Default,
     ],
   }
 ) {}
-
-/**
- * Build frame-based subtitles from Whisper segments of the concatenated video.
- *
- * The segment timestamps are already on the final timeline (Whisper transcribes
- * the concatenated + normalized audio), so there is no per-clip offset. Long
- * segments are split into short phrases, then seconds are converted to frames.
- */
-export function buildSubtitles(
-  segments: readonly SubtitleSegment[],
-  fps: number
-): { startFrame: number; endFrame: number; text: string }[] {
-  return segments
-    .flatMap((segment) => splitSubtitleSegments(segment))
-    .map((subtitle) => ({
-      startFrame: Math.floor(subtitle.start * fps),
-      endFrame: Math.floor(subtitle.end * fps),
-      text: subtitle.text.trim(),
-    }));
-}
 
 function renderOverlay(
   effectFs: FileSystem.FileSystem,
