@@ -155,7 +155,7 @@ A clip shown during recording before it is saved: the editor's picture of a **Ta
 _Avoid_: Pending clip, Temporary clip
 
 **Take**:
-One stretch of speech a **Recorder** hears long enough to be a **Clip**, from that moment until its Clip is saved (or it ends with none). Both Recorders map their own signals onto it (OBS: the browser's speech detector, then polling; the CVM recorder: its speech events held for the minimum Clip length, then the app server's saved Clips), so delete, restore and the **Insertion Point** behave the same whichever Recorder films. While it is in progress it is shown as an **Optimistic Clip**. A Take is not a Clip: a Clip is what it leaves, and a **Recording Session** holds many Takes.
+One stretch of speech a **Recorder** hears long enough to be a **Clip**, from that moment until its Clip is saved (or it ends with none). OBS's clip logic handles every Take: the CVM recorder is an adapter that turns its own signals (its speech events held for the minimum Clip length, then the end of the speech) into the events and save calls OBS's speech detector and polling make, so delete, restore and the **Insertion Point** behave the same whichever Recorder films (ADR 0044). While it is in progress it is shown as an **Optimistic Clip**. A Take is not a Clip: a Clip is what it leaves, and a **Recording Session** holds many Takes.
 _Avoid_: Speech part, Sound detection
 
 **Clip Web Link**:
@@ -167,7 +167,7 @@ The ordered text of a **Video**: its **Clips** and **Chapters** together, in tim
 _Avoid_: Clip text (only covers Clips), Joined clips, Caption (reserved for the per-clip transcription product)
 
 **Transcript Word**:
-One spoken word of a **Clip**, with the start and end time it was said at. The times are measured from the Clip's own start, not from the Footage and not from the finished Video. A Clip's words are written all at once by a **Transcription** and are never edited one by one. A Clip transcribed before Transcript Words existed has none, which is a normal state; transcribing it again fixes it. Its purpose is to point at an exact spoken moment inside a Clip, which the Transcript cannot do. Recutting the Clip moves its words with it (see **Retiming Cascade**). Every copy of the Clip carries its words.
+One spoken word of a **Clip**, with the start and end time it was said at. The times are measured from the Clip's own start, not from the Footage and not from the finished Video. A Clip's words are written all at once by a **Transcription** and are never edited one by one. A Clip transcribed before Transcript Words existed has none, which is a normal state; transcribing it again fixes it. Its purpose is to point at an exact spoken moment inside a Clip, which the Transcript cannot do. A **Short**'s subtitles are timed by them: the text shown is the Clip's own text, never a second transcription. Recutting the Clip moves its words with it (see **Retiming Cascade**). Every copy of the Clip carries its words.
 _Avoid_: Word timing / Timestamped word (informal, ok in prose), Caption, Subtitle (a rendered product, not this timing data)
 
 **Video File**:
@@ -316,7 +316,7 @@ A marker on a **Clip** (none or subtle) that shows the Clip slightly zoomed in, 
 _Avoid_: Punch-in, Ken Burns (implies an animated move; this one is static — reserved as an informal synonym for **Transform** instead), Scale, Crop
 
 **Insertion Point**:
-The position in a video timeline where new clips or chapters will be added (start, after a clip, after a chapter, end).
+The position in a video timeline where new clips or chapters will be added (start, after a clip, after a chapter, end). The editor owns it: on either **Recorder**, each save of a **Take** carries it, and the app server keeps none of its own (ADR 0044).
 _Avoid_: Cursor, Drop target
 
 **Transcription**:

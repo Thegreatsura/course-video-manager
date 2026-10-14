@@ -133,8 +133,7 @@ describe("getSessionClipMarks over a real take", () => {
       })
       .send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           soundDetectionId: "sound-1",
         })
       );
@@ -177,15 +176,13 @@ describe("getSessionClipMarks over a real take", () => {
       })
       .send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           soundDetectionId: "sound-1",
         })
       )
       .send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           soundDetectionId: "sound-2",
         })
       );

@@ -131,10 +131,10 @@ describe("jobEta from history", () => {
   it("adds the stages still to come to the whole job", () => {
     const state = run([
       [0, start("u1", "render-vertical")],
-      [0, renderStage("u1", "transcribing")],
+      [0, renderStage("u1", "concatenating-clips")],
     ]);
     const past = {
-      "render-vertical:transcribing": runs(30_000),
+      "render-vertical:concatenating-clips": runs(30_000),
       "render-vertical:rendering-overlay": runs(60_000),
       "render-vertical:compositing": runs(90_000),
     };

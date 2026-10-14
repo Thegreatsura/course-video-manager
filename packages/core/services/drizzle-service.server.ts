@@ -39,7 +39,7 @@ export class GitWorktreeProbe extends Context.Tag("GitWorktreeProbe")<
 }
 
 /**
- * The connection pool, with the error listener `pg` requires. A pooled
+ * The connection pool, with the error listeners `pg` requires. A pooled
  * connection the database drops while it sits idle (a restart, a network
  * blip, the pooler recycling it) makes the pool emit `error`; with no
  * listener that is an uncaught exception, and it killed the whole process —
@@ -53,6 +53,20 @@ export const makeConnectionPool = (url: string): Pool => {
     console.error(
       `[db] a pooled connection dropped (${error.message}); the next query opens a new one`
     );
+  });
+  // The pool's listener covers IDLE connections only: pg-pool takes its own
+  // listener off a connection while it is checked out. One the database drops
+  // then — between two statements of a transaction, say — emits `error` on
+  // the Client with nobody listening, and that crashed the Sidecar twice after
+  // the DNS blip of 2026-10-13 (exit 7, #2170). A listener on every
+  // connection, for its whole life: the statement in flight still fails as a
+  // query, and the pool throws the broken connection away when it is released.
+  pool.on("connect", (client) => {
+    client.on("error", (error) => {
+      console.error(
+        `[db] a connection in use dropped (${error.message}); its query fails and the pool replaces it`
+      );
+    });
   });
   return pool;
 };

@@ -68,7 +68,6 @@ const record = async (
   expect(format).toBe("short");
   await client.startRecording(videoId, {
     silenceLength: "short",
-    insertionPoint: { type: "start" },
     folder: tmp(),
     format,
   });

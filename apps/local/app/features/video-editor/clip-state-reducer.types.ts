@@ -5,8 +5,6 @@ import type { TranscriptionStatus } from "@/features/videos/transcription-status
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { BrowserLinkEvent, CapturedWebLink } from "@/lib/clip-web-link";
 import type { JobEventMessage } from "@/features/jobs/job-wire";
-import type { InsertionPoint } from "@/services/clip-service";
-import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import type { ClipRecordingSession } from "@/packages/clip-source";
 import type { Scene } from "@/packages/scene-layout";
 import type { MicEq } from "@cvm/core/features/videos/recorder";
@@ -95,10 +93,6 @@ export type ClipOnDatabase = {
   sessionId?: SessionId;
 };
 
-/**
- * The Optimistic Clip of a Take in progress (`clip-state-reducer-take.ts`),
- * on either Recorder, until its saved Clip fills it in.
- */
 export type ClipOptimisticallyAdded = {
   type: "optimistically-added";
   frontendId: FrontendId;
@@ -211,10 +205,7 @@ export type RecordingSession = {
   id: SessionId;
   displayNumber: number;
   status: RecordingSessionStatus;
-  /**
-   * Unknown only for a CVM recorder Recording Session this editor joined
-   * late (`recorder-status`), having missed its `recording-started`.
-   */
+  /** OBS's output file; a CVM recorder Recording Session's id. */
   outputPath?: string;
   startedAt: number;
   silenceLength?: SilenceLength;
@@ -223,11 +214,6 @@ export type RecordingSession = {
    * after-recording FFmpeg pass cuts with it.
    */
   silenceThresholdDb?: number;
-  /**
-   * A CVM recorder Recording Session: its id is the recorder's, and its
-   * Clips arrive saved (`clips-saved`) to fill in its takes.
-   */
-  cvmRecorder?: true;
 };
 
 /**
@@ -307,20 +293,13 @@ export type ClipReducerState = {
   } | null;
   /**
    * The optimistic clip currently being recorded (set when speech is detected,
-   * cleared when its audio window closes or its take is saved or ends). While
-   * set, the effective visible URL
+   * cleared when its audio window closes). While set, the effective visible URL
    * from each `browser-event` is accumulated into that clip's `pendingWebLinks`.
    */
   recordingClipFrontendId?: FrontendId | null;
 };
 
 export type ClipReducerAction =
-  | {
-      /** The app server told this editor about its CVM recorder Video. */
-      type: "cvm-recorder-message-heard";
-      message: CvmRecorderMessage;
-      receivedAt: number;
-    }
   | {
       type: "recording-started";
       outputPath: string;
@@ -330,6 +309,11 @@ export type ClipReducerAction =
        * after-recording FFmpeg pass cuts with too. Absent: the fixed default.
        */
       silenceThresholdDb?: number;
+      /**
+       * A CVM recorder Recording Session (its `outputPath` too): its Clips
+       * are placed through `place-take`, not found in an OBS file.
+       */
+      recordingSessionId?: string;
     }
   | {
       type: "recording-stopped";
@@ -339,19 +323,11 @@ export type ClipReducerAction =
       sessionId: SessionId;
     }
   | {
-      /**
-       * A Recorder heard enough speech for a Clip: a Take started
-       * (`clip-state-reducer-take.ts`). OBS's browser detector, or the CVM
-       * recorder's `speech-started` held for the minimum Clip length.
-       */
-      type: "take-started";
-      soundDetectionId: string;
+      type: "new-optimistic-clip-detected";
       /** OBS's scene and profile, stamped on the saved Clip; null on the CVM recorder. */
       scene: string | null;
       profile: string | null;
-      /** The CVM recorder's Recording Session; absent on OBS. */
-      recordingSessionId?: string;
-      at: number;
+      soundDetectionId: string;
     }
   | {
       type: "browser-event";
@@ -359,7 +335,8 @@ export type ClipReducerAction =
     }
   | {
       type: "new-database-clips";
-      clips: DB.Clip[];
+      /** A CVM recorder Clip comes with its Recording Session, to play the composite. */
+      clips: (DB.Clip & { recordingSession?: ClipRecordingSession | null })[];
       outputPath?: string;
       /** The id of the `transcribe-clips` Job the new Clips go into. */
       transcriptionJobId: string;
@@ -524,11 +501,6 @@ export type ClipReducerAction =
 
 export type ClipReducerEffect =
   | {
-      /** The app server places the CVM recorder's next Clip here. */
-      type: "send-recorder-insertion-point";
-      insertionPoint: InsertionPoint;
-    }
-  | {
       type: "transcribe-clips";
       jobId: string;
       clipIds: DatabaseId[];
@@ -642,6 +614,8 @@ export type ClipReducerEffect =
       outputPath: string;
       silenceLength: SilenceLength;
       silenceThresholdDb?: number;
+      /** A CVM recorder Recording Session: there is no OBS file to poll. */
+      recordingSessionId?: string;
     }
   | {
       type: "revalidate-loader";

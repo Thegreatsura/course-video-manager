@@ -152,7 +152,6 @@ export const stagePlan = (
       return [
         "starting",
         "concatenating-clips",
-        "transcribing",
         "rendering-overlay",
         "compositing",
       ];

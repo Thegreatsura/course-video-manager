@@ -32,8 +32,7 @@ describe("clipStateReducer", () => {
       const stateWithFirstClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 1",
             soundDetectionId: "sound-1",
           })
@@ -56,8 +55,7 @@ describe("clipStateReducer", () => {
       const stateWithTwoClipsAndSection = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
@@ -94,8 +92,7 @@ describe("clipStateReducer", () => {
       const stateWithNewClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 3",
             soundDetectionId: "sound-3",
           })
@@ -134,8 +131,7 @@ describe("clipStateReducer", () => {
       // Add clip after section
       tester.send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           scene: "Clip 1",
           soundDetectionId: "sound-1",
         })
@@ -157,8 +153,7 @@ describe("clipStateReducer", () => {
       const stateWithNewClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
@@ -179,8 +174,7 @@ describe("clipStateReducer", () => {
       // Add clip
       tester.send(
         fromPartial({
-          type: "take-started",
-          at: 0,
+          type: "new-optimistic-clip-detected",
           scene: "Clip 1",
           soundDetectionId: "sound-1",
         })
@@ -204,8 +198,7 @@ describe("clipStateReducer", () => {
       const stateWithNewClip = tester
         .send(
           fromPartial({
-            type: "take-started",
-            at: 0,
+            type: "new-optimistic-clip-detected",
             scene: "Clip 2",
             soundDetectionId: "sound-2",
           })
