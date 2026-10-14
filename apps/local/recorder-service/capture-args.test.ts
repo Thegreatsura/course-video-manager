@@ -16,22 +16,28 @@ const capture = () =>
     silenceLength: "short",
     thresholdDb: -40,
     cameraPreviewPort: 9,
-    cameraPreviewEncoder: "nvenc",
   });
 
 const graphOf = (args: readonly string[]) =>
   args[args.indexOf("-filter_complex") + 1]!.split(";");
 
 describe("the previews (#2144)", () => {
-  it("split the camera off before the shared clock's CFR while recording", () => {
-    const graph = graphOf(capture().camera);
-    const preview = graph.find((chain) => chain.endsWith("[camprev]"))!;
-    const recorded = graph.find((chain) => chain.endsWith("[cam]"))!;
-    expect(preview).not.toContain("fps=");
+  it("send camera.mkv's own packets as the take's camera preview, with no encoder of its own (#2203)", () => {
+    const take = capture().camera;
     // camera.mkv keeps its chain: CFR, BT.709, 1440p.
-    expect(recorded).toBe(
-      "[camr]fps=30000/1001:start_time=0,setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale_cuda=2560:1440:interp_algo=bicubic[cam]"
+    expect(graphOf(take)).toContain(
+      "[0:v]setpts=PTS-1000.000/TB,hwupload_cuda,fps=30000/1001:start_time=0,setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale_cuda=2560:1440:interp_algo=bicubic[cam]"
     );
+    const args = take.join(" ");
+    expect(args.match(/h264_nvenc/g)).toHaveLength(1);
+    expect(args).toContain("-bf 2 -g 60 -fps_mode passthrough -delay 1");
+    expect(args).not.toContain("libx264");
+    // The file is written straight (no fifo) and fails the take if it
+    // cannot be; the feed drops, retries and is ignored when it fails.
+    expect(args).toContain(
+      "[f=matroska:use_fifo=0:onfail=abort:cluster_time_limit=1000:flush_packets=1]camera.mkv|[f=flv:onfail=ignore]tcp://127.0.0.1:9"
+    );
+    expect(args).toContain("drop_pkts_on_overflow=1");
   });
 
   it("stream each as low-latency H.264 on NVENC: no B-frames, no lookahead, a keyframe a second (#2194)", () => {
@@ -66,28 +72,17 @@ describe("the previews (#2144)", () => {
     expect(camera("nvenc")).not.toContain("hwdownload");
   });
 
-  it("carry the camera preview in a take on the camera feed's encoder, beside camera.mkv's own NVENC", () => {
-    const take = (cameraPreviewEncoder: "nvenc" | "x264") =>
-      buildCaptureArgs({
-        t0Ms: 1_000_000,
-        tag: "t",
-        screenIndex: 0,
-        camera: "Cam Link 4K",
-        mic: "Mic",
-        silenceLength: "short",
-        thresholdDb: -40,
-        cameraPreviewPort: 9,
-        cameraPreviewEncoder,
-      }).camera.join(" ");
-    expect(take("x264")).toContain("-preset p5 -tune hq");
-    expect(take("x264")).toContain("-c:v libx264");
-    expect(take("nvenc").match(/h264_nvenc/g)).toHaveLength(2);
-  });
-
   it("are full size: the camera at camera.mkv's 1440p, the screen unscaled at 60 fps", () => {
-    expect(graphOf(capture().camera).join(";")).toContain(
-      "[camp]scale_cuda=2560:1440"
-    );
+    expect(
+      graphOf(
+        cameraPreviewArgs({
+          camera: "c",
+          port: 1,
+          stillPort: 2,
+          encoder: "nvenc",
+        })
+      ).join(";")
+    ).toContain("[p]scale_cuda=2560:1440");
     const screen = screenPreviewArgs({
       screenIndex: 1,
       port: 9,

@@ -242,7 +242,6 @@ const ffmpegArgs = (
           silenceLength: "short",
           thresholdDb: -40,
           cameraPreviewPort: port,
-          cameraPreviewEncoder: encoder,
         }).camera
       );
   }

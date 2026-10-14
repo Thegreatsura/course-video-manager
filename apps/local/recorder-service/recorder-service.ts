@@ -295,7 +295,6 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
         screenIndex,
         format,
         cameraPreviewPort: feeds.port("camera"),
-        cameraPreviewEncoder: encoders.get("camera"),
         cameraStartTimeoutMs: o.cameraStartTimeoutMs ?? CAMERA_START_TIMEOUT_MS,
         scene,
         emit: onEvent,
