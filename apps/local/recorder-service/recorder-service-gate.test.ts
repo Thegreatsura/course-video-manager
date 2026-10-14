@@ -26,7 +26,7 @@ const openRecorder = async () => {
   await app.next("hello");
   app.send({ type: "open", videoId: "video-1" });
   await app.camera("live");
-  return { app, deck };
+  return { app, deck, windows: s.windows };
 };
 
 describe("the AV Calibration gate on the recorder service", () => {
@@ -75,7 +75,7 @@ describe("the AV Calibration gate on the recorder service", () => {
   );
 
   it("checks only at the start: a take carries on past its calibration's expiry", async () => {
-    const { app, deck } = await openRecorder();
+    const { app, deck, windows } = await openRecorder();
     app.send({
       type: "prepare-record",
       videoId: "video-1",
@@ -87,6 +87,13 @@ describe("the AV Calibration gate on the recorder service", () => {
     await app.next("recording-started");
 
     clock.ms = CALIBRATION.createdAtMs + CALIBRATION_VALIDITY_MS + 60_000;
+    // The writer has written up to the press, which Stop waits for.
+    const seconds = (clock.ms - T0_MS) / 1000;
+    windows
+      .recorder("camera")
+      .stdout(
+        `frame=${Math.ceil(seconds * 30)}\nout_time_us=${seconds * 1e6}\nprogress=continue\n`
+      );
     deck.send({ type: "stream-deck", press: { action: "stop" } });
     expect(await app.next("recording-stopped")).toMatchObject({
       reason: "requested",

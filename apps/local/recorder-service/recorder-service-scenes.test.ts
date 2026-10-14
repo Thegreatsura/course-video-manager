@@ -54,6 +54,10 @@ describe("scenes", () => {
       (m) => m.state.kind === "recording" && m.state.scene === "Camera"
     );
 
+    // The writer has written up to the press, which Stop waits for.
+    s.windows
+      .recorder("camera")
+      .stdout("frame=128\nout_time_us=4250000\nprogress=continue\n");
     client.send({ type: "stop" });
     await client.next("recording-stopped");
     const logged = readLog(

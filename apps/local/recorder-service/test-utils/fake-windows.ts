@@ -262,7 +262,7 @@ const relayPorts = (args: readonly string[]) =>
     ...args
       .join(" ")
       .matchAll(
-        /(?:\[f=nut[^\]]*\]|^|\s)tcp:\/\/127\.0\.0\.1:(\d+)\?(?:timeout|listen)/g
+        /(?:\[f=(?:matroska|rawvideo)[^\]]*\]|^|\s)tcp:\/\/127\.0\.0\.1:(\d+)\?(?:timeout|listen)/g
       ),
   ].map((m) => Number(m[1]));
 
@@ -487,7 +487,7 @@ export const fakeWindows = (
       const [relay] = relayPorts(l.args);
       setImmediate(() =>
         p.stderr(
-          `[info] Input #0, nut, from 'tcp://127.0.0.1:${relay}?listen=1&tcp_nodelay=1':\r\n`
+          `[info] Input #0, matroska,webm, from 'tcp://127.0.0.1:${relay}?listen=1&tcp_nodelay=1':\r\n`
         )
       );
       p.onStdin = (text) => {

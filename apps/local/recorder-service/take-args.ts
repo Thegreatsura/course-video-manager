@@ -83,7 +83,7 @@ export const cameraWriterArgs = (o: {
     "-stats_period",
     String(WRITER_STATS_PERIOD),
     "-copyts",
-    ...relayInput(o.relayPort),
+    ...relayInput("writer", o.relayPort),
     "-filter_complex",
     [
       `[0:v]setpts@t0=PTS-${UNARMED_T0}/TB,${gap},${CAMERA_CFR},${BT709}[cam]`,

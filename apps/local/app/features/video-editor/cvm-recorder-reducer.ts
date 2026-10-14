@@ -1,13 +1,11 @@
 import type { EffectReducer } from "use-effect-reducer";
 import type { Scene } from "@/packages/scene-layout";
-import {
-  DEFAULT_SILENCE_LENGTH,
-  type SilenceLength,
-} from "@/silence-detection-constants";
+import type { SilenceLength } from "@/silence-detection-constants";
 import type { VideoFormat } from "@/features/videos/video-format";
 import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
 import { isSceneAvailable, isScreenWaking } from "./cvm-recorder-screen";
 import { attach } from "./cvm-recorder-attach";
+import { placeClips } from "./cvm-recorder-clips";
 import type {
   CvmRecorderMessage,
   SavedRecorderClip,
@@ -412,83 +410,6 @@ const heard = (
     case "clips-saved":
       return state;
   }
-};
-
-/**
- * The clip reducer's half of a message (see Clips, above), given the
- * recorder state before and after it.
- */
-const placeClips = (
-  before: cvmRecorderReducer.State,
-  after: cvmRecorderReducer.State,
-  message: CvmRecorderMessage,
-  exec: (effect: cvmRecorderReducer.Effect) => void
-): cvmRecorderReducer.State => {
-  let placing = after.placing;
-  let placingTake = after.placingTake;
-  const followed = before.recordingSessionId;
-  const follows = after.recordingSessionId;
-  if (followed !== follows) {
-    if (followed !== null) exec({ type: "stop-session" });
-    if (follows !== null && follows !== placing) {
-      exec({
-        type: "start-session",
-        recordingSessionId: follows,
-        silenceLength:
-          message.type === "recording-started"
-            ? message.silenceLength
-            : (after.silenceLength ?? DEFAULT_SILENCE_LENGTH),
-      });
-      placing = follows;
-      placingTake = false;
-    }
-  }
-  // OBS's detector closes the audio window whenever it goes silent.
-  if (before.speech.type !== "silence" && after.speech.type === "silence")
-    exec({ type: "close-take-window" });
-
-  if (
-    "recordingSessionId" in message &&
-    message.type !== "recorder-status" &&
-    message.recordingSessionId === placing
-  ) {
-    switch (message.type) {
-      case "take-started":
-        // Shown only while the editor follows it: after its stop, the clip
-        // reducer has no session left to show it in, and its Clip is
-        // simply inserted when it comes.
-        if (follows === message.recordingSessionId)
-          exec({ type: "start-take", soundDetectionId: message.takeId });
-        placingTake = true;
-        break;
-      case "speech-ended":
-        // Only a Take is saved; the app server asks about nothing else.
-        if (placingTake)
-          exec({ type: "place-take", recordingSessionId: placing });
-        placingTake = false;
-        break;
-      case "clips-saved":
-        exec({
-          type: "show-saved-clips",
-          recordingSessionId: placing,
-          clips: message.clips,
-          transcriptionJobId: message.transcriptionJobId,
-        });
-        break;
-      case "recording-stopped":
-      case "camera-lost":
-        placing = null;
-        placingTake = false;
-        break;
-      case "recording-started":
-      case "warmed-up":
-      case "speech-started":
-        break;
-    }
-  }
-  return placing === after.placing && placingTake === after.placingTake
-    ? after
-    : { ...after, placing, placingTake };
 };
 
 export const cvmRecorderReducer: EffectReducer<

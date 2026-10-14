@@ -41,11 +41,13 @@ describe("the camera capture (#2207)", () => {
     ]);
     // Each relay drops and retries rather than wait: a consumer gone or
     // stalled never holds up the capture, or the other relay.
+    // Neither is NUT, whose muxer takes the capture down when a consumer
+    // comes back (#2211): the writer's is Matroska, the preview's bare frames.
     expect(args).toContain(
-      `[f=nut:onfail=ignore]tcp://127.0.0.1:${relays.preview}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+      `[f=rawvideo:onfail=ignore]tcp://127.0.0.1:${relays.preview}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
     );
     expect(args).toContain(
-      `[f=nut:onfail=ignore]tcp://127.0.0.1:${relays.writer}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+      `[f=matroska:onfail=ignore]tcp://127.0.0.1:${relays.writer}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
     );
     expect(args.match(/drop_pkts_on_overflow=1/g)).toHaveLength(2);
   });
@@ -71,7 +73,7 @@ describe("the camera preview (#2207)", () => {
       encoder: "nvenc",
     }).join(" ");
     expect(preview).toContain(
-      `-f nut -i tcp://127.0.0.1:${relays.preview}?listen=1&tcp_nodelay=1`
+      `-use_wallclock_as_timestamps 1 -pix_fmt nv12 -video_size 2560x1440 -framerate 30000/1001 -f rawvideo -i tcp://127.0.0.1:${relays.preview}?listen=1&tcp_nodelay=1`
     );
     expect(preview).not.toContain("dshow");
     expect(preview).toContain("[f=flv:onfail=ignore]tcp://127.0.0.1:9");
@@ -119,7 +121,7 @@ describe("a take's camera writer (#2207)", () => {
   it("listens for the writer relay and writes camera.mkv and mic.mkv as the take process always did", () => {
     const args = writer().join(" ");
     expect(args).toContain(
-      `-f nut -i tcp://127.0.0.1:${relays.writer}?listen=1&tcp_nodelay=1`
+      `-f matroska -i tcp://127.0.0.1:${relays.writer}?listen=1&tcp_nodelay=1`
     );
     expect(args).toContain(
       "-c:v h264_nvenc -preset p5 -tune hq -rc constqp -qp 23 -profile:v high -bf 2 -g 60 -fps_mode passthrough"

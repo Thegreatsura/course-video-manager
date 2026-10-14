@@ -25,6 +25,9 @@ import { cameraWriterArgs, takeStartCommand } from "./take-args";
  *   - The preview's consumer dying, stalling or never being there leaves
  *     camera.mkv whole, with no gap.
  *   - The writer dying leaves the preview's frames coming as before.
+ *   - Take after take on the same relay: a Stop's writer goes, the next
+ *     one arms there, and the capture and its preview carry on; a preview
+ *     started again connects mid-take and the take carries on (#2211).
  */
 
 const hasFfmpeg = (() => {
@@ -192,7 +195,9 @@ const take = async (o: {
     ),
     o.dir
   );
-  await waitFor(() => /Input #0, nut, from 'tcp:/.test(writer.stderr()));
+  await waitFor(() =>
+    /Input #0, matroska,webm, from 'tcp:/.test(writer.stderr())
+  );
   // Armed: everything it reads is dropped until Record.
   await new Promise((r) => setTimeout(r, 1_000));
   const t0Ms = Date.now();
@@ -289,6 +294,92 @@ describe.skipIf(!hasFfmpeg)(
       },
       30_000
     );
+
+    it("records take after take on the same relay: each Stop's writer goes, the next arms there, and the capture and preview never notice (#2211)", async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "take-"));
+      dirs.push(dir);
+      const { ports, capture } = await startCapture(dir);
+      const preview = await previewConsumer(ports.preview);
+      try {
+        const takes = [];
+        for (const name of ["first", "second"]) {
+          const takeDir = path.join(dir, name);
+          fs.mkdirSync(takeDir);
+          takes.push({
+            dir: takeDir,
+            ...(await take({ dir: takeDir, writerPort: ports.writer })),
+          });
+        }
+        // NUT relays crashed the capture here, the moment the second writer
+        // connected: every Stop reopened the Cam Link and the mic.
+        expect(capture.child.exitCode).toBeNull();
+        for (const t of takes) {
+          expect(t.code).toBe(0);
+          // Whole, and playable to the press: no gap, nothing cut short.
+          const frames = frameHashes(path.join(t.dir, "camera.mkv"));
+          expect(frames.length).toBeGreaterThanOrEqual(
+            Math.floor(((t.stopMs - t.t0Ms) / 1000) * FPS) - 2
+          );
+          expect(t.writer.stderr()).not.toMatch(/\[warning\] -\d/);
+          const mic = spawnSync(
+            "ffprobe",
+            [
+              "-v",
+              "error",
+              "-show_entries",
+              "format=duration",
+              "-of",
+              "csv=p=0",
+              path.join(t.dir, "mic.mkv"),
+            ],
+            { encoding: "utf8" }
+          ).stdout;
+          expect(Number(mic)).toBeGreaterThanOrEqual(
+            (t.stopMs - t.t0Ms) / 1000 - 0.05
+          );
+        }
+        // The preview's frames kept coming across both Stops and arms.
+        const from = takes[0]!.stopMs;
+        const after = preview.arrivals.filter((t) => t >= from);
+        const gaps = after.slice(1).map((t, i) => t - after[i]!);
+        expect(Math.max(...gaps)).toBeLessThan(200);
+      } finally {
+        preview.close();
+      }
+    }, 40_000);
+
+    it("keeps the take whole when a preview started again connects mid-take, and that preview gets the frames (#2211)", async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "take-"));
+      dirs.push(dir);
+      const { ports, capture } = await startCapture(dir);
+      const first = await previewConsumer(ports.preview, {
+        after: "dies",
+        readMs: 2_000,
+      });
+      let again: Awaited<ReturnType<typeof previewConsumer>> | undefined;
+      try {
+        const { code, t0Ms, stopMs, writer } = await take({
+          dir,
+          writerPort: ports.writer,
+          during: async () => {
+            await new Promise((r) => setTimeout(r, 1_500));
+            again = await previewConsumer(ports.preview);
+          },
+        });
+        // NUT relays crashed the capture here, ending the take.
+        expect(capture.child.exitCode).toBeNull();
+        expect(code).toBe(0);
+        const frames = frameHashes(path.join(dir, "camera.mkv"));
+        expect(frames.length).toBeGreaterThanOrEqual(
+          Math.floor(((stopMs - t0Ms) / 1000) * FPS) - 2
+        );
+        expect(writer.stderr()).not.toMatch(/\[warning\] -\d/);
+        expect(again!.arrivals.length).toBeGreaterThan(0);
+      } finally {
+        first.close();
+        again?.close();
+      }
+    }, 30_000);
 
     it("keeps the preview's frames coming, with no gap, when the writer dies mid-take", async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "take-"));
