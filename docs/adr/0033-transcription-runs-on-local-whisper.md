@@ -20,3 +20,4 @@ Every **Transcription** (a Clip's text and **Transcript Words**, a **Footage** f
 - The first start on a new machine downloads ~2 GB of wheels and the 1.6 GB model (about 2 minutes here). Transcription Jobs wait for it, and the Sidecar logs its progress.
 - The CVM now needs an NVIDIA GPU and `python3` with `venv` on the machine that runs the Sidecar.
 - Footage is still cut into ~27-minute chunks at silences, which OpenAI's 25 MB upload limit used to require. This now keeps each pass inside the worker's 5-minute timeout and lets a long file resume from its cached chunks.
+- **Amended by #2172:** a Short's subtitles are no longer transcribed. The `render-vertical` Job takes them from its Clips' text, timed by their **Transcript Words**, and leaves no gap between them, so it no longer calls Whisper at all.

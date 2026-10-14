@@ -43,7 +43,7 @@ ALLOWLIST=(
   # Remove-on-failure of ffmpeg/whisper intermediates in the OS temp dir.
   "apps/local/app/services/video-export-passes.ts:2"
   "apps/local/app/services/render-vertical-video-service.ts:5"
-  "apps/local/app/services/whisper-transcription-service.ts:2"
+  "apps/local/app/services/whisper-transcription-service.ts:1"
   "apps/local/app/services/footage-transcription.ts:3"
   "apps/local/app/services/overlay-content-renderer.ts:2"
   # The Clip Mockup daemon's own lock file and socket.
@@ -55,7 +55,7 @@ ALLOWLIST=(
   # the export code built under finished-videos/ on a Storage Root.
   "apps/local/app/services/export-sha256-sidecar.ts:1"
 )
-MAX_ALLOWLISTED=21
+MAX_ALLOWLISTED=20
 
 # The definition of removeBestEffort: its callers are what gets checked.
 EXEMPT=(
