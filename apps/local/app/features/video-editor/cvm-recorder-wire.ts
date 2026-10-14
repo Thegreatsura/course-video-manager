@@ -1,9 +1,20 @@
 import type { DB } from "@/db/schema";
 import type { Scene } from "@/packages/scene-layout";
 import type { ClipRecordingSession } from "@/packages/clip-source";
-import type { InsertionPoint } from "@/services/clip-service";
 import type { SilenceLength } from "@/silence-detection-constants";
 import type { FramesLost, ScreenStatus } from "recorder-service/protocol";
+
+/** A Clip the app server saved from speech, with its Recording Session, so the editor plays it as the composite. */
+export type SavedRecorderClip = DB.Clip & {
+  recordingSession: ClipRecordingSession;
+};
+
+/** What `POST /api/videos/:id/recorder/place-take` answers: the Clips saved where the editor said. */
+export type PlacedTake = {
+  clips: SavedRecorderClip[];
+  /** The `transcribe-clips` Job the app server enqueued for them; null with none. */
+  transcriptionJobId: string | null;
+};
 
 /**
  * What the app server's recorder client tells an editor open on a New
@@ -60,14 +71,19 @@ export type CvmRecorderMessage =
   /** The take's first silence: ready for speech (speech-detector.ts). */
   | { type: "warmed-up"; recordingSessionId: string }
   | { type: "speech-started"; recordingSessionId: string }
+  /**
+   * A speech ended. Sent before its Clip is saved: an editor following the
+   * Recording Session answers with where to save it (`place-take`).
+   */
   | { type: "speech-ended"; recordingSessionId: string }
   | {
-      /** Speech became saved Clips, placed after `placedAt`, in order. */
+      /**
+       * Speech the app server saved as Clips without an editor saying where
+       * (none answered its `speech-ended`): after the Video's last item.
+       */
       type: "clips-saved";
       recordingSessionId: string;
-      /** With their Recording Session, so the editor plays them as the composite. */
-      clips: (DB.Clip & { recordingSession: ClipRecordingSession })[];
-      placedAt: InsertionPoint;
+      clips: SavedRecorderClip[];
       /** The `transcribe-clips` Job the app server enqueued for them. */
       transcriptionJobId: string;
     }
@@ -119,10 +135,3 @@ export const CVM_RECORDER_MESSAGE_TYPES = [
   "recording-stopped",
   "recorder-failed",
 ] as const satisfies readonly CvmRecorderMessage["type"][];
-
-/** What the editor sends with Record. */
-export type StartRecordingRequest = {
-  silenceLength: SilenceLength;
-  /** The editor's insertion point, resolved to saved items. */
-  insertionPoint: InsertionPoint;
-};

@@ -22,6 +22,7 @@ import { TRANSCRIBE_CLIPS_JOB_KIND } from "@/features/video-editor/transcribe-cl
 import type { Database } from "@/services/drizzle-service.server";
 import { enqueueJob, JOB_KIND_SPECS } from "../../sidecar/job-specs";
 import type { InsertionPoint } from "./clip-service";
+import type { UnknownDBServiceError } from "@/services/db-service-errors";
 import {
   dbCall,
   placeClips,
@@ -35,8 +36,12 @@ export interface PlaceSpeechAsClipsInput {
   readonly videoId: string;
   /** The Footage file the speech was found in: each Clip's Footage path. */
   readonly footagePath: string;
-  /** Where the Clips go, resolved to saved Clips and chapters. */
-  readonly insertionPoint: InsertionPoint;
+  /**
+   * Where the Clips go, resolved to saved Clips and chapters; or how to
+   * find out, asked only when there is speech not saved yet.
+   */
+  readonly insertionPoint:
+    InsertionPoint | Effect.Effect<InsertionPoint, UnknownDBServiceError>;
   /** The picture's frame rate: Clip bounds snap to its frames. */
   readonly fps: number;
   readonly speech: readonly SpeechSegment[];
@@ -88,9 +93,12 @@ export const placeSpeechAsClips = Effect.fn("placeSpeechAsClips")(function* (
           )
       );
       if (fresh.length === 0) return [];
+      const insertionPoint = Effect.isEffect(input.insertionPoint)
+        ? yield* input.insertionPoint
+        : input.insertionPoint;
       return yield* placeClips(db, {
         videoId: input.videoId,
-        insertionPoint: input.insertionPoint,
+        insertionPoint,
         clips: fresh.map((b) => ({
           inputVideo: input.footagePath,
           ...b,

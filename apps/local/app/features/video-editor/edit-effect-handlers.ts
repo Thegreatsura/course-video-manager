@@ -283,6 +283,9 @@ export function createEditEffectHandlers(
       });
 
       (async () => {
+        // A CVM recorder Recording Session has no OBS file: its editor
+        // places each speech as it ends (`place-take`, use-cvm-recorder.ts).
+        if (effect.recordingSessionId) return;
         while (!unmounted) {
           // Stop polling when session is done
           const session = clipStateRef.current.sessions.find(
@@ -449,23 +452,6 @@ export function createEditEffectHandlers(
                 ? error.message
                 : "Failed to create effect clip",
           });
-        });
-    },
-    "send-recorder-insertion-point": (_state, effect) => {
-      fetch(`/api/videos/${videoId}/recorder/insertion-point`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ insertionPoint: effect.insertionPoint }),
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        })
-        .catch((error) => {
-          // Not fatal: the next Clip lands where the last one did.
-          console.error(
-            "Could not tell the recorder the insertion point",
-            error
-          );
         });
     },
     "revalidate-loader": () => {

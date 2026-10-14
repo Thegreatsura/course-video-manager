@@ -10,7 +10,7 @@ import {
   MINIMUM_CLIP_LENGTH_SECONDS,
   type SilenceLength,
 } from "@/silence-detection-constants";
-import { savedItemBefore } from "./clip-state-reducer-cvm-recorder";
+import { resolveInsertionPoint } from "@/services/clip-service";
 import type {
   ClipReducerAction,
   ClipReducerState,
@@ -29,6 +29,7 @@ import {
 import {
   CVM_RECORDER_MESSAGE_TYPES,
   type CvmRecorderMessage,
+  type PlacedTake,
 } from "./cvm-recorder-wire";
 import { isSceneAvailable } from "./cvm-recorder-screen";
 
@@ -94,8 +95,8 @@ export const useRecorderEvents = (
 
 /**
  * The effect runner for `cvmRecorderReducer`, and the bridge from the app
- * server's recorder events (`GET /api/videos/:id/recorder/events`) into it
- * and into the clip reducer. Listens only on a CVM recorder Video, and its
+ * server's recorder events (`GET /api/videos/:id/recorder/events`) into it.
+ * Its clip effects reach the clip reducer as the OBS path's events. Listens only on a CVM recorder Video, and its
  * listening is what opens the recorder (and the Cam Link) for that Video:
  * an OBS Video never opens it.
  */
@@ -106,6 +107,13 @@ export const useCvmRecorder = (o: {
   silenceLength: SilenceLength;
   clipStateRef: RefObject<ClipReducerState>;
   clipDispatch: (action: ClipReducerAction) => void;
+  /** OBS's callbacks: the CVM recorder's takes go through the same path. */
+  onNewClipOptimisticallyAdded: (take: {
+    scene: null;
+    profile: null;
+    soundDetectionId: string;
+  }) => void;
+  onClipAudioWindowClosed: () => void;
   micOffsetRefusal: MicOffsetRefusal | null;
 }): CvmRecorderControls => {
   const videoId = o.video.id;
@@ -118,10 +126,7 @@ export const useCvmRecorder = (o: {
         fetch(`/api/videos/${videoId}/recorder/record`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            silenceLength: effect.silenceLength,
-            insertionPoint: effect.insertionPoint,
-          }),
+          body: JSON.stringify({ silenceLength: effect.silenceLength }),
         })
           .then(answer)
           .catch((error: unknown) =>
@@ -152,20 +157,71 @@ export const useCvmRecorder = (o: {
             dispatch({
               type: "speech-long-enough",
               speechCount: effect.speechCount,
-              recordingSessionId: effect.recordingSessionId,
             }),
           MINIMUM_CLIP_LENGTH_SECONDS * 1000
         );
         return () => clearTimeout(timer);
       },
-      "start-take": (_state, effect) => {
+      "start-session": (_state, effect) => {
         o.clipDispatch({
-          type: "take-started",
+          type: "recording-started",
+          outputPath: effect.recordingSessionId,
           recordingSessionId: effect.recordingSessionId,
-          soundDetectionId: effect.soundDetectionId,
+          silenceLength: effect.silenceLength,
+        });
+      },
+      "stop-session": () => {
+        o.clipDispatch({ type: "recording-stopped" });
+      },
+      "start-take": (_state, effect) => {
+        o.onNewClipOptimisticallyAdded({
           scene: null,
           profile: null,
-          at: Date.now(),
+          soundDetectionId: effect.soundDetectionId,
+        });
+      },
+      "close-take-window": () => {
+        o.onClipAudioWindowClosed();
+      },
+      "place-take": (_state, effect) => {
+        // Where OBS's polling would place it: the editor's insertion point.
+        const { insertionPoint, items } = o.clipStateRef.current;
+        Promise.resolve()
+          .then(() =>
+            fetch(`/api/videos/${videoId}/recorder/place-take`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                recordingSessionId: effect.recordingSessionId,
+                insertionPoint: resolveInsertionPoint(insertionPoint, items),
+              }),
+            })
+          )
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            return (await response.json()) as PlacedTake;
+          })
+          .then(({ clips, transcriptionJobId }) => {
+            if (clips.length > 0 && transcriptionJobId)
+              o.clipDispatch({
+                type: "new-database-clips",
+                clips,
+                outputPath: effect.recordingSessionId,
+                transcriptionJobId,
+              });
+          })
+          .catch((error: unknown) =>
+            // Not lost: the app server saves it after the Video's last item
+            // and says so (`clips-saved`).
+            console.error("Could not tell the recorder where to save", error)
+          );
+      },
+      "show-saved-clips": (_state, effect) => {
+        o.clipDispatch({
+          type: "new-database-clips",
+          clips: effect.clips,
+          outputPath: effect.recordingSessionId,
+          transcriptionJobId: effect.transcriptionJobId,
         });
       },
       "retry-camera": (_state, _effect, dispatch) => {
@@ -221,11 +277,6 @@ export const useCvmRecorder = (o: {
 
   useRecorderEvents(videoId, o.enabled, (message) => {
     dispatch({ type: "recorder-message-heard", message });
-    o.clipDispatch({
-      type: "cvm-recorder-message-heard",
-      message,
-      receivedAt: Date.now(),
-    });
   });
 
   return {
@@ -238,11 +289,7 @@ export const useCvmRecorder = (o: {
     canWakeSpacedeskAgain: canWakeSpacedeskAgain(state),
     onWakeSpacedesk: () => dispatch({ type: "press-wake-spacedesk" }),
     onRecord: () =>
-      dispatch({
-        type: "press-record",
-        silenceLength: o.silenceLength,
-        insertionPoint: savedItemBefore(o.clipStateRef.current),
-      }),
+      dispatch({ type: "press-record", silenceLength: o.silenceLength }),
     onStop: () => dispatch({ type: "press-stop" }),
     onScene: (scene) => dispatch({ type: "press-scene", scene }),
     onDismissAlert: () => dispatch({ type: "dismiss-alert" }),

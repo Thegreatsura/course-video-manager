@@ -323,6 +323,26 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     }
   });
 
+  // Either Recorder's takes (the CVM recorder adapts: ADR 0044).
+  const onNewClipOptimisticallyAdded = (take: {
+    scene: string | null;
+    profile: string | null;
+    soundDetectionId: string;
+  }) => dispatch({ type: "new-optimistic-clip-detected", ...take });
+  const onClipAudioWindowClosed = () => {
+    const activeSession = clipStateRef.current.sessions.find(
+      (s) => s.status === "recording"
+    );
+    if (!activeSession) return;
+    dispatch({
+      type: "clip-audio-window-closed",
+      sessionId: activeSession.id,
+      activeDiagramId: getActiveDiagramId(),
+      diagramFocused: diagramFocus.isFocused(),
+      ts: Date.now(),
+    });
+  };
+
   const recorderChoice = useRecorderChoice(props.loaderData.video);
   const cvmRecorder = useCvmRecorder({
     video: props.loaderData.video,
@@ -330,25 +350,14 @@ export const ComponentInner = (props: Route.ComponentProps) => {
     silenceLength,
     clipStateRef,
     clipDispatch: dispatch,
+    onNewClipOptimisticallyAdded,
+    onClipAudioWindowClosed,
     micOffsetRefusal: clipState.micOffsetRefusal,
   });
   const obsConnector = useOBSConnector({
     usesObs: recorderChoice.usesObs,
-    onNewClipOptimisticallyAdded: (take) =>
-      dispatch({ type: "take-started", ...take, at: Date.now() }),
-    onClipAudioWindowClosed: () => {
-      const activeSession = clipStateRef.current.sessions.find(
-        (s) => s.status === "recording"
-      );
-      if (!activeSession) return;
-      dispatch({
-        type: "clip-audio-window-closed",
-        sessionId: activeSession.id,
-        activeDiagramId: getActiveDiagramId(),
-        diagramFocused: diagramFocus.isFocused(),
-        ts: Date.now(),
-      });
-    },
+    onNewClipOptimisticallyAdded,
+    onClipAudioWindowClosed,
     silenceLength,
     lastPassedCalibration: props.loaderData.lastPassedCalibration,
     // Only a Landscape Video records with OBS (ADR 0037).

@@ -1,5 +1,4 @@
 import { Effect, Schema } from "effect";
-import { InsertionPointSchema } from "@/services/clip-service.schemas";
 import { recorderCommand } from "@/services/recorder-client/recorder-command";
 import {
   recorderClient,
@@ -12,7 +11,6 @@ import { makeAction } from "@/services/route-action.server";
 
 const startRecordingSchema = Schema.Struct({
   silenceLength: Schema.Literal("short", "long"),
-  insertionPoint: InsertionPointSchema,
 });
 
 /**
