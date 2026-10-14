@@ -505,6 +505,8 @@ describe("the CVM recorder's adapter", () => {
   it("saves the last take of a Recording Session in its place when the app server says it stopped first", () => {
     const e = editor(["a"]);
     const adapter = cvmAdapter(e);
+    // Opened idle; then a Stream Deck Record.
+    adapter.hear(status(null));
     adapter.hear(status(SESSION));
     adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
     adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
@@ -585,26 +587,46 @@ describe("the CVM recorder's adapter", () => {
     });
   });
 
-  it("joins a Recording Session already going when it loads, and places its takes", () => {
+  // #2182: a refresh mid-take stops it, as OBS's connector does on connect.
+  it("stops a Recording Session already going when it loads, and still places its last take", () => {
     const e = editor(["a", "b"]);
     const adapter = cvmAdapter(e);
     adapter.hear(status(SESSION));
-    adapter.hear({ type: "scene-changed", scene: "Camera" });
-    expect(canStop(adapter.recorder.getState())).toBe(true);
-    expect(adapter.recorder.getState().scene).toBe("Camera");
+    const stops = () =>
+      adapter.recorder.getEffects().filter((x) => x.type === "stop-recording")
+        .length;
+    expect(stops()).toBe(1);
+    expect(adapter.recorder.getState().phase).toBe("stopping");
     expect(e.clips.getState().sessions).toMatchObject([
       { status: "recording", outputPath: SESSION },
     ]);
-    // A reconnect's status again starts nothing new.
+    // A reconnect's status stops nothing more and starts nothing new.
     adapter.hear(status(SESSION));
+    expect(stops()).toBe(1);
     expect(e.clips.getState().sessions).toHaveLength(1);
 
+    // The speech heard before the stop landed is saved where the editor says.
     adapter.hear({ type: "warmed-up", recordingSessionId: SESSION });
     adapter.hear({ type: "speech-started", recordingSessionId: SESSION });
     adapter.willSave("c");
     adapter.hear({ type: "speech-ended", recordingSessionId: SESSION });
+    adapter.hear(status(null));
+    adapter.hear(stopped(SESSION));
 
     expect(shown(e)).toEqual(["a", "b", "c"]);
     expect(e.database()).toEqual(["a", "b", "c"]);
+    expect(adapter.recorder.getState().phase).toBe("idle");
+  });
+
+  it("does not stop a Recording Session that starts after it loads, through a reconnect", () => {
+    const e = editor(["a"]);
+    const adapter = cvmAdapter(e);
+    adapter.hear(status(null));
+    adapter.hear(status(SESSION));
+    adapter.hear(status(SESSION));
+    expect(
+      adapter.recorder.getEffects().some((x) => x.type === "stop-recording")
+    ).toBe(false);
+    expect(canStop(adapter.recorder.getState())).toBe(true);
   });
 });
