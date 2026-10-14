@@ -11,6 +11,8 @@ import {
 import { CAM_LINK_BUSY, CAM_LINK_NOT_STARTING } from "./camera";
 import { CALIBRATION_REQUIRED, type RecorderCommand } from "./protocol";
 import { fakeFootage, fakeWindows } from "./test-utils/fake-windows";
+import { previewChunks } from "./test-utils/flv";
+import { PREVIEW_CHUNK } from "./preview-feeds";
 import {
   connect,
   holdThreadpool,
@@ -57,26 +59,26 @@ describe("start-up checks", () => {
   });
 });
 
-/** A frame a browser pulls from a preview feed. */
-const pullPreview = (port: number, feed: "camera" | "screen", after = "") =>
-  new Promise<{ status: number; type: string | undefined; seq: string }>(
-    (resolve) => {
-      http.get(
-        `http://127.0.0.1:${port}/preview/${feed}?after=${after}`,
-        (res) => {
-          res.resume();
-          resolve({
-            status: res.statusCode ?? 0,
-            type: res.headers["content-type"],
-            seq: String(res.headers["x-frame-seq"]),
-          });
-        }
-      );
-    }
-  );
+/** The first chunks a browser reads from a preview stream: its config, then a keyframe. */
+const watchPreview = (port: number, feed: "camera" | "screen") =>
+  new Promise<{ type: string | undefined; kinds: number[] }>((resolve) => {
+    http.get(`http://127.0.0.1:${port}/preview/${feed}`, (res) => {
+      let bytes = Buffer.alloc(0);
+      res.on("data", (c: Buffer) => {
+        bytes = Buffer.concat([bytes, c]);
+        const chunks = previewChunks(bytes);
+        if (chunks.length < 3) return;
+        res.destroy();
+        resolve({
+          type: res.headers["content-type"],
+          kinds: chunks.slice(0, 3).map((c) => c.kind),
+        });
+      });
+    });
+  });
 
 describe("the Cam Link", () => {
-  it("opens with the recorder and is live on its first frame, with camera and screen previews pulled a frame at a time", async () => {
+  it("opens with the recorder and is live on its first frame, with camera and screen previews streamed from a keyframe", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
@@ -87,12 +89,12 @@ describe("the Cam Link", () => {
     expect(windows.cameraPreviews).toHaveLength(1);
 
     for (const feed of ["camera", "screen"] as const) {
-      const first = await pullPreview(port, feed);
-      expect(first).toMatchObject({ status: 200, type: "image/jpeg" });
-      // Asking after that frame waits for a newer one.
-      const next = await pullPreview(port, feed, first.seq);
-      expect(next.status).toBe(200);
-      expect(Number(next.seq)).toBeGreaterThan(Number(first.seq));
+      const watched = await watchPreview(port, feed);
+      expect(watched.type).toBe("application/octet-stream");
+      expect(watched.kinds.slice(0, 2)).toEqual([
+        PREVIEW_CHUNK.config,
+        PREVIEW_CHUNK.key,
+      ]);
     }
   });
 

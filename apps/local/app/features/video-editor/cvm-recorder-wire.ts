@@ -33,7 +33,7 @@ export type CvmRecorderMessage =
       problem: string | null;
       /** The Recording Session in progress for this Video, if any. */
       recordingSessionId: string | null;
-      /** Where the browser watches the raw camera and screen (MJPEG, for an `<img>`). */
+      /** Where the browser watches the raw camera and screen (H.264 streams, `latest-frame.ts`). */
       previews: { camera: string; screen: string };
       /** Where the browser fetches the camera's still (a 1280x720 JPEG): the thumbnail camera. */
       still: string;

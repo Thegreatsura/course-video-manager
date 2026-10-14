@@ -2,6 +2,7 @@ import { cameraPreviewArgs, PREVIEW_TAGS } from "./capture-args";
 import { runToEnd, type LaunchedProcess, type Launcher } from "./launcher";
 import type { PreviewFeeds } from "./preview-feeds";
 import type { CameraStatus } from "./protocol";
+import { watchPreview } from "./preview-watchdog";
 
 /**
  * OPENING THE CAM LINK (#1993 Q11, Q12). The Cam Link's real trouble is
@@ -81,6 +82,8 @@ export type CameraOptions = {
   findCamera: () => Promise<string | undefined>;
   onStatus: (status: CameraStatus) => void;
   startTimeoutMs: number;
+  /** No frame for this long while live and the preview is opened again (`preview-watchdog.ts`). */
+  previewStallMs?: number;
 };
 
 export type Camera = {
@@ -95,6 +98,8 @@ export const openCamera = (o: CameraOptions): Camera => {
   let status: CameraStatus = { kind: "opening", attempt: 1 };
   let current: LaunchedProcess | undefined;
   let released = false;
+  /** How many times a stalled preview was opened again. */
+  let restarts = 0;
   const quitting = { launch: o.launch, tag: PREVIEW_TAGS.camera };
 
   const set = (next: CameraStatus) => {
@@ -136,6 +141,21 @@ export const openCamera = (o: CameraOptions): Camera => {
       if (released) return;
       if (outcome === "frame") {
         set({ kind: "live" });
+        // Stalled: quit it, and the exit below opens it again.
+        watchPreview({
+          name: "camera preview",
+          process: p,
+          onFrame: (listener) => o.feeds.onFrame("camera", listener),
+          stallMs: o.previewStallMs,
+          onStall: () => {
+            if (released || current !== p) return;
+            restarts += 1;
+            console.error(
+              `recorder: the camera preview stalled; opening the Cam Link again (restart ${restarts})`
+            );
+            void quitProcess(p, quitting);
+          },
+        });
         // Lost while open and not recording: open it again from the start.
         void p.exited.then(() => {
           if (!released && current === p) void attempt(1);

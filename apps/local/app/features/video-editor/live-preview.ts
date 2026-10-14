@@ -5,7 +5,7 @@ import type { cvmRecorderReducer } from "./cvm-recorder-reducer";
 /**
  * The editor's live frame, whichever Recorder the Video uses. OBS fills it
  * with its Virtual Camera; the CVM recorder with the composite drawn from its
- * MJPEG feeds. Either way it is the same frame: the same place on screen, the
+ * H.264 preview feeds. Either way it is the same frame: the same place on screen, the
  * same capture badge, ring, recording signal and centre line (fed by
  * `recorder-capture.ts`), and the previous Clip's last frame over it.
  */

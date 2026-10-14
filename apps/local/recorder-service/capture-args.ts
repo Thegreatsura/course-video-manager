@@ -29,8 +29,9 @@ import {
  * aresample=…:first_pts=0 make each file CFR from exactly t=0. The mic's
  * stamps only anchor it: its audio is timed by sample count (`micOnClock`).
  *
- * PREVIEWS: every process that sees a picture also sends a small MJPEG of it
- * to the service (`previewOutput`), which serves it to the browser
+ * PREVIEWS: every process that sees a picture also sends it, full size, as
+ * a low-latency H.264 stream to the service (`previewOutput`), which relays
+ * it to the browser
  * (`preview-feeds.ts`). While the recorder is open but not recording, the
  * camera has a preview-only process of its own (`cameraPreviewArgs`); while
  * recording, the camera + mic process carries the camera preview. The screen
@@ -131,31 +132,79 @@ const WALLCLOCK = [
 ];
 
 /**
- * A preview output, as the rig (#1992) settled it: MJPEG to the service's TCP
- * feed for that picture. A preview consumer that dies or stalls must never
- * stop a recording, and a slow Windows -> WSL connect must not lose the
- * preview for good, so it sits behind tee's fifo: its own queue, packets
- * dropped when full, the connection retried every 0.5 s. The null output
- * keeps the tee alive.
- *
- * Near-live, as OBS's preview is (#2144): the fifo holds at most two frames
- * (it held 30, a second of backlog once anything stalled), and the socket
- * sends each frame as soon as it is written (no Nagle).
+ * Behind tee's fifo, as the rig (#1992) settled it: a preview consumer that
+ * dies or stalls must never stop a recording, and a slow Windows -> WSL
+ * connect must not lose the preview for good, so each feed has its own
+ * queue, packets dropped when full, the connection retried every 0.5 s. The
+ * null output keeps the tee alive. The socket sends each packet as soon as
+ * it is written (no Nagle).
  */
-export const previewOutput = (port: number, quality = 7) => [
-  "-fps_mode",
-  "passthrough",
-  "-c:v",
-  "mjpeg",
-  "-q:v",
-  String(quality),
+const teeToFeed = (port: number, format: string, queueSize: number) => [
   "-f",
   "tee",
   "-use_fifo",
   "1",
   "-fifo_options",
-  "attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=2",
-  `[f=mpjpeg:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`,
+  `attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=${queueSize}`,
+  `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`,
+];
+
+/**
+ * A preview output: the picture at full size as a low-latency H.264 stream
+ * to the service's TCP feed for it (#2192), which relays it to the browser
+ * to decode in hardware (`preview-feeds.ts`). Encoded on the CPU with
+ * libx264, never NVENC: the recording's encoder budget stays the
+ * recording's. ultrafast + zerolatency: no B-frames, no lookahead, each
+ * frame out as soon as it is in. A keyframe a second, so a browser that
+ * joins late (or loses a packet) is whole within a second. In FLV, whose
+ * tags carry their own lengths: the service hands a frame on the moment its
+ * last byte is in, with no container to wait on.
+ *
+ * The fifo may hold a few frames: a dropped packet breaks the picture until
+ * the next keyframe, so it drops only when the service has stopped reading.
+ */
+export const previewOutput = (port: number, gopFrames: number) => [
+  "-fps_mode",
+  "passthrough",
+  "-c:v",
+  "libx264",
+  "-preset",
+  "ultrafast",
+  "-tune",
+  "zerolatency",
+  "-crf",
+  String(PREVIEW_CRF),
+  "-pix_fmt",
+  "yuv420p",
+  "-g",
+  String(gopFrames),
+  // The tee hides FLV's need for the SPS/PPS up front: ask for them.
+  "-flags",
+  "+global_header",
+  "-x264-params",
+  `keyint_min=${gopFrames}:scenecut=0:threads=${PREVIEW_THREADS}`,
+  ...teeToFeed(port, "flv", 8),
+];
+
+/** Near-transparent: the preview is not to look any softer than the Footage. */
+const PREVIEW_CRF = 18;
+
+/** libx264's threads per preview: enough for 1440p30 or 1080p60 in real time, short of every core. */
+const PREVIEW_THREADS = 4;
+
+/**
+ * The thumbnail camera's still feed: MJPEG at high quality, the latest of
+ * which the service keeps (`GET /still`). It is never drawn live, so each
+ * JPEG stands alone and the fifo holds two at most.
+ */
+const stillOutput = (port: number) => [
+  "-fps_mode",
+  "passthrough",
+  "-c:v",
+  "mjpeg",
+  "-q:v",
+  "2",
+  ...teeToFeed(port, "mpjpeg", 2),
 ];
 
 /**
@@ -175,9 +224,15 @@ const tagged = (tag: string) => ["-metadata", `comment=${tag}`];
 
 const PREVIEW_HEAD = ["-hide_banner", "-nostats", "-loglevel", "level+warning"];
 
-/** 640x360 off the GPU, for the browser. */
+/**
+ * The camera preview at the size camera.mkv gets (1440p), scaled on the GPU
+ * as the recording scales it, then down to the CPU for libx264.
+ */
 const CAMERA_PREVIEW_SCALE =
-  "scale_cuda=640:360,hwdownload,format=nv12,format=yuvj420p";
+  "scale_cuda=2560:1440:interp_algo=bicubic,hwdownload,format=nv12";
+
+/** A keyframe a second at the Cam Link's 29.97 fps. */
+const CAMERA_PREVIEW_GOP = 30;
 
 /**
  * How many bytes of frames DirectShow may hold for ffmpeg: 4K NV12 is 12.4 MB
@@ -249,45 +304,29 @@ export const cameraPreviewArgs = (o: {
   "-map",
   "[prev]",
   ...tagged(PREVIEW_TAGS.camera),
-  ...previewOutput(o.port),
+  ...previewOutput(o.port, CAMERA_PREVIEW_GOP),
   "-map",
   "[still]",
-  ...previewOutput(o.stillPort, 2),
+  ...stillOutput(o.stillPort),
 ];
-
-/**
- * The screen preview's size: 540 tall, as wide as the screen's shape (even),
- * so the preview is never stretched: 960x540 for the DELL or a 1920x1080
- * Spacedesk display, 540x540 for a 1080x1080 one (ADR 0043).
- */
-export const screenPreviewSize = (screen: {
-  width: number;
-  height: number;
-}) => ({
-  width: Math.round((540 * screen.width) / screen.height / 2) * 2,
-  height: 540,
-});
 
 /**
  * The screen preview: a second Desktop Duplication session (Windows allows
  * several) in its own ffmpeg.exe, which can stall, crash or be stopped
- * without touching the screen recorder, at `screenPreviewSize`.
+ * without touching the screen recorder. At the screen's own size and 60
+ * fps, as the screen is recorded and as OBS previews it: nothing is scaled
+ * (#2192).
  */
-export const screenPreviewArgs = (o: {
-  screenIndex: number;
-  port: number;
-  /** The screen's own size, in pixels. */
-  size: { width: number; height: number };
-}) => [
+export const screenPreviewArgs = (o: { screenIndex: number; port: number }) => [
   ...PREVIEW_HEAD,
   "-f",
   "lavfi",
   "-i",
-  `ddagrab=output_idx=${o.screenIndex}:framerate=30,hwdownload,format=bgra,scale=${screenPreviewSize(o.size).width}:540,format=yuvj420p`,
+  `ddagrab=output_idx=${o.screenIndex}:framerate=60,hwdownload,format=bgra`,
   "-map",
   "0:v",
   ...tagged(PREVIEW_TAGS.screen),
-  ...previewOutput(o.port),
+  ...previewOutput(o.port, 60),
 ];
 
 /** The camera (input 0) stamped in file time: wall time less T0. */
@@ -492,7 +531,7 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     FILE_NAMES.mic,
     "-map",
     "[camprev]",
-    ...previewOutput(o.cameraPreviewPort),
+    ...previewOutput(o.cameraPreviewPort, CAMERA_PREVIEW_GOP),
   ];
   return { screen, camera };
 };
