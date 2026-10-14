@@ -1,14 +1,13 @@
 import type { PreviewEncoder } from "./capture-args";
 
 /**
- * WHAT ENCODES EACH PREVIEW (#2194). Both previews start on NVENC. A take
- * already holds two NVENC sessions (camera.mkv, screen.mkv) and the previews
- * add two; the RTX 4060 allows eight. Should a preview-only process fail to
+ * WHAT ENCODES EACH PREVIEW-ONLY PROCESS (#2194). Both start on NVENC. A take
+ * holds three NVENC sessions (camera.mkv, screen.mkv, the screen preview);
+ * the RTX 4060 opened nine at once. Should a preview-only process fail to
  * open NVENC all the same (every session taken, no usable GPU), that feed
  * moves to libx264 on the CPU for the rest of the service's life, and the
- * log says so. The recording's camera process carries the camera preview
- * with the camera feed's encoder, so a feed that fell back never asks NVENC
- * for a session inside a take: the recording gets its encoders first.
+ * log says so. A take's camera preview has no encoder of its own: it is
+ * camera.mkv's stream (`recordedAndPreviewed`, #2203).
  */
 
 export type PreviewFeed = "camera" | "screen";

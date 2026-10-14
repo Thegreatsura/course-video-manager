@@ -63,12 +63,12 @@ describe("the preview watchdog", () => {
 
 /**
  * A preview whose NVENC will not open (every session taken) is started
- * again on libx264, and a take then carries the camera preview on libx264
+ * again on libx264. A take's camera preview is camera.mkv's own stream
  * too, so the recording's own NVENC sessions are the only ones it asks for
  * (#2194).
  */
 describe("a preview whose NVENC will not open", () => {
-  it("moves that feed to libx264, without spending a Cam Link try, and the take's camera preview with it", async () => {
+  it("moves that feed to libx264, without spending a Cam Link try; a take still asks NVENC only for camera.mkv", async () => {
     const windows = fakeWindows({ nvencBusy: true, cameraTries: ["frames"] });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const { port } = await start(windows, tmp());
@@ -98,6 +98,6 @@ describe("a preview whose NVENC will not open", () => {
     await client.next("recording-started");
     const take = windows.recorder("camera").launch.args;
     expect(take.filter((a) => a === "h264_nvenc")).toHaveLength(1);
-    expect(take).toContain("libx264");
+    expect(take).not.toContain("libx264");
   });
 });

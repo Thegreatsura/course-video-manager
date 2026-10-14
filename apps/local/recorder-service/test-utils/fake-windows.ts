@@ -227,6 +227,10 @@ const NVENC_BUSY_STDERR = [
   "",
 ].join("\r\n");
 
+/** Whether a process writes `file`: as an output of its own, or a tee's slave (`recordedAndPreviewed`). */
+export const writesFile = (args: readonly string[], file: string) =>
+  args.some((a) => a === file || a.includes(`]${file}|`));
+
 const isPreview = (l: Launch, input: string) =>
   l.tool === "ffmpeg" &&
   l.args.some((a) => a.includes("tcp://")) &&
@@ -420,7 +424,7 @@ export const fakeWindows = (
     if (l.args.at(-2) === "-i")
       return answer(p, probeAnswer(path.join(l.cwd, l.args.at(-1) ?? "")));
     recorders.push(p);
-    if (l.args.includes("camera.mkv") && o.recordingCamera !== "silent")
+    if (writesFile(l.args, "camera.mkv") && o.recordingCamera !== "silent")
       setImmediate(() =>
         p.stdout("frame=1\nout_time_us=0\nprogress=continue\n")
       );
@@ -436,7 +440,8 @@ export const fakeWindows = (
     );
   const recorder = (kind: "screen" | "camera") => {
     const p = recorders.find(
-      (r) => r.launch.tool === "ffmpeg" && r.launch.args.includes(`${kind}.mkv`)
+      (r) =>
+        r.launch.tool === "ffmpeg" && writesFile(r.launch.args, `${kind}.mkv`)
     );
     if (!p) throw new Error(`no ${kind} recorder was launched`);
     return p;

@@ -34,7 +34,9 @@ import {
  * service (`previewOutput`), which relays it to the browser
  * (`preview-feeds.ts`). While the recorder is open but not recording, the
  * camera has a preview-only process of its own (`cameraPreviewArgs`); while
- * recording, the camera + mic process carries the camera preview. The screen
+ * recording, the camera + mic process sends camera.mkv's own packets as the
+ * camera preview (`recordedAndPreviewed`), with no encoder of the preview's
+ * own that could fail the take. The screen
  * preview is always its own process (`screenPreviewArgs`): reading a D3D11
  * frame back in the screen recorder would cost it frames.
  */
@@ -98,6 +100,16 @@ const nvenc = (gopFrames: number) => [
 ];
 
 /**
+ * camera.mkv's NVENC hands each frame on one frame behind, rather than
+ * holding a queue of them (ffmpeg's default; the take's camera preview,
+ * which is camera.mkv's stream (#2203), drew 510-550 ms late with it and
+ * 286 ms at one frame, synthetic). The packets are the same either way
+ * (same framemd5 at the default, 0, 1 and 2, synthetic 1440p29.97), and it
+ * kept real time.
+ */
+const CAMERA_TAKE_DELAY = ["-delay", "1"];
+
+/**
  * MKV, not fragmented MP4 (which put the first video frame two frames late),
  * with 1 s clusters: a cluster is held in memory until it closes, so the
  * cluster time bounds what a hard kill loses.
@@ -139,14 +151,40 @@ const WALLCLOCK = [
  * null output keeps the tee alive. The socket sends each packet as soon as
  * it is written (no Nagle).
  */
-const teeToFeed = (port: number, format: string, queueSize: number) => [
+const teeToFeed = (port: number, format: string, queueSize: number) =>
+  teeWith(queueSize, `${feedSlave(port, format)}|[f=null:use_fifo=0]-`);
+
+const teeWith = (queueSize: number, slaves: string) => [
   "-f",
   "tee",
   "-use_fifo",
   "1",
   "-fifo_options",
   `attempt_recovery=1:recover_any_error=1:recovery_wait_time=0.5:max_recovery_attempts=0:drop_pkts_on_overflow=1:queue_size=${queueSize}`,
-  `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`,
+  slaves,
+];
+
+const feedSlave = (port: number, format: string) =>
+  `[f=${format}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1`;
+
+/**
+ * A Footage file that is also a preview feed (#2203): the recording's own
+ * encoded packets, written to `file` exactly as `MKV` writes them (no fifo,
+ * and a failure there fails the recording, as it always has), and copied to
+ * the service's feed in FLV behind the same dropping, retrying fifo as any
+ * preview. No second encoder, so nothing about the preview (its encoder
+ * failing, its consumer gone or stalled) can stop or slow the file. The
+ * packets in the file are the ones a plain matroska output writes (checked:
+ * the same framemd5, size and CodecPrivate, synthetic). Global headers, as
+ * matroska asks for them anyway: FLV needs the SPS/PPS up front.
+ */
+export const recordedAndPreviewed = (file: string, port: number) => [
+  "-flags",
+  "+global_header",
+  ...teeWith(
+    8,
+    `[f=matroska:use_fifo=0:onfail=abort:cluster_time_limit=1000:flush_packets=1]${file}|${feedSlave(port, "flv")}`
+  ),
 ];
 
 /**
@@ -524,13 +562,8 @@ export type CaptureOptions = {
   silenceLength: SilenceLength;
   /** The silence threshold silencedetect cuts with, in dB. */
   thresholdDb: number;
-  /** The service's camera preview feed, which this process also sends to. */
+  /** The service's camera preview feed, which this process also sends camera.mkv's stream to. */
   cameraPreviewPort: number;
-  /**
-   * What encodes that camera preview: the camera feed's encoder, so one that
-   * fell back to libx264 never asks NVENC for a session inside a take.
-   */
-  cameraPreviewEncoder: PreviewEncoder;
 };
 
 export const buildCaptureArgs = (o: CaptureOptions) => {
@@ -569,13 +602,11 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
   const silence = silencedetectFilter(
     silenceRule(o.silenceLength, o.thresholdDb)
   );
-  // The preview splits off as soon as the camera is on the GPU, before the
-  // shared clock's CFR (#2144): the fps filter holds each frame until the
-  // next one comes, and the preview need not wait on the 1440p scale.
+  // The camera preview during a take is camera.mkv's own stream
+  // (`recordedAndPreviewed`, #2203): a preview encoder of its own in this
+  // process could fail the whole process, and the take with it.
   const cameraGraph = [
-    `${cameraOnT0(t0)},hwupload_cuda,split[camr][camp]`,
-    `[camr]${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
-    `[camp]${cameraPreviewScale(o.cameraPreviewEncoder)}[camprev]`,
+    `${cameraOnT0(t0)},hwupload_cuda,${CAMERA_CFR},${BT709},scale_cuda=2560:1440:interp_algo=bicubic[cam]`,
     `${micOnClock(t0)},asplit=2[mic][sd]`,
     `[sd]${silence},anullsink`,
   ].join(";");
@@ -588,10 +619,10 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     "-map",
     "[cam]",
     ...nvenc(60),
+    ...CAMERA_TAKE_DELAY,
     "-metadata",
     `comment=${o.tag}`,
-    ...MKV,
-    FILE_NAMES.camera,
+    ...recordedAndPreviewed(FILE_NAMES.camera, o.cameraPreviewPort),
     "-map",
     "[mic]",
     "-c:a",
@@ -604,13 +635,6 @@ export const buildCaptureArgs = (o: CaptureOptions) => {
     `comment=${o.tag}`,
     ...MKV,
     FILE_NAMES.mic,
-    "-map",
-    "[camprev]",
-    ...previewOutput(
-      o.cameraPreviewPort,
-      CAMERA_PREVIEW_GOP,
-      o.cameraPreviewEncoder
-    ),
   ];
   return { screen, camera };
 };
