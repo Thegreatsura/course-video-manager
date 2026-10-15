@@ -68,6 +68,8 @@ export const makeWorker = (config: WorkerConfig) => {
   let ready: Promise<void> | null = null;
   let nextId = 0;
   let idleTimer: NodeJS.Timeout | null = null;
+  /** Until when (epoch ms) a `keepWarm` holds the worker loaded. */
+  let warmUntil = 0;
   const pending = new Map<string, Pending>();
 
   const failAll = (error: Error) => {
@@ -147,10 +149,32 @@ export const makeWorker = (config: WorkerConfig) => {
 
   const armIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      if (pending.size === 0) stop();
-    }, config.idleMs);
+    idleTimer = setTimeout(
+      () => {
+        if (pending.size > 0) return;
+        // Held warm past the idle time: look again when the hold ends.
+        if (Date.now() < warmUntil) return armIdleTimer();
+        stop();
+      },
+      Math.max(config.idleMs, warmUntil - Date.now())
+    );
     idleTimer.unref();
+  };
+
+  /**
+   * Loads the model now, if it is not loaded, and keeps it loaded for at
+   * least `ms` (#2214): the recorder holds it warm while open, so a
+   * transcription never cold-starts Whisper on the GPU mid-take. Renew it
+   * before it lapses; once it lapses the idle stop applies as before.
+   */
+  const keepWarm = (ms: number) => {
+    warmUntil = Math.max(warmUntil, Date.now() + ms);
+    if (!ready) {
+      ready = start();
+      // A worker that will not start is reported by the next transcription.
+      ready.catch(() => {});
+    }
+    if (pending.size === 0) armIdleTimer();
   };
 
   const transcribe = async (audioPath: string): Promise<AudioTranscript> => {
@@ -175,6 +199,7 @@ export const makeWorker = (config: WorkerConfig) => {
 
   return {
     transcribe,
+    keepWarm,
     stop,
     /** Whether a worker process is running (the model is loaded or loading). */
     isRunning: () => child !== null,
@@ -214,24 +239,37 @@ export const LocalWhisperEngineLive = Layer.scoped(
       idleMinutes: IDLE_MINUTES,
     });
 
+    const theWorker = Effect.gen(function* () {
+      const python = yield* Fiber.join(prepared);
+      worker ??= makeWorker({
+        command: python,
+        args: [
+          "-I",
+          WORKER_SCRIPT,
+          WHISPER_MODEL,
+          computeType,
+          BATCHED ? "1" : "0",
+          WHISPER_MODELS_DIR,
+        ],
+        idleMs: IDLE_MINUTES * 60_000,
+        model: WHISPER_MODEL,
+      });
+      return worker;
+    });
+
     return {
+      keepWarm: (ms: number) =>
+        theWorker.pipe(
+          Effect.map((w) => w.keepWarm(ms)),
+          Effect.catchAll((error) =>
+            Effect.logWarning(
+              `Local Whisper could not be kept warm: ${error.message}`
+            )
+          )
+        ),
       transcribe: (audioPath: string) =>
         Effect.gen(function* () {
-          const python = yield* Fiber.join(prepared);
-          worker ??= makeWorker({
-            command: python,
-            args: [
-              "-I",
-              WORKER_SCRIPT,
-              WHISPER_MODEL,
-              computeType,
-              BATCHED ? "1" : "0",
-              WHISPER_MODELS_DIR,
-            ],
-            idleMs: IDLE_MINUTES * 60_000,
-            model: WHISPER_MODEL,
-          });
-          const w = worker;
+          const w = yield* theWorker;
           return yield* Effect.tryPromise({
             try: () => w.transcribe(audioPath),
             catch: (cause) =>

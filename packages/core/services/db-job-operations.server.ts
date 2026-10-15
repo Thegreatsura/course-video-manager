@@ -11,7 +11,12 @@ import {
   sql,
 } from "drizzle-orm";
 import { Effect } from "effect";
-import { jobEvents, jobs, sidecarLease } from "../db/schema.js";
+import {
+  jobEvents,
+  jobs,
+  recordingSessions,
+  sidecarLease,
+} from "../db/schema.js";
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { withDbTransaction } from "./with-db-transaction.server.js";
 import { createPostingJobOperations } from "./db-job-posting.server.js";
@@ -56,6 +61,22 @@ export { dependencyFailedMessage } from "./db-job-calls.server.js";
  * Job still queued behind it. Both copy the Upload Manager — see
  * docs/plans/background-jobs-sidecar.md, "What the sidecar copies".
  */
+
+/**
+ * Job kinds held, queued, while any Recording Session is recording (#2214):
+ * local Whisper on the GPU (and its ffmpeg audio cut from the growing mic
+ * file) starved the camera capture mid-take. They run once it stops.
+ */
+export const HELD_WHILE_RECORDING_KINDS = [
+  "transcribe-clips",
+  "transcribe-footage",
+] as const;
+
+/**
+ * A Recording Session left `recording` longer than this (a service that died
+ * and was never started again to recover it) holds nothing.
+ */
+export const RECORDING_HOLD_MAX_HOURS = 3;
 
 export type Job = typeof jobs.$inferSelect;
 export type JobEvent = typeof jobEvents.$inferSelect;
@@ -132,7 +153,9 @@ export const createJobOperations = (db: Database) => {
   /**
    * Claim the oldest queued Job in `lane` whose dependency (if any) has
    * succeeded: one statement, `FOR UPDATE SKIP LOCKED`, so two claimers never
-   * take the same row. `undefined` when there is nothing to run.
+   * take the same row. `undefined` when there is nothing to run. A
+   * `HELD_WHILE_RECORDING_KINDS` Job waits, queued, while a Recording
+   * Session records.
    */
   const claimNextJob = Effect.fn("claimNextJob")(function* (input: {
     lane: string;
@@ -158,6 +181,13 @@ export const createJobOperations = (db: Database) => {
                        LEFT JOIN ${jobs} p ON p.id = q.depends_on
                       WHERE q.status = 'queued' AND q.lane = ${input.lane}
                         AND (q.depends_on IS NULL OR p.status = 'succeeded')
+                        AND NOT (q.kind IN (${sql.join(
+                          HELD_WHILE_RECORDING_KINDS.map((k) => sql`${k}`),
+                          sql`, `
+                        )}) AND EXISTS (
+                          SELECT 1 FROM ${recordingSessions} r
+                           WHERE r.status = 'recording'
+                             AND r.started_at > now() - make_interval(hours => ${RECORDING_HOLD_MAX_HOURS})))
                       ORDER BY q.created_at, q.id
                       LIMIT 1
                       FOR UPDATE OF q SKIP LOCKED)`

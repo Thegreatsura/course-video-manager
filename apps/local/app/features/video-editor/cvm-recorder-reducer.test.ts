@@ -6,6 +6,8 @@ import {
   canSwitchScene,
   createInitialCvmRecorderState,
   cvmRecorderReducer,
+  framesLostAlert,
+  holdsStillsOf,
 } from "./cvm-recorder-reducer";
 import type { CvmRecorderMessage } from "./cvm-recorder-wire";
 import { getRecorderCapture, toCaptureStatus } from "./recorder-capture";
@@ -180,15 +182,57 @@ describe("the CVM recorder's Record and Stop", () => {
     expect(t.getState().alert).toBeNull();
   });
 
-  it("shows the frames lost once a recording stops", () => {
+  it("alerts the moment a frame is lost mid-recording, keeps the alert after Stop, and clears it at the next Record", () => {
     const t = recording();
-    expect(t.getState().framesLost).toBeNull();
+    expect(framesLostAlert(t.getState())).toBeNull();
 
-    t.send(heard(stoppedMessage({ framesLost: { camera: 1, screen: 0 } })));
-    expect(t.getState().framesLost).toEqual({ camera: 1, screen: 0 });
+    t.send(
+      heard({
+        type: "frames-lost",
+        recordingSessionId: "s1",
+        framesLost: { camera: 6, screen: 0 },
+      })
+    );
+    expect(framesLostAlert(t.getState())).toBe(
+      "Frames lost: 6 camera frames so far. This recording has a freeze in it."
+    );
+
+    // A late total from a Recording Session already over is not this one's.
+    t.send(
+      heard({
+        type: "frames-lost",
+        recordingSessionId: "s0",
+        framesLost: { camera: 99, screen: 99 },
+      })
+    );
+    expect(t.getState().framesLost).toEqual({ camera: 6, screen: 0 });
+
+    t.send(heard(stoppedMessage({ framesLost: { camera: 7, screen: 1 } })));
+    expect(framesLostAlert(t.getState())).toBe(
+      "Frames lost: 7 camera frames and 1 screen frame in the last recording. It has a freeze in it."
+    );
 
     t.send(pressRecord);
-    expect(t.getState().framesLost).toBeNull();
+    expect(framesLostAlert(t.getState())).toBeNull();
+  });
+
+  it("holds the stills of the take being recorded until it stops, and no other Clip's", () => {
+    const t = recording();
+    const ofTake = { recordingSession: { id: "s1" } };
+    expect(holdsStillsOf(t.getState(), ofTake)).toBe(true);
+    expect(
+      holdsStillsOf(t.getState(), { recordingSession: { id: "s0" } })
+    ).toBe(false);
+    expect(holdsStillsOf(t.getState(), { recordingSession: null })).toBe(false);
+
+    t.send(heard(stoppedMessage())).send(status());
+    expect(holdsStillsOf(t.getState(), ofTake)).toBe(false);
+  });
+
+  it("raises no alert for a recording that lost nothing", () => {
+    const t = recording().send(heard(stoppedMessage()));
+    expect(t.getState().framesLost).toEqual({ camera: 0, screen: 0 });
+    expect(framesLostAlert(t.getState())).toBeNull();
   });
 
   it("says a Recording Session was cut off by a crash and its Clips kept", () => {

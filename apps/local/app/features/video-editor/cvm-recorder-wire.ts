@@ -111,6 +111,15 @@ export type CvmRecorderMessage =
       /** What ffmpeg said, if anything. */
       errors: string[];
     }
+  /**
+   * Frames were lost mid-recording (#2214): the Recording Session's running
+   * totals. `recording-stopped` carries the final ones.
+   */
+  | {
+      type: "frames-lost";
+      recordingSessionId: string;
+      framesLost: FramesLost;
+    }
   | {
       type: "recording-stopped";
       recordingSessionId: string;
@@ -146,6 +155,7 @@ export const CVM_RECORDER_MESSAGE_TYPES = [
   "speech-ended",
   "clips-saved",
   "camera-lost",
+  "frames-lost",
   "recording-stopped",
   "recorder-failed",
 ] as const satisfies readonly CvmRecorderMessage["type"][];

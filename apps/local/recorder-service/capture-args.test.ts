@@ -164,7 +164,9 @@ describe("a take's screen recorder", () => {
       screenIndex: 1,
     }).join(" ");
     expect(args).toContain("ddagrab=output_idx=1:framerate=60:dup_frames=1");
-    expect(args).toContain("setpts=PTS-1000.000/TB,fps=60:start_time=0");
+    expect(args).toMatch(
+      /setpts=PTS-1000\.000\/TB,select='[^']*gt\(t-prev_selected_t,0\.05\),print\(-\(t-prev_selected_t\),24\)\);1',fps=60:start_time=0/
+    );
     expect(args).toContain("-g 120");
     expect(args).toContain("screen.mkv");
   });

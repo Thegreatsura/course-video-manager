@@ -82,6 +82,7 @@ export const placeClips = (
       case "recording-started":
       case "warmed-up":
       case "speech-started":
+      case "frames-lost":
         break;
     }
   }

@@ -12,6 +12,7 @@ import { SilenceLengthToggle } from "./silence-length-toggle";
 import { ShortScreenStatus } from "./short-screen-status";
 import { CalibrationGateBanner } from "./calibration-gate-banner";
 import { isCalibrationRefusal } from "@/av-calibration-constants";
+import { framesLostAlert } from "../cvm-recorder-reducer";
 
 /** What the CVM recorder is doing, in a few words. */
 const statusText = (
@@ -50,9 +51,6 @@ const statusText = (
       return "Stopping…";
   }
 };
-
-const framesText = (count: number, picture: string) =>
-  `${count} ${picture} ${count === 1 ? "frame" : "frames"}`;
 
 const useCvmRecorderControls = () =>
   useContextSelector(VideoEditorContext, (ctx) => ctx.cvmRecorder);
@@ -123,8 +121,19 @@ export const CvmRecorderControls = () => {
   );
   const { state } = controls;
   const calibrationRefusal = isCalibrationRefusal(state.error);
+  const framesLost = framesLostAlert(state);
   return (
     <div className="mt-2 flex flex-col items-center gap-2">
+      {framesLost && (
+        <div
+          role="alert"
+          data-testid="cvm-recorder-frames-lost"
+          className="flex w-full max-w-xl items-center gap-3 rounded-md border-4 border-red-600 bg-red-600 p-4 text-base font-bold uppercase tracking-wide text-white shadow-lg animate-pulse"
+        >
+          <TriangleAlertIcon className="size-7 shrink-0" />
+          <p className="flex-1">{framesLost}</p>
+        </div>
+      )}
       {state.alert && (
         <div
           role="alert"
@@ -185,15 +194,10 @@ export const CvmRecorderControls = () => {
       <SceneButtons />
       <ShortScreenStatus />
       <CameraProblem />
-      {state.framesLost && (
-        <p
-          className={`text-xs ${state.framesLost.camera + (state.framesLost.screen ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground"}`}
-          data-testid="cvm-recorder-frames-lost"
-        >
-          Last recording:{" "}
-          {state.framesLost.screen === null
-            ? `${framesText(state.framesLost.camera, "camera")} lost (screen not measured)`
-            : `${framesText(state.framesLost.camera, "camera")}, ${framesText(state.framesLost.screen, "screen")} lost`}
+      {state.framesLost && !framesLost && state.phase === "idle" && (
+        <p className="text-xs text-muted-foreground">
+          Last recording: no frames lost
+          {state.framesLost.screen === null ? " (screen not measured)" : ""}
         </p>
       )}
       {state.error && !calibrationRefusal && (

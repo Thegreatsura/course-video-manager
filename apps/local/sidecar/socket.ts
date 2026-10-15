@@ -191,6 +191,9 @@ const socketAnswers = (socket: string) =>
     req.on("error", () => resume(Effect.succeed(false)));
   });
 
+/** The longest one keep-warm lease may hold Whisper loaded. */
+const MAX_WHISPER_WARM_MS = 10 * 60_000;
+
 /**
  * Listen on `socket` for as long as the scope lives. Refuses a path too long
  * for a socket, and a socket another live process still answers on; a socket
@@ -202,6 +205,11 @@ export const serveSidecarSocket = (opts: {
   readonly registry: JobKindRegistry<unknown>;
   /** Where the Jobs' log files are (`json-logger.ts`). */
   readonly logDir: string;
+  /**
+   * Keeps Local Whisper loaded for at least this many ms
+   * (`/whisper/keep-warm`); without it the route does nothing (tests).
+   */
+  readonly keepWhisperWarm?: (ms: number) => Effect.Effect<void>;
 }) =>
   Effect.gen(function* () {
     const { socket, handle, registry, logDir } = opts;
@@ -238,6 +246,16 @@ export const serveSidecarSocket = (opts: {
         }
         if (req.method === "POST" && url === "/nudge") {
           yield* handle.nudge;
+          return { status: 200, body: { ok: true } };
+        }
+        // The recorder, while open, holds Whisper loaded (#2214): a lease
+        // it renews, so an app server that dies pins no VRAM for long.
+        const warm = /^\/whisper\/keep-warm\?ms=(\d+)$/.exec(url);
+        if (req.method === "POST" && warm?.[1]) {
+          if (opts.keepWhisperWarm)
+            yield* opts.keepWhisperWarm(
+              Math.min(Number(warm[1]), MAX_WHISPER_WARM_MS)
+            );
           return { status: 200, body: { ok: true } };
         }
         if (req.method === "POST" && url === "/jobs") {

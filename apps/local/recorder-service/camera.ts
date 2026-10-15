@@ -77,6 +77,29 @@ export const stopTagged = async (launch: Launcher, tags: string[]) => {
 };
 
 /**
+ * Raises a just-started ffmpeg.exe (found by `tag` and `match` in its
+ * command line) to High priority (`raise-priority.ps1`, #2214): the camera
+ * capture and a take's writer, as the screen recorder already is. One left
+ * at Normal still records, so a failure is only logged.
+ */
+export const raisePriority = (
+  launch: Launcher,
+  o: { name: string; tag: string; match: string }
+) =>
+  void runToEnd(
+    launch({
+      tool: "powershell",
+      script: "raise-priority.ps1",
+      args: ["-Tag", o.tag, "-Match", o.match],
+    })
+  ).then(({ code, stderr, stdout }) => {
+    if (code !== 0)
+      console.error(
+        `recorder: could not raise the ${o.name} to High priority: ${(stderr || stdout).trim().split(/\r?\n/)[0] ?? ""}`
+      );
+  });
+
+/**
  * Asks ffmpeg.exe to quit with `q`, killing it only if it does not. ffmpeg
  * reads `q` only once every input is open, so a Cam Link stuck opening never
  * hears it. Killing the WSL side can leave ffmpeg.exe holding the device on
@@ -297,6 +320,11 @@ export const openCamera = (o: CameraOptions): Camera => {
           relays,
         }),
         cwd: "/mnt/c",
+      });
+      raisePriority(o.launch, {
+        name: "camera capture",
+        tag: CAPTURE_TAG,
+        match: CAPTURE_TAG,
       });
       const live: NonNullable<typeof current> = {
         capture,

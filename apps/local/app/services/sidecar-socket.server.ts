@@ -96,6 +96,28 @@ export const nudgeSidecar = Effect.fn("nudgeSidecar")(function* () {
   );
 });
 
+/**
+ * Asks the Sidecar to keep Local Whisper loaded for `ms` (#2214): the
+ * recorder's hold while it is open. Fails when the Sidecar is not there.
+ */
+export const keepWhisperWarm = Effect.fn("keepWhisperWarm")(function* (
+  ms: number
+) {
+  const socket = sidecarSocketPath();
+  yield* Effect.tryPromise({
+    try: () =>
+      requestSidecar({
+        socket,
+        method: "POST",
+        path: `/whisper/keep-warm?ms=${Math.round(ms)}`,
+        headers: {},
+        signal: null,
+      }).then((res) => readAll(res)),
+    catch: (cause) =>
+      new SidecarUnreachableError({ socket, message: String(cause) }),
+  });
+});
+
 /** A Job's log as the sidecar keeps it, or `null` when it has none. */
 export const readJobLog = Effect.fn("readJobLog")(function* (jobId: string) {
   const socket = sidecarSocketPath();

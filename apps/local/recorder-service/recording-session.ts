@@ -6,7 +6,7 @@ import {
   silenceLengthToSeconds,
   type SilenceLength,
 } from "../app/silence-detection-constants";
-import { quitProcess, type Capture } from "./camera";
+import { quitProcess, raisePriority, type Capture } from "./camera";
 import { FILE_NAMES } from "./capture-args";
 import {
   cameraWriterArgs,
@@ -25,6 +25,7 @@ import type { Scene } from "../app/packages/scene-layout";
 import type { RecordingSessionEvent, RecordingSessionFiles } from "./protocol";
 import { repairFile } from "./footage-repair";
 import { createSpeechDetector } from "./speech-detector";
+import { CAMERA_FPS, countFramesLost } from "./frames-lost";
 
 /**
  * ONE RECORDING SESSION (#2207). Its camera + mic writer is armed before
@@ -65,9 +66,6 @@ const CAMERA_STALL_SECONDS = 3;
 export const CAMERA_STALL_BLOCKS = Math.round(
   CAMERA_STALL_SECONDS / WRITER_STATS_PERIOD
 );
-
-/** The Cam Link's frame rate: how many frames a gap the writer logs was. */
-const CAMERA_FPS = 30000 / 1001;
 
 /** How far short of the press a stopped take may end before it says so (a frame and a bit). */
 const SHORT_OF_PRESS = 0.05;
@@ -172,9 +170,6 @@ const namesCamera = (line: string) =>
 /** What the writer prints once it has the relay: its input opened. */
 const READS_RELAY = /Input #0, .*from 'tcp:/;
 
-/** A gap the writer logged, in seconds (`FRAME_GAP_SECONDS`). */
-const GAP = /\[warning\] -(\d+(?:\.\d+)?)\s*$/;
-
 /**
  * Arms a take: makes its folder, and starts its camera + mic writer on the
  * capture's writer relay. `onQuit` hears of a writer that quits before it
@@ -232,6 +227,11 @@ export const armTake = (o: {
       thresholdDb: o.settings.thresholdDb,
     })
   );
+  raisePriority(o.launch, {
+    name: "camera writer",
+    tag,
+    match: FILE_NAMES.camera,
+  });
   let begun = false;
   let disarmed = false;
   const removeDir = async () => {
@@ -374,34 +374,25 @@ const beginTake = (
   captureLog.on("error", (error) =>
     console.error("recorder: ffmpeg-capture.log", error.message)
   );
-  // FRAMES LOST. The Cam Link's dshow buffer drops, and any gap in the
-  // frames reaching the writer (the Cam Link skipping, or the relay dropping
-  // what the writer could not take). The screen's loss is not measured
-  // (null) rather than a 0 that hides it: the fps filter fills its gaps.
-  let cameraBufferDrops = 0;
-  let cameraGapFrames = 0;
+  // FRAMES LOST (`frames-lost.ts`): each told at once, for the editor.
+  const framesLost = countFramesLost({
+    screenCaptured: screen !== null,
+    fileTime: () => lastFileTime,
+    tell: (lost) => {
+      if (!ended) log({ type: "frames-lost", fileTime: lastFileTime, ...lost });
+    },
+  });
   const stopCaptureLines = o.capture.onLine((line) => {
     captureLog.write(`${line}\n`);
-    if (/real-time buffer .*\[video input\].*frame dropped/.test(line))
-      cameraBufferDrops += 1;
+    framesLost.captureLine(line);
   });
   camera.child.onStderr(
     lineSplitter((line) => {
-      const gap = line.match(GAP);
-      if (gap) {
-        const missing = Math.max(
-          1,
-          Math.round(Number(gap[1]) * CAMERA_FPS) - 1
-        );
-        cameraGapFrames += missing;
-        console.error(
-          `recorder: camera.mkv is missing about ${missing} frame(s) at ${lastFileTime.toFixed(1)} s: a ${gap[1]} s gap in the Cam Link's frames reaching the writer`
-        );
-        return;
-      }
+      if (framesLost.writerLine(line)) return;
       for (const change of speech.line(line)) log(change);
     })
   );
+  screen?.child.onStderr(lineSplitter(framesLost.screenLine));
   // -progress pipe:1: blocks of key=value lines ending `progress=…`;
   // out_time_us is file time, frame the camera's frames written.
   let cameraFrames = 0;
@@ -565,6 +556,7 @@ const beginTake = (
         camera.closeLog(),
         streamFinished(captureLog).catch(() => {}),
       ]);
+      framesLost.stop();
       for (const last of speech.stop(lastFileTime)) log(last);
       const captureErrors = o.capture.quitWith() ?? [];
       log({
@@ -573,10 +565,7 @@ const beginTake = (
         fileTime: lastFileTime,
         files,
         exitCodes: { screen: screenCode, camera: cameraCode },
-        framesLost: {
-          camera: cameraBufferDrops + cameraGapFrames,
-          screen: null,
-        },
+        framesLost: framesLost.totals(),
         errors: [
           ...(logFailure ? [logFailure] : []),
           ...(reason === "requested" &&
@@ -585,11 +574,7 @@ const beginTake = (
                 `camera.mkv and mic.mkv end ${(pressedAt - lastFileTime).toFixed(1)} s before Stop was pressed: the writer had not caught up in ${STOP_CATCH_UP_MS / 1000} s (ffmpeg-camera.log).`,
               ]
             : []),
-          ...(cameraGapFrames > 0
-            ? [
-                `camera.mkv is missing about ${cameraGapFrames} frame(s): gaps in the Cam Link's frames reaching the writer (ffmpeg-camera.log).`,
-              ]
-            : []),
+          ...framesLost.errors(),
           ...(reason === "ffmpeg-exited"
             ? [
                 ...(screen?.errors() ?? []),

@@ -474,24 +474,41 @@ describe("a Recording Session", () => {
     expect((await client.next("recording-stopped")).reason).toBe("camera-lost");
   });
 
-  it("reports the Cam Link's dropped frames and any gap reaching the writer when it stops, and the screen's as not measured", async () => {
+  it("tells every lost frame, camera or screen, the moment it is lost, and totals them at Stop", async () => {
     const { windows, client } = await recordOnce();
     const camera = windows.cameraCaptures[0]!;
     // A gap of 0.233 s in the frames reaching the writer: about 6 missing.
     windows.recorder("camera").stderr("[warning] -0.233000\r\n");
+    expect(await client.next("frames-lost")).toMatchObject({
+      camera: 6,
+      screen: 0,
+    });
     camera.stderr(
       "[dshow @ 0001] [warning] real-time buffer [Cam Link 4K] [video input] too full or near too full (101% of size: 1500000000 [rtbufsize parameter])! frame dropped!\r\n"
     );
+    expect(await client.next("frames-lost")).toMatchObject({
+      camera: 7,
+      screen: 0,
+    });
     // The mic's buffer is not a camera frame.
     camera.stderr(
       "[dshow @ 0002] [warning] real-time buffer [Voicemeeter Out B1] [audio input] too full or near too full (101% of size: 1500000000 [rtbufsize parameter])! frame dropped!\r\n"
     );
+    // A 0.05 s gap in ddagrab's frames at 60 fps: 2 slots missed.
+    windows.recorder("screen").stderr("[warning] -0.050000\r\n");
+    expect(await client.next("frames-lost")).toMatchObject({
+      camera: 7,
+      screen: 2,
+    });
 
     client.send({ type: "stop" });
     const stopped = await client.next("recording-stopped");
-    expect(stopped.framesLost).toEqual({ camera: 7, screen: null });
+    expect(stopped.framesLost).toEqual({ camera: 7, screen: 2 });
     expect(stopped.errors.join("\n")).toContain(
       "camera.mkv is missing about 6 frame(s)"
+    );
+    expect(stopped.errors.join("\n")).toContain(
+      "screen.mkv is missing about 2 frame(s)"
     );
   });
 

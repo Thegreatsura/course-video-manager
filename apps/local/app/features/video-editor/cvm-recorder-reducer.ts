@@ -111,7 +111,10 @@ export namespace cvmRecorderReducer {
      * Recording Session cut off by a crash), until he dismisses it.
      */
     alert: string | null;
-    /** The last Recording Session's frames lost, until the next Record. */
+    /**
+     * The Recording Session's frames lost: live while it records (#2214),
+     * then the last one's, until the next Record.
+     */
     framesLost: FramesLost | null;
     /** The editor's Silence Length, for a Stream Deck Record. */
     silenceLength: SilenceLength | null;
@@ -247,6 +250,50 @@ export const canStop = (state: cvmRecorderReducer.State) =>
 export const isCvmRecorderRecording = (state: cvmRecorderReducer.State) =>
   state.phase === "recording" || state.phase === "stopping";
 
+/**
+ * Whether a Clip's stills are held (#2214): it belongs to the Recording
+ * Session still being recorded (or still placing its last speech), whose
+ * files are growing. A still decodes them with ffmpeg on the GPU, which cost
+ * the capture frames mid-take; the editor fetches it after Stop instead.
+ */
+export const holdsStillsOf = (
+  state: cvmRecorderReducer.State,
+  clip: { recordingSession?: { id: string } | null }
+): boolean => {
+  const id = clip.recordingSession?.id;
+  return (
+    id !== undefined &&
+    (id === state.recordingSessionId || id === state.placing)
+  );
+};
+
+const frames = (count: number, picture: string) =>
+  `${count} ${picture} ${count === 1 ? "frame" : "frames"}`;
+
+/**
+ * The loud alert for frames lost (#2214): shown the moment any camera or
+ * screen frame is lost mid-recording, and kept after Stop until the next
+ * Record. Null while none were lost. Each lost frame is a freeze in the
+ * file (the CFR filters repeat the last one).
+ */
+export const framesLostAlert = (
+  state: cvmRecorderReducer.State
+): string | null => {
+  const lost = state.framesLost;
+  if (!lost) return null;
+  const screen = lost.screen ?? 0;
+  if (lost.camera + screen === 0) return null;
+  const what = [
+    lost.camera > 0 ? frames(lost.camera, "camera") : null,
+    screen > 0 ? frames(screen, "screen") : null,
+  ]
+    .filter((part) => part !== null)
+    .join(" and ");
+  return isCvmRecorderRecording(state)
+    ? `Frames lost: ${what} so far. This recording has a freeze in it.`
+    : `Frames lost: ${what} in the last recording. It has a freeze in it.`;
+};
+
 const WARMING_UP: FrontendSpeechDetectorState = { type: "warming-up" };
 const SILENCE: FrontendSpeechDetectorState = { type: "silence" };
 
@@ -292,6 +339,8 @@ const follows = (
     case "take-started":
     case "speech-ended":
     case "clips-saved":
+    // A late total: `recording-stopped` carries the final one.
+    case "frames-lost":
       return false;
   }
 };
@@ -403,8 +452,11 @@ const heard = (
         error:
           message.errors.length > 0 ? message.errors.join("\n") : state.error,
         alert: message.crashed ? CRASHED_ALERT : state.alert,
-        framesLost: message.framesLost,
+        // A crash counted nothing more: what was heard live stands.
+        framesLost: message.framesLost ?? state.framesLost,
       };
+    case "frames-lost":
+      return { ...state, framesLost: message.framesLost };
     case "recorder-failed":
       return { ...state, error: message.message };
     case "clips-saved":
