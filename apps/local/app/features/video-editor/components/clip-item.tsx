@@ -35,6 +35,8 @@ import { clipScenePicker } from "./clip-scene-picker";
 import { clipEditTranscriptAction } from "./clip-edit-transcript-action";
 import { openDiagramPlaygroundForClip } from "./open-diagram-playground-for-clip";
 import { clipStillUrl } from "../clip-still-url";
+import { holdsStillsOf } from "../cvm-recorder-reducer";
+import { HeldStill } from "./held-still";
 import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   overlayKindLabel,
@@ -96,6 +98,11 @@ export const ClipItem = (props: ClipItemProps) => {
       ? ctx.overlaysByClipId.get(clip.databaseId)
       : undefined
   );
+  const stillHeld = useContextSelector(
+    VideoEditorContext,
+    (ctx) =>
+      clip.type === "on-database" && holdsStillsOf(ctx.cvmRecorder.state, clip)
+  );
   const percentComplete = getClipPercentComplete(clip, currentTimeInClip);
   const transcriptionStatus =
     clip.type === "on-database" ? clip.transcriptionStatus : null;
@@ -126,7 +133,9 @@ export const ClipItem = (props: ClipItemProps) => {
           }}
         >
           {/* Thumbnail image */}
-          {clip.type === "on-database" ? (
+          {clip.type === "on-database" && stillHeld ? (
+            <HeldStill isPortrait={isPortrait} timecode={timecode} />
+          ) : clip.type === "on-database" ? (
             <div className="flex-shrink-0 relative">
               <img
                 src={clipStillUrl(clip, "first")}

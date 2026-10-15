@@ -27,6 +27,7 @@ import { createRecorderEventSequencer, type SequencedEvent } from "./sequencer";
 import { meterRelay, isMeterMessage } from "./meter-relay";
 import { calibrationCommands } from "./calibration-commands";
 import { streamDeckPreparation } from "./stream-deck-prepare";
+import { holdWhisperWarm } from "./whisper-warmth";
 
 /**
  * THE RECORDER CLIENT: the app server's one WebSocket to the recorder service
@@ -87,6 +88,8 @@ export type RecorderClientOptions = {
   folder: string;
   /** What a Record goes by (ADR 0038): `lastPassedCalibration`. */
   calibration: () => Promise<LastPassedCalibration | null>;
+  /** `whisper-warmth.ts` */
+  keepWhisperWarm?: (ms: number) => void;
 };
 
 type Listener = (message: CvmRecorderMessage) => void;
@@ -118,6 +121,11 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
   /** Per Video and kind (scene, screen): the last sent while the recorder is its. */
   const lastOpen = new Map<string, string>();
   const { previews, still } = serviceUrls(o.url);
+
+  const whisper = holdWhisperWarm(
+    o.keepWhisperWarm,
+    () => reachable && state.kind !== "closed"
+  );
 
   const publish = (videoId: string, message: CvmRecorderMessage) => {
     for (const listener of listeners.get(videoId) ?? []) listener(message);
@@ -323,6 +331,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         deck.forget();
         reconcile();
         prepare();
+        whisper.changed();
         catchUp(message.recovered, message.recent);
         meter.restart();
         return publishStatus();
@@ -332,6 +341,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
         state = message.state;
         reconcile();
         prepare();
+        whisper.changed();
         // Stop lets a take go at the press (ADR 0048): the editors hear the
         // take's events so far, still being saved, before they hear it is over.
         if (letGo) return void (ingesting = ingesting.then(publishStatus));
@@ -367,6 +377,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       case "take-started":
       case "speech-ended":
       case "camera-lost":
+      case "frames-lost":
       case "recording-stopped":
       case "recording-crashed": {
         const { ready, replay } = sequencer.accept(message);
@@ -394,6 +405,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
       deck.forget();
       if (reachable) {
         reachable = false;
+        whisper.changed();
         publishStatus();
         meter.restart();
       }
@@ -612,6 +624,7 @@ export const createRecorderClient = (o: RecorderClientOptions) => {
 
     close() {
       closed = true;
+      whisper.close();
       socket?.close();
     },
   };

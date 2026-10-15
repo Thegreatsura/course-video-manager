@@ -126,9 +126,11 @@ export const calibrationFromDatabase: LastPassed = () =>
 export const connectClient = (
   port: number,
   ingest: Ingest = saveEvent,
-  lastPassed: LastPassed = freshCalibration
+  lastPassed: LastPassed = freshCalibration,
+  keepWhisperWarm?: (ms: number) => void
 ) => {
   const client = createRecorderClient({
+    keepWhisperWarm,
     url: `ws://127.0.0.1:${port}`,
     ingest,
     unfinishedRecordingSessions: (candidates) =>

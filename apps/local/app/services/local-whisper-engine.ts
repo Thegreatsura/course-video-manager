@@ -40,11 +40,18 @@ export class LocalWhisperEngine extends Context.Tag("LocalWhisperEngine")<
     readonly transcribe: (
       audioPath: string
     ) => Effect.Effect<AudioTranscript, LocalWhisperError>;
+    /**
+     * Loads the model now and keeps it loaded for at least `ms` (#2214),
+     * while the recorder is open. Never fails: a GPU that will not load it
+     * is reported by the next transcription.
+     */
+    readonly keepWarm: (ms: number) => Effect.Effect<void>;
   }
 >() {}
 
 /** An engine that refuses every file: for tests that never transcribe. */
 export const LocalWhisperUnavailable = Layer.succeed(LocalWhisperEngine, {
+  keepWarm: () => Effect.void,
   transcribe: () =>
     Effect.fail(
       new LocalWhisperError({

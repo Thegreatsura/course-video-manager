@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import { clipStillUrl } from "../clip-still-url";
+import { holdsStillsOf } from "../cvm-recorder-reducer";
 import { getCvmRecorderLivePreview } from "../live-preview";
 import {
   getIsOBSActive,
@@ -114,14 +115,18 @@ export const LivePreviewFrame = () => {
           />
         </CaptureFrame>
       )}
-      {!showVideoPlayer && showLastFrameOverlay && lastFrameClip && (
-        <div className="absolute inset-0 rounded-lg">
-          <img
-            className="w-full h-full rounded-lg opacity-50 object-contain"
-            src={clipStillUrl(lastFrameClip, "last")}
-          />
-        </div>
-      )}
+      {!showVideoPlayer &&
+        showLastFrameOverlay &&
+        lastFrameClip &&
+        // Its take is still recording: no still until Stop (#2214).
+        !holdsStillsOf(cvmRecorderState, lastFrameClip) && (
+          <div className="absolute inset-0 rounded-lg">
+            <img
+              className="w-full h-full rounded-lg opacity-50 object-contain"
+              src={clipStillUrl(lastFrameClip, "last")}
+            />
+          </div>
+        )}
     </div>
   );
 };

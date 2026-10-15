@@ -295,6 +295,18 @@ export const ingestRecorderEvent = Effect.fn("ingestRecorderEvent")(function* (
           { type: "camera-lost", recordingSessionId, errors: event.errors },
         ],
       } satisfies IngestResult;
+    case "frames-lost":
+      // Told at once; `recording-stopped` stores the totals.
+      return {
+        videoId,
+        messages: [
+          {
+            type: "frames-lost",
+            recordingSessionId,
+            framesLost: { camera: event.camera, screen: event.screen },
+          },
+        ],
+      } satisfies IngestResult;
     case "recording-stopped":
       yield* dbCall(() =>
         db

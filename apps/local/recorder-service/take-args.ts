@@ -38,6 +38,21 @@ const UNARMED_T0 = "1e10";
 export const FRAME_GAP_SECONDS = 0.1;
 
 /**
+ * The same for the screen recorder at 60 fps (#2214): a frame more than
+ * this after the one before is about two slots ddagrab missed.
+ */
+export const SCREEN_FRAME_GAP_SECONDS = 0.05;
+
+/**
+ * A filter that passes every frame and logs, at warning, each gap longer
+ * than `seconds` once the take's clock has started ("[warning] -0.233000",
+ * negative so it never reads as a mic stall). The writer and the screen
+ * recorder both count lost frames from it (recording-session.ts).
+ */
+const gapLogger = (seconds: number) =>
+  `select='if(gte(t,0)*gte(prev_selected_t,0)*gt(t-prev_selected_t,${seconds}),print(-(t-prev_selected_t),24));1'`;
+
+/**
  * -progress and keyboard period of the writer, in seconds: how often it
  * looks for Record's T0 on its stdin (ffmpeg reads a key at most every 0.1
  * s). Frames stamped T0 or later that pass before T0 arrives are dropped, so
@@ -71,7 +86,7 @@ export const cameraWriterArgs = (o: {
   const silence = silencedetectFilter(
     silenceRule(o.silenceLength, o.thresholdDb)
   );
-  const gap = `select='if(gte(t,0)*gte(prev_selected_t,0)*gt(t-prev_selected_t,${FRAME_GAP_SECONDS}),print(-(t-prev_selected_t),24));1'`;
+  const gap = gapLogger(FRAME_GAP_SECONDS);
   return [
     "-hide_banner",
     "-nostats",
@@ -125,7 +140,8 @@ export const takeStartCommand = (t0Ms: number) => {
 
 /**
  * THE SCREEN RECORDER for one take: ddagrab on the screen, wall time less
- * T0, CFR 60 from exactly t=0, NV12 on the GPU, NVENC. dup_frames=1: with 0,
+ * T0, CFR 60 from exactly t=0, NV12 on the GPU, NVENC. Each gap in
+ * ddagrab's frames is logged (`SCREEN_FRAME_GAP_SECONDS`). dup_frames=1: with 0,
  * ddagrab emits nothing while the screen is static, which stalls the graph.
  * Its pacing needs the 1 ms timer the service raises right after start
  * (timer-resolution.ps1).
@@ -146,7 +162,7 @@ export const screenRecorderArgs = (o: {
     "-i",
     `ddagrab=output_idx=${o.screenIndex}:framerate=60:dup_frames=1:draw_mouse=1,settb=AVTB`,
     "-filter_complex",
-    `[0:v]setpts=PTS-${t0}/TB,fps=60:start_time=0,${BT709},scale_d3d11=format=nv12[scr]`,
+    `[0:v]setpts=PTS-${t0}/TB,${gapLogger(SCREEN_FRAME_GAP_SECONDS)},fps=60:start_time=0,${BT709},scale_d3d11=format=nv12[scr]`,
     "-map",
     "[scr]",
     ...nvenc(120),

@@ -52,11 +52,12 @@ export const RECORDER_SERVICE_PORT = 5177;
  * camera, and Record is gated on the camera + mic pair; 13: the previews are
  * pulled a frame at a time, not streamed as multipart; 14: the previews are
  * H.264 streams, not JPEGs; 15: `take-started`, without which the editor
- * shows no Take). The app server reloads on a change and the service does not
+ * shows no Take; 16: `frames-lost` mid-take, the screen's lost frames
+ * counted, and the capture and writer at High priority). The app server reloads on a change and the service does not
  * (ADR 0035), so after a pull mid-session the app may meet a service started
  * from older code; `hello` says which wire it speaks (none before 2).
  */
-export const RECORDER_PROTOCOL_VERSION = 15;
+export const RECORDER_PROTOCOL_VERSION = 16;
 
 export const PREVIEW_FEEDS = ["camera", "screen"] as const;
 export type PreviewFeed = (typeof PREVIEW_FEEDS)[number];
@@ -245,10 +246,11 @@ export type RecordingSessionFiles = {
 };
 
 /**
- * Frames lost in a Recording Session, per picture file. The camera's are the
- * frames DirectShow dropped from a full real-time buffer. The screen's are not
- * measured yet (null): see recording-session.ts, FRAMES LOST. Logs written
- * before that carry a number.
+ * Frames lost in a Recording Session, per picture file: the frames
+ * DirectShow dropped from a full real-time buffer, and any gap in the frames
+ * reaching a writer (each filled with repeats). See recording-session.ts,
+ * FRAMES LOST. `screen` is null with no screen recorder, and in logs written
+ * before the screen's were counted (#2214).
  */
 export type FramesLost = { camera: number; screen: number | null };
 
@@ -296,6 +298,12 @@ export type RecordingSessionEvent = Logged<
    * logs the scene it starts in at 0, right after `recording-started`.
    */
   | { type: "scene-changed"; scene: Scene; fileTime: number }
+  /**
+   * Frames were lost mid-take (#2214): the running totals so far, sent at
+   * once so the editor can alert while the take is still going. The same
+   * totals end up in `recording-stopped`'s `framesLost`.
+   */
+  | ({ type: "frames-lost"; fileTime: number } & FramesLost)
   /** The screen recorder's 1 ms timer, no-throttling and High priority. */
   | { type: "screen-recorder-tuned"; ok: boolean; detail: string }
   /**

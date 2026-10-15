@@ -7,6 +7,7 @@ import { STORAGE_FOLDERS, writeFolder } from "@/packages/storage";
 import { readStorageRootsSync } from "@/services/storage-roots";
 import { lastPassedCalibrationNow } from "@/services/av-calibration.server";
 import { createRecorderClient, type RecorderClient } from "./client.server";
+import { keepWhisperWarm } from "@/services/sidecar-socket.server";
 import {
   ingestRecorderEvent,
   unfinishedRecordingSessions,
@@ -73,6 +74,15 @@ export const recorderClient = (): RecorderClient => {
     closeGraceMs: 10_000,
     retryMs: 1_000,
     folder: recordingFolder(),
+    keepWhisperWarm: (ms) =>
+      void runtimeLive.runPromise(
+        keepWhisperWarm(ms).pipe(
+          // No Sidecar: nothing to keep warm, and nothing to transcribe.
+          Effect.catchTag("SidecarUnreachableError", (e) =>
+            Effect.logWarning(`Whisper not kept warm: ${e.message}`)
+          )
+        )
+      ),
   });
   store[KEY] = client;
   return client;

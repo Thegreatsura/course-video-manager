@@ -22,6 +22,7 @@ import { JOB_KINDS, type JobServices } from "./job-kinds";
 import { makeJsonLogger } from "./json-logger";
 import { runSidecar, SIDECAR_TIMING, type SidecarIdentity } from "./sidecar";
 import { serveSidecarSocket } from "./socket";
+import { LocalWhisperEngine } from "@/services/local-whisper-engine";
 import { sweepStuckClips } from "./stuck-clip-sweep";
 import { sweepUnqueuedVoices } from "./clip-mockup-voice-sweep";
 import { sweepExpiredTrash } from "./trash-expiry-sweep";
@@ -150,28 +151,31 @@ const main = async (): Promise<void> => {
       }
       return yield* superviseSidecar({
         runOnce: (stop) =>
-          runSidecar<JobServices>({
-            identity: identity(),
-            registry: JOB_KINDS,
-            timing: SIDECAR_TIMING,
-            stop,
-            // Each sweep on its own: one that fails never skips the other.
-            afterRecovery: sweepStuckClips.pipe(
-              Effect.catchAllCause((cause) =>
-                Effect.logError("sidecar: the stuck-Clip sweep failed", cause)
+          Effect.flatMap(LocalWhisperEngine, (whisper) =>
+            runSidecar<JobServices>({
+              identity: identity(),
+              registry: JOB_KINDS,
+              timing: SIDECAR_TIMING,
+              stop,
+              // Each sweep on its own: one that fails never skips the other.
+              afterRecovery: sweepStuckClips.pipe(
+                Effect.catchAllCause((cause) =>
+                  Effect.logError("sidecar: the stuck-Clip sweep failed", cause)
+                ),
+                Effect.zipRight(sweepUnqueuedVoices),
+                Effect.zipRight(sweepExpiredTrash),
+                Effect.zipRight(sweepMovePartials)
               ),
-              Effect.zipRight(sweepUnqueuedVoices),
-              Effect.zipRight(sweepExpiredTrash),
-              Effect.zipRight(sweepMovePartials)
-            ),
-            serve: (handle) =>
-              serveSidecarSocket({
-                socket,
-                handle,
-                registry: JOB_KINDS,
-                logDir,
-              }),
-          }).pipe(Effect.provide(layer)),
+              serve: (handle) =>
+                serveSidecarSocket({
+                  socket,
+                  handle,
+                  registry: JOB_KINDS,
+                  logDir,
+                  keepWhisperWarm: whisper.keepWarm,
+                }),
+            })
+          ).pipe(Effect.provide(layer)),
         signalled,
         initialDelayMs: 1_000,
         maxDelayMs: 30_000,

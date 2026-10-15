@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { beforeAll, beforeEach } from "vitest";
 import { Effect, Layer } from "effect";
-import { inArray, sql } from "drizzle-orm";
-import { jobs } from "../db/schema.js";
+import { eq, inArray, sql } from "drizzle-orm";
+import { jobs, recordingSessions } from "../db/schema.js";
 import {
   JobOperationsService,
   INTERRUPTED_POST_MESSAGE,
@@ -119,6 +119,47 @@ describe("claimNextJob", () => {
       });
       expect(next?.id).toBe(child.id);
     }).pipe(Effect.provide(testLayer))
+  );
+
+  it.effect(
+    "holds transcription, queued, while a Recording Session records, and runs everything else",
+    () =>
+      Effect.gen(function* () {
+        const ops = yield* JobOperationsService;
+        const claim = () =>
+          ops.claimNextJob({ lane: "default", holder: "h", leaseMs: LEASE });
+        const transcribe = yield* enqueue({ kind: "transcribe-clips" });
+        const other = yield* enqueue({ kind: "noop" });
+        yield* Effect.promise(() =>
+          testDb.insert(recordingSessions).values({
+            id: "rs-1",
+            cameraFilePath: "camera.mkv",
+            screenFilePath: "screen.mkv",
+            micFilePath: "mic.mkv",
+          })
+        );
+        // A take left "recording" for days (never recovered) holds nothing.
+        yield* Effect.promise(() =>
+          testDb.insert(recordingSessions).values({
+            id: "rs-stale",
+            cameraFilePath: "camera.mkv",
+            screenFilePath: "screen.mkv",
+            micFilePath: "mic.mkv",
+            startedAt: new Date(Date.now() - 3 * 24 * 3600_000),
+          })
+        );
+
+        expect((yield* claim())?.id).toBe(other.id);
+        expect(yield* claim()).toBeUndefined();
+
+        yield* Effect.promise(() =>
+          testDb
+            .update(recordingSessions)
+            .set({ status: "stopped" })
+            .where(eq(recordingSessions.id, "rs-1"))
+        );
+        expect((yield* claim())?.id).toBe(transcribe.id);
+      }).pipe(Effect.provide(testLayer))
   );
 
   it.effect(

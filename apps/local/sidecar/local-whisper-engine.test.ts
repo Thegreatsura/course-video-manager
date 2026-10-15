@@ -71,6 +71,20 @@ describe("makeWorker", () => {
     w.stop();
   });
 
+  it("loads the model when kept warm, holds it past the idle time, then stops once the hold lapses", async () => {
+    const w = worker("ok", 50);
+    w.keepWarm(400);
+    expect(w.isRunning()).toBe(true);
+    const during = await w.transcribe("/a.mp3");
+    await new Promise((r) => setTimeout(r, 200));
+    // Past the 50 ms idle time, still held: the same process answers.
+    expect(w.isRunning()).toBe(true);
+    expect(pidOf(await w.transcribe("/b.mp3"))).toBe(pidOf(during));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(w.isRunning()).toBe(false);
+    w.stop();
+  });
+
   it("stops when idle and starts again on the next file", async () => {
     const w = worker("ok", 50);
     const first = await w.transcribe("/a.mp3");
