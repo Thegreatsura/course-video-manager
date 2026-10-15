@@ -258,6 +258,8 @@ export function ChooseScreenshot({
           picture={picture}
           offsetSeconds={offset}
           hidden={false}
+          // A frame picker: it scrubs, it is never played as the editor.
+          editorPlaying={false}
           className="rounded-md"
         />
       )}

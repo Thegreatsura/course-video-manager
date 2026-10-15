@@ -19,6 +19,24 @@ const createInitialState = (
 });
 
 describe("videoStateReducer", () => {
+  it("keeps only the Clips around the playhead preloaded, however many have played", () => {
+    const clips = Array.from(
+      { length: 10 },
+      (_, i) => `clip-${i}` as FrontendId
+    );
+    const tester = new ReducerTester(
+      makeVideoEditorReducer(clips, clips),
+      createInitialState({ currentClipId: clips[0], runningState: "playing" })
+    );
+    for (let i = 0; i < 7; i++) tester.send({ type: "clip-finished" });
+
+    expect([...tester.getState().clipIdsPreloaded]).toEqual([
+      "clip-7",
+      "clip-8",
+      "clip-9",
+    ]);
+  });
+
   it("a dot clicked on the teleprompter plays its Clip, and pauses it when clicked again", () => {
     const clip1 = "clip-1" as FrontendId;
     const clip2 = "clip-2" as FrontendId;

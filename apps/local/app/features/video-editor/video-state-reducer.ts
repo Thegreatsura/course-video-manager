@@ -1,4 +1,5 @@
 import type { EffectReducer } from "use-effect-reducer";
+import { preloadedAround } from "./preloaded-clips";
 import type { FrontendId } from "./clip-state-reducer";
 
 export type RunningState = "playing" | "paused";
@@ -167,39 +168,16 @@ const preloadSelectedClips = (
   clipIds: FrontendId[],
   state: videoStateReducer.State
 ): videoStateReducer.State => {
-  if (!state.currentClipId) {
+  if (!state.currentClipId || !clipIds.includes(state.currentClipId)) {
     return state;
   }
-
-  const currentClipIndex = clipIds.findIndex(
-    (clipId) => clipId === state.currentClipId
-  );
-
-  if (currentClipIndex === -1) {
-    return state;
-  }
-
-  const nextClip = clipIds[currentClipIndex + 1];
-  const nextNextClip = clipIds[currentClipIndex + 2];
-
-  if (nextClip) {
-    state.clipIdsPreloaded.add(nextClip);
-  }
-  if (nextNextClip) {
-    state.clipIdsPreloaded.add(nextNextClip);
-  }
-
-  // Add currentClipId to preloaded set, then union with selectedClipsSet
-  // Note: Using spread instead of Set.union() for Node 20 compatibility
-  state.clipIdsPreloaded.add(state.currentClipId);
-  const newClipIdsPreloaded = new Set([
-    ...state.clipIdsPreloaded,
-    ...state.selectedClipsSet,
-  ]);
-
   return {
     ...state,
-    clipIdsPreloaded: newClipIdsPreloaded,
+    clipIdsPreloaded: preloadedAround(
+      clipIds,
+      state.currentClipId,
+      state.selectedClipsSet
+    ),
   };
 };
 
@@ -558,23 +536,16 @@ export const makeVideoEditorReducer =
         }
 
         const nextClip = clipIds[currentClipIndex + 1];
-        const nextNextClip = clipIds[currentClipIndex + 2];
-
-        const newClipIdsPreloaded = state.clipIdsPreloaded;
-
-        if (nextClip) {
-          newClipIdsPreloaded.add(nextClip);
-        }
-
-        if (nextNextClip) {
-          newClipIdsPreloaded.add(nextNextClip);
-        }
 
         if (nextClip) {
           return {
             ...state,
             currentClipId: nextClip,
-            clipIdsPreloaded: newClipIdsPreloaded,
+            clipIdsPreloaded: preloadedAround(
+              clipIds,
+              nextClip,
+              state.selectedClipsSet
+            ),
             scrubSeekTime: undefined,
           };
         } else {
