@@ -268,6 +268,7 @@ export const PreloadableClip = (props: {
           picture={picture}
           offsetSeconds={clockOffset}
           hidden={props.hidden}
+          editorPlaying={isPlaying}
           style={
             overlayCameraStyle ??
             clipZoomCssStyle(props.clip.zoomType) ??

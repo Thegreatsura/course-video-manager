@@ -39,6 +39,8 @@ export const CompositePlayback = (props: {
   };
   offsetSeconds: number;
   hidden: boolean;
+  /** The editor wants this Clip playing: a play then waits for the picture. */
+  editorPlaying: boolean;
   className?: string;
   style?: CSSProperties;
 }) => {
@@ -50,6 +52,7 @@ export const CompositePlayback = (props: {
     segments: props.picture.segments,
     offsetSeconds: props.offsetSeconds,
     sources: props.picture.screen === null ? CAMERA_ONLY : CAMERA_AND_SCREEN,
+    editorPlaying: props.editorPlaying,
   });
 
   useEffect(() => {
