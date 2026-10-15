@@ -33,6 +33,10 @@
  *
  * The previews encode on NVENC unless `--encoder x264` (#2194); the camera
  * and recording scenarios use CUDA either way.
+ *
+ * Every ffmpeg.exe starts through the Windows guard (`windows-guard.ts`): it
+ * refuses while the recorder or OBS is running, and runs each one at Idle
+ * priority on cores 6-9, so latencies here read higher than the recorder's.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -55,6 +59,7 @@ import {
 } from "../recorder-service/take-args";
 import { startPreviewFeeds } from "../recorder-service/preview-feeds";
 import { findFfmpegExe } from "../recorder-service/windows-launcher";
+import { guardWindows } from "./windows-guard";
 
 const SCENARIOS = [
   "floor",
@@ -366,12 +371,15 @@ const measure = async (scenario: Scenario) => {
   );
   let log = "";
   const ffs = processes.map((argv) => {
-    const p = spawn(exe, argv, { cwd: dir, stdio: ["pipe", "ignore", "pipe"] });
-    p.stderr.on(
+    const p = windows.spawn(exe, argv, {
+      cwd: dir,
+      stdio: ["pipe", "ignore", "pipe"],
+    });
+    p.stderr?.on(
       "data",
       (d: Buffer) => (log = (log + d.toString()).slice(-4000))
     );
-    p.stdin.on("error", () => {});
+    p.stdin?.on("error", () => {});
     return p;
   });
   const ff = ffs[processes.findIndex((a) => a.includes("pipe:0"))]!;
@@ -383,7 +391,7 @@ const measure = async (scenario: Scenario) => {
     sourceArgs(isScreen(scenario) ? "60" : CAMERA_RATE),
     { stdio: ["ignore", "pipe", "inherit"] }
   );
-  source.stdout.pipe(ff.stdin);
+  source.stdout.pipe(ff.stdin!);
 
   // How many frames the service relays while measuring.
   let measuring = false;
@@ -403,7 +411,7 @@ const measure = async (scenario: Scenario) => {
     // A take starts as measuring does: T0 now, on the WSL clock (as
     // Windows' would be, give or take).
     if (writer !== undefined)
-      ffs[writer]!.stdin.write(takeStartCommand(Date.now()));
+      ffs[writer]!.stdin?.write(takeStartCommand(Date.now()));
     measuring = true;
     await new Promise((r) => setTimeout(r, seconds * 1000));
     measuring = false;
@@ -422,7 +430,7 @@ const measure = async (scenario: Scenario) => {
     // The source ending ends the capture's input, and so the capture; the
     // others are asked to quit.
     source.kill();
-    for (const p of ffs) if (p !== ff) p.stdin.write("q");
+    for (const p of ffs) if (p !== ff) p.stdin?.write("q");
     const kill = setTimeout(() => ffs.forEach((p) => p.kill("SIGKILL")), 5000);
     await ffClosed;
     clearTimeout(kill);
@@ -432,6 +440,9 @@ const measure = async (scenario: Scenario) => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 };
+
+// Before anything starts on Windows: refuses while the recorder or OBS runs.
+const windows = guardWindows();
 
 const chosen: readonly Scenario[] =
   scenarioFlag === "all" ? SCENARIOS : [scenarioFlag as Scenario];
