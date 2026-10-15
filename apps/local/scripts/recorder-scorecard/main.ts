@@ -4,12 +4,13 @@
  * targets and OBS (docs/recorder-scorecard/README.md).
  *
  *   pnpm recorder:scorecard [--quick] [--out <dir>] [--long-take <s>]
- *     [--cycles <n>] [--keep-footage] [--wait-minutes <n>]
+ *     [--cycles <n>] [--fault-repeats <n>] [--keep-footage]
  *
  * Writes `scorecard.json` and `scorecard.md` to `--out` (default
  * `.data/recorder-scorecard/<run>/`). Opens no capture device and no real
- * screen; never touches OBS or Matt's own recorder service, and waits while
- * that one is recording (and stops if it starts).
+ * screen. Starts no Windows process unless the Windows guard allows it
+ * (exits 3 while Matt's recorder service runs, anything records, or OBS
+ * runs), and stops everything at once if any of those starts mid-run.
  */
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -31,11 +32,17 @@ import {
   liveRecorderState,
   logicalCpus,
   notIdle,
+  foreignRecorderReasons,
   obsRunning,
   sampleGpu,
   sampleMarked,
+  useGuard,
 } from "./windows";
-import { buildIdleLauncher, setRunTag } from "./windows-idle";
+import {
+  checkWindows,
+  guardWindows,
+  REFUSED_EXIT_CODE,
+} from "../windows-guard";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -45,7 +52,6 @@ const flag = (name: string) => {
 const quick = args.includes("--quick");
 const longTakeSeconds = Number(flag("--long-take") ?? (quick ? 60 : 600));
 const cycleCount = Number(flag("--cycles") ?? (quick ? 10 : 50));
-const allowOpenRecorder = args.includes("--allow-open-recorder");
 const faultRepeats = Number(flag("--fault-repeats") ?? (quick ? 3 : 5));
 const keepFootage = args.includes("--keep-footage");
 
@@ -75,25 +81,6 @@ fs.mkdirSync(footageDir, { recursive: true });
 
 let aborted = false;
 
-/**
- * THE GATE: no run beside Matt filming. Refuses while his recorder service
- * records, while OBS runs, and (unless `--allow-open-recorder`, for a run
- * he has said is fine) while his recorder is open at all: two recorders
- * share one GPU. Says whether his recorder was open.
- */
-const gate = async () => {
-  const state = await liveRecorderState();
-  if (state === "recording")
-    throw new Error("Not run: Matt's recorder service is recording.");
-  if (await obsRunning())
-    throw new Error("Not run: OBS is running on Windows.");
-  if (state === "open" && !allowOpenRecorder)
-    throw new Error(
-      "Not run: Matt's recorder is open (pass --allow-open-recorder only when he has said he is not filming)."
-    );
-  return state === "open";
-};
-
 const main = async () => {
   const started = performance.now();
   const startedAt = new Date().toISOString();
@@ -110,18 +97,18 @@ const main = async () => {
     `A/V drift is measured over the long take (${longTakeSeconds} s, real time), first minute against last.`,
   ];
 
-  // Not even the launcher's build runs beside a take of Matt's.
-  if ((await liveRecorderState()) === "recording")
-    throw new Error("Not run: Matt's recorder service is recording.");
-  log("building idle-launch.exe");
-  const idleLaunch = buildIdleLauncher(path.join(workDir, "bin"));
-  setRunTag(marker);
-  if (await gate())
-    notes.push(
-      "Matt's own recorder was open (not recording) for this run, so the GPU was shared with his previews: preview latency, repeats and GPU figures read worse than on an idle machine."
-    );
+  // THE GATE (`scripts/windows-guard.ts`): nothing starts on Windows while
+  // Matt's recorder service runs at all, while anything of his records, or
+  // while OBS runs; everything that does start runs at Idle on cores 6-9.
+  const reasons = checkWindows();
+  if (reasons.length > 0) {
+    log(`not run, the Windows guard refuses:\n  - ${reasons.join("\n  - ")}`);
+    process.exitCode = REFUSED_EXIT_CODE;
+    return;
+  }
+  useGuard(guardWindows());
   notes.push(
-    "Every Windows process ran at Idle priority on cores 6-9 (idle-launch.exe's job object), checked every 5 s; timer-resolution.ps1 was not run (it raises the screen recorder to High)."
+    "Every Windows process ran through the Windows guard (Idle priority, cores 6-9), checked every 5 s; timer-resolution.ps1 and raise-priority.ps1 were not run (they raise the capture, writer and screen recorder to High)."
   );
   let ctxRef: Ctx | undefined;
   let stopEverything: () => Promise<void> = async () => {
@@ -147,7 +134,9 @@ const main = async () => {
     checking = true;
     void Promise.all([liveRecorderState(), obsRunning(), sampleMarked(marker)])
       .then(([state, obs, sample]) => {
+        const foreign = foreignRecorderReasons(marker);
         if (state === "recording") emergency("Matt's recorder started a take");
+        else if (foreign.length) emergency(foreign.join(" "));
         else if (obs) emergency("OBS is running");
         else {
           const off = notIdle(sample);
@@ -169,7 +158,6 @@ const main = async () => {
     marker,
     stateDir,
     logFile: path.join(workDir, "service.log"),
-    idleLaunch,
   });
   stopEverything = async () => {
     await (ctxRef?.service ?? service).kill().catch(() => {});
@@ -184,7 +172,6 @@ const main = async () => {
 
   const ctx: Ctx = {
     marker,
-    idleLaunch,
     stateDir,
     footageDir,
     videoId: `scorecard-${runId}`,

@@ -127,6 +127,7 @@ export const longTake = async (
   m.optimistic_clip_delay_ms = speech.optimisticMs;
   m.clip_end_delay_ms = speech.clipEndMs;
   m.service_frames_lost = take.stopped.framesLost.camera;
+  m.service_screen_frames_lost = take.stopped.framesLost.screen;
 
   ctx.log("long take: reading the files back");
   const camera = analysePicture(await decodeClocks(take.files.camera), {

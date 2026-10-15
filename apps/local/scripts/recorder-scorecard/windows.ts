@@ -1,22 +1,42 @@
 import http from "node:http";
 import { RECORDER_SERVICE_PORT } from "../../recorder-service/protocol";
-import { AFFINITY_MASK, spawnPowerShellIdle } from "./windows-idle";
+import fs from "node:fs";
+import {
+  AFFINITY_MASK,
+  reasonsToRefuse,
+  type WindowsGuard,
+} from "../windows-guard";
 
 /**
  * The scorecard's reach into Windows: its own ffmpeg.exe processes (found by
  * the run's marker in their command line, and nothing else), the GPU, the
- * Windows wall clock, and whether Matt is filming. Every PowerShell here
- * runs at Idle on cores 6-9 (`windows-idle.ts`). Read-only, except
+ * Windows wall clock, and whether Matt is filming. Every Windows process
+ * here starts through the Windows guard (`scripts/windows-guard.ts`): Idle
+ * priority on cores 6-9, and none at all while anything records. Read-only, except
  * `killMarked`, which only ever stops an ffmpeg.exe carrying this run's
  * marker.
  */
 
 const NVIDIA_SMI = "C:\\Windows\\System32\\nvidia-smi.exe";
 
+let guard: WindowsGuard | undefined;
+/** The guard this process got from `guardWindows()`: the only way to start a Windows process. */
+export const useGuard = (g: WindowsGuard) => {
+  guard = g;
+};
+export const windowsGuard = () => {
+  if (!guard)
+    throw new Error("No Windows guard: no Windows process may start.");
+  return guard;
+};
+
+const spawnPowerShell = (command: string) =>
+  windowsGuard().powershell(command, { stdio: ["ignore", "pipe", "pipe"] });
+
 export const runPowerShell = (command: string, timeoutMs = 30_000) =>
   new Promise<{ code: number | null; stdout: string; stderr: string }>(
     (resolve) => {
-      const child = spawnPowerShellIdle(
+      const child = spawnPowerShell(
         `$ProgressPreference = 'SilentlyContinue'; ${command}`
       );
       let stdout = "";
@@ -60,17 +80,10 @@ export const killMarked = async (marker: string, tags?: readonly string[]) => {
 };
 
 /**
- * Stops everything this run started on Windows: each launcher carrying the
- * marker (its job object takes its program with it) and each ffmpeg.exe
- * carrying it. Returns how many it stopped.
+ * Stops every ffmpeg.exe this run started (by its marker); each one's
+ * idle-launch.exe ends with it. Returns how many it stopped.
  */
-export const killRun = async (marker: string) => {
-  const { stdout } = await runPowerShell(
-    // Not this PowerShell's own launcher, which carries the marker too.
-    `$own = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId; $p = @(Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'idle-launch.exe' -or $_.Name -eq 'ffmpeg.exe') -and $_.CommandLine -like ('*' + ${literal(marker)} + '*') -and $_.ProcessId -ne $own }); foreach ($x in $p) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }; $p.Count`
-  );
-  return Number(stdout.trim()) || 0;
-};
+export const killRun = (marker: string) => killMarked(marker);
 
 export type ProcessSample = {
   atMs: number;
@@ -176,7 +189,7 @@ export const sampleGpu = async (ms: number): Promise<GpuReading | null> => {
  */
 export const windowsClockOffset = () =>
   new Promise<number>((resolve, reject) => {
-    const child = spawnPowerShellIdle(
+    const child = spawnPowerShell(
       "for ($i = 0; $i -lt 60; $i++) { [Console]::Out.WriteLine([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Out.Flush(); Start-Sleep -Milliseconds 15 }"
     );
     let best = -Infinity;
@@ -233,3 +246,28 @@ export const obsRunning = async () =>
       "@(Get-Process -Name obs64,obs32,obs -ErrorAction SilentlyContinue).Count"
     )
   ).stdout.trim() !== "0";
+
+/** Linux-side command lines, from /proc. Starts nothing. */
+const commandLines = () =>
+  fs.readdirSync("/proc").flatMap((pid) => {
+    if (!/^\d+$/.test(pid)) return [];
+    try {
+      const raw = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+      return raw ? [raw.split("\0").join(" ").trim()] : [];
+    } catch {
+      return [];
+    }
+  });
+
+/**
+ * The guard's Linux-side reasons to refuse, the run's own processes left
+ * out: Matt's recorder service started, or a recorder ffmpeg.exe not ours.
+ */
+export const foreignRecorderReasons = (marker: string) =>
+  reasonsToRefuse({
+    linux: commandLines().filter((c) => !c.includes(marker)),
+  });
+
+/** Whether any ffmpeg.exe of the run still shows on the Linux side. */
+export const runProcessesLeft = (marker: string) =>
+  commandLines().some((c) => c.includes(marker) && /\.exe\b/i.test(c));

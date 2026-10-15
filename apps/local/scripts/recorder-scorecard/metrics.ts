@@ -338,6 +338,16 @@ export const METRICS: readonly MetricDef[] = [
     scale: 1,
   },
   {
+    id: "service_screen_frames_lost",
+    label: "Screen frames the service itself reports lost (long take)",
+    group: "reliability",
+    unit: "frames",
+    better: "lower",
+    target: 0,
+    obs: null,
+    scale: 1,
+  },
+  {
     id: "av_drift_ms",
     label: "A/V drift (mic vs camera) across the long take",
     group: "reliability",

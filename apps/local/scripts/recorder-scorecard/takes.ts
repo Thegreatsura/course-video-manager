@@ -28,8 +28,6 @@ export class Aborted extends Error {}
 
 export type Ctx = {
   marker: string;
-  /** `idle-launch.exe`, through which every Windows process starts. */
-  idleLaunch: string;
   stateDir: string;
   footageDir: string;
   videoId: string;

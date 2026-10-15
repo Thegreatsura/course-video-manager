@@ -3,13 +3,13 @@
 `pnpm recorder:scorecard` drives the real CVM recorder service end to end and scores its speed and reliability. Each metric has a target and an OBS reference, and the rule is that CVM must be at least as good as OBS on every metric. It writes `scorecard.json` and `scorecard.md`, with the gaps ranked worst first (#2212).
 
 ```sh
-pnpm recorder:scorecard            # full: 10-min take, 50 Record/Stop cycles, ~15 min
-pnpm recorder:scorecard --quick    # 60 s take, 10 cycles, ~4 min
+pnpm recorder:scorecard            # full: 10-min take, 50 cycles, 5 preview kills, ~20 min
+pnpm recorder:scorecard --quick    # 60 s take, 10 cycles, 3 preview kills, ~6 min
   [--out <dir>]          # default .data/recorder-scorecard/<run>/
-  [--long-take <s>] [--cycles <n>] [--keep-footage] [--wait-minutes <n>]
+  [--long-take <s>] [--cycles <n>] [--fault-repeats <n>] [--keep-footage]
 ```
 
-The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baseline/`](./baseline/). To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
+The command runs under `nice -n 19 taskset -c 6-9`. The baseline goes in [`baseline/`](./baseline/) (pending: see #2212). To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
 
 ## What it runs
 
@@ -21,13 +21,16 @@ The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baselin
   - The device and screen listings are faked.
 - **Never touched.** No real device or screen is opened, OBS is never touched, and nothing is written under `/mnt`.
 - **Process kills.** Every ffmpeg.exe the run starts carries a marker. Process kills match that marker only; Matt's own recorder uses the same tags, so the real `stop-recorders.ps1` is never run.
-- **Matt's recorder.** The run waits while Matt's own recorder (port 5177) is recording, and stops if it starts recording. It also waits up to 5 minutes for that recorder to close, because both recorders share one GPU. If it is still open after that, the run goes ahead and the report says so.
+- **The Windows guard.** Every Windows process (ffmpeg.exe, PowerShell, nvidia-smi) starts through `guardWindows()` (`scripts/windows-guard.ts`), so it runs at Idle priority on cores 6-9, in a job object that kills it with its launcher.
+  - The run exits 3 without starting anything while Matt's recorder service runs at all, while any recorder ffmpeg.exe runs, or while OBS runs.
+  - Every 5 s it checks again. If a take of Matt's, his recorder service, or OBS starts, or a process of the run is found off Idle or off cores 6-9, everything of the run is killed at once and the report says so.
+  - `timer-resolution.ps1` and `raise-priority.ps1` are not run: they raise the capture, the writer and the screen recorder to High priority.
 - **Scenarios, in order:**
   1. Idle (preview latency and resources).
   2. The long take (A/V drift, frames, first frames, Stop timings, Optimistic Clip delay).
-  3. A take whose camera and screen previews are killed mid-take.
+  3. Takes whose camera and screen previews are killed mid-take, `--fault-repeats` times, for a pass rate.
   4. A take whose `events.jsonl` turns read-only.
-  5. The Record/Stop cycles.
+  5. The Record/Stop cycles. Each Stop lets the writer go and arms the next on the same relay, and the camera capture must live through it (the same Windows PID, never reopened): a pass rate and restarts per Stop.
   6. The service SIGKILLed mid-take and started again on the same state folder.
 
 ## Reading it

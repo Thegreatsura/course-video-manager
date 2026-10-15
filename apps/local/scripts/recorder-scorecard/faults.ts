@@ -11,7 +11,12 @@ import {
 } from "./takes";
 import { CAPTURE_TAG } from "../../recorder-service/capture-args";
 import type { RecorderMessage } from "../../recorder-service/protocol";
-import { sampleMarked, windowsClockOffset } from "./windows";
+import {
+  killMarked,
+  runProcessesLeft,
+  sampleMarked,
+  windowsClockOffset,
+} from "./windows";
 
 /**
  * Back-to-back cycles, and the service killed mid-take.
@@ -158,12 +163,22 @@ export const crash = async (ctx: Ctx) => {
   ctx.feeds.screen.close();
   // A moment as a person takes to notice and restart `pnpm dev`.
   await sleep(2000);
+  // The Windows guard refuses to start the service again while a recorder
+  // ffmpeg.exe runs, the dead one's included: what still runs after 10 s is
+  // stopped here, which pre-empts the restarted service's own stopTagged.
+  let orphansStopped = 0;
+  for (let i = 0; i < 10 && runProcessesLeft(ctx.marker); i++)
+    await sleep(1000);
+  if (runProcessesLeft(ctx.marker)) {
+    orphansStopped = await killMarked(ctx.marker);
+    for (let i = 0; i < 10 && runProcessesLeft(ctx.marker); i++)
+      await sleep(1000);
+  }
   const restartAt = performance.now();
   ctx.service = await startService({
     marker: ctx.marker,
     stateDir: ctx.stateDir,
     logFile: `${ctx.stateDir}/../service.log`,
-    idleLaunch: ctx.idleLaunch,
   });
   ctx.client = await connect(ctx.service.port);
   ctx.feeds = watchFeeds(ctx.service.port);
@@ -189,6 +204,7 @@ export const crash = async (ctx: Ctx) => {
   ctx.measured.crash_seconds_lost = lost;
   ctx.measured.crash_recovery_ms = hello.at - restartAt;
   ctx.details.crash = {
+    orphansStoppedByHarness: orphansStopped,
     recordingSessionId: take.id,
     secondsRecordedBeforeKill: expected,
     files,

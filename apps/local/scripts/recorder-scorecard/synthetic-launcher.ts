@@ -14,8 +14,7 @@ import {
   SYNTHETIC_DEVICE_LISTING,
   SYNTHETIC_SCREENS,
 } from "./synthetic-sources";
-import { killMarked } from "./windows";
-import { spawnIdle } from "./windows-idle";
+import { killMarked, windowsGuard } from "./windows";
 
 /**
  * THE SCORECARD'S LAUNCHER: the real recorder service's one seam
@@ -31,10 +30,12 @@ import { spawnIdle } from "./windows-idle";
  *   processes with that marker. The real script matches by tag alone, and
  *   the tags are the same in Matt's own recorder.
  *
- * - every process starts through `idle-launch.exe` (`windows-idle.ts`): Idle
- *   priority on cores 6-9, never beside Matt's capture at his priority;
- * - `timer-resolution.ps1` is not run: it raises the screen recorder to
- *   High priority. Its event says so (`ok: false`).
+ * - every process starts through the Windows guard
+ *   (`scripts/windows-guard.ts`): Idle priority on cores 6-9;
+ * - `timer-resolution.ps1` and `raise-priority.ps1` are not run: they raise
+ *   the screen recorder, the capture and the writer to High priority, which
+ *   the guard's job object forbids anyway. Each reports a failure, which the
+ *   service only logs.
  *
  * nvidia-smi runs for real.
  */
@@ -183,7 +184,7 @@ const idleProcess = (
   args: readonly string[],
   cwd: string
 ): LaunchedProcess => {
-  const child = spawnIdle(exe, args, { cwd });
+  const child = windowsGuard().spawn(exe, args, { cwd });
   const exited = new Promise<number | null>((resolve) => {
     child.once("close", (code) => resolve(code));
     child.once("error", () => resolve(null));
@@ -233,6 +234,7 @@ export const syntheticLauncher = (o: {
           case "stop-recorders.ps1":
             return workProcess(() => killMarked(o.marker, tagsOf(launch.args)));
           case "timer-resolution.ps1":
+          case "raise-priority.ps1":
             return fakeProcess(
               "",
               "skipped: the scorecard keeps every process at Idle priority\n",

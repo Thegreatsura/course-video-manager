@@ -5,34 +5,32 @@ import {
   type ClockTicker,
 } from "../../recorder-service/windows-clock";
 import { syntheticLauncher } from "./synthetic-launcher";
-import {
-  setRunTag,
-  spawnPowerShellIdle,
-  useIdleLauncher,
-} from "./windows-idle";
+import { guardWindows } from "../windows-guard";
+import { useGuard } from "./windows";
 
 /**
  * The real recorder service in a process of its own, as `service-process.ts`
  * runs it, on the scorecard's synthetic launcher, a free port and the run's
  * own state folder: so the scorecard can kill it mid-take and start it again.
  *
- *   node --import tsx service-child.ts <marker> <stateDir> <idle-launch.exe>
+ *   node --import tsx service-child.ts <marker> <stateDir>
+ *
+ * Exits 3 (the guard's refusal) while anything records.
  *
  * Prints `SCORECARD-SERVICE-PORT <port>` once it listens.
  */
-const [marker, stateDir, idleLaunch] = process.argv.slice(2);
-if (!marker || !stateDir || !idleLaunch) {
-  console.error(
-    "Usage: service-child.ts <marker> <stateDir> <idle-launch.exe>"
-  );
+const [marker, stateDir] = process.argv.slice(2);
+if (!marker || !stateDir) {
+  console.error("Usage: service-child.ts <marker> <stateDir>");
   process.exit(2);
 }
-useIdleLauncher(idleLaunch);
-setRunTag(marker);
+// Exits 3 if anything records: not one Windows process starts then.
+const windows = guardWindows();
+useGuard(windows);
 
-/** The Windows clock's PowerShell ticker, as `windows-clock.ts` runs it, at Idle on cores 6-9. */
+/** The Windows clock's PowerShell ticker, as `windows-clock.ts` runs it, through the guard. */
 const idleTicker = (): ClockTicker => {
-  const child = spawnPowerShellIdle(
+  const child = windows.powershell(
     "while ($true) { [Console]::Out.WriteLine([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Out.Flush(); Start-Sleep -Milliseconds 20 }"
   );
   return {
