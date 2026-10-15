@@ -10,16 +10,18 @@ import {
 
 /**
  * The effect runner for `compositePlaybackReducer`, and the bridge from the
- * clock `<video>` (a CVM-recorder Clip's mic) and the picture `<video>`s
- * into it. Returns the refs the picture `<video>`s mount on and the scene to
- * draw now. `sources` are the picture `<video>`s mounted (no screen when the
- * picture never draws it).
+ * clock `<video>` (a CVM-recorder Clip's mic), the picture `<video>`s and the
+ * editor into it. Returns the refs the picture `<video>`s mount on and the
+ * scene to draw now. `sources` are the picture `<video>`s mounted (no screen
+ * when the picture never draws it); `editorPlaying` is whether the editor
+ * wants this Clip playing.
  */
 export const useCompositePlayback = (o: {
   clock: RefObject<HTMLVideoElement | null>;
   segments: readonly SceneSegment[];
   offsetSeconds: number;
   sources: readonly PictureSource[];
+  editorPlaying: boolean;
 }) => {
   const camera = useRef<HTMLVideoElement>(null);
   const screen = useRef<HTMLVideoElement>(null);
@@ -33,6 +35,14 @@ export const useCompositePlayback = (o: {
       if (video) act(video);
     }
   };
+  /** Where each picture `<video>` is; an unmounted one counts as in place. */
+  const sourceTimes = (clockTime: number) => {
+    const picture = clockTime + o.offsetSeconds;
+    return {
+      camera: camera.current?.currentTime ?? picture,
+      screen: screen.current?.currentTime ?? picture,
+    };
+  };
 
   const [state, dispatch] = useEffectReducer(
     compositePlaybackReducer,
@@ -43,25 +53,32 @@ export const useCompositePlayback = (o: {
         sources: o.sources,
       }),
     {
-      "play-sources": (_state, effect) =>
-        each(effect.sources, (video) => {
-          video.currentTime = effect.at;
-          video.playbackRate = effect.rate;
-          void video.play().catch(() => {});
-        }),
-      "pause-sources": (_state, effect) =>
-        each(effect.sources, (video) => {
-          video.pause();
-          video.currentTime = effect.at;
-        }),
       "seek-sources": (_state, effect) =>
         each(effect.sources, (video) => {
           video.currentTime = effect.at;
         }),
+      "play-sources": (_state, effect) =>
+        each(effect.sources, (video) => {
+          video.playbackRate = effect.rate;
+          void video.play().catch(() => {});
+        }),
+      "pause-sources": (_state, effect) =>
+        each(effect.sources, (video) => video.pause()),
       "set-sources-rate": (_state, effect) =>
         each(effect.sources, (video) => {
           video.playbackRate = effect.rate;
         }),
+      "hold-clock": (_state, effect, dispatch) => {
+        o.clock.current?.pause();
+        const timer = setTimeout(
+          () => dispatch({ type: "hold-expired", holdId: effect.holdId }),
+          effect.expiresAfterMs
+        );
+        return () => clearTimeout(timer);
+      },
+      "play-clock": () => {
+        void o.clock.current?.play().catch(() => {});
+      },
     }
   );
 
@@ -76,20 +93,23 @@ export const useCompositePlayback = (o: {
     });
   }, [sourceKey]);
 
+  // Bridge: whether the editor wants this Clip playing.
+  useEffect(() => {
+    dispatch({ type: o.editorPlaying ? "editor-played" : "editor-paused" });
+  }, [o.editorPlaying]);
+
   // Bridge: what the clock does.
   useEffect(() => {
     const clock = o.clock.current;
     if (!clock) return;
+    const at = () => ({
+      clockTime: clock.currentTime,
+      sourceTimes: sourceTimes(clock.currentTime),
+    });
     const played = () =>
-      dispatch({
-        type: "clock-played",
-        clockTime: clock.currentTime,
-        rate: clock.playbackRate,
-      });
-    const paused = () =>
-      dispatch({ type: "clock-paused", clockTime: clock.currentTime });
-    const seeked = () =>
-      dispatch({ type: "clock-seeked", clockTime: clock.currentTime });
+      dispatch({ type: "clock-played", rate: clock.playbackRate, ...at() });
+    const paused = () => dispatch({ type: "clock-paused", ...at() });
+    const seeked = () => dispatch({ type: "clock-seeked", ...at() });
     const rateChanged = () =>
       dispatch({ type: "clock-rate-changed", rate: clock.playbackRate });
     clock.addEventListener("play", played);
@@ -104,7 +124,7 @@ export const useCompositePlayback = (o: {
       clock.removeEventListener("loadedmetadata", seeked);
       clock.removeEventListener("ratechange", rateChanged);
     };
-  }, [o.clock.current]);
+  }, [o.clock.current, o.offsetSeconds]);
 
   // Bridge: the picture `<video>`s landing where they were sent.
   useEffect(() => {
@@ -126,14 +146,10 @@ export const useCompositePlayback = (o: {
       frame = requestAnimationFrame(tick);
       const clock = o.clock.current;
       if (!clock) return;
-      const picture = clock.currentTime + o.offsetSeconds;
       dispatch({
         type: "clock-ticked",
         clockTime: clock.currentTime,
-        sourceTimes: {
-          camera: camera.current?.currentTime ?? picture,
-          screen: screen.current?.currentTime ?? picture,
-        },
+        sourceTimes: sourceTimes(clock.currentTime),
       });
     };
     frame = requestAnimationFrame(tick);
