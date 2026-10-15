@@ -25,13 +25,17 @@ import { renderJson, renderMarkdown, type RunInfo } from "./report";
 import { eventLogFailure, idle, longTake, previewKill } from "./scenarios";
 import { connect, isState, startService } from "./service-control";
 import { SYNTHETIC_THRESHOLD_DB } from "./synthetic-sources";
-import { openRecorder, sleep, watchFeeds, type Ctx } from "./takes";
+import { Aborted, openRecorder, sleep, watchFeeds, type Ctx } from "./takes";
 import {
-  killMarked,
+  killRun,
   liveRecorderState,
   logicalCpus,
+  notIdle,
+  obsRunning,
   sampleGpu,
+  sampleMarked,
 } from "./windows";
+import { buildIdleLauncher, setRunTag } from "./windows-idle";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -41,7 +45,8 @@ const flag = (name: string) => {
 const quick = args.includes("--quick");
 const longTakeSeconds = Number(flag("--long-take") ?? (quick ? 60 : 600));
 const cycleCount = Number(flag("--cycles") ?? (quick ? 10 : 50));
-const waitMinutes = Number(flag("--wait-minutes") ?? 30);
+const allowOpenRecorder = args.includes("--allow-open-recorder");
+const faultRepeats = Number(flag("--fault-repeats") ?? (quick ? 3 : 5));
 const keepFootage = args.includes("--keep-footage");
 
 const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomBytes(3).toString("hex")}`;
@@ -68,28 +73,25 @@ const stateDir = path.join(workDir, "state");
 const footageDir = path.join(workDir, "footage");
 fs.mkdirSync(footageDir, { recursive: true });
 
-class Aborted extends Error {}
 let aborted = false;
 
 /**
- * Waits while Matt's recorder records (up to `--wait-minutes`, then gives
- * up), and for a while if it is merely open: two recorders share one GPU.
- * Says whether it was still open when the run started.
+ * THE GATE: no run beside Matt filming. Refuses while his recorder service
+ * records, while OBS runs, and (unless `--allow-open-recorder`, for a run
+ * he has said is fine) while his recorder is open at all: two recorders
+ * share one GPU. Says whether his recorder was open.
  */
-const waitForIdleRecorder = async () => {
-  const deadline = Date.now() + waitMinutes * 60_000;
-  const openDeadline = Date.now() + Math.min(waitMinutes, 5) * 60_000;
-  for (;;) {
-    const state = await liveRecorderState();
-    if (state === "closed") return false;
-    if (state === "open" && Date.now() > openDeadline) return true;
-    if (Date.now() > deadline)
-      throw new Error(
-        `Matt's recorder was still recording after ${waitMinutes} min: not run.`
-      );
-    log(`Matt's recorder is ${state}: waiting`);
-    await sleep(15_000);
-  }
+const gate = async () => {
+  const state = await liveRecorderState();
+  if (state === "recording")
+    throw new Error("Not run: Matt's recorder service is recording.");
+  if (await obsRunning())
+    throw new Error("Not run: OBS is running on Windows.");
+  if (state === "open" && !allowOpenRecorder)
+    throw new Error(
+      "Not run: Matt's recorder is open (pass --allow-open-recorder only when he has said he is not filming)."
+    );
+  return state === "open";
 };
 
 const main = async () => {
@@ -108,22 +110,55 @@ const main = async () => {
     `A/V drift is measured over the long take (${longTakeSeconds} s, real time), first minute against last.`,
   ];
 
-  if (await waitForIdleRecorder())
+  // Not even the launcher's build runs beside a take of Matt's.
+  if ((await liveRecorderState()) === "recording")
+    throw new Error("Not run: Matt's recorder service is recording.");
+  log("building idle-launch.exe");
+  const idleLaunch = buildIdleLauncher(path.join(workDir, "bin"));
+  setRunTag(marker);
+  if (await gate())
     notes.push(
       "Matt's own recorder was open (not recording) for this run, so the GPU was shared with his previews: preview latency, repeats and GPU figures read worse than on an idle machine."
     );
+  notes.push(
+    "Every Windows process ran at Idle priority on cores 6-9 (idle-launch.exe's job object), checked every 5 s; timer-resolution.ps1 was not run (it raises the screen recorder to High)."
+  );
+  let ctxRef: Ctx | undefined;
+  let stopEverything: () => Promise<void> = async () => {
+    await killRun(marker);
+  };
+  /**
+   * THE GUARD, every 5 s: Matt starts a take, OBS starts, or a process of
+   * the run is found off Idle or off cores 6-9, and everything of the run on
+   * Windows is killed at once, by its marker, before anything else.
+   */
+  const emergency = (why: string) => {
+    if (aborted) return;
+    aborted = true;
+    log(`STOPPING NOW: ${why}`);
+    notes.push(`ABORTED at ${new Date().toISOString()}: ${why}.`);
+    void stopEverything().then(() =>
+      log("every Windows process of the run is stopped")
+    );
+  };
+  let checking = false;
   const guard = setInterval(() => {
-    void liveRecorderState().then((s) => {
-      if (s === "recording" && !aborted) {
-        aborted = true;
-        log("Matt's recorder started recording: stopping the scorecard");
-      }
-    });
+    if (checking || aborted) return;
+    checking = true;
+    void Promise.all([liveRecorderState(), obsRunning(), sampleMarked(marker)])
+      .then(([state, obs, sample]) => {
+        if (state === "recording") emergency("Matt's recorder started a take");
+        else if (obs) emergency("OBS is running");
+        else {
+          const off = notIdle(sample);
+          if (off.length)
+            emergency(`ffmpeg.exe off Idle/cores 6-9: ${JSON.stringify(off)}`);
+        }
+      })
+      .finally(() => (checking = false));
   }, 5000);
 
-  const gpuProbe = sampleGpu();
-  await sleep(3000);
-  const gpuBefore = gpuProbe.stop();
+  const gpuBefore = await sampleGpu(3000);
   if (gpuBefore)
     notes.push(
       `GPU before the service started: ${Math.round(gpuBefore.gpuPct)}% busy, NVENC ${Math.round(gpuBefore.encoderPct)}%, ${Math.round(gpuBefore.memoryMb)} MiB.`
@@ -134,7 +169,12 @@ const main = async () => {
     marker,
     stateDir,
     logFile: path.join(workDir, "service.log"),
+    idleLaunch,
   });
+  stopEverything = async () => {
+    await (ctxRef?.service ?? service).kill().catch(() => {});
+    await killRun(marker);
+  };
   const client = await connect(service.port);
   const hello = await client.waitFor((m) => m.type === "hello", {
     what: "hello",
@@ -144,6 +184,7 @@ const main = async () => {
 
   const ctx: Ctx = {
     marker,
+    idleLaunch,
     stateDir,
     footageDir,
     videoId: `scorecard-${runId}`,
@@ -164,9 +205,11 @@ const main = async () => {
     details,
     log,
     checkAbort: () => {
-      if (aborted) throw new Aborted("Matt's recorder started recording");
+      if (aborted) throw new Aborted("The guard stopped the run");
     },
   };
+  ctxRef = ctx;
+
   details.openToLiveMs = await openRecorder(ctx);
   log(`camera live after ${Math.round(details.openToLiveMs as number)} ms`);
   try {
@@ -181,7 +224,7 @@ const main = async () => {
   const scenarios: [string, () => Promise<void>][] = [
     ["idle", () => idle(ctx, gpuBefore)],
     ["longTake", () => longTake(ctx, longTakeSeconds, gpuBefore)],
-    ["previewKill", () => previewKill(ctx, quick ? 12 : 20)],
+    ["previewKill", () => previewKill(ctx, 15, faultRepeats)],
     ["eventLogFailure", () => eventLogFailure(ctx)],
     ["cycles", () => cycles(ctx, cycleCount)],
     [
@@ -208,29 +251,27 @@ const main = async () => {
     }
   }
 
-  log("closing");
   clearInterval(guard);
   await ctx.probe?.close();
-  try {
-    const from = ctx.client.send({ type: "stop" });
-    await sleep(1000);
-    ctx.client.send({ type: "close" });
-    await ctx.client.waitFor(isState("closed"), {
-      from: from.from,
-      timeoutMs: 30_000,
-    });
-  } catch (e) {
-    log(`close: ${e instanceof Error ? e.message : String(e)}`);
+  if (!aborted) {
+    log("closing");
+    try {
+      const from = ctx.client.send({ type: "stop" });
+      await sleep(1000);
+      ctx.client.send({ type: "close" });
+      await ctx.client.waitFor(isState("closed"), {
+        from: from.from,
+        timeoutMs: 30_000,
+      });
+    } catch (e) {
+      log(`close: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    await ctx.service.stop();
   }
   ctx.client.close();
   ctx.feeds.camera.close();
   ctx.feeds.screen.close();
-  await ctx.service.stop();
-  details.leftoverProcesses = await killMarked(marker);
-  if (aborted)
-    notes.push(
-      "ABORTED: Matt's recorder started recording, so the run stopped early; unmeasured metrics are blank."
-    );
+  details.leftoverProcesses = await killRun(marker);
 
   const run: RunInfo = {
     startedAt,
@@ -256,7 +297,7 @@ try {
   await main();
 } finally {
   // Whatever happened, nothing of this run is left running on Windows.
-  await killMarked(marker).catch(() => 0);
+  await killRun(marker).catch(() => 0);
   if (!keepFootage) fs.rmSync(workDir, { recursive: true, force: true });
   else log(`footage kept in ${workDir}`);
 }

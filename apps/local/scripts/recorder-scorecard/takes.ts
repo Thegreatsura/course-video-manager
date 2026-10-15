@@ -23,8 +23,13 @@ import type { Measured } from "./metrics";
  * and a Record/Stop with everything the scorecard times around it.
  */
 
+/** The run stops: Matt started filming, or a Windows process left Idle. */
+export class Aborted extends Error {}
+
 export type Ctx = {
   marker: string;
+  /** `idle-launch.exe`, through which every Windows process starts. */
+  idleLaunch: string;
   stateDir: string;
   footageDir: string;
   videoId: string;
@@ -194,9 +199,10 @@ export const recordTake = async (
     timeoutMs: o.stopTimeoutMs ?? 60_000,
     what: "recording-stopped",
   });
-  // The open that follows the stop: a take that ended by itself reopened before Stop.
+  // The first open since Record: the recorder opens again at Stop (#2211),
+  // before the take's files are final, or when a take ends by itself.
   const open = await ctx.client.waitFor(isState("open"), {
-    from: ctx.client.received.indexOf(stoppedAt),
+    from: press.from,
     timeoutMs: 60_000,
     what: "open after stop",
   });
@@ -216,7 +222,7 @@ export const recordTake = async (
     ackMs: ack.at - press.at,
     stopAt: stop.at,
     stopWin: stop.wall + offsetMs,
-    stopToOpenMs: open.at - stop.at,
+    stopToOpenMs: Math.max(0, open.at - stop.at),
     stopToNextCommandMs: next.at - stop.at,
     stopToFinalMs: stoppedAt.at - stop.at,
     stopped: stoppedAt.message as Stopped,

@@ -33,11 +33,13 @@ export const startService = (o: {
   stateDir: string;
   /** Where its output is also appended. */
   logFile?: string;
+  /** `idle-launch.exe`: the service starts every Windows process through it. */
+  idleLaunch: string;
 }) =>
   new Promise<ServiceProcess>((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["--import", "tsx", CHILD, o.marker, o.stateDir],
+      ["--import", "tsx", CHILD, o.marker, o.stateDir, o.idleLaunch],
       {
         cwd: path.join(import.meta.dirname, "../.."),
         stdio: ["ignore", "pipe", "pipe", "ipc"],

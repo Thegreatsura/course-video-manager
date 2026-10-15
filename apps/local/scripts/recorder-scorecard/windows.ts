@@ -1,30 +1,28 @@
-import { spawn } from "node:child_process";
 import http from "node:http";
 import { RECORDER_SERVICE_PORT } from "../../recorder-service/protocol";
+import { AFFINITY_MASK, spawnPowerShellIdle } from "./windows-idle";
 
 /**
  * The scorecard's reach into Windows: its own ffmpeg.exe processes (found by
- * the run's marker in their command line, and nothing else), the GPU, and
- * the Windows wall clock. Read-only, except `killMarked`, which only ever
- * stops an ffmpeg.exe whose command line carries this run's marker.
+ * the run's marker in their command line, and nothing else), the GPU, the
+ * Windows wall clock, and whether Matt is filming. Every PowerShell here
+ * runs at Idle on cores 6-9 (`windows-idle.ts`). Read-only, except
+ * `killMarked`, which only ever stops an ffmpeg.exe carrying this run's
+ * marker.
  */
 
-const POWERSHELL =
-  "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
-const NVIDIA_SMI = "/mnt/c/Windows/System32/nvidia-smi.exe";
+const NVIDIA_SMI = "C:\\Windows\\System32\\nvidia-smi.exe";
 
 export const runPowerShell = (command: string, timeoutMs = 30_000) =>
   new Promise<{ code: number | null; stdout: string; stderr: string }>(
     (resolve) => {
-      const child = spawn(
-        POWERSHELL,
-        ["-NoProfile", "-NonInteractive", "-Command", command],
-        { cwd: "/mnt/c", stdio: ["ignore", "pipe", "pipe"] }
+      const child = spawnPowerShellIdle(
+        `$ProgressPreference = 'SilentlyContinue'; ${command}`
       );
       let stdout = "";
       let stderr = "";
-      child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+      child.stdout?.on("data", (d: Buffer) => (stdout += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
       const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
       child.once("close", (code) => {
         clearTimeout(timer);
@@ -61,15 +59,37 @@ export const killMarked = async (marker: string, tags?: readonly string[]) => {
   return Number(stdout.trim()) || 0;
 };
 
-export type ProcessSample = {
-  atMs: number;
-  processes: { pid: number; cpu100ns: number; workingSet: number }[];
+/**
+ * Stops everything this run started on Windows: each launcher carrying the
+ * marker (its job object takes its program with it) and each ffmpeg.exe
+ * carrying it. Returns how many it stopped.
+ */
+export const killRun = async (marker: string) => {
+  const { stdout } = await runPowerShell(
+    // Not this PowerShell's own launcher, which carries the marker too.
+    `$own = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId; $p = @(Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'idle-launch.exe' -or $_.Name -eq 'ffmpeg.exe') -and $_.CommandLine -like ('*' + ${literal(marker)} + '*') -and $_.ProcessId -ne $own }); foreach ($x in $p) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }; $p.Count`
+  );
+  return Number(stdout.trim()) || 0;
 };
 
-/** This run's ffmpeg.exe processes: CPU time so far and working set. */
+export type ProcessSample = {
+  atMs: number;
+  processes: {
+    pid: number;
+    cpu100ns: number;
+    workingSet: number;
+    /** Its priority class and affinity mask, as Windows has them now. */
+    priority: string;
+    affinity: number;
+    /** Its `comment=` tag (`cvm-recorder-…`). */
+    tag: string;
+  }[];
+};
+
+/** This run's ffmpeg.exe processes: CPU time so far, working set, priority, affinity. */
 export const sampleMarked = async (marker: string): Promise<ProcessSample> => {
   const { stdout } = await runPowerShell(
-    `${marked(marker)} | ForEach-Object { "$($_.ProcessId)\`t$($_.KernelModeTime + $_.UserModeTime)\`t$($_.WorkingSetSize)" }`
+    `${marked(marker)} | ForEach-Object { $g = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($g) { $tag = [regex]::Match($_.CommandLine, 'comment=(cvm-recorder-[A-Za-z0-9-]+)').Groups[1].Value; "$($_.ProcessId)\`t$($_.KernelModeTime + $_.UserModeTime)\`t$($_.WorkingSetSize)\`t$($g.PriorityClass)\`t$([int64]$g.ProcessorAffinity)\`t$tag" } }`
   );
   return {
     atMs: Date.now(),
@@ -77,11 +97,24 @@ export const sampleMarked = async (marker: string): Promise<ProcessSample> => {
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => {
-        const [pid, cpu, ws] = line.split("\t").map(Number);
-        return { pid: pid ?? 0, cpu100ns: cpu ?? 0, workingSet: ws ?? 0 };
+        const [pid, cpu, ws, priority, affinity, tag] = line.split("\t");
+        return {
+          pid: Number(pid),
+          cpu100ns: Number(cpu),
+          workingSet: Number(ws),
+          priority: priority ?? "",
+          affinity: Number(affinity),
+          tag: tag ?? "",
+        };
       }),
   };
 };
+
+/** The processes in a sample that are not at Idle on cores 6-9: none, or the run stops. */
+export const notIdle = (s: ProcessSample) =>
+  s.processes.filter(
+    (p) => p.priority !== "Idle" || p.affinity !== AFFINITY_MASK
+  );
 
 export const logicalCpus = async () =>
   Number(
@@ -120,44 +153,20 @@ export type GpuReading = {
   memoryMb: number;
 };
 
-/** The whole GPU, sampled every 500 ms until `stop()`; averages of what it read. */
-export const sampleGpu = () => {
-  const readings: GpuReading[] = [];
-  const child = spawn(
-    NVIDIA_SMI,
-    [
-      "--query-gpu=utilization.gpu,utilization.encoder,memory.used",
-      "--format=csv,noheader,nounits",
-      "-lms",
-      "500",
-    ],
-    { cwd: "/mnt/c", stdio: ["ignore", "pipe", "ignore"] }
+/** The whole GPU, read every 500 ms for `ms`; the averages. */
+export const sampleGpu = async (ms: number): Promise<GpuReading | null> => {
+  const { stdout } = await runPowerShell(
+    `$end = (Get-Date).AddMilliseconds(${Math.round(ms)}); while ((Get-Date) -lt $end) { & '${NVIDIA_SMI}' --query-gpu=utilization.gpu,utilization.encoder,memory.used --format=csv,noheader,nounits; Start-Sleep -Milliseconds 500 }`,
+    ms + 30_000
   );
-  let buffer = "";
-  child.stdout.on("data", (d: Buffer) => {
-    buffer += d.toString();
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const [g, e, m] = line.split(",").map((x) => Number(x.trim()));
-      if ([g, e, m].every((x) => Number.isFinite(x)))
-        readings.push({ gpuPct: g!, encoderPct: e!, memoryMb: m! });
-    }
-  });
-  child.once("error", () => {});
-  return {
-    stop: (): GpuReading | null => {
-      child.kill();
-      if (readings.length === 0) return null;
-      const avg = (k: keyof GpuReading) =>
-        readings.reduce((s, r) => s + r[k], 0) / readings.length;
-      return {
-        gpuPct: avg("gpuPct"),
-        encoderPct: avg("encoderPct"),
-        memoryMb: avg("memoryMb"),
-      };
-    },
-  };
+  const readings = stdout
+    .split(/\r?\n/)
+    .map((line) => line.split(",").map((x) => Number(x.trim())))
+    .filter((r) => r.length === 3 && r.every((x) => Number.isFinite(x)));
+  if (readings.length === 0) return null;
+  const avg = (i: number) =>
+    readings.reduce((s, r) => s + r[i]!, 0) / readings.length;
+  return { gpuPct: avg(0), encoderPct: avg(1), memoryMb: avg(2) };
 };
 
 /**
@@ -167,19 +176,12 @@ export const sampleGpu = () => {
  */
 export const windowsClockOffset = () =>
   new Promise<number>((resolve, reject) => {
-    const child = spawn(
-      POWERSHELL,
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "for ($i = 0; $i -lt 60; $i++) { [Console]::Out.WriteLine([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Out.Flush(); Start-Sleep -Milliseconds 15 }",
-      ],
-      { cwd: "/mnt/c", stdio: ["ignore", "pipe", "ignore"] }
+    const child = spawnPowerShellIdle(
+      "for ($i = 0; $i -lt 60; $i++) { [Console]::Out.WriteLine([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Out.Flush(); Start-Sleep -Milliseconds 15 }"
     );
     let best = -Infinity;
     let buffer = "";
-    child.stdout.on("data", (d: Buffer) => {
+    child.stdout?.on("data", (d: Buffer) => {
       const at = Date.now();
       buffer += d.toString();
       const lines = buffer.split(/\r?\n/);
@@ -196,11 +198,7 @@ export const windowsClockOffset = () =>
     );
   });
 
-/**
- * What Matt's own recorder service (port 5177) is doing, read from its
- * /health: the scorecard never runs beside a take of his, and would rather
- * not share the GPU with his open recorder either.
- */
+/** What Matt's own recorder service (port 5177) is doing, from its /health. */
 export const liveRecorderState = () =>
   new Promise<"recording" | "open" | "closed">((resolve) => {
     const req = http.get(
@@ -227,3 +225,11 @@ export const liveRecorderState = () =>
     req.on("timeout", () => req.destroy());
     req.on("error", () => resolve("closed"));
   });
+
+/** Whether OBS is running on Windows. */
+export const obsRunning = async () =>
+  (
+    await runPowerShell(
+      "@(Get-Process -Name obs64,obs32,obs -ErrorAction SilentlyContinue).Count"
+    )
+  ).stdout.trim() !== "0";

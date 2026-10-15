@@ -10,6 +10,7 @@ import {
 } from "./footage-analysis";
 import { CAMERA_FPS, SCREEN_FPS } from "./synthetic-sources";
 import {
+  Aborted,
   hold,
   recordTake,
   rssMb,
@@ -39,11 +40,11 @@ export const idle = async (ctx: Ctx, gpuBefore: GpuReading | null) => {
   const offset = await windowsClockOffset();
   await ctx.probe?.reset("camera", offset);
   await ctx.probe?.reset("screen", offset);
-  const gpu = sampleGpu();
+  const gpu = sampleGpu(LATENCY_WINDOW_MS);
   const a = await sampleMarked(ctx.marker);
   await hold(ctx, LATENCY_WINDOW_MS);
   const b = await sampleMarked(ctx.marker);
-  const gpuIdle = gpu.stop();
+  const gpuIdle = await gpu;
   const cam = (await ctx.probe?.read("camera")) ?? null;
   const scr = (await ctx.probe?.read("screen")) ?? null;
   const cpu = cpuBetween(a, b, ctx.cpus);
@@ -71,7 +72,7 @@ export const longTake = async (
 ) => {
   ctx.log(`long take: ${seconds} s`);
   await sleep(2000);
-  const gpu = sampleGpu();
+  const gpu = sampleGpu(seconds * 1000);
   let cpu: ReturnType<typeof cpuBetween> | undefined;
   let rss = NaN;
   let latency: Record<string, unknown> = {};
@@ -94,7 +95,7 @@ export const longTake = async (
     cpu = cpuBetween(a, b, ctx.cpus);
     rss = rssMb(ctx.service.child.pid);
   });
-  const gpuRec = gpu.stop();
+  const gpuRec = await gpu;
   const m = ctx.measured;
   m.record_ack_ms = take.ackMs;
   m.stop_to_open_ms = take.stopToOpenMs;
@@ -174,10 +175,8 @@ export const longTake = async (
   };
 };
 
-/** A preview killed mid-take: the take must not notice. */
-export const previewKill = async (ctx: Ctx, seconds: number) => {
-  ctx.log("preview kill: camera and screen previews killed mid-take");
-  await sleep(2000);
+/** One take whose camera preview, then screen preview, is killed mid-take. */
+const previewKillTrial = async (ctx: Ctx, seconds: number) => {
   let killAt = 0;
   let screenKillAt = 0;
   let killed = 0;
@@ -188,13 +187,13 @@ export const previewKill = async (ctx: Ctx, seconds: number) => {
     await hold(ctx, 4000);
     screenKillAt = performance.now();
     killed += await killMarked(ctx.marker, [PREVIEW_TAGS.screen]);
-    await hold(ctx, Math.max(4000, seconds * 1000 - 9000));
+    await hold(ctx, Math.max(3000, seconds * 1000 - 9000));
   });
   const camera = analysePicture(await decodeClocks(take.files.camera), {
     fps: CAMERA_FPS,
     t0Ms: take.t0Ms,
   });
-  const ok =
+  const stoppedCleanly =
     take.stopped.reason === "requested" &&
     take.stopped.exitCodes.camera === 0 &&
     take.stopped.exitCodes.screen === 0;
@@ -205,15 +204,17 @@ export const previewKill = async (ctx: Ctx, seconds: number) => {
       ((take.stopWin - take.t0Ms) / 1000 - take.stopped.fileTime) * CAMERA_FPS
     )
   );
-  ctx.measured.preview_kill_take_frames_lost =
-    camera.dropped + camera.repeated + (ok ? 0 : tailLost);
-  ctx.measured.preview_kill_take_ok = ok && killed >= 2 ? 1 : 0;
-  ctx.measured.preview_kill_recovery_ms = ctx.feeds.camera.longestGap(
-    killAt,
-    killAt + 4000
-  );
-  ctx.details.previewKill = {
+  const framesLost =
+    camera.dropped + camera.repeated + (stoppedCleanly ? 0 : tailLost);
+  return {
+    pass: stoppedCleanly && killed >= 2 && framesLost === 0,
     processesKilled: killed,
+    framesLost,
+    recoveryMs: ctx.feeds.camera.longestGap(killAt, killAt + 4000),
+    screenPreviewGapMs: ctx.feeds.screen.longestGap(
+      screenKillAt,
+      screenKillAt + 4000
+    ),
     takeEndedAtSeconds: take.stopped.fileTime,
     stopPressedAtSeconds: (take.stopWin - take.t0Ms) / 1000,
     stopped: {
@@ -221,12 +222,45 @@ export const previewKill = async (ctx: Ctx, seconds: number) => {
       exitCodes: take.stopped.exitCodes,
       errors: take.stopped.errors,
     },
-    camera,
-    screenPreviewGapMs: ctx.feeds.screen.longestGap(
-      screenKillAt,
-      screenKillAt + 4000
-    ),
   };
+};
+
+/**
+ * PREVIEW KILLED → RECORDING UNAFFECTED, `n` times: the pass rate is what the
+ * ratchet hardens (the real-ffmpeg isolation tests flake under load, so CI
+ * skips them; here every process runs at Idle on cores 6-9, a load that is
+ * the same every run).
+ */
+export const previewKill = async (ctx: Ctx, seconds: number, n: number) => {
+  ctx.log(
+    `preview kill: ${n} takes, camera and screen previews killed mid-take`
+  );
+  const trials: Awaited<ReturnType<typeof previewKillTrial>>[] = [];
+  const errors: string[] = [];
+  for (let i = 0; i < n; i++) {
+    ctx.checkAbort();
+    await sleep(2000);
+    try {
+      trials.push(await previewKillTrial(ctx, seconds));
+    } catch (e) {
+      if (e instanceof Aborted) throw e;
+      errors.push(e instanceof Error ? e.message.slice(0, 500) : String(e));
+      ctx.client.send({ type: "stop" });
+      await sleep(3000);
+    }
+  }
+  const passed = trials.filter((t) => t.pass).length;
+  const recoveries = trials.map((t) => t.recoveryMs).sort((a, b) => a - b);
+  ctx.measured.preview_kill_pass_rate_pct = n ? (passed / n) * 100 : null;
+  ctx.measured.preview_kill_take_frames_lost = trials.length
+    ? Math.max(...trials.map((t) => t.framesLost))
+    : null;
+  ctx.measured.preview_kill_take_ok =
+    trials.length === n && passed === n ? 1 : 0;
+  ctx.measured.preview_kill_recovery_ms = recoveries.length
+    ? recoveries[Math.floor(recoveries.length / 2)]!
+    : null;
+  ctx.details.previewKill = { n, passed, trials, errors };
 };
 
 /** The event log stops being writable mid-take (a disk fault the scorecard can make safely). */

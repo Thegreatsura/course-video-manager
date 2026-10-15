@@ -3,7 +3,7 @@ import type {
   LaunchedProcess,
   Launcher,
 } from "../../recorder-service/launcher";
-import { windowsLauncher } from "../../recorder-service/windows-launcher";
+import { findFfmpegExe } from "../../recorder-service/windows-launcher";
 import {
   CAMERA_SOURCE,
   CAMERA_TO_4K_ON_GPU,
@@ -15,6 +15,7 @@ import {
   SYNTHETIC_SCREENS,
 } from "./synthetic-sources";
 import { killMarked } from "./windows";
+import { spawnIdle } from "./windows-idle";
 
 /**
  * THE SCORECARD'S LAUNCHER: the real recorder service's one seam
@@ -30,8 +31,12 @@ import { killMarked } from "./windows";
  *   processes with that marker. The real script matches by tag alone, and
  *   the tags are the same in Matt's own recorder.
  *
- * `timer-resolution.ps1` and nvidia-smi run for real: the first finds its
- * target by the Recording Session's own tag, which is unique.
+ * - every process starts through `idle-launch.exe` (`windows-idle.ts`): Idle
+ *   priority on cores 6-9, never beside Matt's capture at his priority;
+ * - `timer-resolution.ps1` is not run: it raises the screen recorder to
+ *   High priority. Its event says so (`ok: false`).
+ *
+ * nvidia-smi runs for real.
  */
 
 const fakeProcess = (stdout: string, stderr: string, code = 0) => {
@@ -169,6 +174,36 @@ export const syntheticFfmpegArgs = (
 const tagsOf = (args: readonly string[]) =>
   (args[args.indexOf("-Tags") + 1] ?? "").split(",").filter(Boolean);
 
+/**
+ * `windows-launcher.ts`'s process, started at Idle on cores 6-9. Its kill
+ * ends the launcher, and the launcher's job object ends the program.
+ */
+const idleProcess = (
+  exe: string,
+  args: readonly string[],
+  cwd: string
+): LaunchedProcess => {
+  const child = spawnIdle(exe, args, { cwd });
+  const exited = new Promise<number | null>((resolve) => {
+    child.once("close", (code) => resolve(code));
+    child.once("error", () => resolve(null));
+  });
+  child.stdin?.on("error", () => {});
+  return {
+    onStdout: (l) =>
+      void child.stdout?.on("data", (d: Buffer) => l(d.toString())),
+    onStderr: (l) =>
+      void child.stderr?.on("data", (d: Buffer) => l(d.toString())),
+    writeStdin: (text) => {
+      if (child.exitCode === null) child.stdin?.write(text);
+    },
+    exited,
+    kill: () => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    },
+  };
+};
+
 export const syntheticLauncher = (o: {
   marker: string;
   /** Each ffmpeg.exe started, with its (rewritten) arguments. */
@@ -179,12 +214,18 @@ export const syntheticLauncher = (o: {
       case "ffmpeg": {
         if (launch.args.includes("-list_devices"))
           return fakeProcess("", SYNTHETIC_DEVICE_LISTING);
+        const exe = findFfmpegExe();
+        if (!exe) return fakeProcess("", "ffmpeg.exe not found\n", 1);
         const args = syntheticFfmpegArgs(launch.args, o.marker);
         o.onLaunch?.(args);
-        return windowsLauncher({ ...launch, args });
+        return idleProcess(exe, args, launch.cwd);
       }
       case "nvidia-smi":
-        return windowsLauncher(launch);
+        return idleProcess(
+          "C:\\Windows\\System32\\nvidia-smi.exe",
+          launch.args,
+          "/mnt/c"
+        );
       case "powershell":
         switch (launch.script) {
           case "screens.ps1":
@@ -192,7 +233,11 @@ export const syntheticLauncher = (o: {
           case "stop-recorders.ps1":
             return workProcess(() => killMarked(o.marker, tagsOf(launch.args)));
           case "timer-resolution.ps1":
-            return windowsLauncher(launch);
+            return fakeProcess(
+              "",
+              "skipped: the scorecard keeps every process at Idle priority\n",
+              1
+            );
         }
     }
   };

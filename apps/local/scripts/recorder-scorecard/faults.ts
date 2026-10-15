@@ -9,6 +9,8 @@ import {
   watchFeeds,
   type Ctx,
 } from "./takes";
+import { CAPTURE_TAG } from "../../recorder-service/capture-args";
+import type { RecorderMessage } from "../../recorder-service/protocol";
 import { sampleMarked, windowsClockOffset } from "./windows";
 
 /**
@@ -32,7 +34,22 @@ const footprint = async (ctx: Ctx) => {
   };
 };
 
-/** `n` Record/Stop cycles, each a short take, with a short rest between. */
+/** The camera capture's Windows PID now, if it runs. */
+const capturePid = async (ctx: Ctx) =>
+  (await sampleMarked(ctx.marker)).processes.find((p) => p.tag === CAPTURE_TAG)
+    ?.pid;
+
+/** A state saying the camera is being opened (again): the capture restarted. */
+const reopening = (m: RecorderMessage) =>
+  m.type === "state" &&
+  m.state.kind === "open" &&
+  m.state.camera.kind === "opening";
+
+/**
+ * `n` Record/Stop cycles, each a short take, with a short rest between.
+ * Every Stop lets the writer go and the next is armed on the same relay: the
+ * camera capture must live through it (same Windows PID, never reopened).
+ */
 export const cycles = async (ctx: Ctx, n: number) => {
   ctx.log(`cycles: ${n} back-to-back Record/Stop`);
   await sleep(2000);
@@ -40,8 +57,14 @@ export const cycles = async (ctx: Ctx, n: number) => {
   const acks: number[] = [];
   const finals: number[] = [];
   const failures: string[] = [];
+  let pid = await capturePid(ctx);
+  const firstPid = pid;
+  let restarts = 0;
+  let survived = 0;
+  let stops = 0;
   for (let i = 0; i < n; i++) {
     ctx.checkAbort();
+    const from = ctx.client.received.length;
     try {
       const take = await recordTake(ctx, () => hold(ctx, 1000), {
         stopTimeoutMs: 30_000,
@@ -57,9 +80,22 @@ export const cycles = async (ctx: Ctx, n: number) => {
       await sleep(3000);
     }
     await sleep(1000);
+    // The writer reconnect at this Stop: did the capture live through it?
+    stops += 1;
+    const now = await capturePid(ctx);
+    const reopened = ctx.client.received
+      .slice(from)
+      .some((r) => reopening(r.message));
+    if (now !== pid || reopened) restarts += 1;
+    else survived += 1;
+    pid = now;
   }
   await sleep(3000);
   const after = await footprint(ctx);
+  ctx.measured.capture_restarts_per_stop = stops ? restarts / stops : null;
+  ctx.measured.stop_capture_survival_pct = stops
+    ? (survived / stops) * 100
+    : null;
   ctx.measured.cycles_failed = failures.length;
   ctx.measured.cycles_leaked_processes = Math.max(
     0,
@@ -71,6 +107,8 @@ export const cycles = async (ctx: Ctx, n: number) => {
   ctx.details.cycles = {
     n,
     failures,
+    captureRestarts: restarts,
+    capturePids: { first: firstPid ?? null, last: pid ?? null },
     before,
     after,
     recordAckMs: {
@@ -125,6 +163,7 @@ export const crash = async (ctx: Ctx) => {
     marker: ctx.marker,
     stateDir: ctx.stateDir,
     logFile: `${ctx.stateDir}/../service.log`,
+    idleLaunch: ctx.idleLaunch,
   });
   ctx.client = await connect(ctx.service.port);
   ctx.feeds = watchFeeds(ctx.service.port);
