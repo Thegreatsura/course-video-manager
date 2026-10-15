@@ -207,21 +207,20 @@ export const encodePowerShell = (command: string) =>
   Buffer.from(command, "utf16le").toString("base64");
 
 /**
- * `idle-launch.exe`, compiled on first use and kept, keyed by its source.
- * The compiling PowerShell lowers itself to Idle on cores 6-9 first; csc
- * inherits both.
+ * Makes `file` executable for WSL interop. Windows writes through \\wsl$
+ * with mode 0644, and interop will not spawn a file without the exec bit
+ * (`spawn … EACCES`).
  */
-const idleLauncher = (): string => {
-  const hash = createHash("sha256")
-    .update(LAUNCHER_SOURCE)
-    .digest("hex")
-    .slice(0, 12);
-  const dir = path.join(os.tmpdir(), "cvm-windows-guard");
-  const exe = path.join(dir, `idle-launch-${hash}.exe`);
-  if (fs.existsSync(exe)) return exe;
-  fs.mkdirSync(dir, { recursive: true });
-  const src = path.join(dir, `idle-launch-${hash}.cs`);
-  fs.writeFileSync(src, LAUNCHER_SOURCE);
+export const ensureExecutable = (file: string) => {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+  } catch {
+    fs.chmodSync(file, 0o755);
+  }
+};
+
+/** Compiles `src` (C#) to `exe` with a PowerShell lowered to Idle on cores 6-9; csc inherits both. */
+const buildLauncher = (src: string, exe: string) => {
   const command = [
     "$me = [Diagnostics.Process]::GetCurrentProcess()",
     `$me.ProcessorAffinity = [IntPtr]${AFFINITY_MASK}`,
@@ -242,6 +241,31 @@ const idleLauncher = (): string => {
     throw new Error(
       `Could not build idle-launch.exe: ${run.stderr || run.stdout}`
     );
+};
+
+/**
+ * `idle-launch.exe`, compiled on first use and kept, keyed by its source.
+ * Always handed back executable, cached or freshly built.
+ */
+export const idleLauncher = ({
+  dir = path.join(os.tmpdir(), "cvm-windows-guard"),
+  build = buildLauncher,
+}: {
+  dir?: string;
+  build?: (src: string, exe: string) => void;
+} = {}): string => {
+  const hash = createHash("sha256")
+    .update(LAUNCHER_SOURCE)
+    .digest("hex")
+    .slice(0, 12);
+  const exe = path.join(dir, `idle-launch-${hash}.exe`);
+  if (!fs.existsSync(exe)) {
+    fs.mkdirSync(dir, { recursive: true });
+    const src = path.join(dir, `idle-launch-${hash}.cs`);
+    fs.writeFileSync(src, LAUNCHER_SOURCE);
+    build(src, exe);
+  }
+  ensureExecutable(exe);
   return exe;
 };
 
