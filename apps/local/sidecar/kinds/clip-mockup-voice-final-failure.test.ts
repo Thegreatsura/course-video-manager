@@ -9,7 +9,6 @@ import { eq } from "drizzle-orm";
 import * as schema from "@cvm/core/db/schema";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import { DrizzleService } from "@cvm/core/services/drizzle-service.server";
-import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { ClipMockupVoiceOperationsService } from "@/services/db-clip-mockup-voice-operations.server";
 import { STORAGE_ROOTS_ENV_KEY } from "@/services/storage-roots";
 import {
@@ -80,7 +79,6 @@ const layer = () => {
   const db = Layer.succeed(DrizzleService, testDb as never);
   return Layer.mergeAll(
     JobOperationsService.Default,
-    ClipMockupOperationsService.Default,
     ClipMockupVoiceOperationsService.Default
   ).pipe(
     Layer.provide(db),
@@ -105,13 +103,25 @@ const layer = () => {
   );
 };
 
-/** A pending Clip Mockup, and a voice Job for it on its LAST attempt. */
+/**
+ * A pending Clip Mockup, and a voice Job for it on its LAST attempt. The row
+ * is inserted directly: `createClipMockups` would queue a fresh Job for it,
+ * and that one would cover this one.
+ */
 const pendingOnLastAttempt = (line: string) =>
   Effect.gen(function* () {
-    const ops = yield* ClipMockupOperationsService;
-    const [row] = yield* ops.createClipMockups("video-1", [
-      { type: "clipMockup", line, imagePath: "0.png" },
-    ]);
+    const [row] = yield* Effect.promise(() =>
+      testDb
+        .insert(schema.clipMockups)
+        .values({
+          videoId: "video-1",
+          line,
+          imagePath: "0.png",
+          voiceStatus: "pending",
+          order: `a${line.length}`,
+        })
+        .returning()
+    );
     const job = yield* enqueueJob({
       id: null,
       kind: "clip-mockup-voice",

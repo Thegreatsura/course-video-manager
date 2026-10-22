@@ -122,11 +122,13 @@ describe("ClipMockupVoiceOperationsService", () => {
       Effect.gen(function* () {
         const row = yield* createPending("Say this.");
         const voice = yield* ClipMockupVoiceOperationsService;
+        // The Job `createClipMockups` queued for it is the one failing.
+        const job = yield* Effect.promise(() => testDb.query.jobs.findFirst());
 
         expect(
           yield* voice.markVoiceFailed({
             ids: [row.id],
-            jobId: "job-1",
+            jobId: job!.id,
             error: "the GPU would not load",
           })
         ).toEqual([row.id]);
@@ -148,7 +150,7 @@ describe("ClipMockupVoiceOperationsService", () => {
         expect(
           yield* voice.markVoiceFailed({
             ids: [row.id],
-            jobId: "job-1",
+            jobId: job!.id,
             error: "late",
           })
         ).toEqual([]);
