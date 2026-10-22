@@ -1,96 +1,28 @@
-import {
-  ConfigProvider,
-  Effect,
-  Layer,
-  Logger,
-  LogLevel,
-  Option,
-} from "effect";
-import { DrizzleService } from "@/services/drizzle-service.server";
-import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
-import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
+import { Effect, Logger, LogLevel } from "effect";
 import { estimateSpokenSeconds } from "@cvm/core/features/clip-mockups/estimate-spoken-seconds";
-import { CLIP_MOCKUP_VOICE_JOB_KIND } from "@cvm/core/features/clip-mockups/voice-status";
-import { voiceJobRequests } from "@cvm/core/features/clip-mockups/voice-job-cover";
 import { nudgeSidecar } from "@/services/sidecar-socket.server";
-import { loadRepoEnv } from "@/services/repo-env";
-import { enqueueJob, JOB_KIND_SPECS } from "../../../sidecar/job-specs";
 
 /**
  * THE VOICE HALF of `cvm clip-mockup add` and `update`, which no longer
- * waits for it. The rows are written with their voice `pending`; this queues
- * ONE `clip-mockup-voice` Job for them, which this machine's Sidecar runs
+ * waits for it. The API writes the rows with their voice `pending` AND queues
+ * their `clip-mockup-voice` Job in the same request (`createClipMockups`,
+ * `updateClipMockups`); this machine's Sidecar runs it
  * (`sidecar/kinds/clip-mockup-voice.ts`): Kokoro, through the Clip Mockup
- * daemon, never in the `cvm` process.
+ * daemon, never in the `cvm` process. The CLI opens no database connection
+ * for it.
  */
 
 /**
- * The Job row goes in this machine's database directly, as `cvm course
- * publish` does: the Sidecar reads its queue there, and the deployed API has
- * no Job verbs. The `Effect.serviceOption` branch is the test seam — a suite
- * provides `JobOperationsService` on its own database, and no connection is
- * opened from `.env`.
+ * Ask this machine's Sidecar to look at its queue now, when any row written
+ * is waiting for its voice. Best effort, and silent: STDERR is the CLI's
+ * error contract, and a Sidecar that is down finds the Job when it starts.
  */
-const jobsLayer = JobOperationsService.Default.pipe(
-  Layer.provide(
-    DrizzleService.Default.pipe(Layer.provide(GitWorktreeProbeLive))
-  )
-);
-
-const withJobOperations = <A, E>(
-  effect: Effect.Effect<A, E, JobOperationsService>
+export const nudgeVoiceJob = (
+  rows: ReadonlyArray<{ readonly voiceStatus: string }>
 ) =>
-  Effect.serviceOption(JobOperationsService).pipe(
-    Effect.flatMap((provided) =>
-      Option.isSome(provided)
-        ? Effect.provideService(effect, JobOperationsService, provided.value)
-        : Effect.sync(() => loadRepoEnv()).pipe(
-            Effect.zipRight(
-              effect.pipe(
-                Effect.provide(jobsLayer),
-                Effect.withConfigProvider(ConfigProvider.fromEnv())
-              )
-            )
-          )
-    )
-  );
-
-/**
- * Queue the voice of every Clip Mockup named — one Job per Video, keyed by
- * each row's line — and nudge the Sidecar so it starts now. A row whose line
- * a live Job will already voice queues nothing (`coveredBy`,
- * `voice-job-cover.ts`), so a picture-only `update` of a pending row adds no
- * Job. Nothing to voice queues nothing. A Sidecar that is down finds the Job
- * when it starts.
- */
-export const queueClipMockupVoices = (
-  rows: ReadonlyArray<{
-    readonly id: string;
-    readonly videoId: string;
-    readonly line: string;
-  }>
-) =>
-  rows.length === 0
-    ? Effect.succeed([])
-    : withJobOperations(
-        Effect.gen(function* () {
-          const queued = yield* Effect.forEach(
-            voiceJobRequests(rows),
-            (request) =>
-              enqueueJob({
-                id: null,
-                kind: CLIP_MOCKUP_VOICE_JOB_KIND,
-                ...request,
-                dependsOn: null,
-                attemptsSpent: 0,
-                registry: JOB_KIND_SPECS,
-              })
-          );
-          // Best effort, and silent: STDERR is the CLI's error contract.
-          yield* nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None));
-          return queued;
-        })
-      );
+  rows.some((r) => r.voiceStatus === "pending")
+    ? nudgeSidecar().pipe(Logger.withMinimumLogLevel(LogLevel.None))
+    : Effect.void;
 
 /**
  * A Clip Mockup row as `cvm clip-mockup` prints it. A voice that is not

@@ -23,12 +23,7 @@ import {
   type RunResult,
   type WriteSeed,
 } from "./cli-write-test-harness";
-import {
-  addArgv,
-  updateArgv,
-  voiceJobs,
-  voiceQueueLayer,
-} from "./cli-clip-mockup-test-harness";
+import { addArgv, updateArgv, voiceJobs } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
 // cvm clip-mockup add/update, "html" entries: capture a frame from a page
@@ -92,11 +87,7 @@ const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 beforeAll(async () => {
   const result = await createTestDb();
   testDb = result.testDb;
-  const layer = Layer.mergeAll(
-    buildWriteLayer(testDb),
-    fakeFrameCapture,
-    voiceQueueLayer(testDb)
-  );
+  const layer = Layer.mergeAll(buildWriteLayer(testDb), fakeFrameCapture);
   run = async (argv) => {
     const out = makeTestCliOutput();
     const exitCode = await Effect.runPromise(
@@ -358,13 +349,7 @@ describe("cvm clip-mockup --html", () => {
       ).pipe(
         Effect.provide(out.layer),
         // The voice queue too: without it the Job would go to the .env database.
-        Effect.provide(
-          Layer.mergeAll(
-            buildWriteLayer(testDb),
-            broken,
-            voiceQueueLayer(testDb)
-          )
-        )
+        Effect.provide(Layer.mergeAll(buildWriteLayer(testDb), broken))
       )
     );
 

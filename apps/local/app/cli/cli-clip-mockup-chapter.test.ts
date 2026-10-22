@@ -393,6 +393,23 @@ describe("cvm clip-mockup-chapter: off the local machine", () => {
     expect(chapterOf(r.stdout).archived).toBe(true);
   });
 
+  it("delete takes many ids in one call: NDJSON of the archived rows, all or none", async () => {
+    const a = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
+    const b = chapterOf((await add(s.standaloneActiveId, "Two")).stdout);
+
+    const bad = await run(["clip-mockup-chapter", "delete", a.id, "nope"]);
+    expect(bad.exitCode).toBe(2);
+    expect(await list(s.standaloneActiveId)).toHaveLength(2);
+
+    const r = await run(["clip-mockup-chapter", "delete", a.id, b.id]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(ndjson(r.stdout)).toMatchObject([
+      { id: a.id, archived: true },
+      { id: b.id, archived: true },
+    ]);
+    expect(await list(s.standaloneActiveId)).toEqual([]);
+  });
+
   it("a deleted Chapter never appears in list or get again", async () => {
     const created = chapterOf((await add(s.standaloneActiveId, "One")).stdout);
     const before = await run(["clip-mockup-chapter", "get", created.id]);

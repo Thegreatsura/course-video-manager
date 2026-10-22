@@ -150,7 +150,9 @@ describe("listClipMockupsByVideoId", () => {
       const kept = yield* createOne("video-1", "Mine", "a.png");
       const gone = yield* createOne("video-1", "Deleted", "b.png");
       yield* createOne("video-2", "Theirs", "c.png");
-      yield* ops.deleteClipMockup(gone.id);
+      expect(yield* ops.archiveClipMockups([gone.id])).toMatchObject([
+        { id: gone.id, archived: true },
+      ]);
 
       const rows = yield* ops.listClipMockupsByVideoId("video-1");
       expect(rows.map((r) => r.id)).toEqual([kept.id]);

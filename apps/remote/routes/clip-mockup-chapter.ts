@@ -71,10 +71,10 @@ export const clipMockupChapterRoutes = (runtime: RemoteRuntime) =>
       )
     )
     .post(
-      "/archiveClipMockupChapter",
+      "/archiveClipMockupChapters",
       forward(
         runtime,
         ClipMockupChapterOperationsService,
-        "archiveClipMockupChapter"
+        "archiveClipMockupChapters"
       )
     );

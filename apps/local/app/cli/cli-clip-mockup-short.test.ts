@@ -20,11 +20,7 @@ import {
   seedWrite,
   type RunResult,
 } from "./cli-write-test-harness";
-import {
-  addArgv,
-  updateArgv,
-  voiceQueueLayer,
-} from "./cli-clip-mockup-test-harness";
+import { addArgv, updateArgv } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
 // cvm clip-mockup on a SHORT: the composed 1080x1920 frame, and the order
@@ -68,11 +64,7 @@ const originalLocalMachine = process.env[LOCAL_MACHINE_ENV_KEY];
 
 beforeAll(async () => {
   testDb = (await createTestDb()).testDb;
-  const layer = Layer.mergeAll(
-    buildWriteLayer(testDb),
-    fakeFrameCapture,
-    voiceQueueLayer(testDb)
-  );
+  const layer = Layer.mergeAll(buildWriteLayer(testDb), fakeFrameCapture);
   run = async (argv) => {
     const out = makeTestCliOutput();
     const exitCode = await Effect.runPromise(
@@ -259,6 +251,17 @@ describe("cvm clip-mockup on a Short", () => {
       codeB!.id,
       codeA!.id,
     ]);
+
+    // The Camera moment may go in the same call as every Code moment left.
+    const all = await run([
+      "clip-mockup",
+      "delete",
+      camera!.id,
+      codeA!.id,
+      codeB!.id,
+    ]);
+    expect(all.exitCode, all.stderr).toBe(0);
+    expect(await list(short.id)).toEqual([]);
   });
 
   it("update redraws a Code frame in the Short layout, and refuses a picture for the Camera", async () => {

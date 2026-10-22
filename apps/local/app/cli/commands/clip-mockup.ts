@@ -24,7 +24,6 @@ import {
   emitObject,
   notFound,
   parseError,
-  rejectBothFlags,
   type ParseError,
 } from "@/cli/helpers";
 import {
@@ -48,7 +47,13 @@ import {
   updateFrameSpec,
 } from "./clip-mockup.short-guard";
 import { captureCmd } from "./clip-mockup.capture";
-import { queueClipMockupVoices, withVoiceDuration } from "./clip-mockup.voice";
+import {
+  requireActiveClipMockup,
+  requireActiveVideo,
+  resolveDeleteTargets,
+  resolveTargetClipMockup,
+} from "./clip-mockup.targets";
+import { nudgeVoiceJob, withVoiceDuration } from "./clip-mockup.voice";
 import {
   HELP,
   ADD_HELP,
@@ -131,6 +136,7 @@ const withChaptersOption = Options.boolean("with-chapters").pipe(
 );
 
 const optionalIdArg = entityIdArg("clip-mockup").pipe(Args.optional);
+/** `get` and `delete`: any number of bare ids, one call. */
 const idsArg = entityIdArg("clip-mockup").pipe(Args.repeated);
 
 // ---------------------------------------------------------------------------
@@ -150,23 +156,6 @@ const requireLocalFrameStore = requireLocalMachine(
   NEEDS_CLIP_MOCKUP_DIRECTORY
 );
 
-/**
- * Frames hang off a Video's `lineageId`, not its id — resolve one to the
- * other, refusing archived videos the way every other noun refuses archived
- * rows.
- */
-const requireActiveVideo = (id: string) =>
-  Effect.gen(function* () {
-    const svc = yield* VideoOperationsService;
-    const row = yield* svc
-      .getVideoDeepById(id)
-      .pipe(Effect.catchTag("NotFoundError", () => notFound("video", id)));
-    if (row.archived) {
-      return yield* notFound("video", id);
-    }
-    return row;
-  });
-
 /** A path escaping the Video's frame directory is bad input, not a missing file. */
 const asParseError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.mapError(
@@ -176,88 +165,6 @@ const asParseError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         ? parseError(`${e.path}: ${e.message}`, "clipMockup")
         : (e as Exclude<E, InvalidClipMockupPathError>)
   );
-
-/** The row must exist and be active. */
-const requireActiveClipMockup = (id: string) =>
-  Effect.gen(function* () {
-    const svc = yield* ClipMockupOperationsService;
-    const row = yield* svc
-      .getClipMockupById(id)
-      .pipe(Effect.catchTag("NotFoundError", () => notFound("clipMockup", id)));
-    if (row.archived) {
-      return yield* notFound("clipMockup", id);
-    }
-    return row;
-  });
-
-/**
- * Find the ONE Clip Mockup a write verb is aimed at, from either form of
- * address: the bare `<id>` an agent reads out of `list`, or `--video <id> --at
- * <position>`, the number a human reads off the screen while watching the
- * Animatic ("number 14 is too dense"). Positions count from 1 and are exactly
- * the order `list` and the player show, because both read this same sorted
- * list.
- *
- * Every write verb goes through here so the two forms can never drift apart,
- * and so "both at once" and "off the end of the list" are one message each.
- * An out-of-range position is INVALID INPUT, not a not-found: the position is
- * only meaningful against a list whose length the caller can be told.
- */
-const resolveTargetClipMockup = (params: {
-  readonly id: Option.Option<string>;
-  readonly video: Option.Option<string>;
-  readonly at: Option.Option<number>;
-}) =>
-  Effect.gen(function* () {
-    const id = Option.getOrUndefined(params.id);
-    const video = Option.getOrUndefined(params.video);
-    const at = Option.getOrUndefined(params.at);
-
-    yield* rejectBothFlags({
-      a: id,
-      b: at,
-      flags: ["<id>", "--at"],
-      entity: "clipMockup",
-    });
-
-    if (id !== undefined) {
-      if (video !== undefined) {
-        return yield* parseError(
-          "--video only names the list --at counts in, so it cannot be combined with a bare <id>",
-          "clipMockup"
-        );
-      }
-      return yield* requireActiveClipMockup(id);
-    }
-
-    if (at === undefined) {
-      return yield* parseError(
-        "address the Clip Mockup with a bare <id> or with --video <id> --at <position>",
-        "clipMockup"
-      );
-    }
-    if (video === undefined) {
-      return yield* parseError(
-        "--at <position> needs --video <id> to count the position in",
-        "clipMockup"
-      );
-    }
-
-    const videoRow = yield* requireActiveVideo(video);
-    const svc = yield* ClipMockupOperationsService;
-    const rows = yield* svc.listClipMockupsByVideoId(videoRow.id);
-    const row = at >= 1 ? rows[at - 1] : undefined;
-
-    if (row === undefined) {
-      return yield* parseError(
-        rows.length === 0
-          ? `--at ${at} is out of range: video ${video} has 0 Clip Mockups`
-          : `--at ${at} is out of range: video ${video} has ${rows.length} Clip Mockups, so positions run 1-${rows.length}`,
-        "clipMockup"
-      );
-    }
-    return row;
-  });
 
 /**
  * A Clip Mockup row as every verb here prints it: its files as absolute paths
@@ -386,8 +293,10 @@ const addCmd = Command.make(
         };
       });
 
+      // The same request queues the rows' voice Job; the Sidecar is only
+      // asked to look now.
       const created = yield* svc.createClipMockups(row.id, batch);
-      yield* queueClipMockupVoices(
+      yield* nudgeVoiceJob(
         created.flatMap((r) => (r.type === "clipMockup" ? [r] : []))
       );
       yield* emitNdjson(
@@ -435,7 +344,7 @@ const getCmd = Command.make("get", { ids: idsArg }, ({ ids }) =>
       Effect.gen(function* () {
         const known = lineageOf.get(videoId);
         if (known !== undefined) return known;
-        const video = yield* videos.getVideoDeepById(videoId);
+        const video = yield* videos.getVideoRowById(videoId);
         lineageOf.set(videoId, video.lineageId);
         return video.lineageId;
       });
@@ -527,10 +436,9 @@ const updateCmd = Command.make(
         requeueVoice: true,
       }));
 
+      // The same request re-queues every voice left pending.
       const updated = yield* svc.updateClipMockups(edits);
-      yield* queueClipMockupVoices(
-        updated.filter((r) => r.voiceStatus === "pending")
-      );
+      yield* nudgeVoiceJob(updated);
       yield* emitNdjson(
         updated.map((r) => present(lineageOf.get(r.videoId)!, r))
       );
@@ -576,21 +484,32 @@ const moveCmd = Command.make(
 
 const deleteCmd = Command.make(
   "delete",
-  { id: optionalIdArg, video: videoAddressOption, at: atOption },
-  ({ id, video: videoRef, at }) =>
+  { ids: idsArg, video: videoAddressOption, at: atOption },
+  ({ ids, video: videoRef, at }) =>
     Effect.gen(function* () {
       yield* requireLocalFrameStore;
       const video = Option.fromNullable(yield* optionalDraftId(videoRef));
-      const row = yield* resolveTargetClipMockup({ id, video, at });
+      const rows = yield* resolveDeleteTargets({ ids, video, at });
+      yield* requireDeleteKeepsShortOrder(rows);
       const svc = yield* ClipMockupOperationsService;
-      yield* requireDeleteKeepsShortOrder(row);
-      yield* svc.deleteClipMockup(row.id);
-      const archived = yield* svc
-        .getClipMockupById(row.id)
+      // ONE write for the whole batch, and it answers with the archived rows.
+      const archived = (yield* svc
+        .archiveClipMockups(rows.map((r) => r.id))
         .pipe(
-          Effect.catchTag("NotFoundError", () => notFound("clipMockup", row.id))
-        );
-      yield* emitObject(withVoiceDuration(archived));
+          Effect.catchTag("NotFoundError", (e) =>
+            notFound(
+              "clipMockup",
+              (e.params as { id?: string }).id ?? rows[0]!.id
+            )
+          )
+        )).map(withVoiceDuration);
+      // One Clip Mockup asked for prints one object, as it always did; more
+      // print NDJSON, one archived row per line, as `get` does.
+      if (ids.length <= 1) {
+        yield* emitObject(archived[0]);
+      } else {
+        yield* emitNdjson(archived);
+      }
     })
 ).pipe(Command.withDescription(detail(DELETE_HELP)));
 

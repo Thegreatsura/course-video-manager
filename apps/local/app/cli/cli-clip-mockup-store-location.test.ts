@@ -28,11 +28,7 @@ import {
   type RunResult,
   type WriteSeed,
 } from "./cli-write-test-harness";
-import {
-  addArgv,
-  updateArgv,
-  voiceQueueLayer,
-} from "./cli-clip-mockup-test-harness";
+import { addArgv, updateArgv } from "./cli-clip-mockup-test-harness";
 
 // ===========================================================================
 // WHICH DIRECTORY A CLIP MOCKUP FRAME LANDS IN
@@ -142,11 +138,7 @@ beforeAll(async () => {
 
   const result = await createTestDb();
   testDb = result.testDb;
-  const layer = Layer.mergeAll(
-    buildWriteLayer(testDb),
-    fakeFrameCapture,
-    voiceQueueLayer(testDb)
-  );
+  const layer = Layer.mergeAll(buildWriteLayer(testDb), fakeFrameCapture);
   run = async (argv) => {
     const out = makeTestCliOutput();
     const exitCode = await Effect.runPromise(
@@ -297,13 +289,7 @@ describe("cvm clip-mockup with STORAGE_ROOTS only in the repo .env", () => {
         ])
       ).pipe(
         Effect.provide(out.layer),
-        Effect.provide(
-          Layer.mergeAll(
-            buildWriteLayer(testDb),
-            broken,
-            voiceQueueLayer(testDb)
-          )
-        )
+        Effect.provide(Layer.mergeAll(buildWriteLayer(testDb), broken))
       )
     );
 

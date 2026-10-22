@@ -1,5 +1,6 @@
 import { PUBLISH_INTERRUPTED_MESSAGE } from "@/features/jobs/job-wire";
 import type { LaneName } from "./lanes";
+import { CLIP_MOCKUP_VOICE_POLICY as CORE_CLIP_MOCKUP_VOICE_POLICY } from "@cvm/core/features/clip-mockups/voice-status";
 
 /**
  * How many times each kind of job runs before it fails, and which lane it
@@ -243,12 +244,12 @@ export const STORAGE_DELETE_POLICY = {
  * repeats nothing that already landed. 3 attempts, the Upload Manager's
  * ordinary count, then the Clip Mockups it holds are marked `failed`; the
  * author's `cvm clip-mockup update` queues them again. Not a posting kind,
- * and safe to put back after a deliberate stop.
+ * and safe to put back after a deliberate stop. DEFINED IN `@cvm/core`
+ * (`voice-status.ts`), because the API queues this Job itself, in the same
+ * request that writes the rows; this is the Sidecar's view of the same one.
  */
-export const CLIP_MOCKUP_VOICE_POLICY = {
-  lane: "default",
-  maxAttempts: 3,
-} as const satisfies RetryingJobPolicy;
+export const CLIP_MOCKUP_VOICE_POLICY =
+  CORE_CLIP_MOCKUP_VOICE_POLICY satisfies RetryingJobPolicy;
 
 /**
  * The Upload Manager types that post to an outside service: each must be a

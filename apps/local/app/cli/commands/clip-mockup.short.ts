@@ -102,13 +102,18 @@ export const shortMoveProblem = (
 };
 
 /**
- * `delete`: the Short's Clip Mockups in order, and the one going. The Camera
- * moment goes last, or the next Code moment would open the Short.
+ * `delete`: the Short's Clip Mockups in order, and the ones going. The Camera
+ * moment goes last — with every Code moment left, or after them — or the
+ * next Code moment would open the Short.
  */
 export const shortDeleteProblem = (
   mockupIds: ReadonlyArray<string>,
-  deletedId: string
-): string | undefined =>
-  mockupIds[0] === deletedId && mockupIds.length > 1
-    ? `Clip Mockup ${deletedId} is this Short's Camera moment; deleting it would leave a Code moment first. Change its "say" with 'update', or delete the ${mockupIds.length - 1} after it first (${SHORT_ORDER})`
-    : undefined;
+  deletedIds: ReadonlyArray<string>
+): string | undefined => {
+  const camera = mockupIds[0];
+  if (camera === undefined || !deletedIds.includes(camera)) return undefined;
+  const left = mockupIds.filter((id) => !deletedIds.includes(id)).length;
+  return left === 0
+    ? undefined
+    : `Clip Mockup ${camera} is this Short's Camera moment; deleting it would leave a Code moment first. Change its "say" with 'update', or delete the ${left} after it too, in the same call or first (${SHORT_ORDER})`;
+};

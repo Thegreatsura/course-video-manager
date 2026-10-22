@@ -25,12 +25,15 @@ const refuse = (problem: string | undefined) =>
     ? Effect.void
     : Effect.fail(parseError(problem, "clipMockup"));
 
-/** A Clip Mockup's Video's format, read even when the Video is archived. */
+/**
+ * A Clip Mockup's Video's format, read even when the Video is archived. The
+ * bare Video row: its Lesson, Section and repo are no use here.
+ */
 const isShortVideo = (videoId: string) =>
   Effect.gen(function* () {
     const svc = yield* VideoOperationsService;
     const row = yield* svc
-      .getVideoDeepById(videoId)
+      .getVideoRowById(videoId)
       .pipe(Effect.catchTag("NotFoundError", () => notFound("video", videoId)));
     return row.format === "short";
   });
@@ -107,12 +110,25 @@ export const requireMoveKeepsShortOrder = (
     yield* refuse(shortMoveProblem(items, row.id, beforeId));
   });
 
-/** `delete`: a Short's Camera moment goes last. */
-export const requireDeleteKeepsShortOrder = (row: {
-  readonly id: string;
-  readonly videoId: string;
-}) =>
-  Effect.gen(function* () {
-    if (!(yield* isShortVideo(row.videoId))) return;
-    yield* refuse(shortDeleteProblem(yield* shortOrderOf(row.videoId), row.id));
-  });
+/**
+ * `delete`, of one Clip Mockup or many, from one Video or several: a Short's
+ * Camera moment goes last — in the same call as every Code moment left, or
+ * after them. Each Video's format is read once.
+ */
+export const requireDeleteKeepsShortOrder = (
+  rows: ReadonlyArray<{ readonly id: string; readonly videoId: string }>
+) =>
+  Effect.forEach(
+    [...Map.groupBy(rows, (r) => r.videoId)],
+    ([videoId, group]) =>
+      Effect.gen(function* () {
+        if (!(yield* isShortVideo(videoId))) return;
+        yield* refuse(
+          shortDeleteProblem(
+            yield* shortOrderOf(videoId),
+            group.map((r) => r.id)
+          )
+        );
+      }),
+    { discard: true }
+  );

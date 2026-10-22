@@ -15,7 +15,7 @@ Verbs (flags come BEFORE any positional <id> — a flag after it exits 3):
   get     <id…>                                    Read one or more back
   update  --clip-mockups-json <file>               Swap frames and/or lines
   move    <id> | --video <id> --at <n>             Reorder within the Video
-  delete  <id> | --video <id> --at <n>             Archive (delete) one
+  delete  <id…> | --video <id> --at <n>           Archive (delete) one or many
   capture <page.html>… [--sheet <sheet.png>] [--short]  Render pages to PNGs only — no row
 
 THE BATCH FILE. 'add' and 'update' take one input, --clip-mockups-json <file>
@@ -51,6 +51,8 @@ time and say how many are still pending.
 
 An 'update' entry, 'move' and 'delete' address a Clip Mockup by id or by
 Video + position (counting from 1, as 'list' and the player show it).
+'delete' takes MANY bare ids in one call — pass them all at once rather than
+calling it once per Clip Mockup.
 
 Exit codes: 2 not found; 3 invalid input (naming the entry); 4 a frame could
 not be made (_tag FrameCaptureError) — no row is written; 7 not the author's
@@ -277,26 +279,31 @@ Examples:
   cvm clip-mockup get cm_456
   cvm clip-mockup get cm_456 cm_789 | jq -r .imageFile`;
 
-export const DELETE_HELP = `WRITES. Delete (archive) a single Clip Mockup, addressed either by a bare
-<id> or by '--video <id> --at <position>'. For Clip Mockups,
-archived == deleted: it leaves the Animatic and can never be listed or
-addressed again (there is no restore verb).
+export const DELETE_HELP = `WRITES. Delete (archive) Clip Mockups: any number of bare ids in ONE call,
+or the one at '--video <id> --at <position>'. Deleting many? Pass every id to
+one 'delete' — it is one write however many there are, and all of them are
+archived or none is. For Clip Mockups, archived == deleted: they leave the
+Animatic and can never be listed or addressed again (there is no restore verb).
 
 The PNG on disk is deliberately LEFT ALONE. The row is the state; an orphan
 frame in the Clip Mockup directory costs nothing and is never served.
 
 On a SHORT, the Camera moment (Clip Mockup 1) is deleted last: while any Code
-moment follows it, deleting it is invalid input (exit 3), because the next
-one would open the Short. Change its line with 'update' instead.
+moment would still follow it, deleting it is invalid input (exit 3), because
+the next one would open the Short. Delete it in the same call as every Code
+moment left, or change its line with 'update' instead.
 
 Immediate — there is no confirmation prompt (this is an agent-facing tool).
-Echoes the now-archived row ({ ..., archived: true }). An unknown or
-already-deleted id is a not-found (exit 2).
+Echoes the now-archived row ({ ..., archived: true }) for one id; for several,
+NDJSON, one archived row per line, in the order given (a repeated id once).
+An unknown or already-deleted id is a not-found (exit 2) naming it, and
+nothing is archived.
 
 ${ADDRESSING_HELP}
 
 Examples:
   cvm clip-mockup delete cm_456
+  cvm clip-mockup delete cm_456 cm_789 cm_790
   cvm clip-mockup delete --video vid_123 --at 14`;
 
 export const UPDATE_HELP = `WRITES. Change the frame, the line, or both, of any number of existing Clip
