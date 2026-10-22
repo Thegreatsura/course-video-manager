@@ -63,11 +63,6 @@
   ],
   "swallowed-catch": [
     {
-      "file": "apps/local/app/routes/_app.videos.$videoId.animatic.tsx",
-      "count": 2,
-      "reason": "A Clip Mockup file the loader cannot check renders as missing, which is what the Animatic shows for an absent frame or speech file."
-    },
-    {
       "file": "apps/local/app/routes/api.videos.$videoId.export-file-exists.ts",
       "count": 1,
       "reason": "UI status probe: any failure shows as 'not exported', the safe default for the indicator."
