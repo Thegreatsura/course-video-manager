@@ -1,5 +1,5 @@
 import { CliConfig, Command } from "@effect/cli";
-import { NodeContext } from "@effect/platform-node";
+import * as NodeContext from "@effect/platform-node/NodeContext";
 import { Effect } from "effect";
 import * as Console from "effect/Console";
 import { ensureApiConfig, ensureDatabaseUrl } from "./env";
