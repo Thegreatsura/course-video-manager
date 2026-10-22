@@ -1,6 +1,6 @@
 import { Args, Command, Options } from "@effect/cli";
 import { FileSystem } from "@effect/platform";
-import { NodeContext } from "@effect/platform-node";
+import * as NodeContext from "@effect/platform-node/NodeContext";
 import {
   Config,
   ConfigProvider,

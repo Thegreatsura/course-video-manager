@@ -39,6 +39,27 @@ describe("the cvm bundle", () => {
     }
   });
 
+  it("loads none of the heavy packages that no command needs", () => {
+    // Every external the bundle imports is loaded on every call, so an icon
+    // set or an HTTP client reached through a barrel import costs each `cvm`
+    // call ~50ms whether or not the command uses it.
+    const bundle = nodeFs.readFileSync(
+      nodePath.join(cacheDir, "cli.mjs"),
+      "utf8"
+    );
+    const externals = [
+      ...bundle.matchAll(/^(?:import|export|\}) [^;]*?from "([^"]+)"/gm),
+    ].map(([, specifier]) => specifier ?? "");
+    expect(externals.length).toBeGreaterThan(0);
+    for (const heavy of ["fast-check", "pure-rand", "undici", "lucide-react"]) {
+      expect(
+        externals.filter((specifier) =>
+          new RegExp(`(^|/)${heavy}(@|/|$)`).test(specifier)
+        )
+      ).toEqual([]);
+    }
+  });
+
   it("is stale when there is no bundle at all", async () => {
     const empty = nodeFs.mkdtempSync(
       nodePath.join(nodeOs.tmpdir(), "cvm-cli-")

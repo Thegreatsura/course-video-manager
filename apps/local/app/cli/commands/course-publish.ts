@@ -1,7 +1,7 @@
 import { Command, Options } from "@effect/cli";
 import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Layer, Logger, LogLevel } from "effect";
-import { NodeContext } from "@effect/platform-node";
+import * as NodeContext from "@effect/platform-node/NodeContext";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { GitWorktreeProbeLive } from "@cvm/core/git-worktree";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";

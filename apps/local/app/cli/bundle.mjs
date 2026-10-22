@@ -17,6 +17,9 @@
  *   - so are `effect`, `@effect/*` and `drizzle-orm`: they are hundreds of small modules each, and resolving and
  *     loading them file by file was most of what remained of the start-up
  *     after tsx was gone;
+ *   - so are `fast-check` and its `pure-rand`: `effect/Schema` imports them
+ *     for Arbitraries no command ever generates, and loading their ~240
+ *     files cost every call ~50ms, against a few ms of bundled code;
  *   - every other npm package stays EXTERNAL and loads from node_modules as it
  *     always did, so a native or heavy dependency never has to be bundleable;
  *   - `import.meta.url` / `.dirname` / `.filename` are rewritten per file to
@@ -51,8 +54,14 @@ const BUILD_INPUTS = [
   resolve(appRoot, "../../node_modules/.pnpm/lock.yaml"),
 ];
 
-/** npm packages that are bundled rather than left external. */
-const BUNDLED_PACKAGES = /^(effect|@effect\/[^/]+|drizzle-orm)(\/|$)/;
+/**
+ * npm packages that are bundled rather than left external. An external is
+ * loaded on every call whether or not the command needs it, so keep the CLI's
+ * import graph off heavy packages it never uses (an icon set, an HTTP client
+ * through a barrel import) rather than adding them here.
+ */
+const BUNDLED_PACKAGES =
+  /^(effect|@effect\/[^/]+|drizzle-orm|fast-check|pure-rand)(\/|$)/;
 
 const fingerprint = async (file) => {
   try {

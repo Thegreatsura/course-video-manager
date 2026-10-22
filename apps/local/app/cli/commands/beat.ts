@@ -9,7 +9,10 @@ import { Effect, Option } from "effect";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { PitchOperationsService } from "@/services/db-pitch-operations.server";
 import { LearningGoalOperationsService } from "@/services/db-learning-goal-operations.server";
-import { BEAT_KINDS, DEFAULT_BEAT_KIND } from "@/features/beats/beat-kinds";
+import {
+  BEAT_KINDS,
+  DEFAULT_BEAT_KIND,
+} from "@cvm/core/features/beats/beat-kinds";
 import {
   detail,
   emitNdjson,

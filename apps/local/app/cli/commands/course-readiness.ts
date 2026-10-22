@@ -1,7 +1,7 @@
 import { Command, Options } from "@effect/cli";
 import { entityIdArg } from "../entity-id";
 import { ConfigProvider, Effect, Option } from "effect";
-import { NodeContext } from "@effect/platform-node";
+import * as NodeContext from "@effect/platform-node/NodeContext";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import {
   PUBLISH_BLOCKING_LISTS,
