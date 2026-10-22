@@ -197,6 +197,52 @@ export function locateClipMockupFile(
   );
 }
 
+/**
+ * Every file in a Video's Clip Mockup directory, across ALL Storage Roots,
+ * as the relative paths a row stores — one directory listing per root.
+ *
+ * FOR THE ANIMATIC PAGE, which asks "is this file there?" of every frame and
+ * every WAV on every two-second poll. Asked one file at a time
+ * ({@link clipMockupFileExists}) that is a realpath, an exists per root and a
+ * stat for EACH file, synchronously, and on Matt's drvfs Storage Roots every
+ * one of them is a round trip to Windows: sixty Clip Mockups took longer than
+ * the poll interval (#2337). A listing answers the same question for the whole
+ * Video in one call per root.
+ *
+ * A Video directory missing on a root (not written there yet, or the drive is
+ * unplugged) lists as empty. Presence only: a file listed here is still served
+ * through {@link locateClipMockupFile}, whose symlink guard is unchanged.
+ */
+export const listClipMockupFiles = (
+  lineageId: string
+): Effect.Effect<ReadonlySet<string>, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const roots = yield* Effect.try(() => readStorageRootsSync()).pipe(
+      Effect.orElseSucceed(() => [] as readonly string[])
+    );
+    const dirs = roots.map((root) =>
+      path.join(root, STORAGE_FOLDERS.clipMockups, lineageId)
+    );
+    const listings = yield* Effect.forEach(
+      dirs,
+      (dir) =>
+        fs
+          .readDirectory(dir, { recursive: true })
+          .pipe(Effect.orElseSucceed(() => [] as string[])),
+      { concurrency: "unbounded" }
+    );
+    return new Set(
+      listings.flat().map((entry) => entry.split(path.sep).join("/"))
+    );
+  });
+
+/** Whether `relativePath` is in a {@link listClipMockupFiles} listing. */
+export const isListedClipMockupFile = (
+  listing: ReadonlySet<string>,
+  relativePath: string
+): boolean => listing.has(path.posix.normalize(relativePath));
+
 /** Whether a frame already exists at `relativePath`. */
 export const clipMockupFileExists = (lineageId: string, relativePath: string) =>
   Effect.gen(function* () {

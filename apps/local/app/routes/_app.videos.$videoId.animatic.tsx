@@ -6,8 +6,7 @@ import { ClipMockupCommentOperationsService } from "@/services/db-clip-mockup-co
 import { ClipMockupOperationsService } from "@/services/db-clip-mockup-operations.server";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
-import { clipMockupFileExists } from "@/services/clip-mockup-files";
-import { clipMockupSpeechOnsetSeconds } from "@/services/clip-mockup-speech-onset.server";
+import { readAnimaticClipMockupFiles } from "@/services/animatic-clip-mockup-files.server";
 import {
   clipMockupAudioUrl,
   clipMockupFrameUrl,
@@ -70,56 +69,25 @@ export const loader = makeLoader({
       const commentRows =
         yield* commentOps.listClipMockupCommentsByVideoId(videoId);
 
-      // Every file is checked HERE, once, before anything plays. A frame or a
-      // WAV the row names but the disk does not have has to be reported as
+      // Every file is checked HERE, before anything plays. A frame or a WAV
+      // the row names but the disk does not have has to be reported as
       // missing — a Clip Mockup that silently plays as a black rectangle reads
       // as a bad frame rather than as a broken file, and the author would go
-      // looking in the wrong place.
-      const mockups: AnimaticClipMockup[] = yield* Effect.all(
-        rows.map((row, index) =>
-          Effect.gen(function* () {
-            const imageExists = yield* clipMockupFileExists(
-              video.lineageId,
-              row.imagePath
-            ).pipe(Effect.catchAll(() => Effect.succeed(false)));
-
-            // No `audioPath` means the voice is not made yet — as missing as
-            // a WAV that is not on disk.
-            const audioExists =
-              row.audioPath === null
-                ? false
-                : yield* clipMockupFileExists(
-                    video.lineageId,
-                    row.audioPath
-                  ).pipe(Effect.catchAll(() => Effect.succeed(false)));
-
-            // Where the voice starts inside its WAV, past Kokoro's padding,
-            // so the player can start it there (#2265).
-            const speechStartSeconds =
-              row.audioPath === null || !audioExists
-                ? 0
-                : yield* clipMockupSpeechOnsetSeconds(
-                    video.lineageId,
-                    row.audioPath
-                  );
-
-            return {
-              id: row.id,
-              line: row.line,
-              position: index + 1,
-              durationSeconds: row.durationSeconds,
-              voiceStatus: row.voiceStatus,
-              voiceError: row.voiceError,
-              order: row.order,
-              imageUrl: clipMockupFrameUrl(row.id),
-              audioUrl: clipMockupAudioUrl(row.id),
-              imageMissing: !imageExists,
-              audioMissing: !audioExists,
-              speechStartSeconds,
-            } satisfies AnimaticClipMockup;
-          })
-        )
-      );
+      // looking in the wrong place. Checked against one directory listing per
+      // Storage Root, not a stat per file: this loader is polled (#2337).
+      const files = yield* readAnimaticClipMockupFiles(video.lineageId, rows);
+      const mockups: AnimaticClipMockup[] = rows.map((row, index) => ({
+        id: row.id,
+        line: row.line,
+        position: index + 1,
+        durationSeconds: row.durationSeconds,
+        voiceStatus: row.voiceStatus,
+        voiceError: row.voiceError,
+        order: row.order,
+        imageUrl: clipMockupFrameUrl(row.id),
+        audioUrl: clipMockupAudioUrl(row.id),
+        ...files[index]!,
+      }));
 
       const sectionLessons = yield* loadSectionLessons(videoId);
 
