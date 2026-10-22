@@ -8,8 +8,8 @@
  * - `ready` — the voice is on disk: `audioPath` and `durationSeconds` are set.
  * - `failed` — making the voice did not finish; `voiceError` says why.
  *
- * `cvm clip-mockup add` and `update` write a new line `pending` and queue a
- * `clip-mockup-voice` Job (`CLIP_MOCKUP_VOICE_JOB_KIND`), which the Sidecar
+ * `cvm clip-mockup add` and `update` write a new line `pending`, and the same
+ * write queues a `clip-mockup-voice` Job (`CLIP_MOCKUP_VOICE_JOB_KIND`), which the Sidecar
  * runs: it makes the voice and sets `ready`, or `failed` once its attempts are
  * spent. Until then the line's run time is a guess from its words
  * (`estimate-spoken-seconds.ts`).
@@ -24,6 +24,18 @@ export type ClipMockupVoiceStatus = (typeof CLIP_MOCKUP_VOICE_STATUSES)[number];
 
 /** The kind of the Job that makes a Clip Mockup's voice (`sidecar/kinds/clip-mockup-voice.ts`). */
 export const CLIP_MOCKUP_VOICE_JOB_KIND = "clip-mockup-voice";
+
+/**
+ * Where a `clip-mockup-voice` Job runs and how many times: the Sidecar's
+ * `default` lane, 3 attempts (why: `sidecar/retry-policy.ts`). Here, not in
+ * the Sidecar, because the API queues the Job in the same request that
+ * writes the rows (`createClipMockups`, `updateClipMockups`), and the
+ * Sidecar's registry reads the same value.
+ */
+export const CLIP_MOCKUP_VOICE_POLICY = {
+  lane: "default",
+  maxAttempts: 3,
+} as const;
 
 /**
  * The Job Event a `clip-mockup-voice` run appends once it has read its rows:

@@ -7,6 +7,15 @@ import { generateNKeysBetween } from "fractional-indexing";
 import { orderKeyBeforeItem } from "../lib/sort-by-order.js";
 import { listAnimaticOrder, lockAnimatic } from "./db-animatic-order.server.js";
 import { transactionalizeWrites } from "./with-db-transaction.server.js";
+import { createEnqueueJobOperations } from "./db-job-enqueue.server.js";
+import {
+  CLIP_MOCKUP_VOICE_JOB_KIND,
+  CLIP_MOCKUP_VOICE_POLICY,
+} from "../features/clip-mockups/voice-status.js";
+import {
+  liveVoiceJobCovers,
+  voiceJobRequests,
+} from "../features/clip-mockups/voice-job-cover.js";
 
 /**
  * Row-level operations for Clip Mockups — one still image and one spoken line
@@ -26,6 +35,11 @@ import { transactionalizeWrites } from "./with-db-transaction.server.js";
  * against `listAnimaticOrder` — the merged, sorted list of both nouns — not
  * against this table, and under `lockAnimatic`, so two writers on one Video
  * can never compute the same key.
+ *
+ * THE VOICE JOB IS QUEUED HERE, in the same transaction as the rows it
+ * voices: `createClipMockups` and `updateClipMockups` each queue one
+ * `clip-mockup-voice` Job per Video for their `pending` Clip Mockups, so a
+ * caller makes one request and nothing else opens a connection to queue it.
  */
 
 /**
@@ -126,6 +140,52 @@ const createClipMockupOperations = (db: Database) => {
         );
 
   /**
+   * The Clip Mockups with these ids, archived or not — the caller decides
+   * what an archived one means. Missing ids are simply absent.
+   */
+  const getClipMockupsByIds = (ids: ReadonlyArray<string>) =>
+    ids.length === 0
+      ? Effect.succeed([] as ClipMockupRow[])
+      : makeDbCall(() =>
+          db.query.clipMockups.findMany({
+            where: inArray(clipMockups.id, [...ids]),
+          })
+        );
+
+  /**
+   * Queue the voice of every `pending` Clip Mockup named: one
+   * `clip-mockup-voice` Job per Video, keyed by each row's line. A row whose
+   * line a live Job will already voice queues nothing (`liveVoiceJobCovers`),
+   * so a picture-only update of a row being voiced adds no Job. The Sidecar
+   * finds the Job on its next poll; the CLI nudges it to look at once.
+   */
+  const queueVoices = (rows: ReadonlyArray<ClipMockupRow>) =>
+    Effect.forEach(
+      voiceJobRequests(rows.filter((r) => r.voiceStatus === "pending")),
+      (request) =>
+        createEnqueueJobOperations(db)
+          .enqueueJob({
+            id: null,
+            kind: CLIP_MOCKUP_VOICE_JOB_KIND,
+            title: request.title,
+            lane: CLIP_MOCKUP_VOICE_POLICY.lane,
+            params: request.params,
+            maxAttempts: CLIP_MOCKUP_VOICE_POLICY.maxAttempts,
+            dependsOn: null,
+            subject: request.subject,
+            coveredBy: (live) => liveVoiceJobCovers(request.params, live),
+          })
+          .pipe(
+            // Only a caller-chosen Job id can be taken; this one is fresh.
+            Effect.catchTag(
+              "JobIdTakenError",
+              (e) => new UnknownDBServiceError({ cause: e })
+            )
+          ),
+      { discard: true }
+    );
+
+  /**
    * What addresses each Video's Exported Animatic — its Clip Mockups' two
    * file names and measured length, in Animatic order — across several
    * Videos in one read. The export garbage collector asks it for a whole
@@ -187,8 +247,9 @@ const createClipMockupOperations = (db: Database) => {
    *
    * Every Clip Mockup is born with its voice `pending`: no `audioPath`, no
    * `durationSeconds`. This service never synthesises anything and never
-   * opens a file; the `clip-mockup-voice` Job the caller enqueues voices the
-   * line and records it (`ClipMockupVoiceOperationsService`).
+   * opens a file; it queues the `clip-mockup-voice` Job, in the same
+   * transaction, that voices the line and records it
+   * (`ClipMockupVoiceOperationsService`).
    */
   const createClipMockups = Effect.fn("createClipMockups")(function* (
     videoId: string,
@@ -238,6 +299,9 @@ const createClipMockupOperations = (db: Database) => {
       if (!row) return yield* noRowReturned("clip mockup");
       created.push({ type: "clipMockup", ...row });
     }
+    yield* queueVoices(
+      created.flatMap((r) => (r.type === "clipMockup" ? [r] : []))
+    );
     return created;
   });
 
@@ -248,8 +312,9 @@ const createClipMockupOperations = (db: Database) => {
    *
    * New WORDS drop the old speech (`say`): the row goes back to a `pending`
    * voice with no `audioPath` and no `durationSeconds`, so it can never claim a
-   * run time measured off words it no longer says. The caller enqueues the
-   * `clip-mockup-voice` Job that voices the new line. A new frame is only a new `imagePath` — the caller that owns
+   * run time measured off words it no longer says. The `clip-mockup-voice`
+   * Job that voices it is queued in the same transaction, for every row left
+   * `pending`. A new frame is only a new `imagePath` — the caller that owns
    * the disk writes the PNG first, and the old one is left where it is, because
    * an orphan PNG costs nothing.
    *
@@ -258,7 +323,7 @@ const createClipMockupOperations = (db: Database) => {
   const updateClipMockups = Effect.fn("updateClipMockups")(function* (
     edits: ReadonlyArray<ClipMockupEdit>
   ) {
-    const updated = [];
+    const updated: ClipMockupRow[] = [];
     for (const edit of edits) {
       const current = yield* requireClipMockup(edit.id);
       if (current.archived) {
@@ -285,13 +350,21 @@ const createClipMockupOperations = (db: Database) => {
           : {}),
       };
       // A re-queue of a voice that is already ready changes nothing.
-      if (Object.keys(changes).length > 0) {
-        yield* makeDbCall(() =>
-          db.update(clipMockups).set(changes).where(eq(clipMockups.id, edit.id))
-        );
+      if (Object.keys(changes).length === 0) {
+        updated.push(current);
+        continue;
       }
-      updated.push(yield* requireClipMockup(edit.id));
+      const [row] = yield* makeDbCall(() =>
+        db
+          .update(clipMockups)
+          .set(changes)
+          .where(eq(clipMockups.id, edit.id))
+          .returning()
+      );
+      if (!row) return yield* noRowReturned("clip mockup");
+      updated.push(row);
     }
+    yield* queueVoices(updated);
     return updated;
   });
 
@@ -331,20 +404,37 @@ const createClipMockupOperations = (db: Database) => {
   });
 
   /**
-   * Archive a Clip Mockup. As with a Beat, archived == deleted: it leaves the
-   * Animatic and there is no restore verb. The PNG on disk is deliberately
-   * left alone — the row is the state, and an orphan frame costs nothing.
+   * Archive several Clip Mockups in ONE statement — all of them, or none —
+   * and return the archived rows, in the order asked (a repeated id once). As
+   * with a Beat, archived == deleted: they leave the Animatic and there is no
+   * restore verb. An id that is missing or already archived is a
+   * NotFoundError naming it, and nothing is archived. One id is a batch of
+   * one. The PNGs on disk are deliberately left alone — the row is the state,
+   * and an orphan frame costs nothing.
    */
-  const deleteClipMockup = Effect.fn("deleteClipMockup")(function* (
-    id: string
+  const archiveClipMockups = Effect.fn("archiveClipMockups")(function* (
+    ids: ReadonlyArray<string>
   ) {
-    yield* makeDbCall(() =>
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return [] as ClipMockupRow[];
+    const rows = yield* makeDbCall(() =>
       db
         .update(clipMockups)
         .set({ archived: true })
-        .where(eq(clipMockups.id, id))
+        .where(
+          and(inArray(clipMockups.id, unique), eq(clipMockups.archived, false))
+        )
+        .returning()
     );
-    return { success: true as const };
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const missing = unique.find((id) => !byId.has(id));
+    if (missing !== undefined) {
+      return yield* new NotFoundError({
+        type: "clipMockup",
+        params: { id: missing },
+      });
+    }
+    return unique.map((id) => byId.get(id)!);
   });
 
   return {
@@ -352,10 +442,11 @@ const createClipMockupOperations = (db: Database) => {
     listClipMockupDurationsByVideoIds,
     listAnimaticExportRowsByVideoIds,
     getClipMockupById: requireClipMockup,
+    getClipMockupsByIds,
     createClipMockups,
     updateClipMockups,
     moveClipMockup,
-    deleteClipMockup,
+    archiveClipMockups,
   };
 };
 
@@ -370,6 +461,7 @@ export class ClipMockupOperationsService extends Effect.Service<ClipMockupOperat
         "createClipMockups",
         "updateClipMockups",
         "moveClipMockup",
+        "archiveClipMockups",
       ]);
     }),
   }

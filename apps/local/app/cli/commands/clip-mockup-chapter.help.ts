@@ -55,8 +55,9 @@ Verbs:
   clip-mockup-chapter update --title <t> <id> rename a Chapter
   clip-mockup-chapter move                    slide a Chapter; an anchor is
       [--before | --after <anchor>] <id>      REQUIRED, unlike clip-mockup move
-  clip-mockup-chapter delete <id>             archive it; its Clip Mockups are
-                                              absorbed into the Chapter above
+  clip-mockup-chapter delete <id...>          archive one or many in one call;
+                                              their Clip Mockups are absorbed
+                                              into the Chapter above
 
 All writes are immediate — no confirmation, no dry-run (agent-facing tool). Read
 an Animatic's lines with 'cvm clip-mockup list --video <id>'.`;
@@ -158,7 +159,9 @@ Examples:
   cvm clip-mockup-chapter move --before cmc_def cmc_abc
   cvm clip-mockup-chapter move --after cm_ghi cmc_abc`;
 
-export const DELETE_HELP = `Archive (soft-delete) a Clip Mockup Chapter. Takes a BARE ID.
+export const DELETE_HELP = `Archive (soft-delete) Clip Mockup Chapters. Takes one or more BARE IDs —
+deleting many? Pass every id to one 'delete': it is one write, and all of
+them are archived or none is.
 
 Sets 'archived: true' and writes NOTHING ELSE. Archived Chapters are ALWAYS
 filtered out — no --archived flag, no 'get' access, no restore verb.
@@ -169,9 +172,12 @@ into the Chapter above, or is left unchaptered if the deleted Chapter was the
 first. A following 'cvm clip-mockup list --video <id>' still shows all of them.
 An organisational verb can never destroy hours of frames and speech.
 
-An unknown or archived id is a not-found (exit 2). Echoes the archived row.
+An unknown or archived id is a not-found (exit 2) naming it, and nothing is
+archived. Echoes the archived row for one id; for several, NDJSON, one
+archived row per line, in the order given.
 Immediate, no confirmation (agent-facing tool). No Draft Course Version is
 needed, and the verb is not local-only.
 
-Example:
-  cvm clip-mockup-chapter delete cmc_abc`;
+Examples:
+  cvm clip-mockup-chapter delete cmc_abc
+  cvm clip-mockup-chapter delete cmc_abc cmc_def`;

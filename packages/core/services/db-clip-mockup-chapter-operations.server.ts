@@ -174,19 +174,41 @@ const createClipMockupChapterOperations = (db: Database) => {
   });
 
   /**
-   * Archive a divider. It touches NOTHING else: its Clip Mockups are absorbed
-   * into the Chapter above by the implicit-membership rule, with no write, so
-   * an organisational verb can never destroy hours of frames and speech.
+   * Archive several dividers in ONE statement — all of them, or none — and
+   * return the archived rows, in the order asked (a repeated id once). It
+   * touches NOTHING else: their Clip Mockups are absorbed into the Chapter
+   * above by the implicit-membership rule, with no write, so an
+   * organisational verb can never destroy hours of frames and speech. An id
+   * that is missing or already archived is a NotFoundError naming it, and
+   * nothing is archived. One id is a batch of one.
    */
-  const archiveClipMockupChapter = Effect.fn("archiveClipMockupChapter")(
-    function* (id: string) {
-      yield* makeDbCall(() =>
+  const archiveClipMockupChapters = Effect.fn("archiveClipMockupChapters")(
+    function* (ids: ReadonlyArray<string>) {
+      const unique = [...new Set(ids)];
+      if (unique.length === 0) {
+        return [] as (typeof clipMockupChapters.$inferSelect)[];
+      }
+      const rows = yield* makeDbCall(() =>
         db
           .update(clipMockupChapters)
           .set({ archived: true })
-          .where(eq(clipMockupChapters.id, id))
+          .where(
+            and(
+              inArray(clipMockupChapters.id, unique),
+              eq(clipMockupChapters.archived, false)
+            )
+          )
+          .returning()
       );
-      return { success: true as const };
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const missing = unique.find((id) => !byId.has(id));
+      if (missing !== undefined) {
+        return yield* new NotFoundError({
+          type: "clipMockupChapter",
+          params: { clipMockupChapterId: missing },
+        });
+      }
+      return unique.map((id) => byId.get(id)!);
     }
   );
 
@@ -198,7 +220,7 @@ const createClipMockupChapterOperations = (db: Database) => {
     createClipMockupChapterAtItem,
     updateClipMockupChapter,
     moveClipMockupChapterToPosition,
-    archiveClipMockupChapter,
+    archiveClipMockupChapters,
   };
 };
 
@@ -212,6 +234,7 @@ export class ClipMockupChapterOperationsService extends Effect.Service<ClipMocku
       return transactionalizeWrites(db, createClipMockupChapterOperations, [
         "createClipMockupChapterAtItem",
         "moveClipMockupChapterToPosition",
+        "archiveClipMockupChapters",
       ]);
     }),
   }

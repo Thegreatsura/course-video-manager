@@ -282,6 +282,9 @@ const clipMockupService = (client: RpcClient) =>
     getClipMockupById: rpcMethod((json) =>
       client.rpc["clip-mockup"].getClipMockupById.$post({ json })
     ),
+    getClipMockupsByIds: rpcMethod((json) =>
+      client.rpc["clip-mockup"].getClipMockupsByIds.$post({ json })
+    ),
     createClipMockups: rpcMethod((json) =>
       client.rpc["clip-mockup"].createClipMockups.$post({ json })
     ),
@@ -291,8 +294,8 @@ const clipMockupService = (client: RpcClient) =>
     moveClipMockup: rpcMethod((json) =>
       client.rpc["clip-mockup"].moveClipMockup.$post({ json })
     ),
-    deleteClipMockup: rpcMethod((json) =>
-      client.rpc["clip-mockup"].deleteClipMockup.$post({ json })
+    archiveClipMockups: rpcMethod((json) =>
+      client.rpc["clip-mockup"].archiveClipMockups.$post({ json })
     ),
   }) satisfies RemoteService<ClipMockupOperationsService>;
 
@@ -328,8 +331,10 @@ const clipMockupChapterService = (client: RpcClient) =>
         json,
       })
     ),
-    archiveClipMockupChapter: rpcMethod((json) =>
-      client.rpc["clip-mockup-chapter"].archiveClipMockupChapter.$post({ json })
+    archiveClipMockupChapters: rpcMethod((json) =>
+      client.rpc["clip-mockup-chapter"].archiveClipMockupChapters.$post({
+        json,
+      })
     ),
   }) satisfies RemoteService<ClipMockupChapterOperationsService>;
 

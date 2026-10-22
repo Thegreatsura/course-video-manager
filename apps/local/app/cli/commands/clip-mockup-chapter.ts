@@ -75,17 +75,22 @@ const afterOpt = entityIdOption("after", [
 
 const idArg = entityIdArg("clip-mockup-chapter");
 const idArgs = entityIdArg("clip-mockup-chapter").pipe(Args.repeated);
+/** `delete`: one id or many, one call. */
+const deleteIdArgs = entityIdArg("clip-mockup-chapter").pipe(Args.atLeast(1));
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/** The Video must exist and be active before its Animatic is read or written. */
+/**
+ * The Video must exist and be active before its Animatic is read or written.
+ * The bare Video row: only its id and `archived` are read.
+ */
 const requireActiveVideo = (id: string) =>
   Effect.gen(function* () {
     const svc = yield* VideoOperationsService;
     const row = yield* svc
-      .getVideoDeepById(id)
+      .getVideoRowById(id)
       .pipe(Effect.catchTag("NotFoundError", () => notFound("video", id)));
     if (row.archived) {
       return yield* notFound("video", id);
@@ -219,18 +224,33 @@ const moveCmd = Command.make(
 ).pipe(Command.withDescription(detail(MOVE_HELP)));
 
 /**
- * `delete` archives the divider and writes NOTHING else. Its Clip Mockups are
- * absorbed into the Chapter above — or left unchaptered, if it was the first —
- * by the implicit-membership rule, so no row is re-parented and no frame or WAV
- * is lost. Archived means deleted; there is no restore verb.
+ * `delete` archives the dividers named — one or many, in ONE write that also
+ * checks each is there and active, so a bad id archives nothing — and writes
+ * NOTHING else. Their Clip Mockups are absorbed into the Chapter above — or
+ * left unchaptered, if it was the first — by the implicit-membership rule, so
+ * no row is re-parented and no frame or WAV is lost. Archived means deleted;
+ * there is no restore verb.
  */
-const deleteCmd = Command.make("delete", { id: idArg }, ({ id }) =>
+const deleteCmd = Command.make("delete", { ids: deleteIdArgs }, ({ ids }) =>
   Effect.gen(function* () {
-    yield* requireActiveChapter(id);
     const svc = yield* ClipMockupChapterOperationsService;
-    yield* svc.archiveClipMockupChapter(id);
-    const [archived] = yield* svc.getClipMockupChaptersByIds([id]);
-    yield* emitObject(archived);
+    const archived = yield* svc
+      .archiveClipMockupChapters(ids)
+      .pipe(
+        Effect.catchTag("NotFoundError", (e) =>
+          notFound(
+            "clipMockupChapter",
+            (e.params as { clipMockupChapterId?: string })
+              .clipMockupChapterId ?? ids[0]
+          )
+        )
+      );
+    // One id prints one object, as it always did; more print NDJSON.
+    if (ids.length === 1) {
+      yield* emitObject(archived[0]);
+    } else {
+      yield* emitNdjson(archived);
+    }
   })
 ).pipe(Command.withDescription(detail(DELETE_HELP)));
 

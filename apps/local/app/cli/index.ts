@@ -166,7 +166,8 @@ WRITES
                                      only; never published). update/move/delete
                                      take a bare <id> OR --video <id> --at <n>,
                                      the 1-based position the author reads off
-                                     'list' and the player. 'capture' renders
+                                     'list' and the player; 'delete' takes
+                                     MANY ids in one call. 'capture' renders
                                      pages to PNGs and writes no row
     clip-mockup-chapter
             add/update/move/delete   name the dividers that group a Video's
@@ -177,7 +178,8 @@ WRITES
                                      needs NO Draft Version, unlike
                                      'clip-mockup' and 'chapter'. Addressed by
                                      BARE <id> only: there is no --at, and
-                                     'move' REQUIRES an anchor
+                                     'move' REQUIRES an anchor; 'delete' takes
+                                     MANY ids in one call
     clip-mockup-comment
             add/update/delete        pin the author's notes to one Clip Mockup
                                      or one Clip Mockup Chapter.

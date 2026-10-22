@@ -417,6 +417,27 @@ describe("cvm clip-mockup", () => {
     ]);
   });
 
+  it("delete takes many ids in one call: NDJSON of the archived rows, all or none", async () => {
+    const a = await add(s.standaloneActiveId, "One");
+    const b = await add(s.standaloneActiveId, "Two");
+    const c = await add(s.standaloneActiveId, "Three");
+
+    // One bad id archives nothing, and names the id.
+    const bad = await run(["clip-mockup", "delete", a.id, "nope", b.id]);
+    expect(bad.exitCode).toBe(2);
+    expect(failureOf(bad)._tag).toBe("NotFoundError");
+    expect(bad.stderr).toContain("nope");
+    expect(await list(s.standaloneActiveId)).toHaveLength(3);
+
+    const r = await run(["clip-mockup", "delete", b.id, a.id]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(ndjson(r.stdout)).toMatchObject([
+      { id: b.id, archived: true },
+      { id: a.id, archived: true },
+    ]);
+    expect((await list(s.standaloneActiveId)).map((m) => m.id)).toEqual([c.id]);
+  });
+
   it("delete leaves the frame on disk — the row is the state", async () => {
     const created = await add(s.standaloneActiveId, "One");
     await run(["clip-mockup", "delete", created.id]);
