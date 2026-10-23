@@ -262,7 +262,7 @@ const relayPorts = (args: readonly string[]) =>
     ...args
       .join(" ")
       .matchAll(
-        /(?:\[f=(?:matroska|rawvideo)[^\]]*\]|^|\s)tcp:\/\/127\.0\.0\.1:(\d+)\?(?:timeout|listen)/g
+        /(?:\[f=(?:matroska|rawvideo)[^\]]*\]|^|\s)tcp:\/\/127\.0\.0\.1:(\d+)\?(?:timeout|listen|tcp_nodelay)/g
       ),
   ].map((m) => Number(m[1]));
 

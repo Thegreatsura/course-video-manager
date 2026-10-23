@@ -155,11 +155,11 @@ export const RELAY_FORMAT = {
 } as const;
 
 /**
- * A raw relay (#2207): loopback TCP to a consumer that listens on Windows
- * (the camera preview, or the take's writer), behind the same dropping,
- * retrying fifo as a preview feed. A consumer that is gone or stalls costs
- * only its own packets; the capture never waits on it, and the next
- * consumer on the port gets the relay from its next packet.
+ * A raw relay (#2207): loopback TCP to a consumer listening on Windows,
+ * behind the preview feeds' dropping, retrying fifo. A consumer gone or
+ * stalled costs only its own packets; the next on the port gets the next.
+ * The preview's socket times out after 2 s; the writer's never (#2344): it
+ * stalls at Record while NVENC opens, and a timeout cut it, ending the take.
  */
 const teeToRelay = (
   relay: keyof typeof RELAY_FORMAT,
@@ -168,7 +168,7 @@ const teeToRelay = (
 ) =>
   teeWith(
     queueSize,
-    `[f=${RELAY_FORMAT[relay]}:onfail=ignore]tcp://127.0.0.1:${port}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+    `[f=${RELAY_FORMAT[relay]}:onfail=ignore]tcp://127.0.0.1:${port}?${relay === "preview" ? "timeout=2000000&" : ""}tcp_nodelay=1|[f=null:use_fifo=0]-`
   );
 
 /** Where a camera capture's relays go: Windows loopback ports its consumers listen on. */

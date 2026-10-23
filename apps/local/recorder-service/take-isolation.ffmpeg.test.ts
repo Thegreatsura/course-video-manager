@@ -381,6 +381,39 @@ describe.skipIf(!hasFfmpeg)(
       }
     }, 30_000);
 
+    it("keeps the take running when the writer stalls for seconds at Record, as NVENC opening on a loaded machine stalls it", async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "take-"));
+      dirs.push(dir);
+      const { ports, capture } = await startCapture(dir);
+      const preview = await previewConsumer(ports.preview);
+      try {
+        let exitedAt = 0;
+        const { code, stopMs, writer } = await take({
+          dir,
+          writerPort: ports.writer,
+          during: async (w) => {
+            void w.exited.then(() => (exitedAt = Date.now()));
+            // Longer than the relay's buffers and the 2 s socket timeout
+            // the relay had, which closed it and so ended the take (#2344).
+            await new Promise((r) => setTimeout(r, 300));
+            w.child.kill("SIGSTOP");
+            await new Promise((r) => setTimeout(r, 4_000));
+            w.child.kill("SIGCONT");
+          },
+        });
+        expect(writer.stderr()).not.toMatch(/File ended prematurely/);
+        // The writer ran until Stop's `q`, not until the relay was cut.
+        expect(exitedAt).toBeGreaterThan(stopMs);
+        expect(code).toBe(0);
+        expect(capture.child.exitCode).toBeNull();
+        // Frames after the stall are in camera.mkv: the take went on.
+        const frames = frameHashes(path.join(dir, "camera.mkv"));
+        expect(frames.length).toBeGreaterThan(Math.floor(5 * FPS));
+      } finally {
+        preview.close();
+      }
+    }, 40_000);
+
     it("keeps the preview's frames coming, with no gap, when the writer dies mid-take", async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "take-"));
       dirs.push(dir);
