@@ -1,11 +1,5 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
-import { hasLocalStorage, useLocalStorage } from "@/hooks/use-local-storage";
-import { toast } from "@/components/ui/toast";
-import { useFetcher } from "react-router";
-import { UploadContext } from "@/features/upload-manager/upload-context";
-import { findVideoJobRow } from "@/features/jobs/jobs-selectors";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,19 +32,14 @@ import type { CourseStructure } from "@/components/video-context-panel";
 import type { SectionWithWordCount } from "@/features/article-writer/types";
 import { PostPageOverwriteDialog } from "./post-page-overwrite-dialog";
 import { ThumbnailSelector } from "./post-page-thumbnail-selector";
-import { findYouTubeMetadataProblem } from "@/lib/youtube-metadata";
-import { getAutoSelectThumbnailId } from "./auto-select-thumbnail";
 import {
-  findConvertibleAiHeroUrls,
-  hasAiHeroUrls,
-  replaceUrls,
-} from "./convert-short-links";
-
-const POST_TITLE_STORAGE_KEY = (videoId: string) => `post-title-${videoId}`;
-const POST_DESCRIPTION_STORAGE_KEY = (videoId: string) =>
-  `post-description-${videoId}`;
-const YOUTUBE_VIDEO_ID_STORAGE_KEY = (videoId: string) =>
-  `youtube-video-id-${videoId}`;
+  selectCanPost,
+  selectGenerateRequest,
+  selectMetadataProblem,
+  selectUploadDisplay,
+  type postPageReducer,
+} from "./post-page-reducer";
+import { usePostPageReducer } from "./use-post-page-reducer";
 
 export function PostPage({
   videoId,
@@ -75,308 +64,40 @@ export function PostPage({
   chapters: SectionWithWordCount[];
   pitchYoutubeTitle: string | null;
 }) {
-  const [title, setTitle] = useLocalStorage(
-    POST_TITLE_STORAGE_KEY(videoId),
-    pitchYoutubeTitle ?? ""
-  );
-  const [description, setDescription] = useLocalStorage(
-    POST_DESCRIPTION_STORAGE_KEY(videoId)
-  );
-
-  // AI generation state
-  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
-  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
-
-  // Confirmation dialog state
-  const [confirmOverwriteField, setConfirmOverwriteField] = useState<
-    "title" | "description" | null
-  >(null);
-  const [pendingGeneratedText, setPendingGeneratedText] = useState<string>("");
-  const [currentFieldText, setCurrentFieldText] = useState<string>("");
-
-  // Visibility state
-  const [privacyStatus, setPrivacyStatus] = useState<"public" | "unlisted">(
-    "unlisted"
-  );
-
-  // Upload state from global context
   const {
-    jobs,
-    startUpload: globalStartUpload,
-    startExportUpload,
-  } = useContext(UploadContext);
+    state,
+    dispatch,
+    title,
+    description,
+    editTitle,
+    editDescription,
+    activeUpload,
+  } = usePostPageReducer({ videoId, thumbnails, pitchYoutubeTitle });
 
-  // This Video's YouTube upload: a posting Job the Sidecar runs.
-  const activeUpload = findVideoJobRow(jobs, videoId, "youtube");
+  const upload = selectUploadDisplay(state, activeUpload);
+  const metadataProblem = selectMetadataProblem(title, description);
+  const { generating, pendingOverwrite } = state.fields;
+  const isGeneratingTitle = generating?.field === "title";
+  const isGeneratingDescription = generating?.field === "description";
+  const { selectedThumbnailId, privacyStatus } = state;
+  const isCheckingExport = state.checkingExport !== null;
 
-  // Historical youtubeVideoId from localStorage (hydration-safe: read in useEffect)
-  const [storedYoutubeVideoId, setStoredYoutubeVideoId] = useState("");
-
-  // Load storedYoutubeVideoId from localStorage on mount
-  useEffect(() => {
-    if (hasLocalStorage()) {
-      const stored = localStorage.getItem(
-        YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId)
-      );
-      if (stored) {
-        setStoredYoutubeVideoId(stored);
-      }
-    }
-  }, [videoId]);
-
-  // Save youtubeVideoId to localStorage when upload succeeds in global context
-  useEffect(() => {
-    if (activeUpload?.status === "success" && activeUpload.youtubeVideoId) {
-      localStorage.setItem(
-        YOUTUBE_VIDEO_ID_STORAGE_KEY(videoId),
-        activeUpload.youtubeVideoId
-      );
-      setStoredYoutubeVideoId(activeUpload.youtubeVideoId);
-    }
-  }, [activeUpload, videoId]);
-
-  // Derive upload display state
-  const uploadStatus: "idle" | "uploading" | "success" | "error" = activeUpload
-    ? activeUpload.status === "retrying" || activeUpload.status === "waiting"
-      ? "uploading"
-      : activeUpload.status
-    : storedYoutubeVideoId
-      ? "success"
-      : "idle";
-  const uploadProgress = activeUpload?.progress ?? 0;
-  const uploadError = activeUpload?.errorMessage ?? "";
-  const youtubeVideoId = activeUpload?.youtubeVideoId ?? storedYoutubeVideoId;
-
-  const generateContent = async (
-    mode: "youtube-title" | "youtube-title-single" | "youtube-description"
-  ) => {
-    const transcriptEnabled =
-      chapters.length > 0 ? enabledSections.size > 0 : includeTranscript;
-
-    const response = await fetch(`/api/videos/${videoId}/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        enabledFiles: Array.from(enabledFiles),
-        includeTranscript: transcriptEnabled,
-        enabledSections: Array.from(enabledSections),
-        courseStructure:
-          includeCourseStructure && courseStructure
-            ? courseStructure
-            : undefined,
+  const generate = (field: postPageReducer.Field) =>
+    dispatch({
+      type: "generate-clicked",
+      field,
+      currentText: field === "title" ? title : description,
+      askToReplace: true,
+      request: selectGenerateRequest(field, {
+        videoId,
+        enabledFiles,
+        enabledSections,
+        includeTranscript,
+        hasChapters: chapters.length > 0,
+        courseStructure,
+        includeCourseStructure,
       }),
     });
-
-    if (!response.ok) {
-      throw new Error("Failed to generate content");
-    }
-
-    const result = await response.json();
-    return result.text as string;
-  };
-
-  const handleGenerateTitle = async () => {
-    setIsGeneratingTitle(true);
-    try {
-      const generatedText = await generateContent("youtube-title-single");
-      if (title.trim()) {
-        setCurrentFieldText(title);
-        setPendingGeneratedText(generatedText);
-        setConfirmOverwriteField("title");
-      } else {
-        setTitle(generatedText);
-      }
-    } catch (error) {
-      console.error("Failed to generate title:", error);
-    } finally {
-      setIsGeneratingTitle(false);
-    }
-  };
-
-  const handleGenerateDescription = async () => {
-    setIsGeneratingDescription(true);
-    try {
-      const generatedText = await generateContent("youtube-description");
-      if (description.trim()) {
-        setCurrentFieldText(description);
-        setPendingGeneratedText(generatedText);
-        setConfirmOverwriteField("description");
-      } else {
-        setDescription(generatedText);
-      }
-    } catch (error) {
-      console.error("Failed to generate description:", error);
-    } finally {
-      setIsGeneratingDescription(false);
-    }
-  };
-
-  const handleConfirmOverwrite = () => {
-    if (confirmOverwriteField === "title") {
-      setTitle(pendingGeneratedText);
-    } else if (confirmOverwriteField === "description") {
-      setDescription(pendingGeneratedText);
-    }
-    setConfirmOverwriteField(null);
-    setPendingGeneratedText("");
-    setCurrentFieldText("");
-  };
-
-  const handleCancelOverwrite = () => {
-    setConfirmOverwriteField(null);
-    setPendingGeneratedText("");
-    setCurrentFieldText("");
-  };
-
-  const handleCopyFromPitch = () => {
-    if (!pitchYoutubeTitle) return;
-
-    if (title.trim()) {
-      setCurrentFieldText(title);
-      setPendingGeneratedText(pitchYoutubeTitle);
-      setConfirmOverwriteField("title");
-    } else {
-      setTitle(pitchYoutubeTitle);
-    }
-  };
-
-  // What YouTube would refuse, named, so the upload is never queued with it.
-  // A blank title is not reported: the button is already off for it.
-  const metadataProblem = title.trim()
-    ? findYouTubeMetadataProblem({ title, description })
-    : null;
-
-  const [selectedThumbnailId, setSelectedThumbnailId] = useState<string | null>(
-    () => getAutoSelectThumbnailId(thumbnails)
-  );
-
-  const deleteThumbnailFetcher = useFetcher();
-
-  const handleDeleteThumbnail = (thumbnailId: string) => {
-    // The Thumbnail menu has already asked (useThumbnailMenu).
-    if (thumbnailId === selectedThumbnailId) {
-      setSelectedThumbnailId(null);
-    }
-    deleteThumbnailFetcher.submit(null, {
-      method: "post",
-      action: `/api/thumbnails/${thumbnailId}/delete`,
-    });
-  };
-
-  const [isCheckingExport, setIsCheckingExport] = useState(false);
-
-  const handleUpload = async () => {
-    if (
-      !title.trim() ||
-      !description.trim() ||
-      !selectedThumbnailId ||
-      metadataProblem
-    )
-      return;
-
-    setIsCheckingExport(true);
-    try {
-      const res = await fetch(`/api/videos/${videoId}/export-file-exists`);
-      const { exists } = await res.json();
-
-      if (exists) {
-        globalStartUpload(
-          videoId,
-          title,
-          description,
-          privacyStatus,
-          selectedThumbnailId
-        );
-        toast("Upload started", {
-          description: `"${title}" is uploading to YouTube`,
-        });
-      } else {
-        const exportId = startExportUpload(videoId, title);
-        globalStartUpload(
-          videoId,
-          title,
-          description,
-          privacyStatus,
-          selectedThumbnailId,
-          exportId
-        );
-        toast("Export + upload started", {
-          description: `"${title}" will export first, then upload to YouTube`,
-        });
-      }
-    } catch {
-      toast.error("Failed to check export status");
-    } finally {
-      setIsCheckingExport(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    const response = await fetch("/api/auth/google/disconnect", {
-      method: "POST",
-    });
-    if (response.ok) {
-      window.location.reload();
-    }
-  };
-
-  // Short link conversion state
-  const [isConvertingShortLinks, setIsConvertingShortLinks] = useState(false);
-
-  const handleConvertToShortLinks = async () => {
-    const convertibleUrls = findConvertibleAiHeroUrls(description);
-
-    if (!hasAiHeroUrls(description)) {
-      toast("No aihero.dev links found", {
-        description: "The description doesn't contain any aihero.dev URLs.",
-      });
-      return;
-    }
-
-    if (convertibleUrls.length === 0) {
-      toast("All links already converted", {
-        description: "All aihero.dev links are already short links.",
-      });
-      return;
-    }
-
-    setIsConvertingShortLinks(true);
-    try {
-      const replacements = new Map<string, string>();
-      for (const url of convertibleUrls) {
-        const response = await fetch("/api/shortlinks/find-or-create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url,
-            description: `YouTube (${title || "Untitled"})`,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to create short link");
-        }
-
-        const { shortLinkUrl } = await response.json();
-        replacements.set(url, shortLinkUrl);
-      }
-
-      setDescription(replaceUrls(description, replacements));
-      toast("Links converted", {
-        description: `Converted ${convertibleUrls.length} aihero.dev URL${convertibleUrls.length > 1 ? "s" : ""} to short links.`,
-      });
-    } catch (error) {
-      console.error("Failed to convert short links:", error);
-      toast.error("Failed to convert links", {
-        description:
-          error instanceof Error ? error.message : "An error occurred",
-      });
-    } finally {
-      setIsConvertingShortLinks(false);
-    }
-  };
 
   if (!isYoutubeAuthenticated) {
     return (
@@ -415,7 +136,14 @@ export function PostPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleCopyFromPitch}
+                  onClick={() =>
+                    pitchYoutubeTitle &&
+                    dispatch({
+                      type: "copy-from-pitch-clicked",
+                      pitchTitle: pitchYoutubeTitle,
+                      currentTitle: title,
+                    })
+                  }
                 >
                   <CopyIcon className="h-4 w-4" />
                   Copy from Pitch
@@ -424,8 +152,8 @@ export function PostPage({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleGenerateTitle}
-                disabled={isGeneratingTitle || isGeneratingDescription}
+                onClick={() => generate("title")}
+                disabled={generating !== null}
               >
                 {isGeneratingTitle ? (
                   <>
@@ -444,7 +172,7 @@ export function PostPage({
           <Textarea
             id="title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => editTitle(e.target.value)}
             placeholder="Enter video title..."
             className="text-lg min-h-[60px] resize-y"
           />
@@ -461,8 +189,8 @@ export function PostPage({
             <Button
               variant="outline"
               size="sm"
-              onClick={handleGenerateDescription}
-              disabled={isGeneratingTitle || isGeneratingDescription}
+              onClick={() => generate("description")}
+              disabled={generating !== null}
             >
               {isGeneratingDescription ? (
                 <>
@@ -480,7 +208,7 @@ export function PostPage({
           <Textarea
             id="description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => editDescription(e.target.value)}
             placeholder="Enter video description..."
             className="min-h-[300px] resize-y"
           />
@@ -492,10 +220,16 @@ export function PostPage({
           <Button
             variant="outline"
             size="sm"
-            onClick={handleConvertToShortLinks}
-            disabled={isConvertingShortLinks || !description.trim()}
+            onClick={() =>
+              dispatch({
+                type: "convert-short-links-clicked",
+                title,
+                description,
+              })
+            }
+            disabled={!!state.convertingShortLinks || !description.trim()}
           >
-            {isConvertingShortLinks ? (
+            {state.convertingShortLinks ? (
               <>
                 <Loader2Icon className="h-4 w-4 animate-spin" />
                 Converting...
@@ -514,8 +248,11 @@ export function PostPage({
           <Label htmlFor="visibility">Visibility</Label>
           <Select
             value={privacyStatus}
-            onValueChange={(value: "public" | "unlisted") =>
-              setPrivacyStatus(value)
+            onValueChange={(value: postPageReducer.PrivacyStatus) =>
+              dispatch({
+                type: "privacy-status-selected",
+                privacyStatus: value,
+              })
             }
           >
             <SelectTrigger id="visibility">
@@ -533,21 +270,24 @@ export function PostPage({
           videoId={videoId}
           thumbnails={thumbnails}
           selectedThumbnailId={selectedThumbnailId}
-          onSelectThumbnail={setSelectedThumbnailId}
-          onDeleteThumbnail={handleDeleteThumbnail}
+          onSelectThumbnail={(thumbnailId) =>
+            dispatch({ type: "thumbnail-selected", thumbnailId })
+          }
+          onDeleteThumbnail={(thumbnailId) =>
+            dispatch({ type: "thumbnail-delete-clicked", thumbnailId })
+          }
         />
 
         {/* Upload section */}
         <div className="space-y-3">
           <Button
-            onClick={handleUpload}
+            onClick={() =>
+              dispatch({ type: "post-clicked", videoId, title, description })
+            }
             disabled={
               !!activeUpload ||
               isCheckingExport ||
-              !title.trim() ||
-              !description.trim() ||
-              !selectedThumbnailId ||
-              !!metadataProblem
+              !selectCanPost(state, title, description)
             }
             className="w-full"
             size="lg"
@@ -557,7 +297,7 @@ export function PostPage({
                 <Loader2Icon className="h-4 w-4 animate-spin" />
                 Checking export...
               </>
-            ) : uploadStatus === "uploading" ? (
+            ) : upload.status === "uploading" ? (
               <>
                 <Loader2Icon className="h-4 w-4 animate-spin" />
                 Uploading...
@@ -570,7 +310,7 @@ export function PostPage({
             )}
           </Button>
 
-          {!selectedThumbnailId && uploadStatus !== "uploading" && (
+          {!selectedThumbnailId && upload.status !== "uploading" && (
             <p className="text-sm text-muted-foreground text-center">
               {thumbnails.length === 0
                 ? "Create and select a thumbnail before uploading."
@@ -579,22 +319,22 @@ export function PostPage({
           )}
 
           {/* Progress bar */}
-          {uploadStatus === "uploading" && (
+          {upload.status === "uploading" && (
             <div className="space-y-1">
               <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-primary h-full rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
+                  style={{ width: `${upload.progress}%` }}
                 />
               </div>
               <p className="text-sm text-muted-foreground text-center">
-                {uploadProgress}%
+                {upload.progress}%
               </p>
             </div>
           )}
 
           {/* Success state */}
-          {uploadStatus === "success" && (
+          {upload.status === "success" && (
             <div className="flex flex-col items-center gap-2 text-green-500">
               <div className="flex items-center gap-2">
                 <CheckCircle2Icon className="h-4 w-4" />
@@ -602,9 +342,9 @@ export function PostPage({
                   Video uploaded successfully as {privacyStatus}
                 </span>
               </div>
-              {youtubeVideoId && (
+              {upload.youtubeVideoId && (
                 <a
-                  href={`https://studio.youtube.com/video/${youtubeVideoId}/edit`}
+                  href={`https://studio.youtube.com/video/${upload.youtubeVideoId}/edit`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-blue-500 hover:underline"
@@ -616,10 +356,10 @@ export function PostPage({
           )}
 
           {/* Error state */}
-          {uploadStatus === "error" && (
+          {upload.status === "error" && (
             <div className="flex items-center gap-2 text-destructive justify-center">
               <XCircleIcon className="h-4 w-4" />
-              <span className="text-sm">{uploadError}</span>
+              <span className="text-sm">{upload.error}</span>
             </div>
           )}
         </div>
@@ -630,7 +370,7 @@ export function PostPage({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
-            onClick={handleDisconnect}
+            onClick={() => dispatch({ type: "disconnect-clicked" })}
           >
             <UnplugIcon className="h-4 w-4" />
             Disconnect YouTube Account
@@ -639,11 +379,11 @@ export function PostPage({
       </div>
 
       <PostPageOverwriteDialog
-        field={confirmOverwriteField}
-        currentText={currentFieldText}
-        pendingText={pendingGeneratedText}
-        onConfirm={handleConfirmOverwrite}
-        onCancel={handleCancelOverwrite}
+        field={pendingOverwrite?.field ?? null}
+        currentText={pendingOverwrite?.currentText ?? ""}
+        pendingText={pendingOverwrite?.pendingText ?? ""}
+        onConfirm={() => dispatch({ type: "overwrite-confirmed" })}
+        onCancel={() => dispatch({ type: "overwrite-cancelled" })}
       />
     </>
   );

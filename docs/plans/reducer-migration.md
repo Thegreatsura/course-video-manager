@@ -230,7 +230,7 @@ stay in `decidePublishAction`. The route has no `useState` left, so its
   pressed the reducer ignores form edits and a second press, where before
   only the disabled controls stopped them.
 
-## Batch 5 — Posting pages, part 1: post page and Shorts modal (score 142)
+## Batch 5 — Posting pages, part 1: post page and Shorts modal (score 142) — Done
 
 `features/video-posting/post-page.tsx` has 10 `useState`s:
 `isGeneratingTitle`/`Description`, `confirmOverwriteField`,
@@ -244,6 +244,47 @@ becomes a reducer of its own.
 - Keep `lib/youtube-metadata.test.ts`, which tests the pure YouTube metadata
   validation both pages and the posting Jobs share. The reducer calls it; it
   does not move into the reducer.
+
+**Done.** `features/video-posting/generated-field-reducer.ts` is the shared
+flow: `generate-clicked` (with the field's text as it was, and whether to ask
+before replacing it) declares `generate-text`; `text-generated` declares
+`apply-field-text` straight away for a blank field, or holds the new text for
+Replace / Cancel (`overwrite-confirmed` / `overwrite-cancelled`). One field
+generates at a time. `text-offered` is the same ask-then-apply for a ready-made
+text (the Pitch's YouTube title). It does not own the field's text: the pages
+keep that per Video in `localStorage`, as before, so events carry it and
+`apply-field-text` changes it. A surface reducer keeps it as `fields` and hands
+it those six actions.
+
+`post-page-reducer.ts` owns the rest of the post page: visibility, the
+selected Thumbnail (deleting the selected one clears it), the remembered
+YouTube id (`video-opened` declares `read-stored-youtube-video-id`; the jobs
+list's `youtube-upload-succeeded` declares `store-youtube-video-id`), Post
+(`check-export`, then `start-youtube-upload` with `exportFirst` when there is
+no Exported Video), and short links (`create-short-links`, whose
+`short-links-created` rewrites the description as it was when pressed). The
+upload's display, the metadata problem, whether Post can be pressed and the
+generation request are selectors. `shorts-posting-reducer.ts` owns the
+Short's title (renamed on blur; a refused rename puts the saved title back),
+the once-per-mount description generated on open, where the Short was already
+posted, Post Short (`check-vertical-export`, then one `start-short-posting`
+naming the vertical export, YouTube and Buffer as data) and short links. The
+Short and the posting mode come in on the events, because the portrait studio
+keeps the modal mounted while they change. The runners are
+`use-post-page-reducer.ts` and `use-shorts-posting-reducer.ts`, sharing
+`posting-requests.ts` for the generate and short-link calls. Both files are
+at zero `useState` (10 and 5 before) and neither has an effect that sets
+state, so their four allowlist entries are gone (`use-state` 7 → 5,
+`effect-sets-state` 9 → 7).
+
+- Tests: `apps/local` went from 4825 to 4839 (+8 scenarios in
+  `post-page-reducer.test.ts`, +6 in `shorts-posting-reducer.test.ts`). No
+  component test rendered either file, so none could be deleted;
+  `lib/youtube-metadata.test.ts` and `convert-short-links.test.ts` stay.
+- One guard is new but changes nothing a user can reach: a second Post or
+  Convert press while the first is in flight is ignored, where before only the
+  disabled button stopped it. A posted-status answer for a Short the modal is
+  no longer open on is ignored, as the old effect's cancel flag did.
 
 ## Batch 6 — Small modals and forms (score 126)
 
