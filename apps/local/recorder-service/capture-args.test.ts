@@ -47,8 +47,10 @@ describe("the camera capture (#2207)", () => {
     expect(args).toContain(
       `[f=rawvideo:onfail=ignore]tcp://127.0.0.1:${relays.preview}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
     );
+    // The writer's has no socket timeout: a writer stalled at Record (NVENC
+    // opening) must lose frames, never the relay and so the take (#2344).
     expect(args).toContain(
-      `[f=matroska:onfail=ignore]tcp://127.0.0.1:${relays.writer}?timeout=2000000&tcp_nodelay=1|[f=null:use_fifo=0]-`
+      `[f=matroska:onfail=ignore]tcp://127.0.0.1:${relays.writer}?tcp_nodelay=1|[f=null:use_fifo=0]-`
     );
     expect(args.match(/drop_pkts_on_overflow=1/g)).toHaveLength(2);
   });

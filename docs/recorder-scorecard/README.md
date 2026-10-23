@@ -10,7 +10,7 @@ pnpm recorder:scorecard --quick    # 60 s take, 10 cycles, 3 preview kills, ~6 m
   [--only <scenario,…>]  # idle, longTake, previewKill, eventLogFailure, cycles, crash
 ```
 
-The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baseline/`](./baseline/): a full run on commit `d843a057` (2026-10-15). To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
+The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baseline/`](./baseline/): a full run on 2026-10-23, `f148af49` plus the writer relay fix (#2344). To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
 
 ## What it runs
 

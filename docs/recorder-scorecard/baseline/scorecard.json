@@ -1,138 +1,523 @@
 {
   "run": {
-    "startedAt": "2026-10-15T12:09:49.425Z",
+    "startedAt": "2026-10-23T15:54:08.616Z",
     "mode": "full",
-    "commit": "d843a057",
+    "commit": "f148af49",
     "longTakeSeconds": 600,
     "cycles": 50,
-    "wallSeconds": 1328.074271339,
+    "wallSeconds": 1302.623622497,
     "notes": [
       "Footage is written to WSL's own disk (ffmpeg.exe reaches it over \\\\wsl.localhost), never to a Windows drive; Matt's footage goes to a Windows drive, so finalisation times here include the WSL file share.",
       "A/V drift is measured over the long take (600 s, real time), first minute against last.",
-      "Every Windows process ran through the Windows guard (Idle priority, cores 6-9), checked every 5 s; timer-resolution.ps1 and raise-priority.ps1 were not run (they raise the capture, writer and screen recorder to High).",
-      "GPU before the service started: 9% busy, NVENC 13%, 1602 MiB."
+      "Every Windows process ran through the Windows guard (Idle priority, cores 6-9), checked every 5 s; timer-resolution.ps1 was not run (it raises the capture, writer and screen recorder to High).",
+      "GPU before the service started: 0% busy, NVENC 0%, 1290 MiB."
     ]
   },
   "ranking": [
-    "screen_dropped_frames",
-    "camera_dropped_frames",
-    "preview_kill_take_frames_lost",
     "preview_camera_take_p95_ms",
-    "screen_repeated_per_100",
-    "camera_repeated_per_100",
-    "preview_camera_idle_p50_ms",
-    "preview_camera_take_p50_ms",
-    "preview_kill_pass_rate_pct",
     "preview_screen_take_p95_ms",
-    "optimistic_clip_delay_ms",
+    "preview_camera_take_p50_ms",
+    "preview_screen_take_p50_ms",
+    "av_drift_ms",
+    "preview_camera_idle_p50_ms",
     "record_to_first_screen_frame_ms",
     "preview_screen_idle_p50_ms",
+    "optimistic_clip_delay_ms",
+    "screen_lag_drift_ms",
     "cpu_recording_pct",
-    "av_drift_ms",
-    "preview_screen_take_p50_ms",
     "nvenc_recording_delta_pct",
-    "preview_kill_take_ok",
     "cycles_stop_final_p90_ms",
     "stop_to_files_final_ms",
+    "cpu_idle_pct",
     "preview_gap_on_stop_ms",
-    "crash_seconds_lost",
     "screen_preview_gap_on_record_ms",
-    "cpu_idle_pct"
+    "crash_seconds_lost",
+    "preview_gap_on_record_ms"
   ],
-  "unmeasured": [
-    "disk_full"
-  ],
+  "unmeasured": ["disk_full"],
   "metrics": {
-    "record_ack_ms": {"value":32.34,"target":100,"obs":null,"bar":100,"status":"pass","gap":0,"vsObs":"unknown"},
-    "record_to_first_camera_frame_ms": {"value":-6,"target":100,"obs":null,"bar":100,"status":"pass","gap":0,"vsObs":"unknown"},
-    "record_to_first_mic_ms": {"value":19.27,"target":100,"obs":null,"bar":100,"status":"pass","gap":0,"vsObs":"unknown"},
-    "record_to_first_screen_frame_ms": {"value":280,"target":100,"obs":null,"bar":100,"status":"fail","gap":5.45,"vsObs":"unknown"},
-    "stop_to_open_ms": {"value":1.57,"target":500,"obs":null,"bar":500,"status":"pass","gap":0,"vsObs":"unknown"},
-    "stop_to_next_command_ms": {"value":2.51,"target":500,"obs":null,"bar":500,"status":"pass","gap":0,"vsObs":"unknown"},
-    "stop_to_files_final_ms": {"value":1028,"target":1000,"obs":null,"bar":1000,"status":"fail","gap":0.28,"vsObs":"unknown"},
-    "preview_camera_idle_p50_ms": {"value":241,"target":70,"obs":null,"bar":70,"status":"fail","gap":17.1,"vsObs":"unknown"},
-    "preview_camera_take_p50_ms": {"value":227,"target":70,"obs":null,"bar":70,"status":"fail","gap":15.7,"vsObs":"unknown"},
-    "preview_camera_take_p95_ms": {"value":341,"target":100,"obs":null,"bar":100,"status":"fail","gap":24.1,"vsObs":"unknown"},
-    "preview_screen_idle_p50_ms": {"value":112,"target":70,"obs":null,"bar":70,"status":"fail","gap":4.2,"vsObs":"unknown"},
-    "preview_screen_take_p50_ms": {"value":98,"target":70,"obs":89,"bar":70,"status":"fail","gap":2.8,"vsObs":"worse"},
-    "preview_screen_take_p95_ms": {"value":176,"target":100,"obs":111,"bar":100,"status":"fail","gap":7.6,"vsObs":"worse"},
-    "preview_gap_on_record_ms": {"value":91.62,"target":100,"obs":null,"bar":100,"status":"pass","gap":0,"vsObs":"unknown"},
-    "preview_gap_on_stop_ms": {"value":107,"target":100,"obs":null,"bar":100,"status":"fail","gap":0.22,"vsObs":"unknown"},
-    "screen_preview_gap_on_record_ms": {"value":105,"target":100,"obs":null,"bar":100,"status":"fail","gap":0.14,"vsObs":"unknown"},
-    "optimistic_clip_delay_ms": {"value":532,"target":250,"obs":null,"bar":250,"status":"fail","gap":5.65,"vsObs":"unknown"},
-    "clip_end_delay_ms": {"value":68.08,"target":250,"obs":null,"bar":250,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cpu_idle_pct": {"value":2.04,"target":2,"obs":null,"bar":2,"status":"fail","gap":0.08,"vsObs":"unknown"},
-    "cpu_recording_pct": {"value":2.27,"target":2,"obs":0.31,"bar":0.31,"status":"fail","gap":3.93,"vsObs":"worse"},
-    "memory_recording_mb": {"value":1130,"target":1500,"obs":null,"bar":1500,"status":"pass","gap":0,"vsObs":"unknown"},
-    "gpu_recording_delta_pct": {"value":30.4,"target":50,"obs":null,"bar":50,"status":"pass","gap":0,"vsObs":"unknown"},
-    "nvenc_recording_delta_pct": {"value":49.17,"target":45,"obs":42.7,"bar":42.7,"status":"fail","gap":1.29,"vsObs":"worse"},
-    "vram_recording_delta_mb": {"value":597,"target":1700,"obs":null,"bar":1700,"status":"pass","gap":0,"vsObs":"unknown"},
-    "camera_dropped_frames": {"value":799,"target":0,"obs":null,"bar":0,"status":"fail","gap":799,"vsObs":"unknown"},
-    "camera_repeated_per_100": {"value":2.08,"target":0.1,"obs":0.1,"bar":0.1,"status":"fail","gap":19.76,"vsObs":"worse"},
-    "screen_dropped_frames": {"value":4609,"target":0,"obs":null,"bar":0,"status":"fail","gap":4609,"vsObs":"unknown"},
-    "screen_repeated_per_100": {"value":2.42,"target":0.1,"obs":null,"bar":0.1,"status":"fail","gap":23.22,"vsObs":"unknown"},
-    "service_frames_lost": {"value":0,"target":0,"obs":null,"bar":0,"status":"pass","gap":0,"vsObs":"unknown"},
-    "service_screen_frames_lost": {"value":0,"target":0,"obs":null,"bar":0,"status":"pass","gap":0,"vsObs":"unknown"},
-    "av_drift_ms": {"value":18.38,"target":10,"obs":0.3,"bar":0.3,"status":"fail","gap":3.62,"vsObs":"worse"},
-    "screen_lag_drift_ms": {"value":9.33,"target":10,"obs":null,"bar":10,"status":"pass","gap":0,"vsObs":"unknown"},
-    "crash_files_playable": {"value":3,"target":3,"obs":null,"bar":3,"status":"pass","gap":0,"vsObs":"unknown"},
-    "crash_take_recovered": {"value":1,"target":1,"obs":null,"bar":1,"status":"pass","gap":0,"vsObs":"unknown"},
-    "crash_seconds_lost": {"value":1.11,"target":1,"obs":null,"bar":1,"status":"fail","gap":0.21,"vsObs":"unknown"},
-    "crash_recovery_ms": {"value":4597,"target":15000,"obs":null,"bar":15000,"status":"pass","gap":0,"vsObs":"unknown"},
-    "preview_kill_pass_rate_pct": {"value":0,"target":100,"obs":null,"bar":100,"status":"fail","gap":10,"vsObs":"unknown"},
-    "stop_capture_survival_pct": {"value":100,"target":100,"obs":null,"bar":100,"status":"pass","gap":0,"vsObs":"unknown"},
-    "capture_restarts_per_stop": {"value":0,"target":0,"obs":null,"bar":0,"status":"pass","gap":0,"vsObs":"unknown"},
-    "preview_kill_take_frames_lost": {"value":55,"target":0,"obs":null,"bar":0,"status":"fail","gap":55,"vsObs":"unknown"},
-    "preview_kill_take_ok": {"value":0,"target":1,"obs":null,"bar":1,"status":"fail","gap":1,"vsObs":"unknown"},
-    "preview_kill_recovery_ms": {"value":1778,"target":3000,"obs":null,"bar":3000,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cycles_failed": {"value":0,"target":0,"obs":null,"bar":0,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cycles_leaked_processes": {"value":0,"target":0,"obs":null,"bar":0,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cycles_memory_growth_mb": {"value":6.96,"target":20,"obs":null,"bar":20,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cycles_record_ack_p90_ms": {"value":31.82,"target":150,"obs":null,"bar":150,"status":"pass","gap":0,"vsObs":"unknown"},
-    "cycles_stop_final_p90_ms": {"value":1075,"target":1000,"obs":null,"bar":1000,"status":"fail","gap":0.75,"vsObs":"unknown"},
-    "event_log_failure_stops_cleanly": {"value":1,"target":1,"obs":null,"bar":1,"status":"pass","gap":0,"vsObs":"unknown"},
-    "disk_full": {"value":null,"target":1,"obs":null,"bar":1,"status":"unmeasured","gap":0,"vsObs":"unknown"}
+    "record_ack_ms": {
+      "value": 29.45,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "record_to_first_camera_frame_ms": {
+      "value": -41,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "record_to_first_mic_ms": {
+      "value": -48,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "record_to_first_screen_frame_ms": {
+      "value": 588,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "fail",
+      "gap": 14.79,
+      "vsObs": "unknown"
+    },
+    "stop_to_open_ms": {
+      "value": 1.46,
+      "target": 500,
+      "obs": null,
+      "bar": 500,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "stop_to_next_command_ms": {
+      "value": 2.25,
+      "target": 500,
+      "obs": null,
+      "bar": 500,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "stop_to_files_final_ms": {
+      "value": 1158,
+      "target": 1000,
+      "obs": null,
+      "bar": 1000,
+      "status": "fail",
+      "gap": 1.58,
+      "vsObs": "unknown"
+    },
+    "preview_camera_idle_p50_ms": {
+      "value": 311,
+      "target": 70,
+      "obs": null,
+      "bar": 70,
+      "status": "fail",
+      "gap": 24.1,
+      "vsObs": "unknown"
+    },
+    "preview_camera_take_p50_ms": {
+      "value": 415,
+      "target": 70,
+      "obs": null,
+      "bar": 70,
+      "status": "fail",
+      "gap": 34.5,
+      "vsObs": "unknown"
+    },
+    "preview_camera_take_p95_ms": {
+      "value": 688,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "fail",
+      "gap": 58.8,
+      "vsObs": "unknown"
+    },
+    "preview_screen_idle_p50_ms": {
+      "value": 201,
+      "target": 70,
+      "obs": null,
+      "bar": 70,
+      "status": "fail",
+      "gap": 13.1,
+      "vsObs": "unknown"
+    },
+    "preview_screen_take_p50_ms": {
+      "value": 363,
+      "target": 70,
+      "obs": 89,
+      "bar": 70,
+      "status": "fail",
+      "gap": 29.3,
+      "vsObs": "worse"
+    },
+    "preview_screen_take_p95_ms": {
+      "value": 533,
+      "target": 100,
+      "obs": 111,
+      "bar": 100,
+      "status": "fail",
+      "gap": 43.3,
+      "vsObs": "worse"
+    },
+    "preview_gap_on_record_ms": {
+      "value": 104,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "fail",
+      "gap": 0.13,
+      "vsObs": "unknown"
+    },
+    "preview_gap_on_stop_ms": {
+      "value": 128,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "fail",
+      "gap": 0.86,
+      "vsObs": "unknown"
+    },
+    "screen_preview_gap_on_record_ms": {
+      "value": 114,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "fail",
+      "gap": 0.42,
+      "vsObs": "unknown"
+    },
+    "optimistic_clip_delay_ms": {
+      "value": 851,
+      "target": 250,
+      "obs": null,
+      "bar": 250,
+      "status": "fail",
+      "gap": 12.03,
+      "vsObs": "unknown"
+    },
+    "clip_end_delay_ms": {
+      "value": 184,
+      "target": 250,
+      "obs": null,
+      "bar": 250,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cpu_idle_pct": {
+      "value": 2.6,
+      "target": 2,
+      "obs": null,
+      "bar": 2,
+      "status": "fail",
+      "gap": 1.2,
+      "vsObs": "unknown"
+    },
+    "cpu_recording_pct": {
+      "value": 2.39,
+      "target": 2,
+      "obs": 0.31,
+      "bar": 0.31,
+      "status": "fail",
+      "gap": 4.16,
+      "vsObs": "worse"
+    },
+    "memory_recording_mb": {
+      "value": 1175,
+      "target": 1500,
+      "obs": null,
+      "bar": 1500,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "gpu_recording_delta_pct": {
+      "value": 15.03,
+      "target": 50,
+      "obs": null,
+      "bar": 50,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "nvenc_recording_delta_pct": {
+      "value": 60.77,
+      "target": 45,
+      "obs": 42.7,
+      "bar": 42.7,
+      "status": "fail",
+      "gap": 3.61,
+      "vsObs": "worse"
+    },
+    "vram_recording_delta_mb": {
+      "value": 915,
+      "target": 1700,
+      "obs": null,
+      "bar": 1700,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "camera_dropped_frames": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "camera_repeated_per_100": {
+      "value": 0,
+      "target": 0.1,
+      "obs": 0.1,
+      "bar": 0.1,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "better-or-equal"
+    },
+    "screen_dropped_frames": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "screen_repeated_per_100": {
+      "value": 0,
+      "target": 0.1,
+      "obs": null,
+      "bar": 0.1,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "service_frames_lost": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "service_screen_frames_lost": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "av_drift_ms": {
+      "value": 122,
+      "target": 10,
+      "obs": 0.3,
+      "bar": 0.3,
+      "status": "fail",
+      "gap": 24.24,
+      "vsObs": "worse"
+    },
+    "screen_lag_drift_ms": {
+      "value": 64,
+      "target": 10,
+      "obs": null,
+      "bar": 10,
+      "status": "fail",
+      "gap": 10.8,
+      "vsObs": "unknown"
+    },
+    "crash_files_playable": {
+      "value": 3,
+      "target": 3,
+      "obs": null,
+      "bar": 3,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "crash_take_recovered": {
+      "value": 1,
+      "target": 1,
+      "obs": null,
+      "bar": 1,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "crash_seconds_lost": {
+      "value": 1.13,
+      "target": 1,
+      "obs": null,
+      "bar": 1,
+      "status": "fail",
+      "gap": 0.26,
+      "vsObs": "unknown"
+    },
+    "crash_recovery_ms": {
+      "value": 4386,
+      "target": 15000,
+      "obs": null,
+      "bar": 15000,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "preview_kill_pass_rate_pct": {
+      "value": 100,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "stop_capture_survival_pct": {
+      "value": 100,
+      "target": 100,
+      "obs": null,
+      "bar": 100,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "capture_restarts_per_stop": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "preview_kill_take_frames_lost": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "preview_kill_take_ok": {
+      "value": 1,
+      "target": 1,
+      "obs": null,
+      "bar": 1,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "preview_kill_recovery_ms": {
+      "value": 1863,
+      "target": 3000,
+      "obs": null,
+      "bar": 3000,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cycles_failed": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cycles_leaked_processes": {
+      "value": 0,
+      "target": 0,
+      "obs": null,
+      "bar": 0,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cycles_memory_growth_mb": {
+      "value": -9.35,
+      "target": 20,
+      "obs": null,
+      "bar": 20,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cycles_record_ack_p90_ms": {
+      "value": 31.58,
+      "target": 150,
+      "obs": null,
+      "bar": 150,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "cycles_stop_final_p90_ms": {
+      "value": 1207,
+      "target": 1000,
+      "obs": null,
+      "bar": 1000,
+      "status": "fail",
+      "gap": 2.07,
+      "vsObs": "unknown"
+    },
+    "event_log_failure_stops_cleanly": {
+      "value": 1,
+      "target": 1,
+      "obs": null,
+      "bar": 1,
+      "status": "pass",
+      "gap": 0,
+      "vsObs": "unknown"
+    },
+    "disk_full": {
+      "value": null,
+      "target": 1,
+      "obs": null,
+      "bar": 1,
+      "status": "unmeasured",
+      "gap": 0,
+      "vsObs": "unknown"
+    }
   },
   "details": {
     "errors": {},
-    "openToLiveMs": 826.4150840000002,
+    "openToLiveMs": 472.2930350000006,
     "idle": {
       "previewCamera": {
-        "frames": 101,
-        "medianMs": 241,
-        "p90Ms": 327,
-        "p95Ms": 355,
-        "maxMs": 1014
+        "frames": 65,
+        "medianMs": 311,
+        "p90Ms": 496,
+        "p95Ms": 589,
+        "maxMs": 1507
       },
       "previewScreen": {
-        "frames": 119,
-        "medianMs": 112,
-        "p90Ms": 165,
-        "p95Ms": 184,
-        "maxMs": 892
+        "frames": 127,
+        "medianMs": 201,
+        "p90Ms": 307,
+        "p95Ms": 312,
+        "maxMs": 320
       },
       "cpu": {
-        "cpuPctOfMachine": 2.038100647984516,
-        "cpuCores": 0.652192207355045,
-        "workingSetMb": 542.2421875,
+        "cpuPctOfMachine": 2.598798257121439,
+        "cpuCores": 0.8316154422788605,
+        "workingSetMb": 562.87109375,
         "processes": 4
       },
       "gpuBefore": {
-        "gpuPct": 9.333333333333334,
-        "encoderPct": 12.5,
-        "memoryMb": 1602
+        "gpuPct": 0,
+        "encoderPct": 0,
+        "memoryMb": 1289.5
       },
       "gpuIdle": {
-        "gpuPct": 27.647058823529413,
-        "encoderPct": 25.705882352941178,
-        "memoryMb": 1911.8823529411766
+        "gpuPct": 27.470588235294116,
+        "encoderPct": 36.23529411764706,
+        "memoryMb": 1764.1764705882354
       },
-      "serviceRssMb": 102.87890625
+      "serviceRssMb": 105.35546875
     },
     "longTake": {
       "seconds": 600,
-      "recordingSessionId": "f5742718-bcfc-456b-bb09-5f42388168fd",
-      "pressToT0Ms": -2,
+      "recordingSessionId": "55e10571-16d9-41f9-8bc7-ca76bc167d52",
+      "pressToT0Ms": -48,
       "stopped": {
         "reason": "requested",
         "exitCodes": {
@@ -146,284 +531,124 @@
         "errors": []
       },
       "camera": {
-        "frames": 18156,
+        "frames": 17533,
         "leadingRepeats": 0,
-        "firstCaptureMs": 1792066229637,
-        "repeated": 377,
-        "dropped": 799,
+        "firstCaptureMs": 1792770884300,
+        "repeated": 0,
+        "dropped": 0,
         "unreadable": 0,
-        "lagStartMs": -4.7666015625,
-        "lagEndMs": 4.39990234375
+        "sourceStalls": {
+          "frames": 1168,
+          "longestMs": 200
+        },
+        "lagStartMs": 13.86669921875,
+        "lagEndMs": 70.666748046875
       },
       "screen": {
-        "frames": 36369,
-        "leadingRepeats": 17,
-        "firstCaptureMs": 1792066229923,
-        "repeated": 881,
-        "dropped": 4609,
+        "frames": 35122,
+        "leadingRepeats": 38,
+        "firstCaptureMs": 1792770884929,
+        "repeated": 0,
+        "dropped": 0,
         "unreadable": 0,
-        "lagStartMs": -5.333251953125,
-        "lagEndMs": 4
+        "sourceStalls": {
+          "frames": 4418,
+          "longestMs": 96
+        },
+        "lagStartMs": -5,
+        "lagEndMs": 59
       },
       "mic": {
-        "firstSoundSeconds": 0.0212708,
-        "onsets": 102,
-        "driftStartMs": 0,
-        "driftEndMs": -9.210000000052787
+        "firstSoundSeconds": 0,
+        "onsets": 98,
+        "driftStartMs": -4.010000000000957,
+        "driftEndMs": -68.71000000001004
       },
-      "micDriftMs": -9.210000000052787,
-      "cameraLagDriftMs": 9.16650390625,
+      "micDriftMs": -64.70000000000908,
+      "cameraLagDriftMs": 56.800048828125,
       "speech": {
-        "optimisticMs": 532.47900390625,
-        "clipEndMs": 68.0830078125,
+        "optimisticMs": 851.47900390625,
+        "clipEndMs": 183.5,
         "optimisticAll": [
-          514,
-          525,
-          516,
-          506,
-          561,
-          548,
-          569,
-          563,
-          596,
-          505,
-          510,
-          567,
-          559,
-          583,
-          506,
-          497,
-          490,
-          556,
-          564,
-          575,
-          508,
-          521,
-          532,
-          556,
-          537,
-          506,
-          502,
-          550,
-          576,
-          540,
-          531,
-          493,
-          496,
-          526,
-          539,
-          540,
-          522,
-          517,
-          582,
-          530,
-          529,
-          521,
-          551,
-          611,
-          549,
-          559,
-          528,
-          510,
-          548,
-          548,
-          524,
-          550,
-          512,
-          562,
-          502,
-          509,
-          561,
-          556,
-          584,
-          516,
-          525,
-          559,
-          503,
-          569,
-          539,
-          512,
-          509,
-          517,
-          623,
-          565,
-          521,
-          485,
-          529,
-          617,
-          544,
-          539,
-          484,
-          508,
-          630,
-          581,
-          496,
-          549,
-          519,
-          540,
-          530,
-          523,
-          549,
-          547,
-          571,
-          554,
-          566,
-          522,
-          532,
-          542,
-          533,
-          512,
-          507,
-          498,
-          519,
-          559,
-          529
+          1059, 1288, 427, 637, 851, 1121, 1374, 430, 627, 921, 1260, 282, 544,
+          683, 1107, 1237, 315, 498, 936, 987, 1263, 251, 418, 641, 900, 1124,
+          435, 648, 904, 1143, 1415, 455, 673, 867, 1130, 1272, 493, 738, 973,
+          1297, 321, 523, 729, 1022, 1203, 329, 532, 755, 992, 1227, 349, 665,
+          852, 1108, 1334, 460, 627, 828, 1100, 1448, 364, 591, 820, 1062, 1248,
+          490, 762, 1007, 1189, 322, 454, 722, 1032, 1145, 388, 603, 903, 991,
+          1228, 414, 685, 875, 998, 1237, 535, 582, 850, 1041, 1221, 413, 677,
+          891, 1110, 1318, 656, 749, 956
         ],
         "clipEndAll": [
-          50,
-          60,
-          92,
-          52,
-          54,
-          65,
-          58,
-          47,
-          92,
-          65,
-          70,
-          58,
-          84,
-          80,
-          56,
-          55,
-          58,
-          115,
-          71,
-          107,
-          45,
-          68,
-          38,
-          70,
-          87,
-          48,
-          60,
-          109,
-          69,
-          75,
-          83,
-          54,
-          58,
-          75,
-          72,
-          82,
-          39,
-          96,
-          62,
-          68,
-          63,
-          86,
-          55,
-          72,
-          70,
-          43,
-          74,
-          51,
-          58,
-          81,
-          62,
-          65,
-          93,
-          54,
-          66,
-          61,
-          62,
-          130,
-          57,
-          76,
-          56,
-          51,
-          75,
-          80,
-          58,
-          74,
-          68,
-          110,
-          86,
-          63,
-          53,
-          66,
-          172,
-          78,
-          101,
-          38,
-          63,
-          79,
-          66,
-          99,
-          47,
-          68,
-          67,
-          68,
-          89,
-          87,
-          42,
-          88,
-          67,
-          79,
-          88,
-          44,
-          99,
-          66,
-          81,
-          74,
-          40,
-          51,
-          74,
-          77,
-          63
+          445, 766, -234, 17, 278, 469, 700, -189, 54, 326, 528, -369, -107,
+          134, 380, 596, -330, -113, 140, 405, 607, -350, -147, 51, 263, 526,
+          -197, 25, 288, 486, 769, -201, 18, 295, 556, -362, -111, 153, 418,
+          588, -341, -133, 132, 369, 568, -301, -38, 117, 402, 582, -126, 5,
+          227, 472, 647, -274, -38, 212, 490, 623, -252, -46, 190, 457, -362,
+          -144, 116, 379, 552, -338, -146, 267, 352, 523, -271, 22, 184, 403,
+          629, -205, -25, 195, 395, 636, -245, -21, 201, 433, 629, -211, 55,
+          267, 509, 78, -12, 137, 550
         ]
       },
       "latency": {
         "camera": {
-          "frames": 94,
-          "medianMs": 227,
-          "p90Ms": 312,
-          "p95Ms": 341,
-          "maxMs": 449
+          "frames": 283,
+          "medianMs": 415,
+          "p90Ms": 591,
+          "p95Ms": 688,
+          "maxMs": 761
         },
         "screen": {
-          "frames": 94,
-          "medianMs": 98,
-          "p90Ms": 154,
-          "p95Ms": 176,
-          "maxMs": 219
+          "frames": 425,
+          "medianMs": 363,
+          "p90Ms": 485,
+          "p95Ms": 533,
+          "maxMs": 605
         }
       },
       "cpu": {
-        "cpuPctOfMachine": 2.2749338428967527,
-        "cpuCores": 0.7279788297269608,
-        "workingSetMb": 1020.5625,
+        "cpuPctOfMachine": 2.3908499035425104,
+        "cpuCores": 0.7650719691336033,
+        "workingSetMb": 1062.734375,
         "processes": 5
       },
-      "serviceRssMb": 109.87890625,
+      "serviceRssMb": 112.0390625,
       "gpuRecording": {
-        "gpuPct": 39.73719806763285,
-        "encoderPct": 61.67246376811594,
-        "memoryMb": 2199.1111111111113
+        "gpuPct": 15.02807357212004,
+        "encoderPct": 60.76573088092933,
+        "memoryMb": 2204.7163601161665
       }
     },
     "previewKill": {
       "n": 5,
-      "passed": 0,
+      "passed": 5,
       "trials": [
         {
-          "pass": false,
+          "pass": true,
           "processesKilled": 2,
-          "framesLost": 33,
-          "recoveryMs": 2056.2343790000305,
-          "screenPreviewGapMs": 2100.626099999994,
-          "takeEndedAtSeconds": 16.649967,
-          "stopPressedAtSeconds": 16.036,
+          "framesLost": 0,
+          "camera": {
+            "frames": 488,
+            "leadingRepeats": 0,
+            "firstCaptureMs": 1792771602207,
+            "repeated": 0,
+            "dropped": 0,
+            "unreadable": 0,
+            "sourceStalls": {
+              "frames": 168,
+              "longestMs": 147
+            },
+            "lagStartMs": 64.39990234375,
+            "lagEndMs": 69.13330078125
+          },
+          "serviceFramesLost": {
+            "camera": 0,
+            "screen": 0
+          },
+          "recoveryMs": 1873.5428110000212,
+          "screenPreviewGapMs": 1696.525476000039,
+          "takeEndedAtSeconds": 16.149467,
+          "stopPressedAtSeconds": 15.976,
           "stopped": {
             "reason": "requested",
             "exitCodes": {
@@ -434,13 +659,31 @@
           }
         },
         {
-          "pass": false,
+          "pass": true,
           "processesKilled": 2,
-          "framesLost": 34,
-          "recoveryMs": 1781.0898319999687,
-          "screenPreviewGapMs": 1349.916458999971,
-          "takeEndedAtSeconds": 16.783433,
-          "stopPressedAtSeconds": 16.308,
+          "framesLost": 0,
+          "camera": {
+            "frames": 493,
+            "leadingRepeats": 0,
+            "firstCaptureMs": 1792771626642,
+            "repeated": 0,
+            "dropped": 0,
+            "unreadable": 0,
+            "sourceStalls": {
+              "frames": 174,
+              "longestMs": 120
+            },
+            "lagStartMs": 67.933349609375,
+            "lagEndMs": 68.60009765625
+          },
+          "serviceFramesLost": {
+            "camera": 0,
+            "screen": 0
+          },
+          "recoveryMs": 1812.4061199999414,
+          "screenPreviewGapMs": 1372.4199370000279,
+          "takeEndedAtSeconds": 16.349666,
+          "stopPressedAtSeconds": 15.493,
           "stopped": {
             "reason": "requested",
             "exitCodes": {
@@ -451,13 +694,31 @@
           }
         },
         {
-          "pass": false,
+          "pass": true,
           "processesKilled": 2,
-          "framesLost": 55,
-          "recoveryMs": 1769.2265520000365,
-          "screenPreviewGapMs": 1341.3762850000057,
-          "takeEndedAtSeconds": 16.783433,
-          "stopPressedAtSeconds": 16.311,
+          "framesLost": 0,
+          "camera": {
+            "frames": 498,
+            "leadingRepeats": 1,
+            "firstCaptureMs": 1792771650429,
+            "repeated": 0,
+            "dropped": 0,
+            "unreadable": 0,
+            "sourceStalls": {
+              "frames": 177,
+              "longestMs": 156
+            },
+            "lagStartMs": 67.199951171875,
+            "lagEndMs": 65.300048828125
+          },
+          "serviceFramesLost": {
+            "camera": 0,
+            "screen": 0
+          },
+          "recoveryMs": 1862.6432839999907,
+          "screenPreviewGapMs": 1316.5214970000088,
+          "takeEndedAtSeconds": 16.483134,
+          "stopPressedAtSeconds": 15.684,
           "stopped": {
             "reason": "requested",
             "exitCodes": {
@@ -468,13 +729,31 @@
           }
         },
         {
-          "pass": false,
+          "pass": true,
           "processesKilled": 2,
-          "framesLost": 37,
-          "recoveryMs": 1771.160808000015,
-          "screenPreviewGapMs": 1358.1533849999541,
-          "takeEndedAtSeconds": 16.483133,
-          "stopPressedAtSeconds": 15.967,
+          "framesLost": 0,
+          "camera": {
+            "frames": 524,
+            "leadingRepeats": 1,
+            "firstCaptureMs": 1792771673620,
+            "repeated": 0,
+            "dropped": 0,
+            "unreadable": 0,
+            "sourceStalls": {
+              "frames": 194,
+              "longestMs": 139
+            },
+            "lagStartMs": 79.833251953125,
+            "lagEndMs": 80
+          },
+          "serviceFramesLost": {
+            "camera": 0,
+            "screen": 0
+          },
+          "recoveryMs": 2210.0066939999815,
+          "screenPreviewGapMs": 1364.0952769999858,
+          "takeEndedAtSeconds": 17.350667,
+          "stopPressedAtSeconds": 16.77,
           "stopped": {
             "reason": "requested",
             "exitCodes": {
@@ -485,13 +764,31 @@
           }
         },
         {
-          "pass": false,
+          "pass": true,
           "processesKilled": 2,
-          "framesLost": 39,
-          "recoveryMs": 1777.926666000043,
-          "screenPreviewGapMs": 1343.6501319999807,
-          "takeEndedAtSeconds": 17.5175,
-          "stopPressedAtSeconds": 17.084,
+          "framesLost": 0,
+          "camera": {
+            "frames": 492,
+            "leadingRepeats": 0,
+            "firstCaptureMs": 1792771697478,
+            "repeated": 0,
+            "dropped": 0,
+            "unreadable": 0,
+            "sourceStalls": {
+              "frames": 181,
+              "longestMs": 160
+            },
+            "lagStartMs": 81.199951171875,
+            "lagEndMs": 81.63330078125
+          },
+          "serviceFramesLost": {
+            "camera": 0,
+            "screen": 0
+          },
+          "recoveryMs": 1766.8679129999364,
+          "screenPreviewGapMs": 2147.727394000045,
+          "takeEndedAtSeconds": 16.282934,
+          "stopPressedAtSeconds": 16.11,
           "stopped": {
             "reason": "requested",
             "exitCodes": {
@@ -507,22 +804,22 @@
     "eventLogFailure": {
       "reason": "event-log-failed",
       "errors": [
-        "Could not write the event log: EACCES: permission denied, open '/tmp/cvm-recorder-scorecard-2026-10-15T12-09-49-423Z-a33a4f/footage/2026-10-15T12-24-51 44a89e3a/events.jsonl'"
+        "Could not write the event log: EACCES: permission denied, open '/tmp/cvm-recorder-scorecard-2026-10-23T15-54-08-614Z-9a568e/footage/2026-10-23T16-08-34 c2c7d827/events.jsonl'"
       ],
       "files": [
         {
           "exists": true,
-          "durationSeconds": 2.869,
+          "durationSeconds": 2.769,
           "decodeErrors": 0
         },
         {
           "exists": true,
-          "durationSeconds": 3.017,
+          "durationSeconds": 2.834,
           "decodeErrors": 0
         },
         {
           "exists": true,
-          "durationSeconds": 2.87,
+          "durationSeconds": 2.767,
           "decodeErrors": 0
         }
       ]
@@ -532,56 +829,34 @@
       "failures": [],
       "captureRestarts": 0,
       "capturePids": {
-        "first": 44868,
-        "last": 44868
+        "first": 57720,
+        "last": 57720
       },
       "before": {
         "ffmpegProcesses": 4,
-        "memoryMb": 651.1171875
+        "memoryMb": 722.87109375
       },
       "after": {
         "ffmpegProcesses": 4,
-        "memoryMb": 658.078125
+        "memoryMb": 713.5234375
       },
       "recordAckMs": {
-        "p50": 26.756834999890998,
-        "p90": 31.815659999847412,
-        "max": 38.83400100003928
+        "p50": 27.660994000034407,
+        "p90": 31.575570999993943,
+        "max": 73.28314100019634
       },
       "stopToFinalMs": {
-        "p50": 873.4957470002118,
-        "p90": 1075.4482629999984,
-        "max": 1506.569005999947
+        "p50": 899.786303000059,
+        "p90": 1207.240938999923,
+        "max": 1344.2391709999647
       },
-      "firstTenAckMs": [
-        23,
-        27,
-        28,
-        27,
-        31,
-        30,
-        34,
-        19,
-        39,
-        22
-      ],
-      "lastTenAckMs": [
-        28,
-        22,
-        28,
-        24,
-        25,
-        29,
-        24,
-        27,
-        29,
-        25
-      ]
+      "firstTenAckMs": [23, 26, 26, 31, 23, 29, 30, 27, 26, 29],
+      "lastTenAckMs": [29, 30, 21, 30, 23, 73, 19, 25, 30, 36]
     },
     "crash": {
       "orphansStoppedByHarness": 1,
-      "recordingSessionId": "c1aa4560-a32d-47e9-bd8d-86bc244718d1",
-      "secondsRecordedBeforeKill": 6.045,
+      "recordingSessionId": "eb392a44-befb-4194-bfa2-6baeddebb4be",
+      "secondsRecordedBeforeKill": 6.066,
       "files": {
         "camera": {
           "exists": true,
@@ -595,13 +870,13 @@
         },
         "mic": {
           "exists": true,
-          "durationSeconds": 5.908,
+          "durationSeconds": 4.927,
           "decodeErrors": 0
         }
       },
       "recovered": [
-        "44a89e3a-71ac-480f-a7c9-21857b4916d4",
-        "c1aa4560-a32d-47e9-bd8d-86bc244718d1"
+        "c2c7d827-6773-4751-b465-614a796ecf57",
+        "eb392a44-befb-4194-bfa2-6baeddebb4be"
       ]
     },
     "leftoverProcesses": 0
