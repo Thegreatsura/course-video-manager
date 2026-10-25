@@ -269,7 +269,6 @@
         "apps/local/app/services/changelog-detection.ts",
         "apps/local/app/services/changelog-service.ts",
         "apps/local/app/services/clip-service-handler.helpers.ts",
-        "apps/local/app/services/clip-service-handler.ts",
         "apps/local/app/services/course-publish-service-test-setup.ts",
         "apps/local/app/services/course-publish-service.ts",
         "apps/local/app/services/export-hash-rename.ts",

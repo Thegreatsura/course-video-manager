@@ -460,6 +460,12 @@ export type ClipServiceEvent =
       input: AutofillChaptersInput;
     };
 
+/** The one ClipServiceEvent of type `T`, the shape its handler takes. */
+export type ClipServiceEventOf<T extends ClipServiceEvent["type"]> = Extract<
+  ClipServiceEvent,
+  { type: T }
+>;
+
 // ============================================================================
 // Transport Type
 // ============================================================================

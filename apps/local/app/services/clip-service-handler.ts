@@ -8,18 +8,25 @@
  * appropriate database operations.
  */
 
-import { clips, chapters, videos } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { videos } from "@/db/schema";
 import { Effect } from "effect";
-import { generateNKeysBetween } from "fractional-indexing";
-import {
-  checkClipZoomEligibility,
-  clipZoomIneligibilityMessage,
-} from "@/features/videos/clip-zoom";
-import { effectiveClipScene } from "@cvm/core/features/videos/effective-scene";
 import { getFootageStats } from "@cvm/core/services/db-footage-stats.server";
-import { writeClipText } from "@cvm/core/services/db-transcript-word-operations.server";
 import { type ClipServiceEvent, type TimelineItem } from "./clip-service";
+import {
+  archiveClips,
+  unarchiveClips,
+  updateClips,
+  updatePause,
+  updateClipText,
+  updateZoom,
+} from "./clip-service-clips.server";
+import {
+  createChapterAtInsertionPoint,
+  createChapterAtPosition,
+  updateChapter,
+  archiveChapters,
+} from "./clip-service-chapters.server";
+import { reorderClip, reorderChapter } from "./clip-service-reorder.server";
 import { updateSceneOverride } from "./clip-service-scene-override.server";
 import {
   updateMicEq,
@@ -130,167 +137,23 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
         return result;
       }
 
-      case "archive-clips": {
-        for (const clipId of event.clipIds) {
-          yield* dbCall(() =>
-            db.update(clips).set({ archived: true }).where(eq(clips.id, clipId))
-          );
-        }
+      case "archive-clips":
+        return yield* archiveClips(db, logger, event);
 
-        // We need the videoId for logging — look up from first clip
-        if (event.clipIds.length > 0) {
-          const firstClip = yield* dbCall(() =>
-            db.query.clips.findFirst({
-              where: eq(clips.id, event.clipIds[0]!),
-            })
-          );
-          if (firstClip) {
-            yield* touchVideoUpdatedAt(db, firstClip.videoId);
-            logger.log(firstClip.videoId, {
-              type: "clips-archived",
-              clipIds: [...event.clipIds],
-            });
-          }
-        }
-        return;
-      }
+      case "unarchive-clips":
+        return yield* unarchiveClips(db, logger, event);
 
-      case "unarchive-clips": {
-        for (const clipId of event.clipIds) {
-          yield* dbCall(() =>
-            db
-              .update(clips)
-              .set({ archived: false })
-              .where(eq(clips.id, clipId))
-          );
-        }
+      case "update-clips":
+        return yield* updateClips(db, logger, event);
 
-        if (event.clipIds.length > 0) {
-          const firstClip = yield* dbCall(() =>
-            db.query.clips.findFirst({
-              where: eq(clips.id, event.clipIds[0]!),
-            })
-          );
-          if (firstClip) {
-            yield* touchVideoUpdatedAt(db, firstClip.videoId);
-            logger.log(firstClip.videoId, {
-              type: "clips-unarchived",
-              clipIds: [...event.clipIds],
-            });
-          }
-        }
-        return;
-      }
+      case "update-pause":
+        return yield* updatePause(db, logger, event);
 
-      case "update-clips": {
-        for (const clip of event.clips) {
-          yield* dbCall(() =>
-            db
-              .update(clips)
-              .set({
-                scene: clip.scene,
-                profile: clip.profile,
-                pauseType: clip.pauseType,
-              })
-              .where(eq(clips.id, clip.id))
-          );
-        }
+      case "update-clip-text":
+        return yield* updateClipText(db, logger, event);
 
-        if (event.clips.length > 0) {
-          const firstClip = yield* dbCall(() =>
-            db.query.clips.findFirst({
-              where: eq(clips.id, event.clips[0]!.id),
-            })
-          );
-          if (firstClip) {
-            yield* touchVideoUpdatedAt(db, firstClip.videoId);
-            logger.log(firstClip.videoId, {
-              type: "clips-updated",
-              clips: event.clips.map((c) => ({
-                id: c.id,
-                scene: c.scene,
-                profile: c.profile,
-                pauseType: c.pauseType,
-              })),
-            });
-          }
-        }
-        return;
-      }
-
-      case "update-pause": {
-        yield* dbCall(() =>
-          db
-            .update(clips)
-            .set({ pauseType: event.pauseType })
-            .where(eq(clips.id, event.clipId))
-        );
-
-        const clip = yield* dbCall(() =>
-          db.query.clips.findFirst({
-            where: eq(clips.id, event.clipId),
-          })
-        );
-        if (clip) {
-          yield* touchVideoUpdatedAt(db, clip.videoId);
-          logger.log(clip.videoId, {
-            type: "pause-updated",
-            clipId: event.clipId,
-            pauseType: event.pauseType,
-          });
-        }
-        return;
-      }
-
-      case "update-clip-text": {
-        const clip = yield* writeClipText(db, event.clipId, event.text);
-        if (!clip) {
-          throw new Error(`Clip not found: ${event.clipId}`);
-        }
-        yield* touchVideoUpdatedAt(db, clip.videoId);
-        logger.log(clip.videoId, {
-          type: "clip-text-updated",
-          clipId: event.clipId,
-        });
-        return;
-      }
-
-      case "update-zoom": {
-        // The eligibility rule is enforced here, not only at the call sites,
-        // so every caller inherits it. The editor hides the affordance on an
-        // ineligible clip and the CLI pre-checks to report a clean typed
-        // error, but neither of those is what makes the rule hold.
-        const clip = yield* dbCall(() =>
-          db.query.clips.findFirst({
-            where: eq(clips.id, event.clipId),
-          })
-        );
-        if (!clip) {
-          throw new Error(`Clip not found: ${event.clipId}`);
-        }
-
-        const ineligibility = checkClipZoomEligibility(
-          effectiveClipScene(clip)
-        );
-        if (ineligibility) {
-          throw new Error(clipZoomIneligibilityMessage(ineligibility));
-        }
-
-        yield* dbCall(() =>
-          db
-            .update(clips)
-            .set({ zoomType: event.zoomType })
-            .where(eq(clips.id, event.clipId))
-        );
-
-        yield* touchVideoUpdatedAt(db, clip.videoId);
-        logger.log(clip.videoId, {
-          type: "zoom-updated",
-          clipId: event.clipId,
-          zoomType: event.zoomType,
-        });
-        return;
-      }
+      case "update-zoom":
+        return yield* updateZoom(db, logger, event);
 
       case "update-scene-override":
         return yield* updateSceneOverride(db, logger, event);
@@ -301,304 +164,23 @@ const dispatchClipServiceEvent = Effect.fn("dispatchClipServiceEvent")(
       case "update-mic-eq":
         return yield* updateMicEq(db, event);
 
-      case "reorder-clip": {
-        const clip = yield* dbCall(() =>
-          db.query.clips.findFirst({
-            where: eq(clips.id, event.clipId),
-          })
-        );
+      case "reorder-clip":
+        return yield* reorderClip(db, logger, event);
 
-        if (!clip) {
-          throw new Error(`Clip not found: ${event.clipId}`);
-        }
+      case "create-chapter-at-insertion-point":
+        return yield* createChapterAtInsertionPoint(db, logger, event);
 
-        const allItems = yield* getOrderedItems(db, clip.videoId);
+      case "create-chapter-at-position":
+        return yield* createChapterAtPosition(db, logger, event);
 
-        const itemIndex = allItems.findIndex(
-          (item) => item.type === "clip" && item.id === event.clipId
-        );
-        const targetIndex =
-          event.direction === "up" ? itemIndex - 1 : itemIndex + 1;
+      case "update-chapter":
+        return yield* updateChapter(db, logger, event);
 
-        if (targetIndex < 0 || targetIndex >= allItems.length) {
-          return;
-        }
+      case "archive-chapters":
+        return yield* archiveChapters(db, logger, event);
 
-        let newOrder: string;
-        if (event.direction === "up") {
-          const prevItem = allItems[targetIndex - 1];
-          const nextItem = allItems[targetIndex];
-          const prevOrder = prevItem?.order ?? null;
-          const nextOrder = nextItem!.order;
-          const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-          newOrder = order!;
-        } else {
-          const prevItem = allItems[targetIndex];
-          const nextItem = allItems[targetIndex + 1];
-          const prevOrder = prevItem!.order;
-          const nextOrder = nextItem?.order ?? null;
-          const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-          newOrder = order!;
-        }
-
-        yield* dbCall(() =>
-          db
-            .update(clips)
-            .set({ order: newOrder })
-            .where(eq(clips.id, event.clipId))
-        );
-
-        yield* touchVideoUpdatedAt(db, clip.videoId);
-
-        logger.log(clip.videoId, {
-          type: "clip-reordered",
-          clipId: event.clipId,
-          direction: event.direction,
-        });
-        return;
-      }
-
-      case "create-chapter-at-insertion-point": {
-        const { videoId, name, insertionPoint } = event.input;
-        const allItems = yield* getOrderedItems(db, videoId);
-
-        let prevOrder: string | null = null;
-        let nextOrder: string | null = null;
-
-        if (insertionPoint.type === "start") {
-          const firstItem = allItems[0];
-          nextOrder = firstItem?.order ?? null;
-        } else if (insertionPoint.type === "after-clip") {
-          const insertAfterClipIndex = allItems.findIndex(
-            (item) =>
-              item.type === "clip" && item.id === insertionPoint.databaseClipId
-          );
-
-          if (insertAfterClipIndex === -1) {
-            throw new Error(
-              `Could not find a clip to insert after: ${insertionPoint.databaseClipId}`
-            );
-          }
-
-          const insertAfterItem = allItems[insertAfterClipIndex];
-          prevOrder = insertAfterItem?.order ?? null;
-
-          const nextItem = allItems[insertAfterClipIndex + 1];
-          nextOrder = nextItem?.order ?? null;
-        } else if (insertionPoint.type === "after-chapter") {
-          const insertAfterSectionIndex = allItems.findIndex(
-            (item) =>
-              item.type === "chapter" && item.id === insertionPoint.chapterId
-          );
-
-          if (insertAfterSectionIndex === -1) {
-            throw new Error(
-              `Could not find a chapter to insert after: ${insertionPoint.chapterId}`
-            );
-          }
-
-          const insertAfterItem = allItems[insertAfterSectionIndex];
-          prevOrder = insertAfterItem?.order ?? null;
-
-          const nextItem = allItems[insertAfterSectionIndex + 1];
-          nextOrder = nextItem?.order ?? null;
-        }
-
-        const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-
-        const [chapter] = yield* dbCall(() =>
-          db
-            .insert(chapters)
-            .values({
-              videoId,
-              name,
-              order: order!,
-              archived: false,
-            })
-            .returning()
-        );
-
-        if (!chapter) {
-          throw new Error("Failed to create chapter");
-        }
-
-        yield* touchVideoUpdatedAt(db, videoId);
-
-        logger.log(videoId, {
-          type: "chapter-created",
-          sectionId: chapter.id,
-          name,
-          order: order!,
-        });
-
-        return chapter;
-      }
-
-      case "create-chapter-at-position": {
-        const { videoId, name, position, targetItemId, targetItemType } =
-          event.input;
-        const allItems = yield* getOrderedItems(db, videoId);
-
-        const targetIndex = allItems.findIndex(
-          (item) => item.type === targetItemType && item.id === targetItemId
-        );
-
-        if (targetIndex === -1) {
-          throw new Error(
-            `Could not find target ${targetItemType}: ${targetItemId}`
-          );
-        }
-
-        let prevOrder: string | null = null;
-        let nextOrder: string | null = null;
-
-        if (position === "before") {
-          nextOrder = allItems[targetIndex]?.order ?? null;
-          const prevItem = allItems[targetIndex - 1];
-          prevOrder = prevItem?.order ?? null;
-        } else {
-          prevOrder = allItems[targetIndex]?.order ?? null;
-          const nextItem = allItems[targetIndex + 1];
-          nextOrder = nextItem?.order ?? null;
-        }
-
-        const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-
-        const [chapter] = yield* dbCall(() =>
-          db
-            .insert(chapters)
-            .values({
-              videoId,
-              name,
-              order: order!,
-              archived: false,
-            })
-            .returning()
-        );
-
-        if (!chapter) {
-          throw new Error("Failed to create chapter");
-        }
-
-        yield* touchVideoUpdatedAt(db, videoId);
-
-        logger.log(videoId, {
-          type: "chapter-created",
-          sectionId: chapter.id,
-          name,
-          order: order!,
-        });
-
-        return chapter;
-      }
-
-      case "update-chapter": {
-        yield* dbCall(() =>
-          db
-            .update(chapters)
-            .set({ name: event.name })
-            .where(eq(chapters.id, event.chapterId))
-        );
-
-        const section = yield* dbCall(() =>
-          db.query.chapters.findFirst({
-            where: eq(chapters.id, event.chapterId),
-          })
-        );
-        if (section) {
-          yield* touchVideoUpdatedAt(db, section.videoId);
-          logger.log(section.videoId, {
-            type: "chapter-updated",
-            chapterId: event.chapterId,
-            name: event.name,
-          });
-        }
-        return;
-      }
-
-      case "archive-chapters": {
-        for (const chapterId of event.chapterIds) {
-          yield* dbCall(() =>
-            db
-              .update(chapters)
-              .set({ archived: true })
-              .where(eq(chapters.id, chapterId))
-          );
-        }
-
-        if (event.chapterIds.length > 0) {
-          const firstSection = yield* dbCall(() =>
-            db.query.chapters.findFirst({
-              where: eq(chapters.id, event.chapterIds[0]!),
-            })
-          );
-          if (firstSection) {
-            yield* touchVideoUpdatedAt(db, firstSection.videoId);
-            logger.log(firstSection.videoId, {
-              type: "chapters-archived",
-              chapterIds: [...event.chapterIds],
-            });
-          }
-        }
-        return;
-      }
-
-      case "reorder-chapter": {
-        const chapter = yield* dbCall(() =>
-          db.query.chapters.findFirst({
-            where: eq(chapters.id, event.chapterId),
-          })
-        );
-
-        if (!chapter) {
-          throw new Error(`Chapter not found: ${event.chapterId}`);
-        }
-
-        const allItems = yield* getOrderedItems(db, chapter.videoId);
-
-        const itemIndex = allItems.findIndex(
-          (item) => item.type === "chapter" && item.id === event.chapterId
-        );
-        const targetIndex =
-          event.direction === "up" ? itemIndex - 1 : itemIndex + 1;
-
-        if (targetIndex < 0 || targetIndex >= allItems.length) {
-          return;
-        }
-
-        let newOrder: string;
-        if (event.direction === "up") {
-          const prevItem = allItems[targetIndex - 1];
-          const nextItem = allItems[targetIndex];
-          const prevOrder = prevItem?.order ?? null;
-          const nextOrder = nextItem!.order;
-          const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-          newOrder = order!;
-        } else {
-          const prevItem = allItems[targetIndex];
-          const nextItem = allItems[targetIndex + 1];
-          const prevOrder = prevItem!.order;
-          const nextOrder = nextItem?.order ?? null;
-          const [order] = generateNKeysBetween(prevOrder, nextOrder, 1);
-          newOrder = order!;
-        }
-
-        yield* dbCall(() =>
-          db
-            .update(chapters)
-            .set({ order: newOrder })
-            .where(eq(chapters.id, event.chapterId))
-        );
-
-        yield* touchVideoUpdatedAt(db, chapter.videoId);
-
-        logger.log(chapter.videoId, {
-          type: "chapter-reordered",
-          chapterId: event.chapterId,
-          direction: event.direction,
-        });
-        return;
-      }
+      case "reorder-chapter":
+        return yield* reorderChapter(db, logger, event);
 
       case "create-effect-clip-at-position": {
         return yield* createEffectClipAtPositionImpl(db, event.input, logger);
