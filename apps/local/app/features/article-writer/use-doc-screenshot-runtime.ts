@@ -3,7 +3,9 @@ import { toastError } from "@/components/ui/toast";
 import {
   removeChooseScreenshot,
   replaceChooseScreenshotWithImage,
+  setChooseScreenshotFace,
   updateChooseScreenshotClipIndex,
+  type ScreenshotFace,
 } from "./choose-screenshot-mutations";
 import type { ChooseScreenshotRuntime } from "./choose-screenshot-components";
 import type { IndexedClip } from "./types";
@@ -91,6 +93,18 @@ export function useDocScreenshotRuntime(opts: {
     [documentRef, updateDocument]
   );
 
+  const handleDocFaceChange = useCallback(
+    (clipIndex: number, alt: string, face: ScreenshotFace) => {
+      const currentDoc = documentRef.current;
+      if (currentDoc) {
+        updateDocument(
+          setChooseScreenshotFace(currentDoc, clipIndex, alt, face)
+        );
+      }
+    },
+    [documentRef, updateDocument]
+  );
+
   // The document is a single scope, so the message id plays no part in its keys.
   const docScreenshotRuntime = useMemo(
     (): ChooseScreenshotRuntime => ({
@@ -104,6 +118,8 @@ export function useDocScreenshotRuntime(opts: {
       onCapture: (_messageId, clipIndex, alt, frame) =>
         handleDocCapture(clipIndex, alt, frame),
       onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
+      onFaceChange: (_messageId, clipIndex, alt, face) =>
+        handleDocFaceChange(clipIndex, alt, face),
     }),
     [
       indexedClips,
@@ -112,6 +128,7 @@ export function useDocScreenshotRuntime(opts: {
       handleDocClipIndexChange,
       handleDocCapture,
       handleDocRemove,
+      handleDocFaceChange,
     ]
   );
 

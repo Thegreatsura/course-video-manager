@@ -176,6 +176,11 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
         return (yield* runOnce(fallbackArgs, lowPriority)).code;
       });
 
+      /**
+       * A Choose Screenshot capture. A screen frame alone (No face) keeps
+       * the screen's native size; a composite or a Footage frame is scaled
+       * to 720p.
+       */
       const captureFrameAtTime = Effect.fn("captureFrameAtTime")(function* (
         frame: ClipFrame,
         outputPath: string
@@ -185,7 +190,7 @@ export class FFmpegCommandsService extends Effect.Service<FFmpegCommandsService>
           "-hide_banner",
           ...clipFrameFfmpegArgs(frame, {
             seek: String(frame.time),
-            filter: "scale=-2:720",
+            filter: frame.kind === "screen" ? undefined : "scale=-2:720",
           }),
           "-vframes",
           "1",

@@ -29,6 +29,8 @@ import {
   replaceChooseScreenshotWithImage,
   updateChooseScreenshotClipIndex,
   removeChooseScreenshot,
+  setChooseScreenshotFace,
+  type ScreenshotFace,
 } from "./choose-screenshot-mutations";
 import { WriteDocumentDisplay, EditDocumentDisplay } from "./tool-call-display";
 import { CacheStatsBadge } from "./cache-stats-badge";
@@ -110,6 +112,20 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
     [mutateMessageText]
   );
 
+  const handleFaceChange = useCallback(
+    (
+      messageId: string,
+      clipIndex: number,
+      alt: string,
+      face: ScreenshotFace
+    ) => {
+      mutateMessageText(messageId, (text) =>
+        setChooseScreenshotFace(text, clipIndex, alt, face)
+      );
+    },
+    [mutateMessageText]
+  );
+
   const [capturingKey, setCapturingKey] = useState<string | null>(null);
 
   const handleCapture = useCallback(
@@ -159,6 +175,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
       onClipIndexChange: handleClipIndexChange,
       onCapture: handleCapture,
       onRemove: handleRemove,
+      onFaceChange: handleFaceChange,
     }),
     [
       indexedClips,
@@ -167,6 +184,7 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
       handleClipIndexChange,
       handleCapture,
       handleRemove,
+      handleFaceChange,
     ]
   );
 

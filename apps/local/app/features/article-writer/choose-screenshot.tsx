@@ -25,10 +25,13 @@ import {
   clipFrame,
   clipPlaybackClock,
   clipPlaybackUrl,
+  clipScreenPicture,
   clipSource,
   type ClipFrame,
 } from "@/packages/clip-source";
 import { CompositePlayback } from "@/features/video-editor/components/composite-playback";
+import { ScreenPlayback } from "@/features/video-editor/components/screen-playback";
+import type { ScreenshotFace } from "./choose-screenshot-mutations";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
@@ -43,6 +46,9 @@ export interface ChooseScreenshotProps {
     frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (clipIndex: number, alt: string) => void;
+  /** Saved on the placeholder: No face (the default) or With face. */
+  face: ScreenshotFace;
+  onFaceChange: (face: ScreenshotFace) => void;
   isCapturing?: boolean;
   isStreaming?: boolean;
 }
@@ -54,6 +60,8 @@ export function ChooseScreenshot({
   onClipIndexChange,
   onCapture,
   onRemove,
+  face,
+  onFaceChange,
   isCapturing,
   isStreaming,
 }: ChooseScreenshotProps) {
@@ -73,6 +81,11 @@ export function ChooseScreenshot({
   const seekVideo = (time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time - offset;
   };
+
+  // No face shows the screen frame alone, when the Clip has one: an OBS
+  // Clip's face is baked in, and a camera-only Short session has no screen.
+  const screenPicture = screenPictureOf(clip, source);
+  const noFace = isNoFace(screenPicture, face);
 
   const isFirstClip = clipIndex <= 1;
   const isLastClip = clipIndex >= clips.length;
@@ -113,7 +126,11 @@ export function ChooseScreenshot({
   };
   const capture = () =>
     clip
-      ? onCapture(clipIndex, alt, clipFrame(clipSource(clip), currentTime))
+      ? onCapture(
+          clipIndex,
+          alt,
+          clipFrame(clipSource(clip), currentTime, { screenOnly: noFace })
+        )
       : Promise.resolve(false);
 
   const handleCaptureRequest = async (request: ScreenshotCaptureRequest) => {
@@ -253,14 +270,12 @@ export function ChooseScreenshot({
         }}
       />
       {picture && (
-        <CompositePlayback
+        <RecorderClipPicture
           clock={videoRef}
           picture={picture}
+          screen={screenPicture?.screen ?? null}
           offsetSeconds={offset}
-          hidden={false}
-          // A frame picker: it scrubs, it is never played as the editor.
-          editorPlaying={false}
-          className="rounded-md"
+          noFace={noFace}
         />
       )}
       <div className="mt-2 flex items-center gap-2">
@@ -300,6 +315,11 @@ export function ChooseScreenshot({
           <ChevronRightIcon className="h-3 w-3 ml-1" />
         </Button>
         <div className="flex-1" />
+        <ScreenshotFaceToggle
+          available={screenPicture !== null}
+          face={face}
+          onFaceChange={onFaceChange}
+        />
         {dials}
         <Button size="sm" disabled={isCapturing} onClick={() => void capture()}>
           {isCapturing ? (
@@ -310,6 +330,94 @@ export function ChooseScreenshot({
           {isCapturing ? "Capturing…" : "Capture"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+const screenPictureOf = (
+  clip: IndexedClip | undefined,
+  source: ReturnType<typeof clipSource> | null
+) =>
+  clip && source
+    ? clipScreenPicture(source, {
+        from: clip.sourceStartTime,
+        to: clip.sourceEndTime,
+      })
+    : null;
+
+/**
+ * A CVM-recorder Clip's picture: the composite (With face), or its screen
+ * frame alone (No face). Both stay mounted, so each is already on the chosen
+ * frame when the other is clicked.
+ */
+function RecorderClipPicture(props: {
+  clock: React.RefObject<HTMLVideoElement | null>;
+  picture: NonNullable<ReturnType<typeof clipCompositePicture>>;
+  /** Null when there is no screen to show without the face. */
+  screen: string | null;
+  offsetSeconds: number;
+  noFace: boolean;
+}) {
+  return (
+    <>
+      <CompositePlayback
+        clock={props.clock}
+        picture={props.picture}
+        offsetSeconds={props.offsetSeconds}
+        hidden={props.noFace}
+        // A frame picker: it scrubs, it is never played as the editor.
+        editorPlaying={false}
+        className={cn("rounded-md", props.noFace && "hidden")}
+      />
+      {props.screen !== null && (
+        <ScreenPlayback
+          clock={props.clock}
+          screen={props.screen}
+          segments={props.picture.segments}
+          offsetSeconds={props.offsetSeconds}
+          className={cn(
+            "rounded-md overflow-hidden",
+            !props.noFace && "hidden"
+          )}
+        />
+      )}
+    </>
+  );
+}
+
+const FACE_OPTIONS = [
+  ["none", "No face"],
+  ["with", "With face"],
+] as const;
+
+/** No face only when there is a screen to show without the face. */
+const isNoFace = (screenPicture: unknown, face: ScreenshotFace) =>
+  screenPicture !== null && face === "none";
+
+/**
+ * No face / With face, saved on the placeholder. Not shown when the Clip has
+ * no screen to show without the face.
+ */
+function ScreenshotFaceToggle(props: {
+  available: boolean;
+  face: ScreenshotFace;
+  onFaceChange: (face: ScreenshotFace) => void;
+}) {
+  if (!props.available) return null;
+  return (
+    <div className="flex items-center rounded-md border border-border">
+      {FACE_OPTIONS.map(([value, label]) => (
+        <Button
+          key={value}
+          variant={props.face === value ? "secondary" : "ghost"}
+          size="sm"
+          className="h-7 rounded-none first:rounded-l-md last:rounded-r-md"
+          aria-pressed={props.face === value}
+          onClick={() => props.onFaceChange(value)}
+        >
+          {label}
+        </Button>
+      ))}
     </div>
   );
 }

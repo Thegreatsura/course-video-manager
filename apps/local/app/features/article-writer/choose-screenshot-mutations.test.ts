@@ -4,6 +4,7 @@ import {
   updateChooseScreenshotClipIndex,
   removeChooseScreenshot,
   hasUnresolvedScreenshots,
+  setChooseScreenshotFace,
 } from "./choose-screenshot-mutations";
 
 describe("replaceChooseScreenshotWithImage", () => {
@@ -155,5 +156,35 @@ More text`;
     const message = `Some text with ![image](./path.png) but no screenshot tags`;
 
     expect(hasUnresolvedScreenshots(message)).toBe(false);
+  });
+});
+
+describe("a placeholder's saved face", () => {
+  it("survives re-pointing it at another Clip, and the capture resolves it", () => {
+    const original =
+      'Before\n<ChooseScreenshot clipIndex={2} alt="diagram" />\nAfter';
+
+    const withFace = setChooseScreenshotFace(original, 2, "diagram", "with");
+    expect(withFace).toBe(
+      'Before\n<ChooseScreenshot clipIndex={2} alt="diagram" face="with" />\nAfter'
+    );
+
+    const moved = updateChooseScreenshotClipIndex(withFace, 2, 3, "diagram");
+    expect(moved).toBe(
+      'Before\n<ChooseScreenshot clipIndex={3} alt="diagram" face="with" />\nAfter'
+    );
+    expect(hasUnresolvedScreenshots(moved)).toBe(true);
+
+    expect(setChooseScreenshotFace(moved, 3, "diagram", "none")).toBe(
+      'Before\n<ChooseScreenshot clipIndex={3} alt="diagram" />\nAfter'
+    );
+    expect(
+      replaceChooseScreenshotWithImage(
+        moved,
+        3,
+        "diagram",
+        "./screenshot-1.png"
+      )
+    ).toBe("Before\n![diagram](./screenshot-1.png)\nAfter");
   });
 });

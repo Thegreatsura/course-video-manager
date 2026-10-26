@@ -307,6 +307,10 @@ _Avoid_: Recording mode, Capture backend, New recorder (its old name; stored as 
 A marker on a **Clip** from a CVM-recorder **Recording Session** naming one scene (Camera, Code or No Face) to draw the whole Clip in, in place of the scenes that were live while it was filmed. With none, the Clip follows its Recording Session's scene timeline. An OBS Clip cannot have one: its scene is baked into its Footage.
 _Avoid_: Scene change (a live switch during a Recording Session), Layout
 
+**No face** / **With face**:
+How the Article Writer's Choose Screenshot takes a still of a CVM-recorder **Clip**. No face, the default, is the **Recording Session**'s screen frame alone, at its native size. With face is the composite the export draws, with the face in its scene, at 720p. The choice is saved per screenshot, on its `<ChooseScreenshot>` placeholder. OBS Clips get neither option, because the face is baked into their **Footage**. A camera-only Short session gets neither either, because it has no screen.
+_Avoid_: Scene Override (that changes what the Clip exports), Hide camera, Screen-only mode
+
 **Silence Length**:
 A setting of each Recording Session (short or long) for how long a silence must be to end a clip: short (the default) cuts on brief pauses in a sentence, long only on long ones. It is fixed when recording starts.
 _Avoid_: Pause Length (former name — reused "Pause", now the clip-level held pause), Silence mode, Silence sensitivity, Pause threshold

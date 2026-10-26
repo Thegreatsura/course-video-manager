@@ -52,7 +52,7 @@ describe.skipIf(!hasFfmpeg)("a screenshot, decoded on the GPU", () => {
     }
   });
 
-  const frame = () =>
+  const frame = (opts?: { screenOnly?: boolean }) =>
     clipFrame(
       clipSource({
         videoFilename: path.join(dir, "mic.mkv"),
@@ -69,14 +69,15 @@ describe.skipIf(!hasFfmpeg)("a screenshot, decoded on the GPU", () => {
           sceneEvents: [],
         },
       }),
-      "first"
+      "first",
+      opts
     );
 
-  const capture = (name: string) => {
+  const capture = (name: string, opts?: { screenOnly?: boolean }) => {
     const out = path.join(dir, name);
     return Effect.runPromise(
       Effect.flatMap(FFmpegCommandsService, (ffmpeg) =>
-        ffmpeg.captureFrameAtTime(frame(), out)
+        ffmpeg.captureFrameAtTime(frame(opts), out)
       ).pipe(
         Effect.provide(
           Layer.mergeAll(FFmpegCommandsService.Default, NodeContext.layer)
@@ -100,6 +101,10 @@ describe.skipIf(!hasFfmpeg)("a screenshot, decoded on the GPU", () => {
 
   it("captures the frame at 720p", async () => {
     expect(await capture("gpu.jpg")).toBe("1280,720");
+  });
+
+  it("captures a No-face frame as the screen alone, at its native size", async () => {
+    expect(await capture("no-face.png", { screenOnly: true })).toBe("320,180");
   });
 
   describe("with no usable GPU", () => {
