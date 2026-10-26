@@ -1,0 +1,1 @@
+ALTER TABLE "course-video-manager_av_calibration" DROP COLUMN "browser_input_label";

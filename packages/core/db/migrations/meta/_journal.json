@@ -288,6 +288,13 @@
       "when": 1791836852901,
       "tag": "0040_av_calibration_claps",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793028876451,
+      "tag": "0041_av_calibration_drop_browser_input_label",
+      "breakpoints": true
     }
   ]
 }
