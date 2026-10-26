@@ -288,8 +288,9 @@ export const makeDuplicateCourse = (db: Database) =>
               // Shared, not copied: see SHARED_FOOTAGE in version-copy-manifest.ts.
               recordingSessionId: clip.recordingSessionId,
               sceneOverride: clip.sceneOverride,
-              // A copy is not new filming: it keeps its original's Clip Origin.
-              origin: clip.origin,
+              // A duplicated Course is a user-made copy: the original Course
+              // keeps its Clips, so these are not new filming (CLIP_ORIGINS).
+              origin: "copy",
             });
           }
 
