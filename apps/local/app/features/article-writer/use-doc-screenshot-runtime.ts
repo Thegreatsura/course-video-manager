@@ -10,11 +10,14 @@ import {
 import type { ChooseScreenshotRuntime } from "./choose-screenshot-components";
 import type { IndexedClip } from "./types";
 import type { ClipFrame, ScreenCrop } from "@/packages/clip-source";
+import { screenshotMemory } from "./screenshot-memory";
 
 /**
  * The document pane's `<ChooseScreenshot>` runtime: capturing a frame from the
  * video and folding it into the working document, re-pointing a placeholder at
- * another clip, or removing it. `isCapturing` holds sends back while a capture
+ * another clip, or removing it. Each capture is remembered for this session
+ * (`screenshot-memory.ts`), so its image can be revived back into the
+ * placeholder it came from. `isCapturing` holds sends back while a capture
  * is in flight (see `use-message-queue.ts`).
  */
 export function useDocScreenshotRuntime(opts: {
@@ -29,7 +32,12 @@ export function useDocScreenshotRuntime(opts: {
   const [docCapturingKey, setDocCapturingKey] = useState<string | null>(null);
 
   const handleDocCapture = useCallback(
-    async (clipIndex: number, alt: string, frame: ClipFrame) => {
+    async (
+      clipIndex: number,
+      alt: string,
+      frame: ClipFrame,
+      placeholder: { face: ScreenshotFace; crop: ScreenCrop | null }
+    ) => {
       const key = `doc-${clipIndex}-${alt}`;
       setDocCapturingKey(key);
       try {
@@ -43,6 +51,12 @@ export function useDocScreenshotRuntime(opts: {
           throw new Error(text || "Failed to capture screenshot");
         }
         const { imagePath } = await res.json();
+        screenshotMemory.remember(videoId, imagePath, {
+          clipIndex,
+          alt,
+          ...placeholder,
+          time: frame.time,
+        });
         const currentDoc = documentRef.current;
         if (currentDoc) {
           updateDocument(
@@ -110,6 +124,16 @@ export function useDocScreenshotRuntime(opts: {
     [documentRef, updateDocument]
   );
 
+  const handleDocRevive = useCallback(
+    (imagePath: string) => {
+      const currentDoc = documentRef.current;
+      const revived =
+        currentDoc && screenshotMemory.revive(videoId, currentDoc, imagePath);
+      if (revived) updateDocument(revived);
+    },
+    [videoId, documentRef, updateDocument]
+  );
+
   // The document is a single scope, so the message id plays no part in its keys.
   const docScreenshotRuntime = useMemo(
     (): ChooseScreenshotRuntime => ({
@@ -120,11 +144,18 @@ export function useDocScreenshotRuntime(opts: {
       onClipIndexChange: (_messageId, current, next, alt) =>
         handleDocClipIndexChange(current, next, alt),
       // The capture toasts its own failure; Return waits on the result.
-      onCapture: (_messageId, clipIndex, alt, frame) =>
-        handleDocCapture(clipIndex, alt, frame),
+      onCapture: (_messageId, clipIndex, alt, frame, placeholder) =>
+        handleDocCapture(clipIndex, alt, frame, placeholder),
       onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
       onFaceChange: (_messageId, clipIndex, alt, face, crop) =>
         handleDocFaceChange(clipIndex, alt, face, crop),
+      revive: {
+        canRevive: (imagePath, alt) =>
+          screenshotMemory.canRevive(videoId, imagePath, alt),
+        revive: handleDocRevive,
+        startTime: (clipIndex, alt) =>
+          screenshotMemory.startTime(videoId, clipIndex, alt),
+      },
     }),
     [
       indexedClips,
@@ -134,6 +165,8 @@ export function useDocScreenshotRuntime(opts: {
       handleDocCapture,
       handleDocRemove,
       handleDocFaceChange,
+      handleDocRevive,
+      videoId,
     ]
   );
 
