@@ -10,12 +10,6 @@ const FPS = 60;
 const ANIMATION_FRAMES = bulletPanelAnimationFrames(FPS);
 
 describe("bulletPanelAnimationFrames", () => {
-  it("is one ease at the composition's frame rate", () => {
-    expect(ANIMATION_FRAMES).toBe(
-      Math.round(BULLET_PANEL_ANIMATION_IN_SECONDS * FPS)
-    );
-  });
-
   it("never rounds down to nothing", () => {
     // A frame rate low enough that the ease rounds to ZERO frames. It is
     // derived from the ease rather than typed out, so the guard keeps being

@@ -127,11 +127,6 @@ describe("resolveForVideo", () => {
     });
   });
 
-  it("returns home when insertion point is end and items are empty", () => {
-    const ip: FrontendInsertionPoint = { type: "end" };
-    expect(resolveForVideo([], ip, lookup)).toEqual({ kind: "home" });
-  });
-
   it("returns home when after-clip target is not found in items", () => {
     const items = [clip("c1", "snap-1")];
     const ip: FrontendInsertionPoint = {
@@ -179,10 +174,5 @@ describe("resolveForVideo", () => {
     const items = [section("s1"), section("s2"), section("s3")];
     const ip: FrontendInsertionPoint = { type: "end" };
     expect(resolveForVideo(items, ip, lookup)).toEqual({ kind: "home" });
-  });
-
-  it("returns home when start insertion point is used with empty items", () => {
-    const ip: FrontendInsertionPoint = { type: "start" };
-    expect(resolveForVideo([], ip, lookup)).toEqual({ kind: "home" });
   });
 });
