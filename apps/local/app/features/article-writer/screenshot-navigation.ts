@@ -6,13 +6,15 @@
  * where a jump back to the top would lose his place.
  *
  * I / O nudge the frame of the current placeholder by the large step, and
- * Left / Right by the small one (see `screenshot-frame-step.ts`). Return
- * captures it, then walks on as L would.
+ * Left / Right by the small one (see `screenshot-frame-step.ts`). P cycles
+ * its face toggle: No face → Diagram → With face → No face. Return captures
+ * it, then walks on as L would.
  *
  * The decisions live here as pure functions; `useScreenshotNavigation` is the
  * DOM wiring around them.
  */
 import { isTypingTarget } from "@/hooks/should-ignore-keyboard-shortcut";
+import type { ScreenshotFace } from "./choose-screenshot-mutations";
 
 export type ScreenshotNavDirection = 1 | -1;
 
@@ -61,6 +63,23 @@ export function screenshotStep(e: NavKeyEvent): ScreenshotStep | null {
 }
 
 /**
+ * Whether P cycles the current placeholder's face. Same guard as
+ * {@link screenshotNavDirection}. The placeholder hears it as
+ * {@link SCREENSHOT_FACE_EVENT}.
+ */
+export function isScreenshotFacePress(e: NavKeyEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  return e.key === "p" && !isTypingTarget(e.target);
+}
+
+/** The face P moves to: the toggle's order, left to right, wrapping. */
+export function nextScreenshotFace(face: ScreenshotFace): ScreenshotFace {
+  return FACE_CYCLE[(FACE_CYCLE.indexOf(face) + 1) % FACE_CYCLE.length]!;
+}
+
+const FACE_CYCLE: readonly ScreenshotFace[] = ["none", "diagram", "with"];
+
+/**
  * Whether Return captures the current placeholder. Same guard as the other
  * keys, plus: not a held-down repeat (one press, one capture), and not a
  * control outside the preview — Return must still press the writer's own
@@ -94,6 +113,9 @@ function keyDirection(
 
 /** Dispatched on a placeholder's root; `detail` is a {@link ScreenshotStep}. */
 export const SCREENSHOT_STEP_EVENT = "choose-screenshot-step";
+
+/** Dispatched on a placeholder's root to cycle its face; no `detail`. */
+export const SCREENSHOT_FACE_EVENT = "choose-screenshot-face";
 
 /**
  * Dispatched on a placeholder's root to capture its frame; `detail` is a

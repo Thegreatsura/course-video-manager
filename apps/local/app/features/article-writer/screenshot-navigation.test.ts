@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   isScreenshotCapturePress,
+  isScreenshotFacePress,
+  nextScreenshotFace,
   pickCurrentScreenshot,
   pickScreenshotTarget,
   screenshotNavDirection,
@@ -286,5 +288,54 @@ describe("screenshotStep and isScreenshotCapturePress", () => {
       isScreenshotCapturePress(event("Enter", plain, true), preview),
       isScreenshotCapturePress(event("Enter", applyButton), preview),
     ]).toEqual([true, true, false, false, false]);
+  });
+});
+
+describe("P cycles the face", () => {
+  const origInput = globalThis.HTMLInputElement;
+  const origTextarea = globalThis.HTMLTextAreaElement;
+
+  beforeAll(() => {
+    (globalThis as any).HTMLInputElement = FakeHTMLInputElement;
+    (globalThis as any).HTMLTextAreaElement = FakeHTMLTextAreaElement;
+  });
+
+  afterAll(() => {
+    (globalThis as any).HTMLInputElement = origInput;
+    (globalThis as any).HTMLTextAreaElement = origTextarea;
+  });
+
+  const pressP = (
+    overrides: Partial<{ shiftKey: boolean; ctrlKey: boolean; target: unknown }>
+  ) =>
+    isScreenshotFacePress({
+      key: "p",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+      target: plain as unknown as EventTarget,
+      ...overrides,
+    } as KeyboardEvent);
+
+  it("is taken on P, even with focus on a button", () => {
+    const button = { tagName: "BUTTON", closest: () => null };
+    expect([pressP({}), pressP({ target: button })]).toEqual([true, true]);
+  });
+
+  it("lets P type in an input, and leaves modified P alone", () => {
+    expect([
+      pressP({ target: new FakeHTMLInputElement() }),
+      pressP({ shiftKey: true }),
+      pressP({ ctrlKey: true }),
+    ]).toEqual([false, false, false]);
+  });
+
+  it("walks the toggle left to right, wrapping: No face, Diagram, With face", () => {
+    expect([
+      nextScreenshotFace("none"),
+      nextScreenshotFace("diagram"),
+      nextScreenshotFace("with"),
+    ]).toEqual(["diagram", "with", "none"]);
   });
 });
