@@ -13,6 +13,8 @@ import {
   getSourceTexts,
   getSuggestionInput,
   getSuggestionText,
+  isPreviousVideoInReach,
+  PREVIOUS_VIDEO_CLIP_LIMIT,
   suggestionsReducer,
 } from "../suggestions-reducer";
 import { SuggestionsContextModal } from "./suggestions-context-modal";
@@ -23,6 +25,22 @@ const SOURCE_LABELS: Record<suggestionsReducer.Source, string> = {
   animatic: "Animatic",
   beats: "Beats",
   diagram: "Diagram",
+  previousVideo: "Previous video",
+};
+
+/** Why a source's chip can't be ticked, or `null` when it can. */
+const disabledReason = (
+  source: suggestionsReducer.Source,
+  present: boolean,
+  inReach: boolean
+): string | null => {
+  if (source === "previousVideo" && present && !inReach) {
+    return `Off once ${PREVIOUS_VIDEO_CLIP_LIMIT} clips are before the Insertion Point`;
+  }
+  if (present) return null;
+  if (source === "notes") return "Write some Notes below to include them";
+  if (source === "previousVideo") return "No previous video with clips";
+  return `This video has no ${SOURCE_LABELS[source]}`;
 };
 
 /** The suggestion's Markdown, rendered as bold and nothing else. */
@@ -59,6 +77,7 @@ export function SuggestionsPanel(props: {
     );
   const scriptLoading = state.script === null;
   const busy = state.status === "waiting" || state.status === "streaming";
+  const previousVideoInReach = isPreviousVideoInReach(state);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -78,8 +97,10 @@ export function SuggestionsPanel(props: {
         </button>
         {suggestionsReducer.SOURCES.map((source) => {
           const present = texts[source].trim().length > 0;
-          const disabled = !present && !(source === "script" && scriptLoading);
-          const on = state.included[source] && present;
+          const reason = disabledReason(source, present, previousVideoInReach);
+          const disabled =
+            reason !== null && !(source === "script" && scriptLoading);
+          const on = state.included[source] && !disabled && present;
           return (
             <button
               key={source}
@@ -96,10 +117,8 @@ export function SuggestionsPanel(props: {
                     : "bg-transparent text-muted-foreground opacity-70"
               )}
               title={
-                disabled
-                  ? source === "notes"
-                    ? "Write some Notes below to include them"
-                    : `This video has no ${SOURCE_LABELS[source]}`
+                disabled && reason
+                  ? reason
                   : `Include the ${SOURCE_LABELS[source]}`
               }
             >

@@ -31,6 +31,8 @@ const requestSchema = Schema.Struct({
   animatic: Schema.optional(Schema.String),
   beats: Schema.optional(Schema.String),
   diagram: Schema.optional(Schema.String),
+  /** Capped by the prompt, keeping the end, however long it arrives. */
+  previousVideo: Schema.optional(Schema.String),
   clips: Schema.Array(Schema.String),
   files: Schema.optional(Schema.Array(Schema.String)),
 });

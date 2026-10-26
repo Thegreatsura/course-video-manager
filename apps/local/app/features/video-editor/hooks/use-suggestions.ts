@@ -57,6 +57,7 @@ const readIncludedSources = (): suggestionsReducer.Included => {
       animatic: parsed.animatic !== false,
       beats: parsed.beats !== false,
       diagram: parsed.diagram !== false,
+      previousVideo: parsed.previousVideo !== false,
     };
   } catch {
     return ALL_SOURCES_INCLUDED;
@@ -88,6 +89,8 @@ export function useSuggestions(input: {
   insertionPoint: FrontendInsertionPoint;
   /** The editor's file scan, which lists the Video's repo files. */
   fsData: FsData;
+  /** Transcripts of the previous Video's Clips, oldest first. */
+  previousVideoClips: string[];
 }) {
   const [state, dispatch] = useEffectReducer<
     suggestionsReducer.State,
@@ -103,6 +106,7 @@ export function useSuggestions(input: {
         included: readIncludedSources(),
         notes: readStored(notesKey(input.videoId)) ?? "",
         pickedFiles: readPickedFiles(input.videoId),
+        previousVideoClips: input.previousVideoClips,
       });
     },
     {

@@ -185,8 +185,21 @@ export const loader = makeLoader({
         loadVideoEditorFsData({ lineageId: video.lineageId })
       );
 
+      // The Suggestions tab's "Previous video" source: the transcripts of the
+      // Video before this one in course order. Failing leaves it empty, and
+      // the editor opens anyway.
+      const previousVideoClips = yield* Effect.gen(function* () {
+        const previousVideoId = yield* videoOps.getPreviousVideoId(video);
+        if (!previousVideoId) return [];
+        const previous = yield* videoOps.getVideoWithClipsById(previousVideoId);
+        return previous.clips
+          .map((clip) => clip.text.trim())
+          .filter((text) => text.length > 0);
+      }).pipe(Effect.orElseSucceed((): string[] => []));
+
       return {
         video: slimVideo,
+        previousVideoClips,
         hasScript,
         clipIdsWithTranscriptWords,
         jobEventCursor,
@@ -447,6 +460,7 @@ export const ComponentInner = (props: Route.ComponentProps) => {
       silenceLength={silenceLength}
       onSilenceLengthChange={setSilenceLength}
       fsData={props.loaderData.fsData}
+      previousVideoClips={props.loaderData.previousVideoClips}
       videoCount={props.loaderData.videoCount}
       referenceCandidates={props.loaderData.referenceCandidates}
       beats={props.loaderData.beats}

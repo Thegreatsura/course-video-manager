@@ -104,6 +104,8 @@ export const VideoEditor = (props: {
     standaloneFiles: Array<{ path: string }>;
     files: Array<{ path: string; size: number; defaultEnabled: boolean }>;
   }>;
+  /** Transcripts of the previous Video's Clips, for the Suggestions tab. */
+  previousVideoClips: string[];
   videoCount: number;
   beats: BeatListBeat[];
   animatic: AnimaticLine[];
@@ -322,6 +324,7 @@ export const VideoEditor = (props: {
     items: timelineItems,
     insertionPoint: props.insertionPoint,
     fsData: props.fsData,
+    previousVideoClips: props.previousVideoClips,
   });
 
   useTeleprompterEditorMode({

@@ -10,7 +10,9 @@
  * they say how today's take departs from the plan. Next come the repo files
  * the author picked in the Context modal, read by the route. The words on the
  * **Diagram** on screen right now go with the Clips, since they change from
- * one Clip to the next.
+ * one Clip to the next. The transcripts of the **previous Video**'s Clips
+ * come last in the plan, straight before this Video's Clips, so the
+ * conversation reads in order.
  */
 export type SuggestNextClipInput = {
   notes?: string;
@@ -19,6 +21,11 @@ export type SuggestNextClipInput = {
   beats?: string;
   /** The Diagram Text of the Active Diagram, the one on screen now. */
   diagram?: string;
+  /**
+   * Transcripts of the previous Video's Clips (the one before this in course
+   * order), one per line, oldest first.
+   */
+  previousVideo?: string;
   /** Transcripts of every Clip before the Insertion Point, oldest first. */
   clips: string[];
   /**
@@ -68,6 +75,20 @@ export const MAX_DIAGRAM_TEXT_CHARS = 4_000;
 const capDiagramText = (text: string | undefined) =>
   text && text.length > MAX_DIAGRAM_TEXT_CHARS
     ? `${text.slice(0, MAX_DIAGRAM_TEXT_CHARS)} [… cut: over the diagram text limit]`
+    : text;
+
+/**
+ * The most of the previous Video's Clips one suggestion carries, in
+ * characters. The END is kept: the Clips nearest the join matter most.
+ */
+export const MAX_PREVIOUS_VIDEO_CHARS = 6_000;
+
+const PREVIOUS_VIDEO_CUT_MARKER = "[… cut: earlier clips over the limit]\n";
+
+/** The previous Video's Clips, cut from the front past the limit. */
+export const capPreviousVideoText = (text: string): string =>
+  text.length > MAX_PREVIOUS_VIDEO_CHARS
+    ? `${PREVIOUS_VIDEO_CUT_MARKER}${text.slice(-MAX_PREVIOUS_VIDEO_CHARS)}`
     : text;
 
 /**
@@ -142,13 +163,19 @@ ${recent.join("\n")}
           .join("\n\n")
       : "The creator has not recorded anything yet: suggest the opening line of the video.";
 
+  const previousVideo = section(
+    "previous-video-clips",
+    "What the creator said in the previous video of the course, clip by clip, oldest first: the viewer has just watched it. This video picks up where it left off, so open by carrying on from it, and do not repeat it. The notes outrank it.",
+    input.previousVideo && capPreviousVideoText(input.previousVideo)
+  );
+
   const plan = `
 <role-context>
 You are a teleprompter for a course creator recording a video one short clip at a time. After each clip, you show them what to say next.
 </role-context>
 
 ${guides.length > 0 ? guides.join("\n\n") : "There is no plan for this video: continue naturally from the clips."}
-`.trim();
+${previousVideo ? `\n${previousVideo}\n` : ""}`.trim();
 
   const diagram = section(
     "diagram-on-screen",

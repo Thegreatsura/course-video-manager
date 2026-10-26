@@ -21,7 +21,10 @@ const context = (
 /** The running stream, as `exec` hands it back, so stopping it is visible. */
 const runningStream = { stop: () => {} } as never;
 
-const tester = (pickedFiles: string[] = []) => {
+const tester = (
+  pickedFiles: string[] = [],
+  previousVideoClips: string[] = []
+) => {
   const t = new ReducerTester(
     suggestionsStateReducer,
     createInitialSuggestionsState({
@@ -29,6 +32,7 @@ const tester = (pickedFiles: string[] = []) => {
       included: ALL_SOURCES_INCLUDED,
       notes: "",
       pickedFiles,
+      previousVideoClips,
     })
   );
   vi.mocked(t.getExec()).mockReturnValue(runningStream);
@@ -289,6 +293,37 @@ describe("the Suggestions tab", () => {
         clips: ["So that's a type."],
       }),
     ]);
+  });
+
+  it("sends the previous Video's Clips until 5 Clips are before the Insertion Point, then follows the tick again below that", () => {
+    const four = ["a", "b", "c", "d"];
+    const t = tester([], ["Last time.", "See you next."])
+      .send({ type: "suggestions-tab-opened" })
+      .send({ type: "script-loaded", videoId: "v1", script: "" })
+      .send({
+        type: "editor-context-changed",
+        context: context({ clips: four }),
+      })
+      .send({
+        type: "editor-context-changed",
+        context: context({ clips: [...four, "e"] }),
+      })
+      .send({
+        type: "editor-context-changed",
+        context: context({ clips: four }),
+      });
+
+    const sent = t
+      .getEffects()
+      .flatMap((effect) =>
+        effect.type === "stream-suggestion" ? [effect.input.previousVideo] : []
+      );
+    expect(sent.slice(-3)).toEqual([
+      "Last time.\nSee you next.",
+      undefined,
+      "Last time.\nSee you next.",
+    ]);
+    expect(t.getState().included.previousVideo).toBe(true);
   });
 
   describe("repo files picked in the Context modal", () => {

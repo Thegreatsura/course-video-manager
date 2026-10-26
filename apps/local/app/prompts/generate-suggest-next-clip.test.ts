@@ -3,6 +3,7 @@ import {
   generateSuggestNextClipPrompt,
   generateSuggestNextClipPromptParts,
   MAX_DIAGRAM_TEXT_CHARS,
+  MAX_PREVIOUS_VIDEO_CHARS,
   MAX_REPO_FILES_CHARS,
 } from "./generate-suggest-next-clip";
 
@@ -88,6 +89,21 @@ describe("generateSuggestNextClipPrompt", () => {
     expect(now).toContain("[… cut: over the diagram text limit]");
     expect(now.indexOf("CLIP_MARKER")).toBeLessThan(
       now.indexOf("DIAGRAM_MARKER")
+    );
+  });
+
+  it("puts the previous Video's Clips last in the cached plan, keeping their end past the limit", () => {
+    const { plan, now } = generateSuggestNextClipPromptParts({
+      script: "SCRIPT_MARKER",
+      previousVideo: `EARLY_MARKER${"x".repeat(MAX_PREVIOUS_VIDEO_CHARS)}LATE_MARKER`,
+      clips: ["CLIP_MARKER"],
+    });
+    expect(now).not.toContain("LATE_MARKER");
+    expect(plan).not.toContain("EARLY_MARKER");
+    expect(plan).toContain("[… cut: earlier clips over the limit]");
+    expect(plan).toMatch(/LATE_MARKER\n<\/previous-video-clips>$/);
+    expect(plan.indexOf("SCRIPT_MARKER")).toBeLessThan(
+      plan.indexOf("<previous-video-clips>")
     );
   });
 
