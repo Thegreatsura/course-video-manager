@@ -70,7 +70,7 @@ export const loadStorageOwnership = (
         db
           .select({
             mic: avCalibrations.micFilePath,
-            trace: avCalibrations.browserTracePath,
+            script: avCalibrations.scriptFilePath,
             camera: avCalibrations.cameraFilePath,
           })
           .from(avCalibrations),
@@ -134,7 +134,7 @@ export const loadStorageOwnership = (
         footageUses,
         keptFootage: [
           ...calibrationRows.flatMap((c) =>
-            [c.mic, c.trace, c.camera].filter(
+            [c.mic, c.script, c.camera].filter(
               (p): p is string => p !== null && p !== ""
             )
           ),

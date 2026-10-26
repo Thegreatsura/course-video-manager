@@ -70,7 +70,7 @@ export const MIGRATED_PATH_COLUMNS: readonly MigratedColumn[] = [
   {
     name: "av_calibration.browser_trace_path",
     table: avCalibrations,
-    column: avCalibrations.browserTracePath,
+    column: avCalibrations.scriptFilePath,
   },
 ];
 

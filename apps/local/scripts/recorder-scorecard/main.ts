@@ -199,7 +199,6 @@ const main = async () => {
       createdAtMs: Date.now(),
       thresholdDb: SYNTHETIC_THRESHOLD_DB,
       recorderMic: MIC_NAME,
-      browserInputLabel: null,
       cameraDevice: RECORDER_CAMERA_NAME,
     },
     service,

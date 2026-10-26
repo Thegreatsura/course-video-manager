@@ -20,10 +20,7 @@ import {
   runSchedule,
   SCRIPT_VERSION,
 } from "@/av-calibration-constants";
-import type {
-  BrowserTracePoint,
-  SavedAVCalibration,
-} from "@/features/av-calibration/calibration-wire";
+import type { SavedAVCalibration } from "@/features/av-calibration/calibration-wire";
 import {
   buildCalibrationTimeline,
   calibrationDetectorRule,
@@ -49,8 +46,13 @@ import {
 } from "@/packages/clap-step";
 import { readMicSamples } from "@/packages/clap-step/server";
 
-/** Beside a calibration's mic file: the browser's level trace and the prompt schedule. */
-export const BROWSER_TRACE_FILE = "browser-trace.json";
+/**
+ * Beside a calibration's mic file: the prompt schedule its run followed and
+ * the windows it was measured over. Runs before #2355 wrote it as
+ * `browser-trace.json`, with the browser detector's trace in it too; their
+ * rows keep that path.
+ */
+export const SCRIPT_FILE = "calibration-script.json";
 
 /** The recorder service measured a run other than the one the page followed. */
 export class CalibrationRunMismatchError extends Data.TaggedError(
@@ -70,9 +72,9 @@ export class LoudnessCheckFailedError extends Data.TaggedError(
 /**
  * Stores an AV Calibration from its run's measurement: judges the speech
  * loudness against the band and the true peak against its ceiling (the
- * loudness check), derives the threshold, writes the browser's trace beside
- * the mic file (with the schedule its prompts followed and the windows, in
- * the files' seconds), and saves the row. It has no Mic Offset yet, so it is
+ * loudness check), derives the threshold, writes the schedule its prompts
+ * followed and the windows beside the mic file (`SCRIPT_FILE`, in the files'
+ * seconds), and saves the row. It has no Mic Offset yet, so it is
  * stored failed: the clap step's Save (`saveMicOffset`) passes it (#2137).
  */
 export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
@@ -86,8 +88,6 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     scriptStartSeconds: number;
     /** The folder (WSL path) the run's own folder was made in. */
     recordingsFolder: string;
-    browserInputLabel: string | null;
-    browserTrace: BrowserTracePoint[] | null;
   }
 ) {
   const { measured } = o;
@@ -113,20 +113,18 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
     micOffsetMs: null,
   });
   const thresholdDb = deriveThreshold(measured.speechLufs);
-  const browserTracePath = yield* assertUnderEffect(
+  const scriptFilePath = yield* assertUnderEffect(
     o.recordingsFolder,
-    path.join(path.dirname(micFile), BROWSER_TRACE_FILE)
+    path.join(path.dirname(micFile), SCRIPT_FILE)
   );
   const fs = yield* FileSystem.FileSystem;
   yield* fs.writeFileString(
-    browserTracePath,
+    scriptFilePath,
     JSON.stringify({
       scriptVersion: SCRIPT_VERSION,
       scriptStartSeconds: o.scriptStartSeconds,
       schedule: runSchedule(o.scriptStartSeconds),
       measurementWindows: o.windows,
-      browserInputLabel: o.browserInputLabel,
-      trace: o.browserTrace,
     })
   );
   const storageRoots = yield* storageRootsConfig;
@@ -141,11 +139,10 @@ export const recordAVCalibration = Effect.fn("recordAVCalibration")(function* (
         truePeakDb: measured.truePeakDb,
         thresholdDb,
         recorderMic: measured.mic,
-        browserInputLabel: o.browserInputLabel,
         scriptVersion: SCRIPT_VERSION,
         // Relative to its Storage Root, as every stored path is (ADR 0040).
         micFilePath: toRootRelative(micFile, storageRoots),
-        browserTracePath: toRootRelative(browserTracePath, storageRoots),
+        scriptFilePath: toRootRelative(scriptFilePath, storageRoots),
         cameraDevice: measured.camera,
         clapsFound: null,
         clapSpreadMs: null,
@@ -174,7 +171,6 @@ const toSaved = (row: AVCalibrationRow): SavedAVCalibration => ({
   truePeakDb: row.truePeakDb,
   thresholdDb: row.thresholdDb,
   recorderMic: row.recorderMic,
-  browserInputLabel: row.browserInputLabel,
   cameraDevice: row.cameraDevice,
   clapsFound: row.clapsFound,
   clapSpreadMs: row.clapSpreadMs,
@@ -247,8 +243,11 @@ const TimeWindowSchema = Schema.Struct({
   endSeconds: Schema.Number,
 });
 
-/** `BROWSER_TRACE_FILE`, as `recordAVCalibration` writes it. */
-const TraceFileSchema = Schema.parseJson(
+/**
+ * `SCRIPT_FILE`, as `recordAVCalibration` writes it. A run's file from
+ * before #2355 also holds the browser detector's trace, which is ignored.
+ */
+const ScriptFileSchema = Schema.parseJson(
   Schema.Struct({
     schedule: Schema.Array(
       Schema.Union(
@@ -273,19 +272,14 @@ const TraceFileSchema = Schema.parseJson(
       speech: Schema.Array(TimeWindowSchema),
       claps: Schema.optional(TimeWindowSchema),
     }),
-    trace: Schema.NullOr(
-      Schema.Array(
-        Schema.Struct({ seconds: Schema.Number, peakDb: Schema.Number })
-      )
-    ),
   })
 );
 
 /**
  * A stored AV Calibration's review timeline (#2081), redrawn from what
  * was kept: silencedetect is run on its mic file with its own threshold and
- * the short Silence Length, and its browser trace and prompt schedule are
- * read from the file beside it. Review only; it decides nothing.
+ * the short Silence Length, and its prompt schedule is read from the file
+ * beside it (`SCRIPT_FILE`). Review only; it decides nothing.
  */
 export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
   function* (db: Database, calibrationId: string) {
@@ -305,18 +299,18 @@ export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
     // Stored root-relative once the files are under a Storage Root; a run
     // in ~/Videos is read where it is.
     const storageRoots = yield* storageRootsConfig;
-    const tracePath = yield* resolveStoragePath(
-      row.browserTracePath,
+    const scriptPath = yield* resolveStoragePath(
+      row.scriptFilePath,
       storageRoots,
-      "AV Calibration trace"
+      "AV Calibration script"
     );
     const micPath = yield* resolveStoragePath(
       row.micFilePath,
       storageRoots,
       "AV Calibration mic recording"
     );
-    const traceFile = yield* Schema.decodeUnknown(TraceFileSchema)(
-      yield* fs.readFileString(tracePath)
+    const scriptFile = yield* Schema.decodeUnknown(ScriptFileSchema)(
+      yield* fs.readFileString(scriptPath)
     );
     const ffmpeg = yield* FFmpegCommandsService;
     const silencedetectOutput = yield* ffmpeg.detectSilence(micPath, {
@@ -325,7 +319,7 @@ export const loadCalibrationTimeline = Effect.fn("loadCalibrationTimeline")(
     return buildCalibrationTimeline({
       calibrationId: row.id,
       thresholdDb: row.thresholdDb,
-      traceFile,
+      scriptFile,
       silencedetectOutput,
     });
   }
@@ -360,7 +354,6 @@ export const lastPassedCalibration = Effect.fn("lastPassedCalibration")(
           createdAtMs: row.createdAt.getTime(),
           thresholdDb: row.thresholdDb,
           recorderMic: row.recorderMic,
-          browserInputLabel: row.browserInputLabel,
           cameraDevice: row.cameraDevice,
         } satisfies LastPassedCalibration)
       : null;
@@ -505,7 +498,7 @@ export const clapStepFiles = Effect.fn("clapStepFiles")(function* (
 
 /**
  * What the clap step opens with (`ClapStepData`): the loudest point in the
- * run's clap window (the whole mic file, for a run whose trace has none),
+ * run's clap window (the whole mic file, for a run whose script file has none),
  * the waveform around it, and the Mic Offset to start from: the one already
  * saved on it, else the pair's current one, else the default.
  */
@@ -515,15 +508,15 @@ export const loadClapStep = Effect.fn("loadClapStep")(function* (
 ) {
   const { row, micFile } = yield* clapStepFiles(db, calibrationId);
   const fs = yield* FileSystem.FileSystem;
-  const tracePath = yield* resolveStoragePath(
-    row.browserTracePath,
+  const scriptPath = yield* resolveStoragePath(
+    row.scriptFilePath,
     yield* storageRootsConfig,
-    "AV Calibration trace"
+    "AV Calibration script"
   );
-  const traceFile = yield* Schema.decodeUnknown(TraceFileSchema)(
-    yield* fs.readFileString(tracePath)
+  const scriptFile = yield* Schema.decodeUnknown(ScriptFileSchema)(
+    yield* fs.readFileString(scriptPath)
   );
-  const window = traceFile.measurementWindows.claps;
+  const window = scriptFile.measurementWindows.claps;
   const fromMs = window ? window.startSeconds * 1000 : 0;
   const toMs = window ? window.endSeconds * 1000 : 24 * 60 * 60 * 1000;
   const clapWindow = yield* readMicSamples({

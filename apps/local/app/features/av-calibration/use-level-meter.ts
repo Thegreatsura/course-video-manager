@@ -7,7 +7,7 @@ import type { levelMeterReducer } from "./level-meter-reducer";
 /**
  * The `listen-to-meter` effect: listens to `GET /api/av-calibration/meter`
  * while the page is open. Closing the stream (leaving the page) is what stops
- * the meter. A reading is stamped with when the page heard it.
+ * the meter.
  */
 export const listenToMeter = (
   dispatch: (action: levelMeterReducer.Action) => void
@@ -16,12 +16,7 @@ export const listenToMeter = (
     const source = new EventSource("/api/av-calibration/meter");
     for (const type of LEVEL_METER_MESSAGE_TYPES) {
       source.addEventListener(type, (event) => {
-        const message = JSON.parse(event.data) as LevelMeterMessage;
-        dispatch(
-          message.type === "meter-reading"
-            ? { ...message, receivedAtMs: Date.now() }
-            : message
-        );
+        dispatch(JSON.parse(event.data) as LevelMeterMessage);
       });
     }
     return source;

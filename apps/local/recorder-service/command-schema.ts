@@ -23,7 +23,6 @@ const calibration = {
       createdAtMs: Schema.Number,
       thresholdDb: Schema.Number,
       recorderMic: Schema.String,
-      browserInputLabel: Schema.NullOr(Schema.String),
       cameraDevice: Schema.NullOr(Schema.String),
     })
   ),

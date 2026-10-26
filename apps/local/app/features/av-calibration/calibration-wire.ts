@@ -10,14 +10,6 @@ import type {
  * progress itself comes over the level meter's stream (`level-meter-wire.ts`).
  */
 
-/**
- * One block of the browser detector's input (1024 samples, ~21 ms): its peak
- * across every channel, in dBFS, timed in seconds of the run's mic file.
- * Silence is a block whose peak is under the threshold, as `silence-scan.ts`
- * judges each sample.
- */
-export type BrowserTracePoint = { seconds: number; peakDb: number };
-
 /** `POST /api/av-calibration/finish`: the script is done; measure and store it. */
 export type FinishCalibrationRequest = {
   /** The run the page followed (`calibration-started`). */
@@ -29,10 +21,6 @@ export type FinishCalibrationRequest = {
    * speech, and the clap window (the Mic Offset's, cut out of the peak).
    */
   windows: MeasurementWindows;
-  /** The label of the browser's audio input; null when it could not be opened. */
-  browserInputLabel: string | null;
-  /** What the browser detector heard during the run; null with no input. */
-  browserTrace: BrowserTracePoint[] | null;
 };
 
 /** A stored AV Calibration, as the page shows it. */
@@ -47,7 +35,6 @@ export type SavedAVCalibration = {
   truePeakDb: number | null;
   thresholdDb: number;
   recorderMic: string;
-  browserInputLabel: string | null;
   /** The recorder service's camera; null before the clap step. */
   cameraDevice: string | null;
   /** Claps found in both mic and camera; null before the clap step. */

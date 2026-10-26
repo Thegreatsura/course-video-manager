@@ -102,7 +102,7 @@ async function seed() {
     recorderMic: "mic",
     scriptVersion: 1,
     micFilePath: "/mnt/d/raw-footage/cal/mic.wav",
-    browserTracePath: "/mnt/d/raw-footage/cal/browser-trace.json",
+    scriptFilePath: "/mnt/d/raw-footage/cal/browser-trace.json",
   });
   await testDb.insert(schema.thumbnails).values({
     videoId,
@@ -164,7 +164,7 @@ describe("migrateStoragePaths", () => {
     expect(video!.originalFootagePath).toBe("raw-footage/original.mp4");
     const [cal] = await testDb.select().from(schema.avCalibrations);
     expect(cal!.micFilePath).toBe("raw-footage/cal/mic.wav");
-    expect(cal!.browserTracePath).toBe("raw-footage/cal/browser-trace.json");
+    expect(cal!.scriptFilePath).toBe("raw-footage/cal/browser-trace.json");
   });
 
   it("leaves thumbnails alone and reports them for #2105", async () => {

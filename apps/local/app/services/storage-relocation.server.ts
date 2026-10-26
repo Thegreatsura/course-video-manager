@@ -224,7 +224,7 @@ export const planRelocation = (
     for (const run of calibrationRows) {
       const files = [
         run.micFilePath,
-        run.browserTracePath,
+        run.scriptFilePath,
         ...(run.cameraFilePath === null ? [] : [run.cameraFilePath]),
       ];
       if (!files.some((f) => underNoRoot(f, roots))) continue;
@@ -255,7 +255,7 @@ export const planRelocation = (
       calibrationUpdates.push({
         id: run.id,
         micFilePath: moved(run.micFilePath),
-        browserTracePath: moved(run.browserTracePath),
+        scriptFilePath: moved(run.scriptFilePath),
         cameraFilePath:
           run.cameraFilePath === null ? null : moved(run.cameraFilePath),
       });

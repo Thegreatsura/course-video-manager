@@ -21,12 +21,7 @@ export namespace levelMeterReducer {
     failure: string | null;
   };
 
-  /** A reading carries when the page heard it, for the session's clock. */
-  export type Action =
-    | Exclude<LevelMeterMessage, { type: "meter-reading" }>
-    | (Extract<LevelMeterMessage, { type: "meter-reading" }> & {
-        receivedAtMs: number;
-      });
+  export type Action = LevelMeterMessage;
 }
 
 type State = levelMeterReducer.State;

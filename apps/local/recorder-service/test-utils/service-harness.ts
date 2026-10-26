@@ -33,7 +33,6 @@ export const CALIBRATION: LastPassedCalibration = {
   createdAtMs: T0_MS - 24 * 60 * 60 * 1000,
   thresholdDb: DEFAULT_SILENCE_THRESHOLD_DB,
   recorderMic: FAKE_MIC,
-  browserInputLabel: FAKE_MIC,
   cameraDevice: "Cam Link 4K",
 };
 

@@ -19,7 +19,7 @@ import { findByName, Refusal } from "./refusal";
 import { listDshowDevices } from "./windows-devices";
 import { MIC_NAME } from "../app/mic-device";
 import {
-  CLOSE_OBS_TO_CALIBRATE,
+  CAM_LINK_IN_USE_TO_CALIBRATE,
   runMeasurementWindows,
 } from "../app/av-calibration-constants";
 import {
@@ -156,9 +156,9 @@ type CalibrationRun = {
  * run (its preview lets go of the Cam Link, which opens in one process at a
  * time) and given back when the run's process is gone. The run starts once
  * it is live: its first reading, which comes only once the camera has
- * opened; a process that quits before then is a refused start ("Close OBS
- * to calibrate" when dshow says another program holds the Cam Link; the
- * service never closes OBS itself). Finished or
+ * opened; a process that quits before then is a refused start
+ * (`CAM_LINK_IN_USE_TO_CALIBRATE` when dshow says another app holds the Cam
+ * Link; the service never closes that app itself). Finished or
  * cancelled, the plain meter comes back for the same client; stopped, or its
  * client gone, the run is discarded with the meter. A discarded run leaves
  * no file.
@@ -272,11 +272,11 @@ export const createMeterSide = <Owner>(o: {
           onExit: (lastLine, said) => {
             if (current !== started) return;
             const message = `The AV Calibration's ffmpeg quit${lastLine ? `: ${lastLine}` : "."}`;
-            // Another program has the Cam Link: Matt closes OBS (CVM never
-            // does) and presses Start again.
+            // Another app has the Cam Link: Matt closes it (CVM never does)
+            // and presses Start again.
             if (!live)
               return failToStart(
-                saysDeviceBusy(said) ? CLOSE_OBS_TO_CALIBRATE : message
+                saysDeviceBusy(said) ? CAM_LINK_IN_USE_TO_CALIBRATE : message
               );
             current = undefined;
             o.giveBackCamera();

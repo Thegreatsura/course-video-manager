@@ -137,7 +137,6 @@ const lastPassed: LastPassedCalibration = {
   createdAtMs: AT,
   thresholdDb: -43,
   recorderMic: MIC,
-  browserInputLabel: MIC,
   cameraDevice: "Cam Link 4K",
 };
 
@@ -156,14 +155,14 @@ describe("whether a Recorder may start (the gate)", () => {
     [
       "the editor names the camera as the recorder is configured to find it",
       { ...lastPassed, cameraDevice: "Elgato Cam Link 4K" },
-      { browserInputLabel: MIC, camera: RECORDER_CAMERA_NAME },
+      { camera: RECORDER_CAMERA_NAME },
       AT,
       null,
     ],
     [
       "a millisecond under 7 days",
       lastPassed,
-      { browserInputLabel: MIC },
+      {},
       AT + CALIBRATION_VALIDITY_MS - 1,
       null,
     ],
@@ -197,13 +196,6 @@ describe("whether a Recorder may start (the gate)", () => {
         from: "Cam Link 4K",
         to: "Elgato Facecam",
       },
-    ],
-    [
-      "the browser has no mic open",
-      lastPassed,
-      { browserInputLabel: null },
-      AT,
-      { kind: "device-changed", device: "browser-input", from: MIC, to: null },
     ],
   ])("%s", (_, last, device, now, reason) => {
     const validity = calibrationValidity(last, device, now);
