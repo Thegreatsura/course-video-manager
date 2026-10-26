@@ -139,13 +139,19 @@ export type ClipComposite = {
 };
 
 /**
- * One still of a Clip's picture: a frame of a Footage file, or the composite
- * drawn from a Recording Session's screen and camera in one scene.
+ * One still of a Clip's picture: a frame of a Footage file, the composite
+ * drawn from a Recording Session's screen and camera in one scene, or a
+ * Recording Session's screen frame alone (no face), at its native size.
  */
 export type ClipFrame =
   | {
       readonly kind: "footage";
       readonly inputVideo: string;
+      readonly time: number;
+    }
+  | {
+      readonly kind: "screen";
+      readonly screen: string;
       readonly time: number;
     }
   | {
@@ -409,10 +415,29 @@ export const sceneAt = (
     (time < segments[0]!.startSeconds ? segments[0]! : segments.at(-1)!)
   ).scene;
 
-/** The first frame, the last frame, or the frame at a source time. */
+/**
+ * The Clip's screen frame alone as a picture for playback, cued to
+ * `from`–`to` (source time: it shares the picture's clock). Null when there
+ * is no screen to show without the face: an OBS Clip (its face is baked into
+ * its Footage) or a camera-only Short session.
+ */
+export const clipScreenPicture = (
+  source: ClipSource,
+  range: { readonly from: number; readonly to: number }
+): { readonly screen: string } | null =>
+  source.kind === "recording-session" && source.files.screen !== null
+    ? { screen: viewVideoUrl(source.files.screen, range.from, range.to) }
+    : null;
+
+/**
+ * The first frame, the last frame, or the frame at a source time. With
+ * `screenOnly`, a CVM-recorder Clip that captured a screen gives its screen
+ * frame alone (no face); any other Clip ignores it.
+ */
 export const clipFrame = (
   source: ClipSource,
-  at: "first" | "last" | number
+  at: "first" | "last" | number,
+  opts?: { readonly screenOnly?: boolean }
 ): ClipFrame => {
   const time =
     at === "first"
@@ -422,6 +447,9 @@ export const clipFrame = (
         : at;
   if (source.kind === "footage") {
     return { kind: "footage", inputVideo: source.footagePath, time };
+  }
+  if (opts?.screenOnly && source.files.screen !== null) {
+    return { kind: "screen", screen: source.files.screen, time };
   }
   return {
     kind: "composite",
@@ -446,12 +474,12 @@ export const clipFrameFfmpegArgs = (
   frame: ClipFrame,
   opts: { readonly seek: string; readonly filter?: string }
 ): string[] => {
-  if (frame.kind === "footage") {
+  if (frame.kind === "footage" || frame.kind === "screen") {
     return [
       "-ss",
       opts.seek,
       "-i",
-      frame.inputVideo,
+      frame.kind === "footage" ? frame.inputVideo : frame.screen,
       ...(opts.filter ? ["-vf", opts.filter] : []),
     ];
   }
@@ -580,8 +608,8 @@ export const mapClipSourceFiles = <E, R>(
 
 /**
  * The same still with every file it reads passed through `f` (its Footage
- * file, or its screen and camera), as {@link mapClipSourceFiles} does for a
- * Clip Source.
+ * file, its screen, or its screen and camera), as {@link mapClipSourceFiles}
+ * does for a Clip Source.
  */
 export const mapClipFrameFiles = <E, R>(
   frame: ClipFrame,
@@ -592,6 +620,9 @@ export const mapClipFrameFiles = <E, R>(
       ...frame,
       inputVideo,
     }));
+  }
+  if (frame.kind === "screen") {
+    return Effect.map(f(frame.screen), (screen) => ({ ...frame, screen }));
   }
   return Effect.map(
     Effect.all({

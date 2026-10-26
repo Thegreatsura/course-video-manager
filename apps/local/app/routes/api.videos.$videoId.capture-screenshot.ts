@@ -12,13 +12,19 @@ import { storageRootsConfig } from "@/services/storage-roots";
 
 /**
  * A `ClipFrame` from `@/packages/clip-source`: the picker never names a file.
- * A CVM-recorder Clip's is a composite, drawn from its screen and camera in
- * its Recording Session's Video Format.
+ * A CVM-recorder Clip's is its screen frame alone (No face, the default), or
+ * With face the composite, drawn from its screen and camera in its Recording
+ * Session's Video Format.
  */
 const RequestSchema = Schema.Union(
   Schema.Struct({
     kind: Schema.Literal("footage"),
     inputVideo: Schema.String,
+    time: Schema.Number,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("screen"),
+    screen: Schema.String,
     time: Schema.Number,
   }),
   Schema.Struct({

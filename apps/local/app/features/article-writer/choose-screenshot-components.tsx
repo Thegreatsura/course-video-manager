@@ -6,6 +6,10 @@ import type { Options } from "react-markdown";
 import { ChooseScreenshot } from "./choose-screenshot";
 import type { IndexedClip } from "./types";
 import type { ClipFrame } from "@/packages/clip-source";
+import {
+  parseScreenshotFace,
+  type ScreenshotFace,
+} from "./choose-screenshot-mutations";
 
 /**
  * Everything a rendered `<ChooseScreenshot>` placeholder needs. It travels by
@@ -36,6 +40,13 @@ export interface ChooseScreenshotRuntime {
     frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (messageId: string, clipIndex: number, alt: string) => void;
+  /** No face / With face clicked: saved on the placeholder's tag. */
+  onFaceChange: (
+    messageId: string,
+    clipIndex: number,
+    alt: string,
+    face: ScreenshotFace
+  ) => void;
 }
 
 const RuntimeContext = createContext<ChooseScreenshotRuntime | null>(null);
@@ -64,6 +75,7 @@ function ChooseScreenshotSlot(
   const clipIndex = parseInt(props.clipindex as string, 10);
   const alt = (props.alt as string) ?? "";
   const messageId = (props["data-message-id"] as string) ?? "";
+  const face = parseScreenshotFace(props.face);
 
   return (
     <ChooseScreenshot
@@ -75,6 +87,10 @@ function ChooseScreenshotSlot(
       }
       onCapture={(ci, a, frame) => runtime.onCapture(messageId, ci, a, frame)}
       onRemove={(ci, a) => runtime.onRemove(messageId, ci, a)}
+      face={face}
+      onFaceChange={(next) =>
+        runtime.onFaceChange(messageId, clipIndex, alt, next)
+      }
       isCapturing={
         runtime.capturingKey === runtime.keyFor(clipIndex, alt, messageId)
       }

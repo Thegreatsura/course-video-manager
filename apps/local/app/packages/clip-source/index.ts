@@ -23,6 +23,7 @@ export {
   clipFrameFfmpegArgs,
   clipPlaybackClock,
   clipPlaybackUrl,
+  clipScreenPicture,
   sceneAt,
   sceneOverrideScenes,
   clipSource,
