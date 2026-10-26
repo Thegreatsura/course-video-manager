@@ -3,7 +3,7 @@ import { useEffectReducer } from "use-effect-reducer";
 import { useBlocker, useNavigate } from "react-router";
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
 import { diagramChannel } from "@/lib/diagram-protocol";
-import { FULL_SCREEN_REFUSED_HINT } from "./full-screen";
+import { FULL_SCREEN_REFUSED_HINT, readFullScreen } from "./full-screen";
 import {
   createInitialDiagramPlaygroundState,
   diagramPlaygroundReducer,
@@ -19,6 +19,8 @@ import {
   type HeadSaveResult,
 } from "./head-autosaver";
 import { centreCameraOnContent } from "./centre-camera-on-content";
+import { rememberDiagramFrame } from "./diagram-frame";
+import type { VideoFormat } from "@/features/videos/video-format";
 import { renderThumbnailPngBase64 } from "./render-thumbnail";
 import type { PlaygroundStatus } from "./playground-status";
 import { fetchSnapshotList, type Snapshot } from "./snapshot-list";
@@ -139,7 +141,7 @@ export function useDiagramPlaygroundReducer() {
         if (!ed) return;
         if (effect.scene) {
           loadSnapshot(ed.store, { document: effect.scene });
-          if (effect.centreFor) centreCameraOnContent(ed, effect.centreFor);
+          if (effect.centreFor) centreAndRememberFrame(ed, effect.centreFor);
         } else {
           clearCanvas(ed);
         }
@@ -371,7 +373,7 @@ export function useDiagramPlaygroundReducer() {
             const ed = editorRef.current;
             if (!ed) return;
             ed.updateViewportScreenBounds(ed.getContainer());
-            centreCameraOnContent(ed, effect.format);
+            centreAndRememberFrame(ed, effect.format);
           });
         });
         return () => cancelAnimationFrame(frame);
@@ -537,4 +539,18 @@ export function useDiagramPlaygroundReducer() {
     requestRestore,
     reportStoredHead,
   };
+}
+
+/**
+ * Centre the diagram, and remember where it was centred as the Diagram Frame
+ * when the window is full screen (diagram-frame.ts).
+ */
+function centreAndRememberFrame(editor: Editor, format: VideoFormat) {
+  const safeArea = centreCameraOnContent(editor, format);
+  if (!safeArea) return;
+  rememberDiagramFrame(format, safeArea, {
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    fullScreen: readFullScreen(),
+  });
 }

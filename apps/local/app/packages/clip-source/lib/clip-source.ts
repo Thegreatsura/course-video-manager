@@ -11,6 +11,7 @@ import {
   type Scene,
   type SceneSegment,
 } from "@/packages/scene-layout";
+import { clampCrop, cropFilter, type ScreenCrop } from "./screen-crop";
 
 /**
  * A CVM-recorder Clip's Recording Session, as loaded with the Clip (the
@@ -141,7 +142,8 @@ export type ClipComposite = {
 /**
  * One still of a Clip's picture: a frame of a Footage file, the composite
  * drawn from a Recording Session's screen and camera in one scene, or a
- * Recording Session's screen frame alone (no face), at its native size.
+ * Recording Session's screen frame alone (no face), at its native size,
+ * optionally cut to a `crop` of it.
  */
 export type ClipFrame =
   | {
@@ -153,6 +155,7 @@ export type ClipFrame =
       readonly kind: "screen";
       readonly screen: string;
       readonly time: number;
+      readonly crop?: ScreenCrop;
     }
   | {
       readonly kind: "composite";
@@ -417,27 +420,32 @@ export const sceneAt = (
 
 /**
  * The Clip's screen frame alone as a picture for playback, cued to
- * `from`–`to` (source time: it shares the picture's clock). Null when there
+ * `from`–`to` (source time: it shares the picture's clock), with the Video
+ * Format its Recording Session was filmed in. Null when there
  * is no screen to show without the face: an OBS Clip (its face is baked into
  * its Footage) or a camera-only Short session.
  */
 export const clipScreenPicture = (
   source: ClipSource,
   range: { readonly from: number; readonly to: number }
-): { readonly screen: string } | null =>
+): { readonly screen: string; readonly format: VideoFormat } | null =>
   source.kind === "recording-session" && source.files.screen !== null
-    ? { screen: viewVideoUrl(source.files.screen, range.from, range.to) }
+    ? {
+        screen: viewVideoUrl(source.files.screen, range.from, range.to),
+        format: source.format,
+      }
     : null;
 
 /**
  * The first frame, the last frame, or the frame at a source time. With
  * `screenOnly`, a CVM-recorder Clip that captured a screen gives its screen
- * frame alone (no face); any other Clip ignores it.
+ * frame alone (no face), cut to `crop` when given; any other Clip ignores
+ * both.
  */
 export const clipFrame = (
   source: ClipSource,
   at: "first" | "last" | number,
-  opts?: { readonly screenOnly?: boolean }
+  opts?: { readonly screenOnly?: boolean; readonly crop?: ScreenCrop }
 ): ClipFrame => {
   const time =
     at === "first"
@@ -449,7 +457,12 @@ export const clipFrame = (
     return { kind: "footage", inputVideo: source.footagePath, time };
   }
   if (opts?.screenOnly && source.files.screen !== null) {
-    return { kind: "screen", screen: source.files.screen, time };
+    return {
+      kind: "screen",
+      screen: source.files.screen,
+      time,
+      ...(opts.crop ? { crop: clampCrop(opts.crop) } : {}),
+    };
   }
   return {
     kind: "composite",
@@ -475,12 +488,16 @@ export const clipFrameFfmpegArgs = (
   opts: { readonly seek: string; readonly filter?: string }
 ): string[] => {
   if (frame.kind === "footage" || frame.kind === "screen") {
+    const filters = [
+      frame.kind === "screen" && frame.crop ? cropFilter(frame.crop) : null,
+      opts.filter ?? null,
+    ].filter((f) => f !== null);
     return [
       "-ss",
       opts.seek,
       "-i",
       frame.kind === "footage" ? frame.inputVideo : frame.screen,
-      ...(opts.filter ? ["-vf", opts.filter] : []),
+      ...(filters.length > 0 ? ["-vf", filters.join(",")] : []),
     ];
   }
   const at = Number(opts.seek);

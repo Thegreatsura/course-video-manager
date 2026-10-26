@@ -307,9 +307,13 @@ _Avoid_: Recording mode, Capture backend, New recorder (its old name; stored as 
 A marker on a **Clip** from a CVM-recorder **Recording Session** naming one scene (Camera, Code or No Face) to draw the whole Clip in, in place of the scenes that were live while it was filmed. With none, the Clip follows its Recording Session's scene timeline. An OBS Clip cannot have one: its scene is baked into its Footage.
 _Avoid_: Scene change (a live switch during a Recording Session), Layout
 
-**No face** / **With face**:
-How the Article Writer's Choose Screenshot takes a still of a CVM-recorder **Clip**. No face, the default, is the **Recording Session**'s screen frame alone, at its native size. With face is the composite the export draws, with the face in its scene, at 720p. The choice is saved per screenshot, on its `<ChooseScreenshot>` placeholder. OBS Clips get neither option, because the face is baked into their **Footage**. A camera-only Short session gets neither either, because it has no screen.
-_Avoid_: Scene Override (that changes what the Clip exports), Hide camera, Screen-only mode
+**No face** / **Diagram** / **With face**:
+How the Article Writer's Choose Screenshot takes a still of a CVM-recorder **Clip**. No face, the default, is the **Recording Session**'s screen frame alone, at its native size. Diagram is that screen frame cut to the **Diagram Frame**, also at native size. It is offered only once the Diagram Playground has remembered a Diagram Frame. With face is the composite the export draws, with the face in its scene, at 720p. The choice is saved per screenshot, on its `<ChooseScreenshot>` placeholder. OBS Clips get none of these options, because the face is baked into their **Footage**. A camera-only Short session gets none either, because it has no screen.
+_Avoid_: Scene Override (that changes what the Clip exports), Hide camera, Screen-only mode, Crop box
+
+**Diagram Frame**:
+The rectangle of the recorded screen that the Diagram Playground centres every diagram in: inside the padding, and left of the face-cam strip. It is the same for every diagram. The playground remembers it in the browser, once per **Video Format**, as fractions of the screen, each time it centres while full screen. Full screen means the window covers exactly the recorded monitor, so the fractions hold at any device pixel ratio. It assumes the playground is full screen on the monitor the recorder captures: nothing stored records which monitor that was.
+_Avoid_: Safe area (the centring code's own word for it), Diagram view, Crop
 
 **Silence Length**:
 A setting of each Recording Session (short or long) for how long a silence must be to end a clip: short (the default) cuts on brief pauses in a sentence, long only on long ones. It is fixed when recording starts.
