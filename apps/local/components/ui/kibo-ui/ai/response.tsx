@@ -1,8 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { HTMLAttributes } from "react";
-import { memo, useMemo } from "react";
+import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 import ReactMarkdown, { type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -28,6 +28,72 @@ import {
 } from "../code-block";
 
 export type RemoveBlockHandler = (range: BlockRange) => void;
+
+/**
+ * Controls a host lays over a local image in the preview, given the image's
+ * `src` as written in the markdown and its alt text; null for none.
+ */
+export type PreviewImageActions = (image: {
+  src: string;
+  alt: string;
+}) => ReactNode;
+
+/** Provide it around an `AIResponse` to give its local images controls. */
+export const PreviewImageActionsContext =
+  createContext<PreviewImageActions | null>(null);
+
+/** One markdown image: local ones are served from `imageBasePath`. */
+const PreviewImage = ({
+  imageBasePath,
+  className,
+  ...props
+}: ComponentProps<"img"> & { imageBasePath: string }) => {
+  const actions = useContext(PreviewImageActionsContext);
+  const isExternalUrl =
+    props.src?.startsWith("http://") || props.src?.startsWith("https://");
+  const src = isExternalUrl
+    ? props.src
+    : `/view-image?imagePath=${imageBasePath}/${props.src}`;
+  const localActions =
+    !isExternalUrl && props.src && actions
+      ? actions({ src: props.src, alt: props.alt ?? "" })
+      : null;
+  return (
+    <div className="relative my-6 aspect-video">
+      <img
+        {...props}
+        className={cn("w-full h-full object-contain", className)}
+        src={src}
+      />
+      {localActions && (
+        <div className="absolute top-2 left-2 flex items-center gap-1">
+          {localActions}
+        </div>
+      )}
+      <div
+        className={cn(
+          "absolute top-2 right-2 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium shadow-sm",
+          isExternalUrl
+            ? "bg-blue-500/80 text-white"
+            : "bg-amber-500/80 text-white"
+        )}
+        title={isExternalUrl ? "External image (web)" : "Local image"}
+      >
+        {isExternalUrl ? (
+          <>
+            <GlobeIcon className="size-3" />
+            <span>Web</span>
+          </>
+        ) : (
+          <>
+            <HardDriveIcon className="size-3" />
+            <span>Local</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
   options?: Options;
@@ -255,43 +321,9 @@ const getComponents = (
         </CodeBlock>
       );
     },
-    img: ({ node, children, className, ...props }) => {
-      const isExternalUrl =
-        props.src?.startsWith("http://") || props.src?.startsWith("https://");
-      const src = isExternalUrl
-        ? props.src
-        : `/view-image?imagePath=${imageBasePath}/${props.src}`;
-      return (
-        <div className="relative my-6 aspect-video">
-          <img
-            {...props}
-            className={cn("w-full h-full object-contain", className)}
-            src={src}
-          />
-          <div
-            className={cn(
-              "absolute top-2 right-2 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium shadow-sm",
-              isExternalUrl
-                ? "bg-blue-500/80 text-white"
-                : "bg-amber-500/80 text-white"
-            )}
-            title={isExternalUrl ? "External image (web)" : "Local image"}
-          >
-            {isExternalUrl ? (
-              <>
-                <GlobeIcon className="size-3" />
-                <span>Web</span>
-              </>
-            ) : (
-              <>
-                <HardDriveIcon className="size-3" />
-                <span>Local</span>
-              </>
-            )}
-          </div>
-        </div>
-      );
-    },
+    img: ({ node, children, ...props }) => (
+      <PreviewImage {...props} imageBasePath={imageBasePath} />
+    ),
   };
 };
 

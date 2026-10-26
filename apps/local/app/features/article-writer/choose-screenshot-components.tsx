@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useCallback, useContext } from "react";
+import { History } from "lucide-react";
+import {
+  PreviewImageActionsContext,
+  type PreviewImageActions,
+} from "components/ui/kibo-ui/ai/response";
+import { Button } from "@/components/ui/button";
 import type { HTMLAttributes, ReactNode } from "react";
 import type { Options } from "react-markdown";
 import { ChooseScreenshot } from "./choose-screenshot";
@@ -38,7 +44,9 @@ export interface ChooseScreenshotRuntime {
     messageId: string,
     clipIndex: number,
     alt: string,
-    frame: ClipFrame
+    frame: ClipFrame,
+    /** The placeholder's saved face and crop, as they were captured. */
+    placeholder: { face: ScreenshotFace; crop: ScreenCrop | null }
   ) => Promise<boolean>;
   onRemove: (messageId: string, clipIndex: number, alt: string) => void;
   /** A face chosen (with Custom, its crop): saved on the placeholder's tag. */
@@ -49,6 +57,19 @@ export interface ChooseScreenshotRuntime {
     face: ScreenshotFace,
     crop?: ScreenCrop
   ) => void;
+  /**
+   * Revive: a screenshot captured this session turned back into its
+   * placeholder. Only the document has it; the chat's images get no button.
+   */
+  revive?: ScreenshotRevive;
+}
+
+export interface ScreenshotRevive {
+  /** Whether this image, written with this alt, was captured this session. */
+  canRevive: (imagePath: string, alt: string) => boolean;
+  revive: (imagePath: string) => void;
+  /** The frame a revived placeholder opens on. */
+  startTime: (clipIndex: number, alt: string) => number | undefined;
 }
 
 const RuntimeContext = createContext<ChooseScreenshotRuntime | null>(null);
@@ -61,9 +82,28 @@ export function ChooseScreenshotProvider({
   runtime: ChooseScreenshotRuntime;
   children: ReactNode;
 }) {
+  const revive = runtime.isStreaming ? undefined : runtime.revive;
+  const imageActions = useCallback<PreviewImageActions>(
+    ({ src, alt }) =>
+      revive?.canRevive(src, alt) ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="h-6 px-2 text-xs shadow-sm"
+          title="Turn back into Choose Screenshot, as it was when captured"
+          onClick={() => revive.revive(src)}
+        >
+          <History className="size-3" />
+          Revive
+        </Button>
+      ) : null,
+    [revive]
+  );
   return (
     <RuntimeContext.Provider value={runtime}>
-      {children}
+      <PreviewImageActionsContext.Provider value={revive ? imageActions : null}>
+        {children}
+      </PreviewImageActionsContext.Provider>
     </RuntimeContext.Provider>
   );
 }
@@ -88,7 +128,10 @@ function ChooseScreenshotSlot(
       onClipIndexChange={(current, next) =>
         runtime.onClipIndexChange(messageId, current, next, alt)
       }
-      onCapture={(ci, a, frame) => runtime.onCapture(messageId, ci, a, frame)}
+      onCapture={(ci, a, frame) =>
+        runtime.onCapture(messageId, ci, a, frame, { face, crop })
+      }
+      startTime={runtime.revive?.startTime(clipIndex, alt)}
       onRemove={(ci, a) => runtime.onRemove(messageId, ci, a)}
       face={face}
       crop={crop}

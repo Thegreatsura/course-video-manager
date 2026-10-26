@@ -73,6 +73,8 @@ export interface ChooseScreenshotProps {
   onFaceChange: (face: ScreenshotFace, crop?: ScreenCrop) => void;
   isCapturing?: boolean;
   isStreaming?: boolean;
+  /** A revived placeholder's frame: where it opens, instead of the start. */
+  startTime?: number;
 }
 
 export function ChooseScreenshot({
@@ -87,6 +89,7 @@ export function ChooseScreenshot({
   onFaceChange,
   isCapturing,
   isStreaming,
+  startTime,
 }: ChooseScreenshotProps) {
   const clip = clips.find((c) => c.index === clipIndex);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -118,7 +121,9 @@ export function ChooseScreenshot({
   const isLastClip = clipIndex >= clips.length;
 
   const landingTime = (c: IndexedClip) =>
-    landAtRef.current === "end" ? c.sourceEndTime : c.sourceStartTime;
+    landAtRef.current === "end"
+      ? c.sourceEndTime
+      : clampToClip(c, startTime ?? c.sourceStartTime);
 
   useEffect(() => {
     if (clip && videoRef.current) {
@@ -375,6 +380,9 @@ export function ChooseScreenshot({
     </div>
   );
 }
+
+const clampToClip = (c: IndexedClip, time: number) =>
+  Math.min(Math.max(time, c.sourceStartTime), c.sourceEndTime);
 
 const screenPictureOf = (
   clip: IndexedClip | undefined,
