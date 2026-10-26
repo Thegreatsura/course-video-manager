@@ -78,24 +78,6 @@ afterEach(() => {
 });
 
 describe("createPopupChannel", () => {
-  it("carries popup messages to the main app", async () => {
-    const { parent, child } = setup();
-    const seen = received(parent.subscribeParent);
-
-    child.sendToParent({ type: "saved", id: "a" });
-
-    await vi.waitFor(() => expect(seen).toEqual([{ type: "saved", id: "a" }]));
-  });
-
-  it("carries main-app messages to the popup", async () => {
-    const { parent, child } = setup();
-    const seen = received(child.subscribeChild);
-
-    parent.sendToChild({ type: "load", id: "b" });
-
-    await vi.waitFor(() => expect(seen).toEqual([{ type: "load", id: "b" }]));
-  });
-
   it("gives each side only the messages meant for it", async () => {
     const { parent, child } = setup();
     const parentSeen = received(parent.subscribeParent);

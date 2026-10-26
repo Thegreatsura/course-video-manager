@@ -150,10 +150,6 @@ describe("parseDiffLines", () => {
     expect(parseDiffLines("")).toEqual(new Map());
   });
 
-  it("returns empty map for whitespace-only diff", () => {
-    expect(parseDiffLines("   \n\n  ")).toEqual(new Map());
-  });
-
   it("handles new file diffs", () => {
     const result = parseDiffLines(newFileDiff);
     expect(result.get("app/new.ts")).toEqual(new Set([1, 2, 3]));

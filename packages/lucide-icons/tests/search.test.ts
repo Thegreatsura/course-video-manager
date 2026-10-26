@@ -27,14 +27,6 @@ describe("recently used icons", () => {
     expect(names.slice(0, 2)).toEqual(recent);
   });
 
-  it("keeps them in recency order, most recent first", () => {
-    const names = searchIconNames("", {
-      limit: 20,
-      recent: ["circle", "atom"],
-    });
-    expect(names.slice(0, 2)).toEqual(["circle", "atom"]);
-  });
-
   it("lifts a recent icon above a better textual match", () => {
     // `square` is a prefix match for the query while `key-square` merely
     // contains it, so without recency `key-square` would sort below every

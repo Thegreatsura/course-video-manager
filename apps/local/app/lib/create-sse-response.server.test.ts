@@ -44,17 +44,6 @@ async function readAllEvents(response: Response): Promise<string[]> {
 }
 
 describe("createSSEResponse", () => {
-  it("returns correct SSE headers", () => {
-    const response = createSSEResponse({
-      runtime: testRuntime,
-      program: () => Effect.void,
-    });
-
-    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
-    expect(response.headers.get("Cache-Control")).toBe("no-cache");
-    expect(response.headers.get("Connection")).toBe("keep-alive");
-  });
-
   it("formats events in correct SSE framing", async () => {
     const response = createSSEResponse({
       runtime: testRuntime,

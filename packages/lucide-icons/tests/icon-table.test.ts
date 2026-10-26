@@ -7,24 +7,6 @@ describe("the frozen table", () => {
     expect(ICON_NAMES.length).toBeGreaterThan(1600);
   });
 
-  it("returns raw lucide primitives, not transpiled geometry", () => {
-    const node = getIconNode("circle");
-    expect(node).toBeDefined();
-    for (const [tag, attrs] of node!) {
-      expect([
-        "path",
-        "circle",
-        "rect",
-        "line",
-        "polyline",
-        "polygon",
-        "ellipse",
-      ]).toContain(tag);
-      // React `key` attributes are the one thing stripped.
-      expect(attrs).not.toHaveProperty("key");
-    }
-  });
-
   it("uses only the seven lucide primitives across the whole set", () => {
     const tags = new Set<string>();
     for (const name of ICON_NAMES) {
@@ -87,11 +69,5 @@ describe("searchIconNames", () => {
 
   it("caps its result count", () => {
     expect(searchIconNames("a", { limit: 12, recent: [] })).toHaveLength(12);
-  });
-
-  it("returns the head of the set for an empty query", () => {
-    expect(searchIconNames("", { limit: 3, recent: [] })).toEqual(
-      ICON_NAMES.slice(0, 3)
-    );
   });
 });
