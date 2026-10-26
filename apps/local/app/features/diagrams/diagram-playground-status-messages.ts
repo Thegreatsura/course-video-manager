@@ -19,3 +19,7 @@ export const KEEP_CANVAS_BEFORE_RESTORING_FAILED =
   "Couldn't keep the canvas as a snapshot, so the snapshot wasn't restored. Try again.";
 export const RESTORE_BEFORE_LOADED =
   "The diagram hasn't loaded, so the snapshot wasn't restored.";
+
+/** A Clip's snapshot link pointed at a snapshot the timeline doesn't show. */
+export const LINKED_SNAPSHOT_NOT_FOUND =
+  "Couldn't open the Clip's snapshot: it isn't on this diagram's timeline";

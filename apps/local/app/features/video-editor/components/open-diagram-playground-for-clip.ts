@@ -5,7 +5,10 @@ import {
   openPlaygroundWithDiagram,
 } from "@/lib/diagram-window";
 
-/** Opens the Diagram Playground on the Clip's pinned Diagram, or empty. */
+/**
+ * Opens the Diagram Playground on the Clip's pinned DiagramSnapshot, restored
+ * to its Diagram's head, or empty.
+ */
 export const openDiagramPlaygroundForClip = async (
   snapshotId: string | null
 ) => {
@@ -19,7 +22,9 @@ export const openDiagramPlaygroundForClip = async (
     () => resolvedDiagramId
   );
   if (result.kind === "diagram") {
-    openPlaygroundWithDiagram(result.diagramId);
+    openPlaygroundWithDiagram(result.diagramId, {
+      snapshotId: snapshotId ?? undefined,
+    });
   } else {
     openPlayground();
   }
