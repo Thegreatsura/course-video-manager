@@ -285,6 +285,8 @@ export const createVersionCopyOps = (db: Database) => {
                     // Shared, not copied: see SHARED_FOOTAGE in version-copy-manifest.ts.
                     recordingSessionId: clip.recordingSessionId,
                     sceneOverride: clip.sceneOverride,
+                    // A copy is not new filming: it keeps its original's Clip Origin.
+                    origin: clip.origin,
                   }))
                 )
               );

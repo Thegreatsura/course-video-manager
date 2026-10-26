@@ -21,6 +21,7 @@ import type { BeatKind } from "../features/beats/beat-kinds.js";
 import type { VideoFormat } from "../features/videos/video-format.js";
 import type { TranscriptionStatus } from "../features/videos/transcription-status.js";
 import type { ClipMockupVoiceStatus } from "../features/clip-mockups/voice-status.js";
+import type { ClipOrigin } from "../features/videos/clip-origin.js";
 import type {
   RecordingSessionScene,
   RecordingSessionStatus,
@@ -404,9 +405,21 @@ export const clips = createTable(
     sceneOverride: varchar("scene_override", {
       length: 255,
     }).$type<RecordingSessionScene>(),
+    /**
+     * Clip Origin — how the Clip came to exist; see CLIP_ORIGINS
+     * (features/videos/clip-origin.ts). Defaults to `video-editor`, which
+     * every Clip from before the column holds; `cvm clip add` writes `cli`.
+     * Only `video-editor` Clips count in the footage stats.
+     */
+    origin: text("origin")
+      .$type<ClipOrigin>()
+      .notNull()
+      .default("video-editor"),
   },
   (table) => [
     index("clip_recording_session_id_idx").on(table.recordingSessionId),
+    // Mirrors CLIP_ORIGINS (features/videos/clip-origin.ts).
+    check("clip_origin_valid", sql`${table.origin} IN ('video-editor', 'cli')`),
     // Mirrors RECORDING_SESSION_SCENES (features/videos/recorder.ts).
     check(
       "clip_scene_override_valid",

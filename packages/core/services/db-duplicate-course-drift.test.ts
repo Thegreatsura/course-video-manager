@@ -107,6 +107,8 @@ describe("duplicateCourse — schema-drift guard", () => {
         "archived",
         // When the take was filmed, which the footage stats date it by.
         "createdAt",
+        // Clip Origin: whether the footage stats count it at all.
+        "origin",
       ],
       notCopied: ["id", "videoId"],
     },
