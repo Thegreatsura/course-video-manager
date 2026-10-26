@@ -2,8 +2,10 @@ import { useEffect, useRef, type RefObject } from "react";
 import {
   CHOOSE_SCREENSHOT_ATTR,
   SCREENSHOT_CAPTURE_EVENT,
+  SCREENSHOT_FACE_EVENT,
   SCREENSHOT_STEP_EVENT,
   isScreenshotCapturePress,
+  isScreenshotFacePress,
   pickCurrentScreenshot,
   pickScreenshotTarget,
   screenshotNavDirection,
@@ -16,7 +18,7 @@ const HIGHLIGHT_MS = 1200;
 
 /**
  * L / K step through the preview's `<ChooseScreenshot>` placeholders; I / O and
- * Left / Right nudge the current one's frame; Return captures it and, once the
+ * Left / Right nudge the current one's frame; P cycles its face; Return captures it and, once the
  * capture has succeeded, walks on as L would. Mount it only while the preview
  * is showing.
  *
@@ -55,7 +57,8 @@ export function useScreenshotNavigation(
       const direction = screenshotNavDirection(e);
       const step = screenshotStep(e);
       const capture = isScreenshotCapturePress(e, preview);
-      if (direction === null && step === null && !capture) return;
+      const face = isScreenshotFacePress(e);
+      if (direction === null && step === null && !capture && !face) return;
 
       const scope = preview.closest('[role="dialog"]') ?? document.body;
       if (!(e.target instanceof Node) || !scope.contains(e.target)) return;
@@ -71,7 +74,7 @@ export function useScreenshotNavigation(
       });
       const viewportHeight = preview.clientHeight;
 
-      if (step !== null || capture) {
+      if (step !== null || capture || face) {
         const current = pickCurrentScreenshot({
           spans,
           viewportHeight,
@@ -83,6 +86,10 @@ export function useScreenshotNavigation(
           el.dispatchEvent(
             new CustomEvent(SCREENSHOT_STEP_EVENT, { detail: step })
           );
+          return;
+        }
+        if (face) {
+          el.dispatchEvent(new CustomEvent(SCREENSHOT_FACE_EVENT));
           return;
         }
 

@@ -71,3 +71,11 @@ describe("ChooseScreenshot's face toggle", () => {
     }
   });
 });
+
+describe("ChooseScreenshot's frame steps", () => {
+  it("has no step dials: I / O and Left / Right are fixed", () => {
+    const html = render(recorderClip(true));
+    expect(html).not.toContain("I/O step");
+    expect(html).not.toContain('type="number"');
+  });
+});

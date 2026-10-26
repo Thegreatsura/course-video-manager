@@ -14,12 +14,14 @@ import type { IndexedClip } from "./types";
 import {
   CHOOSE_SCREENSHOT_ATTR,
   SCREENSHOT_CAPTURE_EVENT,
+  SCREENSHOT_FACE_EVENT,
   SCREENSHOT_STEP_EVENT,
+  nextScreenshotFace,
   type ScreenshotCaptureRequest,
   type ScreenshotStep,
+  type ScreenshotStepSize,
 } from "./screenshot-navigation";
 import { stepScreenshotFrame } from "./screenshot-frame-step";
-import { useScreenshotSteps } from "./screenshot-io-step-dial";
 import {
   clipCompositePicture,
   clipFrame,
@@ -37,6 +39,12 @@ import { ScreenPlayback } from "@/features/video-editor/components/screen-playba
 import type { ScreenshotFace } from "./choose-screenshot-mutations";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
+
+/** How far I / O (large) and Left / Right (small) move the frame, in seconds. */
+const STEP_SECONDS: Record<ScreenshotStepSize, number> = {
+  large: 1,
+  small: 0.2,
+};
 
 export interface ChooseScreenshotProps {
   clipIndex: number;
@@ -74,7 +82,6 @@ export function ChooseScreenshot({
   const rootRef = useRef<HTMLDivElement>(null);
   /** Where the next clip shown opens: its end after I crossed back into it. */
   const landAtRef = useRef<"start" | "end">("start");
-  const { steps, dials } = useScreenshotSteps();
 
   // Every time kept here is the Clip's source time. The `<video>` is the
   // playback clock: an OBS Clip's Footage, or a CVM-recorder Clip's mic,
@@ -120,7 +127,7 @@ export function ChooseScreenshot({
       clipEnd: clip.sourceEndTime,
       clipIndex,
       clipCount: clips.length,
-      step: steps[size],
+      step: STEP_SECONDS[size],
       direction,
     });
     if (next?.type === "seek") {
@@ -144,8 +151,19 @@ export function ChooseScreenshot({
     if (await capture()) request.onCaptured();
   };
 
-  const handlersRef = useRef({ handleStep, handleCaptureRequest });
-  handlersRef.current = { handleStep, handleCaptureRequest };
+  // P: the toggle's next face, saved like a click on it. Nothing when the
+  // toggle is not shown (no screen to show without the face).
+  const handleFacePress = () => {
+    if (screenPicture === null) return;
+    onFaceChange(nextScreenshotFace(shot.face));
+  };
+
+  const handlersRef = useRef({
+    handleStep,
+    handleCaptureRequest,
+    handleFacePress,
+  });
+  handlersRef.current = { handleStep, handleCaptureRequest, handleFacePress };
 
   // Bridge: the keys arrive from useScreenshotNavigation as DOM events.
   const isLive = Boolean(clip) && !isStreaming;
@@ -158,11 +176,14 @@ export function ChooseScreenshot({
       void handlersRef.current.handleCaptureRequest(
         (e as CustomEvent<ScreenshotCaptureRequest>).detail
       );
+    const onFace = () => handlersRef.current.handleFacePress();
     el.addEventListener(SCREENSHOT_STEP_EVENT, onStep);
     el.addEventListener(SCREENSHOT_CAPTURE_EVENT, onCaptureRequest);
+    el.addEventListener(SCREENSHOT_FACE_EVENT, onFace);
     return () => {
       el.removeEventListener(SCREENSHOT_STEP_EVENT, onStep);
       el.removeEventListener(SCREENSHOT_CAPTURE_EVENT, onCaptureRequest);
+      el.removeEventListener(SCREENSHOT_FACE_EVENT, onFace);
     };
   }, [isLive]);
 
@@ -327,7 +348,6 @@ export function ChooseScreenshot({
           face={shot.face}
           onFaceChange={onFaceChange}
         />
-        {dials}
         <Button size="sm" disabled={isCapturing} onClick={() => void capture()}>
           {isCapturing ? (
             <LoaderIcon className="h-3 w-3 mr-1 animate-spin" />
