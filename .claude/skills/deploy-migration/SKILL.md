@@ -55,7 +55,7 @@ Then wait. Do not redeploy, retry or poll until Matt confirms he has run it.
 
    Use GraphQL. The REST `commits/<sha>/statuses` endpoint has returned HTTP 500 for this repo.
 
-   > **Unproven.** The `vercel redeploy` command has been proven to rebuild and promote production. Whether that redeploy posts a fresh `Vercel` status to the commit has not been confirmed yet. Until Matt confirms it once, also report the `Ready` line and the URL that `vercel redeploy` printed.
+   A `vercel redeploy` posts a fresh `Vercel` status to the commit, so this check is enough on its own. This was confirmed on 2026-10-26: redeploying `9b13531b` posted `Vercel` = `SUCCESS`. If the status never appears, report the `Ready` line and the URL that `vercel redeploy` printed instead.
 
 ## 4. Destructive changes go contract-first
 
