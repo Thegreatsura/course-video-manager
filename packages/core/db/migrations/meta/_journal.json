@@ -302,6 +302,13 @@
       "when": 1793031754281,
       "tag": "0042_clip_origin",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793042937591,
+      "tag": "0043_clip_origin_copy",
+      "breakpoints": true
     }
   ]
 }
