@@ -21,7 +21,8 @@ import {
 import { centreCameraOnContent } from "./centre-camera-on-content";
 import { renderThumbnailPngBase64 } from "./render-thumbnail";
 import type { PlaygroundStatus } from "./playground-status";
-import type { Snapshot } from "./snapshot-list";
+import { fetchSnapshotList, type Snapshot } from "./snapshot-list";
+import { LINKED_SNAPSHOT_NOT_FOUND } from "./diagram-playground-status-messages";
 
 /**
  * Straight to the store: the canvas is read-only until a head loads, and the
@@ -177,6 +178,29 @@ export function useDiagramPlaygroundReducer() {
           })
           .catch(() => dispatch({ type: "restore-failed" }))
           .finally(() => releaseRestoreRequest(effect.requestId));
+      },
+      "fetch-linked-snapshot": (_state, effect, dispatch) => {
+        void (async () => {
+          const list = await fetchSnapshotList(effect.diagramId);
+          const snapshot = list?.snapshots.find(
+            (s) => s.id === effect.snapshotId
+          );
+          if (!list || !snapshot) {
+            dispatch({
+              type: "error-reported",
+              message: LINKED_SNAPSHOT_NOT_FOUND,
+            });
+            return;
+          }
+          dispatch({
+            type: "linked-snapshot-fetched",
+            diagramId: effect.diagramId,
+            snapshot,
+            timeline: list.snapshots,
+            // Nobody waits on it, but it shares the ids `requestRestore` hands out.
+            requestId: nextRestoreRequestId.current++,
+          });
+        })();
       },
       "release-restore-request": (_state, effect) => {
         releaseRestoreRequest(effect.requestId);

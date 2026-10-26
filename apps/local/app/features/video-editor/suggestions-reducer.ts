@@ -38,22 +38,32 @@
  * on screen in the Diagram Playground, reported live by the playground. No
  * Active Diagram (the playground closed, or on Playground Home) sends none.
  * A change to it while unticked is kept but does not ask.
+ *
+ * The **Previous video** source is the transcripts of the previous Video's
+ * Clips (the one before this in course order), loaded with the editor and
+ * capped, keeping the end. It is for the start of a Video only: once
+ * `PREVIOUS_VIDEO_CLIP_LIMIT` Clips are before the Insertion Point it is not
+ * sent, whatever the tick says, and below that the tick decides again. That
+ * is derived from the Clips, never stored.
  */
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
   MOST_RECENT_CLIP_COUNT,
+  capPreviousVideoText,
   type SuggestNextClipInput,
 } from "@/prompts/generate-suggest-next-clip";
 import { closeOpenBold } from "@/lib/close-open-bold";
 
 export namespace suggestionsReducer {
-  export type Source = "notes" | "script" | "animatic" | "beats" | "diagram";
+  export type Source =
+    "notes" | "script" | "animatic" | "beats" | "diagram" | "previousVideo";
   export const SOURCES: readonly Source[] = [
     "notes",
     "script",
     "animatic",
     "beats",
     "diagram",
+    "previousVideo",
   ];
   export type Included = Record<Source, boolean>;
 
@@ -84,6 +94,8 @@ export namespace suggestionsReducer {
     notes: string;
     /** The Active Diagram's Diagram Text; empty when there is none. */
     diagramText: string;
+    /** Transcripts of the previous Video's Clips, oldest first; `[]` for none. */
+    previousVideoClips: string[];
     /** The Video's files the Context modal offers; images are left out. */
     repoFiles: RepoFile[];
     /** The repo file paths the author picked for this Video. */
@@ -147,13 +159,21 @@ export const ALL_SOURCES_INCLUDED: suggestionsReducer.Included = {
   animatic: true,
   beats: true,
   diagram: true,
+  previousVideo: true,
 };
+
+/**
+ * How many Clips before the Insertion Point put the previous Video out of
+ * reach: past the start of this one, it no longer helps.
+ */
+export const PREVIOUS_VIDEO_CLIP_LIMIT = 5;
 
 export const createInitialSuggestionsState = (input: {
   videoId: string;
   included: suggestionsReducer.Included;
   notes: string;
   pickedFiles: string[];
+  previousVideoClips?: string[];
 }): State => ({
   videoId: input.videoId,
   open: false,
@@ -161,6 +181,7 @@ export const createInitialSuggestionsState = (input: {
   script: null,
   notes: input.notes,
   diagramText: "",
+  previousVideoClips: input.previousVideoClips ?? [],
   repoFiles: [],
   pickedFiles: input.pickedFiles,
   contextModalOpen: false,
@@ -188,7 +209,15 @@ export const getSourceTexts = (
   animatic: state.context.animatic,
   beats: state.context.beats,
   diagram: state.diagramText,
+  previousVideo: capPreviousVideoText(state.previousVideoClips.join("\n")),
 });
+
+/**
+ * Whether the previous Video can be sent at all: only while fewer than
+ * `PREVIOUS_VIDEO_CLIP_LIMIT` Clips are before the Insertion Point.
+ */
+export const isPreviousVideoInReach = (state: State): boolean =>
+  state.context.clips.length < PREVIOUS_VIDEO_CLIP_LIMIT;
 
 /** The picked repo files this Video still has, in path order. */
 export const getPickedRepoFiles = (
@@ -214,6 +243,7 @@ export const getSuggestionInput = (state: State): SuggestNextClipInput => {
     clips: state.context.clips,
   };
   for (const source of suggestionsReducer.SOURCES) {
+    if (source === "previousVideo" && !isPreviousVideoInReach(state)) continue;
     if (state.included[source] && texts[source].trim().length > 0) {
       input[source] = texts[source];
     }
