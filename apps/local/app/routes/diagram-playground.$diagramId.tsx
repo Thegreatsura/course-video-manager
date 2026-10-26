@@ -35,6 +35,10 @@ import { reportActiveDiagramText } from "@/features/diagrams/report-active-diagr
 
 export const handle = NO_TOASTS;
 
+export const meta: Route.MetaFunction = () => {
+  return [{ title: "CVM - Diagram Playground" }];
+};
+
 export const loader = loadDiagramPlaygroundActive;
 
 const EMPTY_MIME_TYPES: string[] = [];

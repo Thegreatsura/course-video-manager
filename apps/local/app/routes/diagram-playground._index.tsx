@@ -16,7 +16,7 @@ import type { Route } from "./+types/diagram-playground._index";
 export const handle = NO_TOASTS;
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "Diagram Playground" }];
+  return [{ title: "CVM - Diagram Playground" }];
 };
 
 export const loader = makeLoader({
