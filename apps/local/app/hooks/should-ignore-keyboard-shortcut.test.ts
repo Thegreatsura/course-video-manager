@@ -83,11 +83,6 @@ describe("shouldIgnoreKeyboardShortcut", () => {
     expect(shouldIgnoreKeyboardShortcut(makeEvent(target))).toBe(true);
   });
 
-  it("allows shortcuts when not inside a dialog", () => {
-    const target = { closest: () => null };
-    expect(shouldIgnoreKeyboardShortcut(makeEvent(target))).toBe(false);
-  });
-
   it("allows shortcuts when target has no closest method", () => {
     const target = {};
     expect(shouldIgnoreKeyboardShortcut(makeEvent(target))).toBe(false);

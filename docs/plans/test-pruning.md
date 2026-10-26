@@ -27,23 +27,27 @@ They are guard tests owned elsewhere.
 
 ## Batches
 
-**Next batch: 8** (`lib/`, `hooks/`, `.sandcastle/`, `packages/lucide-icons`, `packages/overlay-renderer`). Batches 1 to 7 are done;
-take the lowest-numbered batch whose row does not say **Done.**
+**Next batch: none.** Batches 1 to 8 are done. Three trim rows fell outside
+every batch's scope and are still open: `stream-deck-forwarder/connection-log`
+and the two `packages/course-json` files (area C). Take them as a small batch 9
+if wanted. The upload-manager rows that still read `trim` went with the browser
+Upload Manager (see "Batch 6"). Test files added since the audit (2026-10-06)
+were never classified.
 
 **Batch 1: done.** It removed the high-confidence deletes and trims across
 all areas: 9 files deleted, about 50 trimmed. Rows marked `done (batch 1)`
 had their high-confidence items removed. Trims tagged "(medium)" inside those
 files remain for the area's batch below.
 
-| Batch | Scope                                                                                                  | What is left                                                                          |
-| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| 2     | `apps/local/app/cli/` (area C)                                                                         | **Done.** See "Batch 2" below.                                                        |
-| 3     | `packages/core/` (area A)                                                                              | **Done.** See "Batch 3" below.                                                        |
-| 4     | `apps/local/app/services/` (area B)                                                                    | **Done.** See "Batch 4" below.                                                        |
-| 5     | `features/video-editor/`, `features/article-writer/` (area D)                                          | **Done.** See "Batch 5" below.                                                        |
-| 6     | `features/course-view/`, `features/upload-manager/`, `features/diagrams/` (area E)                     | **Done.** See "Batch 6" below.                                                        |
-| 7     | animatic, teleprompter, publish, video-posting, deliverables, beats (area F)                           | **Done.** See "Batch 7" below.                                                        |
-| 8     | `lib/`, `hooks/`, `.sandcastle/`, `packages/lucide-icons`, `packages/overlay-renderer` (areas A and C) | Small remainder, including the medium deletes `queue-tree` and `timeline-visibility`. |
+| Batch | Scope                                                                                                  | What is left                   |
+| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 2     | `apps/local/app/cli/` (area C)                                                                         | **Done.** See "Batch 2" below. |
+| 3     | `packages/core/` (area A)                                                                              | **Done.** See "Batch 3" below. |
+| 4     | `apps/local/app/services/` (area B)                                                                    | **Done.** See "Batch 4" below. |
+| 5     | `features/video-editor/`, `features/article-writer/` (area D)                                          | **Done.** See "Batch 5" below. |
+| 6     | `features/course-view/`, `features/upload-manager/`, `features/diagrams/` (area E)                     | **Done.** See "Batch 6" below. |
+| 7     | animatic, teleprompter, publish, video-posting, deliverables, beats (area F)                           | **Done.** See "Batch 7" below. |
+| 8     | `lib/`, `hooks/`, `.sandcastle/`, `packages/lucide-icons`, `packages/overlay-renderer` (areas A and C) | **Done.** See "Batch 8" below. |
 
 **Batch 2: done.** It trimmed the CLI files (737 → 670 tests) and cut the
 per-test setup cost every PGlite test pays:
@@ -169,6 +173,21 @@ teleprompter-session "adopts what the editor pushed" for the latest transcript
 test), and convert-short-links "returns true for www variant" (folded;
 `hasAiHeroUrls` has its own regex, separate from the finder's).
 
+**Batch 8: done** (one PR). It pruned `apps/local/app/lib/`,
+`apps/local/app/hooks/`, `.sandcastle/`, `packages/lucide-icons` and
+`packages/overlay-renderer`: 229 → 212 tests across the batch's files (29 → 28
+files). `queue-tree.test.ts` is deleted (a map and a push, mirrored by its
+tests). `timeline-visibility.test.ts` was already gone: it went with its
+module in b751185f.
+
+Plan trims kept because they were the last guard on a rule: popup-channel
+"opens a given url instead of the default" (the diagram window opens a
+specific Diagram through `open(url)`; nothing else checks the url reaches
+`window.open`) and lucide-icons search "lists a recent icon exactly once"
+(the only test where a recent icon also matches the query, so the only guard
+that the table scan skips names already promoted from history; the
+repeated-name test never reaches the scan).
+
 ### Coverage gaps batch 1 exposed
 
 Batch 1 removed tests that exercised a copy of the logic written inside the
@@ -217,7 +236,7 @@ The slow files are almost all PGlite-backed: CLI round trips and `db-*` services
 | file                                                                    | tests                          | runtime | verdict     | conf   | status         | reason                                                                                                                                                                                       |
 | ----------------------------------------------------------------------- | ------------------------------ | ------- | ----------- | ------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | .sandcastle/no-recent-commits.test.ts                                   | 1 (each, 1 row per prompt .md) | 0.0s    | keep        | high   |                | Guard/convention test from a fix commit (#860): keeps `<recent-commits>` out of prompts                                                                                                      |
-| .sandcastle/review/parse-diff-lines.test.ts                             | 12                             | 0.0s    | trim        | medium |                | Parser with fix provenance; one near-duplicate empty-input case                                                                                                                              |
+| .sandcastle/review/parse-diff-lines.test.ts                             | 12                             | 0.0s    | trim        | medium | done (batch 8) | Parser with fix provenance; one near-duplicate empty-input case                                                                                                                              |
 | .sandcastle/run-with-extraction.test.ts                                 | 8                              | 0.0s    | trim        | high   | done (batch 1) | Retry loop now delegates to runWithRetry (f3449a05); 4 retry-semantics tests duplicate run-with-retry.test.ts                                                                                |
 | .sandcastle/run-with-retry.test.ts                                      | 8                              | 0.0s    | keep        | high   |                | Owns the retry contract; promptArgs test is a fix regression (b600da7b)                                                                                                                      |
 | apps/local/stream-deck-forwarder/connection-log.test.ts                 | 7                              | 0.0s    | trim        | medium |                | Fix regression (#1746) for churn collapsing; one test is subsumed by others                                                                                                                  |
@@ -287,10 +306,10 @@ The slow files are almost all PGlite-backed: CLI round trips and `db-*` services
 | packages/core/services/thumbnail-path-rebase.test.ts                    | 5                              | 0.0s    | keep        | high   |                | Regression for fix #1677; pure path-rewrite rules                                                                                                                                            |
 | packages/core/services/with-db-transaction.test.ts                      | 4                              | 0.8s    | trim        | medium | done (batch 3) | Commit/rollback/typed-error are real; the "typecheck" test duplicates commit                                                                                                                 |
 | packages/lucide-icons/tests/generator.test.ts                           | 10                             | 0.0s    | keep        | high   |                | Append-only invariant for the vendored table is a real rule                                                                                                                                  |
-| packages/lucide-icons/tests/icon-table.test.ts                          | 12                             | 0.0s    | trim        | medium |                | Whole-set sweeps and backfill names are real guards; 2 subsumed                                                                                                                              |
-| packages/lucide-icons/tests/search.test.ts                              | 14                             | 0.0s    | trim        | medium |                | Ranking and recency rules are product behaviour; 2 duplicates                                                                                                                                |
+| packages/lucide-icons/tests/icon-table.test.ts                          | 12                             | 0.0s    | trim        | medium | done (batch 8) | Whole-set sweeps and backfill names are real guards; 2 subsumed                                                                                                                              |
+| packages/lucide-icons/tests/search.test.ts                              | 14                             | 0.0s    | trim        | medium | done (batch 8) | Ranking and recency rules are product behaviour; 2 duplicates                                                                                                                                |
 | packages/lucide-icons/tests/to-path-builder.test.ts                     | 26                             | 0.1s    | keep        | medium |                | Geometry transpiler; each case is a distinct SVG rule plus a whole-set sweep                                                                                                                 |
-| packages/overlay-renderer/tests/bullet-panel-timing.test.ts             | 6                              | n/a     | trim        | medium |                | Exit-timing regression is real; one test mirrors the formula                                                                                                                                 |
+| packages/overlay-renderer/tests/bullet-panel-timing.test.ts             | 6                              | n/a     | trim        | medium | done (batch 8) | Exit-timing regression is real; one test mirrors the formula                                                                                                                                 |
 | packages/overlay-renderer/tests/props.test.ts                           | 16                             | n/a     | trim        | high   | done (batch 1) | Mostly checks that zod keeps fields verbatim or rejects missing ones; keep defaults and the 4-bullet cap                                                                                     |
 | tests/effect-guards.test.ts                                             | 10                             | 0.0s    | keep        | high   |                | Guard/convention test (shrink-only allowlist)                                                                                                                                                |
 | tests/workspace-layout.test.ts                                          | 8                              | 0.0s    | keep        | high   |                | Guard/convention test (workspace dependency boundaries)                                                                                                                                      |
@@ -1027,22 +1046,22 @@ Same as above, for copyVersionStructure.
 | apps/local/app/cli/cli-video-archive.test.ts                             | 6                    | 1.2s    | keep        | medium |                   | CLI maps re-archive to exit 3 (service is idempotent) — distinct behaviour                                                                                              |
 | apps/local/app/cli/commands/course-publish.test.ts                       | 2 (it.each, 20 rows) | 0.0s    | keep        | high   |                   | version-name parser                                                                                                                                                     |
 | apps/local/app/cli/helpers.test.ts                                       | 9                    | 0.0s    | keep        | high   |                   | displayName fallback chain — the unit seam                                                                                                                              |
-| apps/local/app/hooks/should-ignore-keyboard-shortcut.test.ts             | 11                   | 0.0s    | trim        | medium |                   | real rule; one near-duplicate                                                                                                                                           |
+| apps/local/app/hooks/should-ignore-keyboard-shortcut.test.ts             | 11                   | 0.0s    | trim        | medium | done (batch 8)    | real rule; one near-duplicate                                                                                                                                           |
 | apps/local/app/hooks/use-banned-phrases.test.ts                          | 5                    | 0.0s    | keep        | high   |                   | parser; regression from fix 9d7f2ff8                                                                                                                                    |
 | apps/local/app/hooks/use-local-storage.test.ts                           | 9                    | 0.0s    | keep        | high   |                   | parser + key-change + SSR guard                                                                                                                                         |
 | apps/local/app/hooks/use-upload-revalidate.test.ts                       | 7                    | 0.0s    | keep        | low    |                   | small pure transition rule; tests are cheap                                                                                                                             |
 | apps/local/app/lib/clip-web-link.test.ts                                 | 7                    | 0.0s    | keep        | high   |                   | URL rules                                                                                                                                                               |
-| apps/local/app/lib/create-sse-response.server.test.ts                    | 9                    | 0.0s    | trim        | medium |                   | framing/error fallbacks real; header test restates constants                                                                                                            |
-| apps/local/app/lib/diagram-action-resolver.test.ts                       | 17                   | 0.0s    | trim        | medium |                   | walk-back rule real; two empty-items cases duplicate start/end cases                                                                                                    |
+| apps/local/app/lib/create-sse-response.server.test.ts                    | 9                    | 0.0s    | trim        | medium | done (batch 8)    | framing/error fallbacks real; header test restates constants                                                                                                            |
+| apps/local/app/lib/diagram-action-resolver.test.ts                       | 17                   | 0.0s    | trim        | medium | done (batch 8)    | walk-back rule real; two empty-items cases duplicate start/end cases                                                                                                    |
 | apps/local/app/lib/filtered-newest-snapshot.test.ts                      | 12                   | 0.0s    | keep        | high   |                   | visibility + newest selection, the right seam                                                                                                                           |
 | apps/local/app/lib/focus-tracker.test.ts                                 | 6                    | 0.0s    | keep        | low    |                   | tiny observable; per-tracker isolation guards the merge refactor                                                                                                        |
-| apps/local/app/lib/popup-channel.test.ts                                 | 13                   | 0.3s    | trim        | medium |                   | keep routing/open-state rules; drop subsumed and pass-through tests                                                                                                     |
-| apps/local/app/lib/queue-tree.test.ts                                    | 4                    | 0.0s    | delete      | medium |                   | trivial map+push; tests mirror the code                                                                                                                                 |
-| apps/local/app/lib/semver.test.ts                                        | 10                   | 0.0s    | trim        | medium |                   | real parser (used by publish route); two zero-version near-dupes                                                                                                        |
+| apps/local/app/lib/popup-channel.test.ts                                 | 13                   | 0.3s    | trim        | medium | done (batch 8)    | keep routing/open-state rules; drop subsumed and pass-through tests                                                                                                     |
+| apps/local/app/lib/queue-tree.test.ts                                    | 4                    | 0.0s    | delete      | medium | done (batch 8)    | trivial map+push; tests mirror the code                                                                                                                                 |
+| apps/local/app/lib/semver.test.ts                                        | 10                   | 0.0s    | trim        | medium | done (batch 8)    | real parser (used by publish route); two zero-version near-dupes                                                                                                        |
 | apps/local/app/lib/short-status.test.ts                                  | 4                    | 0.0s    | keep        | high   |                   | regression for fix ef699080                                                                                                                                             |
 | apps/local/app/lib/short-title.test.ts                                   | 2                    | 0.0s    | keep        | low    |                   | one regex, but it is the only guard on "default title" detection                                                                                                        |
 | apps/local/app/lib/spacedesk-ip.test.ts                                  | 7                    | 0.0s    | keep        | low    |                   | small validator, cheap                                                                                                                                                  |
-| apps/local/app/lib/timeline-visibility.test.ts                           | 9                    | 0.0s    | delete      | medium |                   | one-liner `preserved \                                                                                                                                                  | \   | some(!archived)`; same truth table already in filtered-newest-snapshot.test.ts (which calls it) |
+| apps/local/app/lib/timeline-visibility.test.ts                           | 9                    | 0.0s    | delete      | medium | done (batch 8)    | one-liner `preserved \                                                                                                                                                  | \   | some(!archived)`; same truth table already in filtered-newest-snapshot.test.ts (which calls it) |
 | apps/local/app/lib/video-breadcrumb.test.ts                              | 2                    | 0.0s    | delete      | high   | done (batch 1)    | string concatenation; test mirrors the template                                                                                                                         |
 | apps/local/app/packages/course-json/tests/course-json-validation.test.ts | 27                   | 0.0s    | trim        | medium |                   | role/gap rules real; two near-dupes of effective-sections / each other                                                                                                  |
 | apps/local/app/packages/course-json/tests/course-json.test.ts            | 22                   | 0.0s    | trim        | medium |                   | schema/role/receipt rules real; trivial top-level mapping + three copy-paste lineageId tests                                                                            |

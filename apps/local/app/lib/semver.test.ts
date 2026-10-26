@@ -10,10 +10,6 @@ describe("parseSemver", () => {
     expect(parseSemver("1.2.3")).toEqual({ major: 1, minor: 2, patch: 3 });
   });
 
-  it("parses v0.0.0", () => {
-    expect(parseSemver("v0.0.0")).toEqual({ major: 0, minor: 0, patch: 0 });
-  });
-
   it("parses uppercase V prefix", () => {
     expect(parseSemver("V2.0.1")).toEqual({ major: 2, minor: 0, patch: 1 });
   });
@@ -51,24 +47,6 @@ describe("bumpSemver", () => {
   it("bumps major and resets minor and patch", () => {
     expect(bumpSemver({ major: 1, minor: 2, patch: 3 }, "major")).toEqual({
       major: 2,
-      minor: 0,
-      patch: 0,
-    });
-  });
-
-  it("bumps from v0.0.0", () => {
-    expect(bumpSemver({ major: 0, minor: 0, patch: 0 }, "patch")).toEqual({
-      major: 0,
-      minor: 0,
-      patch: 1,
-    });
-    expect(bumpSemver({ major: 0, minor: 0, patch: 0 }, "minor")).toEqual({
-      major: 0,
-      minor: 1,
-      patch: 0,
-    });
-    expect(bumpSemver({ major: 0, minor: 0, patch: 0 }, "major")).toEqual({
-      major: 1,
       minor: 0,
       patch: 0,
     });
