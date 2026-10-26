@@ -8,13 +8,17 @@
  * where the author is now, matched against that guide. Every source is optional: an unticked or missing one is
  * simply left out. The author's **Notes** for this Video outrank the rest:
  * they say how today's take departs from the plan. Next come the repo files
- * the author picked in the Context modal, read by the route.
+ * the author picked in the Context modal, read by the route. The words on the
+ * **Diagram** on screen right now go with the Clips, since they change from
+ * one Clip to the next.
  */
 export type SuggestNextClipInput = {
   notes?: string;
   script?: string;
   animatic?: string;
   beats?: string;
+  /** The Diagram Text of the Active Diagram, the one on screen now. */
+  diagram?: string;
   /** Transcripts of every Clip before the Insertion Point, oldest first. */
   clips: string[];
   /**
@@ -54,6 +58,17 @@ const formatRepoFiles = (files: SuggestNextClipRepoFile[] | undefined) => {
     })
     .join("\n");
 };
+
+/**
+ * The most Diagram Text one suggestion carries, in characters: a diagram's
+ * words are a few hundred at most, so anything past this is cut with a marker.
+ */
+export const MAX_DIAGRAM_TEXT_CHARS = 4_000;
+
+const capDiagramText = (text: string | undefined) =>
+  text && text.length > MAX_DIAGRAM_TEXT_CHARS
+    ? `${text.slice(0, MAX_DIAGRAM_TEXT_CHARS)} [… cut: over the diagram text limit]`
+    : text;
 
 /**
  * How many of the last Clips count as "where the author is now". The
@@ -135,9 +150,15 @@ You are a teleprompter for a course creator recording a video one short clip at 
 ${guides.length > 0 ? guides.join("\n\n") : "There is no plan for this video: continue naturally from the clips."}
 `.trim();
 
+  const diagram = section(
+    "diagram-on-screen",
+    "The words on the diagram on screen right now, flattened into one line: what the viewer is looking at as the creator speaks. It shows where they are; it is not something they have said. The notes outrank it.",
+    capDiagramText(input.diagram)
+  );
+
   const now = `
 ${clips}
-
+${diagram ? `\n${diagram}\n` : ""}
 <the-ask>
 Work out where the most recent clips sit in the plan, then write the very next thing the creator should say.
 

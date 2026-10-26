@@ -11,6 +11,7 @@ import type { BeatKind } from "@/features/beats/beat-kinds";
 import { formatAnimaticContext } from "@/features/article-writer/format-animatic-context";
 import { formatBeatsContext } from "@/features/article-writer/format-beats-context";
 import { isImageFilePath } from "@/lib/image-file-path";
+import { subscribeActiveDiagramText } from "@/lib/diagram-window";
 import type { FsData } from "../components/deferred-fs-panels";
 import type {
   FrontendInsertionPoint,
@@ -39,8 +40,11 @@ const notesKey = (videoId: string) =>
 const pickedFilesKey = (videoId: string) =>
   `video-editor:suggestions-files:${videoId}`;
 
-/** How long typing in the Notes must pause before a new suggestion. */
-const NOTES_PAUSE_MS = 1000;
+/**
+ * How long editing must pause (typing in the Notes, or drawing on the
+ * on-screen Diagram) before a new suggestion.
+ */
+const EDIT_PAUSE_MS = 1000;
 
 const readIncludedSources = (): suggestionsReducer.Included => {
   try {
@@ -52,6 +56,7 @@ const readIncludedSources = (): suggestionsReducer.Included => {
       script: parsed.script !== false,
       animatic: parsed.animatic !== false,
       beats: parsed.beats !== false,
+      diagram: parsed.diagram !== false,
     };
   } catch {
     return ALL_SOURCES_INCLUDED;
@@ -155,11 +160,10 @@ export function useSuggestions(input: {
       "store-picked-files": (_state, effect) => {
         writePickedFiles(effect.videoId, effect.paths);
       },
-      "wait-for-notes-pause": (_state, effect, dispatch) => {
+      "wait-for-edit-pause": (_state, effect, dispatch) => {
         const timer = setTimeout(
-          () =>
-            dispatch({ type: "notes-pause-elapsed", editId: effect.editId }),
-          NOTES_PAUSE_MS
+          () => dispatch({ type: "edit-pause-elapsed", editId: effect.editId }),
+          EDIT_PAUSE_MS
         );
         return () => clearTimeout(timer);
       },
@@ -172,6 +176,15 @@ export function useSuggestions(input: {
       type: input.open ? "suggestions-tab-opened" : "suggestions-tab-closed",
     });
   }, [input.open, dispatch]);
+
+  // Bridge: the Diagram Playground reporting the on-screen Diagram's text.
+  useEffect(
+    () =>
+      subscribeActiveDiagramText((text) =>
+        dispatch({ type: "diagram-text-changed", text })
+      ),
+    [dispatch]
+  );
 
   // Bridge: the file scan resolving lists the repo files the Context modal
   // offers. Images are left out: the suggestion is text only.

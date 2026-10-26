@@ -30,6 +30,7 @@ const requestSchema = Schema.Struct({
   script: Schema.optional(Schema.String),
   animatic: Schema.optional(Schema.String),
   beats: Schema.optional(Schema.String),
+  diagram: Schema.optional(Schema.String),
   clips: Schema.Array(Schema.String),
   files: Schema.optional(Schema.Array(Schema.String)),
 });
