@@ -1,4 +1,4 @@
-import { hasLocalStorage } from "@/hooks/use-local-storage";
+import { readStored, writeStored } from "@/hooks/use-local-storage";
 import type { VideoFormat } from "@/features/videos/video-format";
 import { clampCrop, type ScreenCrop } from "@/packages/clip-source";
 
@@ -59,8 +59,8 @@ export function rememberDiagramFrame(
   safeArea: WindowRect,
   window: { innerWidth: number; innerHeight: number; fullScreen: boolean }
 ): void {
-  if (!window.fullScreen || !hasLocalStorage()) return;
-  localStorage.setItem(
+  if (!window.fullScreen) return;
+  writeStored(
     storageKey(format),
     JSON.stringify(
       diagramFrameOf(safeArea, window.innerWidth, window.innerHeight)
@@ -73,10 +73,9 @@ const isFraction = (n: unknown): n is number =>
 
 /** The remembered Diagram Frame for `format`, or null when there is none. */
 export function readDiagramFrame(format: VideoFormat): ScreenCrop | null {
-  if (!hasLocalStorage()) return null;
   try {
     const parsed: unknown = JSON.parse(
-      localStorage.getItem(storageKey(format)) ?? "null"
+      readStored(storageKey(format)) ?? "null"
     );
     if (typeof parsed !== "object" || parsed === null) return null;
     const { x, y, w, h } = parsed as Record<string, unknown>;
