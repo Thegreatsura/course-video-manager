@@ -9,7 +9,7 @@ import {
 } from "./choose-screenshot-mutations";
 import type { ChooseScreenshotRuntime } from "./choose-screenshot-components";
 import type { IndexedClip } from "./types";
-import type { ClipFrame } from "@/packages/clip-source";
+import type { ClipFrame, ScreenCrop } from "@/packages/clip-source";
 
 /**
  * The document pane's `<ChooseScreenshot>` runtime: capturing a frame from the
@@ -94,11 +94,16 @@ export function useDocScreenshotRuntime(opts: {
   );
 
   const handleDocFaceChange = useCallback(
-    (clipIndex: number, alt: string, face: ScreenshotFace) => {
+    (
+      clipIndex: number,
+      alt: string,
+      face: ScreenshotFace,
+      crop?: ScreenCrop
+    ) => {
       const currentDoc = documentRef.current;
       if (currentDoc) {
         updateDocument(
-          setChooseScreenshotFace(currentDoc, clipIndex, alt, face)
+          setChooseScreenshotFace(currentDoc, clipIndex, alt, face, crop)
         );
       }
     },
@@ -118,8 +123,8 @@ export function useDocScreenshotRuntime(opts: {
       onCapture: (_messageId, clipIndex, alt, frame) =>
         handleDocCapture(clipIndex, alt, frame),
       onRemove: (_messageId, clipIndex, alt) => handleDocRemove(clipIndex, alt),
-      onFaceChange: (_messageId, clipIndex, alt, face) =>
-        handleDocFaceChange(clipIndex, alt, face),
+      onFaceChange: (_messageId, clipIndex, alt, face, crop) =>
+        handleDocFaceChange(clipIndex, alt, face, crop),
     }),
     [
       indexedClips,

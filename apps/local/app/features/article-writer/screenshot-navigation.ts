@@ -7,7 +7,7 @@
  *
  * I / O nudge the frame of the current placeholder by the large step, and
  * Left / Right by the small one (see `screenshot-frame-step.ts`). P cycles
- * its face toggle: No face → Diagram → With face → No face. Return captures
+ * its face select: No face → Diagram → With face → Custom → No face. Return captures
  * it, then walks on as L would.
  *
  * The decisions live here as pure functions; `useScreenshotNavigation` is the
@@ -72,12 +72,17 @@ export function isScreenshotFacePress(e: NavKeyEvent): boolean {
   return e.key === "p" && !isTypingTarget(e.target);
 }
 
-/** The face P moves to: the toggle's order, left to right, wrapping. */
+/** The face P moves to: the select's order, top to bottom, wrapping. */
 export function nextScreenshotFace(face: ScreenshotFace): ScreenshotFace {
   return FACE_CYCLE[(FACE_CYCLE.indexOf(face) + 1) % FACE_CYCLE.length]!;
 }
 
-const FACE_CYCLE: readonly ScreenshotFace[] = ["none", "diagram", "with"];
+const FACE_CYCLE: readonly ScreenshotFace[] = [
+  "none",
+  "diagram",
+  "with",
+  "custom",
+];
 
 /**
  * Whether Return captures the current placeholder. Same guard as the other

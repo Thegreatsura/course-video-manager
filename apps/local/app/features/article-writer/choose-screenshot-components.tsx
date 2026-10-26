@@ -5,8 +5,9 @@ import type { HTMLAttributes, ReactNode } from "react";
 import type { Options } from "react-markdown";
 import { ChooseScreenshot } from "./choose-screenshot";
 import type { IndexedClip } from "./types";
-import type { ClipFrame } from "@/packages/clip-source";
+import type { ClipFrame, ScreenCrop } from "@/packages/clip-source";
 import {
+  parseScreenshotCrop,
   parseScreenshotFace,
   type ScreenshotFace,
 } from "./choose-screenshot-mutations";
@@ -40,12 +41,13 @@ export interface ChooseScreenshotRuntime {
     frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (messageId: string, clipIndex: number, alt: string) => void;
-  /** No face / With face clicked: saved on the placeholder's tag. */
+  /** A face chosen (with Custom, its crop): saved on the placeholder's tag. */
   onFaceChange: (
     messageId: string,
     clipIndex: number,
     alt: string,
-    face: ScreenshotFace
+    face: ScreenshotFace,
+    crop?: ScreenCrop
   ) => void;
 }
 
@@ -76,6 +78,7 @@ function ChooseScreenshotSlot(
   const alt = (props.alt as string) ?? "";
   const messageId = (props["data-message-id"] as string) ?? "";
   const face = parseScreenshotFace(props.face);
+  const crop = parseScreenshotCrop(props.crop);
 
   return (
     <ChooseScreenshot
@@ -88,8 +91,9 @@ function ChooseScreenshotSlot(
       onCapture={(ci, a, frame) => runtime.onCapture(messageId, ci, a, frame)}
       onRemove={(ci, a) => runtime.onRemove(messageId, ci, a)}
       face={face}
-      onFaceChange={(next) =>
-        runtime.onFaceChange(messageId, clipIndex, alt, next)
+      crop={crop}
+      onFaceChange={(next, nextCrop) =>
+        runtime.onFaceChange(messageId, clipIndex, alt, next, nextCrop)
       }
       isCapturing={
         runtime.capturingKey === runtime.keyFor(clipIndex, alt, messageId)

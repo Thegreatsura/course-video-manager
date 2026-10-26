@@ -5,6 +5,7 @@ import {
   removeChooseScreenshot,
   hasUnresolvedScreenshots,
   setChooseScreenshotFace,
+  parseScreenshotCrop,
 } from "./choose-screenshot-mutations";
 
 describe("replaceChooseScreenshotWithImage", () => {
@@ -186,5 +187,48 @@ describe("a placeholder's saved face", () => {
         "./screenshot-1.png"
       )
     ).toBe("Before\n![diagram](./screenshot-1.png)\nAfter");
+  });
+});
+
+describe("a placeholder's Custom crop", () => {
+  it("is saved with Custom, survives re-pointing, and goes with any other face", () => {
+    const original = '<ChooseScreenshot clipIndex={2} alt="box" />';
+    const crop = { x: 0.1, y: 0.25, w: 0.123456, h: 0.5 };
+
+    const custom = setChooseScreenshotFace(original, 2, "box", "custom", crop);
+    expect(custom).toBe(
+      '<ChooseScreenshot clipIndex={2} alt="box" face="custom" crop="0.1,0.25,0.1235,0.5" />'
+    );
+    expect(hasUnresolvedScreenshots(custom)).toBe(true);
+
+    const moved = updateChooseScreenshotClipIndex(custom, 2, 4, "box");
+    expect(moved).toBe(
+      '<ChooseScreenshot clipIndex={4} alt="box" face="custom" crop="0.1,0.25,0.1235,0.5" />'
+    );
+    expect(setChooseScreenshotFace(moved, 4, "box", "diagram", crop)).toBe(
+      '<ChooseScreenshot clipIndex={4} alt="box" face="diagram" />'
+    );
+    expect(
+      replaceChooseScreenshotWithImage(moved, 4, "box", "./screenshot-9.png")
+    ).toBe("![box](./screenshot-9.png)");
+  });
+
+  it("reads back only four fractions with some size", () => {
+    expect(parseScreenshotCrop("0.1,0.2,0.3,0.4")).toEqual({
+      x: 0.1,
+      y: 0.2,
+      w: 0.3,
+      h: 0.4,
+    });
+    for (const bad of [
+      undefined,
+      "",
+      "0.1,0.2,0.3",
+      "0,0,0,1",
+      "0,0,2,1",
+      "a,b,c,d",
+    ]) {
+      expect(parseScreenshotCrop(bad)).toBeNull();
+    }
   });
 });

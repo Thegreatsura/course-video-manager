@@ -29,7 +29,7 @@ const RequestSchema = Schema.Union(
     kind: Schema.Literal("screen"),
     screen: Schema.String,
     time: Schema.Number,
-    // Diagram: the Diagram Frame, as fractions of the screen frame.
+    // Diagram or Custom: its crop, as fractions of the screen frame.
     crop: Schema.optional(
       Schema.Struct({
         x: Fraction,
