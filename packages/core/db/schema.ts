@@ -408,8 +408,10 @@ export const clips = createTable(
     /**
      * Clip Origin — how the Clip came to exist; see CLIP_ORIGINS
      * (features/videos/clip-origin.ts). Defaults to `video-editor`, which
-     * every Clip from before the column holds; `cvm clip add` writes `cli`.
-     * Only `video-editor` Clips count in the footage stats.
+     * every Clip from before the column holds; `cvm clip add` writes `cli`,
+     * and a user-made copy (Create video from selection, Duplicate Video or
+     * Course, concatenation) writes `copy`. Only `video-editor` Clips count in
+     * the footage stats.
      */
     origin: text("origin")
       .$type<ClipOrigin>()
@@ -419,7 +421,10 @@ export const clips = createTable(
   (table) => [
     index("clip_recording_session_id_idx").on(table.recordingSessionId),
     // Mirrors CLIP_ORIGINS (features/videos/clip-origin.ts).
-    check("clip_origin_valid", sql`${table.origin} IN ('video-editor', 'cli')`),
+    check(
+      "clip_origin_valid",
+      sql`${table.origin} IN ('video-editor', 'cli', 'copy')`
+    ),
     // Mirrors RECORDING_SESSION_SCENES (features/videos/recorder.ts).
     check(
       "clip_scene_override_valid",

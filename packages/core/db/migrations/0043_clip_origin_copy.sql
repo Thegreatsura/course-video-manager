@@ -1,0 +1,2 @@
+ALTER TABLE "course-video-manager_clip" DROP CONSTRAINT "clip_origin_valid";--> statement-breakpoint
+ALTER TABLE "course-video-manager_clip" ADD CONSTRAINT "clip_origin_valid" CHECK ("course-video-manager_clip"."origin" IN ('video-editor', 'cli', 'copy'));
