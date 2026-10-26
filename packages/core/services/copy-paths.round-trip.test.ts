@@ -71,6 +71,9 @@ const overrides = (ctx: {
   "clip_mockup.voiceError": () => null,
   // CHECK clip_scene_override_valid.
   "clip.sceneOverride": () => "Code",
+  // CHECK clip_origin_valid; the non-default value, so a copy that drops
+  // it (back to "video-editor") fails.
+  "clip.origin": () => "cli",
   // CHECKs on a Recording Session and its scene events, which every copy
   // shares rather than copies.
   "recording_session.status": () => "stopped",
