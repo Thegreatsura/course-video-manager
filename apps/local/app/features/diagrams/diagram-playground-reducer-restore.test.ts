@@ -113,4 +113,39 @@ describe("restoring a snapshot over the head", () => {
       },
     ]);
   });
+
+  it("a Clip's snapshot link restores that snapshot once its diagram's head loads, and is dropped if the canvas leaves first", () => {
+    const timeline = [snapshot("s1"), { contentHash: "head-d1" }];
+    // The link arrives before the head has loaded, as on a fresh popup.
+    const tester = openPage()
+      .send({ type: "snapshot-link-opened", diagramId: "d1", snapshotId: "s1" })
+      .resetExec()
+      .send(loaded("d1", scene("d1")));
+    expect(tester.getEffects()).toEqual([
+      shown("d1", scene("d1")),
+      { type: "fetch-linked-snapshot", diagramId: "d1", snapshotId: "s1" },
+    ]);
+
+    // From there it is a timeline row click: the head is saved first.
+    tester.resetExec().send({
+      type: "linked-snapshot-fetched",
+      diagramId: "d1",
+      snapshot: snapshot("s1"),
+      timeline,
+      requestId: 3,
+    });
+    expect(tester.getEffects()).toEqual([
+      { type: "save-before-leaving", diagramId: "d1" },
+    ]);
+
+    // A link for d1 that is still waiting when the canvas moves to d2 never
+    // fires, even on coming back to d1.
+    const left = openPage()
+      .send({ type: "snapshot-link-opened", diagramId: "d1", snapshotId: "s1" })
+      .send({ type: "diagram-opened", diagramId: "d2" })
+      .send({ type: "diagram-opened", diagramId: "d1" })
+      .resetExec()
+      .send(loaded("d1", scene("d1")));
+    expect(left.getEffects()).toEqual([shown("d1", scene("d1"))]);
+  });
 });

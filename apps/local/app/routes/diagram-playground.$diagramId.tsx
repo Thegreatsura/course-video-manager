@@ -5,6 +5,7 @@ import { Save } from "lucide-react";
 import { ConnectionStatusIndicator } from "@/features/diagrams/connection-status-indicator";
 import {
   diagramChannel,
+  playgroundUrl,
   type ParentToChildMessage,
 } from "@/lib/diagram-protocol";
 import { usePreserveSnapshotShortcut } from "@/features/diagrams/preserve-snapshot-shortcut";
@@ -14,7 +15,12 @@ import { DiagramCenteringDebug } from "@/features/diagrams/diagram-centering-deb
 import { copyDiagramContents } from "@/features/diagrams/copy-scene-to-clipboard";
 import { TimelinePanel } from "@/features/diagrams/timeline-panel";
 import { DiagramRail } from "@/features/diagrams/diagram-rail";
-import { useParams, useNavigate, useRevalidator } from "react-router";
+import {
+  useParams,
+  useNavigate,
+  useRevalidator,
+  useSearchParams,
+} from "react-router";
 import { NO_TOASTS } from "@/lib/route-toasts";
 import type { Route } from "./+types/diagram-playground.$diagramId";
 import { loadDiagramPlaygroundActive } from "@/features/diagrams/diagram-playground-active.loader.server";
@@ -115,6 +121,27 @@ export default function DiagramPlaygroundActive({
     if (diagramId) dispatch({ type: "diagram-opened", diagramId });
   }, [diagramId, dispatch]);
 
+  // `?snapshot=<id>`: a Clip's snapshot, opened from the Video Editor. It is
+  // restored to the head once the head loads, then dropped from the URL, so a
+  // reload doesn't restore it again and the same link can be followed twice.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedSnapshotId = searchParams.get("snapshot");
+  useEffect(() => {
+    if (!diagramId || !linkedSnapshotId) return;
+    dispatch({
+      type: "snapshot-link-opened",
+      diagramId,
+      snapshotId: linkedSnapshotId,
+    });
+    setSearchParams(
+      (params) => {
+        params.delete("snapshot");
+        return params;
+      },
+      { replace: true }
+    );
+  }, [diagramId, linkedSnapshotId, dispatch, setSearchParams]);
+
   // Ping the parent every 2s; mark disconnected if no pong within 5s.
   // Re-broadcast activeDiagramChanged alongside each ping so a parent that
   // joined the channel late (e.g. closed and reopened) re-learns the state.
@@ -158,7 +185,9 @@ export default function DiagramPlaygroundActive({
   useEffect(() => {
     const unsub = diagramChannel.subscribeChild((msg: ParentToChildMessage) => {
       if (msg.type === "loadDiagram") {
-        navigate(`/diagram-playground/${msg.diagramId}`, { replace: true });
+        navigate(playgroundUrl(msg.diagramId, msg.snapshotId), {
+          replace: true,
+        });
       } else if (msg.type === "flush") {
         void flushPendingSave().finally(() => {
           diagramChannel.sendToParent({ type: "flushAck" });

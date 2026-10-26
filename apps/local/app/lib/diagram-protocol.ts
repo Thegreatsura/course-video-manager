@@ -3,7 +3,15 @@ import { VIDEO_FORMATS } from "@/features/videos/video-format";
 import { createPopupChannel } from "./popup-channel";
 
 export const ParentToChild = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("loadDiagram"), diagramId: z.string() }),
+  /**
+   * Open `diagramId`. With `snapshotId`, go on to that DiagramSnapshot by a
+   * Restore to Head, as clicking its Snapshot Timeline row does.
+   */
+  z.object({
+    type: z.literal("loadDiagram"),
+    diagramId: z.string(),
+    snapshotId: z.string().optional(),
+  }),
   z.object({ type: z.literal("flush") }),
   z.object({ type: z.literal("pong") }),
   z.object({ type: z.literal("editorConnected") }),
@@ -55,6 +63,17 @@ export const ChildToParent = z.discriminatedUnion("type", [
 
 export type ParentToChildMessage = z.infer<typeof ParentToChild>;
 export type ChildToParentMessage = z.infer<typeof ChildToParent>;
+
+/**
+ * The Active Diagram page's URL for `diagramId`. With `snapshotId`, the page
+ * goes on to that DiagramSnapshot by a Restore to Head.
+ */
+export function playgroundUrl(diagramId: string, snapshotId?: string): string {
+  const path = `/diagram-playground/${encodeURIComponent(diagramId)}`;
+  return snapshotId
+    ? `${path}?snapshot=${encodeURIComponent(snapshotId)}`
+    : path;
+}
 
 export const diagramChannel = createPopupChannel({
   name: "cvm-diagrams",
