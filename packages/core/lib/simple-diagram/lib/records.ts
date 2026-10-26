@@ -130,7 +130,7 @@ function collectText(node: unknown): string {
 
 /**
  * The serialized tldraw schema the records built here are written against:
- * tldraw 5.2.4's defaults plus CVM's `cvm-icon`. A NEW scene carries it; an
+ * tldraw 5.5.2's defaults plus CVM's `cvm-icon`. A NEW scene carries it; an
  * updated scene keeps its own. tldraw migrates a scene forward from whatever
  * schema it names on load, so pinning this is safe across tldraw upgrades —
  * the test that compares it with the live schema only says when to bump it
@@ -158,7 +158,7 @@ export const SCENE_SCHEMA = {
     "com.tldraw.shape.draw": 5,
     "com.tldraw.shape.embed": 4,
     "com.tldraw.shape.frame": 1,
-    "com.tldraw.shape.geo": 11,
+    "com.tldraw.shape.geo": 12,
     "com.tldraw.shape.group": 0,
     "com.tldraw.shape.highlight": 4,
     "com.tldraw.shape.image": 5,

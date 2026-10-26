@@ -41,7 +41,7 @@ export const SIZES = ["s", "m", "l", "xl"] as const;
 
 /**
  * The opacity steps tldraw's style panel offers
- * (`tldrawSupportedOpacities` in tldraw 5.2.4's DefaultStylePanelContent).
+ * (`tldrawSupportedOpacities` in tldraw 5.5.2's DefaultStylePanelContent).
  * The only opacities Matt's Diagrams hold.
  */
 export const OPACITIES = [0.1, 0.25, 0.5, 0.75, 1] as const;

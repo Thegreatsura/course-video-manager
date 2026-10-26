@@ -26,9 +26,9 @@
   },
   "devDependencies": {
     "@effect/vitest": "^0.27.0",
-    "@tldraw/store": "5.2.4",
-    "@tldraw/tlschema": "5.2.4",
-    "@tldraw/validate": "5.2.4",
+    "@tldraw/store": "5.5.2",
+    "@tldraw/tlschema": "5.5.2",
+    "@tldraw/validate": "5.5.2",
     "@types/node": "^20",
     "@types/pg": "^8.21.0",
     "dependency-cruiser": "^18.0.0",
