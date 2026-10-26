@@ -128,7 +128,9 @@ export const concatenateVideos = Effect.fn("concatenateVideos")(
                     },
                   ]
                 : []
-            )
+            ),
+            // The source Videos keep their Clips (Clip Origin).
+            { origin: "copy" }
           )
         );
 

@@ -49,6 +49,8 @@ const NOT_CARRIED: Record<string, string> = {
   "beat.order": "re-keyed, as clip.order",
   "clip_mockup.order": "re-keyed, as clip.order",
   "clip_mockup_chapter.order": "re-keyed, as clip.order",
+  "clip.origin":
+    "every Video-level copy is a user-made copy, stamped `copy` (tested apart)",
 };
 
 /** CHECK constraints, and foreign keys that leave the Video tree. */
@@ -71,8 +73,8 @@ const overrides = (ctx: {
   "clip_mockup.voiceError": () => null,
   // CHECK clip_scene_override_valid.
   "clip.sceneOverride": () => "Code",
-  // CHECK clip_origin_valid; the non-default value, so a copy that drops
-  // it (back to "video-editor") fails.
+  // CHECK clip_origin_valid. The source is `cli`, so a copy that carried it
+  // instead of stamping `copy` fails.
   "clip.origin": () => "cli",
   // CHECKs on a Recording Session and its scene events, which every copy
   // shares rather than copies.
@@ -252,6 +254,15 @@ describe("Video-level copy paths round trip — the copy is the source, row for 
           );
         }
       }
+
+      const copiedClips = await testDb.query.clips.findMany({
+        where: (c, { eq }) => eq(c.videoId, copyId),
+      });
+      expect(copiedClips.length).toBeGreaterThan(0);
+      expect(
+        copiedClips.map((c) => c.origin),
+        `${path}: a user-made copy's Clips are stamped "copy"`
+      ).toEqual(copiedClips.map(() => "copy"));
     });
   }
 });
