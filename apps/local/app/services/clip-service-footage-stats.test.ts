@@ -113,6 +113,28 @@ describe("ClipService.getFootageStats", () => {
     expect((await stats(now)).last7DaysSeconds).toBe(30);
   });
 
+  it("leaves out Clips the cvm CLI created, in every stat", async () => {
+    const now = "2026-10-12T09:00:00Z";
+    await film("filmed.mp4", "2026-10-12T08:00:00Z", 60);
+    // A Clip built by `cvm clip add`, on a day with nothing else filmed, so
+    // it would also have been the personal best.
+    const { clip } = await film("built.mp4", "2026-10-10T08:00:00Z", 600);
+    await testDb
+      .update(clips)
+      .set({ origin: "cli" })
+      .where(eq(clips.id, clip.id));
+
+    expect(await stats(now)).toEqual({
+      todaySeconds: 60,
+      last7DaysSeconds: 60,
+      personalBest: { date: "2026-10-12", seconds: 60 },
+      todayClips: 1,
+      todayKeptClips: 1,
+      last7DaysClips: 1,
+      last7DaysKeptClips: 1,
+    });
+  });
+
   it("leaves out archived Clips and Effect Clips", async () => {
     const now = "2026-10-12T09:00:00Z";
     const { videoId, clip: live } = await film(

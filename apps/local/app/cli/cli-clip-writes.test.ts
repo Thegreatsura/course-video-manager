@@ -484,6 +484,8 @@ describe("clip add", () => {
     expect((added as unknown as { videoFilename: string }).videoFilename).toBe(
       source
     );
+    // Clip Origin: a Clip the CLI makes never counts in the footage stats.
+    expect((added as unknown as { origin: string }).origin).toBe("cli");
 
     expect((await list(s.standaloneActiveId)).map((r) => r.id)).toEqual([
       existing.id,
