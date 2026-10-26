@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Plus, Search } from "lucide-react";
-import { diagramChannel } from "@/lib/diagram-protocol";
+import { diagramChannel, playgroundUrl } from "@/lib/diagram-protocol";
 import { DiagramThumbnail } from "@/features/diagrams/diagram-thumbnail";
 import { makeSnippet } from "@/features/diagrams/make-snippet";
 import { EditableDiagramName } from "@/features/diagrams/editable-diagram-name";
@@ -16,7 +16,7 @@ import type { Route } from "./+types/diagram-playground._index";
 export const handle = NO_TOASTS;
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "Diagram Playground" }];
+  return [{ title: "CVM - Diagram Playground" }];
 };
 
 export const loader = makeLoader({
@@ -116,7 +116,9 @@ export default function DiagramPlaygroundHome({
     const interval = setInterval(beat, 2000);
     const unsub = diagramChannel.subscribeChild((msg) => {
       if (msg.type === "loadDiagram") {
-        navigate(`/diagram-playground/${msg.diagramId}`, { replace: true });
+        navigate(playgroundUrl(msg.diagramId, msg.snapshotId), {
+          replace: true,
+        });
       }
     });
     return () => {

@@ -4,7 +4,11 @@
  * what only the diagram needs — which diagram is active, and the playground's
  * focus.
  */
-import { diagramChannel, type ChildToParentMessage } from "./diagram-protocol";
+import {
+  diagramChannel,
+  playgroundUrl,
+  type ChildToParentMessage,
+} from "./diagram-protocol";
 import { diagramFocus } from "./focus-tracker";
 import type { VideoFormat } from "@/features/videos/video-format";
 
@@ -63,12 +67,19 @@ export function openPlayground(): Window | null {
   return diagramChannel.open();
 }
 
-export function openPlaygroundWithDiagram(diagramId: string): void {
+export function openPlaygroundWithDiagram(
+  diagramId: string,
+  opts: { snapshotId?: string } = {}
+): void {
   if (diagramChannel.isOpen()) {
-    diagramChannel.sendToChild({ type: "loadDiagram", diagramId });
+    diagramChannel.sendToChild({
+      type: "loadDiagram",
+      diagramId,
+      snapshotId: opts.snapshotId,
+    });
   }
   _activeDiagramId = diagramId;
-  diagramChannel.open(`/diagram-playground/${diagramId}`);
+  diagramChannel.open(playgroundUrl(diagramId, opts.snapshotId));
 }
 
 /**

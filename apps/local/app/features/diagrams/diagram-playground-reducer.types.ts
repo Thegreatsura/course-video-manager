@@ -47,6 +47,15 @@ export interface CanvasHead {
   keptAsSnapshot: boolean;
 }
 
+/**
+ * A link that opened the page on one of `diagramId`'s snapshots (a Clip's,
+ * from the Video Editor). It is restored to the head once that head loads.
+ */
+export interface LinkedSnapshot {
+  diagramId: string;
+  snapshotId: string;
+}
+
 /** Where a held navigation was going, so it can be sent on its way. */
 export interface LeaveDestination {
   to: string;
@@ -135,6 +144,11 @@ export type DiagramPlaygroundEffect =
       expectedHeadHash: string | null;
       requestId: number;
     }
+  /**
+   * Read `diagramId`'s timeline and find `snapshotId` on it, for a link that
+   * opened the page on that snapshot.
+   */
+  | { type: "fetch-linked-snapshot"; diagramId: string; snapshotId: string }
   /** The restore won't happen; whoever asked can stop waiting. */
   | { type: "release-restore-request"; requestId: number }
   | { type: "preserve-snapshot"; diagramId: string }
