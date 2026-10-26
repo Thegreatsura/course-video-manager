@@ -150,14 +150,30 @@ export function getCentringInsets(
   viewport: { x: number; w: number },
   windowWidth: number
 ): SafeAreaInsets {
-  const hiddenRightWidth =
-    format === "short"
-      ? Math.max(windowWidth - CANVASES.short.width, 0)
-      : settings.faceCamWidth;
   return getSafeAreaInsets(
-    { ...settings, faceCamWidth: hiddenRightWidth },
+    {
+      ...settings,
+      faceCamWidth: getReservedRightWidth(settings, format, windowWidth),
+    },
     getRightOffscreenWidth(viewport, windowWidth)
   );
+}
+
+/**
+ * How much of the window's right edge, full height, is reserved for the face
+ * rather than the diagram (see `getCentringInsets`): the tuned face-cam strip
+ * for Landscape; for a Short, everything right of its canvas-width square
+ * (none on the square Spacedesk screen, where the face sits below the
+ * diagram in the canvas, not on the screen). No padding.
+ */
+export function getReservedRightWidth(
+  settings: Pick<CenteringSettings, "faceCamWidth">,
+  format: VideoFormat,
+  windowWidth: number
+): number {
+  return format === "short"
+    ? Math.max(windowWidth - CANVASES.short.width, 0)
+    : settings.faceCamWidth;
 }
 
 /**

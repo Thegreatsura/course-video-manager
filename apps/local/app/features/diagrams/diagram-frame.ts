@@ -3,16 +3,19 @@ import type { VideoFormat } from "@/features/videos/video-format";
 import { clampCrop, type ScreenCrop } from "@/packages/clip-source";
 import {
   getCenteringSettings,
-  getCentringInsets,
+  getReservedRightWidth,
   type CenteringSettings,
 } from "./diagram-centering-settings";
 
 /**
- * The Diagram Frame: the rectangle of the recorded screen the Diagram
- * Playground centres every diagram in (its safe area: inside the padding,
- * left of the face-cam strip; see `getCentringInsets`). It is the same for
- * every diagram, so Choose Screenshot's Diagram option cuts a CVM-recorder
- * Clip's screen frame to it.
+ * The Diagram Frame: the recorded screen the Diagram Playground draws every
+ * diagram on, less only the full-height strip on the right reserved for the
+ * face (`getReservedRightWidth`). It runs to the screen's top, bottom and
+ * left edges: the centring padding is not cut away, because that margin is
+ * what makes the screenshot sit well on the page (cutting to the padded safe
+ * area put the diagram flush against the crop). It is the same for every
+ * diagram, so Choose Screenshot's Diagram option cuts a CVM-recorder Clip's
+ * screen frame to it.
  *
  * The playground remembers it, per Video Format, each time it centres while
  * full screen. Full screen is what makes it a rectangle of the recorded
@@ -28,50 +31,43 @@ import {
  * captures (the DELL for a Landscape Video, Spacedesk for a Short): nothing
  * stored says which monitor it was on.
  */
-const storageKey = (format: VideoFormat) => `diagram-frame:${format}:v1`;
-
-/** A rectangle in the window's CSS pixels. */
-export interface WindowRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+// v2: a v1 frame was the padded safe area, tight to the diagram; bumping the
+// key orphans those, so an install falls back to the computed frame until
+// the playground next centres full screen.
+const storageKey = (format: VideoFormat) => `diagram-frame:${format}:v2`;
 
 /**
- * The Diagram Frame as fractions of a full-screen window (`windowWidth` x
- * `windowHeight` CSS pixels), from the safe area in the window's pixels.
- * Kept inside the window.
+ * The Diagram Frame as fractions of a full-screen window `windowWidth` CSS
+ * pixels wide: all of it but the strip reserved for the face on the right,
+ * full height. Kept inside the window.
  */
 export function diagramFrameOf(
-  safeArea: WindowRect,
+  format: VideoFormat,
   windowWidth: number,
-  windowHeight: number
+  settings: Pick<CenteringSettings, "faceCamWidth"> = getCenteringSettings()
 ): ScreenCrop {
+  const reserved = getReservedRightWidth(settings, format, windowWidth);
   return clampCrop({
-    x: safeArea.x / windowWidth,
-    y: safeArea.y / windowHeight,
-    w: safeArea.w / windowWidth,
-    h: safeArea.h / windowHeight,
+    x: 0,
+    y: 0,
+    w: Math.max(windowWidth - reserved, 1) / windowWidth,
+    h: 1,
   });
 }
 
 /**
- * Remember the Diagram Frame for `format`, from a centring's safe area, when
- * the window is full screen (`fullScreen`); otherwise the window is not the
- * recorded screen, and nothing is remembered.
+ * Remember the Diagram Frame for `format` when the window is full screen
+ * (`fullScreen`); otherwise the window is not the recorded screen, and
+ * nothing is remembered.
  */
 export function rememberDiagramFrame(
   format: VideoFormat,
-  safeArea: WindowRect,
-  window: { innerWidth: number; innerHeight: number; fullScreen: boolean }
+  window: { innerWidth: number; fullScreen: boolean }
 ): void {
   if (!window.fullScreen) return;
   writeStored(
     storageKey(format),
-    JSON.stringify(
-      diagramFrameOf(safeArea, window.innerWidth, window.innerHeight)
-    )
+    JSON.stringify(diagramFrameOf(format, window.innerWidth))
   );
 }
 
@@ -93,25 +89,13 @@ export const RECORDED_SCREENS: Record<
 
 /**
  * The Diagram Frame a full-screen playground on `format`'s recorded screen
- * would remember, from the centring settings: the same safe area
- * `centreCameraOnContent` centres in, with the canvas filling the window.
+ * would remember, from the centring settings' face-cam strip.
  */
 export function computedDiagramFrame(
   format: VideoFormat,
-  settings: CenteringSettings = getCenteringSettings()
+  settings: Pick<CenteringSettings, "faceCamWidth"> = getCenteringSettings()
 ): ScreenCrop {
-  const { width, height } = RECORDED_SCREENS[format];
-  const insets = getCentringInsets(settings, format, { x: 0, w: width }, width);
-  return diagramFrameOf(
-    {
-      x: insets.left,
-      y: insets.top,
-      w: Math.max(width - insets.left - insets.right, 1),
-      h: Math.max(height - insets.top - insets.bottom, 1),
-    },
-    width,
-    height
-  );
+  return diagramFrameOf(format, RECORDED_SCREENS[format].width, settings);
 }
 
 /**

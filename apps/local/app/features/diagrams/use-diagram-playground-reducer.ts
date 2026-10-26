@@ -542,15 +542,13 @@ export function useDiagramPlaygroundReducer() {
 }
 
 /**
- * Centre the diagram, and remember where it was centred as the Diagram Frame
- * when the window is full screen (diagram-frame.ts).
+ * Centre the diagram, and remember the Diagram Frame when the window is full
+ * screen (diagram-frame.ts).
  */
 function centreAndRememberFrame(editor: Editor, format: VideoFormat) {
-  const safeArea = centreCameraOnContent(editor, format);
-  if (!safeArea) return;
-  rememberDiagramFrame(format, safeArea, {
+  if (!centreCameraOnContent(editor, format)) return;
+  rememberDiagramFrame(format, {
     innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
     fullScreen: readFullScreen(),
   });
 }
