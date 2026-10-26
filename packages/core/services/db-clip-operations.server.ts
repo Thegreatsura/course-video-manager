@@ -430,6 +430,9 @@ const createClipOperationsUnwrapped = (db: Database) => {
           text: opts.text,
           // Its text comes from the Footage's own transcript.
           transcriptionStatus: "done",
+          // Clip Origin: only the `cvm` CLI calls this (`cvm clip add`), and a
+          // Clip it builds from Footage already filmed is not new filming.
+          origin: "cli",
         })
         .returning()
     );

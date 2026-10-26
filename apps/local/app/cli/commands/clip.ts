@@ -84,6 +84,9 @@ import {
  *   archived         true for a soft-deleted clip; only ever seen with --archived
  *   createdAt        when the clip was cut; a copy (new Draft, duplicated
  *                    Course or Video) keeps its original's
+ *   origin           Clip Origin: "video-editor" (filmed or cut in the app) or
+ *                    "cli" (made by `clip add`); only "video-editor" Clips
+ *                    count in the footage stats. A copy keeps its original's
  *
  * VERBS:
  *   clip list --video <videoId> [--archived]  clips on a Video, timeline order

@@ -8,6 +8,7 @@ import {
   videos,
 } from "../db/schema.js";
 import type { Database } from "./drizzle-service.server.js";
+import type { ClipOrigin } from "../features/videos/clip-origin.js";
 import { UnknownDBServiceError } from "./db-service-errors.js";
 
 /**
@@ -51,6 +52,13 @@ export interface PersonalBestDay {
 const EFFECT_CLIP_SCENE = "white noise";
 
 /**
+ * The only **Clip Origin** that counts. A Clip the `cvm` CLI created is cut
+ * from Footage already filmed, so it never counts, in any stat: duration,
+ * personal best or efficiency.
+ */
+const COUNTED_ORIGIN: ClipOrigin = "video-editor";
+
+/**
  * Two aggregates, run side by side: one over the Clips filmed in the last 7
  * days (two sums and four counts leave the database), one over the live
  * Clips of the last 365 (only the personal-best day and its total leave).
@@ -62,6 +70,8 @@ const EFFECT_CLIP_SCENE = "white noise";
  *   original does. (Copies made before copies carried `created_at` were
  *   stamped with the time of the copy; their `transcribed_at` still dates
  *   them, unless they were never transcribed.)
+ * - **Which Clips** at all: only those whose Clip Origin is `video-editor`.
+ *   A Clip the `cvm` CLI created is left out of every number below.
  * - **How much**: the live Clips — not archived, not an Effect Clip, on a
  *   standalone Video or a Video of a Draft Version (a Pending or Published
  *   Version holds frozen copies) — each counted for `source_end_time -
@@ -125,6 +135,7 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
               LEFT JOIN ${courseVersions} ON ${courseVersions.id} = ${sections.repoVersionId}
               WHERE ${filmedAt} >= (${localMidnight} - interval '6 days') AT TIME ZONE ${tz}
                 AND ${clips.scene} IS DISTINCT FROM ${EFFECT_CLIP_SCENE}
+                AND ${clips.origin} = ${COUNTED_ORIGIN}
               GROUP BY ${clips.videoFilename}, ${clips.sourceStartTime}, ${clips.sourceEndTime}
             )
             SELECT
@@ -157,6 +168,7 @@ export const getFootageStats = Effect.fn("getFootageStats")(function* (
               LEFT JOIN ${courseVersions} ON ${courseVersions.id} = ${sections.repoVersionId}
               WHERE ${filmedAt} >= (${localMidnight} - interval '364 days') AT TIME ZONE ${tz}
                 AND ${clips.scene} IS DISTINCT FROM ${EFFECT_CLIP_SCENE}
+                AND ${clips.origin} = ${COUNTED_ORIGIN}
                 AND ${clips.archived} = false
                 AND ${current}
               GROUP BY ${clips.videoFilename}, ${clips.sourceStartTime}, ${clips.sourceEndTime}

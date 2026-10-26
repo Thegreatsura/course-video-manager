@@ -143,7 +143,8 @@ timing straight away, with no re-transcribe step.
 on the SAME video, and because clips and chapters share one order space the new
 clip lands correctly even when the neighbour is a Chapter. The resulting clip is
 an ordinary Clip in every way — zoomable, movable, deletable, listed by
-'clip list'. Rejected (exit 3) if start >= end or the range is shorter than the
+'clip list' — except its Clip Origin, which is 'cli': it is cut from Footage
+already filmed, so it never counts in the footage stats. Rejected (exit 3) if start >= end or the range is shorter than the
 ${MINIMUM_CLIP_LENGTH_SECONDS}s minimum clip length; an unknown --video is a
 not-found (exit 2).
 
