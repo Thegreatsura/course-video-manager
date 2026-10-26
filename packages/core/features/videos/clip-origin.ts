@@ -16,7 +16,8 @@
  * Videos, so each Clip keeps its original's Clip Origin (as it keeps
  * `createdAt`). The stats count only current Clips (a Draft's or a
  * standalone Video's), so stamping `copy` there would drop every Submitted
- * take from them.
+ * take from them. Create video from selection in "move" mode is not a copy
+ * either: it archives the originals, so the moved Clip keeps its origin.
  *
  * Not to be confused with the `clip-source` package, which answers where a
  * Clip's picture and sound come from.

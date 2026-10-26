@@ -120,7 +120,10 @@ export const createVideoFromSelectionImpl = Effect.fn(
         item.kind === "clip"
           ? [{ clip: item.clip, videoId: newVideo.id, order: item.order }]
           : []
-      )
+      ),
+      // Clip Origin: a copy leaves the originals live, so it is not new
+      // filming; a move archives them, so the moved Clip is the take.
+      { origin: mode === "copy" ? "copy" : "keep" }
     )
   );
   const chapterValues = placed.flatMap((item) =>

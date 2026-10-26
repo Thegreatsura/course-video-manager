@@ -185,7 +185,9 @@ export const copyVideoImpl = (
               clip,
               videoId: newVideo.id,
               order: clipOrders[i]!,
-            }))
+            })),
+            // Duplicate Video: the source keeps its Clips (Clip Origin).
+            { origin: "copy" }
           );
 
           if (sourceChapters.length > 0) {

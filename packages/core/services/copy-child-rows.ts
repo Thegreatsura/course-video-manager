@@ -159,6 +159,12 @@ export const copyClipChildren = async (
  * `keepsArchived` in version-copy-manifest.ts) and `createdAt`, when the take
  * was filmed, which the footage stats date it by.
  *
+ * The one column the caller decides is `origin` (Clip Origin): `"copy"` for a
+ * user-made copy, whose original stays where it was, so the copy is not new
+ * filming; `"keep"` to carry the original's, for a move (Create video from
+ * selection in "move" mode archives the originals, so the moved Clip is the
+ * take and must still count).
+ *
  * Returns the source -> copy Clip id map.
  */
 export const copyClipsOntoVideo = async (
@@ -167,7 +173,8 @@ export const copyClipsOntoVideo = async (
     readonly clip: ClipToCopy;
     readonly videoId: string;
     readonly order: string;
-  }>
+  }>,
+  options: { readonly origin: "copy" | "keep" }
 ): Promise<ReadonlyMap<string, string>> => {
   const clipIds = new Map(
     placements.map(({ clip }) => [clip.id, crypto.randomUUID()] as const)
@@ -183,7 +190,13 @@ export const copyClipsOntoVideo = async (
         overlays: _overlays,
         ...carried
       } = clip;
-      return { ...carried, id: clipIds.get(id)!, videoId, order };
+      return {
+        ...carried,
+        id: clipIds.get(id)!,
+        videoId,
+        order,
+        origin: options.origin === "copy" ? ("copy" as const) : carried.origin,
+      };
     })
   );
   await copyClipChildren(

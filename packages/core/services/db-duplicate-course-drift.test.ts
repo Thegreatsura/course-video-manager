@@ -107,10 +107,10 @@ describe("duplicateCourse — schema-drift guard", () => {
         "archived",
         // When the take was filmed, which the footage stats date it by.
         "createdAt",
-        // Clip Origin: whether the footage stats count it at all.
-        "origin",
       ],
-      notCopied: ["id", "videoId"],
+      // Clip Origin: a duplicated Course is a user-made copy, so its Clips
+      // are stamped `copy` (asserted below), not carried.
+      notCopied: ["id", "videoId", "origin"],
     },
     chapter: {
       table: schema.chapters,
@@ -351,6 +351,8 @@ describe("duplicateCourse — schema-drift guard", () => {
       ),
       thumbnail: await getOne(schema.thumbnails, "videoId", video!.id),
     };
+
+    expect(dupRows.clip.origin).toBe("copy");
 
     for (const [name, spec] of Object.entries(COPY_SPEC)) {
       const src = sourceRows[name as keyof typeof COPY_SPEC];

@@ -53,8 +53,9 @@ const EFFECT_CLIP_SCENE = "white noise";
 
 /**
  * The only **Clip Origin** that counts. A Clip the `cvm` CLI created is cut
- * from Footage already filmed, so it never counts, in any stat: duration,
- * personal best or efficiency.
+ * from Footage already filmed, and a `copy` (from selection, a duplicated
+ * Video or Course) duplicates a take whose original still counts, so neither
+ * counts, in any stat: duration, personal best or efficiency.
  */
 const COUNTED_ORIGIN: ClipOrigin = "video-editor";
 
@@ -71,7 +72,9 @@ const COUNTED_ORIGIN: ClipOrigin = "video-editor";
  *   stamped with the time of the copy; their `transcribed_at` still dates
  *   them, unless they were never transcribed.)
  * - **Which Clips** at all: only those whose Clip Origin is `video-editor`.
- *   A Clip the `cvm` CLI created is left out of every number below.
+ *   A Clip the `cvm` CLI created, or a user-made `copy`, is left out of
+ *   every number below. A Submit's new Draft keeps its Clips'
+ *   `video-editor`, so a Submitted take still counts.
  * - **How much**: the live Clips — not archived, not an Effect Clip, on a
  *   standalone Video or a Video of a Draft Version (a Pending or Published
  *   Version holds frozen copies) — each counted for `source_end_time -
