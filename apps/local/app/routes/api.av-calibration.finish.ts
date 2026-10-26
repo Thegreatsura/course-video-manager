@@ -21,20 +21,14 @@ const finishSchema = Schema.Struct({
     speech: Schema.Array(WindowSchema),
     claps: WindowSchema,
   }),
-  browserInputLabel: Schema.NullOr(Schema.String),
-  browserTrace: Schema.NullOr(
-    Schema.Array(
-      Schema.Struct({ seconds: Schema.Number, peakDb: Schema.Number })
-    )
-  ),
 });
 
 /**
  * The script is done: the recorder service ends the run and measures its mic
  * file over the windows the page sends (the clap window cut out of the true
  * peak), the claps are found in its mic and camera files for the Mic Offset,
- * and the AV Calibration is stored, passed or failed, with the browser's
- * level trace beside the files. Answers the stored calibration
+ * and the AV Calibration is stored, passed or failed, with the run's script
+ * file beside its files. Answers the stored calibration
  * (`SavedAVCalibration`).
  */
 export const action = makeAction({
@@ -61,8 +55,6 @@ export const action = makeAction({
         windows,
         scriptStartSeconds: request.scriptStartSeconds,
         recordingsFolder: recordingFolder(),
-        browserInputLabel: request.browserInputLabel,
-        browserTrace: request.browserTrace ? [...request.browserTrace] : null,
       });
       // A Stream Deck Record from now on cuts with the new threshold.
       recorderClient().calibrationChanged();

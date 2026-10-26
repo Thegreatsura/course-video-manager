@@ -261,32 +261,10 @@ const Result = ({ calibration }: { calibration: SavedAVCalibration }) => {
         peak at most {MAX_TRUE_PEAK_DBTP} dBTP; then the clap step saved. Stored{" "}
         {new Date(calibration.createdAt).toLocaleString()}, on{" "}
         {calibration.recorderMic}
-        {calibration.cameraDevice ? ` and ${calibration.cameraDevice}` : ""}
-        {calibration.browserInputLabel
-          ? `; browser input ${calibration.browserInputLabel}`
-          : "; no browser input"}
-        .
+        {calibration.cameraDevice ? ` and ${calibration.cameraDevice}` : ""}.
       </p>
     </div>
   );
-};
-
-/** What the browser detector is listening to during a run. */
-const BrowserInput = ({ state }: { state: State }) => {
-  const { label, problem } = state.browser;
-  if (label)
-    return (
-      <p className="text-sm text-muted-foreground">
-        Browser detector listening to {label}.
-      </p>
-    );
-  if (problem)
-    return (
-      <p className="text-sm text-amber-500">
-        No browser trace for this run: {problem}
-      </p>
-    );
-  return null;
 };
 
 /**
@@ -341,8 +319,7 @@ export const CalibrationSession = ({
           <Progress
             seconds={session.kind === "running" ? session.seconds : 0}
           />
-          <div className="flex items-center justify-between gap-6">
-            <BrowserInput state={state} />
+          <div className="flex items-center justify-end gap-6">
             <Button variant="outline" onClick={onCancel}>
               Cancel
             </Button>
@@ -383,11 +360,11 @@ export const CalibrationSession = ({
         <div className="flex items-center justify-between gap-6">
           <div className="space-y-1">
             <div className="text-xl font-semibold text-amber-500">
-              Close OBS to calibrate
+              Another app is using the Cam Link — close it to calibrate
             </div>
             <p className="text-sm text-muted-foreground">
-              Another program has the Cam Link, so the session did not start and
-              nothing was recorded. Close OBS, then press Start.
+              The session did not start and nothing was recorded. Close the
+              other app, then press Start.
             </p>
           </div>
           <Button

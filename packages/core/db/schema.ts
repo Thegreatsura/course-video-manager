@@ -535,9 +535,8 @@ export const recordingSessions = createTable(
 
 /**
  * An AV Calibration (GLOSSARY.md): one scripted check of Matt's mic, kept
- * whether it passed or failed; a cancelled one is never stored. Its mic file
- * and the browser detector's level trace stay beside each other in the
- * recordings area (`av-calibrations/<stamp> <id>/`), named here.
+ * whether it passed or failed; a cancelled one is never stored. Its mic,
+ * camera and script files stay beside each other in the recordings area (`av-calibrations/<stamp> <id>/`), named here.
  */
 export const avCalibrations = createTable(
   "av_calibration",
@@ -568,13 +567,15 @@ export const avCalibrations = createTable(
     thresholdDb: doublePrecision("threshold_db").notNull(),
     /** The recorder service's mic: its DirectShow name. */
     recorderMic: text("recorder_mic").notNull(),
-    /** The browser's audio input label; null when the browser could not open it. */
-    browserInputLabel: text("browser_input_label"),
     /** SCRIPT_VERSION of the script it ran. */
     scriptVersion: integer("script_version").notNull(),
     micFilePath: text("mic_file_path").notNull(),
-    /** The browser detector's level trace and the prompt schedule (JSON). */
-    browserTracePath: text("browser_trace_path").notNull(),
+    /**
+     * The prompt schedule the run followed and the windows it was measured
+     * over (JSON). The column keeps its old name: before #2355 the file also
+     * held the browser detector's level trace (`browser-trace.json`).
+     */
+    scriptFilePath: text("browser_trace_path").notNull(),
     /**
      * THE CLAP STEP (#2095). Every column null before it. The recorder
      * service's camera: its DirectShow name.

@@ -258,7 +258,6 @@ describe("a Recording Session", () => {
           createdAtMs: CALIBRATION.createdAtMs,
           thresholdDb: CALIBRATION.thresholdDb,
           recorderMic: CALIBRATION.recorderMic,
-          browserInputLabel: CALIBRATION.browserInputLabel,
         },
       },
     ]) {

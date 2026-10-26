@@ -137,8 +137,8 @@ const Axis = ({ endSeconds }: { endSeconds: number }) => {
 };
 
 /**
- * An AV Calibration's review timeline (#2081): the prompts, the browser
- * detector and the FFmpeg detector on one axis, in seconds of the mic file.
+ * An AV Calibration's review timeline (#2081): the prompts and the FFmpeg
+ * detector on one axis, in seconds of the mic file.
  * For Matt to judge by eye; it decides nothing.
  */
 export const CalibrationTimelineView = ({
@@ -165,25 +165,13 @@ export const CalibrationTimelineView = ({
       <div className="flex items-baseline justify-between gap-4">
         <div className="font-semibold">Timeline</div>
         <div className="text-xs text-muted-foreground">
-          Detectors cut at {timeline.rule.thresholdDb.toFixed(1)} dB, silences
-          of {timeline.rule.minSilenceSeconds} s or more. Green is speech;
-          hatching is the {timeline.reactionMarginSeconds} s reaction margin.
+          The detector cuts at {timeline.rule.thresholdDb.toFixed(1)} dB,
+          silences of {timeline.rule.minSilenceSeconds} s or more. Green is
+          speech; hatching is the {timeline.reactionMarginSeconds} s reaction
+          margin.
         </div>
       </div>
       <PromptsRow timeline={timeline} />
-      {timeline.browser ? (
-        <DetectorRow
-          label="Browser detector"
-          spans={timeline.browser}
-          endSeconds={timeline.endSeconds}
-        />
-      ) : (
-        <Row label="Browser detector">
-          <div className="flex h-full items-center px-2 text-xs text-muted-foreground">
-            No browser trace for this run.
-          </div>
-        </Row>
-      )}
       <DetectorRow
         label="FFmpeg detector"
         spans={timeline.ffmpeg}
@@ -191,7 +179,7 @@ export const CalibrationTimelineView = ({
       />
       <Axis endSeconds={timeline.endSeconds} />
       <p className="text-xs text-muted-foreground">
-        Review only: whether the rows agree does not change pass or fail.
+        Review only: what the detector heard does not change pass or fail.
       </p>
     </div>
   );

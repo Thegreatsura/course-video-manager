@@ -304,18 +304,18 @@ describe("which Footage is Unused", () => {
       recorderMic: "mic",
       scriptVersion: 1,
       micFilePath: `${folder}/mic.wav`,
-      browserTracePath: `${folder}/trace.json`,
+      scriptFilePath: `${folder}/calibration-script.json`,
     });
     put(d, `${folder}/mic.wav`);
-    put(d, `${folder}/trace.json`);
+    put(d, `${folder}/calibration-script.json`);
     put(d, `${folder}/camera.mkv`);
 
     await trash();
 
     expect(tree(path.join(d, folder))).toEqual([
+      "calibration-script.json",
       "camera.mkv",
       "mic.wav",
-      "trace.json",
     ]);
   });
 

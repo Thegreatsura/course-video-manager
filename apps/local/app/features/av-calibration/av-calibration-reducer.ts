@@ -1,13 +1,12 @@
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
-  CLOSE_OBS_TO_CALIBRATE,
+  CAM_LINK_IN_USE_TO_CALIBRATE,
   runMeasurementWindows,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
   type ScriptStep,
 } from "@/av-calibration-constants";
 import type {
-  BrowserTracePoint,
   FinishCalibrationRequest,
   SavedAVCalibration,
 } from "./calibration-wire";
@@ -43,10 +42,10 @@ export { clapStepOffsetMs, soundRange, videoRange } from "./clap-step-reducer";
  * stores the AV Calibration, passed or failed. Cancel, from any step before
  * the analysis, stores nothing.
  *
- * Start opens the camera first. Another program (OBS) holding the Cam Link
- * refuses it with `CLOSE_OBS_TO_CALIBRATE`: the session never starts, and
- * the page says "Close OBS to calibrate" with Start, which works again as
- * soon as OBS lets go. A camera that opens but sends nothing is refused with
+ * Start opens the camera first. Another app holding the Cam Link refuses
+ * it with `CAM_LINK_IN_USE_TO_CALIBRATE`: the session never starts, and the
+ * page says another app is using the Cam Link, with Start, which works
+ * again as soon as that app lets go. A camera that opens but sends nothing is refused with
  * the "Cam Link not starting" message, as any other refusal.
  *
  * During the clap step each clap shows as the mic hears it, marked seen once
@@ -54,23 +53,17 @@ export { clapStepOffsetMs, soundRange, videoRange } from "./clap-step-reducer";
  * recorder service with the result's own rules, so the claps marked seen are
  * the claps the result finds).
  *
- * Alongside, the browser detector's input is traced (`capture-browser-levels`)
- * and timed onto the same axis through the reading heard last.
- *
  * The result shows the calibration's review timeline (#2081), loaded once it
  * is stored. A past calibration's result, timeline and all, opens again from
  * the page's history.
  */
 export namespace avCalibrationReducer {
-  /** Where the page's clock meets the run's: a reading, and when the page heard it. */
-  export type Anchor = { seconds: number; receivedAtMs: number };
-
   export type Session =
     /** The meter, with Start. */
     | { kind: "meter" }
     /** Start was pressed; the run has not said it runs. */
     | { kind: "starting" }
-    /** Start was refused: another program (OBS) holds the Cam Link. */
+    /** Start was refused: another app holds the Cam Link. */
     | { kind: "camera-busy" }
     | {
         kind: "running";
@@ -79,8 +72,6 @@ export namespace avCalibrationReducer {
         scriptStartSeconds: number;
         /** Seconds of the script at the latest reading (negative: not yet). */
         seconds: number;
-        /** In seconds of the run's files, as the browser trace is timed. */
-        anchor: Anchor | null;
         /** The claps heard so far, each seen or not (`calibration-claps`). */
         claps: ClapMark[];
       }
@@ -106,21 +97,11 @@ export namespace avCalibrationReducer {
     | { status: "loaded"; timeline: CalibrationTimeline }
     | { status: "failed"; message: string };
 
-  export type Browser = {
-    /** The browser's audio input, once open. */
-    label: string | null;
-    /** Why there is no trace, when the input could not be opened. */
-    problem: string | null;
-    trace: BrowserTracePoint[];
-    capture: EffectEntity<State, Action> | null;
-  };
-
   export type State = {
     meter: levelMeterReducer.State;
     /** The meter's stream: listening is what runs the meter. */
     meterListener: EffectEntity<State, Action> | null;
     session: Session;
-    browser: Browser;
   };
 
   export type Action =
@@ -133,20 +114,6 @@ export namespace avCalibrationReducer {
     | { type: "cancel-clicked" }
     | { type: "back-to-meter-clicked" }
     | { type: "start-refused"; message: string }
-    | { type: "browser-input-opened"; label: string }
-    | { type: "browser-input-failed"; message: string }
-    /**
-     * Peaks of consecutive blocks the browser heard. Block `n` (counted from
-     * the first the capture heard) ended at `firstBlockEndedAtMs` (the page's
-     * clock) plus `n` blocks: timed by the audio's own sample count.
-     */
-    | {
-        type: "browser-levels-heard";
-        firstBlockEndedAtMs: number;
-        firstBlock: number;
-        blockSeconds: number;
-        peaksDb: number[];
-      }
     | {
         type: "calibration-saved";
         calibrationId: string;
@@ -181,8 +148,6 @@ export namespace avCalibrationReducer {
     | { type: "start-calibration" }
     | { type: "cancel-calibration" }
     | ({ type: "finish-calibration" } & FinishCalibrationRequest)
-    /** Open the browser detector's input and report its levels until stopped. */
-    | { type: "capture-browser-levels" }
     | { type: "load-timeline"; calibrationId: string }
     | { type: "load-clap-step"; calibrationId: string }
     | { type: "save-mic-offset"; calibrationId: string; micOffsetMs: number }
@@ -194,13 +159,6 @@ type State = avCalibrationReducer.State;
 type Action = avCalibrationReducer.Action;
 type Effect = avCalibrationReducer.Effect;
 
-const noBrowser = (): avCalibrationReducer.Browser => ({
-  label: null,
-  problem: null,
-  trace: [],
-  capture: null,
-});
-
 /**
  * Nothing listens yet: the page starts the meter once it has opened
  * (`page-opened`), so a Strict Mode remount, which stops the first listener,
@@ -210,32 +168,17 @@ export const createInitialAVCalibrationState = (): State => ({
   meter: STARTING_LEVEL_METER,
   meterListener: null,
   session: { kind: "meter" },
-  browser: noBrowser(),
 });
 
-/** Stops the browser capture, keeping what it heard. */
-const stopCapture = (
-  state: State,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2]
-): avCalibrationReducer.Browser => {
-  if (state.browser.capture) exec.stop(state.browser.capture);
-  return { ...state.browser, capture: null };
-};
-
-const fail = (
-  state: State,
-  exec: Parameters<EffectReducer<State, Action, Effect>>[2],
-  message: string
-): State => ({
+const fail = (state: State, message: string): State => ({
   ...state,
   session: { kind: "failed", message },
-  browser: stopCapture(state, exec),
 });
 
 /** In a run: a reading moves the clock on; the last one ends the script. */
 const onReading = (
   state: State,
-  reading: { seconds: number; receivedAtMs: number },
+  reading: { seconds: number },
   exec: Parameters<EffectReducer<State, Action, Effect>>[2]
 ): State => {
   const session = state.session;
@@ -244,25 +187,17 @@ const onReading = (
   if (seconds < SCRIPT_END_SECONDS)
     return {
       ...state,
-      session: {
-        ...session,
-        seconds,
-        anchor: session.anchor ?? reading,
-      },
+      session: { ...session, seconds },
     };
-  const browser = stopCapture(state, exec);
   exec({
     type: "finish-calibration",
     calibrationId: session.calibrationId,
     scriptStartSeconds: session.scriptStartSeconds,
     windows: runMeasurementWindows(session.scriptStartSeconds),
-    browserInputLabel: browser.label,
-    browserTrace: browser.label ? browser.trace : null,
   });
   return {
     ...state,
     session: { kind: "analysing", calibrationId: session.calibrationId },
-    browser,
   };
 };
 
@@ -355,7 +290,6 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
           calibrationId: action.calibrationId,
           scriptStartSeconds: action.scriptStartSeconds,
           seconds: 0,
-          anchor: null,
           claps: [],
         },
       };
@@ -376,36 +310,24 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
         session.calibrationId !== action.calibrationId
       )
         return state;
-      return fail(state, exec, action.message);
+      return fail(state, action.message);
     }
     case "start-clicked": {
       if (!isSessionIdle(state.session)) return state;
       if (state.meter.status !== "running") return state;
       exec({ type: "start-calibration" });
-      return {
-        ...state,
-        session: { kind: "starting" },
-        browser: {
-          ...noBrowser(),
-          capture: exec({ type: "capture-browser-levels" }),
-        },
-      };
+      return { ...state, session: { kind: "starting" } };
     }
     case "start-refused":
       if (state.session.kind !== "starting") return state;
-      if (action.message === CLOSE_OBS_TO_CALIBRATE)
-        return {
-          ...state,
-          session: { kind: "camera-busy" },
-          browser: stopCapture(state, exec),
-        };
-      return fail(state, exec, action.message);
+      if (action.message === CAM_LINK_IN_USE_TO_CALIBRATE)
+        return { ...state, session: { kind: "camera-busy" } };
+      return fail(state, action.message);
     case "cancel-clicked": {
       const { kind } = state.session;
       if (kind !== "starting" && kind !== "running") return state;
       exec({ type: "cancel-calibration" });
-      stopCapture(state, exec);
-      return { ...state, session: { kind: "meter" }, browser: noBrowser() };
+      return { ...state, session: { kind: "meter" } };
     }
     case "back-to-meter-clicked":
       if (
@@ -415,47 +337,6 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
       )
         return state;
       return { ...state, session: { kind: "meter" } };
-    case "browser-input-opened":
-      if (!state.browser.capture) return state;
-      return {
-        ...state,
-        browser: { ...state.browser, label: action.label, problem: null },
-      };
-    case "browser-input-failed":
-      if (!state.browser.capture) return state;
-      return {
-        ...state,
-        browser: { ...state.browser, label: null, problem: action.message },
-      };
-    case "browser-levels-heard": {
-      const session = state.session;
-      if (
-        session.kind !== "running" ||
-        !session.anchor ||
-        !state.browser.capture
-      )
-        return state;
-      const { anchor } = session;
-      const points = action.peaksDb.map((peakDb, i) => {
-        const endedAtMs =
-          action.firstBlockEndedAtMs +
-          (action.firstBlock + i) * action.blockSeconds * 1000;
-        return {
-          seconds:
-            anchor.seconds +
-            (endedAtMs - anchor.receivedAtMs) / 1000 -
-            action.blockSeconds,
-          peakDb,
-        };
-      });
-      return {
-        ...state,
-        browser: {
-          ...state.browser,
-          trace: [...state.browser.trace, ...points],
-        },
-      };
-    }
     case "calibration-saved":
       if (
         state.session.kind !== "analysing" ||
@@ -582,7 +463,7 @@ export const avCalibrationReducer: EffectReducer<State, Action, Effect> = (
         state.session.calibrationId !== action.calibrationId
       )
         return state;
-      return fail(state, exec, action.message);
+      return fail(state, action.message);
   }
 };
 

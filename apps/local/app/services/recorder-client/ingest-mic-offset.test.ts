@@ -84,7 +84,7 @@ const calibrated = (
     recorderMic: o.mic ?? MIC,
     scriptVersion: 4,
     micFilePath: `/calibrations/${id}/mic.wav`,
-    browserTracePath: `/calibrations/${id}/browser-trace.json`,
+    scriptFilePath: `/calibrations/${id}/calibration-script.json`,
     cameraDevice: o.camera ?? CAMERA,
     clapsFound: 5,
     clapSpreadMs: 8,

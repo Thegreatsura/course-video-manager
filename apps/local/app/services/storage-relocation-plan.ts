@@ -58,7 +58,7 @@ export type RowUpdates = {
   readonly calibrations: ReadonlyArray<{
     id: string;
     micFilePath: string;
-    browserTracePath: string;
+    scriptFilePath: string;
     cameraFilePath: string | null;
   }>;
   readonly thumbnails: ReadonlyArray<{

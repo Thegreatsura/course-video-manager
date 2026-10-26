@@ -229,12 +229,12 @@ export const SCRIPT_SCHEDULE: readonly ScriptStep[] = (() => {
 export const SCRIPT_END_SECONDS = SCRIPT_SCHEDULE.at(-1)!.endSeconds;
 
 /**
- * Why Start is refused when another program (OBS) holds the Cam Link: the
- * session never starts, and nothing is recorded or stored. CVM never closes
- * OBS itself; Matt does, then presses Start again.
+ * Why Start is refused when another app holds the Cam Link: the session
+ * never starts, and nothing is recorded or stored. CVM never closes the
+ * other app itself; Matt does, then presses Start again.
  */
-export const CLOSE_OBS_TO_CALIBRATE =
-  "Close OBS to calibrate: another program has the Cam Link.";
+export const CAM_LINK_IN_USE_TO_CALIBRATE =
+  "Another app is using the Cam Link: close it to calibrate.";
 
 export type TimeWindow = { startSeconds: number; endSeconds: number };
 
@@ -334,8 +334,6 @@ export type LastPassedCalibration = {
   thresholdDb: number;
   /** The recorder service's mic (its DirectShow name) it was taken on. */
   recorderMic: string;
-  /** The browser's audio input label it was taken on; null: none opened. */
-  browserInputLabel: string | null;
   /**
    * The recorder service's camera (its DirectShow name) it was taken on;
    * null only on a row from before AV Calibration, which never passes.
@@ -345,14 +343,12 @@ export type LastPassedCalibration = {
 
 /**
  * The camera + mic pair now, as far as the asker knows it: the recorder
- * service its mic and camera (their DirectShow names, at Record), the editor
- * its getUserMedia audio track's label (null when it has none open) and
- * the camera the recorder service is configured with
- * (`RECORDER_CAMERA_NAME`). A device left out is not compared.
+ * service its mic and camera (their DirectShow names, at Record), or the
+ * camera the recorder service is configured with (`RECORDER_CAMERA_NAME`).
+ * A device left out is not compared.
  */
 export type CurrentInputDevice = {
   recorderMic?: string;
-  browserInputLabel?: string | null;
   camera?: string;
 };
 
@@ -361,7 +357,7 @@ export type CalibrationInvalidReason =
   | { kind: "expired"; expiredAtMs: number }
   | {
       kind: "device-changed";
-      device: "recorder-mic" | "browser-input" | "camera";
+      device: "recorder-mic" | "camera";
       from: string | null;
       to: string | null;
     };
@@ -414,19 +410,6 @@ export const calibrationValidity = (
       },
     };
   if (
-    current.browserInputLabel !== undefined &&
-    current.browserInputLabel !== lastPassed.browserInputLabel
-  )
-    return {
-      valid: false,
-      reason: {
-        kind: "device-changed",
-        device: "browser-input",
-        from: lastPassed.browserInputLabel,
-        to: current.browserInputLabel,
-      },
-    };
-  if (
     current.camera !== undefined &&
     !isSameCamera(lastPassed.cameraDevice, current.camera)
   )
@@ -455,7 +438,6 @@ export const formatCalibrationTime = (ms: number): string =>
 
 const DEVICE_NAMES = {
   "recorder-mic": "The recorder's mic",
-  "browser-input": "The browser's mic input",
   camera: "The camera",
 } as const;
 const deviceName = (device: keyof typeof DEVICE_NAMES) => DEVICE_NAMES[device];

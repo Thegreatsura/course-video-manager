@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ReducerTester } from "@/test-utils/reducer-tester";
 import {
-  CLOSE_OBS_TO_CALIBRATE,
+  CAM_LINK_IN_USE_TO_CALIBRATE,
   SCRIPT_END_SECONDS,
   SCRIPT_SCHEDULE,
 } from "@/av-calibration-constants";
@@ -25,7 +25,6 @@ const calibration = (id: string): SavedAVCalibration => ({
   truePeakDb: -9,
   thresholdDb: -43,
   recorderMic: "Voicemeeter Out B1",
-  browserInputLabel: "Voicemeeter Out B1",
   cameraDevice: "Cam Link 4K",
   clapsFound: 5,
   clapSpreadMs: 8,
@@ -38,7 +37,6 @@ const timeline = (calibrationId: string): CalibrationTimeline => ({
   endSeconds: 63,
   prompts: [],
   reactionMarginSeconds: 0.75,
-  browser: null,
   ffmpeg: [],
 });
 
@@ -91,7 +89,6 @@ describe("the AV Calibration page's session", () => {
     seconds,
     momentaryLufs: -30,
     shortTermLufs: -30,
-    receivedAtMs: 1_000 + seconds * 1000,
   });
 
   it("prompts the clap between the silence and the reading, on the files' clock from where the run went live, and sends the clap window to the analysis", () => {
@@ -150,33 +147,26 @@ describe("the AV Calibration page's session", () => {
     );
   });
 
-  it("says Close OBS to calibrate when another program holds the Cam Link, starts nothing, and starts once it is freed, without a reload", () => {
+  it("says another app is using the Cam Link when one holds it, starts nothing, and starts once it is freed, without a reload", () => {
     const t = new ReducerTester(
       avCalibrationReducer,
       createInitialAVCalibrationState()
     );
     t.send({ type: "meter-started", mic: "Voicemeeter Out B1" })
       .send({ type: "start-clicked" })
-      .send({ type: "start-refused", message: CLOSE_OBS_TO_CALIBRATE });
+      .send({ type: "start-refused", message: CAM_LINK_IN_USE_TO_CALIBRATE });
     expect(t.getState().session).toEqual({ kind: "camera-busy" });
-    expect(t.getState().browser.capture).toBeNull();
     // Nothing ran, so nothing is measured or stored.
-    expect(t.getEffects().map((e) => e.type)).toEqual([
-      "start-calibration",
-      "capture-browser-levels",
-    ]);
+    expect(t.getEffects().map((e) => e.type)).toEqual(["start-calibration"]);
 
-    // Matt closes OBS and presses Start again.
+    // Matt closes the other app and presses Start again.
     t.resetExec().send({ type: "start-clicked" }).send({
       type: "calibration-started",
       calibrationId: "run-1",
       mic: "Voicemeeter Out B1",
       scriptStartSeconds: 3.1,
     });
-    expect(t.getEffects().map((e) => e.type)).toEqual([
-      "start-calibration",
-      "capture-browser-levels",
-    ]);
+    expect(t.getEffects().map((e) => e.type)).toEqual(["start-calibration"]);
     expect(t.getState().session).toMatchObject({
       kind: "running",
       calibrationId: "run-1",

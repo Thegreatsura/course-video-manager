@@ -441,7 +441,7 @@ const calibrated = (
     recorderMic: o.recorderMic ?? FAKE_MIC,
     scriptVersion: 3,
     micFilePath: `/calibrations/${id}/mic.wav`,
-    browserTracePath: `/calibrations/${id}/browser-trace.json`,
+    scriptFilePath: `/calibrations/${id}/calibration-script.json`,
     cameraDevice: "Cam Link 4K",
     clapsFound: o.clapsFound === undefined ? 5 : o.clapsFound,
     clapSpreadMs: o.clapsFound === null ? null : 8,

@@ -5,7 +5,7 @@ import { CAM_LINK_NOT_STARTING } from "./camera";
 import { micOnClock } from "./capture-args";
 import { METER_WHILE_RECORDING, RECORD_WHILE_METERING } from "./protocol";
 import {
-  CLOSE_OBS_TO_CALIBRATE,
+  CAM_LINK_IN_USE_TO_CALIBRATE,
   runMeasurementWindows,
 } from "../app/av-calibration-constants";
 import { ebur128Line } from "./test-utils/fake-windows";
@@ -291,7 +291,7 @@ describe("the level meter", () => {
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");
   });
 
-  it("refuses to start a run while another program holds the Cam Link, says Close OBS to calibrate, keeps nothing, and starts once it is freed", async () => {
+  it("refuses to start a run while another program holds the Cam Link, says another app is using it, keeps nothing, and starts once it is freed", async () => {
     const { port, windows } = await start();
     const client = await connect(port);
     await client.next("hello");
@@ -303,7 +303,7 @@ describe("the level meter", () => {
     await vi.waitFor(() =>
       expect(windows.meter()?.launch.args).toContain("mic.wav")
     );
-    // What dshow says when OBS has the Cam Link: a synthetic error, no device.
+    // What dshow says when another app has the Cam Link: a synthetic error, no device.
     const busy = windows.meter()!;
     busy.stderr(
       "[dshow @ 0001] [error] Could not run graph (sometimes caused by a device already in use by other application)\r\n" +
@@ -312,12 +312,12 @@ describe("the level meter", () => {
     busy.exit(1);
     expect(await client.next("refused")).toMatchObject({
       command: "start-calibration",
-      message: CLOSE_OBS_TO_CALIBRATE,
+      message: CAM_LINK_IN_USE_TO_CALIBRATE,
     });
     expect(fs.readdirSync(path.join(folder, "av-calibrations"))).toEqual([]);
     expect(windows.meter()?.launch.args).not.toContain("mic.wav");
 
-    // OBS lets go: Start runs.
+    // The other app lets go: Start runs.
     client.send({ type: "start-calibration", folder });
     await vi.waitFor(() =>
       expect(windows.meter()?.launch.args).toContain("mic.wav")
