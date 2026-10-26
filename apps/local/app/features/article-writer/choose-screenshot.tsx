@@ -30,7 +30,7 @@ import {
   type ClipFrame,
   type ScreenCrop,
 } from "@/packages/clip-source";
-import { readDiagramFrame } from "@/features/diagrams/diagram-frame";
+import { diagramFrameFor } from "@/features/diagrams/diagram-frame";
 import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 import { CompositePlayback } from "@/features/video-editor/components/composite-playback";
 import { ScreenPlayback } from "@/features/video-editor/components/screen-playback";
@@ -88,8 +88,9 @@ export function ChooseScreenshot({
   // No face shows the screen frame alone, when the Clip has one: an OBS
   // Clip's face is baked in, and a camera-only Short session has no screen.
   const screenPicture = screenPictureOf(clip, source);
-  // The Diagram Frame the playground remembered for this format, if any.
-  const diagramFrame = diagramFrameFor(screenPicture);
+  // The Diagram Frame for this format: remembered by the playground, or
+  // computed the way it would compute it.
+  const diagramFrame = screenDiagramFrame(screenPicture);
   const shot = recorderShot(screenPicture, face, diagramFrame);
 
   const isFirstClip = clipIndex <= 1;
@@ -323,7 +324,6 @@ export function ChooseScreenshot({
         <div className="flex-1" />
         <ScreenshotFaceToggle
           available={screenPicture !== null}
-          diagramAvailable={diagramFrame !== null}
           face={shot.face}
           onFaceChange={onFaceChange}
         />
@@ -420,9 +420,8 @@ function CropBox({ crop }: { crop: ScreenCrop }) {
 /**
  * What a capture takes, from the saved face: the composite (With face, and
  * every Clip with no screen to show without the face), the screen frame
- * alone (No face), or that frame cut to the Diagram Frame (Diagram). Diagram
- * with no Diagram Frame remembered falls back to No face. `face` is the one
- * in effect, for the toggle to show.
+ * alone (No face), or that frame cut to the Diagram Frame (Diagram). `face`
+ * is the one in effect, for the toggle to show.
  */
 const recorderShot = (
   screenPicture: unknown,
@@ -438,11 +437,11 @@ const recorderShot = (
   return { screenOnly: true, face: "none" };
 };
 
-/** The Diagram Frame remembered for the Clip's Video Format, if any. */
-const diagramFrameFor = (
+/** The Diagram Frame for the Clip's Video Format, when it has a screen. */
+const screenDiagramFrame = (
   screenPicture: { readonly format: VideoFormat } | null
 ): ScreenCrop | null =>
-  screenPicture ? readDiagramFrame(screenPicture.format) : null;
+  screenPicture ? diagramFrameFor(screenPicture.format) : null;
 
 const FACE_OPTIONS = [
   ["none", "No face"],
@@ -452,22 +451,17 @@ const FACE_OPTIONS = [
 
 /**
  * No face / Diagram / With face, saved on the placeholder. Not shown when the
- * Clip has no screen to show without the face; Diagram only once the
- * playground has remembered a Diagram Frame.
+ * Clip has no screen to show without the face.
  */
 function ScreenshotFaceToggle(props: {
   available: boolean;
-  diagramAvailable: boolean;
   face: ScreenshotFace;
   onFaceChange: (face: ScreenshotFace) => void;
 }) {
   if (!props.available) return null;
-  const options = FACE_OPTIONS.filter(
-    ([value]) => value !== "diagram" || props.diagramAvailable
-  );
   return (
     <div className="flex items-center rounded-md border border-border">
-      {options.map(([value, label]) => (
+      {FACE_OPTIONS.map(([value, label]) => (
         <Button
           key={value}
           variant={props.face === value ? "secondary" : "ghost"}
