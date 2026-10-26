@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IndexedClip } from "./types";
-import { ChooseScreenshot } from "./choose-screenshot";
+import { ChooseScreenshot, FACE_OPTIONS } from "./choose-screenshot";
+import type { ScreenCrop } from "@/packages/clip-source";
 import type { ScreenshotFace } from "./choose-screenshot-mutations";
 
 const recorderClip = (screenCaptured: boolean): IndexedClip => ({
@@ -32,7 +33,11 @@ const obsClip: IndexedClip = {
 
 // No Diagram Frame is remembered: there is no localStorage here, as on a
 // browser whose playground has never centred full screen.
-const render = (clip: IndexedClip, face: ScreenshotFace = "none") =>
+const render = (
+  clip: IndexedClip,
+  face: ScreenshotFace = "none",
+  crop: ScreenCrop | null = null
+) =>
   renderToStaticMarkup(
     <ChooseScreenshot
       clipIndex={1}
@@ -42,32 +47,49 @@ const render = (clip: IndexedClip, face: ScreenshotFace = "none") =>
       onCapture={async () => true}
       onRemove={() => {}}
       face={face}
+      crop={crop}
       onFaceChange={() => {}}
     />
   );
 
-const pressed = (html: string, label: string) =>
-  new RegExp(`aria-pressed="true"[^>]*>${label}<`).test(html);
+const SELECT = 'aria-label="Screenshot mode"';
 
-describe("ChooseScreenshot's face toggle", () => {
-  it("offers Diagram on a CVM-recorder Clip with no Diagram Frame remembered", () => {
-    const html = render(recorderClip(true));
-    expect(html).toContain(">No face<");
-    expect(html).toContain(">Diagram<");
-    expect(html).toContain(">With face<");
+describe("ChooseScreenshot's face select", () => {
+  it("offers No face, Diagram, With face and Custom, in P's order", () => {
+    expect(render(recorderClip(true))).toContain(SELECT);
+    expect(FACE_OPTIONS.map(([, label]) => label)).toEqual([
+      "No face",
+      "Diagram",
+      "With face",
+      "Custom",
+    ]);
   });
 
   it("boxes the computed Diagram Frame when Diagram is chosen", () => {
     const html = render(recorderClip(true), "diagram");
-    expect(pressed(html, "Diagram")).toBe(true);
     expect(html).toContain('data-testid="diagram-frame-box"');
+  });
+
+  it("boxes Custom's saved crop, with its eight handles", () => {
+    const html = render(recorderClip(true), "custom", {
+      x: 0.1,
+      y: 0.2,
+      w: 0.5,
+      h: 0.25,
+    });
+    expect(html).toMatch(/left:10%;top:20%;width:50%;height:25%/);
+    expect(html.match(/data-crop-handle=/g)).toHaveLength(8);
+  });
+
+  it("boxes nothing for No face, but the frame still takes a drag", () => {
+    const html = render(recorderClip(true));
+    expect(html).not.toContain('data-testid="diagram-frame-box"');
+    expect(html).toContain('data-testid="crop-overlay"');
   });
 
   it("is not shown on an OBS Clip or a camera-only session", () => {
     for (const clip of [obsClip, recorderClip(false)]) {
-      const html = render(clip);
-      expect(html).not.toContain(">Diagram<");
-      expect(html).not.toContain(">No face<");
+      expect(render(clip)).not.toContain(SELECT);
     }
   });
 });

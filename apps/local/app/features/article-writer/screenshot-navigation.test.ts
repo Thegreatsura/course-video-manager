@@ -331,11 +331,12 @@ describe("P cycles the face", () => {
     ]).toEqual([false, false, false]);
   });
 
-  it("walks the toggle left to right, wrapping: No face, Diagram, With face", () => {
+  it("walks the select top to bottom, wrapping: No face, Diagram, With face, Custom", () => {
     expect([
       nextScreenshotFace("none"),
       nextScreenshotFace("diagram"),
       nextScreenshotFace("with"),
-    ]).toEqual(["diagram", "with", "none"]);
+      nextScreenshotFace("custom"),
+    ]).toEqual(["diagram", "with", "custom", "none"]);
   });
 });

@@ -38,7 +38,7 @@ import { AssistantMessage } from "./assistant-message";
 import { useMessageTextMutation } from "./message-text-mutation";
 import { RegenerateReply, RejectedToolCall, TurnFailure } from "./turn-failure";
 import type { WriterFailure } from "./writer-errors";
-import type { ClipFrame } from "@/packages/clip-source";
+import type { ClipFrame, ScreenCrop } from "@/packages/clip-source";
 
 export interface WriteChatProps {
   messages: DocumentAgentMessage[];
@@ -117,10 +117,11 @@ export const WriteChat = memo(function WriteChat(props: WriteChatProps) {
       messageId: string,
       clipIndex: number,
       alt: string,
-      face: ScreenshotFace
+      face: ScreenshotFace,
+      crop?: ScreenCrop
     ) => {
       mutateMessageText(messageId, (text) =>
-        setChooseScreenshotFace(text, clipIndex, alt, face)
+        setChooseScreenshotFace(text, clipIndex, alt, face, crop)
       );
     },
     [mutateMessageText]

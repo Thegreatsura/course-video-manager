@@ -1,5 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   CameraIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -36,7 +43,8 @@ import { diagramFrameFor } from "@/features/diagrams/diagram-frame";
 import type { VideoFormat } from "@cvm/core/features/videos/video-format";
 import { CompositePlayback } from "@/features/video-editor/components/composite-playback";
 import { ScreenPlayback } from "@/features/video-editor/components/screen-playback";
-import type { ScreenshotFace } from "./choose-screenshot-mutations";
+import { FULL_FRAME, type ScreenshotFace } from "./choose-screenshot-mutations";
+import { CropOverlay } from "./crop-overlay";
 
 const navAnchor = { [CHOOSE_SCREENSHOT_ATTR]: "" };
 
@@ -57,9 +65,12 @@ export interface ChooseScreenshotProps {
     frame: ClipFrame
   ) => Promise<boolean>;
   onRemove: (clipIndex: number, alt: string) => void;
-  /** Saved on the placeholder: No face (the default) or With face. */
+  /** Saved on the placeholder: No face (the default), Diagram, With face or Custom. */
   face: ScreenshotFace;
-  onFaceChange: (face: ScreenshotFace) => void;
+  /** Custom's crop box, saved on the placeholder with it. */
+  crop?: ScreenCrop | null;
+  /** Saves a face; Custom always comes with its crop. */
+  onFaceChange: (face: ScreenshotFace, crop?: ScreenCrop) => void;
   isCapturing?: boolean;
   isStreaming?: boolean;
 }
@@ -72,6 +83,7 @@ export function ChooseScreenshot({
   onCapture,
   onRemove,
   face,
+  crop,
   onFaceChange,
   isCapturing,
   isStreaming,
@@ -98,7 +110,9 @@ export function ChooseScreenshot({
   // The Diagram Frame for this format: remembered by the playground, or
   // computed the way it would compute it.
   const diagramFrame = screenDiagramFrame(screenPicture);
-  const shot = recorderShot(screenPicture, face, diagramFrame);
+  const shot = recorderShot(screenPicture, face, diagramFrame, crop);
+  const chooseFace = (next: ScreenshotFace) =>
+    onFaceChange(next, ...cropEnteringFace(next, shot.crop));
 
   const isFirstClip = clipIndex <= 1;
   const isLastClip = clipIndex >= clips.length;
@@ -155,7 +169,7 @@ export function ChooseScreenshot({
   // toggle is not shown (no screen to show without the face).
   const handleFacePress = () => {
     if (screenPicture === null) return;
-    onFaceChange(nextScreenshotFace(shot.face));
+    chooseFace(nextScreenshotFace(shot.face));
   };
 
   const handlersRef = useRef({
@@ -304,6 +318,7 @@ export function ChooseScreenshot({
           offsetSeconds={offset}
           noFace={shot.screenOnly}
           crop={shot.crop}
+          onCropSave={(next) => onFaceChange("custom", next)}
         />
       )}
       <div className="mt-2 flex items-center gap-2">
@@ -343,10 +358,10 @@ export function ChooseScreenshot({
           <ChevronRightIcon className="h-3 w-3 ml-1" />
         </Button>
         <div className="flex-1" />
-        <ScreenshotFaceToggle
+        <ScreenshotFaceSelect
           available={screenPicture !== null}
           face={shot.face}
-          onFaceChange={onFaceChange}
+          onFaceChange={chooseFace}
         />
         <Button size="sm" disabled={isCapturing} onClick={() => void capture()}>
           {isCapturing ? (
@@ -374,8 +389,9 @@ const screenPictureOf = (
 
 /**
  * A CVM-recorder Clip's picture: the composite (With face), or its screen
- * frame alone (No face; Diagram boxes the Diagram Frame on it). Both stay
- * mounted, so each is already on the chosen frame when the other is clicked.
+ * frame alone (No face; Diagram and Custom box their crop on it, and a drag
+ * on it draws, moves or resizes a Custom crop). Both stay mounted, so each is
+ * already on the chosen frame when the other is clicked.
  */
 function RecorderClipPicture(props: {
   clock: React.RefObject<HTMLVideoElement | null>;
@@ -384,8 +400,9 @@ function RecorderClipPicture(props: {
   screen: string | null;
   offsetSeconds: number;
   noFace: boolean;
-  /** Diagram: the Diagram Frame, boxed over the screen frame. */
+  /** Diagram's or Custom's crop, boxed over the screen frame. */
   crop?: ScreenCrop;
+  onCropSave: (crop: ScreenCrop) => void;
 }) {
   return (
     <>
@@ -409,47 +426,31 @@ function RecorderClipPicture(props: {
             !props.noFace && "hidden"
           )}
         >
-          {props.crop && <CropBox crop={props.crop} />}
+          <CropOverlay crop={props.crop ?? null} onSave={props.onCropSave} />
         </ScreenPlayback>
       )}
     </>
   );
 }
 
-const pct = (n: number) => `${n * 100}%`;
-
-/** The Diagram Frame boxed over the screen frame, the rest dimmed. */
-function CropBox({ crop }: { crop: ScreenCrop }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        className="absolute border-2 border-primary"
-        data-testid="diagram-frame-box"
-        style={{
-          left: pct(crop.x),
-          top: pct(crop.y),
-          width: pct(crop.w),
-          height: pct(crop.h),
-          boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.55)",
-        }}
-      />
-    </div>
-  );
-}
-
 /**
  * What a capture takes, from the saved face: the composite (With face, and
  * every Clip with no screen to show without the face), the screen frame
- * alone (No face), or that frame cut to the Diagram Frame (Diagram). `face`
- * is the one in effect, for the toggle to show.
+ * alone (No face), or that frame cut to the Diagram Frame (Diagram) or to
+ * the author's own box (Custom; the whole frame when none is saved). `face`
+ * is the one in effect, for the select to show.
  */
 const recorderShot = (
   screenPicture: unknown,
   face: ScreenshotFace,
-  diagramFrame: ScreenCrop | null
+  diagramFrame: ScreenCrop | null,
+  customCrop: ScreenCrop | null | undefined
 ): { screenOnly: boolean; crop?: ScreenCrop; face: ScreenshotFace } => {
   if (screenPicture === null || face === "with") {
     return { screenOnly: false, face: "with" };
+  }
+  if (face === "custom") {
+    return { screenOnly: true, crop: customCrop ?? FULL_FRAME, face: "custom" };
   }
   if (face === "diagram" && diagramFrame) {
     return { screenOnly: true, crop: diagramFrame, face: "diagram" };
@@ -457,42 +458,62 @@ const recorderShot = (
   return { screenOnly: true, face: "none" };
 };
 
+/**
+ * The crop saved with a face just chosen: Custom starts from the crop of the
+ * face it is entered from (the Diagram Frame, or the whole screen frame for
+ * No face and With face); every other face saves none.
+ */
+const cropEnteringFace = (
+  next: ScreenshotFace,
+  current: ScreenCrop | undefined
+): [] | [ScreenCrop] => (next === "custom" ? [current ?? FULL_FRAME] : []);
+
 /** The Diagram Frame for the Clip's Video Format, when it has a screen. */
 const screenDiagramFrame = (
   screenPicture: { readonly format: VideoFormat } | null
 ): ScreenCrop | null =>
   screenPicture ? diagramFrameFor(screenPicture.format) : null;
 
-const FACE_OPTIONS = [
+export const FACE_OPTIONS = [
   ["none", "No face"],
   ["diagram", "Diagram"],
   ["with", "With face"],
+  ["custom", "Custom"],
 ] as const;
 
 /**
- * No face / Diagram / With face, saved on the placeholder. Not shown when the
- * Clip has no screen to show without the face.
+ * No face / Diagram / With face / Custom, saved on the placeholder. Not shown
+ * when the Clip has no screen to show without the face. Closing it hands
+ * focus back to the page, so Return and the walk keys go on working.
  */
-function ScreenshotFaceToggle(props: {
+function ScreenshotFaceSelect(props: {
   available: boolean;
   face: ScreenshotFace;
   onFaceChange: (face: ScreenshotFace) => void;
 }) {
   if (!props.available) return null;
   return (
-    <div className="flex items-center rounded-md border border-border">
-      {FACE_OPTIONS.map(([value, label]) => (
-        <Button
-          key={value}
-          variant={props.face === value ? "secondary" : "ghost"}
-          size="sm"
-          className="h-7 rounded-none first:rounded-l-md last:rounded-r-md"
-          aria-pressed={props.face === value}
-          onClick={() => props.onFaceChange(value)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
+    <Select
+      value={props.face}
+      onValueChange={(value) => {
+        const option = FACE_OPTIONS.find(([v]) => v === value);
+        if (option) props.onFaceChange(option[0]);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-[120px]"
+        aria-label="Screenshot mode"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+        {FACE_OPTIONS.map(([value, label]) => (
+          <SelectItem key={value} value={value}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
