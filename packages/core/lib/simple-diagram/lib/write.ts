@@ -94,7 +94,7 @@ function changes<T extends object>(prev: T | null, next: T) {
 }
 
 // ---------------------------------------------------------------------------
-// Fresh records: tldraw 5.2.4's own defaults, in Matt's style.
+// Fresh records: tldraw 5.5.2's own defaults, in Matt's style.
 
 function baseShape(
   id: string,
@@ -127,6 +127,8 @@ function freshProps(type: SimpleShape["type"]): Record<string, unknown> {
         w: 100,
         h: 100,
         geo: type === "box" ? "rectangle" : "ellipse",
+        flipX: false,
+        flipY: false,
         dash: DEFAULTS.dash,
         growY: 0,
         url: "",

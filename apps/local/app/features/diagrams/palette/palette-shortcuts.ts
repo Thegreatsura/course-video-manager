@@ -18,7 +18,7 @@ export type PaletteCommand =
 type ShortcutEvent = { key: string; metaKey: boolean; ctrlKey: boolean };
 
 /**
- * tldraw 5.2.4 leaves both of these unbound with a modifier held (the laser and
+ * tldraw 5.5.2 leaves both of these unbound with a modifier held (the laser and
  * frame tools bind bare `k` and `f`, and their modifier matching is exact) and
  * never stopPropagations keydown, so a plain document listener is enough — and
  * it works identically in Focus Mode.

@@ -16,7 +16,7 @@
     "lint:boundaries": "depcruise index.ts generator.ts tldraw.ts lib tests"
   },
   "peerDependencies": {
-    "tldraw": "^5.2.4"
+    "tldraw": "^5.5.2"
   },
   "peerDependenciesMeta": {
     "tldraw": {
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "dependency-cruiser": "^18.0.0",
-    "tldraw": "5.2.4",
+    "tldraw": "5.5.2",
     "typescript": "7.0.2",
     "vitest": "^3"
   }
