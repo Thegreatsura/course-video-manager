@@ -10,11 +10,14 @@ import { VIDEO_FORMATS } from "@cvm/core/features/videos/video-format";
 import { resolveClipFrameFiles } from "@/services/clip-source-files.server";
 import { storageRootsConfig } from "@/services/storage-roots";
 
+const Fraction = Schema.Number.pipe(Schema.between(0, 1));
+
 /**
  * A `ClipFrame` from `@/packages/clip-source`: the picker never names a file.
- * A CVM-recorder Clip's is its screen frame alone (No face, the default), or
- * With face the composite, drawn from its screen and camera in its Recording
- * Session's Video Format.
+ * A CVM-recorder Clip's is its screen frame alone (No face, the default),
+ * that frame cut to the Diagram Frame (Diagram), or the composite (With
+ * face), drawn from its screen and camera in its Recording Session's Video
+ * Format.
  */
 const RequestSchema = Schema.Union(
   Schema.Struct({
@@ -26,6 +29,15 @@ const RequestSchema = Schema.Union(
     kind: Schema.Literal("screen"),
     screen: Schema.String,
     time: Schema.Number,
+    // Diagram: the Diagram Frame, as fractions of the screen frame.
+    crop: Schema.optional(
+      Schema.Struct({
+        x: Fraction,
+        y: Fraction,
+        w: Fraction,
+        h: Fraction,
+      })
+    ),
   }),
   Schema.Struct({
     kind: Schema.Literal("composite"),

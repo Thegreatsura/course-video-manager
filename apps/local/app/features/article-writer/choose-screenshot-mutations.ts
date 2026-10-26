@@ -4,12 +4,14 @@
  */
 
 /**
- * Whether a screenshot shows Matt's face: "none" (No face, the default) is a
- * CVM-recorder Clip's screen frame alone; "with" (With face) is the composite
- * the export draws. Saved on the placeholder as `face="with"`; a tag without
- * the attribute is No face. An OBS Clip ignores it: its face is baked in.
+ * What a screenshot of a CVM-recorder Clip shows: "none" (No face, the
+ * default) is its screen frame alone; "diagram" (Diagram) is that frame cut
+ * to the Diagram Frame; "with" (With face) is the composite the export
+ * draws. Saved on the placeholder as `face="with"` or `face="diagram"`; a
+ * tag without the attribute is No face. An OBS Clip ignores it: its face is
+ * baked in.
  */
-export type ScreenshotFace = "none" | "with";
+export type ScreenshotFace = "none" | "with" | "diagram";
 
 /**
  * One placeholder, found by its clipIndex and alt text (which identify it when
@@ -17,16 +19,16 @@ export type ScreenshotFace = "none" | "with";
  */
 const tagPattern = (clipIndex: number, alt: string, trailing = "") =>
   new RegExp(
-    `<ChooseScreenshot\\s+clipIndex=\\{${clipIndex}\\}\\s+alt="${escapeRegex(alt)}"(?:\\s+face="(with|none)")?\\s*/>${trailing}`,
+    `<ChooseScreenshot\\s+clipIndex=\\{${clipIndex}\\}\\s+alt="${escapeRegex(alt)}"(?:\\s+face="(with|none|diagram)")?\\s*/>${trailing}`,
     "g"
   );
 
 const writeTag = (clipIndex: number, alt: string, face: ScreenshotFace) =>
-  `<ChooseScreenshot clipIndex={${clipIndex}} alt="${alt}"${face === "with" ? ' face="with"' : ""} />`;
+  `<ChooseScreenshot clipIndex={${clipIndex}} alt="${alt}"${face === "none" ? "" : ` face="${face}"`} />`;
 
 /** The face a placeholder's `face` attribute saves (absent: No face). */
 export function parseScreenshotFace(attr: unknown): ScreenshotFace {
-  return attr === "with" ? "with" : "none";
+  return attr === "with" || attr === "diagram" ? attr : "none";
 }
 
 /**
@@ -77,7 +79,7 @@ export function setChooseScreenshotFace(
  * Uses a fresh regex (no /g flag) to avoid stateful lastIndex issues.
  */
 export function hasUnresolvedScreenshots(message: string): boolean {
-  return /<ChooseScreenshot\s+clipIndex=\{(\d+)\}\s+alt="([^"]*)"(?:\s+face="(with|none)")?\s*\/>/.test(
+  return /<ChooseScreenshot\s+clipIndex=\{(\d+)\}\s+alt="([^"]*)"(?:\s+face="(with|none|diagram)")?\s*\/>/.test(
     message
   );
 }

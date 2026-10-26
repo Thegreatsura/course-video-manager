@@ -39,3 +39,4 @@ export {
   type ClipSourceColumns,
   type ClipSourceRow,
 } from "./lib/clip-source";
+export { clampCrop, type ScreenCrop } from "./lib/screen-crop";
