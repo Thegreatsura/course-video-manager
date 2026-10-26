@@ -71,6 +71,21 @@ export function openPlaygroundWithDiagram(diagramId: string): void {
   diagramChannel.open(`/diagram-playground/${diagramId}`);
 }
 
+/**
+ * Hear the Active Diagram's Diagram Text whenever the playground reports it:
+ * on a change, and again with every heartbeat. `""` when there is no Active
+ * Diagram. Returns the unsubscribe.
+ */
+export function subscribeActiveDiagramText(
+  handler: (text: string) => void
+): () => void {
+  return diagramChannel.subscribeParent((msg: ChildToParentMessage) => {
+    if (msg.type === "activeDiagramText") {
+      handler(msg.diagramId === null ? "" : msg.text);
+    }
+  });
+}
+
 export function getActiveDiagramId(): string | null {
   if (!diagramChannel.isOpen()) return null;
   return _activeDiagramId;

@@ -143,7 +143,7 @@ describe("the Suggestions tab", () => {
       stream(2, { animatic: 'Mockup 1: "Hello"', clips: [] }),
       {
         type: "store-included-sources",
-        included: { notes: true, script: true, animatic: true, beats: false },
+        included: { ...ALL_SOURCES_INCLUDED, beats: false },
       },
       stream(3, { animatic: 'Mockup 1: "Hello"', clips: [] }),
     ]);
@@ -206,7 +206,7 @@ describe("the Suggestions tab", () => {
     expect(t.getEffects()).toEqual([
       {
         type: "store-included-sources",
-        included: { notes: true, script: true, animatic: false, beats: true },
+        included: { ...ALL_SOURCES_INCLUDED, animatic: false },
       },
       stream(2, { script: "Intro line.", clips: ["So that's a type."] }),
     ]);
@@ -237,16 +237,54 @@ describe("the Suggestions tab", () => {
     t.send({ type: "notes-edited", notes: "Skip" })
       .send({ type: "notes-edited", notes: "Skip the intro" })
       // The first pause was superseded by the second edit.
-      .send({ type: "notes-pause-elapsed", editId: 1 })
-      .send({ type: "notes-pause-elapsed", editId: 2 });
+      .send({ type: "edit-pause-elapsed", editId: 1 })
+      .send({ type: "edit-pause-elapsed", editId: 2 });
 
     expect(t.getEffects()).toEqual([
       { type: "store-notes", videoId: "v1", notes: "Skip" },
-      { type: "wait-for-notes-pause", editId: 1 },
+      { type: "wait-for-edit-pause", editId: 1 },
       { type: "store-notes", videoId: "v1", notes: "Skip the intro" },
-      { type: "wait-for-notes-pause", editId: 2 },
+      { type: "wait-for-edit-pause", editId: 2 },
       stream(2, {
         notes: "Skip the intro",
+        animatic: 'Mockup 1: "Hello"',
+        clips: ["So that's a type."],
+      }),
+    ]);
+  });
+
+  it("the on-screen Diagram's new text asks after the same pause as the Notes; unticked, it waits for nothing", () => {
+    const t = tester()
+      .send({ type: "suggestions-tab-opened" })
+      .send({ type: "script-loaded", videoId: "v1", script: "" })
+      .resetExec();
+    vi.mocked(t.getExec()).mockReturnValue(runningStream);
+    t.send({ type: "diagram-text-changed", text: "Client" })
+      .send({ type: "notes-edited", notes: "Draw first" })
+      .send({ type: "diagram-text-changed", text: "Client Server" })
+      // The heartbeat repeats the text: not an edit.
+      .send({ type: "diagram-text-changed", text: "Client Server" })
+      .send({ type: "edit-pause-elapsed", editId: 3 })
+      .send({ type: "source-toggled", source: "diagram" })
+      .send({ type: "diagram-text-changed", text: "Client Server DB" });
+
+    expect(t.getEffects()).toEqual([
+      { type: "wait-for-edit-pause", editId: 1 },
+      { type: "store-notes", videoId: "v1", notes: "Draw first" },
+      { type: "wait-for-edit-pause", editId: 2 },
+      { type: "wait-for-edit-pause", editId: 3 },
+      stream(2, {
+        notes: "Draw first",
+        animatic: 'Mockup 1: "Hello"',
+        diagram: "Client Server",
+        clips: ["So that's a type."],
+      }),
+      {
+        type: "store-included-sources",
+        included: { ...ALL_SOURCES_INCLUDED, diagram: false },
+      },
+      stream(3, {
+        notes: "Draw first",
         animatic: 'Mockup 1: "Hello"',
         clips: ["So that's a type."],
       }),

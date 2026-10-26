@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   generateSuggestNextClipPrompt,
   generateSuggestNextClipPromptParts,
+  MAX_DIAGRAM_TEXT_CHARS,
   MAX_REPO_FILES_CHARS,
 } from "./generate-suggest-next-clip";
 
@@ -74,6 +75,19 @@ describe("generateSuggestNextClipPrompt", () => {
     );
     expect(plan.indexOf("FILE_MARKER")).toBeLessThan(
       plan.indexOf("SCRIPT_MARKER")
+    );
+  });
+
+  it("puts the on-screen Diagram's text with the Clips, not the cached plan, cut short past the limit", () => {
+    const { plan, now } = generateSuggestNextClipPromptParts({
+      diagram: `DIAGRAM_MARKER ${"x".repeat(MAX_DIAGRAM_TEXT_CHARS)}`,
+      clips: ["CLIP_MARKER"],
+    });
+    expect(plan).not.toContain("DIAGRAM_MARKER");
+    expect(now).toContain("<diagram-on-screen>\nDIAGRAM_MARKER");
+    expect(now).toContain("[… cut: over the diagram text limit]");
+    expect(now.indexOf("CLIP_MARKER")).toBeLessThan(
+      now.indexOf("DIAGRAM_MARKER")
     );
   });
 

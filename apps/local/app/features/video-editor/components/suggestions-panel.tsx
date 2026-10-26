@@ -22,6 +22,7 @@ const SOURCE_LABELS: Record<suggestionsReducer.Source, string> = {
   script: "Script",
   animatic: "Animatic",
   beats: "Beats",
+  diagram: "Diagram",
 };
 
 /** The suggestion's Markdown, rendered as bold and nothing else. */

@@ -34,6 +34,16 @@ export const ChildToParent = z.discriminatedUnion("type", [
     diagramId: z.string().nullable(),
   }),
   z.object({ type: z.literal("ping") }),
+  /**
+   * The Active Diagram's Diagram Text, from the live canvas: sent when it
+   * changes and with every ping. `diagramId: null` (and `text: ""`) when the
+   * playground leaves the diagram or closes.
+   */
+  z.object({
+    type: z.literal("activeDiagramText"),
+    diagramId: z.string().nullable(),
+    text: z.string(),
+  }),
   z.object({
     type: z.literal("snapshotForClipDone"),
     clipId: z.string(),

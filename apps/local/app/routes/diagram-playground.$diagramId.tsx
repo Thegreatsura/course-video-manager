@@ -31,6 +31,7 @@ import {
   showsCornerButtons,
 } from "@/features/diagrams/diagram-playground-selectors";
 import { readFullScreen } from "@/features/diagrams/full-screen";
+import { reportActiveDiagramText } from "@/features/diagrams/report-active-diagram-text";
 
 export const handle = NO_TOASTS;
 
@@ -267,6 +268,15 @@ export default function DiagramPlaygroundActive({
   );
 
   const openDiagramId = state.head?.diagramId;
+
+  // The Video Editor's Suggestions tab reads the words on the diagram the
+  // canvas holds, live.
+  const { editorMounted } = state;
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editorMounted || !editor) return;
+    return reportActiveDiagramText(editor, openDiagramId ?? null);
+  }, [editorMounted, openDiagramId, editorRef]);
   const handleCopyDiagramContents = useCallback(
     async (id: string) => {
       // Copying the OPEN diagram reads its stored head like any other, so the

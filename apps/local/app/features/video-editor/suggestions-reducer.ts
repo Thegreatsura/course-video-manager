@@ -11,8 +11,9 @@
  *   - Any change to what a suggestion is made from asks again AT ONCE, with
  *     no wait: a new Clip's transcript, a Clip deleted, moved or re-transcribed,
  *     the Insertion Point moved, the Animatic or Beats changed, a source
- *     ticked or unticked, or Refresh. The one exception is the author's
- *     Notes, which ask once typing pauses for a second.
+ *     ticked or unticked, or Refresh. The exceptions are the author's Notes
+ *     and the on-screen Diagram's text, which ask once editing pauses for a
+ *     second: one pause, restarted by an edit to either.
  *   - A newer request stops the one in flight: only the newest suggestion
  *     ever shows.
  *   - Closing the tab stops the stream and forgets the suggestion, so the
@@ -32,6 +33,11 @@
  * request names the picked paths; the route reads them. Changing the pick
  * asks again at once. A picked file the Video no longer has is not sent, but
  * stays picked.
+ *
+ * The **Diagram** source is the Diagram Text of the Active Diagram, the one
+ * on screen in the Diagram Playground, reported live by the playground. No
+ * Active Diagram (the playground closed, or on Playground Home) sends none.
+ * A change to it while unticked is kept but does not ask.
  */
 import type { EffectEntity, EffectReducer } from "use-effect-reducer";
 import {
@@ -41,12 +47,13 @@ import {
 import { closeOpenBold } from "@/lib/close-open-bold";
 
 export namespace suggestionsReducer {
-  export type Source = "notes" | "script" | "animatic" | "beats";
+  export type Source = "notes" | "script" | "animatic" | "beats" | "diagram";
   export const SOURCES: readonly Source[] = [
     "notes",
     "script",
     "animatic",
     "beats",
+    "diagram",
   ];
   export type Included = Record<Source, boolean>;
 
@@ -75,16 +82,18 @@ export namespace suggestionsReducer {
     script: string | null;
     /** This Video's Notes, as typed. */
     notes: string;
+    /** The Active Diagram's Diagram Text; empty when there is none. */
+    diagramText: string;
     /** The Video's files the Context modal offers; images are left out. */
     repoFiles: RepoFile[];
     /** The repo file paths the author picked for this Video. */
     pickedFiles: string[];
     /** Whether the Context modal is showing. */
     contextModalOpen: boolean;
-    /** The pause after the last Notes edit, before asking again. */
-    notesPause: EffectEntity<State, Action> | null;
-    /** Which Notes edit the running pause is for; an older one is late. */
-    notesEditId: number;
+    /** The pause after the last Notes or Diagram edit, before asking again. */
+    editPause: EffectEntity<State, Action> | null;
+    /** Which edit the running pause is for; an older one is late. */
+    editId: number;
     context: EditorContext;
     status: Status;
     /** The suggestion so far. */
@@ -103,7 +112,8 @@ export namespace suggestionsReducer {
     | { type: "source-toggled"; source: Source }
     | { type: "refresh-clicked" }
     | { type: "notes-edited"; notes: string }
-    | { type: "notes-pause-elapsed"; editId: number }
+    | { type: "diagram-text-changed"; text: string }
+    | { type: "edit-pause-elapsed"; editId: number }
     | { type: "repo-files-listed"; videoId: string; files: RepoFile[] }
     | { type: "context-button-clicked" }
     | { type: "context-modal-dismissed" }
@@ -123,7 +133,7 @@ export namespace suggestionsReducer {
     | { type: "store-included-sources"; included: Included }
     | { type: "store-notes"; videoId: string; notes: string }
     | { type: "store-picked-files"; videoId: string; paths: string[] }
-    | { type: "wait-for-notes-pause"; editId: number };
+    | { type: "wait-for-edit-pause"; editId: number };
 }
 
 type State = suggestionsReducer.State;
@@ -136,6 +146,7 @@ export const ALL_SOURCES_INCLUDED: suggestionsReducer.Included = {
   script: true,
   animatic: true,
   beats: true,
+  diagram: true,
 };
 
 export const createInitialSuggestionsState = (input: {
@@ -149,11 +160,12 @@ export const createInitialSuggestionsState = (input: {
   included: input.included,
   script: null,
   notes: input.notes,
+  diagramText: "",
   repoFiles: [],
   pickedFiles: input.pickedFiles,
   contextModalOpen: false,
-  notesPause: null,
-  notesEditId: 0,
+  editPause: null,
+  editId: 0,
   context: {
     animatic: "",
     beats: "",
@@ -175,6 +187,7 @@ export const getSourceTexts = (
   script: state.script ?? "",
   animatic: state.context.animatic,
   beats: state.context.beats,
+  diagram: state.diagramText,
 });
 
 /** The picked repo files this Video still has, in path order. */
@@ -281,6 +294,17 @@ const asksDifferently = (prev: State, next: State) =>
     JSON.stringify(getSuggestionInput(prev)) !==
       JSON.stringify(getSuggestionInput(next)));
 
+/** Wait for editing to pause again, dropping any pause already running. */
+const restartEditPause = (state: State, exec: Exec): State => {
+  if (state.editPause) exec.stop(state.editPause);
+  const editId = state.editId + 1;
+  return {
+    ...state,
+    editId,
+    editPause: exec({ type: "wait-for-edit-pause", editId }),
+  };
+};
+
 export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
   state,
   action,
@@ -347,19 +371,19 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
         videoId: state.videoId,
         notes: action.notes,
       });
-      if (state.notesPause) exec.stop(state.notesPause);
-      const editId = state.notesEditId + 1;
-      return {
-        ...state,
-        notes: action.notes,
-        notesEditId: editId,
-        notesPause: exec({ type: "wait-for-notes-pause", editId }),
-      };
+      return restartEditPause({ ...state, notes: action.notes }, exec);
     }
 
-    case "notes-pause-elapsed": {
-      if (action.editId !== state.notesEditId) return state;
-      const next = { ...state, notesPause: null };
+    case "diagram-text-changed": {
+      // The playground repeats the text with every heartbeat.
+      if (action.text === state.diagramText) return state;
+      const next = { ...state, diagramText: action.text };
+      return next.included.diagram ? restartEditPause(next, exec) : next;
+    }
+
+    case "edit-pause-elapsed": {
+      if (action.editId !== state.editId) return state;
+      const next = { ...state, editPause: null };
       return canAsk(next) ? ask(next, exec) : next;
     }
 
