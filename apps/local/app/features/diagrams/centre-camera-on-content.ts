@@ -4,12 +4,11 @@ import {
   getCenteringSettings,
   getCentringInsets,
 } from "./diagram-centering-settings";
-import type { WindowRect } from "./diagram-frame";
 
 /**
  * Bring the whole page into view, centred within whatever space is left
- * after reserving room for the presenter's face-cam. Answers that space (the
- * safe area) in the window's pixels, or null for an empty page.
+ * after reserving room for the presenter's face-cam (the safe area). Answers
+ * false for an empty page, with nothing to centre.
  *
  * Camera state is deliberately not persisted (ADR 0003), so loading a scene
  * leaves the camera wherever the last one left it — routinely pointing at
@@ -65,9 +64,9 @@ import type { WindowRect } from "./diagram-frame";
 export function centreCameraOnContent(
   editor: Editor,
   format: VideoFormat
-): WindowRect | null {
+): boolean {
   const bounds = editor.getCurrentPageBounds();
-  if (!bounds) return null;
+  if (!bounds) return false;
 
   const settings = getCenteringSettings();
   const viewport = editor.getViewportScreenBounds();
@@ -106,11 +105,5 @@ export function centreCameraOnContent(
     },
     { immediate: true }
   );
-  // The safe area, in the window's pixels: the Diagram Frame (diagram-frame.ts).
-  return {
-    x: viewport.x + insets.left,
-    y: viewport.y + insets.top,
-    w: safeWidth,
-    h: safeHeight,
-  };
+  return true;
 }
