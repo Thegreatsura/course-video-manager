@@ -10,6 +10,7 @@ import {
   type StorageOwnership,
 } from "./buckets";
 import type { DirtyBitReader } from "./dirty-bit";
+import { remountCommandFor } from "./offline";
 import { loadStorageOwnership } from "./ownership.server";
 import type {
   StorageBucketFilesMessage,
@@ -51,6 +52,7 @@ const measureRoots = (roots: StorageRoots, readDirtyBit: DirtyBitReader) =>
             label,
             online: false,
             reason: messageOf(readable.left),
+            remountCommand: remountCommandFor(root),
           } as const;
         }
         const dirtyBit = yield* readDirtyBit(root);
@@ -68,6 +70,7 @@ const measureRoots = (roots: StorageRoots, readDirtyBit: DirtyBitReader) =>
             label,
             online: false,
             reason: "could not read its free space",
+            remountCommand: remountCommandFor(root),
           }))
         );
       }),

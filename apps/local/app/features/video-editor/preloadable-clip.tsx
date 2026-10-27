@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { VideoOffIcon } from "lucide-react";
+import { RemountCommand } from "@/components/remount-command";
 import type { FootageNotFound } from "@/services/clip-source-files.server";
 import type { ClipOnDatabase, FrontendId } from "./clip-state-reducer";
 import { cn } from "@/lib/utils";
@@ -234,6 +235,11 @@ export const PreloadableClip = (props: {
           <p className="text-xs text-muted-foreground break-all">
             {props.footageNotFound.path}
           </p>
+          {props.footageNotFound.remountCommands.map((command) => (
+            <div key={command} className="w-full max-w-xl pt-2">
+              <RemountCommand command={command} />
+            </div>
+          ))}
         </div>
       )}
       <video

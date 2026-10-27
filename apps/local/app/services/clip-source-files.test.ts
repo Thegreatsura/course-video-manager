@@ -62,6 +62,8 @@ describe("findClipsWithMissingFootage", () => {
       b: {
         headline: `Footage not found (${e} offline?)`,
         path: "raw-footage/on-e.mkv",
+        // A temp-dir root is on no Windows drive: nothing to remount.
+        remountCommands: [],
       },
     });
   });

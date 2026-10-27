@@ -26,6 +26,7 @@ describe("Storage Root availability", () => {
         root: "/roots/e",
         message:
           "Storage Root /roots/e is offline — reconnect it, then remount /roots/e",
+        remountCommand: null,
       },
     ]);
     now = 500;
