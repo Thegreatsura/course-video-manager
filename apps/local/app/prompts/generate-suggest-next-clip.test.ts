@@ -92,6 +92,36 @@ describe("generateSuggestNextClipPrompt", () => {
     );
   });
 
+  it("gives the on-screen Diagram as a diff against the last Clip's DiagramSnapshot, every line kept", () => {
+    const { now } = generateSuggestNextClipPromptParts({
+      lastClipDiagram: "Client\nServer\nDatabase",
+      diagram: "Client\nAPI Gateway\nServer",
+      clips: ["CLIP_MARKER"],
+    });
+    expect(now).toContain(
+      "<diagram-changes-since-last-clip>\n Client\n+API Gateway\n Server\n-Database\n</diagram-changes-since-last-clip>"
+    );
+    expect(now).toContain("+ was added since the last clip");
+    expect(now).not.toContain("<diagram-on-screen>");
+  });
+
+  it("gives the Diagram flattened, as one line, when there is nothing to diff against or nothing changed", () => {
+    const plain = generateSuggestNextClipPromptParts({
+      diagram: "Client\nServer",
+      clips: [],
+    }).now;
+    expect(plain).toContain("<diagram-on-screen>\nClient Server\n");
+    expect(plain).not.toContain("unchanged since the last clip");
+
+    const unchanged = generateSuggestNextClipPromptParts({
+      lastClipDiagram: "Client\nServer",
+      diagram: "Client\nServer",
+      clips: [],
+    }).now;
+    expect(unchanged).toContain("<diagram-on-screen>\nClient Server\n");
+    expect(unchanged).toContain("unchanged since the last clip");
+  });
+
   it("puts the previous Video's Clips last in the cached plan, keeping their end past the limit", () => {
     const { plan, now } = generateSuggestNextClipPromptParts({
       script: "SCRIPT_MARKER",

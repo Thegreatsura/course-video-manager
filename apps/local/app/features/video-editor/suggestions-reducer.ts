@@ -37,6 +37,10 @@
  * The **Diagram** source is the Diagram Text of the Active Diagram, the one
  * on screen in the Diagram Playground, reported live by the playground. No
  * Active Diagram (the playground closed, or on Playground Home) sends none.
+ * It comes one line per shape. When it is sent and the Clip just before the
+ * Insertion Point has a DiagramSnapshot pinned, that snapshot is named too,
+ * so the prompt can show the Diagram as a diff against it; a new pin asks
+ * again at once, like any other change to the Clips.
  * A change to it while unticked is kept but does not ask.
  *
  * The **Previous video** source is the transcripts of the previous Video's
@@ -77,6 +81,11 @@ export namespace suggestionsReducer {
     clips: string[];
     /** Every Clip whose transcript has arrived, so a new one is noticed. */
     transcribedClipIds: string[];
+    /**
+     * The DiagramSnapshot pinned to the Clip just before the Insertion Point;
+     * `null` when it has none, or there is no Clip before it.
+     */
+    diagramSnapshotId: string | null;
   };
 
   export type Status = "idle" | "waiting" | "streaming" | "done" | "failed";
@@ -192,6 +201,7 @@ export const createInitialSuggestionsState = (input: {
     beats: "",
     clips: [],
     transcribedClipIds: [],
+    diagramSnapshotId: null,
   },
   status: "idle",
   text: "",
@@ -247,6 +257,9 @@ export const getSuggestionInput = (state: State): SuggestNextClipInput => {
     if (state.included[source] && texts[source].trim().length > 0) {
       input[source] = texts[source];
     }
+  }
+  if (input.diagram !== undefined && state.context.diagramSnapshotId) {
+    input.diagramSnapshotId = state.context.diagramSnapshotId;
   }
   const files = getPickedRepoFiles(state).map((file) => file.path);
   if (files.length > 0) input.files = files;

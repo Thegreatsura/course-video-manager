@@ -5,6 +5,8 @@ import {
 } from "@/prompts/generate-suggest-next-clip";
 import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
 import { VideoOperationsService } from "@/services/db-video-operations.server";
+import { DiagramOperationsService } from "@/services/db-diagram-operations.server";
+import { extractSceneLines } from "@cvm/core/lib/extract-scene-text/index";
 import { readVideoFilesForPrompt } from "@/services/text-writing-agent";
 import { isImageFilePath } from "@/lib/image-file-path";
 import { streamText } from "ai";
@@ -19,7 +21,9 @@ export const SUGGEST_NEXT_CLIP_MODEL = "claude-haiku-5-5";
  * sources the author ticked and the Clip transcripts it already holds, so
  * this route reads nothing and starts the model call at once, unless the
  * author picked repo files in the Context modal: those it reads from the
- * Video's directory, through the Article Writer's loader, text files only. The plan
+ * Video's directory, through the Article Writer's loader, text files only,
+ * and the DiagramSnapshot pinned to the Clip before the Insertion Point,
+ * whose text the on-screen Diagram is diffed against. The plan
  * (role and sources) is cached for five minutes: it is the same for every
  * Clip of a take, so only the Clips are read fresh, which shortens the wait
  * for the first word. Aborting the request (a newer suggestion, or
@@ -31,6 +35,7 @@ const requestSchema = Schema.Struct({
   animatic: Schema.optional(Schema.String),
   beats: Schema.optional(Schema.String),
   diagram: Schema.optional(Schema.String),
+  diagramSnapshotId: Schema.optional(Schema.String),
   /** Capped by the prompt, keeping the end, however long it arrives. */
   previousVideo: Schema.optional(Schema.String),
   clips: Schema.Array(Schema.String),
@@ -57,8 +62,22 @@ export const action = makeAction({
         files = read.textFiles;
       }
 
+      // A snapshot that is gone leaves the Diagram as plain text.
+      const lastClipDiagram = input.diagramSnapshotId
+        ? yield* Effect.gen(function* () {
+            const diagramOps = yield* DiagramOperationsService;
+            const snapshot = yield* diagramOps.getDiagramSnapshot(
+              input.diagramSnapshotId!
+            );
+            return extractSceneLines(snapshot.scene).join("\n");
+          }).pipe(
+            Effect.catchTag("NotFoundError", () => Effect.succeed(undefined))
+          )
+        : undefined;
+
       const { plan, now } = generateSuggestNextClipPromptParts({
         ...input,
+        lastClipDiagram,
         clips: [...input.clips],
         files,
       });

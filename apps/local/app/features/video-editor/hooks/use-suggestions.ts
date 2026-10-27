@@ -26,6 +26,7 @@ import {
 } from "../suggestions-reducer";
 import {
   getClipTranscriptsBeforeInsertionPoint,
+  getDatabaseClipBeforeInsertionPoint,
   getTranscribedClipIds,
 } from "../video-editor-selectors";
 
@@ -239,6 +240,9 @@ export function useSuggestions(input: {
     () => getTranscribedClipIds(input.items),
     [input.items]
   );
+  const diagramSnapshotId =
+    getDatabaseClipBeforeInsertionPoint(input.items, input.insertionPoint)
+      ?.diagramSnapshotId ?? null;
   const clipsKey = JSON.stringify(clips);
   const transcribedKey = transcribedClipIds.join(",");
   useEffect(() => {
@@ -250,9 +254,10 @@ export function useSuggestions(input: {
         clips: JSON.parse(clipsKey) as string[],
         transcribedClipIds:
           transcribedKey === "" ? [] : transcribedKey.split(","),
+        diagramSnapshotId,
       },
     });
-  }, [animatic, beats, clipsKey, transcribedKey, dispatch]);
+  }, [animatic, beats, clipsKey, transcribedKey, diagramSnapshotId, dispatch]);
 
   return {
     state,

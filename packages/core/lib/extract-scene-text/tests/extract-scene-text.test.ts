@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractSceneText, flattenRichText } from "../index.js";
+import {
+  extractSceneLines,
+  extractSceneText,
+  flattenRichText,
+} from "../index.js";
 
 // Helper: build a ProseMirror doc from paragraphs of text nodes
 function doc(
@@ -244,5 +248,17 @@ describe("extractSceneText", () => {
     });
     const result = extractSceneText(s);
     expect(result).toBe("hello");
+  });
+});
+
+describe("extractSceneLines", () => {
+  it("gives one line per shape with words, in shape id order whatever the store's key order", () => {
+    const s = scene({
+      c: { type: "geo", props: { richText: doc([{ text: "Third  shape" }]) } },
+      a: { type: "frame", props: { name: "First" } },
+      b: { type: "geo", props: { richText: doc([{ text: "" }]) } },
+      bb: { type: "text", props: { richText: doc([{ text: "Second" }]) } },
+    });
+    expect(extractSceneLines(s)).toEqual(["First", "Second", "Third shape"]);
   });
 });
