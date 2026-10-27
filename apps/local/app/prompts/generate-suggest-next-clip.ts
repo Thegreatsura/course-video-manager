@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { unifiedLineDiff } from "@/lib/unified-line-diff";
 
 /**
@@ -262,7 +263,7 @@ Work out where the most recent clips sit in the plan, then write the very next t
 </the-ask>
 
 <output-format>
-Output ONLY the spoken words. No quotes, no "you should say...", no stage directions. The only markdown allowed is **bold**.
+The spoken words alone: no quotes around them, no stage directions. The only markdown allowed is **bold**.
 </output-format>
 `.trim();
 
@@ -274,4 +275,38 @@ export const generateSuggestNextClipPrompt = (
 ): string => {
   const { plan, now } = generateSuggestNextClipPromptParts(input);
   return `${plan}\n\n${now}`;
+};
+
+/**
+ * The shape of the model's answer: one field, the **Suggestion**'s text. Only
+ * that field reaches the editor, so commentary the model might add around
+ * the line has nowhere to go.
+ */
+export const suggestionSchema = z.object({
+  suggestion: z
+    .string()
+    .describe(
+      "The very next words the creator says, and nothing else. The only markdown allowed is **bold**."
+    ),
+});
+
+/**
+ * The Suggestion as plain text, as the model writes it: from the stream of
+ * partial answers, each time just the part of `suggestion` that is new.
+ */
+export const suggestionTextStream = (
+  partials: ReadableStream<{ suggestion?: string }>
+): ReadableStream<string> => {
+  let sent = "";
+  return partials.pipeThrough(
+    new TransformStream<{ suggestion?: string }, string>({
+      transform(partial, controller) {
+        const text = partial.suggestion ?? "";
+        // A partial string only grows; anything else is not sent.
+        if (text.length <= sent.length || !text.startsWith(sent)) return;
+        controller.enqueue(text.slice(sent.length));
+        sent = text;
+      },
+    })
+  );
 };

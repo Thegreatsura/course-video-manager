@@ -1,6 +1,8 @@
 import { makeAction } from "@/services/route-action.server";
 import {
   generateSuggestNextClipPromptParts,
+  suggestionSchema,
+  suggestionTextStream,
   type SuggestNextClipRepoFile,
 } from "@/prompts/generate-suggest-next-clip";
 import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
@@ -9,7 +11,7 @@ import { DiagramOperationsService } from "@/services/db-diagram-operations.serve
 import { extractSceneLines } from "@cvm/core/lib/extract-scene-text/index";
 import { readVideoFilesForPrompt } from "@/services/text-writing-agent";
 import { isImageFilePath } from "@/lib/image-file-path";
-import { streamText } from "ai";
+import { createTextStreamResponse, Output, streamText } from "ai";
 import { Effect, Schema } from "effect";
 import { anthropic } from "@ai-sdk/anthropic";
 
@@ -17,7 +19,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 export const SUGGEST_NEXT_CLIP_MODEL = "claude-haiku-5-5";
 
 /**
- * Streams the Suggestions tab's next line as plain text. The editor sends the
+ * Streams the Suggestions tab's next line as plain text: only the Suggestion
+ * field of the model's structured answer (`suggestionSchema`). The editor sends the
  * sources the author ticked and the Clip transcripts it already holds, so
  * this route reads nothing and starts the model call at once, unless the
  * author picked repo files in the Context modal: those it reads from the
@@ -83,6 +86,7 @@ export const action = makeAction({
       });
       const result = streamText({
         model: anthropic(SUGGEST_NEXT_CLIP_MODEL),
+        output: Output.object({ schema: suggestionSchema }),
         system: [
           {
             role: "system",
@@ -95,6 +99,8 @@ export const action = makeAction({
         abortSignal: request.signal,
       });
 
-      return result.toTextStreamResponse();
+      return createTextStreamResponse({
+        textStream: suggestionTextStream(result.partialOutputStream),
+      });
     }),
 });

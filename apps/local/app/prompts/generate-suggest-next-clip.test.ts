@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { Output, streamText } from "ai";
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import {
   generateSuggestNextClipPrompt,
   generateSuggestNextClipPromptParts,
   MAX_DIAGRAM_TEXT_CHARS,
   MAX_PREVIOUS_VIDEO_CHARS,
   MAX_REPO_FILES_CHARS,
+  suggestionSchema,
+  suggestionTextStream,
 } from "./generate-suggest-next-clip";
 
 describe("generateSuggestNextClipPrompt", () => {
@@ -149,5 +153,68 @@ describe("generateSuggestNextClipPrompt", () => {
     expect(prompt).toContain('<file path="after.ts">');
     expect(prompt).not.toContain("AFTER_MARKER");
     expect(prompt).not.toContain("x".repeat(MAX_REPO_FILES_CHARS + 1));
+  });
+});
+
+/** A model that writes its answer in the given pieces, as a provider streams. */
+const modelWriting = (pieces: string[]) =>
+  new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "stream-start" as const, warnings: [] },
+          { type: "text-start" as const, id: "1" },
+          ...pieces.map((delta) => ({
+            type: "text-delta" as const,
+            id: "1",
+            delta,
+          })),
+          { type: "text-end" as const, id: "1" },
+          {
+            type: "finish" as const,
+            finishReason: { unified: "stop" as const, raw: "end_turn" },
+            usage: {
+              inputTokens: {
+                total: 1,
+                noCache: 1,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 1, text: 1, reasoning: 0 },
+            },
+          },
+        ],
+      }),
+    }),
+  });
+
+describe("suggestionTextStream", () => {
+  it("streams only the Suggestion's text from the model's answer, as it is written", async () => {
+    const model = modelWriting([
+      '{"sugg',
+      'estion": "Now let\'s ',
+      "look at the **diagram",
+      '**.\\nIt shows the loop."}',
+    ]);
+    const result = streamText({
+      model,
+      output: Output.object({ schema: suggestionSchema }),
+      prompt: "What do I say next?",
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of suggestionTextStream(
+      result.partialOutputStream
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.join("")).toBe(
+      "Now let's look at the **diagram**.\nIt shows the loop."
+    );
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(model.doStreamCalls[0]!.responseFormat).toMatchObject({
+      type: "json",
+    });
   });
 });
