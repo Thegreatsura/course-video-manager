@@ -385,12 +385,14 @@ export const storageLocations = (state: State): string[] => {
 export const driveWarnings = (
   state: State
 ): {
-  offline: StorageRootReport[];
+  offline: Extract<StorageRootReport, { online: false }>[];
   dirty: StorageRootReport[];
 } => {
   const roots = state.roots ?? [];
   return {
-    offline: roots.filter((r) => !r.online),
+    offline: roots.filter(
+      (r): r is Extract<StorageRootReport, { online: false }> => !r.online
+    ),
     dirty: roots.filter((r) => r.online && r.dirtyBit === "dirty"),
   };
 };

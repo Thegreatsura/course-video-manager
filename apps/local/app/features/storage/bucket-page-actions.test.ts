@@ -60,7 +60,13 @@ const listed = (
               freeBytes: 1400 * GB,
               dirtyBit: "clean",
             }
-          : { root: E, label: "E:", online: false, reason: "unplugged" },
+          : {
+              root: E,
+              label: "E:",
+              online: false,
+              reason: "unplugged",
+              remountCommand: null,
+            },
       ],
     })
     .send({ type: "bucket-identified", bucket })

@@ -23,6 +23,23 @@ export const offlineRootMessage = (root: string): string => {
 };
 
 /**
+ * The shell command that remounts an Offline Storage Root, for Matt to copy
+ * from the UI and paste into WSL: lazily unmount the stale mount, then mount
+ * the Windows drive again as drvfs, owned by Matt's user (the same options it
+ * is mounted with today). `/mnt/e` → `sudo umount -l /mnt/e; sudo mount -t
+ * drvfs E: /mnt/e -o uid=1000,gid=1000`. `null` for a root that is not a
+ * whole Windows drive (`/srv/footage`): there is no command to offer.
+ *
+ * Only the UI shows it. It never goes into an error's message or the log.
+ */
+export const remountCommandFor = (root: string): string | null => {
+  const drive = rootLabel(root);
+  return drive === root
+    ? null
+    : `sudo umount -l ${root}; sudo mount -t drvfs ${drive} ${root} -o uid=1000,gid=1000`;
+};
+
+/**
  * The error codes a path on a root that is not there fails with. ENOENT is
  * one only for the root itself: under a root it is a missing file.
  */
