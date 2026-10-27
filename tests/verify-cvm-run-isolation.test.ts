@@ -135,7 +135,13 @@ beforeAll(async () => {
   writeFileSync(join(bin, "agent-browser"), FAKE_AGENT_BROWSER);
   chmodSync(join(bin, "agent-browser"), 0o755);
   abLog = join(root, "agent-browser.log");
-  env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, AB_LOG: abLog };
+  env = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH}`,
+    AB_LOG: abLog,
+    // Not Matt's recorder log: a test must not pause because he is filming.
+    CVM_RECORDER_LOG: join(root, "no-recorder.log"),
+  };
   delete env.VERIFY_PORT;
 
   // Launched together, so they race for the same first free port.
