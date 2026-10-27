@@ -1,5 +1,6 @@
 import { useEffectReducer } from "use-effect-reducer";
 import { useRevalidator } from "react-router";
+import { toast } from "@/components/ui/toast";
 import {
   thumbnailStateReducer,
   createInitialThumbnailState,
@@ -162,7 +163,9 @@ export function useThumbnailReducer(thumbnails: Thumbnail[]) {
         });
     },
     revalidate: () => {
-      revalidator.revalidate();
+      revalidator.revalidate().catch(() => {
+        toast.error("Failed to refresh the thumbnails");
+      });
     },
   });
 

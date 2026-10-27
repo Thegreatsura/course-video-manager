@@ -45,6 +45,8 @@ import {
 } from "./writer-engine-utils";
 import { useContextModel } from "./use-context-model";
 import { useMemoryAutosave } from "./use-memory-autosave";
+import { copyToClipboard } from "./clipboard";
+import { toast } from "@/components/ui/toast";
 import { useApplyDocument } from "./use-apply-document";
 import { ApplyButton } from "./apply-button";
 import { InlineContextStrip } from "./inline-context-strip";
@@ -367,24 +369,32 @@ export function WriterEngine({
 
   const handleAddLink = useCallback(
     (link: { url: string; title: string; description?: string }) => {
-      addLinkFetcher.submit(
-        {
-          url: link.url,
-          title: link.title,
-          description: link.description ?? "",
-        },
-        { method: "post", action: "/api/links" }
-      );
+      addLinkFetcher
+        .submit(
+          {
+            url: link.url,
+            title: link.title,
+            description: link.description ?? "",
+          },
+          { method: "post", action: "/api/links" }
+        )
+        .catch(() => {
+          toast.error("Failed to add the link");
+        });
     },
     [addLinkFetcher]
   );
 
   const handleRemoveLink = useCallback(
     (id: string) => {
-      deleteLinkFetcher.submit(null, {
-        method: "post",
-        action: `/api/links/${id}/delete`,
-      });
+      deleteLinkFetcher
+        .submit(null, {
+          method: "post",
+          action: `/api/links/${id}/delete`,
+        })
+        .catch(() => {
+          toast.error("Failed to remove the link");
+        });
     },
     [deleteLinkFetcher]
   );
@@ -417,9 +427,10 @@ export function WriterEngine({
         const text = isDocumentMode
           ? (document ?? "")
           : lastAssistantMessageText;
-        navigator.clipboard.writeText(text);
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
+        copyToClipboard(text, () => {
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        });
       },
       onCopyAsRichText: () => {},
       onCopyConversationHistory: () => {},

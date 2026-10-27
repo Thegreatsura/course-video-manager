@@ -3,6 +3,7 @@ import type { PendingRecovery } from "@/services/pending-recovery.server";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
+import { toast } from "@/components/ui/toast";
 
 /**
  * The durable recovery surface for a crash-stranded Pending Version (#1404).
@@ -26,10 +27,14 @@ export function PendingRecoveryBanner({
     if (recovery?.receiptState === "committed" && !promoteSubmitted.current) {
       promoteSubmitted.current = true;
       setRecoveredName(recovery.versionName);
-      fetcher.submit(
-        { intent: "promote-pending", versionId: recovery.versionId },
-        { method: "post" }
-      );
+      fetcher
+        .submit(
+          { intent: "promote-pending", versionId: recovery.versionId },
+          { method: "post" }
+        )
+        .catch(() => {
+          toast.error("Failed to recover the pending publish");
+        });
     }
   }, [recovery, fetcher]);
 
