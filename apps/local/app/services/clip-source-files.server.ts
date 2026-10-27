@@ -7,7 +7,7 @@ import {
   type ClipSource,
   type ClipSourceRow,
 } from "@/packages/clip-source";
-import type { StorageRoots } from "@/packages/storage";
+import { remountCommandFor, type StorageRoots } from "@/packages/storage";
 import { resolveStoragePath } from "@/packages/storage/server";
 
 /**
@@ -40,6 +40,8 @@ export type FootageNotFound = {
   readonly headline: string;
   /** The root-relative path that was looked for. */
   readonly path: string;
+  /** What to paste into WSL to remount each Offline root that has a drive. */
+  readonly remountCommands: readonly string[];
 };
 
 /**
@@ -66,6 +68,10 @@ export const findClipsWithMissingFootage = (
                   ? error.message.slice(0, -`: ${error.path}`.length)
                   : error.message,
                 path: error.path,
+                remountCommands: error.offlineRoots.flatMap((root) => {
+                  const command = remountCommandFor(root);
+                  return command === null ? [] : [command];
+                }),
               },
             ],
           ],

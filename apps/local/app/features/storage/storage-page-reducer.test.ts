@@ -268,7 +268,13 @@ describe("Offline and Dirty drives", () => {
   it("an Offline root is warned about, reads Offline in every row, and takes no moves", () => {
     const tester = measured([
       d,
-      { root: E, label: "E:", online: false, reason: "ENOENT" },
+      {
+        root: E,
+        label: "E:",
+        online: false,
+        reason: "ENOENT",
+        remountCommand: null,
+      },
     ]).send({
       type: "sizes-counted",
       sizes: [
@@ -284,7 +290,15 @@ describe("Offline and Dirty drives", () => {
     const state = tester.getState();
 
     expect(driveWarnings(state)).toEqual({
-      offline: [{ root: E, label: "E:", online: false, reason: "ENOENT" }],
+      offline: [
+        {
+          root: E,
+          label: "E:",
+          online: false,
+          reason: "ENOENT",
+          remountCommand: null,
+        },
+      ],
       dirty: [],
     });
     const [row] = storageRows(state);

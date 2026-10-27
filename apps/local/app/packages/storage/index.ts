@@ -24,9 +24,11 @@ export {
 } from "./lib/storage-roots";
 
 // A Storage Root that is Offline (an unplugged drive, a stale WSL mount
-// answering ENODEV) is an expected, typed failure, not a missing file.
+// answering ENODEV) is an expected, typed failure, not a missing file. The
+// UI offers the command that remounts it (`remountCommandFor`).
 export {
   StorageRootOfflineError,
   offlineRootMessage,
+  remountCommandFor,
   storageRootOfflineErrorOf,
 } from "./lib/offline";

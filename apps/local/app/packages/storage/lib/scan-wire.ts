@@ -33,6 +33,8 @@ export type StorageRootReport =
       readonly label: string;
       readonly online: false;
       readonly reason: string;
+      /** What to paste into WSL to remount it; null for a root not on a drive. */
+      readonly remountCommand: string | null;
     };
 
 export type StorageSizeDelta = {

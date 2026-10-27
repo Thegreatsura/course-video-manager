@@ -6,6 +6,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "react-router";
+import { RemountCommand } from "@/components/remount-command";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -114,11 +115,16 @@ export default function StoragePage() {
                 data-testid="drive-offline"
               >
                 <AlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
-                <span>
-                  <strong>{labelOf(root.root)} is Offline.</strong> Its files
-                  can't be counted, played or exported, and nothing can be moved
-                  to it until it is plugged in.
-                </span>
+                <div className="flex-1 space-y-2">
+                  <p>
+                    <strong>{labelOf(root.root)} is Offline.</strong> Its files
+                    can't be counted, played or exported, and nothing can be
+                    moved to it until it is plugged in.
+                  </p>
+                  {root.remountCommand !== null && (
+                    <RemountCommand command={root.remountCommand} />
+                  )}
+                </div>
               </div>
             ))}
             {warnings.dirty.map((root) => (

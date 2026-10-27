@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
+import { RemountCommand } from "@/components/remount-command";
 import { GlobalUploadProgress } from "@/features/upload-manager/global-upload-progress";
 import { UploadProvider } from "@/features/upload-manager/upload-context";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
@@ -61,7 +62,10 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({
   defaultShouldRevalidate,
 }) => defaultShouldRevalidate || currentUrl.pathname !== nextUrl.pathname;
 
-/** One line per Offline Storage Root, naming the drive and what to do. */
+/**
+ * One line per Offline Storage Root, naming the drive and what to do, with
+ * the command that remounts it ready to copy.
+ */
 function OfflineStorageRootsBanner() {
   const { offlineRoots } = useLoaderData<typeof loader>();
   if (offlineRoots.length === 0) return null;
@@ -70,8 +74,13 @@ function OfflineStorageRootsBanner() {
       role="alert"
       className="border-b border-amber-500/40 bg-amber-500/20 px-4 py-2 text-sm text-amber-600"
     >
-      {offlineRoots.map(({ root, message }) => (
-        <p key={root}>{message}</p>
+      {offlineRoots.map(({ root, message, remountCommand }) => (
+        <div key={root} className="space-y-1 py-0.5">
+          <p>{message}</p>
+          {remountCommand !== null && (
+            <RemountCommand command={remountCommand} />
+          )}
+        </div>
       ))}
     </div>
   );

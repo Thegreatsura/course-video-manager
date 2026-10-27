@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import {
   offlineRootMessage,
+  remountCommandFor,
   storageRootOfflineErrorOf,
   type StorageRootOfflineError,
 } from "@/packages/storage";
@@ -11,6 +12,8 @@ import { readStorageRootsOrNone } from "./storage-roots";
 export interface OfflineStorageRoot {
   readonly root: string;
   readonly message: string;
+  /** What to paste into WSL to remount it; null for a root not on a drive. */
+  readonly remountCommand: string | null;
 }
 
 /**
@@ -53,7 +56,11 @@ export const makeStorageRootAvailability = <R>(opts: {
       }
       return roots
         .filter((root) => online.get(root) === false)
-        .map((root) => ({ root, message: offlineRootMessage(root) }));
+        .map((root) => ({
+          root,
+          message: offlineRootMessage(root),
+          remountCommand: remountCommandFor(root),
+        }));
     });
 
   return { offlineRoots, observe };
