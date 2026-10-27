@@ -246,6 +246,16 @@ export const isCvmRecorderRecording = (state: cvmRecorderReducer.State) =>
   state.phase === "recording" || state.phase === "stopping";
 
 /**
+ * Whether the editor's Recording Session still needs the recorder: it is
+ * recording or stopping, or its last Take is still being placed. An editor
+ * never lets the recorder go meanwhile (`recorder-attention-reducer.ts`).
+ */
+export const holdsRecordingSession = (state: cvmRecorderReducer.State) =>
+  isCvmRecorderRecording(state) ||
+  state.recordingSessionId !== null ||
+  state.placing !== null;
+
+/**
  * Whether a Clip's stills are held (#2214): it belongs to the Recording
  * Session still being recorded (or still placing its last speech), whose
  * files are growing. A still decodes them with ffmpeg on the GPU, which cost

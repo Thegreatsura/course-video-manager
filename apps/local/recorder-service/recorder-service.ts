@@ -577,6 +577,8 @@ export const startRecorderService = async (o: RecorderServiceOptions) => {
 
   return {
     port: (server.address() as AddressInfo).port,
+    /** Recording, or a take closing its files. */
+    busy: () => state.kind === "recording" || stopping.closing(),
     /** Stops a recording cleanly, then closes every socket. */
     close: async () => {
       await queue;

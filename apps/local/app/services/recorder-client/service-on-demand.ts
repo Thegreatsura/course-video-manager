@@ -7,20 +7,27 @@ import { createIdleStop } from "@/services/idle-stop";
  * has for `RECORDER_IDLE_MINUTES`, so it holds no Windows processes the rest
  * of the time. An editor coming back within that time keeps it running.
  *
+ * An editor stops needing it when Matt closes it, or once its window has
+ * gone unfocused for a while (`recorder-attention-reducer.ts`, #2383).
+ *
  * Raw footage first: it is never stopped while a take records, while a
  * stopped take is still closing its files, or while the app server is still
  * saving the recorder's events. It waits for those, then counts the whole
  * idle time again (`idle-stop.ts`, as Local Whisper's worker does). And the
- * stop itself closes any take's files first (ADR 0035, `stopCleanlyOn`).
+ * stop is only asked for: the service itself refuses it while it records or
+ * a take is closing its files (`stopCleanlyOn`), and the count runs again.
  */
 
 /** How long the recorder service stays up once nothing needs it. */
-const RECORDER_IDLE_MINUTES = 10;
+const RECORDER_IDLE_MINUTES = 2;
 export const RECORDER_IDLE_MS = RECORDER_IDLE_MINUTES * 60_000;
 
 export type RunningRecorderService = {
-  /** Asks it to stop: any take is stopped and its files closed first. */
-  stop: () => void;
+  /**
+   * Asks it to stop because it is idle. The service refuses while it records
+   * or a take is closing its files, and stays up.
+   */
+  stopIfIdle: () => void;
   /** Settles once it has exited. */
   exited: Promise<void>;
 };
@@ -57,7 +64,9 @@ export const createServiceOnDemand = (o: {
         `recorder service: nothing has needed it for ${o.idleMs / 60_000} minutes; stopping it.`
       );
       stopping = true;
-      running.stop();
+      running.stopIfIdle();
+      // Refused (a take began meanwhile): ask again after the next idle time.
+      idle.arm();
     },
   });
 
