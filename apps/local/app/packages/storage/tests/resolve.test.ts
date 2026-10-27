@@ -4,8 +4,12 @@ import path from "node:path";
 import { NodeContext } from "@effect/platform-node";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { StorageRoots } from "../index";
-import { findStoragePathSync, resolveStoragePath } from "../server";
+import { offlineRootMessage, type StorageRoots } from "../index";
+import {
+  findStoragePathSync,
+  requireEveryRootOnline,
+  resolveStoragePath,
+} from "../server";
 
 let base: string;
 let d: string;
@@ -119,5 +123,42 @@ describe("an Offline root", () => {
     expect(error.message).toBe(
       "Footage not found on any Storage Root: raw-footage/a.mkv"
     );
+  });
+});
+
+describe("requireEveryRootOnline", () => {
+  const require = () =>
+    Effect.runPromise(
+      requireEveryRootOnline(roots).pipe(
+        Effect.either,
+        Effect.provide(NodeContext.layer)
+      )
+    );
+
+  it("passes when every root is there", async () => {
+    expect(Either.isRight(await require())).toBe(true);
+  });
+
+  it("fails with the Offline message for a stale mount, not the filesystem's error", async () => {
+    fs.rmSync(e, { recursive: true });
+    fs.writeFileSync(e, "stale");
+
+    const result = await require();
+
+    if (Either.isRight(result)) throw new Error("expected Offline");
+    expect(result.left).toMatchObject({
+      _tag: "StorageRootOfflineError",
+      root: e,
+      message: offlineRootMessage(e),
+    });
+  });
+
+  it("fails for a root that is not there at all", async () => {
+    fs.rmSync(e, { recursive: true });
+
+    const result = await require();
+
+    if (Either.isRight(result)) throw new Error("expected Offline");
+    expect(result.left.root).toBe(e);
   });
 });

@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  afterEach,
+} from "vitest";
 import nodeFs from "node:fs";
 import os from "node:os";
 import nodePath from "node:path";
@@ -343,5 +351,44 @@ describe("file delete", () => {
       "nope.md",
     ]);
     expect(r.exitCode).toBe(2);
+  });
+});
+
+// E: dropped out of WSL on 2026-10-27 and `cvm file add --force` failed with
+// the raw ENODEV. A second Storage Root that is not there stands in for it.
+describe("an Offline Storage Root", () => {
+  let roots: string | undefined;
+  let offline: string;
+  beforeEach(() => {
+    roots = process.env.STORAGE_ROOTS;
+    offline = `${nodePath.dirname(videoFiles.dir)}-offline-e`;
+    process.env.STORAGE_ROOTS = `${roots},${offline}`;
+  });
+  afterEach(() => {
+    process.env.STORAGE_ROOTS = roots;
+  });
+
+  it("add (with --force) refuses with the Offline message and writes nothing; list still works", async () => {
+    const r = await run([
+      "file",
+      "add",
+      "--video",
+      s.standaloneActiveId,
+      "--as",
+      "writer-notes.md",
+      "--force",
+      source("writer-notes.md", "x"),
+    ]);
+
+    expect(r.exitCode).toBe(4);
+    expect(JSON.parse(r.stderr)).toMatchObject({
+      _tag: "StorageRootOfflineError",
+      root: offline,
+    });
+    expect(r.stderr).toContain(`Storage Root ${offline} is offline`);
+    expect(nodeFs.readdirSync(videoFiles.dir)).toEqual([]);
+
+    const list = await run(["file", "list", "--video", s.standaloneActiveId]);
+    expect(list.exitCode).toBe(0);
   });
 });
