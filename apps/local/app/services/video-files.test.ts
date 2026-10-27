@@ -208,27 +208,43 @@ describe("across Storage Roots and the legacy store", () => {
 
 /**
  * E: dropped out of WSL: every path on it fails ENODEV, as `/mnt/e` did on
- * 2026-10-22, when the Script tab 500'd on this walk.
+ * 2026-10-22, when the Script tab 500'd on this walk, and on 2026-10-27,
+ * when `cvm file add` failed with the raw ENODEV.
  */
+const enodev = (method: string, path: string) =>
+  Effect.fail(
+    new SystemError({
+      reason: "Unknown",
+      module: "FileSystem",
+      method,
+      pathOrDescriptor: path,
+      cause: Object.assign(new Error("ENODEV: no such device"), {
+        code: "ENODEV",
+      }),
+    })
+  );
+
 const withEOffline = Effect.provideServiceEffect(
   FileSystem.FileSystem,
-  Effect.map(FileSystem.FileSystem, (fs) => ({
-    ...fs,
-    exists: (path: string) =>
-      path.startsWith(rootE)
-        ? Effect.fail(
-            new SystemError({
-              reason: "Unknown",
-              module: "FileSystem",
-              method: "access",
-              pathOrDescriptor: path,
-              cause: Object.assign(new Error("ENODEV: no such device"), {
-                code: "ENODEV",
-              }),
-            })
-          )
-        : fs.exists(path),
-  }))
+  Effect.map(
+    FileSystem.FileSystem,
+    (fs) =>
+      Object.fromEntries(
+        Object.entries(fs).map(([method, fn]) => [
+          method,
+          typeof fn === "function"
+            ? (...args: unknown[]) =>
+                args.some(
+                  (a) =>
+                    typeof a === "string" &&
+                    (a === rootE || a.startsWith(`${rootE}/`))
+                )
+                  ? enodev(method, String(args[0]))
+                  : (fn as (...a: unknown[]) => unknown)(...args)
+            : fn,
+        ])
+      ) as unknown as FileSystem.FileSystem
+  )
 );
 
 describe("an Offline Storage Root", () => {
@@ -239,6 +255,35 @@ describe("an Offline Storage Root", () => {
     const entries = await run(withEOffline(listVideoFiles(LINEAGE)));
 
     expect(entries.map((e) => e.path)).toEqual(["on-d.md"]);
+  });
+
+  it("refuses a write with the Offline message, before writing anything", async () => {
+    const onE = writeIn(nodePath.join(rootE, "video-files"), "notes.md", "old");
+
+    const error = await run(
+      withEOffline(writeVideoFile(LINEAGE, "notes.md", "new")).pipe(Effect.flip)
+    );
+
+    expect(error).toMatchObject({
+      _tag: "StorageRootOfflineError",
+      root: rootE,
+    });
+    expect(error.message).toContain(`Storage Root ${rootE} is offline`);
+    expect(nodeFs.existsSync(nodePath.join(baseDir, LINEAGE, "notes.md"))).toBe(
+      false
+    );
+    expect(nodeFs.readFileSync(onE, "utf8")).toBe("old");
+  });
+
+  it("refuses a delete with the Offline message, removing nothing", async () => {
+    const onD = writeFixture("notes.md");
+
+    const error = await run(
+      withEOffline(deleteVideoFile(LINEAGE, "notes.md")).pipe(Effect.flip)
+    );
+
+    expect(error).toMatchObject({ _tag: "StorageRootOfflineError" });
+    expect(nodeFs.existsSync(onD)).toBe(true);
   });
 });
 

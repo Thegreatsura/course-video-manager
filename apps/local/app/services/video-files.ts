@@ -14,6 +14,7 @@ import {
 import {
   existsOnStorage,
   findStoragePathSync,
+  requireEveryRootOnline,
 } from "@/packages/storage/server";
 import { removeUnderBestEffort } from "./remove-best-effort";
 import { installLocationRepoRoot } from "./repo-env";
@@ -357,6 +358,10 @@ const removeOtherCopies = (
 /**
  * Write a file on the first Storage Root, creating any missing parent
  * directories, and remove any older copy of it in another store.
+ *
+ * Fails with the Offline message (`StorageRootOfflineError`), before anything
+ * is written, while any Storage Root is Offline: an older copy there could
+ * not be removed, and would be a duplicate when the drive is back.
  */
 export const writeVideoFile = (
   lineageId: string,
@@ -366,6 +371,7 @@ export const writeVideoFile = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const filePath = yield* resolveVideoFilePath(lineageId, relativePath);
+    yield* requireEveryRootOnline(readStorageRootsSync());
 
     yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
 
@@ -381,12 +387,15 @@ export const writeVideoFile = (
 
 /**
  * Remove a file from every store that has it. Empty parent directories are
- * left in place. Fails, as a plain remove does, when no store has it.
+ * left in place. Fails, as a plain remove does, when no store has it, and
+ * with the Offline message, before anything is removed, while any Storage
+ * Root is Offline: a copy there would come back with the drive.
  */
 export const deleteVideoFile = (lineageId: string, relativePath: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* resolveVideoFilePath(lineageId, relativePath);
+    yield* requireEveryRootOnline(readStorageRootsSync());
     for (const dir of videoDirectories(lineageId)) {
       const target = yield* assertUnderEffect(
         dir,

@@ -3,12 +3,15 @@
 // A root-relative path is looked for on each Storage Root in order and the
 // first root that has it wins, so a file mid-move (on both drives) is read
 // from the first. Not found anywhere fails with `StorageFileNotFoundError`,
-// whose message names the roots that are offline ("E: offline?").
+// whose message names the roots that are offline ("E: offline?"). An
+// operation that must see every root (removing a file's other copies) asks
+// `requireEveryRootOnline` first, and fails with the Offline message.
 export {
   StorageFileNotFoundError,
   existsOnStorage,
   findStoragePath,
   findStoragePathSync,
+  requireEveryRootOnline,
   resolveStoragePath,
   rootIsOnline,
 } from "./lib/resolve";

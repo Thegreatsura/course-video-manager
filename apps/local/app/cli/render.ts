@@ -1,5 +1,7 @@
 import { HelpDoc, ValidationError } from "@effect/cli";
 import { Cause, Effect, Option } from "effect";
+import { storageRootOfflineErrorOf } from "@/packages/storage";
+import { readStorageRootsOrNone } from "@/services/storage-roots";
 import { CliOutput } from "./output";
 
 /**
@@ -17,6 +19,7 @@ import { CliOutput } from "./output";
  *   AuthenticationError         -> 5
  *   SchemaVersionMismatchError  -> 6
  *   LocalOnlyCommandError       -> 7
+ *   StorageRootOfflineError     -> 4 (any filesystem failure on an Offline root)
  *   (@effect/cli ValidationError, bad input) -> 3
  *   (defect / unknown tag / die)             -> 4 (rendered as DatabaseError)
  *
@@ -73,6 +76,10 @@ const EXIT_CODES: Record<string, number> = {
   // CVM_API_URL / CVM_API_TOKEN are missing. Same class as a missing
   // DATABASE_URL always was: exit 4.
   ConfigurationError: 4,
+  // A Storage Root is Offline (an unplugged drive, a stale WSL mount). Same
+  // class: something on this machine. The message names the drive and what
+  // to do; reconnecting it and retrying is the fix.
+  StorageRootOfflineError: 4,
 };
 
 const exitCodeForTag = (tag: string): number => EXIT_CODES[tag] ?? 4;
@@ -136,7 +143,15 @@ export const renderToExitCode = <E, R>(
             return 4;
           }
 
-          const error = failure.value;
+          // A filesystem failure on an Offline Storage Root (ENODEV on a
+          // stale WSL mount) says which drive and what to do, never the raw
+          // error, whichever `fs` call hit it — as the app server's
+          // route-action and the Sidecar's job failure already do.
+          const error =
+            storageRootOfflineErrorOf(
+              failure.value,
+              readStorageRootsOrNone()
+            ) ?? failure.value;
 
           // @effect/cli validation errors (bad args/options). Help/version
           // built-ins are handled internally by `run` and succeed, so a

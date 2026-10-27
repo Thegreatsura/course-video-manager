@@ -53,6 +53,12 @@ Verbs (flags come BEFORE the positional args — a flag after them exits 3):
 
 An unknown or archived --video is a not-found (exit 2).
 
+An Offline Storage Root (an unplugged drive, a stale WSL mount): list and get
+see only the files on the roots that are there. add and delete refuse, before
+writing anything, with _tag "StorageRootOfflineError" and exit 4, because a
+copy on the Offline drive could not be replaced or removed. The message names
+the drive; once it is remounted, re-run the same command.
+
 Examples:
   cvm file list --video vid_123
   cvm file add --video vid_123 ./notes.md

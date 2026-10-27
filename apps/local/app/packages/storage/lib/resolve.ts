@@ -9,7 +9,11 @@ import {
   type StorageRoots,
 } from "./storage-roots";
 import { realDriveRefusal } from "./real-drives";
-import { storageRootOfflineErrorOf } from "./offline";
+import {
+  offlineRootMessage,
+  StorageRootOfflineError,
+  storageRootOfflineErrorOf,
+} from "./offline";
 
 /**
  * A root-relative file is on no Storage Root. `offlineRoots` are the roots
@@ -45,6 +49,28 @@ export const rootIsOnline = (root: string) =>
       Effect.as(true),
       Effect.orElseSucceed(() => false)
     );
+  });
+
+/**
+ * The guard for an operation that must see EVERY Storage Root: one that
+ * removes a file's copies on the other roots (a Video File write or delete).
+ * Fails with {@link StorageRootOfflineError} for the first Offline root,
+ * before anything is touched: while a root is Offline CVM cannot tell
+ * whether it holds a copy, and going on would leave one behind to come back
+ * when the drive does. Only lists each root's top level.
+ */
+export const requireEveryRootOnline = (
+  roots: readonly string[]
+): Effect.Effect<void, StorageRootOfflineError, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    for (const root of roots) {
+      if (!(yield* rootIsOnline(root))) {
+        return yield* new StorageRootOfflineError({
+          root,
+          message: offlineRootMessage(root),
+        });
+      }
+    }
   });
 
 /**
