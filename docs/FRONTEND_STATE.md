@@ -39,7 +39,7 @@ the same next state and the same effects, even when StrictMode runs it twice.
 
 The initial state may be an object or a function, `(exec) => state`, which can
 declare effects as the surface mounts. Both forms are safe under StrictMode.
-Fixed 2026-10-27 (PR_REF, #2386): the package's hook, given a function, lost
+Fixed 2026-10-27 (#2389, #2386): the package's hook, given a function, lost
 the effect of an event dispatched on mount whenever StrictMode's replay of
 that event declared nothing (a reducer that loads once per mount), and never
 restarted the initializer's own effects after StrictMode's remount. The repo's

@@ -344,7 +344,7 @@ from 6 to 1. All four allowlist entries are gone (`use-state` 5 → 3,
   save now toasts and never shows Saved. An old Saved timer can no longer hide
   a newer Saving…, and a failed autofill or description load shows an error
   in the modal instead of going to the error boundary or loading forever.
-- A trap found while verifying, **fixed 2026-10-27 in PR_REF (#2386)**: given
+- A trap found while verifying, **fixed 2026-10-27 in #2389 (#2386)**: given
   its initial state as a function, the package's `useEffectReducer` flushed
   once on mount, and StrictMode's second mount pass flushed again, which threw
   away an effect declared by an event dispatched on mount. The SEO Description
