@@ -1,6 +1,7 @@
 import { deepLinkAnchor } from "@/features/entity-links/use-deep-link-focus";
 import { useState } from "react";
 import { useFetcher } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
@@ -221,10 +222,14 @@ export function DeliverableCard({
     fd.set("status", d.status);
     for (const id of courseIds) fd.append("courseIds", id);
     for (const id of pitchIds) fd.append("pitchIds", id);
-    linkFetcher.submit(fd, {
-      method: "post",
-      action: `/api/deliverables/${d.id}/update`,
-    });
+    linkFetcher
+      .submit(fd, {
+        method: "post",
+        action: `/api/deliverables/${d.id}/update`,
+      })
+      .catch(() => {
+        toast.error("Failed to update the deliverable's links");
+      });
   }
 
   if (editing) {
@@ -248,17 +253,25 @@ export function DeliverableCard({
   const setStatus = (status: "planned" | "done" | "cancelled") => {
     const fd = new FormData();
     fd.set("status", status);
-    statusFetcher.submit(fd, {
-      method: "post",
-      action: `/api/deliverables/${d.id}/update-status`,
-    });
+    statusFetcher
+      .submit(fd, {
+        method: "post",
+        action: `/api/deliverables/${d.id}/update-status`,
+      })
+      .catch(() => {
+        toast.error("Failed to update the deliverable's status");
+      });
   };
 
   const duplicate = () => {
-    duplicateFetcher.submit(new FormData(), {
-      method: "post",
-      action: `/api/deliverables/${d.id}/duplicate`,
-    });
+    duplicateFetcher
+      .submit(new FormData(), {
+        method: "post",
+        action: `/api/deliverables/${d.id}/duplicate`,
+      })
+      .catch(() => {
+        toast.error("Failed to duplicate the deliverable");
+      });
   };
 
   const dayLabel = `${day.toLocaleDateString(undefined, { weekday: "short" })} ${day.getDate()}`;
@@ -399,11 +412,16 @@ export function DeliverableCard({
                     title: "Delete deliverable?",
                     description: `"${d.title}" will be removed from the calendar. This cannot be undone from the app.`,
                     confirmLabel: "Delete",
-                    onConfirm: () =>
-                      archiveFetcher.submit(new FormData(), {
-                        method: "post",
-                        action: `/api/deliverables/${d.id}/archive`,
-                      }),
+                    onConfirm: () => {
+                      archiveFetcher
+                        .submit(new FormData(), {
+                          method: "post",
+                          action: `/api/deliverables/${d.id}/archive`,
+                        })
+                        .catch(() => {
+                          toast.error("Failed to delete the deliverable");
+                        });
+                    },
                   }),
               },
             ],

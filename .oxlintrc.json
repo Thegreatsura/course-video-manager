@@ -60,10 +60,10 @@
       }
     ],
     // CODING STANDARD: "Every promise is awaited, handled or marked void".
-    // A ratchet: a warning everywhere, an error in the directories that are
-    // clean (see `overrides`). React handler-heavy UI is the backlog.
-    "typescript/no-floating-promises": "warn",
-    "typescript/no-misused-promises": "warn",
+    // A ratchet: an error everywhere except the backlog directories in
+    // `overrides`, which stay at warn. React handler-heavy UI is the backlog.
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
     // `--type-aware` also switches on every other type-aware rule in
     // `correctness`. Those are a measured backlog (docs/plans/
     // effect-codebase-health.md, phase 2) and stay off until each is fixed
@@ -97,24 +97,21 @@
 
   "overrides": [
     {
-      // The promise ratchet: these directories are clean of floating and
-      // misused promises, so a new one is an error. Add a directory here once
-      // it reaches 0; the React handler-heavy UI (features/, components/,
-      // hooks/, .tsx routes) is the backlog and stays at warn.
+      // The promise ratchet's backlog: these directories still have floating
+      // or misused promises, so here they are warnings, not errors. THIS LIST
+      // ONLY SHRINKS — fix a directory's hits and delete its line. Do not add
+      // one. Counts are in docs/plans/effect-codebase-health.md, phase 2.
       "files": [
-        "apps/local/app/services/**",
-        "apps/local/app/cli/**",
-        "apps/local/recorder-service/**",
-        "apps/local/app/routes/**/*.ts",
-        "apps/local/app/features/jobs/**",
-        "apps/remote/**",
-        "packages/**",
-        ".sandcastle/**",
-        "scripts/**"
+        "apps/local/app/features/course-view/**",
+        "apps/local/app/features/video-editor/**",
+        "apps/local/app/features/diagrams/**",
+        "apps/local/app/components/**",
+        "apps/local/app/features/video-posting/**",
+        "apps/local/app/routes/**/*.tsx"
       ],
       "rules": {
-        "typescript/no-floating-promises": "error",
-        "typescript/no-misused-promises": "error"
+        "typescript/no-floating-promises": "warn",
+        "typescript/no-misused-promises": "warn"
       }
     },
     {

@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef } from "react";
 import { useRevalidator } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import type {
   UploadStatus,
@@ -45,7 +46,9 @@ export function useUploadRevalidate(uploadTypes: UploadType[]) {
 
   useEffect(() => {
     if (hasNewSuccessForTypes(previousRef.current, uploads, typesRef.current)) {
-      revalidator.revalidate();
+      revalidator.revalidate().catch(() => {
+        toast.error("Failed to refresh the page after an upload");
+      });
     }
     previousRef.current = uploads;
   }, [uploads, revalidator]);

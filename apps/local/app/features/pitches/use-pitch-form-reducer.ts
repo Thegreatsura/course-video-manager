@@ -72,7 +72,10 @@ export function usePitchFormReducer(fields: pitchFormReducer.Fields) {
   useEffect(
     () => () => {
       const waiting = selectWaitingSave(stateRef.current);
-      if (waiting) void savePitchField(waiting);
+      if (!waiting) return;
+      savePitchField(waiting).catch(() => {
+        toast.error("Couldn't save the Pitch");
+      });
     },
     []
   );

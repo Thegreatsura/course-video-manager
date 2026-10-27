@@ -17,7 +17,11 @@
  * only in that clone's api_tokens table, so it authenticates nowhere else, and
  * it dies with the clone on cleanup.
  */
-import { createServer } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { createApp } from "@cvm/remote/app";
@@ -68,7 +72,7 @@ const minted = await runtime.runPromise(
 
 const app = createApp(runtime);
 
-const server = createServer(async (req, res) => {
+const handle = async (req: IncomingMessage, res: ServerResponse) => {
   try {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -92,6 +96,14 @@ const server = createServer(async (req, res) => {
     process.stderr.write(`verify-api: ${String(cause)}\n`);
     res.writeHead(500).end();
   }
+};
+
+// `createServer` ignores a returned promise, so the handler's own failure
+// (say, writing a 500 to a socket that is already gone) is caught here.
+const server = createServer((req, res) => {
+  handle(req, res).catch((cause: unknown) => {
+    process.stderr.write(`verify-api: ${String(cause)}\n`);
+  });
 });
 
 server.listen(0, "127.0.0.1", () => {

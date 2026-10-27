@@ -190,24 +190,26 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   const Icon = status === 404 ? AlertTriangle : ServerCrash;
 
-  const copyErrorToClipboard = async () => {
-    try {
-      const errorDetails = [
-        `Error ${status}: ${title}`,
-        "",
-        `Description: ${description}`,
-      ];
+  const copyErrorToClipboard = () => {
+    const errorDetails = [
+      `Error ${status}: ${title}`,
+      "",
+      `Description: ${description}`,
+    ];
 
-      if (stack) {
-        errorDetails.push("", "Stack trace:", stack);
-      }
-
-      await navigator.clipboard.writeText(errorDetails.join("\n"));
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy error to clipboard:", err);
+    if (stack) {
+      errorDetails.push("", "Stack trace:", stack);
     }
+
+    navigator.clipboard.writeText(errorDetails.join("\n")).then(
+      () => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      },
+      (err: unknown) => {
+        console.error("Failed to copy error to clipboard:", err);
+      }
+    );
   };
 
   return (

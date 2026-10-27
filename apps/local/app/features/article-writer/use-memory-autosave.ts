@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { createMemoryAutosaver } from "./memory-autosaver";
 
 export function useMemoryAutosave(memoryText: string, repoId: string | null) {
@@ -22,10 +23,14 @@ export function useMemoryAutosave(memoryText: string, repoId: string | null) {
         initial: memoryText,
         save: (memory) => {
           if (!repoId) return;
-          submitRef.current(
-            { memory },
-            { method: "post", action: `/api/courses/${repoId}/update-memory` }
-          );
+          submitRef
+            .current(
+              { memory },
+              { method: "post", action: `/api/courses/${repoId}/update-memory` }
+            )
+            .catch(() => {
+              toast.error("Failed to save the course memory");
+            });
         },
       }),
     };

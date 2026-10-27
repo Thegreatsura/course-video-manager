@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
+import { toast } from "@/components/ui/toast";
 import {
   autofillDescriptionReducer,
   createInitialAutofillDescriptionState,
@@ -66,13 +67,17 @@ export function useAutofillDescriptionReducer(props: {
         );
     },
     "save-description": (_state, effect) => {
-      void saveFetcher.submit(
-        { intent: "updateDescription", description: effect.description },
-        {
-          method: "post",
-          action: `/api/videos/${effect.videoId}/lesson-writer`,
-        }
-      );
+      saveFetcher
+        .submit(
+          { intent: "updateDescription", description: effect.description },
+          {
+            method: "post",
+            action: `/api/videos/${effect.videoId}/lesson-writer`,
+          }
+        )
+        .catch(() => {
+          toast.error("Failed to save the description");
+        });
     },
     "close-modal": () => {
       props.onOpenChange(false);

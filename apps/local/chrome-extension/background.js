@@ -109,17 +109,16 @@ function sendUrl(url, title) {
   });
 }
 
-// The active tab of the last-focused normal window.
-async function sendActiveTabUrl() {
-  try {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      lastFocusedWindow: true,
-    });
-    if (tab) sendUrl(tab.url, tab.title);
-  } catch {
-    // ignore
-  }
+// The active tab of the last-focused normal window. Called from Chrome's event
+// listeners, which ignore a returned promise, so a failed query is handled here:
+// there is simply no URL to send.
+function sendActiveTabUrl() {
+  chrome.tabs
+    .query({ active: true, lastFocusedWindow: true })
+    .then(([tab]) => {
+      if (tab) sendUrl(tab.url, tab.title);
+    })
+    .catch(() => {});
 }
 
 // Chrome gained/lost OS focus. WINDOW_ID_NONE means no Chrome window is focused

@@ -32,6 +32,7 @@ import type { Options } from "react-markdown";
 import type { OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { useScreenshotNavigation } from "./use-screenshot-navigation";
+import { pasteFromClipboard } from "./clipboard";
 
 export interface DocumentPanelProps {
   document: string | undefined;
@@ -167,16 +168,9 @@ export const DocumentPanel = memo(function DocumentPanel({
     });
   }, []);
 
-  const handlePasteFromClipboard = useCallback(async () => {
+  const handlePasteFromClipboard = useCallback(() => {
     if (readOnlyRef.current) return;
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text.trim()) {
-        onDocumentChange?.(text);
-      }
-    } catch {
-      // Clipboard access denied or empty
-    }
+    pasteFromClipboard((text) => onDocumentChange?.(text));
   }, [onDocumentChange]);
 
   // Modal (field-writer) layout: no header toolbar. A floating Edit/Preview

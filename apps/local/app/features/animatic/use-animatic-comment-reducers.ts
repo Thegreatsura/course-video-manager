@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useEffectReducer } from "use-effect-reducer";
+import { toast } from "@/components/ui/toast";
 import type {
   ClipMockupCommentEvent,
   ClipMockupCommentWriteResult,
@@ -23,12 +24,19 @@ import {
  */
 function useCommentWriter() {
   const fetcher = useFetcher<ClipMockupCommentWriteResult>();
-  const submit = (event: ClipMockupCommentEvent) =>
-    void fetcher.submit(event, {
-      method: "post",
-      action: "/api/clip-mockup-comments",
-      encType: "application/json",
-    });
+  // A refused write comes back as `fetcher.data` (`error` below); a rejected
+  // submit never reached the action, so it is reported here.
+  const submit = (event: ClipMockupCommentEvent) => {
+    fetcher
+      .submit(event, {
+        method: "post",
+        action: "/api/clip-mockup-comments",
+        encType: "application/json",
+      })
+      .catch(() => {
+        toast.error("Failed to save the comment");
+      });
+  };
   const error =
     fetcher.state === "idle" && fetcher.data && !fetcher.data.ok
       ? fetcher.data.message
