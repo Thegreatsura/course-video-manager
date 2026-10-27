@@ -29,11 +29,21 @@ that came before the guard and the order they migrate in.
 ```
 
 This is the Elm architecture (`update : Msg -> Model -> (Model, Cmd Msg)`),
-built on [`use-effect-reducer`](https://github.com/davidkpiano/useEffectReducer),
-which is already a dependency. Inside the reducer, `exec(effect)` does not run
-anything. It adds the effect object to a list, and the hook runs that list after
-the commit. The reducer stays pure: the same state and event give the same next
-state and the same effects, even when StrictMode runs it twice.
+built on [`use-effect-reducer`](https://github.com/davidkpiano/useEffectReducer).
+Import the hook from `@/hooks/use-effect-reducer`, the repo's own copy with the
+package's API and types; importing `useEffectReducer` from the package is a
+lint error, though its types are fine. Inside the reducer, `exec(effect)` does
+not run anything. It adds the effect object to a list, and the hook runs that
+list after the commit. The reducer stays pure: the same state and event give
+the same next state and the same effects, even when StrictMode runs it twice.
+
+The initial state may be an object or a function, `(exec) => state`, which can
+declare effects as the surface mounts. Both forms are safe under StrictMode.
+Fixed 2026-10-27 (#2389, #2386): the package's hook, given a function, lost
+the effect of an event dispatched on mount whenever StrictMode's replay of
+that event declared nothing (a reducer that loads once per mount), and never
+restarted the initializer's own effects after StrictMode's remount. The repo's
+copy fixes both, and `hooks/use-effect-reducer.browser.test.tsx` covers them.
 
 The rules:
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import {
   createInitialWriterTurnState,
   writerTurnReducer,

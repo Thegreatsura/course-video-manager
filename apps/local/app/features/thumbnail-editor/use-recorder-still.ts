@@ -1,4 +1,4 @@
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { useRecorderEvents } from "@/features/video-editor/use-cvm-recorder";
 import {
   canCapture,
