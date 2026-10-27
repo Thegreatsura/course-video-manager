@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import type { ScreenCrop } from "@/packages/clip-source";
 import { cn } from "@/lib/utils";
 import {

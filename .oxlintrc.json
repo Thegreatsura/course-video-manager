@@ -29,6 +29,21 @@
     // scripts/complexity-allowlist.json, which scripts/check-complexity.ts
     // keeps shrink-only.
     "complexity": ["error", { "max": 15, "variant": "modified" }],
+    // CODING STANDARD: "One reducer per surface", run by the repo's
+    // useEffectReducer (docs/FRONTEND_STATE.md). The package's own hook loses
+    // effects under StrictMode, so only its types may be imported.
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "use-effect-reducer",
+            "importNames": ["useEffectReducer"],
+            "message": "Import useEffectReducer from @/hooks/use-effect-reducer. The package's own version loses effects under StrictMode (#2386); its types are fine to import."
+          }
+        ]
+      }
+    ],
     // CODING STANDARD: localStorage goes through the hook.
     "no-restricted-globals": [
       "error",
@@ -128,6 +143,12 @@
           "error",
           {
             "paths": [
+              // Repeated from the top-level rule, which this override replaces.
+              {
+                "name": "use-effect-reducer",
+                "importNames": ["useEffectReducer"],
+                "message": "Import useEffectReducer from @/hooks/use-effect-reducer. The package's own version loses effects under StrictMode (#2386); its types are fine to import."
+              },
               {
                 "name": "@/components/ui/toast",
                 "message": "Toasts are off on the Diagram Playground. Report errors with usePlaygroundStatus() from @/features/diagrams/playground-status; successes stay silent."

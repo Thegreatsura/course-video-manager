@@ -344,11 +344,14 @@ from 6 to 1. All four allowlist entries are gone (`use-state` 5 → 3,
   save now toasts and never shows Saved. An old Saved timer can no longer hide
   a newer Saving…, and a failed autofill or description load shows an error
   in the modal instead of going to the error boundary or loading forever.
-- A trap found while verifying: given its initial state as a function,
-  `useEffectReducer` flushes once on mount, and StrictMode's second mount pass
-  flushes again, which throws away an effect declared by an event dispatched
-  on mount. The SEO Description modal mounts already open, so it sat on
-  Loading… for good. All four runners now pass an initial state object.
+- A trap found while verifying, **fixed 2026-10-27 in PR_REF (#2386)**: given
+  its initial state as a function, the package's `useEffectReducer` flushed
+  once on mount, and StrictMode's second mount pass flushed again, which threw
+  away an effect declared by an event dispatched on mount. The SEO Description
+  modal mounts already open, so it sat on Loading… for good. This batch worked
+  round it by passing an initial state object; the fix is in the hook itself
+  (`hooks/use-effect-reducer.ts`, which every runner now imports), so either
+  form is safe.
 - Verified with `verify-cvm` on a test clone, with the Tiny Course and a Pitch
   and two Clip Mockups made for the run. On the Pitch page, an edit to a
   second field within the pause saves both fields, leaving through the back

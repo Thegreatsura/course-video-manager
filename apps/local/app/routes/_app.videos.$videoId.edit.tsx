@@ -36,7 +36,7 @@ import { findClipsWithMissingFootage } from "@/services/clip-source-files.server
 import { storageRootsConfig } from "@/services/storage-roots";
 import { makeLoader } from "@/services/route-action.server";
 import { Effect } from "effect";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { getActiveDiagramId } from "@/lib/diagram-window";
 import { browserFocus, diagramFocus } from "@/lib/focus-tracker";
 import { useBrowserLinkCapture } from "@/features/video-editor/hooks/use-browser-link-capture";
