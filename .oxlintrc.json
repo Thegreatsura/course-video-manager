@@ -194,7 +194,6 @@
         "apps/local/app/cli/commands/overlay.ts",
         "apps/local/app/cli/commands/video.ts",
         "apps/local/app/components/video-context-panel.tsx",
-        "apps/local/app/features/animatic/animatic-comments.tsx",
         "apps/local/app/features/animatic/use-animatic-shortcuts.ts",
         "apps/local/app/features/article-writer/context-panel-reducer.ts",
         "apps/local/app/features/article-writer/document-panel.tsx",
