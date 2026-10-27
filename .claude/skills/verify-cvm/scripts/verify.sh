@@ -461,7 +461,14 @@ cmd_cleanup() {
   stop_run "$RUN_DIR"
 }
 
+# Never while Matt is filming (../filming.md).
+# shellcheck source=SCRIPTDIR/verify-filming.sh
+. "$(dirname "${BASH_SOURCE[0]}")/verify-filming.sh"
+
 VERB="${1:-}"
+case "$VERB" in
+  launch|ab|shot|snap|tiny-course|cvm) wait_while_filming ;;
+esac
 case "$VERB" in
   mode)     shift; cmd_mode "$@" ;;
   template) cmd_template ;;
