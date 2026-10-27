@@ -39,6 +39,13 @@ import type { ClapMark } from "../app/packages/clap-detection/live";
 export const RECORDER_SERVICE_PORT = 5177;
 
 /**
+ * The app server's idle stop, sent to its child service over the IPC
+ * channel (ADR 0053). The service refuses it while it records or a take is
+ * still closing its files (`stopCleanlyOn`, #2383).
+ */
+export const IDLE_STOP = { type: "idle-stop" } as const;
+
+/**
  * Bumped whenever the wire changes in a way an older service cannot follow
  * (2: a Short's `format` and `screen`; 3: the level meter; 4: the AV
  * Calibration run; 5: Record's silence threshold; 6: the calibration's true

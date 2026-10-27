@@ -20,7 +20,13 @@ import {
   createInitialCvmRecorderState,
   cvmRecorderReducer,
   followedOnLeave,
+  holdsRecordingSession,
 } from "./cvm-recorder-reducer";
+import {
+  createInitialRecorderAttentionState,
+  holdsRecorder,
+  recorderAttentionReducer,
+} from "./recorder-attention-reducer";
 import type { InsertionPoint } from "@/services/clip-service";
 import { useStopRecordingOnLeave } from "./use-stop-recording-on-leave";
 import { cvmRecorderTakeSaver } from "./cvm-recorder-take-saver";
@@ -66,16 +72,61 @@ const messageOf = (error: unknown) =>
  * events` while `enabled`. Listening is what opens the recorder (and the Cam
  * Link) for that Video. The editor and the thumbnail camera both listen
  * through here.
+ *
+ * It stops listening once the window has gone unfocused for
+ * `RECORDER_AWAY_MS`, unless `recording`, and listens again when focus comes
+ * back (`recorder-attention-reducer.ts`, #2383).
  */
 export const useRecorderEvents = (
   videoId: string,
   enabled: boolean,
+  recording: boolean,
   onMessage: (message: CvmRecorderMessage) => void
 ) => {
   const listener = useRef(onMessage);
   listener.current = onMessage;
+  const [attention, dispatch] = useEffectReducer(
+    recorderAttentionReducer,
+    createInitialRecorderAttentionState,
+    {
+      "wait-while-away": (_state, effect, dispatch) => {
+        const timer = setTimeout(
+          () => dispatch({ type: "away-time-elapsed" }),
+          effect.ms
+        );
+        return () => clearTimeout(timer);
+      },
+    }
+  );
+  const listening = enabled && holdsRecorder(attention);
+
+  // Bridges the window's focus in.
   useEffect(() => {
-    if (!enabled) return;
+    const report = () =>
+      dispatch({
+        type:
+          document.visibilityState === "visible" && document.hasFocus()
+            ? "window-focused"
+            : "window-left",
+      });
+    report();
+    window.addEventListener("focus", report);
+    window.addEventListener("blur", report);
+    document.addEventListener("visibilitychange", report);
+    return () => {
+      window.removeEventListener("focus", report);
+      window.removeEventListener("blur", report);
+      document.removeEventListener("visibilitychange", report);
+    };
+  }, [dispatch]);
+
+  // Bridges whether a Recording Session holds the recorder in.
+  useEffect(() => {
+    dispatch({ type: "recording-heard", recording });
+  }, [recording, dispatch]);
+
+  useEffect(() => {
+    if (!listening) return;
     const source = new EventSource(`/api/videos/${videoId}/recorder/events`);
     for (const type of CVM_RECORDER_MESSAGE_TYPES) {
       source.addEventListener(type, (event) => {
@@ -83,7 +134,7 @@ export const useRecorderEvents = (
       });
     }
     return () => source.close();
-  }, [videoId, enabled]);
+  }, [videoId, listening]);
 };
 
 /**
@@ -249,7 +300,7 @@ export const useCvmRecorder = (o: {
     });
   });
 
-  useRecorderEvents(videoId, true, (message) => {
+  useRecorderEvents(videoId, true, holdsRecordingSession(state), (message) => {
     dispatch({ type: "recorder-message-heard", message });
   });
 
