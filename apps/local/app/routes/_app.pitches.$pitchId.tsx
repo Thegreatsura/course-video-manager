@@ -33,7 +33,7 @@ import {
   Video,
   Youtube,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { Link, useFetcher, useSearchParams, useSubmit } from "react-router";
 import { courseEditorFetcherKeyForEvent } from "@/features/course-view/optimistic-applier";
 import type { CourseEditorEvent } from "@/services/course-editor-service";
@@ -41,6 +41,8 @@ import { BeatDndProvider } from "@/features/beats/beat-dnd-context";
 import { CreateBeatDialogProvider } from "@/features/beats/create-beat-dialog";
 import { BeatList } from "@/features/beats/beat-list";
 import { pitchBackLink } from "@/features/pitches/pitch-back-link";
+import type { pitchFormReducer } from "@/features/pitches/pitch-form-reducer";
+import { usePitchFormReducer } from "@/features/pitches/use-pitch-form-reducer";
 import type {
   FindLessonPlace,
   LessonPlace,
@@ -127,69 +129,7 @@ export const loader = makeLoader({
     }),
 });
 
-const SAVE_THROTTLE_MS = 600;
 const X_POST_CHARACTER_LIMIT = 280;
-
-function usePitchAutoSave(pitchId: string) {
-  const fetcher = useFetcher();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "pending" | "saved">(
-    "idle"
-  );
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const submit = useCallback(
-    (field: string, value: string) => {
-      fetcher.submit(
-        { field, value },
-        {
-          method: "post",
-          action: `/api/pitches/${pitchId}/update`,
-        }
-      );
-    },
-    [fetcher, pitchId]
-  );
-
-  const save = useCallback(
-    (field: string, value: string) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setSaveState("pending");
-
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        submit(field, value);
-      }, SAVE_THROTTLE_MS);
-    },
-    [submit]
-  );
-
-  const saveImmediate = useCallback(
-    (field: string, value: string) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      setSaveState("pending");
-      submit(field, value);
-    },
-    [submit]
-  );
-
-  useEffect(() => {
-    if (
-      fetcher.state === "idle" &&
-      saveState === "pending" &&
-      !timerRef.current
-    ) {
-      setSaveState("saved");
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(() => setSaveState("idle"), 1200);
-    }
-  }, [fetcher.state, saveState]);
-
-  return { save, saveImmediate, saveState };
-}
 
 function SaveIndicator({ state }: { state: "idle" | "pending" | "saved" }) {
   if (state === "idle") return null;
@@ -335,21 +275,26 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
     redirectTo: backLink.href,
   });
 
-  const [title, setTitle] = useState(initialPitch.title);
-  const [description, setDescription] = useState(initialPitch.description);
-  const [youtubeTitle, setYoutubeTitle] = useState(initialPitch.youtubeTitle);
-  const [youtubeThumbnailDescription, setYoutubeThumbnailDescription] =
-    useState(initialPitch.youtubeThumbnailDescription);
-  const [newsletterTitle, setNewsletterTitle] = useState(
-    initialPitch.newsletterTitle
-  );
-  const [tweet, setTweet] = useState(initialPitch.tweet);
+  const { state: form, dispatch: formDispatch } = usePitchFormReducer({
+    title: initialPitch.title,
+    description: initialPitch.description,
+    youtubeTitle: initialPitch.youtubeTitle,
+    youtubeThumbnailDescription: initialPitch.youtubeThumbnailDescription,
+    newsletterTitle: initialPitch.newsletterTitle,
+    tweet: initialPitch.tweet,
+  });
+  const {
+    title,
+    description,
+    youtubeTitle,
+    youtubeThumbnailDescription,
+    newsletterTitle,
+    tweet,
+  } = form.fields;
   const priority = (Number(priorityFetcher.formData?.get("value")) ||
     initialPitch.priority) as Priority;
   const effort = (Number(effortFetcher.formData?.get("value")) ||
     initialPitch.effort) as Effort;
-
-  const { save, saveState } = usePitchAutoSave(initialPitch.id);
 
   // A Video that also belongs to a Lesson copies links naming its place.
   const findLessonPlace = useCallback<FindLessonPlace>(
@@ -371,8 +316,13 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
     [submit]
   );
 
-  const handleFieldChange = (field: string, value: string) => {
-    save(field, value);
+  const handleFieldChange = (field: pitchFormReducer.Field, value: string) => {
+    formDispatch({
+      type: "field-edited",
+      pitchId: initialPitch.id,
+      field,
+      value,
+    });
   };
 
   return (
@@ -386,7 +336,7 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
             <ArrowLeft className="w-4 h-4" />
             {backLink.label}
           </Link>
-          <SaveIndicator state={saveState} />
+          <SaveIndicator state={form.saveState} />
         </div>
 
         <div className="flex items-center gap-2 mb-3">
@@ -394,7 +344,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
             autoFocus
             value={title}
             onChange={(e) => {
-              setTitle(e.target.value);
               handleFieldChange("title", e.target.value);
             }}
             aria-label="Title"
@@ -451,7 +400,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
             <Textarea
               value={description}
               onChange={(e) => {
-                setDescription(e.target.value);
                 handleFieldChange("description", e.target.value);
               }}
               rows={2}
@@ -524,7 +472,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
               <Textarea
                 value={youtubeTitle}
                 onChange={(e) => {
-                  setYoutubeTitle(e.target.value);
                   handleFieldChange("youtubeTitle", e.target.value);
                 }}
                 rows={3}
@@ -536,7 +483,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
               <Textarea
                 value={youtubeThumbnailDescription}
                 onChange={(e) => {
-                  setYoutubeThumbnailDescription(e.target.value);
                   handleFieldChange(
                     "youtubeThumbnailDescription",
                     e.target.value
@@ -554,7 +500,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
               <Input
                 value={newsletterTitle}
                 onChange={(e) => {
-                  setNewsletterTitle(e.target.value);
                   handleFieldChange("newsletterTitle", e.target.value);
                 }}
                 placeholder="The subject line of the newsletter"
@@ -568,7 +513,6 @@ export default function PitchDetailRoute(props: Route.ComponentProps) {
               <Textarea
                 value={tweet}
                 onChange={(e) => {
-                  setTweet(e.target.value);
                   handleFieldChange("tweet", e.target.value);
                 }}
                 rows={2}
