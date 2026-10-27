@@ -1,3 +1,5 @@
+import { unifiedLineDiff } from "@/lib/unified-line-diff";
+
 /**
  * The prompt behind the Video Editor's **Suggestions** tab: what should the
  * author say in the next **Clip**?
@@ -10,17 +12,27 @@
  * they say how today's take departs from the plan. Next come the repo files
  * the author picked in the Context modal, read by the route. The words on the
  * **Diagram** on screen right now go with the Clips, since they change from
- * one Clip to the next. The transcripts of the **previous Video**'s Clips
- * come last in the plan, straight before this Video's Clips, so the
- * conversation reads in order.
+ * one Clip to the next. When the Clip just before the Insertion Point has a
+ * **DiagramSnapshot** pinned, they go as a diff against it, so the model sees
+ * what the author has changed on screen since that Clip. The transcripts of
+ * the **previous Video**'s Clips come last in the plan, straight before this
+ * Video's Clips, so the conversation reads in order.
  */
 export type SuggestNextClipInput = {
   notes?: string;
   script?: string;
   animatic?: string;
   beats?: string;
-  /** The Diagram Text of the Active Diagram, the one on screen now. */
+  /**
+   * The Diagram Text of the Active Diagram, the one on screen now, one line
+   * per shape.
+   */
   diagram?: string;
+  /**
+   * The DiagramSnapshot pinned to the Clip just before the Insertion Point,
+   * if it has one. The route reads its text, to diff the Diagram against.
+   */
+  diagramSnapshotId?: string;
   /**
    * Transcripts of the previous Video's Clips (the one before this in course
    * order), one per line, oldest first.
@@ -39,8 +51,16 @@ export type SuggestNextClipInput = {
 export type SuggestNextClipRepoFile = { path: string; content: string };
 
 /** What the prompt is built from: the request, with the files read. */
-export type SuggestNextClipPromptInput = Omit<SuggestNextClipInput, "files"> & {
+export type SuggestNextClipPromptInput = Omit<
+  SuggestNextClipInput,
+  "files" | "diagramSnapshotId"
+> & {
   files?: SuggestNextClipRepoFile[];
+  /**
+   * The Diagram Text of the DiagramSnapshot pinned to the Clip just before
+   * the Insertion Point, one line per shape, as the route read it.
+   */
+  lastClipDiagram?: string;
 };
 
 /**
@@ -76,6 +96,54 @@ const capDiagramText = (text: string | undefined) =>
   text && text.length > MAX_DIAGRAM_TEXT_CHARS
     ? `${text.slice(0, MAX_DIAGRAM_TEXT_CHARS)} [… cut: over the diagram text limit]`
     : text;
+
+/** Diagram Text sent one line per shape, as the single line it is shown as. */
+const flattenDiagramText = (text: string) => text.replace(/\s+/g, " ").trim();
+
+const diagramLines = (text: string) =>
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+/**
+ * The on-screen Diagram's section of the prompt. With no DiagramSnapshot on
+ * the last Clip, its words as one line, as ever; with one, a unified diff of
+ * the snapshot's lines against the Diagram's now, or the one line again with
+ * a note when nothing has changed.
+ */
+const diagramSection = (
+  diagram: string | undefined,
+  lastClipDiagram: string | undefined
+) => {
+  if (!diagram || diagram.trim().length === 0) return "";
+  const intro =
+    "The words on the diagram on screen right now, flattened into one line: what the viewer is looking at as the creator speaks. It shows where they are; it is not something they have said. The notes outrank it.";
+  if (lastClipDiagram === undefined) {
+    return section(
+      "diagram-on-screen",
+      intro,
+      capDiagramText(flattenDiagramText(diagram))
+    );
+  }
+  const before = diagramLines(lastClipDiagram);
+  const after = diagramLines(diagram);
+  if (before.join("\n") === after.join("\n")) {
+    return section(
+      "diagram-on-screen",
+      `${intro} It is unchanged since the last clip.`,
+      capDiagramText(flattenDiagramText(diagram))
+    );
+  }
+  // Not through `section`: its trim would eat the first line's ` ` column.
+  return [
+    "The diagram on screen right now, one line per shape, as a diff against the diagram that was on screen in the last clip: a line starting with + was added since the last clip, a line starting with - was removed, and a line starting with a space is unchanged. What changed is likely what the creator talks about next. It shows what the viewer sees; it is not something the creator has said. The notes outrank it.",
+    "",
+    "<diagram-changes-since-last-clip>",
+    capDiagramText(unifiedLineDiff(before, after)),
+    "</diagram-changes-since-last-clip>",
+  ].join("\n");
+};
 
 /**
  * The most of the previous Video's Clips one suggestion carries, in
@@ -177,11 +245,7 @@ You are a teleprompter for a course creator recording a video one short clip at 
 ${guides.length > 0 ? guides.join("\n\n") : "There is no plan for this video: continue naturally from the clips."}
 ${previousVideo ? `\n${previousVideo}\n` : ""}`.trim();
 
-  const diagram = section(
-    "diagram-on-screen",
-    "The words on the diagram on screen right now, flattened into one line: what the viewer is looking at as the creator speaks. It shows where they are; it is not something they have said. The notes outrank it.",
-    capDiagramText(input.diagram)
-  );
+  const diagram = diagramSection(input.diagram, input.lastClipDiagram);
 
   const now = `
 ${clips}

@@ -15,6 +15,7 @@ const context = (
   beats: "",
   clips: ["So that's a type."],
   transcribedClipIds: ["c1"],
+  diagramSnapshotId: null,
   ...overrides,
 });
 
@@ -293,6 +294,37 @@ describe("the Suggestions tab", () => {
         clips: ["So that's a type."],
       }),
     ]);
+  });
+
+  it("names the DiagramSnapshot on the Clip before the Insertion Point only when it sends the Diagram", () => {
+    const t = tester()
+      .send({
+        type: "editor-context-changed",
+        context: context({ diagramSnapshotId: "snap-1" }),
+      })
+      .send({ type: "suggestions-tab-opened" })
+      .send({ type: "script-loaded", videoId: "v1", script: "" })
+      .send({ type: "refresh-clicked" })
+      .send({ type: "diagram-text-changed", text: "Client\nServer" })
+      .send({ type: "edit-pause-elapsed", editId: 1 });
+
+    const streams = t
+      .getEffects()
+      .filter((effect) => effect.type === "stream-suggestion");
+    expect(streams.at(-2)).toEqual(
+      stream(2, {
+        animatic: 'Mockup 1: "Hello"',
+        clips: ["So that's a type."],
+      })
+    );
+    expect(streams.at(-1)).toEqual(
+      stream(3, {
+        animatic: 'Mockup 1: "Hello"',
+        diagram: "Client\nServer",
+        diagramSnapshotId: "snap-1",
+        clips: ["So that's a type."],
+      })
+    );
   });
 
   it("sends the previous Video's Clips until 5 Clips are before the Insertion Point, then follows the tick again below that", () => {
