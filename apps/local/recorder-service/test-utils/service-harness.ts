@@ -113,7 +113,13 @@ export const start = async (
     wakeSpacedesk: windows.wakeSpacedesk,
   });
   cleanups.unshift(() => service.close());
-  return { windows, stateDir, port: service.port, close: service.close };
+  return {
+    windows,
+    stateDir,
+    port: service.port,
+    close: service.close,
+    busy: service.busy,
+  };
 };
 
 export const connect = async (port: number) => {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { wakeSpacedesk } from "../app/spacedesk-wake";
-import { RECORDER_SERVICE_PORT } from "./protocol";
+import { IDLE_STOP, RECORDER_SERVICE_PORT } from "./protocol";
 import { startRecorderService } from "./recorder-service";
 import { startWindowsClock } from "./windows-clock";
 import { windowsLauncher } from "./windows-launcher";
@@ -46,9 +46,14 @@ export const STOP_EVENTS = ["SIGINT", "SIGTERM", "disconnect"] as const;
  * The handlers stay on until then, so a second Ctrl-C (or a SIGTERM after a
  * SIGINT) is only logged: with no handler left it would kill the process
  * mid-finalise, and with it the only thing that can send ffmpeg.exe its `q`.
+ *
+ * The app server's idle stop (`IDLE_STOP`, a `message` on its IPC channel)
+ * is only a request: while `service.busy()` (recording, or a take still
+ * closing its files) it is refused and the service runs on, so no idle
+ * count can ever cut a take short (#2383). The app server asks again later.
  */
 export const stopCleanlyOn = (
-  service: { close: () => Promise<void> },
+  service: { close: () => Promise<void>; busy: () => boolean },
   events: Pick<NodeJS.EventEmitter, "on" | "off">,
   logLine: (message: string) => void = log
 ) =>
@@ -73,7 +78,20 @@ export const stopCleanlyOn = (
         }
       );
     };
-    const handlers = STOP_EVENTS.map((e) => [e, onStop(e)] as const);
+    const idleStop = onStop(IDLE_STOP.type);
+    const onMessage = (message: unknown) => {
+      if ((message as { type?: unknown } | null)?.type !== IDLE_STOP.type)
+        return;
+      if (service.busy()) {
+        logLine(`${IDLE_STOP.type}: refused, a take is recording or closing`);
+        return;
+      }
+      idleStop();
+    };
+    const handlers: (readonly [string, (message: unknown) => void])[] = [
+      ...STOP_EVENTS.map((e) => [e, onStop(e)] as const),
+      ["message", onMessage],
+    ];
     for (const [e, h] of handlers) events.on(e, h);
   });
 

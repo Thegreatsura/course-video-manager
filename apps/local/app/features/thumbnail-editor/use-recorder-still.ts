@@ -80,7 +80,8 @@ export const useRecorderStill = (videoId: string) => {
     }
   );
 
-  useRecorderEvents(videoId, true, (message) =>
+  // A still never records: the window's focus alone decides.
+  useRecorderEvents(videoId, true, false, (message) =>
     dispatch({ type: "recorder-message-heard", message })
   );
 

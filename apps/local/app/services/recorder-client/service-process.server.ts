@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { RECORDER_SERVICE_PORT } from "recorder-service/protocol";
+import { IDLE_STOP, RECORDER_SERVICE_PORT } from "recorder-service/protocol";
 import { recorderBusy, recorderHealth } from "recorder-service/health";
 import { installLocationRepoRoot } from "@/services/repo-env";
 import type {
@@ -17,7 +17,8 @@ import type {
  * As under ADR 0035, it runs in a process group of its own, out of reach of
  * turbo's SIGKILL, and stops cleanly on SIGTERM or when its IPC channel to
  * the app server closes: it never outlives `pnpm dev` / `pnpm start` by more
- * than closing a take's files.
+ * than closing a take's files. Its idle stop is a request over that channel
+ * (`IDLE_STOP`), which the service refuses mid-take (#2383).
  */
 
 const serviceDir = () => {
@@ -51,7 +52,12 @@ const startProcess = (): RunningRecorderService => {
       resolve();
     });
   });
-  return { stop: () => void child.kill("SIGTERM"), exited };
+  return {
+    stopIfIdle: () => {
+      if (child.connected) child.send(IDLE_STOP);
+    },
+    exited,
+  };
 };
 
 export const recorderServiceProcess: RecorderServiceLauncher = {

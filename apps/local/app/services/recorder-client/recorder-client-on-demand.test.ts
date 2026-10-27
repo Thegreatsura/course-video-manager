@@ -1,13 +1,19 @@
+import { EventEmitter } from "node:events";
 import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CvmRecorderMessage } from "@/features/video-editor/cvm-recorder-wire";
 import { startRecorderService } from "recorder-service/recorder-service";
 import { recorderBusy, recorderHealth } from "recorder-service/health";
+import { IDLE_STOP } from "recorder-service/protocol";
+import { stopCleanlyOn } from "recorder-service/run-recorder-service";
 import { fakeWindows } from "recorder-service/test-utils/fake-windows";
 import { clock } from "recorder-service/test-utils/service-harness";
 import { setupClipServiceTests, clipService } from "../clip-service-test-setup";
 import { connectClient, tmp } from "./recorder-client-test-harness";
-import type { RecorderServiceLauncher } from "./service-on-demand";
+import {
+  RECORDER_IDLE_MS,
+  type RecorderServiceLauncher,
+} from "./service-on-demand";
 
 /**
  * The recorder service on demand (ADR 0053), end to end without hardware:
@@ -52,15 +58,14 @@ const launcherOn = (port: number) => {
       let closing: Promise<void> | undefined;
       const close = () => (closing ??= service.close());
       stopAll.push(close);
-      let exit = () => {};
-      const exited = new Promise<void>((resolve) => (exit = resolve));
-      return {
-        stop: () => {
-          log.stops++;
-          void close().then(exit);
-        },
-        exited,
-      };
+      // The IPC channel `service-process.ts` hears the idle stop on.
+      const ipc = new EventEmitter();
+      const exited = stopCleanlyOn(
+        { close, busy: service.busy },
+        ipc,
+        () => {}
+      ).then(() => void log.stops++);
+      return { stopIfIdle: () => ipc.emit("message", IDLE_STOP), exited };
     },
     busy: async () => recorderBusy(await recorderHealth(port)),
   };
@@ -83,6 +88,10 @@ const setup = async () => {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("the recorder service on demand", () => {
+  it("idles out 2 minutes after nothing needs it (#2383)", () => {
+    expect(RECORDER_IDLE_MS).toBe(2 * 60_000);
+  });
+
   it("starts only when an editor opens, says so while it starts, and stops once no editor has been open for the idle time", async () => {
     const { log, heard, open } = await setup();
     await wait(IDLE_MS);
