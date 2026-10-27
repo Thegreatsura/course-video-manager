@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { toast } from "@/components/ui/toast";
 import {
   autofillDescriptionReducer,
@@ -19,9 +19,6 @@ export function useAutofillDescriptionReducer(props: {
 }) {
   const saveFetcher = useFetcher();
 
-  // The initial state is an object, not a function: given a function,
-  // useEffectReducer flushes on mount, and StrictMode's second mount pass
-  // would flush away the effect this modal declares as it opens.
   const [state, dispatch] = useEffectReducer<
     autofillDescriptionReducer.State,
     autofillDescriptionReducer.Action,

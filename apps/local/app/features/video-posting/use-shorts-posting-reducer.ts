@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { toast } from "@/components/ui/toast";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { useUploadActions } from "@/features/upload-manager/upload-context";

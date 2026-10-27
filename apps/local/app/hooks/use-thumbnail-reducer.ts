@@ -1,4 +1,4 @@
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { useRevalidator } from "react-router";
 import { toast } from "@/components/ui/toast";
 import {

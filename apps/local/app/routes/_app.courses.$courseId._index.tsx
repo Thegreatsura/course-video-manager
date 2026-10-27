@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCollapsedIds } from "@/features/course-view/use-collapsed-ids";
 import { readCookie, useCookieState } from "@/hooks/use-cookie-state";
 import { useFetcher, useNavigate, useSubmit } from "react-router";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import type { Route } from "./+types/_app.courses.$courseId._index";
 import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { ActionsDropdown } from "@/features/course-view/actions-menu";

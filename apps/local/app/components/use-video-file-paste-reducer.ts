@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import {
   createInitialVideoFilePasteState,
   videoFilePasteReducer,
@@ -23,9 +23,6 @@ export function useVideoFilePasteReducer(props: {
   const pasteAreaRef = useRef<HTMLDivElement>(null);
   const pathInputRef = useRef<HTMLInputElement>(null);
 
-  // The initial state is an object, not a function: given a function,
-  // useEffectReducer flushes on mount, and StrictMode's second mount pass
-  // would flush away the effect this modal declares as it opens.
   const [state, dispatch] = useEffectReducer<
     videoFilePasteReducer.State,
     videoFilePasteReducer.Action,

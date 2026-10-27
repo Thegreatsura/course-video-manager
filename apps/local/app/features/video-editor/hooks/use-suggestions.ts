@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import {
   parseStringSet,
   readStored,

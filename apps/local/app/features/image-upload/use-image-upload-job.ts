@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef } from "react";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import { toast } from "@/components/ui/toast";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import { UPLOAD_IMAGES_JOB_KIND, swapImageUploads } from "./image-upload-job";

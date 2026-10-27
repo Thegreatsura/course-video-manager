@@ -31,7 +31,7 @@ import {
   useSearchParams,
   useSubmit,
 } from "react-router";
-import { useEffectReducer } from "use-effect-reducer";
+import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import type { Route } from "./+types/_app.courses.$courseId.sections.$sectionId";
 import { useUploadActions } from "@/features/upload-manager/upload-context";
 import { AutofillChaptersProvider } from "@/features/course-view/autofill-chapters-context";
