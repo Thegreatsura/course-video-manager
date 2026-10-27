@@ -286,7 +286,7 @@ state, so their four allowlist entries are gone (`use-state` 7 → 5,
   disabled button stopped it. A posted-status answer for a Short the modal is
   no longer open on is ignored, as the old effect's cancel flag did.
 
-## Batch 6 — Small modals and forms (score 126)
+## Batch 6 — Small modals and forms (score 126) — Done
 
 `routes/_app.pitches.$pitchId.tsx` (the pitch form fields and the
 `saveState` autosave), `features/animatic/animatic-comments.tsx` (comment
@@ -299,6 +299,69 @@ three separately.
 - Delete: no component tests exist for these five. The camera modal's
   `getUserMedia` stays inside an effect handler, and `stream-acquired` and
   `stream-failed` come back as events.
+
+**Done.** By the time this batch started, #2279 had already deleted
+`components/capture-camera-modal.tsx` (the CVM recorder became the only
+Recorder), and its allowlist entry had gone with it, so four files were left.
+
+`features/pitches/pitch-form-reducer.ts` owns the Pitch page's six text
+fields and the autosave. `field-edited` declares `wait-for-edit-pause` with
+an `editId`; only the latest edit's `edit-pause-elapsed` declares
+`save-pitch-field`, and the indicator reads Saving… until every save has
+answered (`pitch-field-saved`), then declares `reload-pitch` and
+`wait-before-hiding-saved`. The runner is `use-pitch-form-reducer.ts`.
+`features/lesson-writer/autofill-description-reducer.ts` owns the SEO
+Description modal: `modal-opened` declares `load-lesson-writer-data` once per
+mount, and `lesson-writer-data-loaded` declares `autofill-description` itself
+when the description is blank and the body is not. That rule was the
+`seeded` effect. Save declares `save-description` and `close-modal`; the runner
+(`use-autofill-description-reducer.ts`) keeps the save on a fetcher, so the
+page still revalidates after the modal unmounts.
+`components/video-file-paste-reducer.ts` owns the Paste from Clipboard dialog:
+`content-pasted` carries the Video's paths and names the file
+(`generatePastePath`), and `create-clicked` declares `create-file`. The
+fetcher's answer comes back through a bridge as `file-created`, which declares
+`close-modal` and `report-file-created`. The two focus moves are effects. The
+Animatic's comments split into two surfaces, because each comment keeps its
+own writer and shows its own refused write:
+`features/animatic/animatic-comment-thread-reducer.ts` (the popover, the
+target frozen by `thread-shown` until `thread-hidden`, and the new comment) and
+`animatic-comment-edit-reducer.ts` (editing one comment in place, and deleting
+it). Their runners are in `use-animatic-comment-reducers.ts`, with the
+fetcher-backed writer. `useStageComments` keeps its one popover boolean, which
+the "may keep `useState`" rule allows. The pitch route, the autofill modal and
+the paste modal have no `useState` left, and `animatic-comments.tsx` is down
+from 6 to 1. All four allowlist entries are gone (`use-state` 5 → 3,
+`effect-sets-state` 7 → 5).
+
+- Tests: `apps/local` went from 4881 to 4899 (+18 reducer scenarios: 4
+  pitch form, 4 autofill description, 5 paste, 3 comment thread, 2 comment
+  edit). No component test rendered any of these, so none could be deleted.
+- Some edge cases changed on purpose. Editing a second Pitch field within the
+  600 ms pause used to drop the first field's save; now it sends it at once.
+  Leaving the page during the pause used to rely on a timer outliving the
+  route; now the runner sends the waiting edit as it unmounts. A failed Pitch
+  save now toasts and never shows Saved. An old Saved timer can no longer hide
+  a newer Saving…, and a failed autofill or description load shows an error
+  in the modal instead of going to the error boundary or loading forever.
+- A trap found while verifying: given its initial state as a function,
+  `useEffectReducer` flushes once on mount, and StrictMode's second mount pass
+  flushes again, which throws away an effect declared by an event dispatched
+  on mount. The SEO Description modal mounts already open, so it sat on
+  Loading… for good. All four runners now pass an initial state object.
+- Verified with `verify-cvm` on a test clone, with the Tiny Course and a Pitch
+  and two Clip Mockups made for the run. On the Pitch page, an edit to a
+  second field within the pause saves both fields, leaving through the back
+  link right after typing still saves, and the indicator goes Saving… →
+  Saved → gone. The SEO Description modal loads the description, saves an
+  edit and closes; reopened on a blank description, it autofills by itself
+  and shows the error (the model is unreachable on a clone). The editor's Add
+  Note dialog focuses the paste area, names pasted text `notes.md`, then
+  `notes-1.md`, and a pasted image `diagram-1.png`, creates the file, closes,
+  and reopens empty. On the Animatic, a comment added from a row's badge, from
+  the stage button and from a row's right-click menu each lands on its own
+  Clip Mockup, trimmed; edit and delete work from the comment's `…` menu. The
+  Write Ledger shows only those tables.
 
 ## Batch 7 — Video editor media sync (score 111)
 

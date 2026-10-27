@@ -1,8 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useFetcher } from "react-router";
-import { toast } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -13,11 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Loader2Icon, SparklesIcon } from "lucide-react";
-
-type LessonWriterData = {
-  body: string | null;
-  description: string | null;
-};
+import { useAutofillDescriptionReducer } from "./use-autofill-description-reducer";
 
 /**
  * A focused modal for the video's SEO description: shows the current value, a
@@ -33,74 +26,13 @@ export function AutofillDescriptionModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const dataFetcher = useFetcher<LessonWriterData>();
-  const autofillFetcher = useFetcher<{ text?: string; error?: string }>();
-  const saveFetcher = useFetcher();
-
-  const [value, setValue] = useState("");
-  const [seeded, setSeeded] = useState(false);
-
-  useEffect(() => {
-    if (open && dataFetcher.state === "idle" && !dataFetcher.data) {
-      dataFetcher.load(`/api/videos/${videoId}/lesson-writer`).catch(() => {
-        toast.error("Failed to load the description");
-      });
-    }
-  }, [open, videoId, dataFetcher]);
-
-  const handleAutofill = useCallback(() => {
-    autofillFetcher
-      .submit(
-        {},
-        {
-          method: "post",
-          action: `/api/videos/${videoId}/autofill-description`,
-          encType: "application/json",
-        }
-      )
-      .catch(() => {
-        toast.error("Failed to autofill the description");
-      });
-  }, [autofillFetcher, videoId]);
-
-  // Auto-trigger the Autofill when the description is empty and the body has content.
-  useEffect(() => {
-    if (dataFetcher.data && !seeded) {
-      const desc = dataFetcher.data.description ?? "";
-      setValue(desc);
-      setSeeded(true);
-
-      const body = (dataFetcher.data.body ?? "").trim();
-      if (!desc.trim() && body) {
-        handleAutofill();
-      }
-    }
-  }, [dataFetcher.data, seeded, handleAutofill]);
-
-  // A completed Autofill always replaces the textarea contents.
-  useEffect(() => {
-    if (autofillFetcher.data?.text != null) {
-      setValue(autofillFetcher.data.text);
-    }
-  }, [autofillFetcher.data]);
-
-  const isLoading = !dataFetcher.data;
-  const isAutofilling = autofillFetcher.state !== "idle";
-  const bodyIsEmpty = dataFetcher.data
-    ? !(dataFetcher.data.body ?? "").trim()
-    : false;
-
-  const handleSave = () => {
-    saveFetcher
-      .submit(
-        { intent: "updateDescription", description: value },
-        { method: "post", action: `/api/videos/${videoId}/lesson-writer` }
-      )
-      .catch(() => {
-        toast.error("Failed to save the description");
-      });
-    onOpenChange(false);
-  };
+  const { state, dispatch } = useAutofillDescriptionReducer({
+    videoId,
+    open,
+    onOpenChange,
+  });
+  const value = state.description;
+  const isLoading = state.status === "unloaded" || state.status === "loading";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,14 +46,23 @@ export function AutofillDescriptionModal({
             <Loader2Icon className="size-4 animate-spin" />
             Loading…
           </div>
+        ) : state.status === "failed" ? (
+          <p className="py-10 text-center text-sm text-destructive">
+            Couldn't load the description. Close and try again.
+          </p>
         ) : (
           <div className="space-y-3 py-2">
             <Textarea
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "description-edited",
+                  description: e.target.value,
+                })
+              }
               placeholder="A short, compelling SEO description…"
               className="min-h-[120px] text-sm"
-              disabled={isAutofilling}
+              disabled={state.autofilling}
               autoFocus
             />
             <div className="flex items-center justify-between text-xs">
@@ -135,26 +76,24 @@ export function AutofillDescriptionModal({
               </span>
             </div>
 
-            {bodyIsEmpty && (
+            {state.bodyIsEmpty && (
               <p className="text-sm text-destructive">
                 The lesson body is empty. Write a lesson body before
                 autofilling.
               </p>
             )}
-            {autofillFetcher.data?.error && (
-              <p className="text-sm text-destructive">
-                {autofillFetcher.data.error}
-              </p>
+            {state.autofillError && (
+              <p className="text-sm text-destructive">{state.autofillError}</p>
             )}
 
             <div className="flex items-center justify-between">
               <Button
                 type="button"
                 variant="secondary"
-                onClick={handleAutofill}
-                disabled={bodyIsEmpty || isAutofilling}
+                onClick={() => dispatch({ type: "autofill-clicked", videoId })}
+                disabled={state.bodyIsEmpty || state.autofilling}
               >
-                {isAutofilling ? (
+                {state.autofilling ? (
                   <Loader2Icon className="mr-1 size-4 animate-spin" />
                 ) : (
                   <SparklesIcon className="mr-1 size-4" />
@@ -171,8 +110,8 @@ export function AutofillDescriptionModal({
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleSave}
-                  disabled={isAutofilling}
+                  onClick={() => dispatch({ type: "save-clicked", videoId })}
+                  disabled={state.autofilling}
                 >
                   Save
                 </Button>

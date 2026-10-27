@@ -8,8 +8,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ClipboardIcon } from "lucide-react";
-import { useFetcher } from "react-router";
-import { useEffect, useState, useRef } from "react";
+import { useVideoFilePasteReducer } from "./use-video-file-paste-reducer";
+import type { videoFilePasteReducer } from "./video-file-paste-reducer";
 
 export function VideoFilePasteModal(props: {
   videoId: string;
@@ -19,76 +19,19 @@ export function VideoFilePasteModal(props: {
   onFileCreated?: (path: string) => void;
   defaultTextFilename?: string;
 }) {
-  const fetcher = useFetcher<{ success: boolean; path: string }>();
-  const [path, setPath] = useState("");
-  const [pastedContent, setPastedContent] = useState<{
-    type: "text" | "image";
-    data: string;
-  } | null>(null);
-  const pasteAreaRef = useRef<HTMLDivElement>(null);
-  const pathInputRef = useRef<HTMLInputElement>(null);
+  const { state, dispatch, pasteAreaRef, pathInputRef } =
+    useVideoFilePasteReducer(props);
+  const pastedContent = state.pasted;
 
-  // Generate smart sequential path based on existing files
-  const generatePath = (type: "text" | "image"): string => {
-    const existingPaths = props.existingFiles.map((f) => f.path);
+  const contentPasted = (content: videoFilePasteReducer.PastedContent) =>
+    dispatch({
+      type: "content-pasted",
+      content,
+      existingPaths: props.existingFiles.map((f) => f.path),
+      defaultTextFilename: props.defaultTextFilename,
+    });
 
-    if (type === "image") {
-      // For images: diagram-1.png, diagram-2.png, etc.
-      let counter = 1;
-      while (existingPaths.includes(`diagram-${counter}.png`)) {
-        counter++;
-      }
-      return `diagram-${counter}.png`;
-    } else {
-      const baseName = props.defaultTextFilename || "notes.md";
-      const ext = baseName.endsWith(".md") ? ".md" : "";
-      const stem = ext ? baseName.slice(0, -ext.length) : baseName;
-      if (!existingPaths.includes(baseName)) {
-        return baseName;
-      }
-      let counter = 1;
-      while (existingPaths.includes(`${stem}-${counter}${ext}`)) {
-        counter++;
-      }
-      return `${stem}-${counter}${ext}`;
-    }
-  };
-
-  // Reset form when modal opens
-  useEffect(() => {
-    if (props.open) {
-      setPath("");
-      setPastedContent(null);
-      // Focus the paste area when modal opens
-      setTimeout(() => {
-        pasteAreaRef.current?.focus();
-      }, 100);
-    }
-  }, [props.open]);
-
-  // Auto-generate path when content is pasted and focus the path input
-  useEffect(() => {
-    if (pastedContent) {
-      const generatedPath = generatePath(pastedContent.type);
-      setPath(generatedPath);
-      // Focus the path input after a short delay to ensure it's rendered
-      setTimeout(() => {
-        pathInputRef.current?.focus();
-        pathInputRef.current?.select();
-      }, 100);
-    }
-  }, [pastedContent]);
-
-  // Handle successful file creation
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.success) {
-      const createdPath = fetcher.data.path;
-      props.onOpenChange(false);
-      props.onFileCreated?.(createdPath);
-    }
-  }, [fetcher.state, fetcher.data]);
-
-  const handlePaste = async (e: React.ClipboardEvent) => {
+  const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
 
     const clipboardData = e.clipboardData;
@@ -105,11 +48,7 @@ export function VideoFilePasteModal(props: {
           // Convert blob to base64
           const reader = new FileReader();
           reader.onload = () => {
-            const base64 = reader.result as string;
-            setPastedContent({
-              type: "image",
-              data: base64,
-            });
+            contentPasted({ type: "image", data: reader.result as string });
           };
           reader.readAsDataURL(blob);
           return;
@@ -119,31 +58,12 @@ export function VideoFilePasteModal(props: {
 
     // If no image, get text
     const text = clipboardData.getData("text/plain");
-    if (text) {
-      setPastedContent({
-        type: "text",
-        data: text,
-      });
-    }
+    if (text) contentPasted({ type: "text", data: text });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!pastedContent || !path) {
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("videoId", props.videoId);
-    formData.append("path", path);
-    formData.append("content", pastedContent.data);
-
-    fetcher.submit(formData, {
-      method: "post",
-      action: "/api/video-files/create",
-      encType: "multipart/form-data",
-    });
+    dispatch({ type: "create-clicked", videoId: props.videoId });
   };
 
   return (
@@ -191,7 +111,7 @@ export function VideoFilePasteModal(props: {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setPastedContent(null)}
+                  onClick={() => dispatch({ type: "paste-cleared" })}
                   className="text-xs"
                 >
                   Clear and paste again
@@ -203,8 +123,10 @@ export function VideoFilePasteModal(props: {
                   ref={pathInputRef}
                   id="path"
                   name="path"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
+                  value={state.path}
+                  onChange={(e) =>
+                    dispatch({ type: "path-edited", path: e.target.value })
+                  }
                   required
                 />
               </div>
@@ -219,11 +141,8 @@ export function VideoFilePasteModal(props: {
               Cancel
             </Button>
             {pastedContent && (
-              <Button
-                type="submit"
-                disabled={!path || fetcher.state === "submitting"}
-              >
-                {fetcher.state === "submitting" ? (
+              <Button type="submit" disabled={!state.path || state.creating}>
+                {state.creating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   "Create File"

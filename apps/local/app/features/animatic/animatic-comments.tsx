@@ -7,8 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useFetcher, useParams } from "react-router";
-import { toast } from "@/components/ui/toast";
+import { useParams } from "react-router";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
@@ -26,10 +25,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { groupCommentsByParent } from "./animatic-lines";
-import type {
-  ClipMockupCommentEvent,
-  ClipMockupCommentWriteResult,
-} from "@/routes/api.clip-mockup-comments";
+import type { AnimaticCommentTarget } from "./animatic-comment-thread-reducer";
+import {
+  useAnimaticCommentEditReducer,
+  useAnimaticCommentThreadReducer,
+} from "./use-animatic-comment-reducers";
 
 /**
  * Clip Mockup Comments in the Animatic's sidebar — the author's notes on one
@@ -57,10 +57,7 @@ export interface AnimaticComment {
   readonly body: string;
 }
 
-export type AnimaticCommentTarget = Extract<
-  ClipMockupCommentEvent,
-  { type: "create" }
->["target"];
+export type { AnimaticCommentTarget };
 
 const NO_COMMENTS: readonly AnimaticComment[] = [];
 
@@ -186,29 +183,6 @@ export function useStageComments(props: {
   } as const;
 }
 
-/** One place every write of a thread goes through. */
-function useCommentWriter() {
-  const fetcher = useFetcher<ClipMockupCommentWriteResult>();
-  // A refused write comes back as `fetcher.data` (`error` below); a rejected
-  // submit never reached the action, so it is reported here.
-  const submit = (event: ClipMockupCommentEvent) => {
-    fetcher
-      .submit(event, {
-        method: "post",
-        action: "/api/clip-mockup-comments",
-        encType: "application/json",
-      })
-      .catch(() => {
-        toast.error("Failed to save the comment");
-      });
-  };
-  const error =
-    fetcher.state === "idle" && fetcher.data && !fetcher.data.ok
-      ? fetcher.data.message
-      : null;
-  return { submit, error, busy: fetcher.state !== "idle" };
-}
-
 /**
  * The badge (or the hover-only add icon) and the thread behind it. The caller
  * places it: it is drawn beside the row's own button, never inside it, since a
@@ -231,33 +205,20 @@ export function AnimaticCommentThread(props: {
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }) {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = props.open ?? ownOpen;
-  // Captured in render, not in `onOpenChange`, so a thread opened from
-  // outside freezes its target too.
-  const [openTarget, setOpenTarget] = useState<AnimaticCommentTarget | null>(
-    null
-  );
-  if (open && openTarget === null) setOpenTarget(props.target);
-  if (!open && openTarget !== null) setOpenTarget(null);
-  const target = (open && openTarget) || props.target;
+  const { state, dispatch, writer, open, target } =
+    useAnimaticCommentThreadReducer({ open: props.open, target: props.target });
   const comments = useCommentsOn(target);
-  const [draft, setDraft] = useState("");
   const draftRef = useRef<HTMLTextAreaElement>(null);
-  const writer = useCommentWriter();
   const stage = props.variant === "stage";
+  const draft = state.draft;
 
   const onOpenChange = (next: boolean) => {
     if (next) props.onOpen?.();
-    setOwnOpen(next);
+    dispatch({ type: "popover-toggled", open: next });
     props.onOpenChange?.(next);
   };
 
-  const add = () => {
-    if (draft.trim() === "") return;
-    writer.submit({ type: "create", target, body: draft.trim() });
-    setDraft("");
-  };
+  const add = () => dispatch({ type: "comment-submitted" });
 
   const label =
     comments.length > 0
@@ -335,7 +296,9 @@ export function AnimaticCommentThread(props: {
             value={draft}
             placeholder="Add a comment for the filming day…"
             className="min-h-16 text-sm"
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: "draft-edited", draft: e.target.value })
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -366,9 +329,7 @@ export function AnimaticCommentThread(props: {
  * button: edit first, delete last and on its own.
  */
 function CommentItem(props: { readonly comment: AnimaticComment }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(props.comment.body);
-  const writer = useCommentWriter();
+  const { state, dispatch, writer } = useAnimaticCommentEditReducer();
   const videoId = useVideoIdParam();
   const entity = {
     type: "clip-mockup-comment",
@@ -376,14 +337,13 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
     videoId,
   } as const;
 
-  const save = () => {
-    const body = draft.trim();
-    if (body === "") return;
-    if (body !== props.comment.body) {
-      writer.submit({ type: "update", commentId: props.comment.id, body });
-    }
-    setEditing(false);
-  };
+  const save = () =>
+    dispatch({
+      type: "edit-saved",
+      commentId: props.comment.id,
+      body: props.comment.body,
+    });
+  const cancel = () => dispatch({ type: "edit-cancelled" });
 
   const groups: ActionMenuGroups = {
     edit: [
@@ -391,29 +351,29 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
         ...STANDARD_ACTIONS.edit,
         // The draft starts from the body as it is NOW, which a poll may have
         // changed since this comment first rendered.
-        onSelect: () => {
-          setDraft(props.comment.body);
-          setEditing(true);
-        },
+        onSelect: () =>
+          dispatch({ type: "edit-clicked", body: props.comment.body }),
       },
     ],
     danger: [
       {
         ...STANDARD_ACTIONS.delete,
         onSelect: () =>
-          writer.submit({ type: "delete", commentId: props.comment.id }),
+          dispatch({ type: "delete-clicked", commentId: props.comment.id }),
       },
     ],
   };
 
-  if (editing) {
+  if (state.editing) {
     return (
       <li className="flex flex-col gap-2 p-3">
         <Textarea
           autoFocus
-          value={draft}
+          value={state.draft}
           className="min-h-16 text-sm"
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) =>
+            dispatch({ type: "edit-draft-edited", draft: e.target.value })
+          }
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
@@ -422,23 +382,15 @@ function CommentItem(props: { readonly comment: AnimaticComment }) {
             if (e.key === "Escape") {
               e.preventDefault();
               e.stopPropagation();
-              setDraft(props.comment.body);
-              setEditing(false);
+              cancel();
             }
           }}
         />
         <div className="flex justify-end gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setDraft(props.comment.body);
-              setEditing(false);
-            }}
-          >
+          <Button size="sm" variant="ghost" onClick={cancel}>
             Cancel
           </Button>
-          <Button size="sm" disabled={draft.trim() === ""} onClick={save}>
+          <Button size="sm" disabled={state.draft.trim() === ""} onClick={save}>
             Save
           </Button>
         </div>

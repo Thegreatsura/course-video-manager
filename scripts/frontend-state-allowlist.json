@@ -1,11 +1,6 @@
 {
   "use-state": [
     {
-      "file": "apps/local/app/features/animatic/animatic-comments.tsx",
-      "count": 6,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
-    },
-    {
       "file": "apps/local/app/features/diagrams/palette/use-palette.ts",
       "count": 9,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 8."
@@ -19,28 +14,13 @@
       "file": "apps/local/app/features/video-posting/social-page.tsx",
       "count": 5,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 9."
-    },
-    {
-      "file": "apps/local/app/routes/_app.pitches.$pitchId.tsx",
-      "count": 7,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
     }
   ],
   "effect-sets-state": [
     {
-      "file": "apps/local/app/components/video-file-paste-modal.tsx",
-      "count": 2,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
-    },
-    {
       "file": "apps/local/app/features/diagrams/palette/use-palette.ts",
       "count": 3,
       "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 8."
-    },
-    {
-      "file": "apps/local/app/features/lesson-writer/autofill-description-modal.tsx",
-      "count": 2,
-      "reason": "Pre-dates the guard. Migrates in docs/plans/reducer-migration.md, batch 6."
     },
     {
       "file": "apps/local/app/features/video-editor/components/recording-session-panel.tsx",
