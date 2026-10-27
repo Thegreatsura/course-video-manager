@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useFetcher, useRevalidator } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { postConfirmed } from "@/lib/post-confirmed";
 import { WriterModal } from "@/features/article-writer/writer-modal";
 import { toWriterContext } from "@/features/article-writer/use-writer-context";
@@ -37,7 +38,9 @@ export function LessonBodyWriterModal({
 
   useEffect(() => {
     if (open && dataFetcher.state === "idle" && !dataFetcher.data) {
-      dataFetcher.load(`/api/videos/${videoId}/lesson-writer`);
+      dataFetcher.load(`/api/videos/${videoId}/lesson-writer`).catch(() => {
+        toast.error("Failed to load the lesson body");
+      });
     }
   }, [open, videoId, dataFetcher]);
 

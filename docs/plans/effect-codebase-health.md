@@ -200,6 +200,26 @@ The two promise rules ratchet per directory with `overrides`, for example once
 >   handled-in-the-handler shape as `toast.tsx`'s Copy button, with a test.
 >   Re-measured: 113 / 80 warnings (193). Next smallest: `features/pitches`
 >   1, `features/publish` 1, `hooks` 3 (`features/animatic` 3 too).
+> - **Per-directory pass 2 (2026-10-27): every directory at 5 or fewer
+>   promoted.** Re-measured on main at 167 (101 floating / 66 misused); the
+>   193 above was oxlint's whole warning count, not just these two rules.
+>   Fixed and promoted: `features/pitches` 1, `features/publish` 2,
+>   `features/animatic` 3, `hooks` 3, `features/lesson-writer` 4,
+>   `features/article-writer` 5, `features/deliverables-calendar` 5,
+>   `apps/local/chrome-extension` 2, `apps/local/scripts` 1, and the loose
+>   files `app/root.tsx` 1 and `apps/local/playground.ts` 1. No `void`: each
+>   fetcher, revalidate or navigate promise `.catch`es with a toast saying
+>   what failed, the `job-toasts.ts` shape. The writer's Copy and Paste
+>   buttons now go through `article-writer/clipboard.ts`, which toasts a
+>   denied clipboard (Paste used to swallow it; Copy used to show "Copied"
+>   regardless), with a test. Async handlers given to `onClick`,
+>   `createServer` and Chrome's listeners became sync functions that handle
+>   their own rejection. The override is now inverted: the two rules are
+>   errors at the root and `overrides` lists only the backlog, at warn, so a
+>   new directory starts clean. Remaining, smallest first:
+>   `features/course-view` 9, `features/video-editor` 11,
+>   `features/diagrams` 12, `components` 19, `features/video-posting` 22,
+>   `.tsx` routes 66 (139).
 
 **Phase 3 — custom guards.** Add `scripts/check-effect-boundaries.sh` in the
 style of the existing guards.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useFetcher } from "react-router";
+import { toast } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -41,19 +42,25 @@ export function AutofillDescriptionModal({
 
   useEffect(() => {
     if (open && dataFetcher.state === "idle" && !dataFetcher.data) {
-      dataFetcher.load(`/api/videos/${videoId}/lesson-writer`);
+      dataFetcher.load(`/api/videos/${videoId}/lesson-writer`).catch(() => {
+        toast.error("Failed to load the description");
+      });
     }
   }, [open, videoId, dataFetcher]);
 
   const handleAutofill = useCallback(() => {
-    autofillFetcher.submit(
-      {},
-      {
-        method: "post",
-        action: `/api/videos/${videoId}/autofill-description`,
-        encType: "application/json",
-      }
-    );
+    autofillFetcher
+      .submit(
+        {},
+        {
+          method: "post",
+          action: `/api/videos/${videoId}/autofill-description`,
+          encType: "application/json",
+        }
+      )
+      .catch(() => {
+        toast.error("Failed to autofill the description");
+      });
   }, [autofillFetcher, videoId]);
 
   // Auto-trigger the Autofill when the description is empty and the body has content.
@@ -84,10 +91,14 @@ export function AutofillDescriptionModal({
     : false;
 
   const handleSave = () => {
-    saveFetcher.submit(
-      { intent: "updateDescription", description: value },
-      { method: "post", action: `/api/videos/${videoId}/lesson-writer` }
-    );
+    saveFetcher
+      .submit(
+        { intent: "updateDescription", description: value },
+        { method: "post", action: `/api/videos/${videoId}/lesson-writer` }
+      )
+      .catch(() => {
+        toast.error("Failed to save the description");
+      });
     onOpenChange(false);
   };
 

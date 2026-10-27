@@ -1,5 +1,6 @@
 import { useContext } from "react";
 import { useNavigate, useRevalidator } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { useEffectReducer } from "use-effect-reducer";
 import { UploadContext } from "@/features/upload-manager/upload-context";
 import {
@@ -43,7 +44,9 @@ export function usePublishPageReducer() {
       );
     },
     "open-course": (_state, effect) => {
-      navigate(`/courses/${effect.courseId}`);
+      Promise.resolve(navigate(`/courses/${effect.courseId}`)).catch(() => {
+        toast.error("Failed to open the course");
+      });
     },
     "revalidate-readiness": () => {
       void revalidator.revalidate();

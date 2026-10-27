@@ -1,4 +1,5 @@
 import { useRevalidator } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { useEffect } from "react";
 
 interface UseFocusRevalidateOptions {
@@ -29,7 +30,9 @@ export function useFocusRevalidate(options: UseFocusRevalidateOptions = {}) {
     const abortController = new AbortController();
 
     const revalidate = () => {
-      revalidator.revalidate();
+      revalidator.revalidate().catch(() => {
+        toast.error("Failed to refresh the page");
+      });
     };
 
     document.addEventListener(

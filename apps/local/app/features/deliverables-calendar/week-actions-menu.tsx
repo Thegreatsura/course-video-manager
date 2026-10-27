@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useFetcher } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { ActionMenuContent } from "@/features/action-menu/action-menu";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
@@ -25,10 +26,14 @@ export function WeekContextMenu({
     if (count === 0) return;
     const fd = new FormData();
     for (const item of items) fd.append("ids", item.id);
-    fetcher.submit(fd, {
-      method: "post",
-      action: "/api/deliverables/duplicate-week",
-    });
+    fetcher
+      .submit(fd, {
+        method: "post",
+        action: "/api/deliverables/duplicate-week",
+      })
+      .catch(() => {
+        toast.error("Failed to duplicate the week");
+      });
   };
 
   return (

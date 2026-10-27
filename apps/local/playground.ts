@@ -26,4 +26,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error("Error:", err);
+  process.exitCode = 1;
+});

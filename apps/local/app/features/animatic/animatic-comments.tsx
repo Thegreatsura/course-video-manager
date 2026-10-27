@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useFetcher, useParams } from "react-router";
+import { toast } from "@/components/ui/toast";
 import { EntityMenuContent } from "@/features/action-menu/action-menu";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
@@ -188,12 +189,19 @@ export function useStageComments(props: {
 /** One place every write of a thread goes through. */
 function useCommentWriter() {
   const fetcher = useFetcher<ClipMockupCommentWriteResult>();
-  const submit = (event: ClipMockupCommentEvent) =>
-    fetcher.submit(event, {
-      method: "post",
-      action: "/api/clip-mockup-comments",
-      encType: "application/json",
-    });
+  // A refused write comes back as `fetcher.data` (`error` below); a rejected
+  // submit never reached the action, so it is reported here.
+  const submit = (event: ClipMockupCommentEvent) => {
+    fetcher
+      .submit(event, {
+        method: "post",
+        action: "/api/clip-mockup-comments",
+        encType: "application/json",
+      })
+      .catch(() => {
+        toast.error("Failed to save the comment");
+      });
+  };
   const error =
     fetcher.state === "idle" && fetcher.data && !fetcher.data.ok
       ? fetcher.data.message
