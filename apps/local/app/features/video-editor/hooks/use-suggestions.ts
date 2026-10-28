@@ -108,6 +108,8 @@ export function useSuggestions(input: {
         notes: readStored(notesKey(input.videoId)) ?? "",
         pickedFiles: readPickedFiles(input.videoId),
         previousVideoClips: input.previousVideoClips,
+        // Opened on the tab: wait for Refresh rather than ask (#2415).
+        openedOnTab: input.open,
       });
     },
     {

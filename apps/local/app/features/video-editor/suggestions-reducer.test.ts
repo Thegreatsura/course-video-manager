@@ -446,4 +446,44 @@ describe("the Suggestions tab", () => {
       expect(t.getEffects()).toEqual([]);
     });
   });
+
+  it("a Video that opens on the tab asks nothing and keeps the Script until Refresh; clicking the tab open still asks", () => {
+    const t = new ReducerTester(
+      suggestionsStateReducer,
+      createInitialSuggestionsState({
+        videoId: "v1",
+        included: ALL_SOURCES_INCLUDED,
+        notes: "",
+        pickedFiles: [],
+        openedOnTab: true,
+      })
+    );
+    vi.mocked(t.getExec()).mockReturnValue(runningStream);
+    t.send({ type: "editor-context-changed", context: context() })
+      .send({ type: "suggestions-tab-opened" })
+      .send({ type: "script-loaded", videoId: "v1", script: "Intro line." })
+      .send({
+        type: "editor-context-changed",
+        context: context({ transcribedClipIds: ["c1", "c2"] }),
+      });
+    expect(
+      t.getEffects().filter((e) => e.type === "stream-suggestion")
+    ).toEqual([]);
+    expect(getTeleprompterSuggestion(t.getState())).toBeNull();
+
+    t.send({ type: "refresh-clicked" });
+    expect(t.getEffects().at(-1)).toMatchObject({
+      type: "stream-suggestion",
+      requestId: 1,
+    });
+
+    // Closed and clicked open again: asks at once, as ever.
+    t.resetExec()
+      .send({ type: "suggestions-tab-closed" })
+      .send({ type: "suggestions-tab-opened" });
+    expect(t.getEffects().at(-1)).toMatchObject({
+      type: "stream-suggestion",
+      requestId: 2,
+    });
+  });
 });

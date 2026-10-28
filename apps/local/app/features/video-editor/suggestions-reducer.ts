@@ -18,6 +18,10 @@
  *     ever shows.
  *   - Closing the tab stops the stream and forgets the suggestion, so the
  *     teleprompter goes back to the Script.
+ *   - A Video that OPENS on the tab (the tab is remembered across Videos)
+ *     asks nothing and leaves the teleprompter on the Script until Refresh
+ *     (#2415), so moving to the next Video never starts a model call by
+ *     itself. Clicking the tab open still asks at once.
  *
  * Which sources are ticked is one global choice, not one per Video. A ticked
  * source this Video doesn't have is simply not sent; the tick is kept.
@@ -96,6 +100,11 @@ export namespace suggestionsReducer {
   export interface State {
     videoId: string;
     open: boolean;
+    /**
+     * The editor opened on this tab: nothing asks, and the teleprompter keeps
+     * the Script, until Refresh.
+     */
+    awaitingRefresh: boolean;
     included: Included;
     /** `null` until the first load comes back. */
     script: string | null;
@@ -183,9 +192,12 @@ export const createInitialSuggestionsState = (input: {
   notes: string;
   pickedFiles: string[];
   previousVideoClips?: string[];
+  /** The editor opened on the Suggestions tab, remembered from another Video. */
+  openedOnTab?: boolean;
 }): State => ({
   videoId: input.videoId,
-  open: false,
+  open: input.openedOnTab ?? false,
+  awaitingRefresh: input.openedOnTab ?? false,
   included: input.included,
   script: null,
   notes: input.notes,
@@ -291,7 +303,7 @@ export type TeleprompterSuggestion = {
 export const getTeleprompterSuggestion = (
   state: State
 ): TeleprompterSuggestion | null =>
-  state.open && state.status !== "failed"
+  state.open && !state.awaitingRefresh && state.status !== "failed"
     ? {
         id: state.requestId ?? 0,
         text: getSuggestionText(state),
@@ -323,7 +335,8 @@ const ask = (state: State, exec: Exec): State => {
 };
 
 /** Asking only makes sense with the tab open and the Script in hand. */
-const canAsk = (state: State) => state.open && state.script !== null;
+const canAsk = (state: State) =>
+  state.open && !state.awaitingRefresh && state.script !== null;
 
 /**
  * Whether `next` can ask and would send something other than `prev` did: a
@@ -369,6 +382,7 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
       return {
         ...state,
         open: false,
+        awaitingRefresh: false,
         status: "idle",
         text: "",
         requestId: null,
@@ -405,8 +419,10 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
       return canAsk(next) ? ask(next, exec) : next;
     }
 
-    case "refresh-clicked":
-      return canAsk(state) ? ask(state, exec) : state;
+    case "refresh-clicked": {
+      const next = { ...state, awaitingRefresh: false };
+      return canAsk(next) ? ask(next, exec) : next;
+    }
 
     case "notes-edited": {
       exec({

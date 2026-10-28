@@ -21,8 +21,8 @@ export const BEAT_TABS: readonly BeatTab[] = [
 /**
  * Where the author's last tab choice is kept: ONE key for every Video, so
  * moving to the previous or next Video keeps the tab they were on (#2415).
- * Suggestions is remembered too, so a Video opened on it asks for a
- * Suggestion at once. A stored value this app no longer knows (a `mockups`
+ * Suggestions is remembered too; a Video opened on it waits for Refresh
+ * before it asks the model (see `suggestions-reducer.ts`). A stored value this app no longer knows (a `mockups`
  * tab from before that tab went away) reads back as Script.
  */
 export const BEAT_TAB_STORAGE_KEY = "video-editor:side-panel-tab";

@@ -170,7 +170,11 @@ export function SuggestionsPanel(props: {
             <RefreshCwIcon className={cn("size-3.5", busy && "animate-spin")} />
           </Button>
         </div>
-        {state.status === "failed" ? (
+        {state.awaitingRefresh ? (
+          <p className="text-sm text-muted-foreground">
+            Press Refresh for a suggestion.
+          </p>
+        ) : state.status === "failed" ? (
           <p className="flex items-start gap-2 text-sm text-red-400">
             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
             The suggestion failed. Refresh to try again.
