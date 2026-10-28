@@ -140,6 +140,26 @@ const createClipMockupOperations = (db: Database) => {
         );
 
   /**
+   * Which of these Videos have at least one non-archived Clip Mockup — the
+   * Videos the Animatic's keys can walk to. One distinct read over the whole
+   * Course, so it stays cheap on a page that polls.
+   */
+  const listVideoIdsWithClipMockups = (videoIds: readonly string[]) =>
+    videoIds.length === 0
+      ? Effect.succeed([] as string[])
+      : makeDbCall(() =>
+          db
+            .selectDistinct({ videoId: clipMockups.videoId })
+            .from(clipMockups)
+            .where(
+              and(
+                inArray(clipMockups.videoId, [...videoIds]),
+                eq(clipMockups.archived, false)
+              )
+            )
+        ).pipe(Effect.map((rows) => rows.map((row) => row.videoId)));
+
+  /**
    * The Clip Mockups with these ids, archived or not — the caller decides
    * what an archived one means. Missing ids are simply absent.
    */
@@ -440,6 +460,7 @@ const createClipMockupOperations = (db: Database) => {
   return {
     listClipMockupsByVideoId,
     listClipMockupDurationsByVideoIds,
+    listVideoIdsWithClipMockups,
     listAnimaticExportRowsByVideoIds,
     getClipMockupById: requireClipMockup,
     getClipMockupsByIds,
