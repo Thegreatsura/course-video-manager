@@ -44,4 +44,39 @@ describe("the still queue", () => {
     tester.send({ type: "still-settled", ticket: "clip-3" });
     expect(tester.getState().loading).toEqual(["clip-4", "clip-6"]);
   });
+
+  it("admits no still while a Clip's video loads, so the videos always get the connections first", () => {
+    const tester = new ReducerTester(
+      stillQueueReducer,
+      createInitialStillQueueState()
+    );
+    // The editor opens: the current Clip's mic, camera and screen start
+    // loading before any still mounts (they count in a layout effect).
+    for (const video of ["mic", "camera", "screen"]) {
+      tester.send({ type: "video-loading", ticket: video });
+    }
+    for (const ticket of tickets) {
+      tester.send({ type: "still-mounted", ticket });
+    }
+    expect(admitted(tester.getState())).toEqual([]);
+
+    // Chrome pauses between one load's range requests with only metadata
+    // in hand: that is still loading.
+    tester.send({ type: "video-suspended", ticket: "camera", readyState: 1 });
+    tester.send({ type: "video-can-play", ticket: "mic" });
+    tester.send({ type: "video-failed", ticket: "screen" });
+    expect(admitted(tester.getState())).toEqual([]);
+
+    // Stopped fetching with a frame in hand: done, and the stills go.
+    tester.send({ type: "video-suspended", ticket: "camera", readyState: 2 });
+    expect(admitted(tester.getState())).toEqual(["clip-0", "clip-1"]);
+
+    // A video that stalls holds the next still back until it can play again;
+    // the stills already in flight finish.
+    tester.send({ type: "video-loading", ticket: "screen" });
+    tester.send({ type: "still-settled", ticket: "clip-0" });
+    expect(tester.getState().loading).toEqual(["clip-1"]);
+    tester.send({ type: "video-unmounted", ticket: "screen" });
+    expect(tester.getState().loading).toEqual(["clip-1", "clip-2"]);
+  });
 });

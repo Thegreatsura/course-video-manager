@@ -4,6 +4,7 @@ import { CANVASES, type SceneSegment } from "@/packages/scene-layout";
 import { cn } from "@/lib/utils";
 import { drawComposite, type CompositeSourceFrame } from "../draw-composite";
 import { useCompositePlayback } from "../use-composite-playback";
+import { useStillsWaitForVideo } from "./queued-still";
 
 const CAMERA_ONLY = ["camera"] as const;
 const CAMERA_AND_SCREEN = ["camera", "screen"] as const;
@@ -54,6 +55,8 @@ export const CompositePlayback = (props: {
     sources: props.picture.screen === null ? CAMERA_ONLY : CAMERA_AND_SCREEN,
     editorPlaying: props.editorPlaying,
   });
+  useStillsWaitForVideo(camera, props.picture.camera);
+  useStillsWaitForVideo(screen, props.picture.screen);
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
