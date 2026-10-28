@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { WriterEngine, type WriterContext } from "./writer-engine";
 import { formatVideoBreadcrumb } from "@/lib/video-breadcrumb";
 import type { Mode, WriterView } from "./types";
+import type { MoreToggleProps } from "./apply-button";
 import type { WriterFieldId } from "./writer-engine-utils";
 import {
   FIELD_LABELS,
@@ -33,6 +34,14 @@ export interface WriterModalProps {
    * is confirmed, reject if it failed; the modal closes only after it resolves.
    */
   onApply: (finalValue: string) => Promise<void>;
+  /**
+   * The applied value is saved. When set, the host decides what happens next
+   * (the Lesson Body writer's "More?" moves on to the next Video); when not,
+   * the modal closes.
+   */
+  onApplied?: () => void;
+  /** When set, a "More?" checkbox sits beside Apply. */
+  more?: MoreToggleProps;
   /** When set, the modal's Repo Files tab shows an "add from clipboard" button. */
   onAddFileFromClipboard?: () => void;
   /** Other fields on the same page, offered as toggleable AI context. */
@@ -61,6 +70,8 @@ export function WriterModal({
   context,
   label,
   onApply,
+  onApplied,
+  more,
   onAddFileFromClipboard,
   pageFields,
   view: viewProp,
@@ -108,9 +119,10 @@ export function WriterModal({
     (finalValue: string) => {
       workingValueRef.current = finalValue;
       setIsDirty(false);
-      onOpenChange(false);
+      if (onApplied) onApplied();
+      else onOpenChange(false);
     },
-    [onOpenChange]
+    [onApplied, onOpenChange]
   );
 
   const handleCancel = useCallback(() => {
@@ -186,6 +198,7 @@ export function WriterModal({
               onCancel={handleRequestClose}
               onApply={onApply}
               onApplied={handleApplied}
+              more={more}
               onAddFileFromClipboard={onAddFileFromClipboard}
               pageFields={pageFields}
             />

@@ -43,8 +43,9 @@ const DIRECTIONS = {
 } as const;
 
 /** Videos inside a Lesson are ordered by title, everywhere a walk looks. */
-const byTitle = <T extends { title: string }>(videos: ReadonlyArray<T>): T[] =>
-  [...videos].sort((a, b) => a.title.localeCompare(b.title));
+export const byTitle = <T extends { title: string }>(
+  videos: ReadonlyArray<T>
+): T[] => [...videos].sort((a, b) => a.title.localeCompare(b.title));
 
 export const createVideoNavigationOps = (deps: VideoNavigationDeps) => {
   const { getCourseNavigationData } = deps;

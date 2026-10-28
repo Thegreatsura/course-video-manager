@@ -1,6 +1,13 @@
 import { DrizzleService, type Database } from "./drizzle-service.server.js";
 import { CourseOperationsService } from "./db-course-operations.server.js";
-import { clips, chapters, videos, clipWebLinks } from "../db/schema.js";
+import {
+  clips,
+  chapters,
+  videos,
+  clipWebLinks,
+  sections,
+  lessons,
+} from "../db/schema.js";
 import {
   NotFoundError,
   UnknownDBServiceError,
@@ -22,6 +29,7 @@ import {
 import { clipRecordingSessionRelation } from "./clip-recording-session-relation.js";
 import { overlayExportRelation } from "./db-overlay-operations.server.js";
 import {
+  byTitle,
   createVideoNavigationOps,
   type VideoNavigationDeps,
 } from "./db-video-navigation.server.js";
@@ -324,6 +332,64 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
     return video;
   });
 
+  /**
+   * The Article Writer's "More?": the next Video after this one, in course
+   * order (Section, Lesson, then Video title) inside this Video's own Course
+   * Version, that still needs its Body written: the Body is empty or only
+   * whitespace, and it has at least one live Clip. Archived Sections, Lessons,
+   * Videos and Clips are skipped. Never wraps; `null` once none is left, or
+   * for a Standalone Video.
+   */
+  const getNextVideoNeedingBody = Effect.fn("getNextVideoNeedingBody")(
+    function* (videoId: string) {
+      const current = yield* getVideoWithLessonById(videoId);
+      if (!current.lesson) return null;
+      const repoVersionId = current.lesson.section.repoVersionId;
+
+      const versionSections = yield* makeDbCall(() =>
+        db.query.sections.findMany({
+          where: and(
+            eq(sections.repoVersionId, repoVersionId),
+            isNull(sections.archivedAt)
+          ),
+          orderBy: asc(sections.order),
+          columns: { id: true },
+          with: {
+            lessons: {
+              where: eq(lessons.archived, false),
+              orderBy: asc(lessons.order),
+              columns: { id: true },
+              with: {
+                videos: {
+                  where: eq(videos.archived, false),
+                  columns: { id: true, title: true, body: true },
+                  with: {
+                    clips: {
+                      where: eq(clips.archived, false),
+                      columns: { id: true },
+                      limit: 1,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+      );
+
+      const inCourseOrder = versionSections.flatMap((section) =>
+        section.lessons.flatMap((lesson) => byTitle(lesson.videos))
+      );
+      const currentIndex = inCourseOrder.findIndex((v) => v.id === videoId);
+      if (currentIndex === -1) return null;
+
+      const next = inCourseOrder
+        .slice(currentIndex + 1)
+        .find((v) => (v.body ?? "").trim() === "" && v.clips.length > 0);
+      return next?.id ?? null;
+    }
+  );
+
   const createVideo = Effect.fn("createVideo")(function* (
     lessonId: string,
     video: {
@@ -566,6 +632,7 @@ const createVideoOperationsUnwrapped = (db: Database, deps: VideoOpsDeps) => {
     getArchivedStandaloneVideos,
     getVideoWithClipsById,
     getVideoWithLessonById,
+    getNextVideoNeedingBody,
     getVideoScriptsByIds,
     createVideo,
     createStandaloneVideo,
