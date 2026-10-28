@@ -234,7 +234,6 @@
         "apps/local/app/features/entity-links/entity-deep-link.ts",
         "apps/local/app/features/jobs/job-event-actions.ts",
         "apps/local/app/features/jobs/job-video-toasts.ts",
-        "apps/local/app/features/jobs/jobs-reducer.ts",
         "apps/local/app/features/jobs/jobs-selectors.ts",
         "apps/local/app/features/storage/bucket-page-reducer.ts",
         "apps/local/app/features/storage/storage-action.ts",

@@ -6,14 +6,11 @@ import {
   type WireJob,
 } from "./job-wire";
 import { toJobsAction } from "./job-event-actions";
-import { applyStreamAction } from "./jobs-fold";
-import { announceVideoSettled } from "./job-video-toasts";
 import type { SucceededToast } from "./job-succeeded-toast";
-import { announceSettled, loadStageHistory } from "./jobs-settled";
 import { isFinishedJob, jobIdOfRow, reduceDismissal } from "./jobs-dismissal";
 import { reduceEnqueueOutcome, requestedJobView } from "./jobs-enqueue";
 import { reduceCancel } from "./jobs-cancel";
-import { foldJobEvents, recordClockSkew, timeJobEvent } from "./jobs-timing";
+import { reduceSnapshotReceived, reduceStreamAction } from "./jobs-stream";
 import { stageHistoryFrom, type HistoryData } from "./job-stage-history";
 import type { UploadTiming } from "@/features/upload-manager/upload-timing";
 export { ENQUEUE_UNCONFIRMED_MESSAGE } from "./jobs-enqueue";
@@ -375,117 +372,115 @@ export const createInitialJobsState = (): jobsReducer.State => ({
 export const batchVideoRowId = (jobId: string, videoId: string) =>
   `${jobId}/${videoId}`;
 
+type Exec = Parameters<
+  EffectReducer<jobsReducer.State, jobsReducer.Action, jobsReducer.Effect>
+>[2];
+
+type ActionOf<T extends jobsReducer.Action["type"]> = Extract<
+  jobsReducer.Action,
+  { type: T }
+>;
+
+const reduceJobRequested = (
+  state: jobsReducer.State,
+  action: ActionOf<"job-requested">,
+  exec: Exec
+): jobsReducer.State => {
+  const enqueue: jobsReducer.EnqueueJobEffect = {
+    type: "enqueue-job",
+    id: action.id,
+    kind: action.kind,
+    title: action.title,
+    params: action.params,
+    subject: action.subject,
+    attemptsSpent: action.attemptsSpent,
+    dependsOn: action.dependsOn,
+    checks: 0,
+    afterMs: 0,
+  };
+  // The server refuses a `dependsOn` it has not seen yet.
+  const parent = action.dependsOn ? state.jobs[action.dependsOn] : null;
+  const hold = parent !== null && parent !== undefined && !parent.enqueued;
+  let held = state.held;
+  if (hold && action.dependsOn) {
+    held = {
+      ...held,
+      [action.dependsOn]: [...(held[action.dependsOn] ?? []), enqueue],
+    };
+  } else {
+    exec(enqueue);
+  }
+  if (state.sidecar === "not-running") {
+    exec({ type: "show-sidecar-not-running-toast", title: action.title });
+  }
+  return {
+    ...state,
+    held,
+    jobs: {
+      ...state.jobs,
+      [action.id]: requestedJobView(action),
+    },
+  };
+};
+
+const reducePressRetry = (
+  state: jobsReducer.State,
+  action: ActionOf<"press-retry">,
+  exec: Exec
+): jobsReducer.State => {
+  const job = state.jobs[action.id];
+  if (
+    !job ||
+    !isPostingJobKind(job.kind) ||
+    (job.status !== "failed" && job.status !== "interrupted")
+  ) {
+    return state;
+  }
+  exec({ type: "retry-job", id: job.id, attempt: job.attempt });
+  return state;
+};
+
+const reduceRetryFailed = (
+  state: jobsReducer.State,
+  action: ActionOf<"retry-failed">,
+  exec: Exec
+): jobsReducer.State => {
+  const job = state.jobs[action.id];
+  if (!job) return state;
+  exec({
+    type: "show-retry-failed-toast",
+    title: job.title,
+    message: action.message,
+  });
+  return state;
+};
+
 export const jobsReducer: EffectReducer<
   jobsReducer.State,
   jobsReducer.Action,
   jobsReducer.Effect
 > = (state, action, exec) => {
   switch (action.type) {
-    case "job-requested": {
-      const enqueue: jobsReducer.EnqueueJobEffect = {
-        type: "enqueue-job",
-        id: action.id,
-        kind: action.kind,
-        title: action.title,
-        params: action.params,
-        subject: action.subject,
-        attemptsSpent: action.attemptsSpent,
-        dependsOn: action.dependsOn,
-        checks: 0,
-        afterMs: 0,
-      };
-      // The server refuses a `dependsOn` it has not seen yet.
-      const parent = action.dependsOn ? state.jobs[action.dependsOn] : null;
-      const hold = parent !== null && parent !== undefined && !parent.enqueued;
-      let held = state.held;
-      if (hold && action.dependsOn) {
-        held = {
-          ...held,
-          [action.dependsOn]: [...(held[action.dependsOn] ?? []), enqueue],
-        };
-      } else {
-        exec(enqueue);
-      }
-      if (state.sidecar === "not-running") {
-        exec({ type: "show-sidecar-not-running-toast", title: action.title });
-      }
-      return {
-        ...state,
-        held,
-        jobs: {
-          ...state.jobs,
-          [action.id]: requestedJobView(action),
-        },
-      };
-    }
+    case "job-requested":
+      return reduceJobRequested(state, action, exec);
 
     case "enqueue-succeeded":
     case "enqueue-failed":
     case "enqueue-unanswered":
       return reduceEnqueueOutcome(state, action, exec);
 
-    case "press-retry": {
-      const job = state.jobs[action.id];
-      if (
-        !job ||
-        !isPostingJobKind(job.kind) ||
-        (job.status !== "failed" && job.status !== "interrupted")
-      ) {
-        return state;
-      }
-      exec({ type: "retry-job", id: job.id, attempt: job.attempt });
-      return state;
-    }
+    case "press-retry":
+      return reducePressRetry(state, action, exec);
 
     case "press-cancel":
     case "cancel-failed":
       return reduceCancel(state, action, exec);
 
-    case "retry-failed": {
-      const job = state.jobs[action.id];
-      if (!job) return state;
-      exec({
-        type: "show-retry-failed-toast",
-        title: job.title,
-        message: action.message,
-      });
-      return state;
-    }
+    case "retry-failed":
+      return reduceRetryFailed(state, action, exec);
 
-    case "job-snapshot-received": {
-      const jobs: Record<string, jobsReducer.JobView> = {};
-      let timings: Record<string, UploadTiming> = {};
-      for (const { job, events } of action.snapshot.jobs) {
-        const folded = foldJobEvents(job, events);
-        const view = folded.view;
-        jobs[job.id] = view;
-        timings = { ...timings, ...folded.timings };
-        // A Job this tab was following settled while it was not listening:
-        // that is still news, to the author and to anything waiting on it.
-        const before = state.jobs[job.id];
-        if (before && !isFinishedJob(before) && isFinishedJob(view)) {
-          announceSettled(exec, view);
-        }
-      }
-      // A request still on its way to the server is not in any snapshot yet.
-      for (const job of Object.values(state.jobs)) {
-        if (job.status === "requested" && !jobs[job.id]) jobs[job.id] = job;
-      }
-      // The Jobs that finished while no tab listened are in the history.
-      return loadStageHistory(
-        {
-          ...state,
-          jobs,
-          timings,
-          snapshotCursor: action.snapshot.cursor,
-          joinedLate: {},
-          fromCatchUp: {},
-          sidecar: "running",
-          sidecarMessage: null,
-        },
-        exec
-      );
-    }
+    case "job-snapshot-received":
+      return reduceSnapshotReceived(state, action, exec);
 
     case "stage-history-loaded":
       if (action.requestId !== state.stageHistoryRequest) return state;
@@ -535,52 +530,7 @@ export const jobsReducer: EffectReducer<
     case "batch-video-progressed":
     case "batch-video-succeeded":
     case "batch-video-failed":
-    case "batch-video-handed-off": {
-      const before = state.jobs[action.job.id];
-      const after = applyStreamAction(before, action);
-      if (!after) return state;
-      const caughtUp = action.eventId <= state.snapshotCursor;
-      const settled =
-        !(before && isFinishedJob(before)) && isFinishedJob(after);
-      // Only a settlement heard live is news. The catch-up replays Jobs the
-      // snapshot left out (finished, dismissed): not news. A Job this tab
-      // knew unfinished settling is, even below the cursor (the newest id
-      // visible then): a late commit (`job-event-feed.ts`) streams it after.
-      const fromCatchUp =
-        caughtUp &&
-        (before === undefined || state.fromCatchUp[after.id] === true);
-      if (!fromCatchUp) {
-        if (settled) announceSettled(exec, after);
-        announceVideoSettled(exec, after, action, before);
-      }
-      const late =
-        state.joinedLate[after.id] === true ||
-        (before === undefined && (caughtUp || action.type !== "job-queued"));
-      const next: jobsReducer.State = {
-        ...state,
-        // An event is proof the sidecar is up.
-        sidecar: "running",
-        sidecarMessage: null,
-        jobs: { ...state.jobs, [after.id]: after },
-        timings: timeJobEvent(state.timings, before, after, action),
-        clockSkews:
-          late || caughtUp
-            ? state.clockSkews
-            : recordClockSkew(state.clockSkews, action),
-        joinedLate:
-          late && !state.joinedLate[after.id]
-            ? { ...state.joinedLate, [after.id]: true }
-            : state.joinedLate,
-        fromCatchUp:
-          fromCatchUp && !state.fromCatchUp[after.id]
-            ? { ...state.fromCatchUp, [after.id]: true }
-            : state.fromCatchUp,
-      };
-      // A Job that succeeded since the snapshot adds its stages to the
-      // history: the snapshot's own load already had the older ones.
-      return settled && !fromCatchUp && after.status === "succeeded"
-        ? loadStageHistory(next, exec)
-        : next;
-    }
+    case "batch-video-handed-off":
+      return reduceStreamAction(state, action, exec);
   }
 };
