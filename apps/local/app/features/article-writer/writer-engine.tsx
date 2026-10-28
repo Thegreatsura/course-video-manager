@@ -48,7 +48,7 @@ import { useMemoryAutosave } from "./use-memory-autosave";
 import { copyToClipboard } from "./clipboard";
 import { toast } from "@/components/ui/toast";
 import { useApplyDocument } from "./use-apply-document";
-import { ApplyButton } from "./apply-button";
+import { ApplyButton, MoreToggle, type MoreToggleProps } from "./apply-button";
 import { FIX_SHORTCUT_HINT, useWriterShortcuts } from "./writer-shortcuts";
 import { InlineContextStrip } from "./inline-context-strip";
 import { ContextView } from "./context-view";
@@ -86,6 +86,8 @@ export interface WriterEngineProps {
   onApply: (finalDocument: string) => Promise<void>;
   /** The applied document is saved: the host closes the writer here. */
   onApplied?: (finalDocument: string) => void;
+  /** When set, a "More?" checkbox sits beside Apply. */
+  more?: MoreToggleProps;
   /** When set, the modal's Repo Files tab shows an "add from clipboard" button. */
   onAddFileFromClipboard?: () => void;
   /** Other fields on the same page, offered as toggleable AI context. */
@@ -107,6 +109,7 @@ export function WriterEngine({
   onCancel,
   onApply,
   onApplied,
+  more,
   onAddFileFromClipboard,
   pageFields,
 }: WriterEngineProps) {
@@ -640,6 +643,7 @@ export function WriterEngine({
             >
               Cancel
             </Button>
+            {more && <MoreToggle {...more} />}
             <ApplyButton
               onApply={handleApply}
               isApplying={isApplying}

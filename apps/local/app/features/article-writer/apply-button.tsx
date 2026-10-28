@@ -1,5 +1,7 @@
 import { AlertTriangleIcon, Loader2Icon } from "lucide-react";
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { APPLY_SHORTCUT_HINT } from "./writer-shortcuts";
 
 /**
@@ -53,4 +55,33 @@ function applyTitle(props: {
     return `Apply with ${props.lintCount} lint violation${props.lintCount > 1 ? "s" : ""} (${APPLY_SHORTCUT_HINT})`;
   }
   return `Apply (${APPLY_SHORTCUT_HINT})`;
+}
+
+export type MoreToggleProps = {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+};
+
+/**
+ * "More?", beside Apply: once Apply's save lands, move on to the next Video
+ * that still needs this field written instead of closing. Its host owns the
+ * value, so it outlives the writer of any one Video.
+ */
+export function MoreToggle({ checked, onCheckedChange }: MoreToggleProps) {
+  const id = useId();
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      title="After Apply, open the next Video with an empty Lesson Body"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(next) => onCheckedChange(next === true)}
+      />
+      <label htmlFor={id} className="text-sm select-none">
+        More?
+      </label>
+    </div>
+  );
 }
