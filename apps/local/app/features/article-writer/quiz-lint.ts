@@ -69,20 +69,11 @@ export function fixTakenQuizIds(
 }
 
 /**
- * A correct answer this much longer than the longest wrong choice — or this
- * much shorter than the shortest — gives itself away.
- *
- * Measured against the extreme distractor, not their average, so a question
- * whose wrong choices already vary widely is left alone: the tell is a correct
- * answer standing apart from a cluster. 1.5x / 0.6x is where a reader skimming
- * the options sees one stick out. The absolute floor keeps short choices quiet
- * — "Yes" against "No" is 1.5x and means nothing. Checked against the 91
- * questions in the courses on 2026-10-06: none flagged, the nearest being an
- * 82-char answer beside a 60-char distractor (1.37x, +22).
+ * The most a question's choices may differ in length, in characters. Any wider
+ * and the odd one out — usually the correct answer, written with more care —
+ * stands out to a reader skimming the options.
  */
-const LONGER_RATIO = 1.5;
-const SHORTER_RATIO = 0.6;
-const MIN_DIFFERENCE = 25;
+export const MAX_QUIZ_ANSWER_LENGTH_GAP = 10;
 
 /** A choice as the reader sees it: no backticks, emphasis or link targets. */
 function renderedLength(label: string): number {
@@ -94,42 +85,25 @@ function renderedLength(label: string): number {
 }
 
 /**
- * Questions whose correct answer is egregiously longer or shorter than the
- * wrong choices, each described by id and the lengths that tripped it.
+ * Questions whose longest choice is more than `MAX_QUIZ_ANSWER_LENGTH_GAP`
+ * characters longer than their shortest, correct or not, each described by id
+ * and the gap.
  */
-export function findLopsidedQuizAnswers(text: string): string[] {
+export function findUnevenQuizAnswers(text: string): string[] {
   const found: string[] = [];
   for (const block of parseQuizBlocks(text)) {
     for (const { data } of block.questions) {
       if (!data || !Array.isArray(data.choices)) continue;
-      const correct = new Set(
-        Array.isArray(data.correct) ? data.correct : [data.correct]
-      );
-      const right: number[] = [];
-      const wrong: number[] = [];
-      for (const choice of data.choices) {
-        if (typeof choice?.label !== "string") continue;
-        (correct.has(choice.answer) ? right : wrong).push(
-          renderedLength(choice.label)
-        );
-      }
-      if (right.length === 0 || wrong.length === 0) continue;
+      const lengths = data.choices
+        .filter((choice) => typeof choice?.label === "string")
+        .map((choice) => renderedLength(choice.label));
+      if (lengths.length < 2) continue;
 
-      const longest = Math.max(...wrong);
-      const shortest = Math.min(...wrong);
-      const range = `${shortest === longest ? longest : `${shortest}-${longest}`}`;
-      for (const length of right) {
-        const tooLong =
-          length > longest * LONGER_RATIO && length - longest >= MIN_DIFFERENCE;
-        const tooShort =
-          length < shortest * SHORTER_RATIO &&
-          shortest - length >= MIN_DIFFERENCE;
-        if (tooLong || tooShort) {
-          found.push(
-            `${data.id || "(no id)"} (correct answer ${length} chars, wrong choices ${range})`
-          );
-          break;
-        }
+      const gap = Math.max(...lengths) - Math.min(...lengths);
+      if (gap > MAX_QUIZ_ANSWER_LENGTH_GAP) {
+        found.push(
+          `${data.id || "(no id)"}: Answers differ by ${gap} characters (max ${MAX_QUIZ_ANSWER_LENGTH_GAP})`
+        );
       }
     }
   }

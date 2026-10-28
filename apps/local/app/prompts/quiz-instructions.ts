@@ -6,6 +6,8 @@
  * holds the same contract for agents drafting outside this app. Change both.
  */
 
+import { MAX_QUIZ_ANSWER_LENGTH_GAP } from "@/features/article-writer/quiz-lint";
+
 /**
  * A Solution never holds a quiz: the Problem it answers is the exercise. This
  * replaces {@link getQuizInstructions} in the Solution prompt, so the model is
@@ -46,7 +48,7 @@ Ask in the reader's world, so the question points at the work: "Your session jus
 Write the choices like this:
 
 - Every wrong choice is something a real reader would actually do. A choice nobody would pick makes the question free.
-- The correct answer is the same length as the wrong ones. A reader who spots the longest choice never reads the question.
+- Every choice is within ${MAX_QUIZ_ANSWER_LENGTH_GAP} characters of every other, the correct one included. A reader who spots the longest choice never reads the question.
 - The explanation says why the wrong choices are wrong, not only why the right one is right.
 
 Each question carries an \`id\` that names the concept it tests — \`subagent-context-isolation\`, never \`quiz-1\`. Reader answers are keyed to the id, so it must be unique across the whole course.

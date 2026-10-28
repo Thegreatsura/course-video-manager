@@ -7,7 +7,6 @@
   "apps/local/app/features/animatic/use-animatic-shortcuts.ts": 1,
   "apps/local/app/features/article-writer/context-panel-reducer.ts": 2,
   "apps/local/app/features/article-writer/document-panel.tsx": 1,
-  "apps/local/app/features/article-writer/quiz-lint.ts": 1,
   "apps/local/app/features/article-writer/quiz-syntax.ts": 1,
   "apps/local/app/features/article-writer/tool-call-display.tsx": 2,
   "apps/local/app/features/article-writer/use-screenshot-navigation.ts": 1,
