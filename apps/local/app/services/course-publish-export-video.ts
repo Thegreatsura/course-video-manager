@@ -165,7 +165,6 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
         return yield* Effect.fail(
           new ExportError({
             message: "Video has no clips to export",
-            cause: null,
           })
         );
       }
@@ -254,16 +253,38 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
 
       // Export via ffmpeg → writes to {videoId}.mp4
       stage = "concatenating-clips";
-      const rendered = yield* videoExport.exportVideoClips({
-        videoId,
-        format: resolveVideoFormat(video.format),
-        clips: renderClips,
-        onStageChange: (next) => {
-          stage = next;
-          onStage?.(next);
-        },
-        onProgress,
-      });
+      const rendered = yield* videoExport
+        .exportVideoClips({
+          videoId,
+          format: resolveVideoFormat(video.format),
+          clips: renderClips,
+          onStageChange: (next) => {
+            stage = next;
+            onStage?.(next);
+          },
+          onProgress,
+        })
+        .pipe(
+          // ffmpeg stopped reading one Clip's Footage partway and exited 0
+          // anyway (Publish Job 43bfe48a: "Cannot allocate memory", 2.9 s of
+          // one Clip gone). Say which Clip, so the log points at it rather
+          // than at a whole Video that is merely "short".
+          Effect.catchTag("FfmpegInputCutShortError", (error) => {
+            const clip =
+              error.clipIndex === undefined
+                ? undefined
+                : video.clips[error.clipIndex];
+            const which = clip
+              ? `Clip ${error.clipIndex! + 1} of ${video.clips.length} (clip ${clip.id}, ${error.inputPath ?? clip.videoFilename} from ${clip.sourceStartTime.toFixed(2)}s to ${clip.sourceEndTime.toFixed(2)}s)`
+              : `input #${error.inputIndex}${error.inputPath ? ` (${error.inputPath})` : ""}`;
+            return Effect.fail(
+              new ExportError({
+                message: `Export for video "${video.title}" (${videoId}) is missing the end of ${which}: ffmpeg stopped reading it early ("${error.reason}") but exited 0`,
+                cause: error,
+              })
+            );
+          })
+        );
       stage = "checking-duration";
 
       const videoIdPath = yield* assertUnderFinishedVideos(
@@ -285,7 +306,6 @@ export const exportVideoToItsAddress = Effect.fn("exportVideoToItsAddress")(
         return yield* Effect.fail(
           new ExportError({
             message: `Export for video "${video.title}" (${videoId}) is short: its clips ask for ${expectedDurationInSeconds.toFixed(1)}s but the file is ${rendered.durationInSeconds.toFixed(1)}s`,
-            cause: null,
           })
         );
       }

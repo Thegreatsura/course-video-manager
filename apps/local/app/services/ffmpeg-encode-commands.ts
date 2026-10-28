@@ -10,6 +10,8 @@ import {
   LANDSCAPE_VIDEO_ENCODE_ARGS,
   SHORTS_BURN_IN_ENCODE_ARGS,
   FFmpegError,
+  FfmpegInputCutShortError,
+  withClipIndex,
   type FfmpegLogInfo,
 } from "./ffmpeg-error";
 import { runFfmpegWithProgress } from "./ffmpeg-run";
@@ -18,6 +20,7 @@ import { SidecarContext } from "./sidecar-context";
 import { clipZoomCropFilter } from "@/features/videos/clip-zoom";
 import { clipExportDurationInSeconds } from "./export-duration-check";
 import { makeConcatenateClipSegments } from "./ffmpeg-encode-segments";
+import { assertUnder } from "./assert-under";
 import {
   buildOverlayCompositeArgs,
   type RenderedOverlay,
@@ -171,7 +174,20 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           onProgress: extras.onProgress,
           onLog: extras.onLog,
           errorPrefix: "Failed to create concatenated video",
-        });
+        }).pipe(
+          // One input per Clip, in order, so ffmpeg's input number IS the
+          // Clip's position in the Video.
+          Effect.mapError((error) =>
+            error instanceof FfmpegInputCutShortError
+              ? withClipIndex(error, error.inputIndex)
+              : error
+          ),
+          // A pass that failed leaves no half-written file in the temp dir.
+          Effect.tapError(() => {
+            const partialOutput = assertUnder(outputDir, outputFile);
+            return fs.remove(partialOutput).pipe(Effect.ignore);
+          })
+        );
 
         return outputFile;
       });

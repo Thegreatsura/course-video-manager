@@ -325,3 +325,75 @@ export class FFmpegError extends Data.TaggedError("FFmpegError")<{
   cause: unknown;
   message: string;
 }> {}
+
+/** An ffmpeg input whose demuxer gave up partway, and the reason it gave. */
+export type CutShortInput = { inputIndex: number; reason: string };
+
+/**
+ * The input, if any, that ffmpeg stopped reading early.
+ *
+ * When a demuxer fails mid-file — the real case was "Cannot allocate memory"
+ * on input #40 of a 104-input concat — ffmpeg logs it, treats that input as
+ * finished, and goes on to exit 0. The concat filter simply moves to the next
+ * Clip, so the output is short by whatever was left of that input, and
+ * nothing else in the run says so.
+ *
+ * Only the demuxer's own failure counts. A decoder concealing a bad frame, or
+ * a seek that lands a frame off, leaves the input's length intact.
+ */
+export const findCutShortInput = (stderr: string): CutShortInput | null => {
+  const match =
+    /\[in#(\d+)\/[^\]]*\] Error (?:during demuxing|retrieving a packet from demuxer): (.*)/.exec(
+      stderr
+    );
+  if (!match) return null;
+  return { inputIndex: Number(match[1]), reason: match[2]!.trim() };
+};
+
+/**
+ * ffmpeg exited 0, but stopped reading one of its inputs before the end —
+ * so the file it wrote is missing the rest of that input.
+ *
+ * `inputIndex` is ffmpeg's input number within the one pass that failed; a
+ * pass that knows which Clip that input was sets `clipIndex`, so the export
+ * can name the Clip.
+ */
+export class FfmpegInputCutShortError extends Data.TaggedError(
+  "FfmpegInputCutShortError"
+)<{
+  message: string;
+  inputIndex: number;
+  /** The file passed as that input, when the args name one. */
+  inputPath: string | undefined;
+  /** What ffmpeg said, e.g. "Cannot allocate memory". */
+  reason: string;
+  /** The Clip, by its position in the Video, that the input belongs to. */
+  clipIndex?: number;
+}> {}
+
+/** The file given as ffmpeg's `inputIndex`-th `-i`, if there is one. */
+export const nthInputPath = (
+  args: readonly string[],
+  inputIndex: number
+): string | undefined => {
+  let seen = 0;
+  for (let i = 0; i < args.length - 1; i++) {
+    if (args[i] !== "-i") continue;
+    if (seen === inputIndex) return args[i + 1];
+    seen++;
+  }
+  return undefined;
+};
+
+/** The same failure, told which Clip its input belongs to. */
+export const withClipIndex = (
+  error: FfmpegInputCutShortError,
+  clipIndex: number
+): FfmpegInputCutShortError =>
+  new FfmpegInputCutShortError({
+    message: error.message,
+    inputIndex: error.inputIndex,
+    inputPath: error.inputPath,
+    reason: error.reason,
+    clipIndex,
+  });

@@ -252,18 +252,20 @@ ${previousVideo ? `\n${previousVideo}\n` : ""}`.trim();
 ${clips}
 ${diagram ? `\n${diagram}\n` : ""}
 <the-ask>
-Work out where the most recent clips sit in the plan, then write the very next thing the creator should say.
+Work out where the most recent clips sit in the plan, then write ${SUGGESTION_COUNT} different things the creator could say next. The creator improvises around the plan rather than reading it to the letter, so give them ${SUGGESTION_COUNT} different paths to choose from.
 
-- Follow the plan: the Script or the Animatic is the guide for what comes next.
-- If there are notes, they override the plan wherever the two disagree.
+- The first follows the plan: the Script or the Animatic is the guide for what comes next. It is the best single guess.
+- The others each go somewhere genuinely different that the creator might plausibly go next: a different next point, an example, a question to the viewer, a step back. They are different paths, not rephrasings of the first.
+- If there are notes, they override the plan wherever the two disagree, for every one of them.
 - Do not repeat anything the creator has already recorded, in any clip. Skip what the clips already cover.
-- Keep it short: one clip's worth, one or two sentences at most.
-- Write it in the creator's own voice, as heard in the clips: conversational, natural when read aloud.
-- Bold the one to three words that matter most, the ones to stress, with Markdown: **like this**.
+- Keep each short: one clip's worth, one or two sentences at most.
+- Write each in the creator's own voice, as heard in the clips: conversational, natural when read aloud.
+- Bold the one to three words that matter most in each, the ones to stress, with Markdown: **like this**.
+- Give each a title of two to four words naming where it goes, so the creator can pick one at a glance.
 </the-ask>
 
 <output-format>
-The spoken words alone: no quotes around them, no stage directions. The only markdown allowed is **bold**.
+Each text is the spoken words alone: no quotes around them, no stage directions. The only markdown allowed is **bold**. Each title is plain words, no markdown.
 </output-format>
 `.trim();
 
@@ -277,36 +279,97 @@ export const generateSuggestNextClipPrompt = (
   return `${plan}\n\n${now}`;
 };
 
+/** How many Suggestions one request asks for: different paths to pick from. */
+export const SUGGESTION_COUNT = 3;
+
+/** One **Suggestion**: a path the author could take next. */
+export type Suggestion = {
+  /** Two to four words naming where it goes; its tab's label. */
+  title: string;
+  /** The spoken words. The only markdown is **bold**. */
+  text: string;
+};
+
 /**
- * The shape of the model's answer: one field, the **Suggestion**'s text. Only
- * that field reaches the editor, so commentary the model might add around
- * the line has nowhere to go.
+ * The shape of the model's answer: three Suggestions, each a title and a
+ * text. Only this reaches the editor, so commentary the model might add
+ * around them has nowhere to go. "Three" is said in words, not as
+ * `minItems`/`maxItems`, which Anthropic's structured output may refuse; the
+ * stream keeps the first three.
  */
-export const suggestionSchema = z.object({
-  suggestion: z
-    .string()
+export const suggestionsSchema = z.object({
+  suggestions: z
+    .array(
+      z.object({
+        title: z
+          .string()
+          .describe(
+            "Two to four plain words naming where this path goes, e.g. 'Show the diagram'."
+          ),
+        text: z
+          .string()
+          .describe(
+            "The very next words the creator says on this path, and nothing else. The only markdown allowed is **bold**."
+          ),
+      })
+    )
     .describe(
-      "The very next words the creator says, and nothing else. The only markdown allowed is **bold**."
+      `Exactly ${SUGGESTION_COUNT} Suggestions. The first follows the plan; the others are genuinely different paths, not rephrasings.`
     ),
 });
 
+type PartialSuggestions = {
+  suggestions?: (Partial<Suggestion> | undefined)[];
+};
+
+/** A partial answer as the Suggestions so far: at most three, every field a string. */
+const toSuggestions = (partial: PartialSuggestions): Suggestion[] =>
+  (partial.suggestions ?? [])
+    .slice(0, SUGGESTION_COUNT)
+    .map((item) => ({ title: item?.title ?? "", text: item?.text ?? "" }));
+
 /**
- * The Suggestion as plain text, as the model writes it: from the stream of
- * partial answers, each time just the part of `suggestion` that is new.
+ * The Suggestions as the model writes them, as newline-delimited JSON: each
+ * line is every Suggestion so far (`Suggestion[]`), sent whenever one of them
+ * grows. Read it back with {@link readSuggestionLines}.
  */
-export const suggestionTextStream = (
-  partials: ReadableStream<{ suggestion?: string }>
+export const suggestionsLineStream = (
+  partials: ReadableStream<PartialSuggestions>
 ): ReadableStream<string> => {
-  let sent = "";
+  let sent = "[]";
   return partials.pipeThrough(
-    new TransformStream<{ suggestion?: string }, string>({
+    new TransformStream<PartialSuggestions, string>({
       transform(partial, controller) {
-        const text = partial.suggestion ?? "";
-        // A partial string only grows; anything else is not sent.
-        if (text.length <= sent.length || !text.startsWith(sent)) return;
-        controller.enqueue(text.slice(sent.length));
-        sent = text;
+        const line = JSON.stringify(toSuggestions(partial));
+        if (line === sent) return;
+        controller.enqueue(`${line}\n`);
+        sent = line;
       },
     })
   );
+};
+
+/**
+ * The newest Suggestions in what has arrived of a {@link suggestionsLineStream}:
+ * the last complete line, or `null` before the first one. A line that does not
+ * parse as Suggestions is skipped.
+ */
+export const readSuggestionLines = (received: string): Suggestion[] | null => {
+  const lines = received.split("\n").slice(0, -1);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed: unknown = JSON.parse(lines[i]!);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .slice(0, SUGGESTION_COUNT)
+          .map((item: Partial<Suggestion> | null) => ({
+            title: typeof item?.title === "string" ? item.title : "",
+            text: typeof item?.text === "string" ? item.text : "",
+          }));
+      }
+    } catch {
+      // A torn line: try the one before.
+    }
+  }
+  return null;
 };

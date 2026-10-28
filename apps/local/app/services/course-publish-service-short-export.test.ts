@@ -9,14 +9,19 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Effect } from "effect";
+import { Cause, Effect, Layer, Logger } from "effect";
 import fs from "node:fs";
+import { asc, eq } from "drizzle-orm";
+import { clips as clipsTable } from "@/db/schema";
+import { VideoExportService } from "@/services/video-export-service";
+import { FfmpegInputCutShortError } from "@/services/ffmpeg-error";
 import { CoursePublishService } from "@/services/course-publish-service";
 import { resolveExportPath } from "@/services/export-hash";
 import {
   finishedVideosDir,
   setupPublishServiceTests,
   setupPublishableCourse as setup,
+  testDb,
 } from "./course-publish-service-test-setup";
 import { ANNOUNCE_NOTHING } from "@/packages/course-json";
 
@@ -77,5 +82,66 @@ describe("CoursePublishService — when an export comes out short", () => {
       exportHash!
     );
     expect(fs.existsSync(exportPath)).toBe(false);
+  }, 60_000);
+});
+
+const exportVideo = (videoId: string) =>
+  Effect.gen(function* () {
+    const svc = yield* CoursePublishService;
+    return yield* svc.exportVideo(videoId);
+  });
+
+describe("CoursePublishService — what a failed export says", () => {
+  it("logs a short export without a phantom `[cause]: Error: null`", async () => {
+    const { video, run } = await setup({
+      renderDurationInSeconds: (render) =>
+        render.requestedDurationInSeconds - 5,
+    });
+    const rendered: string[] = [];
+    const logger = Logger.make(({ cause }) => {
+      if (!Cause.isEmpty(cause))
+        rendered.push(Cause.pretty(cause, { renderErrorCause: true }));
+    });
+
+    await expect(
+      run(
+        exportVideo(video.id).pipe(
+          Effect.provide(Logger.replace(Logger.defaultLogger, logger))
+        )
+      )
+    ).rejects.toThrow(/is short/);
+
+    expect(rendered.join("\n")).toContain("is short");
+    expect(rendered.join("\n")).not.toContain("Error: null");
+  }, 60_000);
+
+  it("names the Clip and Footage ffmpeg stopped reading early", async () => {
+    const { video, run } = await setup({
+      mockVideoProcessing: Layer.succeed(VideoExportService, {
+        exportVideoClips: () =>
+          Effect.fail(
+            new FfmpegInputCutShortError({
+              message:
+                "Failed to create concatenated video: ffmpeg stopped reading input #1 (/footage/recording.mp4) early",
+              inputIndex: 1,
+              inputPath: "/footage/recording.mp4",
+              reason: "Cannot allocate memory",
+              clipIndex: 1,
+            })
+          ),
+      } as unknown as VideoExportService),
+    });
+    const [, secondClip] = await testDb
+      .select({ id: clipsTable.id })
+      .from(clipsTable)
+      .where(eq(clipsTable.videoId, video.id))
+      .orderBy(asc(clipsTable.order));
+
+    const failure = run(exportVideo(video.id));
+
+    await expect(failure).rejects.toThrow(
+      `Clip 2 of 2 (clip ${secondClip!.id}, /footage/recording.mp4 from 15.00s to 25.00s)`
+    );
+    await expect(failure).rejects.toThrow(/Cannot allocate memory/);
   }, 60_000);
 });

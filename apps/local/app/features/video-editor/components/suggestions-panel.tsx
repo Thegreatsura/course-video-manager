@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import {
   getPickedRepoFiles,
   getRepoFilesTokens,
+  getSelectedSuggestion,
   getSourceTexts,
   getSuggestionInput,
   getSuggestionText,
@@ -48,15 +49,16 @@ const BOLD_ONLY = ["p", "strong"];
 
 /**
  * The side panel's **Suggestions** tab: which sources go in (with what each
- * one costs, as the Article Writer's context strip shows it), and the next
- * line as it streams. The same line is on the teleprompter while this tab is
- * open. **Context** opens a modal to pick the Video's repo files, which go in
+ * one costs, as the Article Writer's context strip shows it), and three
+ * Suggestions as they stream, one tab each, labelled with its title. The
+ * picked one's text is on the teleprompter while this tab is open. **Context** opens a modal to pick the Video's repo files, which go in
  * too. All state is in `suggestions-reducer.ts`.
  */
 export function SuggestionsPanel(props: {
   state: suggestionsReducer.State;
   onToggleSource: (source: suggestionsReducer.Source) => void;
   onRefresh: () => void;
+  onSuggestionTabClick: (index: number) => void;
   onNotesChange: (notes: string) => void;
   onContextClick: () => void;
   onContextDismiss: () => void;
@@ -65,7 +67,7 @@ export function SuggestionsPanel(props: {
   const { state } = props;
   const texts = getSourceTexts(state);
   const input = getSuggestionInput(state);
-  const text = getSuggestionText(state);
+  const text = getSuggestionText(getSelectedSuggestion(state));
   const clipsTokens = estimateTokens(input.clips.join("\n"));
   const pickedFiles = getPickedRepoFiles(state);
   const totalTokens =
@@ -170,7 +172,32 @@ export function SuggestionsPanel(props: {
             <RefreshCwIcon className={cn("size-3.5", busy && "animate-spin")} />
           </Button>
         </div>
-        {state.status === "failed" ? (
+        {state.suggestions.length > 0 && state.status !== "failed" && (
+          <div role="tablist" className="mb-2 flex flex-wrap gap-1">
+            {state.suggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                type="button"
+                role="tab"
+                aria-selected={index === state.selected}
+                onClick={() => props.onSuggestionTabClick(index)}
+                className={cn(
+                  "rounded-md border px-2 py-0.5 text-xs transition-colors",
+                  index === state.selected
+                    ? "bg-background font-semibold text-foreground"
+                    : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {suggestion.title.trim() || `Suggestion ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
+        {state.awaitingRefresh ? (
+          <p className="text-sm text-muted-foreground">
+            Press Refresh for a suggestion.
+          </p>
+        ) : state.status === "failed" ? (
           <p className="flex items-start gap-2 text-sm text-red-400">
             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
             The suggestion failed. Refresh to try again.
@@ -188,7 +215,7 @@ export function SuggestionsPanel(props: {
           </div>
         )}
         <p className="mt-4 text-xs text-muted-foreground">
-          Shown on the teleprompter while this tab is open.
+          The picked one is shown on the teleprompter while this tab is open.
         </p>
       </div>
       <SuggestionsContextModal
