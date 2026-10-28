@@ -7,7 +7,10 @@ import { SidecarContext } from "./sidecar-context";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import {
   FFmpegError,
+  FfmpegInputCutShortError,
   classifyGpuFailure,
+  findCutShortInput,
+  nthInputPath,
   cpuFallbackArgs,
   type FfmpegLogInfo,
 } from "./ffmpeg-error";
@@ -175,7 +178,7 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
           classifyGpuFailure(first.stderrTail) === "nvenc-sessions-exhausted"
         ) {
           return yield* toError(
-            null,
+            undefined,
             `, exit code: ${first.code}: NVENC still had no free encoder session after waiting ${Duration.format(waited)} (${waits.length} retries). The GPU is busy, not missing, so this pass was not moved to the CPU; free the GPU (stop recording, or let other encodes finish) and run the Job again`,
             first.stderrTail
           );
@@ -184,7 +187,7 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
         const fallbackArgs = cpuFallbackArgs(opts.args, first.stderrTail);
         if (!fallbackArgs) {
           return yield* toError(
-            null,
+            undefined,
             `, exit code: ${first.code}`,
             first.stderrTail
           );
@@ -197,7 +200,7 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
         const fallback = yield* runOnce(fallbackArgs);
         if (fallback.code !== 0) {
           return yield* toError(
-            null,
+            undefined,
             `, exit code: ${fallback.code} (on the CPU fallback, after the GPU could not open)`,
             fallback.stderrTail
           );
@@ -279,6 +282,24 @@ export const runFfmpegWithProgress = Effect.fn("runFfmpegWithProgress")(
           const code = yield* child.exitCode.pipe(
             Effect.mapError((e) => toError(e, `: ${e.message}`, stderrTail))
           );
+          // Exiting 0 is not the same as reading every input to its end: a
+          // demuxer that fails mid-file ends that input early and ffmpeg
+          // carries on (`findCutShortInput`). Fail here, naming the input,
+          // rather than leaving the duration check to find a short file
+          // after the next pass has run on it.
+          const cutShort =
+            Number(code) === 0 ? findCutShortInput(stderrTail) : null;
+          if (cutShort) {
+            const inputPath = nthInputPath(args, cutShort.inputIndex);
+            return yield* new FfmpegInputCutShortError({
+              ...cutShort,
+              inputPath,
+              message: withStderrTail(
+                `${opts.errorPrefix}: ffmpeg stopped reading input #${cutShort.inputIndex}${inputPath ? ` (${inputPath})` : ""} early — "${cutShort.reason}" — and still exited 0, so the output is missing the rest of that input`,
+                stderrTail
+              ),
+            });
+          }
           return { code: Number(code), stderrTail };
         })
       );

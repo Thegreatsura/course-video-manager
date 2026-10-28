@@ -42,8 +42,10 @@ export class ExportError extends Data.TaggedError("ExportError")<{
   message: string;
   /**
    * The failure underneath, kept so the Video's log can show it
-   * (`formatFailureCause` walks `cause`). `null` when the export itself is
-   * the first thing that went wrong.
+   * (`formatFailureCause` walks `cause`). Left out when the export itself
+   * is the first thing that went wrong — never `null`: Effect's logger
+   * renders any defined `cause` as `[cause]: Error: null`, a cause that
+   * reads like a lost one.
    */
-  cause: unknown;
+  cause?: unknown;
 }> {}
