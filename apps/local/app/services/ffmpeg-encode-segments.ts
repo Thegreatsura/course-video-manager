@@ -4,7 +4,11 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { tmpdir } from "os";
 import { assertUnder } from "./assert-under";
-import type { FfmpegLogInfo } from "./ffmpeg-error";
+import {
+  FfmpegInputCutShortError,
+  withClipIndex,
+  type FfmpegLogInfo,
+} from "./ffmpeg-error";
 import {
   clipSegmentArgs,
   concatList,
@@ -85,7 +89,14 @@ export const makeConcatenateClipSegments = <E, R>(deps: {
             ),
           onLog: extras.onLog,
           errorPrefix: `Failed to render Clip ${index + 1} of ${clips.length}`,
-        });
+        }).pipe(
+          // Every input of this pass is this one Clip's.
+          Effect.mapError((error) =>
+            error instanceof FfmpegInputCutShortError
+              ? withClipIndex(error, index)
+              : error
+          )
+        );
         segmentFiles.push(segmentFile);
         done += clip.duration;
       }
