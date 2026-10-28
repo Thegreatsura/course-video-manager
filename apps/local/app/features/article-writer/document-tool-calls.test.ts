@@ -171,7 +171,7 @@ describe("getStreamingDocument", () => {
       getStreamingDocument([
         assistant(write("call-1", "# Half", "input-streaming")),
       ])
-    ).toBe("# Half");
+    ).toEqual({ toolCallId: "call-1", content: "# Half" });
   });
 
   it("returns undefined when nothing is streaming", () => {
