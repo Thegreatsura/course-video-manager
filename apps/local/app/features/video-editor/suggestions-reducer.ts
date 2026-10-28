@@ -4,6 +4,10 @@
  *
  * The rules, all decided here:
  *
+ *   - Every request brings three Suggestions, each a title and a text: three
+ *     paths the author could take, shown as tabs labelled with their titles.
+ *     The first is selected whenever a new request starts; picking another
+ *     tab puts that one on the teleprompter, which shows its text alone.
  *   - Nothing runs unless the tab is open. The Script is loaded when the
  *     editor opens (the editor's loader leaves the Script text out), so
  *     opening the tab asks at once. It reloads the Script too, in case it was
@@ -14,8 +18,8 @@
  *     ticked or unticked, or Refresh. The exceptions are the author's Notes
  *     and the on-screen Diagram's text, which ask once editing pauses for a
  *     second: one pause, restarted by an edit to either.
- *   - A newer request stops the one in flight: only the newest suggestion
- *     ever shows.
+ *   - A newer request stops the one in flight: only the newest Suggestions
+ *     ever show.
  *   - Closing the tab stops the stream and forgets the suggestion, so the
  *     teleprompter goes back to the Script.
  *   - A Video that OPENS on the tab (the tab is remembered across Videos)
@@ -60,6 +64,7 @@ import {
   capPreviousVideoText,
   type SuggestNextClipInput,
 } from "@/prompts/generate-suggest-next-clip";
+import type { Suggestion } from "@/prompts/generate-suggest-next-clip";
 import { closeOpenBold } from "@/lib/close-open-bold";
 
 export namespace suggestionsReducer {
@@ -126,8 +131,10 @@ export namespace suggestionsReducer {
     editId: number;
     context: EditorContext;
     status: Status;
-    /** The suggestion so far. */
-    text: string;
+    /** The Suggestions so far, at most three; `[]` before the first arrives. */
+    suggestions: Suggestion[];
+    /** Which Suggestion's tab is picked, and so on the teleprompter. */
+    selected: number;
     /** The request whose text is showing; outcomes for any other are late. */
     requestId: number | null;
     nextRequestId: number;
@@ -148,7 +155,12 @@ export namespace suggestionsReducer {
     | { type: "context-button-clicked" }
     | { type: "context-modal-dismissed" }
     | { type: "repo-files-picked"; paths: string[] }
-    | { type: "suggestion-chunk-received"; requestId: number; text: string }
+    | {
+        type: "suggestion-chunk-received";
+        requestId: number;
+        suggestions: Suggestion[];
+      }
+    | { type: "suggestion-tab-clicked"; index: number }
     | { type: "suggestion-finished"; requestId: number }
     | { type: "suggestion-failed"; requestId: number };
 
@@ -216,7 +228,8 @@ export const createInitialSuggestionsState = (input: {
     diagramSnapshotId: null,
   },
   status: "idle",
-  text: "",
+  suggestions: [],
+  selected: 0,
   requestId: null,
   nextRequestId: 1,
   stream: null,
@@ -279,12 +292,16 @@ export const getSuggestionInput = (state: State): SuggestNextClipInput => {
 };
 
 /**
- * The suggestion so far, as Markdown that is safe to render mid-stream: a
+ * A Suggestion's text so far, as Markdown that is safe to render mid-stream: a
  * `**` whose closer has not arrived yet is closed, so it never shows as
  * literal asterisks.
  */
-export const getSuggestionText = (state: State): string =>
-  closeOpenBold(state.text);
+export const getSuggestionText = (suggestion: Suggestion | undefined): string =>
+  closeOpenBold(suggestion?.text ?? "");
+
+/** The Suggestion whose tab is picked; `undefined` before it arrives. */
+export const getSelectedSuggestion = (state: State): Suggestion | undefined =>
+  state.suggestions[state.selected];
 
 export type TeleprompterSuggestion = {
   /** A new id is a new suggestion, which the glass centres. */
@@ -295,8 +312,9 @@ export type TeleprompterSuggestion = {
 };
 
 /**
- * What the teleprompter shows instead of the Script: the suggestion while the
- * tab is open (empty while the first words are on their way), `null` when it
+ * What the teleprompter shows instead of the Script: the picked Suggestion's
+ * text alone, no title, while the tab is open (empty while its first words
+ * are on their way), `null` when it
  * is closed. A failed suggestion hands the glass back to the Script too,
  * rather than leaving it waiting on words that are not coming.
  */
@@ -306,7 +324,7 @@ export const getTeleprompterSuggestion = (
   state.open && !state.awaitingRefresh && state.status !== "failed"
     ? {
         id: state.requestId ?? 0,
-        text: getSuggestionText(state),
+        text: getSuggestionText(getSelectedSuggestion(state)),
         previousClips: state.context.clips.slice(-MOST_RECENT_CLIP_COUNT),
       }
     : null;
@@ -322,7 +340,8 @@ const ask = (state: State, exec: Exec): State => {
   return {
     ...state,
     status: "waiting",
-    text: "",
+    suggestions: [],
+    selected: 0,
     requestId,
     nextRequestId: requestId + 1,
     stream: exec({
@@ -384,7 +403,8 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
         open: false,
         awaitingRefresh: false,
         status: "idle",
-        text: "",
+        suggestions: [],
+        selected: 0,
         requestId: null,
         stream: null,
       };
@@ -471,7 +491,14 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
 
     case "suggestion-chunk-received":
       if (action.requestId !== state.requestId) return state;
-      return { ...state, status: "streaming", text: action.text };
+      return { ...state, status: "streaming", suggestions: action.suggestions };
+
+    case "suggestion-tab-clicked":
+      // Only a tab that has arrived can be picked.
+      if (action.index < 0 || action.index >= state.suggestions.length) {
+        return state;
+      }
+      return { ...state, selected: action.index };
 
     case "suggestion-finished":
       if (action.requestId !== state.requestId) return state;
@@ -479,7 +506,9 @@ export const suggestionsStateReducer: EffectReducer<State, Action, Effect> = (
       // stream that ends with nothing said is a failure, not a suggestion.
       return {
         ...state,
-        status: state.text.trim() === "" ? "failed" : "done",
+        status: state.suggestions.some((s) => s.text.trim() !== "")
+          ? "done"
+          : "failed",
         stream: null,
       };
 

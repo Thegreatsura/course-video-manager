@@ -1,8 +1,8 @@
 import { makeAction } from "@/services/route-action.server";
 import {
   generateSuggestNextClipPromptParts,
-  suggestionSchema,
-  suggestionTextStream,
+  suggestionsLineStream,
+  suggestionsSchema,
   type SuggestNextClipRepoFile,
 } from "@/prompts/generate-suggest-next-clip";
 import { CACHE_BREAKPOINT_5M } from "@/services/prompt-cache";
@@ -13,14 +13,16 @@ import { readVideoFilesForPrompt } from "@/services/text-writing-agent";
 import { isImageFilePath } from "@/lib/image-file-path";
 import { createTextStreamResponse, Output, streamText } from "ai";
 import { Effect, Schema } from "effect";
-import { anthropic } from "@ai-sdk/anthropic";
+import { writerLanguageModel } from "@/services/fake-writer-model";
 
 /** The Suggestions tab's model: fast, because it races the next Take. */
 export const SUGGEST_NEXT_CLIP_MODEL = "claude-haiku-5-5";
 
 /**
- * Streams the Suggestions tab's next line as plain text: only the Suggestion
- * field of the model's structured answer (`suggestionSchema`). The editor sends the
+ * Streams the Suggestions tab's three Suggestions, each a title and a text, as
+ * newline-delimited JSON (`suggestionsLineStream`): only the `suggestions`
+ * field of the model's structured answer (`suggestionsSchema`), resent as it
+ * grows. With `CVM_FAKE_WRITER_MODEL=1` the fake writer answers. The editor sends the
  * sources the author ticked and the Clip transcripts it already holds, so
  * this route reads nothing and starts the model call at once, unless the
  * author picked repo files in the Context modal: those it reads from the
@@ -85,8 +87,8 @@ export const action = makeAction({
         files,
       });
       const result = streamText({
-        model: anthropic(SUGGEST_NEXT_CLIP_MODEL),
-        output: Output.object({ schema: suggestionSchema }),
+        model: writerLanguageModel(SUGGEST_NEXT_CLIP_MODEL),
+        output: Output.object({ schema: suggestionsSchema }),
         system: [
           {
             role: "system",
@@ -100,7 +102,7 @@ export const action = makeAction({
       });
 
       return createTextStreamResponse({
-        textStream: suggestionTextStream(result.partialOutputStream),
+        textStream: suggestionsLineStream(result.partialOutputStream),
       });
     }),
 });

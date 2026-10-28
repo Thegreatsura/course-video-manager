@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { Output, streamText } from "ai";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import {
+  createFakeWriterModel,
+  FAKE_SUGGESTIONS,
+} from "@/services/fake-writer-model";
 import {
   generateSuggestNextClipPrompt,
   generateSuggestNextClipPromptParts,
   MAX_DIAGRAM_TEXT_CHARS,
   MAX_PREVIOUS_VIDEO_CHARS,
   MAX_REPO_FILES_CHARS,
-  suggestionSchema,
-  suggestionTextStream,
+  readSuggestionLines,
+  suggestionsLineStream,
+  suggestionsSchema,
+  type Suggestion,
 } from "./generate-suggest-next-clip";
 
 describe("generateSuggestNextClipPrompt", () => {
@@ -156,65 +161,39 @@ describe("generateSuggestNextClipPrompt", () => {
   });
 });
 
-/** A model that writes its answer in the given pieces, as a provider streams. */
-const modelWriting = (pieces: string[]) =>
-  new MockLanguageModelV3({
-    doStream: async () => ({
-      stream: simulateReadableStream({
-        chunks: [
-          { type: "stream-start" as const, warnings: [] },
-          { type: "text-start" as const, id: "1" },
-          ...pieces.map((delta) => ({
-            type: "text-delta" as const,
-            id: "1",
-            delta,
-          })),
-          { type: "text-end" as const, id: "1" },
-          {
-            type: "finish" as const,
-            finishReason: { unified: "stop" as const, raw: "end_turn" },
-            usage: {
-              inputTokens: {
-                total: 1,
-                noCache: 1,
-                cacheRead: 0,
-                cacheWrite: 0,
-              },
-              outputTokens: { total: 1, text: 1, reasoning: 0 },
-            },
-          },
-        ],
-      }),
-    }),
-  });
-
-describe("suggestionTextStream", () => {
-  it("streams only the Suggestion's text from the model's answer, as it is written", async () => {
-    const model = modelWriting([
-      '{"sugg',
-      'estion": "Now let\'s ',
-      "look at the **diagram",
-      '**.\\nIt shows the loop."}',
-    ]);
+describe("suggestionsLineStream", () => {
+  it("streams the three Suggestions from the model's answer, as they are written, and nothing else", async () => {
+    const calls: Parameters<
+      ReturnType<typeof createFakeWriterModel>["doStream"]
+    >[0][] = [];
     const result = streamText({
-      model,
-      output: Output.object({ schema: suggestionSchema }),
+      model: createFakeWriterModel({ calls }),
+      output: Output.object({ schema: suggestionsSchema }),
       prompt: "What do I say next?",
     });
 
-    const chunks: string[] = [];
-    for await (const chunk of suggestionTextStream(
+    let received = "";
+    const seen: (Suggestion[] | null)[] = [];
+    for await (const chunk of suggestionsLineStream(
       result.partialOutputStream
     )) {
-      chunks.push(chunk);
+      received += chunk;
+      seen.push(readSuggestionLines(received));
     }
 
-    expect(chunks.join("")).toBe(
-      "Now let's look at the **diagram**.\nIt shows the loop."
-    );
-    expect(chunks.length).toBeGreaterThan(1);
-    expect(model.doStreamCalls[0]!.responseFormat).toMatchObject({
-      type: "json",
-    });
+    // The editor reads every Suggestion's title and text, and no JSON keys.
+    expect(readSuggestionLines(received)).toEqual(FAKE_SUGGESTIONS);
+    expect(FAKE_SUGGESTIONS).toHaveLength(3);
+    // Still streams: the first Suggestion shows before the last arrives.
+    expect(seen.some((s) => s !== null && s.length < 3)).toBe(true);
+    expect(calls[0]!.responseFormat).toMatchObject({ type: "json" });
+  });
+
+  it("keeps the first three, however many the model writes", () => {
+    const four = Array.from({ length: 4 }, (_, i) => ({
+      title: `T${i}`,
+      text: `S${i}`,
+    }));
+    expect(readSuggestionLines(`${JSON.stringify(four)}\n`)).toHaveLength(3);
   });
 });

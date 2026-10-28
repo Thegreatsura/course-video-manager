@@ -47,6 +47,16 @@ const stream = (
   >["input"]
 ) => ({ type: "stream-suggestion", requestId, videoId: "v1", input });
 
+/** The Suggestions so far: the first with `text`, as the stream reports it. */
+const chunk = (requestId: number, text: string, ...others: string[]) => ({
+  type: "suggestion-chunk-received" as const,
+  requestId,
+  suggestions: [text, ...others].map((t, i) => ({
+    title: `Path ${i + 1}`,
+    text: t,
+  })),
+});
+
 describe("the Suggestions tab", () => {
   it("does nothing while closed, even when a new transcript arrives", () => {
     const t = tester().send({
@@ -61,12 +71,8 @@ describe("the Suggestions tab", () => {
     const t = tester()
       .send({ type: "suggestions-tab-opened" })
       .send({ type: "script-loaded", videoId: "v1", script: "Intro line." })
-      .send({ type: "suggestion-chunk-received", requestId: 1, text: "Now" })
-      .send({
-        type: "suggestion-chunk-received",
-        requestId: 1,
-        text: "Now try it.",
-      })
+      .send(chunk(1, "Now"))
+      .send(chunk(1, "Now try it."))
       .send({ type: "suggestion-finished", requestId: 1 });
 
     expect(t.getEffects()).toEqual([
@@ -98,7 +104,7 @@ describe("the Suggestions tab", () => {
     const t = tester()
       .send({ type: "suggestions-tab-opened" })
       .send({ type: "script-loaded", videoId: "v1", script: "" })
-      .send({ type: "suggestion-chunk-received", requestId: 1, text: "Old" })
+      .send(chunk(1, "Old"))
       .send({
         type: "editor-context-changed",
         context: context({
@@ -107,11 +113,7 @@ describe("the Suggestions tab", () => {
         }),
       })
       // The superseded stream's late words are ignored.
-      .send({
-        type: "suggestion-chunk-received",
-        requestId: 1,
-        text: "Old words",
-      });
+      .send(chunk(1, "Old words"));
 
     expect(t.getExec().stop).toHaveBeenCalledWith(runningStream);
     expect(t.getEffects().at(-1)).toEqual(
@@ -185,11 +187,7 @@ describe("the Suggestions tab", () => {
       })
       .send({ type: "suggestions-tab-opened" })
       .send({ type: "script-loaded", videoId: "v1", script: "" })
-      .send({
-        type: "suggestion-chunk-received",
-        requestId: 1,
-        text: "Now the **important",
-      });
+      .send(chunk(1, "Now the **important"));
 
     expect(t.getEffects().at(-1)).toEqual(
       stream(1, { animatic: 'Mockup 1: "Hello"', clips })
@@ -221,7 +219,7 @@ describe("the Suggestions tab", () => {
     const t = tester()
       .send({ type: "suggestions-tab-opened" })
       .send({ type: "script-loaded", videoId: "v1", script: "" })
-      .send({ type: "suggestion-chunk-received", requestId: 1, text: "Half" })
+      .send(chunk(1, "Half"))
       .send({ type: "suggestions-tab-closed" })
       .send({
         type: "editor-context-changed",
@@ -485,5 +483,40 @@ describe("the Suggestions tab", () => {
       type: "stream-suggestion",
       requestId: 2,
     });
+  });
+
+  it("brings three Suggestions as tabs; the first is picked, and picking another puts its text alone on the teleprompter", () => {
+    const t = tester()
+      .send({ type: "suggestions-tab-opened" })
+      .send({ type: "script-loaded", videoId: "v1", script: "" })
+      .send(chunk(1, "Follow the plan.", "Show an example.", "Ask them."))
+      .send({ type: "suggestion-finished", requestId: 1 });
+
+    expect(t.getState().suggestions.map((s) => s.title)).toEqual([
+      "Path 1",
+      "Path 2",
+      "Path 3",
+    ]);
+    expect(getTeleprompterSuggestion(t.getState())?.text).toBe(
+      "Follow the plan."
+    );
+
+    t.send({ type: "suggestion-tab-clicked", index: 2 });
+    expect(getTeleprompterSuggestion(t.getState())).toEqual({
+      id: 1,
+      text: "Ask them.",
+      previousClips: ["So that's a type."],
+    });
+
+    // A tab that never arrived cannot be picked.
+    t.send({ type: "suggestion-tab-clicked", index: 3 });
+    expect(t.getState().selected).toBe(2);
+
+    // Refresh asks again, and the first is picked once more.
+    t.send({ type: "refresh-clicked" }).send(
+      chunk(2, "Fresh plan.", "Fresh example.")
+    );
+    expect(t.getState().selected).toBe(0);
+    expect(getTeleprompterSuggestion(t.getState())?.text).toBe("Fresh plan.");
   });
 });

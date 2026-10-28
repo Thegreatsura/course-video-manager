@@ -16,8 +16,8 @@ import type { SuggestionsTab } from "../hooks/use-suggestions";
  * The editor's middle 40ch slot as a tabbed container holding five mutually
  * exclusive panels that share the space: **Script** (this video's teleprompter
  * script), **Animatic** (its Clip Mockups read as lines), **Beats** (this
- * video's own plan), **Suggestions** (the next line to say, streamed onto the
- * teleprompter while the tab is open) and **Reference** (the sibling-video
+ * video's own plan), **Suggestions** (three next lines to pick from, the
+ * picked one streamed onto the teleprompter while the tab is open) and **Reference** (the sibling-video
  * reader). Landscape and Short editors share this panel. "Reference"
  * stays reserved for the sibling reader — the beat view is the Beat Panel,
  * never a "reference".
@@ -130,6 +130,7 @@ export function EditorSidePanel(props: {
           state={props.suggestions.state}
           onToggleSource={props.suggestions.onToggleSource}
           onRefresh={props.suggestions.onRefresh}
+          onSuggestionTabClick={props.suggestions.onSuggestionTabClick}
           onNotesChange={props.suggestions.onNotesChange}
           onContextClick={props.suggestions.onContextClick}
           onContextDismiss={props.suggestions.onContextDismiss}
