@@ -221,6 +221,20 @@ export const BASE_LINT_RULES: LintRule[] = [
     fixInstruction: "Remove the quiz. A Solution never holds a quiz.",
   },
   {
+    id: "explainer-needs-quiz",
+    name: "Explainer Has No Quiz",
+    description: "An Explainer always holds at least one Quiz",
+    modes: ["explainer"],
+    // Never scanned: `detect` reads the quiz blocks, which a regex cannot.
+    pattern: /(?!)/,
+    // The Quiz comes last, so a body still arriving has none yet.
+    skipWhileStreaming: true,
+    detect: (text) =>
+      parseQuizBlocks(text).length === 0 ? ["Explainer has no Quiz"] : [],
+    fixInstruction:
+      "Add a Quiz to the end of the Explainer, testing what it taught. An Explainer always holds at least one Quiz.",
+  },
+  {
     id: "quiz-id-taken",
     name: "Quiz Id Taken",
     description:

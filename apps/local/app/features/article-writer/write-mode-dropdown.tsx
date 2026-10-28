@@ -46,7 +46,7 @@ const MENU_GROUPS: MenuGroup[] = [
       {
         value: "explainer",
         title: "Explainer",
-        description: "Article for an explainer, quiz allowed",
+        description: "Article for an explainer, always a quiz",
       },
       {
         value: "solution",
