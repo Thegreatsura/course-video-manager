@@ -55,12 +55,12 @@ import {
 } from "./animatic-subtitles";
 import { AnimaticSubtitlesMenu } from "./animatic-subtitles-menu";
 import { AnimaticStagePlayer } from "./animatic-stage-player";
-import { seekKeepingPlayState, startPlayingAt } from "./animatic-transport";
+import { startPlayingAt, stepAnimatic } from "./animatic-transport";
 import { useAnimaticShortcuts } from "./use-animatic-shortcuts";
+import type { AnimaticNeighbours, AnimaticStart } from "./animatic-course-walk";
 import { useAnimaticDeepLink } from "./use-animatic-deep-link";
 import { useSelectionInSight } from "./use-selection-in-sight";
 import {
-  adjacentSegmentStartFrame,
   buildAnimaticTimeline,
   formatAnimaticRunTime,
   segmentIndexAtFrame,
@@ -78,7 +78,9 @@ import {
  * and pauses, RETURN plays the selected moment from its start, ARROW UP and
  * ARROW DOWN move the selection without touching playback. ARROW LEFT and
  * ARROW RIGHT are the one pair that differs: they step the playhead to the
- * previous or next moment, folded or not. See
+ * previous or next moment, folded or not, and off either end into the
+ * neighbouring Video; CTRL with them walks by Section. See
+ * `animatic-course-walk.ts` and
  * `use-animatic-shortcuts.ts`. A CLICK on a Clip Mockup plays it at once,
  * rather than the Video page's select-then-click-again: there is no per-frame
  * editing to select for here, so the second click had nothing to do.
@@ -132,6 +134,11 @@ export const AnimaticPlayer = (props: {
    * way; the Animatic page starts at the top and leaves it out.
    */
   startAt?: string;
+  /** Lets the arrows walk into other Videos. The Animatic page's alone. */
+  courseWalk?: {
+    neighbours: AnimaticNeighbours;
+    onOpen: (videoId: string, start: AnimaticStart) => void;
+  };
   /** ESC closes the player. Only where it is an overlay — the editor's. */
   onClose?: () => void;
   /**
@@ -286,6 +293,20 @@ export const AnimaticPlayer = (props: {
     []
   );
 
+  // LEFT/RIGHT (`clip-mockup`) and CTRL+LEFT/RIGHT (`section`).
+  const step = (level: "clip-mockup" | "section", delta: -1 | 1) =>
+    stepAnimatic({
+      player: playerRef.current,
+      level,
+      delta,
+      segments: segmentsRef.current,
+      neighbours: props.courseWalk?.neighbours,
+      onOpen: props.courseWalk?.onOpen,
+      // The selection goes back to following the playhead, so the highlight
+      // sits on the moment now on screen.
+      onSeek: () => setSelection(null),
+    });
+
   useAnimaticShortcuts({
     onTogglePlay: () => playerRef.current?.toggle(),
     onPlaySelected: () => {
@@ -302,22 +323,8 @@ export const AnimaticPlayer = (props: {
       setSelection(
         moveSelection({ selection, activeIndex, delta, count, hiddenIndices })
       ),
-    onStepPlayhead: (delta) => {
-      const player = playerRef.current;
-      if (!player) return;
-      // From the Player's own frame, not `activeIndex`: that state lags a
-      // frameupdate behind, and two quick presses must step two moments.
-      const frame = adjacentSegmentStartFrame(
-        segmentsRef.current,
-        player.getCurrentFrame(),
-        delta
-      );
-      if (frame === null) return;
-      // The selection goes back to following the playhead, so the highlight
-      // sits on the moment now on screen.
-      setSelection(null);
-      seekKeepingPlayState(player, frame);
-    },
+    onStepPlayhead: (delta) => step("clip-mockup", delta),
+    onStepSection: (delta) => step("section", delta),
     onSelectEdge: (edge) =>
       // `null` is "nothing on screen to select", so the selection stands.
       setSelection(

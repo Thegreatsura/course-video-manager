@@ -5,7 +5,6 @@ import {
   UNVOICED_HOLD_SECONDS,
   buildAnimaticTimeline,
   formatAnimaticRunTime,
-  adjacentSegmentStartFrame,
   segmentIndexAtFrame,
   type AnimaticClipMockup,
 } from "./animatic-timeline";
@@ -150,33 +149,6 @@ describe("segmentIndexAtFrame", () => {
 
   it("is -1 only for an empty timeline", () => {
     expect(segmentIndexAtFrame([], 0)).toBe(-1);
-  });
-});
-
-describe("adjacentSegmentStartFrame", () => {
-  const segments = buildAnimaticTimeline([
-    mockup(1, 2),
-    mockup(2, 2),
-    mockup(3, 2),
-  ]).segments;
-
-  it("steps to the start of the next and the previous Clip Mockup", () => {
-    const midSecond = segments[1]!.startFrame + 5;
-    expect(adjacentSegmentStartFrame(segments, midSecond, 1)).toBe(
-      segments[2]!.startFrame
-    );
-    expect(adjacentSegmentStartFrame(segments, midSecond, -1)).toBe(0);
-  });
-
-  it("holds at either end rather than wrapping", () => {
-    expect(adjacentSegmentStartFrame(segments, 0, -1)).toBeNull();
-    expect(
-      adjacentSegmentStartFrame(segments, segments[2]!.startFrame, 1)
-    ).toBeNull();
-  });
-
-  it("has nowhere to go in an empty Animatic", () => {
-    expect(adjacentSegmentStartFrame([], 0, 1)).toBeNull();
   });
 });
 
