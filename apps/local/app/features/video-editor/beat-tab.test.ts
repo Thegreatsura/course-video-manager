@@ -77,4 +77,17 @@ describe("resolveBeatTab", () => {
       })
     ).toBe("script");
   });
+
+  it("honours a remembered Suggestions tab on any Video, since it always exists", () => {
+    // The choice is one for every Video (#2415): the next Video, with no
+    // Beats, Reference or Animatic of its own, still opens on Suggestions.
+    expect(
+      resolveBeatTab({
+        persistedTab: "suggestions",
+        hasBeats: false,
+        hasReference: false,
+        hasAnimatic: false,
+      })
+    ).toBe("suggestions");
+  });
 });

@@ -10,12 +10,31 @@
 export type BeatTab =
   "beats" | "reference" | "script" | "animatic" | "suggestions";
 
+export const BEAT_TABS: readonly BeatTab[] = [
+  "beats",
+  "reference",
+  "script",
+  "animatic",
+  "suggestions",
+];
+
+/**
+ * Where the author's last tab choice is kept: ONE key for every Video, so
+ * moving to the previous or next Video keeps the tab they were on (#2415).
+ * Suggestions is remembered too, so a Video opened on it asks for a
+ * Suggestion at once. A stored value this app no longer knows (a `mockups`
+ * tab from before that tab went away) reads back as Script.
+ */
+export const BEAT_TAB_STORAGE_KEY = "video-editor:side-panel-tab";
+
 /**
  * Resolve which tab the editor's side slot should show, given the persisted
  * choice and which tabs currently exist. Pure and total so it can be unit
  * tested independently of React:
  *
- *  - Honour the persisted tab if it still exists.
+ *  - Honour the persisted tab if it still exists. The persisted tab is the
+ *    last one the author picked on ANY Video, so a tab this Video lacks shows
+ *    Script without forgetting the choice: the next Video that has it shows it.
  *  - Otherwise Script. It always exists (you author the script there, empty or
  *    not), it's what the teleprompter mirrors, and it's what you're in front of
  *    for most of a session. Reference and Beats are still selected outright by
