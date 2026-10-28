@@ -643,7 +643,6 @@ export function WriterEngine({
             >
               Cancel
             </Button>
-            {more && <MoreToggle {...more} />}
             <ApplyButton
               onApply={handleApply}
               isApplying={isApplying}
@@ -651,6 +650,7 @@ export function WriterEngine({
               unresolvedScreenshots={unresolvedScreenshots}
               lintCount={lintCount}
             />
+            {more && <MoreToggle {...more} />}
           </div>
         )}
       </div>
