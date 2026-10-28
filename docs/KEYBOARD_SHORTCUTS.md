@@ -31,7 +31,10 @@ A surface that lives INSIDE a dialog — the Article Writer preview, whose L and
 step through its ChooseScreenshot placeholders — cannot use that guard whole, so
 it uses the guard's `isTypingTarget` half and scopes itself to keys from its own
 dialog. The Video and Animatic pages refuse every key from a dialog, so the two
-L/K meanings never both act on one press.
+L/K meanings never both act on one press. The writer's bottom bar has keys the
+same way (`features/article-writer/writer-shortcuts.ts`): F runs Fix, and
+Ctrl+Enter (or Cmd+Enter) does nothing while the model streams, presses Go on an
+empty Body, and otherwise runs Apply. Each acts exactly when its button would.
 
 The Video Editor can also open the Animatic player OVER itself: a click on a
 Clip Mockup in the side panel's Animatic tab opens it there and plays from that

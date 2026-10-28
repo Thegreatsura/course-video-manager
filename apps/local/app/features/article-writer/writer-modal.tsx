@@ -211,7 +211,11 @@ export function WriterModal({
 
           {/* Unsaved-changes confirmation */}
           {showConfirmClose && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div
+              role="alertdialog"
+              aria-label="Unsaved changes"
+              className="absolute inset-0 z-20 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+            >
               <div className="max-w-sm rounded-lg border bg-background p-6 shadow-lg">
                 <h3 className="text-base font-semibold">Unsaved changes</h3>
                 <p className="mt-2 text-sm text-muted-foreground">

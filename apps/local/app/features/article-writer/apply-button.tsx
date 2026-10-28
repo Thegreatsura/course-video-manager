@@ -2,6 +2,7 @@ import { AlertTriangleIcon, Loader2Icon } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { APPLY_SHORTCUT_HINT } from "./writer-shortcuts";
 
 /**
  * The writer's Apply. Lint violations never block it: they only add the
@@ -46,14 +47,14 @@ export function ApplyButton(props: {
 function applyTitle(props: {
   unresolvedScreenshots: boolean;
   lintCount: number;
-}): string | undefined {
+}): string {
   if (props.unresolvedScreenshots) {
     return "Resolve all screenshot placeholders before applying";
   }
   if (props.lintCount > 0) {
-    return `Apply with ${props.lintCount} lint violation${props.lintCount > 1 ? "s" : ""}`;
+    return `Apply with ${props.lintCount} lint violation${props.lintCount > 1 ? "s" : ""} (${APPLY_SHORTCUT_HINT})`;
   }
-  return undefined;
+  return `Apply (${APPLY_SHORTCUT_HINT})`;
 }
 
 export type MoreToggleProps = {

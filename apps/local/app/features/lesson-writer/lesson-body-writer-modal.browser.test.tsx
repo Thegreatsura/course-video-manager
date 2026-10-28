@@ -118,7 +118,9 @@ describe("LessonBodyWriterModal: More?", () => {
     await userEvent.fill(chatBox.element() as HTMLElement, "a draft for v1");
 
     await screen.getByRole("checkbox", { name: "More?" }).click();
-    await screen.getByRole("button", { name: /Apply/ }).click();
+    // Ctrl+Enter presses the same Apply as the button.
+    await screen.getByTestId("writer-modal-breadcrumb").click();
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
 
     // The Body was saved, and the writer moved on rather than closing.
     await expect
