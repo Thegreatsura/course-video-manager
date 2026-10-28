@@ -13,6 +13,7 @@ import type { WriterContextData } from "@/services/video-posting-context.server"
 import {
   createInitialLessonBodyChainState,
   lessonBodyChainReducer,
+  writeStoredMore,
 } from "./lesson-body-chain-reducer";
 
 type LessonWriterData = {
@@ -31,7 +32,8 @@ const BODY_MODES: Mode[] = FIELD_MODES["video-body"];
  *
  * With "More?" ticked, Apply moves on to the next Video with an empty Lesson
  * Body (`lesson-body-chain-reducer.ts`). The writer is keyed on the Video it
- * is on, so each Video starts from fresh state; only "More?" carries over.
+ * is on, so each Video starts from fresh state; only "More?" carries over,
+ * and it is remembered in localStorage across opens.
  */
 export function LessonBodyWriterModal({
   videoId,
@@ -67,6 +69,7 @@ export function LessonBodyWriterModal({
           );
       },
       "close-writer": () => onOpenChange(false),
+      "persist-more": (_state, effect) => writeStoredMore(effect.more),
       "show-toast": (_state, effect) => {
         if (effect.tone === "error") toast.error(effect.message);
         else toast(effect.message);

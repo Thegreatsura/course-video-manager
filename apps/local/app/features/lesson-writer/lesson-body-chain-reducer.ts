@@ -1,4 +1,5 @@
 import type { EffectReducer } from "use-effect-reducer";
+import { readStored, writeStored } from "@/hooks/use-local-storage";
 
 /**
  * The Lesson Body writer's "More?": a chain of Lesson Bodies written one
@@ -6,7 +7,10 @@ import type { EffectReducer } from "use-effect-reducer";
  * server for the next Video with an empty Lesson Body and moves the writer
  * there; the writer below is keyed on `videoId`, so it starts fresh. "More?"
  * is the one thing that outlives a Video. Closing the writer by hand ends the
- * chain and unticks it.
+ * chain.
+ *
+ * "More?" is also remembered across opens and reloads: one global
+ * localStorage key, read when the chain starts and written on every toggle.
  */
 export namespace lessonBodyChainReducer {
   export type State = {
@@ -30,16 +34,25 @@ export namespace lessonBodyChainReducer {
   export type Effect =
     | { type: "find-next-video"; videoId: string }
     | { type: "close-writer" }
+    | { type: "persist-more"; more: boolean }
     | { type: "show-toast"; tone: "info" | "error"; message: string };
 }
 
 export const NO_MORE_VIDEOS_MESSAGE =
   "No more Videos with an empty Lesson Body";
 
+/** One key for every Video: "More?" is a habit, not a per-Video setting. */
+export const MORE_STORAGE_KEY = "lesson-body-writer-more";
+
 export function createInitialLessonBodyChainState(
   videoId: string
 ): lessonBodyChainReducer.State {
-  return { videoId, more: false };
+  // Off unless "true" was stored: a missing or unreadable key reads as off.
+  return { videoId, more: readStored(MORE_STORAGE_KEY) === "true" };
+}
+
+export function writeStoredMore(more: boolean): void {
+  writeStored(MORE_STORAGE_KEY, String(more));
 }
 
 export const lessonBodyChainReducer: EffectReducer<
@@ -49,6 +62,7 @@ export const lessonBodyChainReducer: EffectReducer<
 > = (state, action, exec) => {
   switch (action.type) {
     case "more-toggled":
+      exec({ type: "persist-more", more: action.checked });
       return { ...state, more: action.checked };
 
     case "body-applied":
@@ -87,6 +101,6 @@ export const lessonBodyChainReducer: EffectReducer<
 
     case "writer-closed-by-hand":
       exec({ type: "close-writer" });
-      return { ...state, more: false };
+      return state;
   }
 };
