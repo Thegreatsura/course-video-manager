@@ -49,6 +49,7 @@ import { copyToClipboard } from "./clipboard";
 import { toast } from "@/components/ui/toast";
 import { useApplyDocument } from "./use-apply-document";
 import { ApplyButton } from "./apply-button";
+import { FIX_SHORTCUT_HINT, useWriterShortcuts } from "./writer-shortcuts";
 import { InlineContextStrip } from "./inline-context-strip";
 import { ContextView } from "./context-view";
 import { SettingsView } from "./settings-view";
@@ -492,11 +493,32 @@ export function WriterEngine({
     ]
   );
 
+  // The modal's bottom bar, and the keys that press it (F, Ctrl+Enter).
+  const lintCount = violations.reduce((sum, v) => sum + v.count, 0);
+  const unresolvedScreenshots = hasUnresolvedScreenshots(document ?? "");
+  const modalRootRef = useRef<HTMLDivElement>(null);
+  useWriterShortcuts(
+    modalRootRef,
+    layout === "modal" && view === "writer",
+    {
+      isGenerating,
+      canFix: lintCount > 0,
+      canApply: !(isGenerating || isApplying || unresolvedScreenshots),
+      bodyIsEmpty: !document,
+    },
+    {
+      fix: handleFixLintViolations,
+      apply: handleApply,
+      go: () => handleSubmit("Go"),
+    }
+  );
+
   if (layout === "modal") {
-    const lintCount = violations.reduce((sum, v) => sum + v.count, 0);
-    const unresolvedScreenshots = hasUnresolvedScreenshots(document ?? "");
     return (
-      <div className="relative flex flex-1 flex-col overflow-hidden h-full">
+      <div
+        ref={modalRootRef}
+        className="relative flex flex-1 flex-col overflow-hidden h-full"
+      >
         {/* 2-pane body */}
         <div className="flex flex-1 overflow-hidden">
           <WriteChat {...chatProps} className="w-2/5 border-r" />
@@ -594,6 +616,7 @@ export function WriterEngine({
                 size="sm"
                 className="h-8"
                 onClick={handleFixLintViolations}
+                title={`Fix (${FIX_SHORTCUT_HINT})`}
               >
                 <AlertTriangleIcon className="size-4 mr-1 text-orange-500" />
                 Fix ({lintCount})
