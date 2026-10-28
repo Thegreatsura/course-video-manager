@@ -28,6 +28,14 @@ import {
   type AnimaticSectionLesson,
 } from "@/features/animatic/animatic-section-clock";
 import { AnimaticEmptyState } from "@/features/animatic/animatic-empty-state";
+import {
+  NO_ANIMATIC_NEIGHBOURS,
+  animaticNeighbours,
+  readAnimaticStartIntent,
+  type AnimaticNeighbours,
+  type AnimaticStartIntent,
+} from "@/features/animatic/animatic-course-walk";
+import { useLocation, useNavigate } from "react-router";
 import type { Route } from "./+types/_app.videos.$videoId.animatic";
 
 /**
@@ -89,7 +97,7 @@ export const loader = makeLoader({
         ...files[index]!,
       }));
 
-      const sectionLessons = yield* loadSectionLessons(videoId);
+      const { sectionLessons, neighbours } = yield* loadCourseAround(videoId);
 
       return {
         sectionRunTime: sectionRunTime({
@@ -103,6 +111,7 @@ export const loader = makeLoader({
           format: resolveVideoFormat(video.format),
         },
         mockups,
+        neighbours,
         chapters: chapterRows.map(
           (row) =>
             ({
@@ -125,8 +134,13 @@ export const loader = makeLoader({
 });
 
 /**
- * The Lessons of the current Video's Section, in Section order, each Video
- * with the speech durations of its Clip Mockups — what the Section clock sums.
+ * The Course around the current Video, read off one navigation tree.
+ *
+ * The Lessons of its Section, in Section order, each Video with the speech
+ * durations of its Clip Mockups — what the Section clock sums. And its
+ * NEIGHBOURS: the Videos with Clip Mockups that LEFT, RIGHT and CTRL+LEFT/RIGHT
+ * walk to (`animatic-course-walk.ts`), found with one distinct read over the
+ * whole Course.
  *
  * The Section is read off the Course's navigation tree, the same tree
  * PREVIOUS/NEXT walks, so the clock counts the Videos NEXT will stop on. The
@@ -134,23 +148,40 @@ export const loader = makeLoader({
  * this loader is polled every two seconds. A standalone Video has no Section,
  * and gets an empty list.
  */
-const loadSectionLessons = (videoId: string) =>
+const loadCourseAround = (videoId: string) =>
   Effect.gen(function* () {
     const videoOps = yield* VideoOperationsService;
     const courseOps = yield* CourseOperationsService;
     const clipMockupOps = yield* ClipMockupOperationsService;
+    const nothingAround = {
+      sectionLessons: [] as AnimaticSectionLesson[],
+      neighbours: NO_ANIMATIC_NEIGHBOURS as AnimaticNeighbours,
+    };
 
     const video = yield* videoOps.getVideoWithLessonById(videoId);
     const lesson = video.lesson;
-    if (!lesson) return [] as AnimaticSectionLesson[];
+    if (!lesson) return nothingAround;
 
     const courseNav = yield* courseOps.getCourseNavigationData(
       lesson.section.repoVersion.repo.id
     );
-    const section = (courseNav.versions[0]?.sections ?? []).find(
+    const sections = courseNav.versions[0]?.sections ?? [];
+    const section = sections.find(
       (candidate) => candidate.id === lesson.section.id
     );
-    if (!section) return [] as AnimaticSectionLesson[];
+    if (!section) return nothingAround;
+
+    const courseSections = sections.map((s) => ({
+      videoIds: s.lessons.flatMap((l) => l.videos.map((v) => v.id)),
+    }));
+    const withClipMockups = yield* clipMockupOps.listVideoIdsWithClipMockups(
+      courseSections.flatMap((s) => s.videoIds)
+    );
+    const neighbours = animaticNeighbours({
+      sections: courseSections,
+      withClipMockups: new Set(withClipMockups),
+      currentVideoId: videoId,
+    });
 
     const videoIds = section.lessons.flatMap((l) => l.videos.map((v) => v.id));
     const durationRows =
@@ -162,18 +193,30 @@ const loadSectionLessons = (videoId: string) =>
       durationsByVideo.set(row.videoId, list);
     }
 
-    return section.lessons.map((l): AnimaticSectionLesson => ({
+    const sectionLessons = section.lessons.map((l): AnimaticSectionLesson => ({
       videos: l.videos.map((v) => ({
         id: v.id,
         title: v.title,
         durationsSeconds: durationsByVideo.get(v.id) ?? [],
       })),
     }));
+    return { sectionLessons, neighbours };
   });
 
 export default function AnimaticRoute({ loaderData }: Route.ComponentProps) {
-  const { video, mockups, chapters, comments, sectionRunTime } = loaderData;
+  const { video, mockups, neighbours, chapters, comments, sectionRunTime } =
+    loaderData;
   const { startAnimaticExport } = useUploadActions();
+  const navigate = useNavigate();
+
+  // Arrived by a walk from another Animatic (`animatic-course-walk.ts`): open
+  // at the end it asked for, and play. Arrived any other way: at the top,
+  // paused, as ever.
+  const start = readAnimaticStartIntent(useLocation().state);
+  const startAt =
+    start === null
+      ? undefined
+      : (start === "first" ? mockups[0] : mockups[mockups.length - 1])?.id;
 
   // An Animatic is WATCHED WHILE IT IS STILL BEING WRITTEN — an agent redraws a
   // frame or rewrites a line in the background, and the author should see it on
@@ -211,6 +254,15 @@ export default function AnimaticRoute({ loaderData }: Route.ComponentProps) {
         chapters={chapters}
         sectionRunTime={sectionRunTime}
         format={video.format}
+        startAt={startAt}
+        courseWalk={{
+          neighbours,
+          // A real route change, so the URL names the Video now playing.
+          onOpen: (videoId, animaticStart) => {
+            const state: AnimaticStartIntent = { animaticStart };
+            void navigate(`/videos/${videoId}/animatic`, { state });
+          },
+        }}
         onExport={() =>
           startAnimaticExport(video.id, `${video.title} (Animatic)`)
         }

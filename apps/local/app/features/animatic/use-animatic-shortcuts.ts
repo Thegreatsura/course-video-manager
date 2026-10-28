@@ -17,6 +17,9 @@ import { shouldIgnoreKeyboardShortcut } from "@/hooks/should-ignore-keyboard-sho
  * Clip Mockup, because the author watching the picture wants the picture to
  * move — and a selection is invisible with the list folded away, and cannot
  * land on a folded row at all. UP and DOWN keep the Video page's meaning.
+ * Off either end of the Animatic they walk on into the neighbouring Video, and
+ * CTRL+LEFT and CTRL+RIGHT make the same walk by Section — see
+ * `animatic-course-walk.ts`.
  *
  * The same guard as the Video page decides when a key is not ours
  * (`shouldIgnoreKeyboardShortcut`), so typing in a field or a dialog never
@@ -36,7 +39,9 @@ export interface AnimaticShortcutHandlers {
   /** ARROW UP and ARROW DOWN — move the selection only. */
   onMoveSelection: (delta: number) => void;
   /** ARROW LEFT and ARROW RIGHT — step the playhead to the previous / next Clip Mockup. */
-  onStepPlayhead: (delta: number) => void;
+  onStepPlayhead: (delta: -1 | 1) => void;
+  /** CTRL+ARROW LEFT and CTRL+ARROW RIGHT — the same walk, a Section at a time. */
+  onStepSection: (delta: -1 | 1) => void;
   /** HOME / END — select the first / last Clip Mockup. */
   onSelectEdge: (edge: "first" | "last") => void;
   /** L and K — 2x and 1x, the Video page's transport keys. */
@@ -82,12 +87,11 @@ export function useAnimaticShortcuts(handlers: AnimaticShortcutHandlers) {
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         held.current.onMoveSelection(1);
-      } else if (e.key === "ArrowLeft") {
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
-        held.current.onStepPlayhead(-1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        held.current.onStepPlayhead(1);
+        const delta = e.key === "ArrowLeft" ? -1 : 1;
+        if (e.ctrlKey) held.current.onStepSection(delta);
+        else held.current.onStepPlayhead(delta);
       } else if (e.key === "Home") {
         held.current.onSelectEdge("first");
       } else if (e.key === "End") {

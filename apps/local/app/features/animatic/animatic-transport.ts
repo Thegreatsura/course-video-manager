@@ -1,4 +1,11 @@
 import type { PlayerRef } from "@remotion/player";
+import {
+  NO_ANIMATIC_NEIGHBOURS,
+  resolveAnimaticStep,
+  type AnimaticNeighbours,
+  type AnimaticStart,
+} from "./animatic-course-walk";
+import type { AnimaticSegment } from "./animatic-timeline";
 
 /**
  * Start the Animatic playing at a given frame — and be the ONLY thing that
@@ -62,4 +69,42 @@ export function seekKeepingPlayState(
     return;
   }
   player.seekTo(frame);
+}
+
+/**
+ * A press of LEFT/RIGHT (`clip-mockup`) or CTRL+LEFT/RIGHT (`section`),
+ * carried out. What it means is `resolveAnimaticStep`'s decision; this only
+ * seeks the Player, or hands another Video's Animatic to `onOpen`. Without
+ * `neighbours` (the editor's overlay) the walk stays inside this Video.
+ */
+export function stepAnimatic(props: {
+  player: (AnimaticTransport & Pick<PlayerRef, "getCurrentFrame">) | null;
+  level: "clip-mockup" | "section";
+  delta: -1 | 1;
+  segments: ReadonlyArray<AnimaticSegment>;
+  neighbours: AnimaticNeighbours | undefined;
+  onOpen: ((videoId: string, start: AnimaticStart) => void) | undefined;
+  onSeek: () => void;
+}): void {
+  const { player } = props;
+  if (!player) return;
+  // No Course around it, so no Sections to walk.
+  if (props.level === "section" && !props.neighbours) return;
+  const outcome = resolveAnimaticStep({
+    level: props.level,
+    delta: props.delta,
+    segments: props.segments,
+    // From the Player's own frame, not the highlighted row: that lags a
+    // frameupdate behind, and two quick presses must step two moments.
+    frame: player.getCurrentFrame(),
+    neighbours: props.neighbours ?? NO_ANIMATIC_NEIGHBOURS,
+  });
+  if (outcome === null) return;
+  if (outcome.type === "open") {
+    props.onOpen?.(outcome.videoId, outcome.start);
+    return;
+  }
+  props.onSeek();
+  if (outcome.playback === "play") startPlayingAt(player, outcome.frame);
+  else seekKeepingPlayState(player, outcome.frame);
 }

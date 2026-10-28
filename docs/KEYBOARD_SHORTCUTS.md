@@ -16,6 +16,14 @@ are a second UP and DOWN; on the Animatic they step the PLAYHEAD to the previous
 or next Clip Mockup, folded or not, because the author is watching the picture
 and a selection does not move it. UP and DOWN keep the Video page's meaning.
 
+On the Animatic page they also WALK OFF THE END of the Video (#2414): RIGHT on
+the last Clip Mockup opens the next Video with Clip Mockups from the top,
+playing; LEFT in the first second of the first one opens the previous Video at
+its last Clip Mockup (past that second it restarts the Clip Mockup). CTRL+LEFT
+and CTRL+RIGHT make the same walk by Section. The rules are one pure function,
+`features/animatic/animatic-course-walk.ts`; the editor's Animatic overlay
+stays inside its one Video.
+
 Port a key only if the Animatic has something for it to act on — the Animatic is
 read-only, so DELETE, ALT+ARROW (reorder) and B (pause marker) have no
 equivalent and are left out. When a shortcut is ADDED to the Video page, decide

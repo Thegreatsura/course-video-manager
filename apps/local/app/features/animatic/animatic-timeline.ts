@@ -208,21 +208,3 @@ export function segmentIndexAtFrame(
   }
   return segments.length > 0 ? 0 : -1;
 }
-
-/**
- * The first frame of the Clip Mockup `delta` places from the one under the
- * playhead — what LEFT and RIGHT jump to. `null` past either end, so the step
- * holds rather than wrapping round.
- *
- * It walks EVERY segment, folded or not. A fold hides rows in the list; it
- * never skips frames, so a step through the picture does not skip them either.
- */
-export function adjacentSegmentStartFrame(
-  segments: readonly AnimaticSegment[],
-  frame: number,
-  delta: number
-): number | null {
-  const index = segmentIndexAtFrame(segments, frame);
-  if (index < 0) return null;
-  return segments[index + delta]?.startFrame ?? null;
-}
