@@ -28,6 +28,18 @@ function countRemoveButtons(html: string) {
   return html.split(`aria-label="Remove"`).length - 1;
 }
 
+describe("AIResponse image", () => {
+  it("keeps the image's own aspect ratio, not a fixed 16:9 box", () => {
+    const html = renderToStaticMarkup(
+      <AIResponse imageBasePath="/videos/1">
+        {"![a tall crop](shot.png)"}
+      </AIResponse>
+    );
+    expect(html).toContain("max-h-[70vh]");
+    expect(html).not.toContain("aspect-video");
+  });
+});
+
 describe("AIResponse remove-block control", () => {
   it("renders no remove buttons without a handler", () => {
     expect(countRemoveButtons(render())).toBe(0);
