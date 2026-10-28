@@ -58,11 +58,16 @@ const PreviewImage = ({
     !isExternalUrl && props.src && actions
       ? actions({ src: props.src, alt: props.alt ?? "" })
       : null;
+  // The box hugs the image at its own aspect ratio: a Custom Crop can be any
+  // shape, so no fixed ratio here. Capped so a tall crop can't take over.
   return (
-    <div className="relative my-6 aspect-video">
+    <div className="relative my-6 mx-auto w-fit max-w-full">
       <img
         {...props}
-        className={cn("w-full h-full object-contain", className)}
+        className={cn(
+          "block max-w-full max-h-[70vh] object-contain",
+          className
+        )}
         src={src}
       />
       {localActions && (
