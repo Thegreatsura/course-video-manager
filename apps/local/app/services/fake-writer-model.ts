@@ -20,6 +20,10 @@ import { APICallError, type LanguageModel } from "ai";
  * | `stream-drop-once`      | the stream dies mid-reply on the first request                 |
  * | `bad-request`           | 400 on every request                                           |
  * | `slow-write`            | writes a document with Choose Screenshots, over ~40 seconds    |
+ *
+ * A request for structured output (the Suggestions tab's) gets
+ * `FAKE_SUGGESTIONS` back as JSON, a few characters at a time, whatever the
+ * scenario.
  */
 export const FAKE_WRITER_SCENARIOS = [
   "bad-tool-shape",
@@ -83,6 +87,13 @@ export function createFakeWriterModel(
       }
 
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+      if (options.responseFormat?.type === "json") {
+        parts.push(
+          ...textParts(JSON.stringify({ suggestions: FAKE_SUGGESTIONS }), 12)
+        );
+        parts.push(finish("stop"));
+        return { stream: streamOf(parts) };
+      }
       if (turn.scenario === "stream-drop-once" && once("stream-drop")) {
         parts.push(...textParts("Starting the draft…"), {
           type: "error",
@@ -203,13 +214,39 @@ function apiError(status: number, type: string, message: string) {
   });
 }
 
-function textParts(text: string): StreamPart[] {
+/** `chunkSize` splits the text into many deltas, as a real model sends it. */
+function textParts(text: string, chunkSize = Infinity): StreamPart[] {
+  const deltas: StreamPart[] = [];
+  const step = Math.max(1, Math.min(chunkSize, text.length));
+  for (let at = 0; at < text.length; at += step) {
+    deltas.push({
+      type: "text-delta",
+      id: "t",
+      delta: text.slice(at, at + step),
+    });
+  }
   return [
     { type: "text-start", id: "t" },
-    { type: "text-delta", id: "t", delta: text },
+    ...deltas,
     { type: "text-end", id: "t" },
   ];
 }
+
+/** The fake's three Suggestions: three paths, each with a short title. */
+export const FAKE_SUGGESTIONS = [
+  {
+    title: "Follow the plan",
+    text: "Now let's look at the **next step** in the plan.",
+  },
+  {
+    title: "Show an example",
+    text: "Let me show you an **example** of this in action.",
+  },
+  {
+    title: "Ask the viewer",
+    text: "Before we go on, **what do you think** happens here?",
+  },
+];
 
 const SLOW_DOCUMENT = [
   "# Slow draft",

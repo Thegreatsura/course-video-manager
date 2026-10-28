@@ -12,6 +12,7 @@ import { formatAnimaticContext } from "@/features/article-writer/format-animatic
 import { formatBeatsContext } from "@/features/article-writer/format-beats-context";
 import { isImageFilePath } from "@/lib/image-file-path";
 import { subscribeActiveDiagramText } from "@/lib/diagram-window";
+import { readSuggestionLines } from "@/prompts/generate-suggest-next-clip";
 import type { FsData } from "../components/deferred-fs-panels";
 import type {
   FrontendInsertionPoint,
@@ -108,6 +109,8 @@ export function useSuggestions(input: {
         notes: readStored(notesKey(input.videoId)) ?? "",
         pickedFiles: readPickedFiles(input.videoId),
         previousVideoClips: input.previousVideoClips,
+        // Opened on the tab: wait for Refresh rather than ask (#2415).
+        openedOnTab: input.open,
       });
     },
     {
@@ -141,12 +144,19 @@ export function useSuggestions(input: {
           if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
-          let text = "";
+          let received = "";
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            text += decoder.decode(value, { stream: true });
-            dispatch({ type: "suggestion-chunk-received", requestId, text });
+            received += decoder.decode(value, { stream: true });
+            const suggestions = readSuggestionLines(received);
+            if (suggestions) {
+              dispatch({
+                type: "suggestion-chunk-received",
+                requestId,
+                suggestions,
+              });
+            }
           }
           dispatch({ type: "suggestion-finished", requestId });
         })().catch(() => {
@@ -266,6 +276,8 @@ export function useSuggestions(input: {
     onToggleSource: (source: suggestionsReducer.Source) =>
       dispatch({ type: "source-toggled", source }),
     onRefresh: () => dispatch({ type: "refresh-clicked" }),
+    onSuggestionTabClick: (index: number) =>
+      dispatch({ type: "suggestion-tab-clicked", index }),
     onNotesChange: (notes: string) => dispatch({ type: "notes-edited", notes }),
     onContextClick: () => dispatch({ type: "context-button-clicked" }),
     onContextDismiss: () => dispatch({ type: "context-modal-dismissed" }),

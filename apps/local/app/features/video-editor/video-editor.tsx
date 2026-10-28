@@ -8,11 +8,10 @@ import { ClipTimeline } from "./components/clip-timeline";
 import { ErrorOverlay } from "./components/error-overlay";
 import { type ReferenceCandidate } from "./components/reference-panel";
 import { EditorSidePanel } from "./components/editor-side-panel";
-import { useBeatTab } from "./hooks/use-beat-tab";
 import { useSuggestions } from "./hooks/use-suggestions";
 import { useSubmitBeatEvent } from "./hooks/use-submit-beat-event";
 import { useVideoEditor } from "./hooks/use-video-editor";
-import { resolveBeatTab } from "./beat-tab";
+import { BEAT_TAB_STORAGE_KEY, BEAT_TABS, resolveBeatTab } from "./beat-tab";
 import type { AnimaticLine } from "@/features/animatic/animatic-lines";
 import type { BeatListBeat } from "@/features/beats/beat-list";
 import { useAutofillChaptersModal } from "./hooks/use-autofill-chapters-modal";
@@ -27,7 +26,10 @@ import { useClipboardOperations } from "./hooks/use-clipboard-operations";
 import { useCallback, type ReactNode, useEffect, useMemo } from "react";
 import { enableVideoEditorMode } from "@/lib/diagram-window";
 import { useDiagramRecordingStatus } from "./use-diagram-recording-status";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import {
+  useLocalStorage,
+  useLocalStorageOneOf,
+} from "@/hooks/use-local-storage";
 import type {
   DatabaseId,
   EditorError,
@@ -296,7 +298,12 @@ export const VideoEditor = (props: {
   );
   const referenceVideoId = storedReferenceVideoId || null;
 
-  const [persistedBeatTab, setPersistedBeatTab] = useBeatTab(props.videoId);
+  // One choice for every Video: the next Video opens on the same tab.
+  const [persistedBeatTab, setPersistedBeatTab] = useLocalStorageOneOf(
+    BEAT_TAB_STORAGE_KEY,
+    BEAT_TABS,
+    "script"
+  );
 
   const activeReference =
     referenceVideoId &&
