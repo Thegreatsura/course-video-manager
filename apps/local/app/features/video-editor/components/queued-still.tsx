@@ -1,4 +1,10 @@
-import { useEffect, useId, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { cn } from "@/lib/utils";
 import {
   createInitialStillQueueState,
@@ -61,4 +67,50 @@ export const QueuedStill = (props: {
       onError={settled}
     />
   );
+};
+
+/**
+ * Holds every still in the Still Queue while this `<video>` loads, so the
+ * Clip's videos always get the browser's connections, and the server's
+ * Footage reads, first (videos first). A layout effect, so the video counts
+ * before any still in the same commit can be admitted. Bridges the element's
+ * events to the queue; the reducer decides what they mean.
+ */
+export const useStillsWaitForVideo = (
+  ref: RefObject<HTMLVideoElement | null>,
+  src: string | null
+) => {
+  const id = useId();
+  useLayoutEffect(() => {
+    const video = ref.current;
+    if (!video || !src) return;
+    const ticket = `${id} ${src}`;
+    const loading = () => dispatch({ type: "video-loading", ticket });
+    const suspended = () =>
+      dispatch({
+        type: "video-suspended",
+        ticket,
+        readyState: video.readyState,
+      });
+    const canPlay = () => dispatch({ type: "video-can-play", ticket });
+    const failed = () => dispatch({ type: "video-failed", ticket });
+    const listeners = [
+      ["loadstart", loading],
+      ["waiting", loading],
+      ["suspend", suspended],
+      ["canplay", canPlay],
+      ["error", failed],
+    ] as const;
+
+    if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) loading();
+    for (const [event, listener] of listeners) {
+      video.addEventListener(event, listener);
+    }
+    return () => {
+      for (const [event, listener] of listeners) {
+        video.removeEventListener(event, listener);
+      }
+      dispatch({ type: "video-unmounted", ticket });
+    };
+  }, [ref, src, id]);
 };

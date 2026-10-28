@@ -24,6 +24,7 @@ import {
   overlayTransformStyle,
   type ClipOverlay,
 } from "./overlay-preview";
+import { useStillsWaitForVideo } from "./components/queued-still";
 
 const PRELOAD_PLAY_AMOUNT = 0.1;
 
@@ -75,6 +76,12 @@ export const PreloadableClip = (props: {
     from: preloadFrom + clockOffset,
     to: modifiedEndTime + clockOffset,
   });
+
+  const playbackUrl = clipPlaybackUrl(source, {
+    from: preloadFrom + clockOffset,
+    to: modifiedEndTime + clockOffset,
+  });
+  useStillsWaitForVideo(ref, playbackUrl);
 
   const isPlaying = !props.hidden && props.state === "playing";
 
@@ -244,10 +251,7 @@ export const PreloadableClip = (props: {
       )}
       <video
         key={props.clip.frontendId}
-        src={clipPlaybackUrl(source, {
-          from: preloadFrom + clockOffset,
-          to: modifiedEndTime + clockOffset,
-        })}
+        src={playbackUrl}
         className={cn(
           "w-full",
           props.profile === "TikTok" && "w-92 aspect-[9/16]",
