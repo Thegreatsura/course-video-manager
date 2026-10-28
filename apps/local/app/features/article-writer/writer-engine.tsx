@@ -180,7 +180,6 @@ export function WriterEngine({
   const { docScreenshotRuntime, isCapturing } = useDocScreenshotRuntime({
     videoId,
     indexedClips,
-    isGenerating,
     documentRef,
     updateDocument,
   });
@@ -204,22 +203,19 @@ export function WriterEngine({
   const handleRemoveDocBlock = useRemoveDocumentBlock({
     documentRef,
     updateDocument,
-    isGenerating,
     previewOptions,
   });
 
   const docQuizRuntime = useMemo(
     (): QuizRuntime => ({
-      // Mid-stream the next chunk would overwrite the cut, so the card's X waits.
-      onRemoveQuestion: isGenerating
-        ? undefined
-        : (questionStart: number) => {
-            const currentDoc = documentRef.current;
-            if (currentDoc)
-              updateDocument(removeQuizQuestion(currentDoc, questionStart));
-          },
+      // Mid-stream the cut waits in the document flow until the turn ends.
+      onRemoveQuestion: (questionStart: number) => {
+        const currentDoc = documentRef.current;
+        if (currentDoc)
+          updateDocument(removeQuizQuestion(currentDoc, questionStart));
+      },
     }),
-    [documentRef, updateDocument, isGenerating]
+    [documentRef, updateDocument]
   );
 
   // Persist messages on stream completion

@@ -19,6 +19,7 @@ import { APICallError, type LanguageModel } from "ai";
  * | `rate-limit-once`       | 429 on this message's first request, fine on its retry         |
  * | `stream-drop-once`      | the stream dies mid-reply on the first request                 |
  * | `bad-request`           | 400 on every request                                           |
+ * | `slow-write`            | writes a document with Choose Screenshots, over ~40 seconds    |
  */
 export const FAKE_WRITER_SCENARIOS = [
   "bad-tool-shape",
@@ -28,6 +29,7 @@ export const FAKE_WRITER_SCENARIOS = [
   "rate-limit-once",
   "stream-drop-once",
   "bad-request",
+  "slow-write",
 ] as const;
 
 type V3Model = Extract<LanguageModel, { specificationVersion: "v3" }>;
@@ -98,6 +100,18 @@ export function createFakeWriterModel(
         turn.rejectedAttempts === 0 &&
         turn.step === 0;
       const toolNames = (options.tools ?? []).map((t) => t.name);
+
+      if (
+        toolNames.includes("writeDocument") &&
+        turn.scenario === "slow-write"
+      ) {
+        // Slow enough to edit the document while it streams in.
+        parts.push(
+          ...toolCallParts(turn, "writeDocument", { content: SLOW_DOCUMENT }, 6)
+        );
+        parts.push(finish("tool-calls"));
+        return { stream: streamOf(parts, 120) };
+      }
 
       if (!toolNames.includes("writeDocument")) {
         parts.push(...textParts(`Fake reply to: ${turn.text}`));
@@ -197,16 +211,46 @@ function textParts(text: string): StreamPart[] {
   ];
 }
 
+const SLOW_DOCUMENT = [
+  "# Slow draft",
+  "",
+  "An opening paragraph, written by the fake writer model.",
+  "",
+  '<ChooseScreenshot clipIndex={1} alt="The first screenshot" />',
+  "",
+  "A paragraph to delete while the rest streams in.",
+  "",
+  ...Array.from(
+    { length: 12 },
+    (_, i) =>
+      `Paragraph ${i + 1} keeps the stream going for a while longer, so there is time to edit what has already arrived.\n`
+  ),
+  '<ChooseScreenshot clipIndex={1} alt="The last screenshot" />',
+  "",
+  "The end.",
+  "",
+].join("\n");
+
+/** `chunkSize` splits the input into many deltas, as a real model sends it. */
 function toolCallParts(
   turn: Turn,
   toolName: string,
-  input: unknown
+  input: unknown,
+  chunkSize = Infinity
 ): StreamPart[] {
   const id = `fake-${toolName}-${turn.step}-${Math.random().toString(36).slice(2, 8)}`;
   const json = JSON.stringify(input);
+  const deltas: StreamPart[] = [];
+  for (let at = 0; at < json.length; at += Math.min(chunkSize, json.length)) {
+    deltas.push({
+      type: "tool-input-delta",
+      id,
+      delta: json.slice(at, at + Math.min(chunkSize, json.length)),
+    });
+  }
   return [
     { type: "tool-input-start", id, toolName },
-    { type: "tool-input-delta", id, delta: json },
+    ...deltas,
     { type: "tool-input-end", id },
     { type: "tool-call", toolCallId: id, toolName, input: json },
   ];
@@ -223,12 +267,15 @@ function finish(reason: "stop" | "tool-calls"): StreamPart {
   };
 }
 
-function streamOf(parts: StreamPart[]): ReadableStream<StreamPart> {
+function streamOf(
+  parts: StreamPart[],
+  beatMs = 30
+): ReadableStream<StreamPart> {
   return new ReadableStream({
     async start(controller) {
       for (const part of parts) {
         // A beat between chunks, so the browser sees a reply stream in.
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await new Promise((resolve) => setTimeout(resolve, beatMs));
         controller.enqueue(part);
       }
       controller.close();

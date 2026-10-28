@@ -10,26 +10,23 @@ import { removeMarkdownBlock } from "./remove-markdown-block";
  * Builds the document preview's per-block remove handler — the X button that
  * appears when hovering a paragraph, heading or list item.
  *
- * Returns `undefined` while the model is writing, which hides the buttons: the
- * document is streaming in from the tool call, so an edit made mid-stream
- * would be overwritten by the next chunk.
+ * It works while the model is writing too: `updateDocument` queues the cut
+ * until the turn ends (`document-flow-reducer.ts`).
  */
 export function useRemoveDocumentBlock({
   documentRef,
   updateDocument,
-  isGenerating,
   previewOptions,
 }: {
   documentRef: MutableRefObject<string | undefined>;
   updateDocument: (content: string) => void;
-  isGenerating: boolean;
   /**
    * What the preview rewrote before parsing. The offsets it reports index into
    * the rewritten string, so they need mapping back before they can cut the
    * stored document.
    */
   previewOptions: DocumentPreviewOptions;
-}): RemoveBlockHandler | undefined {
+}): RemoveBlockHandler {
   const removeBlock = useCallback<RemoveBlockHandler>(
     ({ start, end }) => {
       const currentDoc = documentRef.current;
@@ -54,5 +51,5 @@ export function useRemoveDocumentBlock({
     [documentRef, updateDocument, previewOptions]
   );
 
-  return isGenerating ? undefined : removeBlock;
+  return removeBlock;
 }

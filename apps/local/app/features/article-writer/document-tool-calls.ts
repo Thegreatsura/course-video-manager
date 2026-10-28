@@ -43,7 +43,7 @@ type Settled<Part> = Part extends { state: "input-streaming" }
   : Part extends { input?: unknown }
     ? Part & { input: NonNullable<Part["input"]> }
     : never;
-type SettledDocumentToolPart = Settled<DocumentToolPart>;
+export type SettledDocumentToolPart = Settled<DocumentToolPart>;
 
 /**
  * A tool call whose input has stopped streaming, and so can be executed.
@@ -80,6 +80,58 @@ export function collectDocumentToolCallIds(
 }
 
 /**
+ * The settled document tool calls not in `processedToolCallIds`, in
+ * transcript order.
+ */
+export function unprocessedDocumentToolCalls(
+  messages: DocumentAgentMessage[],
+  processedToolCallIds: ReadonlySet<string>
+): SettledDocumentToolPart[] {
+  return Array.from(settledDocumentToolCalls(messages)).filter(
+    (part) => !processedToolCallIds.has(part.toolCallId)
+  );
+}
+
+/**
+ * Fold one settled tool call into `document`: a write replaces it, an edit
+ * applies to it (or fails, leaving it as it was).
+ */
+export function foldDocumentToolCall(
+  document: string | undefined,
+  part: SettledDocumentToolPart
+): { document: string | undefined; output: DocumentToolOutput } {
+  if (part.type === "tool-writeDocument") {
+    return {
+      document: part.input.content,
+      output: {
+        tool: "writeDocument",
+        toolCallId: part.toolCallId,
+        output: "Document written successfully.",
+      },
+    };
+  }
+  const result = applyEdits(document ?? "", part.input.edits);
+  if ("error" in result) {
+    return {
+      document,
+      output: {
+        tool: "editDocument",
+        toolCallId: part.toolCallId,
+        output: result.error,
+      },
+    };
+  }
+  return {
+    document: result.document,
+    output: {
+      tool: "editDocument",
+      toolCallId: part.toolCallId,
+      output: "Document edited successfully.",
+    },
+  };
+}
+
+/**
  * Fold every tool call not present in `processedToolCallIds` into `document`,
  * in transcript order, so an edit sees the document as left by an earlier write.
  */
@@ -88,65 +140,42 @@ export function applyDocumentToolCalls(opts: {
   document: string | undefined;
   processedToolCallIds: ReadonlySet<string>;
 }): DocumentToolCallOutcome {
-  const { messages, document, processedToolCallIds } = opts;
-
-  let current = document;
+  let current = opts.document;
   const processed: string[] = [];
   const outputs: DocumentToolOutput[] = [];
-
-  for (const part of settledDocumentToolCalls(messages)) {
-    if (processedToolCallIds.has(part.toolCallId)) continue;
+  for (const part of unprocessedDocumentToolCalls(
+    opts.messages,
+    opts.processedToolCallIds
+  )) {
     processed.push(part.toolCallId);
-
-    if (part.type === "tool-writeDocument") {
-      current = part.input.content;
-      outputs.push({
-        tool: "writeDocument",
-        toolCallId: part.toolCallId,
-        output: "Document written successfully.",
-      });
-      continue;
-    }
-
-    const result = applyEdits(current ?? "", part.input.edits);
-    if ("error" in result) {
-      outputs.push({
-        tool: "editDocument",
-        toolCallId: part.toolCallId,
-        output: result.error,
-      });
-    } else {
-      current = result.document;
-      outputs.push({
-        tool: "editDocument",
-        toolCallId: part.toolCallId,
-        output: "Document edited successfully.",
-      });
-    }
+    const folded = foldDocumentToolCall(current, part);
+    current = folded.document;
+    outputs.push(folded.output);
   }
-
   return { document: current, processedToolCallIds: processed, outputs };
 }
 
 /**
- * The content of the last in-flight `writeDocument` call, so the document panel
- * can render the article as the model types it. Returns undefined when nothing
- * is streaming.
+ * The last in-flight `writeDocument` call, so the document panel can render
+ * the article as the model types it: its id (a new id is a new write, which
+ * replaces the document from scratch) and the content so far. Undefined when
+ * nothing is streaming.
  */
 export function getStreamingDocument(
   messages: DocumentAgentMessage[]
-): string | undefined {
-  let streaming: string | undefined;
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    for (const part of message.parts) {
-      if (
-        part.type === "tool-writeDocument" &&
-        part.state === "input-streaming" &&
-        part.input?.content
-      ) {
-        streaming = part.input.content;
-      }
+): { toolCallId: string; content: string } | undefined {
+  // Only the last message is being streamed: a write left half-done in an
+  // earlier one (a stopped turn) is not in flight.
+  const last = messages.at(-1);
+  if (last?.role !== "assistant") return undefined;
+  let streaming: { toolCallId: string; content: string } | undefined;
+  for (const part of last.parts) {
+    if (
+      part.type === "tool-writeDocument" &&
+      part.state === "input-streaming" &&
+      part.input?.content
+    ) {
+      streaming = { toolCallId: part.toolCallId, content: part.input.content };
     }
   }
   return streaming;

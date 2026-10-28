@@ -18,17 +18,16 @@ import { screenshotMemory } from "./screenshot-memory";
  * another clip, or removing it. Each capture is remembered for this session
  * (`screenshot-memory.ts`), so its image can be revived back into the
  * placeholder it came from. `isCapturing` holds sends back while a capture
- * is in flight (see `use-message-queue.ts`).
+ * is in flight (see `use-message-queue.ts`). It all works while the model
+ * is still writing: `updateDocument` queues the edit until the turn ends.
  */
 export function useDocScreenshotRuntime(opts: {
   videoId: string;
   indexedClips: IndexedClip[];
-  isGenerating: boolean;
   documentRef: React.RefObject<string | undefined>;
   updateDocument: (content: string) => void;
 }) {
-  const { videoId, indexedClips, isGenerating, documentRef, updateDocument } =
-    opts;
+  const { videoId, indexedClips, documentRef, updateDocument } = opts;
   const [docCapturingKey, setDocCapturingKey] = useState<string | null>(null);
 
   const handleDocCapture = useCallback(
@@ -138,7 +137,11 @@ export function useDocScreenshotRuntime(opts: {
   const docScreenshotRuntime = useMemo(
     (): ChooseScreenshotRuntime => ({
       clips: indexedClips,
-      isStreaming: isGenerating,
+      // Live while the model writes: an edit made mid-stream waits in the
+      // document flow's pending edits until the turn ends
+      // (`document-flow-reducer.ts`). The capture itself, and its PNG,
+      // happen at once.
+      isStreaming: false,
       capturingKey: docCapturingKey,
       keyFor: (clipIndex, alt) => `doc-${clipIndex}-${alt}`,
       onClipIndexChange: (_messageId, current, next, alt) =>
@@ -159,7 +162,6 @@ export function useDocScreenshotRuntime(opts: {
     }),
     [
       indexedClips,
-      isGenerating,
       docCapturingKey,
       handleDocClipIndexChange,
       handleDocCapture,
