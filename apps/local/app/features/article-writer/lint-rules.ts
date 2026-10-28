@@ -7,7 +7,8 @@ import {
 } from "./commit-map-syntax";
 import { LEADING_HEADING_PATTERN, stripLeadingHeadings } from "./lint-fix";
 import {
-  findLopsidedQuizAnswers,
+  findUnevenQuizAnswers,
+  MAX_QUIZ_ANSWER_LENGTH_GAP,
   findTakenQuizIds,
   fixTakenQuizIds,
 } from "./quiz-lint";
@@ -251,14 +252,13 @@ export const BASE_LINT_RULES: LintRule[] = [
   {
     id: "quiz-answer-length-tell",
     name: "Quiz Answer Length Tell",
-    description:
-      "A correct answer far longer or shorter than the wrong choices gives itself away",
+    description: `A Quiz question's choices must all be within ${MAX_QUIZ_ANSWER_LENGTH_GAP} characters of each other, or the odd one out gives itself away`,
     modes: null,
     // Never scanned: `detect` reads parsed choices, which a regex cannot.
     pattern: /(?!)/,
-    detect: (text) => findLopsidedQuizAnswers(text),
+    detect: (text) => findUnevenQuizAnswers(text),
     fixInstruction: (matches) =>
-      `In these quiz questions the correct answer's length gives it away: ${matches.join("; ")}. Rebalance the choices so all of them are a similar length — trim the correct answer to its essential claim, or flesh out the wrong choices with equally specific detail. Keep the same choice correct and keep every wrong choice plausible.`,
+      `In these Quiz questions the choices vary too much in length: ${matches.join("; ")}. Rebalance them so every choice is within ${MAX_QUIZ_ANSWER_LENGTH_GAP} characters of every other — trim the longest to its essential claim, or flesh out the shortest with equally specific detail. Keep the same choice correct and keep every wrong choice plausible.`,
   },
   // The commit map rules. All of them read the block's shape, so all of them
   // wait for the writer to stop. None has a deterministic fix: only the author

@@ -215,7 +215,6 @@
         "apps/local/app/features/animatic/use-animatic-shortcuts.ts",
         "apps/local/app/features/article-writer/context-panel-reducer.ts",
         "apps/local/app/features/article-writer/document-panel.tsx",
-        "apps/local/app/features/article-writer/quiz-lint.ts",
         "apps/local/app/features/article-writer/quiz-syntax.ts",
         "apps/local/app/features/article-writer/tool-call-display.tsx",
         "apps/local/app/features/article-writer/use-screenshot-navigation.ts",
