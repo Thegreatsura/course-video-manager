@@ -178,6 +178,16 @@ _Avoid_: Word timing / Timestamped word (informal, ok in prose), Caption, Subtit
 A file attached to a **Video** as **writer context**. It is not a record: the files that are there are the state, and deleting one is permanent. It belongs to the Video, never the Lesson. The Article Writer reads a Video's **Transcript**, **Script**, **Animatic** (with its **Clip Mockup Comments**), **Beats** and Video Files, ranked by the fidelity ladder (see **Script**): only the Transcript decides what the article may claim, and Video Files are supporting material (code samples, notes, session logs) that give detail and evidence, never claims of their own. The one exception is a Clip Mockup Comment about the article itself, which is the author's instruction (see **Clip Mockup Comment**). A duplicated Video or Course gets its own copy of the files; a new Draft Version shares them with the version it came from.
 _Avoid_: Attachment, Asset (reserved for exported/published artifacts), Standalone file / Lesson file (the old split, now one concept)
 
+### On-screen sessions
+
+**Agent Session**:
+One Claude Code session that was on screen while **Clips** were filmed, as its **Agent Session Entries**. It belongs to no **Video**: every Clip its entries are on shows it, and every copy of those Clips (a new Draft, a duplicated **Course**) shares it rather than copying it. Claude Code's own id for the session only finds it again when the same session is given once more; it is never what names it to a learner.
+_Avoid_: Session (alone; that is a **Recording Session**), Session extract (what course.json carries of it), Transcript (that is the spoken text), Conversation
+
+**Agent Session Entry**:
+One thing an **Agent Session** showed on screen: a prompt, a text block of Claude's reply, an interrupt, a skill being loaded, or a stub of a tool call. It is stored on the **Clip** that shows it, at the moment in that Clip's **Footage** it was written, so it moves with the Clip when the cut is edited; when it shows in a Video (its visibleFrom) is worked out from the current cut. A skill's text and a tool's output are never part of one.
+_Avoid_: Message (one message can hold several entries), Event, Line
+
 ### Video planning
 
 **Beat**:

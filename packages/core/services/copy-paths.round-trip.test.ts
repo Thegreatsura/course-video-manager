@@ -57,6 +57,7 @@ const NOT_CARRIED: Record<string, string> = {
 const overrides = (ctx: {
   snapshotId: string;
   learningGoalId: string;
+  agentSessionId: string;
   keepsArchivedClips: boolean;
 }): Overrides => ({
   // CHECK clip_transcription_status_valid; one non-default value per row, so
@@ -86,6 +87,11 @@ const overrides = (ctx: {
   "recording_session.avCalibrationId": () => null,
   // Diagram Snapshots are shared per Diagram, not owned by a Video.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
+  // An Agent Session is shared by every copy of the Clips its entries are
+  // on, as a Recording Session is. CHECKs on the entry's kind and via.
+  "agent_session_entry.agentSessionId": () => ctx.agentSessionId,
+  "agent_session_entry.kind": () => "skillCall",
+  "agent_session_entry.via": () => "slashCommand",
   // A Learning Goal belongs to the Video's Section, which every copy shares.
   "beat_learning_goal.learningGoalId": () => ctx.learningGoalId,
   // CHECK clip_mockup_comment_one_parent: row 0 on a Clip Mockup, row 1 on
@@ -146,6 +152,10 @@ async function generateVideoTree(path: CopyPathName) {
     .insert(schema.diagramSnapshots)
     .values({ diagramId: diagram!.id, scene: {}, contentHash: "h" })
     .returning();
+  const [agentSession] = await testDb
+    .insert(schema.agentSessions)
+    .values({ sourceSessionId: "claude-session" })
+    .returning();
   await generateTreeBelow(
     testDb,
     ROOT,
@@ -153,6 +163,7 @@ async function generateVideoTree(path: CopyPathName) {
     overrides({
       snapshotId: snapshot!.id,
       learningGoalId: goal!.id,
+      agentSessionId: agentSession!.id,
       keepsArchivedClips: COPY_PATHS[path].keepsArchived.includes("clip"),
     })
   );
@@ -215,6 +226,7 @@ describe("Video-level copy paths round trip — the copy is the source, row for 
         overrides({
           snapshotId: "",
           learningGoalId: "",
+          agentSessionId: "",
           keepsArchivedClips: false,
         })
       ),

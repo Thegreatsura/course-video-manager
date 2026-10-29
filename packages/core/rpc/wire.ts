@@ -57,6 +57,7 @@ const ERROR_CONSTRUCTORS: Record<
   VideoTitleTakenError: DomainErrors.VideoTitleTakenError,
   ClipNotZoomableError: DomainErrors.ClipNotZoomableError,
   ClipCarriesOverlaysError: DomainErrors.ClipCarriesOverlaysError,
+  AgentSessionUploadRefusedError: DomainErrors.AgentSessionUploadRefusedError,
 };
 
 /**

@@ -1,4 +1,5 @@
 import { Layer } from "effect";
+import { AgentSessionOperationsService } from "./services/db-agent-session-operations.server.js";
 import { ApiTokenOperationsService } from "./services/db-api-token-operations.server.js";
 import { BeatOperationsService } from "./services/db-beat-operations.server.js";
 import { ClipMockupChapterOperationsService } from "./services/db-clip-mockup-chapter-operations.server.js";
@@ -58,6 +59,7 @@ export const domainServicesLayer = Layer.mergeAll(
   DiagramComponentOperationsService.Default.pipe(
     Layer.provide(DiagramThumbnailStore.noop)
   ),
+  AgentSessionOperationsService.Default,
   CourseWriteService.Default
 );
 

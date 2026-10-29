@@ -171,3 +171,16 @@ export class ClipCarriesOverlaysError extends Data.TaggedError(
   overlayCount: number;
   message: string;
 }> {}
+
+/**
+ * An Agent Session upload (`cvm video agent-sessions set`) that broke a content
+ * rule — a skill body or tool result, an absolute local path, a secret — or
+ * whose Claude Code session id matched more than one Agent Session. The whole
+ * upload is refused and nothing is stored; `reasons` names every problem.
+ */
+export class AgentSessionUploadRefusedError extends Data.TaggedError(
+  "AgentSessionUploadRefusedError"
+)<{
+  reasons: ReadonlyArray<string>;
+  message: string;
+}> {}

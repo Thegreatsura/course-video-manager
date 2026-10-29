@@ -130,6 +130,18 @@ async function seedEveryTable() {
     title: "Term",
     description: "Definition",
   });
+  const [agentSession] = await testDb
+    .insert(schema.agentSessions)
+    .values({ sourceSessionId: "claude-session" })
+    .returning();
+  await testDb.insert(schema.agentSessionEntries).values({
+    agentSessionId: agentSession!.id,
+    clipId,
+    footageTime: 1,
+    sequence: 0,
+    kind: "userPrompt",
+    text: "Hi",
+  });
   await testDb
     .insert(schema.chapters)
     .values({ videoId, name: "Chapter", order: "a0" });

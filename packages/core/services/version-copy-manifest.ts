@@ -54,6 +54,7 @@ const VERSION_TABLES: Record<string, CopyDecision> = {
   clip_web_link: "copied",
   clip_transcript_word: "copied",
   overlay: "copied",
+  agent_session_entry: "copied",
   chapter: "copied",
   beat: "copied",
   beat_learning_goal: "copied",
@@ -74,6 +75,7 @@ const CLIP_TABLES: Record<string, CopyDecision> = {
   clip_web_link: "copied",
   clip_transcript_word: "copied",
   overlay: "copied",
+  agent_session_entry: "copied",
 };
 
 /**
