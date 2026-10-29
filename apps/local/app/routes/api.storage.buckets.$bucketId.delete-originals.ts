@@ -20,10 +20,11 @@ const DeleteOriginalsRequest = Schema.Struct({
 
 /**
  * Start "Delete originals" (#2110): the per-bucket page's confirmed delete.
- * Every refusal is checked again here (409) — and that something has a copy
- * to delete — then the `storage-delete` Sidecar Job is enqueued, which checks
- * each file against its copy by checksum and deletes it
- * (`sidecar/kinds/storage-delete.ts`). Nothing is deleted in this request.
+ * The refusals that need no drive are checked here (409), then the
+ * `storage-delete` Sidecar Job is enqueued, which checks the rest, walks the
+ * files and checks each against its copy by checksum before deleting it
+ * (`sidecar/kinds/storage-delete.ts`). No drive is read and nothing is
+ * deleted in this request, so it answers at once (#2429).
  * Answers the Job's id; its row in the Upload Manager shows the progress, a
  * Cancel, and the result ("N files still on D:, retry").
  */
@@ -48,13 +49,13 @@ export const action = makeAction({
         bucketId,
         from: request.from,
         ...(request.paths === undefined ? {} : { paths: request.paths }),
-        enqueue: (plan) =>
+        enqueue: ({ bucketName }) =>
           enqueueJob({
             id: null,
             kind: STORAGE_DELETE_JOB_KIND,
             title: storageDeleteTitle({
               operation: "originals",
-              bucketName: plan.bucketName,
+              bucketName,
               locationLabel: rootLabel(request.from),
               ...(request.paths === undefined ? {} : { paths: request.paths }),
             }),

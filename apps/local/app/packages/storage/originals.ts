@@ -7,8 +7,8 @@
 // last copy is never deleted (ADR 0041). Always Matt's click, never automatic.
 //
 // `planStorageOriginals` is the confirmation (a count; deletes nothing).
-// `startDeleteOriginals` checks every refusal and enqueues the
-// `storage-delete` Sidecar Job; `runDeleteOriginals` is that Job's work.
+// `startDeleteOriginals` checks the refusals that need no drive and enqueues
+// the `storage-delete` Sidecar Job; `runDeleteOriginals` is that Job's work.
 // Refused while an export, a Publish, a move, another delete, a
 // transcription, a Clip Mockup voice or a Recording Session is queued or
 // running, or a Purge, a delete or a move is being started; looked for again

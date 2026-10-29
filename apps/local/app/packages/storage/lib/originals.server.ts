@@ -105,30 +105,28 @@ type CoreError =
   | StorageOriginalsFailedError
   | StorageOriginalsCancelledError;
 
-/**
- * Every refusal, then each of the bucket's files on `from`, one at a time.
- * `dryRun` reads no contents and deletes nothing: the confirmation's count.
- */
-const originalsCore = (
-  opts: CoreOptions
-): Effect.Effect<StorageOriginalsResult, CoreError> => {
-  const { bucketId, roots, from, dryRun } = opts;
-  const selfJobId = opts.selfJobId ?? null;
-  const cancelRequested = opts.cancelRequested ?? (() => false);
-  const disk = opts.disk ?? realStorageOriginalsDisk;
-  const refuse = (reason: StorageOriginalsRefusalReason, message: string) =>
-    new StorageOriginalsRefusedError({
-      bucketId,
-      reason,
-      message: `Not deleted: ${message}`,
-    });
-  const failed = (cause: unknown) =>
-    new StorageOriginalsFailedError({ bucketId, message: messageOf(cause) });
-  /** A read of the disk before any file is touched; a rejection fails the run. */
-  const io = <A>(f: () => Promise<A>) =>
-    Effect.tryPromise({ try: f, catch: failed });
+type StartOptions = Pick<
+  CoreOptions,
+  "db" | "roots" | "bucketId" | "from" | "selfJobId"
+>;
 
-  const run = Effect.gen(function* () {
+/**
+ * The refusals that need only the database and the Storage Roots' names:
+ * no such bucket, no other root, other work queued or running. Touches no
+ * drive, so starting a delete answers at once (#2429); the Job checks these
+ * again, then every one that reads a drive, then each file.
+ */
+const originalsStartRefusals = (opts: StartOptions) =>
+  Effect.gen(function* () {
+    const { bucketId, roots, from } = opts;
+    const refuse = (reason: StorageOriginalsRefusalReason, message: string) =>
+      new StorageOriginalsRefusedError({
+        bucketId,
+        reason,
+        message: `Not deleted: ${message}`,
+      });
+    const failed = (cause: unknown) =>
+      new StorageOriginalsFailedError({ bucketId, message: messageOf(cause) });
     const ownership: StorageOwnership = yield* loadStorageOwnership(
       opts.db,
       roots
@@ -151,10 +149,39 @@ const originalsCore = (
       );
     }
     const busy = yield* Effect.tryPromise({
-      try: () => busyNow(opts.db, selfJobId),
+      try: () => busyNow(opts.db, opts.selfJobId ?? null),
       catch: failed,
     });
     if (busy !== null) return yield* refuse(busy.reason, busy.message);
+    return { ownership, bucket, kinds, others };
+  });
+
+/**
+ * Every refusal, then each of the bucket's files on `from`, one at a time.
+ * `dryRun` reads no contents and deletes nothing: the confirmation's count.
+ */
+const originalsCore = (
+  opts: CoreOptions
+): Effect.Effect<StorageOriginalsResult, CoreError> => {
+  const { bucketId, from, dryRun } = opts;
+  const selfJobId = opts.selfJobId ?? null;
+  const cancelRequested = opts.cancelRequested ?? (() => false);
+  const disk = opts.disk ?? realStorageOriginalsDisk;
+  const refuse = (reason: StorageOriginalsRefusalReason, message: string) =>
+    new StorageOriginalsRefusedError({
+      bucketId,
+      reason,
+      message: `Not deleted: ${message}`,
+    });
+  const failed = (cause: unknown) =>
+    new StorageOriginalsFailedError({ bucketId, message: messageOf(cause) });
+  /** A read of the disk before any file is touched; a rejection fails the run. */
+  const io = <A>(f: () => Promise<A>) =>
+    Effect.tryPromise({ try: f, catch: failed });
+
+  const run = Effect.gen(function* () {
+    const { ownership, bucket, kinds, others } =
+      yield* originalsStartRefusals(opts);
 
     const fromOnline = yield* io(() =>
       nodeFs.readdir(from).then(
@@ -380,18 +407,19 @@ export const planStorageOriginals = (
   );
 
 /**
- * Start "Delete originals" (#2110): check every refusal, and that there is
- * something to delete, then `enqueue` its `storage-delete` Job, all while
- * holding the Storage page's write hold, so no Purge, delete or move is
- * part-way through when it is queued (after which they refuse while it is
- * queued or running).
+ * Start "Delete originals" (#2110): check the refusals that need no drive
+ * (`originalsStartRefusals`), then `enqueue` its `storage-delete` Job, all
+ * while holding the Storage page's write hold, so no Purge, delete or move
+ * is part-way through when it is queued (after which they refuse while it is
+ * queued or running). Reads no drive (#2429): walking `from` and looking at
+ * each copy took ~36 s on D:, so the Job does it, under its "checking" stage,
+ * and keeps and reports every file without an identical copy.
  */
 export const startDeleteOriginals = <A, E, R>(
-  opts: Omit<
-    CoreOptions,
-    "dryRun" | "selfJobId" | "cancelRequested" | "onProgress" | "disk"
-  > & {
-    readonly enqueue: (plan: StorageOriginalsResult) => Effect.Effect<A, E, R>;
+  opts: Omit<StartOptions, "selfJobId"> & {
+    readonly enqueue: (bucket: {
+      readonly bucketName: string;
+    }) => Effect.Effect<A, E, R>;
   }
 ): Effect.Effect<
   A,
@@ -402,15 +430,8 @@ export const startDeleteOriginals = <A, E, R>(
     "Delete originals being started",
     busyRefusal(opts.bucketId),
     Effect.gen(function* () {
-      const plan = yield* planStorageOriginals(opts);
-      if (plan.deleted.files === 0) {
-        return yield* new StorageOriginalsRefusedError({
-          bucketId: opts.bucketId,
-          reason: "nothing-to-delete",
-          message: `Not deleted: no file on ${rootLabel(opts.from)} has a copy of the same size on another drive`,
-        });
-      }
-      return yield* opts.enqueue(plan);
+      const { bucket } = yield* originalsStartRefusals(opts);
+      return yield* opts.enqueue({ bucketName: bucket.name });
     })
   );
 
