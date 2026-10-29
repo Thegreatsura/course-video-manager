@@ -7,7 +7,6 @@ import { tmpdir } from "os";
 import {
   BITEXACT_ARGS,
   GPU_DECODE_ARGS,
-  LANDSCAPE_VIDEO_ENCODE_ARGS,
   SHORTS_BURN_IN_ENCODE_ARGS,
   FFmpegError,
   FfmpegInputCutShortError,
@@ -17,8 +16,7 @@ import {
 import { runFfmpegWithProgress } from "./ffmpeg-run";
 import { FfmpegPermitsService } from "./ffmpeg-permits";
 import { SidecarContext } from "./sidecar-context";
-import { clipZoomCropFilter } from "@/features/videos/clip-zoom";
-import { clipExportDurationInSeconds } from "./export-duration-check";
+import { buildClipConcatArgs, type ConcatClip } from "./clip-concat-args";
 import { makeConcatenateClipSegments } from "./ffmpeg-encode-segments";
 import { assertUnder } from "./assert-under";
 import {
@@ -65,13 +63,7 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
       const createAndConcatenateVideoClipsSinglePass = Effect.fn(
         "createAndConcatenateVideoClipsSinglePass"
       )(function* (
-        clips: readonly {
-          inputVideo: string;
-          startTime: number;
-          duration: number;
-          pauseType: "none" | "long";
-          zoomType?: string;
-        }[],
+        clips: readonly ConcatClip[],
         dimensions: { width: number; height: number },
         // A single required object rather than stacking positional optionals:
         // onProgress may reasonably be skipped (progress reporting is a UI
@@ -93,80 +85,11 @@ export class FFmpegEncodeService extends Effect.Service<FFmpegEncodeService>()(
           .slice(0, 12);
         const outputFile = path.join(outputDir, `${outputHash}.mp4`);
 
-        // Build input args. The summed -t values are also the expected output
-        // duration (the concat filter output is exactly the clips end to end),
-        // which anchors the progress percentage.
-        const inputArgs: string[] = [];
-        let expectedOutputDuration = 0;
-        for (const clip of clips) {
-          const duration = clipExportDurationInSeconds(clip);
-          expectedOutputDuration += duration;
-          inputArgs.push(
-            "-ss",
-            clip.startTime.toString(),
-            "-t",
-            duration.toString(),
-            "-i",
-            clip.inputVideo
-          );
-        }
-
-        // Build filter complex. Normalize every input to the target frame (and
-        // stereo audio) so the concat filter — which requires all inputs to
-        // share dimensions/SAR/channel layout — accepts odd effect clips (e.g.
-        // white noise at 854x480 mono). The target dimensions come from the
-        // video's format: portrait 1080x1920 for shorts (whose 9:16 subtitle
-        // overlay must line up), landscape 1920x1080 otherwise. Passing the
-        // wrong dimensions here is what previously forced every export portrait.
-        //
-        // A Clip Zoom's crop goes BEFORE that scale, so a source larger than
-        // the output frame is cropped and then scaled DOWN — the zoom spends
-        // surplus resolution rather than upscaling. Cropping after the scale
-        // would discard those pixels first and stretch what remained. The crop
-        // string comes from clipZoomCropFilter, the same rect the editor
-        // preview's CSS transform is formatted from.
-        const filterParts: string[] = [];
-        const concatInputs: string[] = [];
-        for (let i = 0; i < clips.length; i++) {
-          const cropFilter = clipZoomCropFilter(clips[i]!.zoomType);
-          filterParts.push(
-            `[${i}:v]setpts=PTS-STARTPTS,${
-              cropFilter ? `${cropFilter},` : ""
-            }scale=${dimensions.width}:${dimensions.height},setsar=1[v${i}]`,
-            `[${i}:a]asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[a${i}]`
-          );
-          concatInputs.push(`[v${i}][a${i}]`);
-        }
-        filterParts.push(
-          `${concatInputs.join("")}concat=n=${clips.length}:v=1:a=1[outv][outa]`
-        );
-
-        const filterComplex = filterParts.join(";");
-
-        const args = [
-          "-y",
-          "-hide_banner",
-          ...inputArgs,
-          "-filter_complex",
-          filterComplex,
-          "-map",
-          "[outv]",
-          "-map",
-          "[outa]",
-          ...LANDSCAPE_VIDEO_ENCODE_ARGS,
-          "-c:a",
-          "aac",
-          "-ar",
-          "48000",
-          "-b:a",
-          "320k",
-          "-async",
-          "1",
-          "-movflags",
-          "+faststart",
-          ...BITEXACT_ARGS,
+        const { args, expectedOutputDuration } = buildClipConcatArgs({
+          clips,
+          dimensions,
           outputFile,
-        ];
+        });
 
         yield* runEncode({
           args,
