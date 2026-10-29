@@ -3,7 +3,7 @@ import { clipExportDurationInSeconds } from "./export-duration-check";
 import {
   BITEXACT_ARGS,
   LANDSCAPE_VIDEO_ENCODE_ARGS,
-  SINGLE_THREAD_DECODE_ARGS,
+  MANY_INPUT_DECODE_ARGS,
 } from "./ffmpeg-error";
 
 /** One Clip as the single-pass concat cuts it from its Footage. */
@@ -20,7 +20,7 @@ export type ConcatClip = {
  * Footage as its own input, in order (so ffmpeg's input number IS the Clip's
  * position in the Video), normalized, and joined by the concat filter.
  *
- * Each input is decoded on one thread ({@link SINGLE_THREAD_DECODE_ARGS}):
+ * Each input is decoded on two threads ({@link MANY_INPUT_DECODE_ARGS}):
  * ffmpeg opens all of them at once, and a decoder per Clip on every core is
  * what ran two Publishes out of memory.
  *
@@ -39,7 +39,7 @@ export const buildClipConcatArgs = (opts: {
     const duration = clipExportDurationInSeconds(clip);
     expectedOutputDuration += duration;
     inputArgs.push(
-      ...SINGLE_THREAD_DECODE_ARGS,
+      ...MANY_INPUT_DECODE_ARGS,
       "-ss",
       clip.startTime.toString(),
       "-t",
