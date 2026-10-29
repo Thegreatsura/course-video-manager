@@ -224,6 +224,21 @@ const GPU_ENCODES: ReadonlyArray<{
  */
 export const GPU_DECODE_ARGS = ["-hwaccel", "cuda"];
 
+/**
+ * An input option for an encode with many inputs: decode the input after it
+ * on one thread.
+ *
+ * ffmpeg starts every input's decoder when the pass begins, and by default
+ * each one runs `nproc + 1` frame threads, each holding its own frame
+ * buffers. A concat reads only one input at a time, so those threads add
+ * memory and almost no speed. On a 104-Clip concat the peak was 10.65 GB with
+ * the default threads and 3.30 GB with one (4:19 against 4:00), and the
+ * output was byte-identical: thread count does not change what h264 decodes
+ * (#2424). Two Publishes at the default threads ran the machine out of memory
+ * mid-demux (#2419).
+ */
+export const SINGLE_THREAD_DECODE_ARGS = ["-threads", "1"];
+
 /** `args` with {@link GPU_DECODE_ARGS} before every input. */
 export const withGpuDecode = (args: readonly string[]): string[] =>
   args.flatMap((arg) => (arg === "-i" ? [...GPU_DECODE_ARGS, arg] : [arg]));

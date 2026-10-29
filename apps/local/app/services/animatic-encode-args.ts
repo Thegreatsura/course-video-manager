@@ -1,4 +1,8 @@
-import { BITEXACT_ARGS, LANDSCAPE_VIDEO_ENCODE_ARGS } from "./ffmpeg-error";
+import {
+  BITEXACT_ARGS,
+  LANDSCAPE_VIDEO_ENCODE_ARGS,
+  SINGLE_THREAD_DECODE_ARGS,
+} from "./ffmpeg-error";
 import { ANIMATIC_FPS } from "@/features/animatic/animatic-timeline";
 
 /**
@@ -38,6 +42,10 @@ export interface AnimaticEncodeSegment {
  * A frame of any size is fitted inside the frame with black bars, never
  * stretched: a Short's frames are already 1080x1920 and a Landscape Video's
  * 1920x1080, so in practice the fit is a no-op.
+ *
+ * Every input is decoded on one thread ({@link SINGLE_THREAD_DECODE_ARGS}):
+ * ffmpeg opens a frame and a voice per Clip Mockup all at once, and the PNG
+ * decoder frame-threads like h264 does.
  */
 export const buildAnimaticEncodeArgs = (opts: {
   segments: readonly AnimaticEncodeSegment[];
@@ -54,10 +62,12 @@ export const buildAnimaticEncodeArgs = (opts: {
     const audioInput = 2 * i + 1;
     const seconds = segment.durationInFrames / ANIMATIC_FPS;
     inputArgs.push(
+      ...SINGLE_THREAD_DECODE_ARGS,
       "-framerate",
       String(ANIMATIC_FPS),
       "-i",
       segment.imageFile,
+      ...SINGLE_THREAD_DECODE_ARGS,
       "-i",
       segment.audioFile
     );
