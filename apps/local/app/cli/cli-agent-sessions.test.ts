@@ -319,6 +319,10 @@ describe("cvm video agent-sessions", () => {
       prompt(15, "Save it to /tmp/shots/a.png"),
       prompt(16, "Import from ~/db and ~/modules/*"),
       prompt(17, '<pasted_content id="ab12">\nStage 3/4\n</pasted_content>'),
+      prompt(
+        18,
+        '<pasted_content id="cd34" kind="text">\nStage 4/4\n</pasted_content id="cd34">'
+      ),
     ]);
     const r = await run([
       "video",
@@ -337,6 +341,7 @@ describe("cvm video agent-sessions", () => {
       "Save it to /tmp/shots/a.png",
       "Import from ~/db and ~/modules/*",
       "Stage 3/4",
+      "Stage 4/4",
     ]);
   });
 

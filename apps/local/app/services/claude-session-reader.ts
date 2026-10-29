@@ -264,7 +264,7 @@ export const rewriteSessionPaths =
 /** A prompt's `<pasted_content …>` wrappers, dropped for the text inside. */
 const unwrapPastedContent = (text: string) =>
   text.replace(
-    /<pasted_content\b[^>]*>\n?([\s\S]*?)\n?<\/pasted_content>/g,
+    /<pasted_content\b[^>]*>\n?([\s\S]*?)\n?<\/pasted_content\b[^>]*>/g,
     "$1"
   );
 
