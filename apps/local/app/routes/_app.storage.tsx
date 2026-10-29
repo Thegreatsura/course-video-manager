@@ -21,6 +21,8 @@ import {
   StorageActionFailure,
 } from "@/features/storage/storage-action-dialog";
 import { storageActionIsBusy } from "@/features/storage/storage-action";
+import { RootFilterChips } from "@/features/storage/root-filter-chips";
+import { isShown, withRootFilter } from "@/features/storage/root-filter";
 import { StorageJobsPanel } from "@/features/storage/storage-jobs-panel";
 import { shownStorageJobs } from "@/features/storage/storage-jobs";
 import { useStorageJobs } from "@/features/storage/use-storage-jobs";
@@ -29,6 +31,7 @@ import {
   rowCanBePurged,
   rowMoveActions,
   storageCells,
+  storageRootChips,
   storageRows,
   type StorageRow,
   type storagePageReducer,
@@ -60,7 +63,7 @@ const KINDS: { kind: StorageFileKind; heading: string }[] = [
  * Job (#2109). A Course's, Standalone Videos' or Shorts' Exported Videos can
  * be deleted (#2111); the Other buckets that are rebuilt on demand can be
  * deleted (#2112). Counted fresh on every visit and streamed in; leaving the
- * page stops the scan.
+ * page stops the scan. Toggle chips filter by Storage Root (#2431).
  */
 export default function StoragePage() {
   const [state, dispatch] = useStoragePage();
@@ -96,6 +99,14 @@ export default function StoragePage() {
           <p className="text-muted-foreground">Where the space is going.</p>
           <ScanStatus state={state} />
         </div>
+
+        <RootFilterChips
+          chips={storageRootChips(state)}
+          labelOf={labelOf}
+          isOffline={(location) =>
+            state.roots?.some((r) => r.root === location && !r.online) ?? false
+          }
+        />
 
         <StorageActionFailure
           action={state.action}
@@ -151,41 +162,43 @@ export default function StoragePage() {
         )}
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(state.roots ?? []).map((root) => (
-            <div
-              key={root.root}
-              className="rounded-lg border p-4 space-y-1"
-              data-testid="storage-root"
-            >
-              <div className="flex items-center gap-2 font-semibold">
-                <HardDrive className="w-4 h-4 shrink-0" />
-                {labelOf(root.root)}
-                <span
-                  className="text-xs text-muted-foreground font-normal truncate"
-                  title={root.root}
-                >
-                  {root.root}
-                </span>
-                {!root.online && <Badge variant="destructive">Offline</Badge>}
-                {root.online && root.dirtyBit === "dirty" && (
-                  <Badge className="bg-amber-500 text-black">Dirty</Badge>
-                )}
-                {root.online && root.root in state.unreadableRoots && (
-                  <Badge variant="destructive">Unreadable</Badge>
+          {(state.roots ?? [])
+            .filter((root) => isShown(state.hiddenRoots, root.root))
+            .map((root) => (
+              <div
+                key={root.root}
+                className="rounded-lg border p-4 space-y-1"
+                data-testid="storage-root"
+              >
+                <div className="flex items-center gap-2 font-semibold">
+                  <HardDrive className="w-4 h-4 shrink-0" />
+                  {labelOf(root.root)}
+                  <span
+                    className="text-xs text-muted-foreground font-normal truncate"
+                    title={root.root}
+                  >
+                    {root.root}
+                  </span>
+                  {!root.online && <Badge variant="destructive">Offline</Badge>}
+                  {root.online && root.dirtyBit === "dirty" && (
+                    <Badge className="bg-amber-500 text-black">Dirty</Badge>
+                  )}
+                  {root.online && root.root in state.unreadableRoots && (
+                    <Badge variant="destructive">Unreadable</Badge>
+                  )}
+                </div>
+                {root.online ? (
+                  <div className="text-sm text-muted-foreground">
+                    {gb(root.freeBytes)} free of {gb(root.totalBytes)} (
+                    {gb(root.totalBytes - root.freeBytes)} used)
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground break-all">
+                    {root.reason}
+                  </div>
                 )}
               </div>
-              {root.online ? (
-                <div className="text-sm text-muted-foreground">
-                  {gb(root.freeBytes)} free of {gb(root.totalBytes)} (
-                  {gb(root.totalBytes - root.freeBytes)} used)
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground break-all">
-                  {root.reason}
-                </div>
-              )}
-            </div>
-          ))}
+            ))}
         </section>
 
         <table className="w-full text-sm" data-testid="storage-table">
@@ -272,7 +285,10 @@ function BucketRow({
     <tr className="border-b align-top" data-testid="storage-row">
       <td className="py-2 pr-4">
         <Link
-          to={`/storage/${encodeURIComponent(row.bucket.id)}`}
+          to={withRootFilter(
+            `/storage/${encodeURIComponent(row.bucket.id)}`,
+            state.hiddenRoots
+          )}
           className="font-medium hover:underline"
           data-testid="storage-bucket-link"
         >

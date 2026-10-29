@@ -20,8 +20,10 @@ import {
   fileRequest,
   removedBytesOf,
   sameChoice,
+  shownFile,
   withoutCopies,
 } from "./bucket-page-files";
+import { isShown, rootChips, type RootChip } from "./root-filter";
 
 export {
   copiesDeleted,
@@ -66,6 +68,11 @@ import {
  * is a `storageAction` (confirm, Sidecar Job). A delete Job that took
  * exactly what was listed is taken off the list; anything else (a move, a
  * delete that kept or left files) lists again.
+ *
+ * The Storage Root filter (#2431, `root-filter.ts`) hides roots: a file
+ * shows, ticks and deletes only its copies on shown roots, and hiding a
+ * root unticks the files left with none, so a delete never takes a hidden
+ * row.
  */
 export namespace bucketPageReducer {
   /** A copy of a file a delete takes: where, which file, how big. */
@@ -104,6 +111,8 @@ export namespace bucketPageReducer {
     pendingDeletes: Record<string, RemovedCopy[]>;
     /** The last thing that went wrong outside an action (Show in Explorer). */
     notice: string | null;
+    /** The Storage Roots the filter hides, from the URL (#2431). */
+    hiddenRoots: string[];
   };
 
   /** What a file's action menu offers. */
@@ -127,6 +136,7 @@ export namespace bucketPageReducer {
     | { type: "file-action-clicked"; path: string; choice: FileChoice }
     | { type: "reveal-failed"; message: string }
     | { type: "notice-dismissed" }
+    | { type: "root-filter-changed"; hidden: string[] }
     | { type: "storage-jobs-observed"; jobs: ObservedStorageJob[] }
     | storageAction.Action;
 
@@ -154,7 +164,10 @@ type RemovedCopy = bucketPageReducer.RemovedCopy;
  * from the initial state is stopped by React Strict Mode's mount → unmount →
  * mount (client-side navigation in dev) and never started again.
  */
-export const createInitialBucketPageState = (bucketId: string): State => ({
+export const createInitialBucketPageState = (
+  bucketId: string,
+  hiddenRoots: string[] = []
+): State => ({
   bucketId,
   status: "listing",
   failure: null,
@@ -171,6 +184,7 @@ export const createInitialBucketPageState = (bucketId: string): State => ({
   watchedJobs: {},
   pendingDeletes: {},
   notice: null,
+  hiddenRoots,
 });
 
 /** Start listening. */
@@ -186,7 +200,7 @@ const listen = (state: State, exec: Exec): State => {
 const relist = (state: State, exec: Exec): State =>
   listen(
     {
-      ...createInitialBucketPageState(state.bucketId),
+      ...createInitialBucketPageState(state.bucketId, state.hiddenRoots),
       action: state.action,
       nextRequestId: state.nextRequestId,
       watchedJobs: state.watchedJobs,
@@ -348,7 +362,10 @@ const actionReducer = (
     }
     case "delete-selected-clicked": {
       if (state.status !== "complete" || state.bucket === null) return state;
-      const files = state.selected.flatMap((p) => state.files[p] ?? []);
+      const files = state.selected.flatMap((p) => {
+        const file = state.files[p];
+        return (file && shownFile(state, file)) ?? [];
+      });
       return begin(state, deleteRequest(state.bucket, files), exec);
     }
     case "delete-originals-clicked": {
@@ -375,7 +392,8 @@ const actionReducer = (
       const offered = fileActions(state, file).find(
         (a) => sameChoice(a.choice, action.choice) && a.refusal === null
       );
-      if (!offered) return state;
+      const shown = shownFile(state, file);
+      if (!offered || shown === null) return state;
       if (action.choice.type === "reveal") {
         exec({
           type: "reveal-file",
@@ -384,12 +402,29 @@ const actionReducer = (
         });
         return state;
       }
-      return begin(state, fileRequest(state.bucket, file, action.choice), exec);
+      return begin(
+        state,
+        fileRequest(state.bucket, shown, action.choice),
+        exec
+      );
     }
     case "reveal-failed":
       return { ...state, notice: action.message };
     case "notice-dismissed":
       return { ...state, notice: null };
+    case "root-filter-changed": {
+      // A hidden file is unticked: a delete never takes what isn't shown.
+      const next = { ...state, hiddenRoots: action.hidden };
+      const selected = state.selected.filter((p) => fileCanBeTicked(next, p));
+      return {
+        ...next,
+        selected,
+        anchor:
+          state.anchor !== null && fileCanBeTicked(next, state.anchor)
+            ? state.anchor
+            : null,
+      };
+    }
     case "storage-jobs-observed": {
       const { watched, settled } = watchStorageJobs(
         state.watchedJobs,
@@ -509,6 +544,7 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
     case "file-action-clicked":
     case "reveal-failed":
     case "notice-dismissed":
+    case "root-filter-changed":
     case "storage-jobs-observed":
     case "storage-action-planned":
     case "storage-action-confirmed":
@@ -523,14 +559,13 @@ export const bucketPageReducer: EffectReducer<State, Action, Effect> = (
 
 // --- selectors ---------------------------------------------------------------
 
-/** The ticked files' bytes, every copy added up: what a delete frees. */
+/** The ticked files' bytes, every shown copy added up: what a delete frees. */
 export const selectedBytes = (state: State): number =>
-  state.selected.reduce(
-    (n, p) =>
-      n +
-      Object.values(state.files[p]?.copies ?? {}).reduce((m, b) => m + b, 0),
-    0
-  );
+  state.selected.reduce((n, p) => {
+    const file = state.files[p];
+    const shown = file ? shownFile(state, file) : null;
+    return n + Object.values(shown?.copies ?? {}).reduce((m, b) => m + b, 0);
+  }, 0);
 
 /** Whether every file that can be ticked is ticked (and there is one). */
 export const allTicked = (state: State): boolean => {
@@ -542,19 +577,42 @@ export const allTicked = (state: State): boolean => {
   );
 };
 
-/** The bucket's files, largest first. */
-export const bucketFiles = (state: State): StorageBucketFile[] =>
-  largestFirst(state.files);
+/** The bucket's files the Storage Root filter shows, largest first. */
+export const bucketFiles = (state: State): StorageBucketFile[] => {
+  if (state.hiddenRoots.length === 0) return largestFirst(state.files);
+  const shown: Record<string, StorageBucketFile> = {};
+  for (const file of Object.values(state.files)) {
+    const s = shownFile(state, file);
+    if (s !== null) shown[file.path] = s;
+  }
+  return largestFirst(shown);
+};
 
-/** Bytes in the bucket on each location, and files found there. */
+/** Files with a copy at each location, filter or not: the filter's chips. */
+export const bucketRootChips = (state: State): RootChip[] => {
+  const itemsAt: Record<string, number> = {};
+  for (const file of Object.values(state.files)) {
+    for (const location of Object.keys(file.copies)) {
+      itemsAt[location] = (itemsAt[location] ?? 0) + 1;
+    }
+  }
+  return rootChips(
+    (state.roots ?? []).map((r) => r.root),
+    itemsAt,
+    state.hiddenRoots
+  );
+};
+
+/** Bytes in the bucket on each shown location, and files found there. */
 export const bucketTotals = (
   state: State
 ): { location: string; bytes: number; files: number }[] => {
   const totals = new Map<string, { bytes: number; files: number }>();
   for (const root of state.roots ?? []) {
-    if (root.online) totals.set(root.root, { bytes: 0, files: 0 });
+    if (root.online && isShown(state.hiddenRoots, root.root))
+      totals.set(root.root, { bytes: 0, files: 0 });
   }
-  for (const file of Object.values(state.files)) {
+  for (const file of bucketFiles(state)) {
     for (const [location, bytes] of Object.entries(file.copies)) {
       const was = totals.get(location) ?? { bytes: 0, files: 0 };
       totals.set(location, { bytes: was.bytes + bytes, files: was.files + 1 });
@@ -575,7 +633,12 @@ export const originalsOffers = (
   if (state.status !== "complete" || state.bucket === null) return [];
   if (movableKindsOf(state.bucket).length === 0) return [];
   return (state.roots ?? [])
-    .filter((r) => r.online && !(r.root in state.unreadableRoots))
+    .filter(
+      (r) =>
+        r.online &&
+        !(r.root in state.unreadableRoots) &&
+        isShown(state.hiddenRoots, r.root)
+    )
     .map((r) => ({ location: r.root, ...originalsAt(state.files, r.root) }))
     .filter((o) => o.files > 0);
 };

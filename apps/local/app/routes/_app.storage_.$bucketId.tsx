@@ -19,6 +19,7 @@ import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import {
   allTicked,
   bucketFiles,
+  bucketRootChips,
   bucketTotals,
   fileActions,
   fileCanBeTicked,
@@ -32,6 +33,8 @@ import {
   StorageActionFailure,
 } from "@/features/storage/storage-action-dialog";
 import { storageActionIsBusy } from "@/features/storage/storage-action";
+import { RootFilterChips } from "@/features/storage/root-filter-chips";
+import { withRootFilter } from "@/features/storage/root-filter";
 import { StorageJobsPanel } from "@/features/storage/storage-jobs-panel";
 import { shownStorageJobs } from "@/features/storage/storage-jobs";
 import { useBucketPage } from "@/features/storage/use-bucket-page";
@@ -73,7 +76,8 @@ const ROLE_LABELS: Record<StorageFileRole, string> = {
  * originals on D:" deletes the bucket's files on D: with an identical copy
  * elsewhere (#2110). Every move and delete runs as a Sidecar Job, followed
  * live here. The listing streams in and is kept in memory for five minutes
- * (#2423): Refresh lists again at once.
+ * (#2423): Refresh lists again at once. Toggle chips filter by Storage Root
+ * (#2431): ticking and deleting act only on the files shown.
  */
 export default function StorageBucketPage({ params }: Route.ComponentProps) {
   // A new bucket is a new listing: remount rather than reuse the state.
@@ -98,7 +102,7 @@ function BucketPage({ bucketId }: { bucketId: string }) {
       <div className="p-8 max-w-6xl space-y-6">
         <div>
           <Link
-            to="/storage"
+            to={withRootFilter("/storage", state.hiddenRoots)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
             data-testid="back-to-storage"
           >
@@ -155,6 +159,14 @@ function BucketPage({ bucketId }: { bucketId: string }) {
         <StorageJobsPanel
           jobs={shownStorageJobs(jobs.views, state.watchedJobs)}
           onCancel={jobs.cancelJob}
+        />
+
+        <RootFilterChips
+          chips={bucketRootChips(state)}
+          labelOf={labelOf}
+          isOffline={(location) =>
+            state.roots?.some((r) => r.root === location && !r.online) ?? false
+          }
         />
 
         <BucketToolbar
@@ -361,7 +373,8 @@ function FileRow({
   labelOf: (location: string) => string;
   dispatch: (action: bucketPageReducer.Action) => void;
 }) {
-  const actions = fileActions(state, file);
+  // The menu is the whole file's; the row shows only its shown copies.
+  const actions = fileActions(state, state.files[file.path] ?? file);
   return (
     <tr className="border-b align-top" data-testid="bucket-file">
       <td className="py-2 pr-4 whitespace-nowrap space-x-1">
