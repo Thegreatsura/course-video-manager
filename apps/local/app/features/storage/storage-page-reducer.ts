@@ -14,6 +14,7 @@ import {
   type KindBytes,
 } from "./storage-cache";
 import { watchStorageJobs, type ObservedStorageJob } from "./storage-jobs";
+import { isShown, rootChips, shownEntries, type RootChip } from "./root-filter";
 import {
   bucketCanBeDeleted,
   bucketCanBePurged,
@@ -45,6 +46,9 @@ import {
  * page follows every storage Job live from its Job Events. A delete that
  * took exactly what was counted is taken off the rows; anything else (a
  * move, a delete that kept or left files) counts again.
+ *
+ * The Storage Root filter (#2431, `root-filter.ts`): rows count only shown
+ * roots; a row's menu still acts on the whole bucket.
  */
 export namespace storagePageReducer {
   /** Bytes per kind, at one location. */
@@ -80,6 +84,8 @@ export namespace storagePageReducer {
     watchedJobs: Record<string, boolean>;
     /** Delete Jobs started here, by Job id. */
     pendingDeletes: Record<string, PendingDelete>;
+    /** The Storage Roots the filter hides, from the URL (#2431). */
+    hiddenRoots: string[];
   };
 
   /** What a row's action menu offers. */
@@ -98,6 +104,7 @@ export namespace storagePageReducer {
     | { type: "scan-failed"; message: string }
     | { type: "row-action-clicked"; bucketId: string; choice: RowChoice }
     | { type: "storage-jobs-observed"; jobs: ObservedStorageJob[] }
+    | { type: "root-filter-changed"; hidden: string[] }
     | storageAction.Action;
 
   export type Effect =
@@ -117,7 +124,9 @@ type Exec = Parameters<EffectReducer<State, Action, Effect>>[2];
  * from the initial state is stopped by React Strict Mode's mount → unmount →
  * mount (client-side navigation in dev) and never started again.
  */
-export const createInitialStoragePageState = (): State => ({
+export const createInitialStoragePageState = (
+  hiddenRoots: string[] = []
+): State => ({
   status: "scanning",
   failure: null,
   roots: null,
@@ -131,6 +140,7 @@ export const createInitialStoragePageState = (): State => ({
   nextRequestId: 1,
   watchedJobs: {},
   pendingDeletes: {},
+  hiddenRoots,
 });
 
 /** Stop listening: the scan is over, one way or the other. */
@@ -142,7 +152,7 @@ const stopScan = (state: State, exec: Exec) => {
 const rescan = (state: State, exec: Exec): State => {
   stopScan(state, exec);
   return {
-    ...createInitialStoragePageState(),
+    ...createInitialStoragePageState(state.hiddenRoots),
     action: state.action,
     nextRequestId: state.nextRequestId,
     watchedJobs: state.watchedJobs,
@@ -411,6 +421,9 @@ export const storagePageReducer: EffectReducer<State, Action, Effect> = (
   action,
   exec
 ) => {
+  if (action.type === "root-filter-changed") {
+    return { ...state, hiddenRoots: action.hidden };
+  }
   const afterFreshness = freshnessReducer(state, action, exec);
   if (afterFreshness !== null) return afterFreshness;
   const afterAction = actionReducer(state, action, exec);
@@ -512,14 +525,15 @@ const sum = (
 });
 
 /**
- * One row per Storage Bucket that has anything in it, largest first. The
- * order moves while the scan runs and settles once it completes.
+ * One row per Storage Bucket with anything on a shown Storage Root, largest
+ * first. The order moves while the scan runs and settles once it completes.
  */
 export const storageRows = (state: State): StorageRow[] =>
   Object.entries(state.totals)
-    .flatMap(([bucketId, byLocation]): StorageRow[] => {
+    .flatMap(([bucketId, all]): StorageRow[] => {
       const bucket = state.buckets[bucketId];
       if (!bucket) return [];
+      const byLocation = shownEntries(all, state.hiddenRoots);
       const bytes = Object.values(byLocation).reduce(sum, NO_BYTES);
       const totalBytes = bytes.footage + bytes["exported-videos"] + bytes.other;
       if (totalBytes === 0) return [];
@@ -539,10 +553,13 @@ export const rowCanBePurged = (row: StorageRow): boolean =>
   bucketCanBePurged(row.bucket) && row.bytes["exported-videos"] > 0;
 
 /**
- * The columns: each Storage Root in order, then any other folder CVM writes
- * to that the scan counted (export scratch).
+ * The columns: each shown Storage Root in order, then any other shown folder
+ * the scan counted (export scratch).
  */
-export const storageLocations = (state: State): string[] => {
+export const storageLocations = (state: State): string[] =>
+  allLocations(state).filter((l) => isShown(state.hiddenRoots, l));
+
+const allLocations = (state: State): string[] => {
   const roots = (state.roots ?? []).map((r) => r.root);
   const others = new Set<string>();
   for (const byLocation of Object.values(state.totals)) {
@@ -551,6 +568,20 @@ export const storageLocations = (state: State): string[] => {
     }
   }
   return [...roots, ...[...others].sort()];
+};
+
+/** The filter's chips: buckets with anything at each location (#2431). */
+export const storageRootChips = (state: State): RootChip[] => {
+  const itemsAt: Record<string, number> = {};
+  for (const [bucketId, byLocation] of Object.entries(state.totals)) {
+    if (!state.buckets[bucketId]) continue;
+    for (const [location, b] of Object.entries(byLocation)) {
+      if (b.footage + b["exported-videos"] + b.other > 0) {
+        itemsAt[location] = (itemsAt[location] ?? 0) + 1;
+      }
+    }
+  }
+  return rootChips(allLocations(state), itemsAt, state.hiddenRoots);
 };
 
 /**

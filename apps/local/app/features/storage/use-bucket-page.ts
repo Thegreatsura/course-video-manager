@@ -1,10 +1,12 @@
 import { useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import {
   planStorageAction,
   startStorageAction,
 } from "./storage-action-effects";
 import { storageCache } from "./storage-cache";
+import { hiddenRootsOf } from "./root-filter";
 import { useWindowRefocus } from "./use-window-refocus";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
@@ -86,9 +88,11 @@ const revealFile = (
  * and the window has come back into focus. Remount it for another bucket.
  */
 export const useBucketPage = (bucketId: string) => {
+  const [searchParams] = useSearchParams();
+  const hiddenRoots = hiddenRootsOf(searchParams);
   const [state, dispatch] = useEffectReducer(
     bucketPageReducer,
-    createInitialBucketPageState(bucketId),
+    createInitialBucketPageState(bucketId, hiddenRoots),
     {
       "listen-to-listing": (_state, effect, dispatch) =>
         listenToListing(effect.bucketId, dispatch),
@@ -111,6 +115,14 @@ export const useBucketPage = (bucketId: string) => {
       cached: storageCache.listing(bucketId),
     });
   }, [dispatch, bucketId]);
+  // The URL is where the Storage Root filter lives (#2431).
+  const hiddenKey = hiddenRoots.join("\0");
+  useEffect(() => {
+    dispatch({
+      type: "root-filter-changed",
+      hidden: hiddenKey === "" ? [] : hiddenKey.split("\0"),
+    });
+  }, [dispatch, hiddenKey]);
   useWindowRefocus(dispatch);
   return [state, dispatch] as const;
 };

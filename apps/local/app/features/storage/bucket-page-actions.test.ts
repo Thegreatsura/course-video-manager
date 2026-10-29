@@ -6,9 +6,12 @@ import type {
   StorageFileRole,
 } from "@/packages/storage/client";
 import {
+  allTicked,
+  bucketFiles,
   bucketPageReducer,
   createInitialBucketPageState,
   fileActions,
+  selectedBytes,
 } from "./bucket-page-reducer";
 
 /**
@@ -374,6 +377,49 @@ describe("deleting many files at once (#2423)", () => {
       { type: "listen-to-listing", bucketId: course.id },
     ]);
     expect(t.getState().status).toBe("listing");
+  });
+});
+
+describe("the Storage Root filter (#2431)", () => {
+  it("never ticks or deletes a hidden file, or a shown file's copy on a hidden root", () => {
+    const t = listed(unused, [
+      found("raw-footage/d.mkv", D, 2 * GB),
+      found("raw-footage/e.mkv", E, 3 * GB),
+      found("raw-footage/both.mkv", D, GB),
+      found("raw-footage/both.mkv", E, GB),
+    ]);
+    t.send({ type: "file-ticked", path: "raw-footage/e.mkv", shift: false })
+      // Hiding E: unticks the file only on E:.
+      .send({ type: "root-filter-changed", hidden: [E] });
+    expect(t.getState().selected).toEqual([]);
+    expect(bucketFiles(t.getState()).map((f) => [f.path, f.copies])).toEqual([
+      ["raw-footage/d.mkv", { [D]: 2 * GB }],
+      ["raw-footage/both.mkv", { [D]: GB }],
+    ]);
+
+    t.send({ type: "tick-all-clicked" });
+    expect(t.getState().selected).toEqual([
+      "raw-footage/d.mkv",
+      "raw-footage/both.mkv",
+    ]);
+    expect(allTicked(t.getState())).toBe(true);
+    expect(selectedBytes(t.getState())).toBe(3 * GB);
+
+    t.send({ type: "delete-selected-clicked" });
+    expect(t.getState().action).toMatchObject({
+      status: "confirming",
+      request: {
+        type: "delete-unused",
+        files: [
+          { location: D, path: "raw-footage/d.mkv" },
+          { location: D, path: "raw-footage/both.mkv" },
+        ],
+      },
+      plan: {
+        type: "delete",
+        byLocation: [{ location: D, files: 2, bytes: 3 * GB }],
+      },
+    });
   });
 });
 

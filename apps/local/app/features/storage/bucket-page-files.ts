@@ -1,6 +1,7 @@
 import type { storageAction } from "./storage-action";
 import { kindOfRole, type RemovedBytes } from "./storage-cache";
 import type { bucketPageReducer } from "./bucket-page-reducer";
+import { isShown, shownEntries } from "./root-filter";
 import {
   bucketCanBeDeleted,
   bucketCanBePurged,
@@ -35,12 +36,29 @@ const deleteLabelOf = (
         ? "Delete"
         : null;
 
-/** Whether the file can be ticked: it has a Delete. */
+/**
+ * The file as the Storage Root filter shows it (#2431): only its copies on
+ * shown roots, its size the largest of those; null when it has none.
+ */
+export const shownFile = (
+  state: State,
+  file: StorageBucketFile
+): StorageBucketFile | null => {
+  if (state.hiddenRoots.length === 0) return file;
+  const copies = shownEntries(file.copies, state.hiddenRoots);
+  const sizes = Object.values(copies);
+  return sizes.length === 0
+    ? null
+    : { ...file, copies, bytes: Math.max(...sizes) };
+};
+
+/** Whether the file can be ticked: it is shown, and it has a Delete. */
 export const fileCanBeTicked = (state: State, path: string): boolean => {
   const file = state.files[path];
   return (
     state.bucket !== null &&
     file !== undefined &&
+    Object.keys(file.copies).some((l) => isShown(state.hiddenRoots, l)) &&
     deleteLabelOf(state.bucket, file) !== null
   );
 };
@@ -80,7 +98,8 @@ const labelOfRoot = (state: State, location: string) =>
   state.roots?.find((r) => r.root === location)?.label ?? location;
 
 /**
- * A file's action menu, with exactly what its bucket allows (#2157). The
+ * A file's action menu, with exactly what its bucket allows (#2157). Delete
+ * original and Reveal are offered only on shown Storage Roots (#2431). The
  * server checks every one again.
  */
 export const fileActions = (
@@ -107,6 +126,7 @@ export const fileActions = (
   }
   if (movableKindsOf(bucket).length > 0) {
     for (const [from, bytes] of Object.entries(file.copies)) {
+      if (!isShown(state.hiddenRoots, from)) continue;
       const copied = Object.entries(file.copies).some(
         ([at, size]) => at !== from && size === bytes
       );
@@ -119,6 +139,7 @@ export const fileActions = (
     }
   }
   for (const location of Object.keys(file.copies)) {
+    if (!isShown(state.hiddenRoots, location)) continue;
     out.push({
       choice: { type: "reveal", location },
       label: "Reveal in File System",

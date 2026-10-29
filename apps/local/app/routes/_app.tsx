@@ -5,6 +5,7 @@ import { UploadProvider } from "@/features/upload-manager/upload-context";
 import { CourseOperationsService } from "@/services/db-course-operations.server";
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { makeLoader } from "@/services/route-action.server";
+import { onlyRootFilterChanged } from "@/features/storage/root-filter";
 import { offlineStorageRoots } from "@/services/storage-root-availability.server";
 import { getFootageStats } from "@cvm/core/services/db-footage-stats.server";
 import { Effect } from "effect";
@@ -54,13 +55,18 @@ export const loader = makeLoader({
 /**
  * Also reload on every move to a new page, not only after a form submit, so
  * the sidebar's footage stats pick up a take recorded on the page just left.
- * It runs alongside the new page's own loader.
+ * It runs alongside the new page's own loader. Toggling the Storage Root
+ * filter (#2431) only filters what the page already has: no reload.
  */
 export const shouldRevalidate: ShouldRevalidateFunction = ({
   currentUrl,
   nextUrl,
+  formMethod,
   defaultShouldRevalidate,
-}) => defaultShouldRevalidate || currentUrl.pathname !== nextUrl.pathname;
+}) =>
+  formMethod === undefined && onlyRootFilterChanged(currentUrl, nextUrl)
+    ? false
+    : defaultShouldRevalidate || currentUrl.pathname !== nextUrl.pathname;
 
 /**
  * One line per Offline Storage Root, naming the drive and what to do, with

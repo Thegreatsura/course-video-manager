@@ -1,10 +1,12 @@
 import { useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { useEffectReducer } from "@/hooks/use-effect-reducer";
 import {
   planStorageAction,
   startStorageAction,
 } from "./storage-action-effects";
 import { storageCache } from "./storage-cache";
+import { hiddenRootsOf } from "./root-filter";
 import { useWindowRefocus } from "./use-window-refocus";
 import {
   STORAGE_SCAN_MESSAGE_TYPES,
@@ -60,9 +62,11 @@ const listenToScan = (
  * has come back into focus.
  */
 export const useStoragePage = () => {
+  const [searchParams] = useSearchParams();
+  const hiddenRoots = hiddenRootsOf(searchParams);
   const [state, dispatch] = useEffectReducer(
     storagePageReducer,
-    createInitialStoragePageState(),
+    createInitialStoragePageState(hiddenRoots),
     {
       "listen-to-scan": (_state, _effect, dispatch) => listenToScan(dispatch),
       "save-scan": (_state, effect) => storageCache.saveScan(effect.scan),
@@ -81,6 +85,14 @@ export const useStoragePage = () => {
       cached: storageCache.scan(),
     });
   }, [dispatch]);
+  // The URL is where the Storage Root filter lives (#2431).
+  const hiddenKey = hiddenRoots.join("\0");
+  useEffect(() => {
+    dispatch({
+      type: "root-filter-changed",
+      hidden: hiddenKey === "" ? [] : hiddenKey.split("\0"),
+    });
+  }, [dispatch, hiddenKey]);
   useWindowRefocus(dispatch);
   return [state, dispatch] as const;
 };

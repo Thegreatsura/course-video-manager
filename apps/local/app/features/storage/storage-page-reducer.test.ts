@@ -8,6 +8,7 @@ import {
   storageCells,
   storagePageReducer,
   storageLocations,
+  storageRootChips,
   storageRows,
 } from "./storage-page-reducer";
 
@@ -354,5 +355,52 @@ describe("Offline and Dirty drives", () => {
     ]).getState();
 
     expect(driveWarnings(state)).toEqual({ offline: [], dirty: [] });
+  });
+
+  it("counts only the shown Storage Roots, and drops a bucket with nothing on them (#2431)", () => {
+    const tester = start().send({
+      type: "sizes-counted",
+      sizes: [
+        {
+          bucketId: "course:a",
+          location: D,
+          kind: "footage",
+          bytes: 10,
+          files: 1,
+        },
+        {
+          bucketId: "course:a",
+          location: E,
+          kind: "footage",
+          bytes: 30,
+          files: 1,
+        },
+        {
+          bucketId: "course:b",
+          location: E,
+          kind: "footage",
+          bytes: 20,
+          files: 1,
+        },
+      ],
+    });
+    expect(names(tester)).toEqual([
+      ["Course A", 40],
+      ["Course B", 20],
+    ]);
+
+    tester.send({ type: "root-filter-changed", hidden: [E] });
+    expect(names(tester)).toEqual([["Course A", 10]]);
+    expect(storageLocations(tester.getState())).toEqual([D]);
+    expect(storageRootChips(tester.getState())).toEqual([
+      { location: D, items: 1, shown: true, disabled: false },
+      { location: E, items: 2, shown: false, disabled: false },
+    ]);
+
+    // A count from nothing keeps the filter.
+    tester
+      .send({ type: "scan-completed", at: 0 })
+      .send({ type: "refresh-clicked" });
+    expect(tester.getState().hiddenRoots).toEqual([E]);
   });
 });
