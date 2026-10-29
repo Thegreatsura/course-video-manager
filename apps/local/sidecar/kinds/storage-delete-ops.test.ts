@@ -21,19 +21,13 @@ import {
 import { DrizzleService } from "@/services/drizzle-service.server";
 import { JobOperationsService } from "@cvm/core/services/db-job-operations.server";
 import * as schema from "@/db/schema";
-import type { StorageRoots } from "@/packages/storage";
-import { STORAGE_DELETED_EVENT, TRASH_FOLDER } from "@/packages/storage/client";
-import { listStorageTrash } from "@/packages/storage/trash";
+import { STORAGE_DELETED_EVENT } from "@/packages/storage/client";
 import type { JobContext } from "../job-kind";
 import { storageDeleteJobKind } from "./storage-delete";
-import {
-  resetTrashExpirySweep,
-  sweepExpiredTrash,
-} from "../trash-expiry-sweep";
 
 /**
- * The `storage-delete` Sidecar Job's other operations (#2157): the Trash for
- * Unused Footage, a Purge and an Other bucket's delete, run as the Sidecar
+ * The `storage-delete` Sidecar Job's other operations (#2157, #2423):
+ * deleting Unused Footage for good, a Purge and an Other bucket's delete, run as the Sidecar
  * runs them, against PGlite and two temp directories as Storage Roots (never
  * a real drive).
  */
@@ -77,8 +71,6 @@ afterEach(() => {
   }
   fs.rmSync(base, { recursive: true, force: true });
 });
-
-const roots = (): StorageRoots => [d, e];
 
 const put = (dir: string, relative: string, content: Buffer | string) => {
   const full = path.join(dir, relative);
@@ -187,45 +179,21 @@ const runJob = async (params: Record<string, unknown>) => {
   return { jobId, exit };
 };
 
-describe("a storage-delete Job (the Trash)", () => {
-  it("moves Unused Footage to the Trash on its own drive, keeps archived-Clip Footage, and reports it", async () => {
-    const { jobId, exit } = await runJob({ operation: "trash-unused" });
+describe("a storage-delete Job (Unused Footage)", () => {
+  it("deletes Unused Footage for good on every drive, keeps archived-Clip Footage, and reports it", async () => {
+    const { jobId, exit } = await runJob({ operation: "delete-unused" });
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(files(path.join(d, "raw-footage"))).toEqual(["used.mkv"]);
     expect(files(path.join(e, "raw-footage"))).toEqual([]);
-    expect(
-      files(path.join(d, TRASH_FOLDER)).map((p) => p.replace(/^[^/]+\//, ""))
-    ).toEqual(["raw-footage/unused.mkv"]);
-    expect(
-      files(path.join(e, TRASH_FOLDER)).map((p) => p.replace(/^[^/]+\//, ""))
-    ).toEqual(["raw-footage/old/unused-e.mkv"]);
+    expect(files(d).filter((f) => !f.startsWith("raw-footage/"))).toEqual([]);
     const events = await eventsOf(jobId);
     expect(
       events.find((ev) => ev.type === STORAGE_DELETED_EVENT)?.data
     ).toMatchObject({
-      operation: "trash-unused",
+      operation: "delete-unused",
       deleted: { files: 2 },
       left: [],
     });
-  });
-
-  it("restores a trashed file, then Empty trash deletes the rest for good", async () => {
-    await runJob({ operation: "trash-unused" });
-    const entries = await Effect.runPromise(
-      listStorageTrash({ roots: roots() })
-    );
-    const onE = entries.find((x) => x.location === e)!;
-    const restored = await runJob({
-      operation: "restore-trash",
-      files: [{ location: onE.location, batch: onE.batch, path: onE.path }],
-    });
-    expect(Exit.isSuccess(restored.exit)).toBe(true);
-    expect(files(path.join(e, "raw-footage"))).toEqual(["old/unused-e.mkv"]);
-
-    const emptied = await runJob({ operation: "empty-trash" });
-    expect(Exit.isSuccess(emptied.exit)).toBe(true);
-    expect(files(path.join(d, TRASH_FOLDER))).toEqual([]);
-    expect(files(path.join(d, "raw-footage"))).toEqual(["used.mkv"]);
   });
 
   it("deletes one Other bucket's named file, nothing else", async () => {
@@ -240,23 +208,23 @@ describe("a storage-delete Job (the Trash)", () => {
     expect(files(path.join(d, "overlay-renders"))).toEqual(["b.mov"]);
   });
 
-  it("refuses to trash while a recording is active, moving nothing", async () => {
+  it("refuses to delete while a recording is active, deleting nothing", async () => {
     await testDb.insert(schema.recordingSessions).values({
       cameraFilePath: "raw-footage/rec/camera.mkv",
       screenFilePath: "raw-footage/rec/screen.mkv",
       micFilePath: "raw-footage/rec/mic.mkv",
       status: "recording",
     });
-    const { exit } = await runJob({ operation: "trash-unused" });
-    expect(failureOf(exit)._tag).toBe("StorageTrashRefusedError");
+    const { exit } = await runJob({ operation: "delete-unused" });
+    expect(failureOf(exit)._tag).toBe("StorageUnusedDeleteRefusedError");
     expect(files(path.join(d, "raw-footage"))).toEqual([
       "unused.mkv",
       "used.mkv",
     ]);
   });
 
-  it("cancelled before it starts, trashes nothing and ends cancelled", async () => {
-    const jobId = await newJob({ operation: "trash-unused" });
+  it("cancelled before it starts, deletes nothing and ends cancelled", async () => {
+    const jobId = await newJob({ operation: "delete-unused" });
     await run(
       Effect.flatMap(JobOperationsService, (ops) =>
         Effect.zipRight(
@@ -267,7 +235,7 @@ describe("a storage-delete Job (the Trash)", () => {
     );
     const exit = await run(
       storageDeleteJobKind.runRaw(
-        { operation: "trash-unused" } as never,
+        { operation: "delete-unused" } as never,
         ctxFor(jobId)
       )
     );
@@ -275,33 +243,6 @@ describe("a storage-delete Job (the Trash)", () => {
     expect(files(path.join(d, "raw-footage"))).toEqual([
       "unused.mkv",
       "used.mkv",
-    ]);
-  });
-});
-
-describe("the Trash expiry sweep", () => {
-  it("queues one expire-trash Job when a batch is over 14 days old, then waits an hour", async () => {
-    resetTrashExpirySweep();
-    put(d, `${TRASH_FOLDER}/20260101T000000Z-old/raw-footage/x.mkv`, "x");
-    put(d, `${TRASH_FOLDER}/29990101T000000Z-new/raw-footage/y.mkv`, "y");
-    await run(sweepExpiredTrash);
-    await run(sweepExpiredTrash);
-    const jobs = await testDb.select().from(schema.jobs);
-    expect(jobs.map((j) => j.params)).toEqual([{ operation: "expire-trash" }]);
-
-    const { exit } = await (async () => {
-      const job = jobs[0]!;
-      const exit = await run(
-        storageDeleteJobKind.runRaw(
-          { operation: "expire-trash" } as never,
-          ctxFor(job.id)
-        )
-      );
-      return { exit };
-    })();
-    expect(Exit.isSuccess(exit)).toBe(true);
-    expect(files(path.join(d, TRASH_FOLDER))).toEqual([
-      "29990101T000000Z-new/raw-footage/y.mkv",
     ]);
   });
 });

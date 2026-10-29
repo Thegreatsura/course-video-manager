@@ -270,8 +270,6 @@
         "apps/local/app/packages/storage/lib/originals-check.server.ts",
         "apps/local/app/packages/storage/lib/originals.server.ts",
         "apps/local/app/packages/storage/lib/purge-exports.server.ts",
-        "apps/local/app/packages/storage/lib/trash-restore.server.ts",
-        "apps/local/app/packages/storage/lib/trash.server.ts",
         "apps/local/app/routes/_app._index.tsx",
         "apps/local/app/routes/_app.courses.$courseId._index.tsx",
         "apps/local/app/routes/_app.videos.$videoId.thumbnails.tsx",

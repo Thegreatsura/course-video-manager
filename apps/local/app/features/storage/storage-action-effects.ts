@@ -94,47 +94,22 @@ const request = (
             })
           );
     }
-    case "trash-unused":
+    case "delete-unused":
       return fetch(
-        "/api/storage/trash",
+        "/api/storage/unused-footage",
         postOf({
-          operation: "trash-unused",
           dryRun,
           ...(r.files === null ? {} : { files: r.files }),
         })
       );
-    case "restore-trash":
-      return fetch(
-        "/api/storage/trash",
-        postOf({ operation: "restore-trash", dryRun, files: r.files })
-      );
-    case "empty-trash":
-      return fetch(
-        "/api/storage/trash",
-        postOf({ operation: "empty-trash", dryRun })
-      );
   }
 };
 
-const planOf = (
-  r: storageAction.Request,
-  body: unknown
-): storageAction.Plan => {
-  switch (r.type) {
-    case "move":
-      return { type: "move", plan: body as never };
-    case "purge":
-      return { type: "purge", result: body as never };
-    case "delete-bucket":
-      return { type: "delete-bucket", result: body as never };
-    case "originals":
-      return { type: "originals", result: body as never };
-    case "trash-unused":
-    case "restore-trash":
-    case "empty-trash":
-      return { type: "trash", result: body as never };
-  }
-};
+/** A move's dry run, as the dialog draws it. Deletes have no dry run (#2423). */
+const planOf = (body: unknown): storageAction.Plan => ({
+  type: "move",
+  plan: body as never,
+});
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -150,7 +125,7 @@ export const planStorageAction = (
       dispatch({
         type: "storage-action-planned",
         requestId: effect.requestId,
-        plan: planOf(effect.request, body),
+        plan: planOf(body),
       })
     )
     .catch((error: unknown) =>

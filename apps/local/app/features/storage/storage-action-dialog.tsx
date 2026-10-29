@@ -8,14 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { UNUSED_FOOTAGE_MIN_AGE_DAYS } from "@/packages/storage/client";
 import {
-  purgedBytes,
-  purgedFiles,
-  TRASH_RETENTION_DAYS,
-  trashDoneBytes,
-  trashDoneFiles,
-} from "@/packages/storage/client";
-import {
+  deletePlanBytes,
+  deletePlanFiles,
   planBlockers,
   storageActionLabel,
   type storageAction,
@@ -50,12 +46,8 @@ const explanation = (request: storageAction.Request): string => {
       return `${DELETE_EXPLANATIONS[request.bucket.id] ?? ""} Raw Footage is never deleted.`;
     case "originals":
       return "Only files with an identical copy (size and checksum, read again just before) on another drive. A file with no copy elsewhere is kept.";
-    case "trash-unused":
-      return `Each file is moved into the Trash (.cvm-trash) on its own drive, never across drives. You can Restore it for ${TRASH_RETENTION_DAYS} days; then it is deleted for good. Footage any Clip uses, live or archived, and anything from the last 7 days, is never moved.`;
-    case "restore-trash":
-      return "Each file goes back where it was, on its own drive. Nothing is ever overwritten.";
-    case "empty-trash":
-      return "Everything in the Trash is deleted for good, on every drive. This can't be undone.";
+    case "delete-unused":
+      return `Deleted for good; this can't be undone. Footage any Clip uses, live or archived, and anything changed in the last ${UNUSED_FOOTAGE_MIN_AGE_DAYS} days, is checked again and kept.`;
   }
 };
 
@@ -108,90 +100,22 @@ function PlanNumbers({
         </dl>
       );
     }
-    case "purge":
-      return (
-        <div className="space-y-2 text-sm" data-testid="storage-action-numbers">
-          <p>
-            {plural(plan.result.videos, "Video")}:{" "}
-            {plural(purgedFiles(plan.result), "file")},{" "}
-            {size(purgedBytes(plan.result))}.
-          </p>
-          {plan.result.skipped.length > 0 && (
-            <div>
-              <strong>
-                {plural(plan.result.skipped.length, "Video")} skipped
-              </strong>{" "}
-              (its Footage isn't all found, so it couldn't be exported again):
-              <ul className="list-disc pl-5 max-h-32 overflow-y-auto">
-                {plan.result.skipped.slice(0, 10).map((s) => (
-                  <li key={s.videoId} className="break-all">
-                    {s.title || s.videoId}: {s.reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      );
-    case "delete-bucket": {
-      const files = plan.result.deleted.reduce((n, d) => n + d.files, 0);
-      const bytes = plan.result.deleted.reduce((n, d) => n + d.bytes, 0);
+    case "delete":
       return (
         <p className="text-sm" data-testid="storage-action-numbers">
-          {plural(files, "file")}, {size(bytes)}
-          {plan.result.deleted.length > 0 &&
-            `: ${plan.result.deleted.map((d) => `${size(d.bytes)} on ${labelOf(d.location)}`).join(", ")}`}
+          {plural(deletePlanFiles(plan), "item")}, {size(deletePlanBytes(plan))}
+          {plan.byLocation.length > 1 &&
+            `: ${plan.byLocation.map((l) => `${size(l.bytes)} on ${labelOf(l.location)}`).join(", ")}`}
           .
         </p>
-      );
-    }
-    case "originals":
-      return (
-        <p className="text-sm" data-testid="storage-action-numbers">
-          {plural(plan.result.deleted.files, "file")} (
-          {size(plan.result.deleted.bytes)}) to check and delete;{" "}
-          {plural(plan.result.kept.files, "file")} with no copy elsewhere stay.
-        </p>
-      );
-    case "trash":
-      return (
-        <div className="space-y-2 text-sm" data-testid="storage-action-numbers">
-          <p>
-            {plural(trashDoneFiles(plan.result), "file")},{" "}
-            {size(trashDoneBytes(plan.result))}
-            {plan.result.done.length > 0 &&
-              `: ${plan.result.done.map((d) => `${size(d.bytes)} on ${labelOf(d.location)}`).join(", ")}`}
-            .
-          </p>
-          {plan.result.kept.length > 0 && (
-            <div data-testid="storage-action-kept">
-              <strong>{plural(plan.result.kept.length, "file")} kept:</strong>
-              <ul className="list-disc pl-5 max-h-32 overflow-y-auto">
-                {plan.result.kept.slice(0, 10).map((k) => (
-                  <li key={`${k.location}:${k.path}`} className="break-all">
-                    {labelOf(k.location)} {k.path}: {k.reason}
-                  </li>
-                ))}
-                {plan.result.kept.length > 10 && (
-                  <li>…and {plan.result.kept.length - 10} more</li>
-                )}
-              </ul>
-            </div>
-          )}
-        </div>
       );
   }
 }
 
-/** Files a plan would leave (a link, a folder not where it is named). */
-const leftOf = (plan: storageAction.Plan) =>
-  plan.type === "move" || plan.type === "originals"
-    ? 0
-    : plan.result.left.length;
-
 /**
  * The confirmation for any move or delete on the Storage pages (#2157):
- * what it would do (the server's dry run), and why it is blocked, if it is.
+ * what it would do (a move: the server's dry run; a delete: what the page
+ * has listed, so it opens at once), and why it is blocked, if it is.
  * Confirming queues its Sidecar Job.
  */
 export function StorageActionDialog({
@@ -209,10 +133,7 @@ export function StorageActionDialog({
     action?.status === "planning" ||
     action?.status === "confirming" ||
     action?.status === "starting";
-  const destructive =
-    action !== null &&
-    action.request.type !== "move" &&
-    action.request.type !== "restore-trash";
+  const destructive = action !== null && action.request.type !== "move";
   return (
     <Dialog
       open={open}
@@ -236,12 +157,6 @@ export function StorageActionDialog({
           ) : (
             <>
               <PlanNumbers plan={action.plan} labelOf={labelOf} />
-              {leftOf(action.plan) > 0 && (
-                <p className="text-sm text-destructive">
-                  {plural(leftOf(action.plan), "file")} will be left, failing a
-                  safety check (a link, or a folder not where it is named).
-                </p>
-              )}
               {planBlockers(action.plan).length > 0 && (
                 <ul
                   className="list-disc pl-5 text-sm text-destructive"

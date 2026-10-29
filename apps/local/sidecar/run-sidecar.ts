@@ -25,7 +25,6 @@ import { serveSidecarSocket } from "./socket";
 import { LocalWhisperEngine } from "@/services/local-whisper-engine";
 import { sweepStuckClips } from "./stuck-clip-sweep";
 import { sweepUnqueuedVoices } from "./clip-mockup-voice-sweep";
-import { sweepExpiredTrash } from "./trash-expiry-sweep";
 import { sweepMovePartials } from "./move-partials-sweep";
 import { superviseSidecar } from "./supervise";
 
@@ -163,7 +162,6 @@ const main = async (): Promise<void> => {
                   Effect.logError("sidecar: the stuck-Clip sweep failed", cause)
                 ),
                 Effect.zipRight(sweepUnqueuedVoices),
-                Effect.zipRight(sweepExpiredTrash),
                 Effect.zipRight(sweepMovePartials)
               ),
               serve: (handle) =>

@@ -46,8 +46,8 @@ import {
  * - `not-deletable`: only the Overlay Render Cache, export scratch and
  *   Exported Videos of no current Video can be deleted here. Footage of any
  *   kind, Clip Mockups and a Course's, Standalone Videos' or Shorts' buckets
- *   never can be (ADR 0041); Unused Footage goes to the trash instead
- *   (`./trash.server.ts`, ADR 0043).
+ *   never can be (ADR 0041); Unused Footage has its own delete
+ *   (`./unused-delete.server.ts`).
  * - `export-running`: an export, a vertical render or a Publish is queued or
  *   running; it writes export scratch, reads Overlay renders and writes into
  *   `finished-videos/`.
@@ -114,7 +114,7 @@ const inBucket = (
  * legacy flat files of deleted Videos included).
  *
  * Every other bucket is refused outright: raw Footage is never deleted here
- * (Unused Footage goes to the trash, ADR 0043), and Clip Mockups are only
+ * (Unused Footage has its own delete, `./unused-delete.server.ts`), and Clip Mockups are only
  * viewed and moved (ADR 0041). What owns each file is read fresh from the database here, never
  * taken from the page. Each file is checked on disk first (`refusalFor`);
  * one that fails the check, or that Windows won't let go of, is left and

@@ -4,15 +4,11 @@ import { exportScratchDirectory } from "@/services/storage-roots";
 import { runDeleteOriginals } from "@/packages/storage/originals";
 import { purgeExportedVideos } from "@/packages/storage/purge";
 import { deleteOtherStorageBucket } from "@/packages/storage/delete";
-import {
-  emptyStorageTrash,
-  restoreTrashedFootage,
-  trashUnusedFootage,
-} from "@/packages/storage/trash";
+import { deleteUnusedFootage } from "@/packages/storage/unused";
 import { rootLabel, type StorageRoots } from "@/packages/storage";
 import type {
   StorageDeleteJobResult,
-  StorageTrashResult,
+  StorageUnusedDeleteResult,
 } from "@/packages/storage/client";
 import { JobCancelledError } from "../job-kind";
 import type { JOB_PARAMS } from "../job-params";
@@ -45,12 +41,9 @@ const where = (l: { location: string; path: string; message: string }) => ({
   message: l.message,
 });
 
-const fromTrash = (
-  operation: Params["operation"],
-  r: StorageTrashResult
-): StorageDeleteJobResult => ({
+const fromUnused = (r: StorageUnusedDeleteResult): StorageDeleteJobResult => ({
   bucketId: "unused-footage",
-  operation,
+  operation: "delete-unused",
   location: null,
   deleted: sum(r.done),
   kept: { files: r.kept.length, bytes: 0 },
@@ -151,31 +144,13 @@ export const runStorageDeleteOperation = (
           }))
         )
       );
-    case "trash-unused":
+    case "delete-unused":
       return cancelled(
-        trashUnusedFootage({
+        deleteUnusedFootage({
           ...common,
-          batchId: run.jobId,
           ...(params.files === undefined ? {} : { files: params.files }),
           onProgress,
-        }).pipe(Effect.map((r) => fromTrash("trash-unused", r)))
-      );
-    case "restore-trash":
-      return cancelled(
-        restoreTrashedFootage({
-          ...common,
-          files: params.files,
-          onProgress,
-        }).pipe(Effect.map((r) => fromTrash("restore-trash", r)))
-      );
-    case "empty-trash":
-    case "expire-trash":
-      return cancelled(
-        emptyStorageTrash({
-          ...common,
-          olderThanRetention: params.operation === "expire-trash",
-          onProgress,
-        }).pipe(Effect.map((r) => fromTrash(params.operation, r)))
+        }).pipe(Effect.map(fromUnused))
       );
   }
 };

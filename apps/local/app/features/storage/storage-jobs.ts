@@ -39,6 +39,8 @@ export type StorageJobView = {
   readonly summary: string | null;
   /** Files it could not move or delete, and why. */
   readonly left: readonly { path: string; message: string }[];
+  /** A delete's result once reported, for the page to forget what went. */
+  readonly deleted: StorageDeleteJobResult | null;
   readonly errorMessage: string | null;
 };
 
@@ -107,6 +109,10 @@ export const storageJobsOf = (
         cancellable: live && job.status !== "requested" && !job.cancelRequested,
         cancelRequested: live && job.cancelRequested,
         ...summaryOf(job, labelOf),
+        deleted:
+          job.kind === STORAGE_DELETE_JOB_KIND && job.result !== null
+            ? (job.result as unknown as StorageDeleteJobResult)
+            : null,
         errorMessage: job.errorMessage,
       };
     });
@@ -115,28 +121,31 @@ export const storageJobsOf = (
 export type ObservedStorageJob = {
   readonly id: string;
   readonly live: boolean;
+  /** A delete's result, once reported; null for a move or before. */
+  readonly deleted?: StorageDeleteJobResult | null;
 };
 
 export const observedStorageJobs = (
   views: readonly StorageJobView[]
-): ObservedStorageJob[] => views.map((v) => ({ id: v.id, live: v.live }));
+): ObservedStorageJob[] =>
+  views.map((v) => ({ id: v.id, live: v.live, deleted: v.deleted }));
 
 /**
- * The Jobs a page has seen live, and whether one just settled: then the
- * page counts again from nothing. A Job first seen already settled (from
- * before the page opened) changes nothing.
+ * The Jobs a page has seen live, and the ones that just settled: the page
+ * forgets what a delete took, or counts again. A Job first seen already
+ * settled (from before the page opened) changes nothing.
  */
 export const watchStorageJobs = (
   watched: Readonly<Record<string, boolean>>,
   observed: readonly ObservedStorageJob[]
-): { watched: Record<string, boolean>; settled: boolean } => {
+): { watched: Record<string, boolean>; settled: ObservedStorageJob[] } => {
   const next: Record<string, boolean> = { ...watched };
-  let settled = false;
+  const settled: ObservedStorageJob[] = [];
   for (const job of observed) {
     if (job.live) next[job.id] = true;
     else if (next[job.id] === true) {
       next[job.id] = false;
-      settled = true;
+      settled.push(job);
     }
   }
   return { watched: next, settled };

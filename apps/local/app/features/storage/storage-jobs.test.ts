@@ -12,7 +12,7 @@ import {
 const job = (over: Partial<jobsReducer.JobView>): jobsReducer.JobView => ({
   id: "j",
   kind: "storage-delete",
-  title: "Move Unused Footage to the Trash",
+  title: "Delete all Unused Footage",
   subjectType: "storage-bucket",
   subjectId: "unused-footage",
   status: "running",
@@ -51,7 +51,7 @@ describe("storage Jobs on the Storage pages", () => {
           errorMessage: "1 file still on D:",
           result: {
             bucketId: "unused-footage",
-            operation: "trash-unused",
+            operation: "delete-unused",
             location: null,
             deleted: { files: 2, bytes: 2 * 1024 ** 3 },
             kept: { files: 0, bytes: 0 },
@@ -68,7 +68,7 @@ describe("storage Jobs on the Storage pages", () => {
       ["a", true, true, 40],
     ]);
     expect(views[0]!.summary).toBe(
-      "2 moved to the Trash (2.0 GB); 1 file still on its drive, retry"
+      "2 deleted (2.0 GB); 1 file still on its drive, retry"
     );
     expect(views[0]!.left).toEqual([
       { path: "D: raw-footage/x.mkv", message: "EBUSY" },
@@ -93,9 +93,9 @@ describe("storage Jobs on the Storage pages", () => {
       { id: "a", live: true },
       { id: "b", live: false },
     ]);
-    expect(first).toEqual({ watched: { a: true }, settled: false });
+    expect(first).toEqual({ watched: { a: true }, settled: [] });
     expect(watchStorageJobs(first.watched, [{ id: "a", live: false }])).toEqual(
-      { watched: { a: false }, settled: true }
+      { watched: { a: false }, settled: [{ id: "a", live: false }] }
     );
   });
 });

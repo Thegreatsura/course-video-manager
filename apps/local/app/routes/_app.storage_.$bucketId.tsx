@@ -2,7 +2,7 @@ import {
   ArrowLeft,
   CopyX,
   MoreHorizontal,
-  RotateCcw,
+  RefreshCw,
   Trash2,
   Loader2,
 } from "lucide-react";
@@ -17,6 +17,7 @@ import { ActionMenuContent } from "@/features/action-menu/action-menu";
 import type { ActionMenuGroups } from "@/features/action-menu/action-menu-model";
 import { STANDARD_ACTIONS } from "@/features/action-menu/standard-actions";
 import {
+  allTicked,
   bucketFiles,
   bucketTotals,
   fileActions,
@@ -35,10 +36,9 @@ import { StorageJobsPanel } from "@/features/storage/storage-jobs-panel";
 import { shownStorageJobs } from "@/features/storage/storage-jobs";
 import { useBucketPage } from "@/features/storage/use-bucket-page";
 import { useStorageJobs } from "@/features/storage/use-storage-jobs";
-import {
-  TRASH_RETENTION_DAYS,
-  type StorageBucketFile,
-  type StorageFileRole,
+import type {
+  StorageBucketFile,
+  StorageFileRole,
 } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage_.$bucketId";
 
@@ -68,12 +68,12 @@ const ROLE_LABELS: Record<StorageFileRole, string> = {
  * The per-bucket page (#2108): one Storage Bucket's files, largest first,
  * with the drive(s) each is on first. Each file has an action menu with what
  * its bucket allows (#2157): Delete, Move to another drive, Delete original
- * and Show in Explorer. Exported Videos can be ticked and deleted together;
- * "Delete originals on D:" deletes the bucket's files on D: with an
- * identical copy elsewhere (#2110). Every move and delete runs as a Sidecar
- * Job, followed live here. Unused Footage's page lists the Trash too.
- * Listed fresh on every visit and streamed in; leaving the page stops the
- * walk.
+ * and Show in Explorer. Every file with a Delete can be ticked (shift-click
+ * for a range, the header for all) and deleted together (#2423); "Delete
+ * originals on D:" deletes the bucket's files on D: with an identical copy
+ * elsewhere (#2110). Every move and delete runs as a Sidecar Job, followed
+ * live here. The listing streams in and is kept in memory for five minutes
+ * (#2423): Refresh lists again at once.
  */
 export default function StorageBucketPage({ params }: Route.ComponentProps) {
   // A new bucket is a new listing: remount rather than reuse the state.
@@ -85,7 +85,6 @@ function BucketPage({ bucketId }: { bucketId: string }) {
   const files = bucketFiles(state);
   const canTick = files.some((f) => fileCanBeTicked(state, f.path));
   const totals = bucketTotals(state);
-  const offers = originalsOffers(state);
   const busy = storageActionIsBusy(state.action);
   const labelOf = (location: string) => {
     const label =
@@ -105,9 +104,20 @@ function BucketPage({ bucketId }: { bucketId: string }) {
           >
             <ArrowLeft className="w-4 h-4" /> Storage
           </Link>
-          <h1 className="text-3xl font-bold mb-2">
-            {state.bucket?.name ?? "Storage Bucket"}
-          </h1>
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <h1 className="text-3xl font-bold">
+              {state.bucket?.name ?? "Storage Bucket"}
+            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={state.status === "listing" || busy}
+              onClick={() => dispatch({ type: "refresh-clicked" })}
+              data-testid="bucket-refresh"
+            >
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </Button>
+          </div>
           {state.bucket?.sharedBy && state.bucket.sharedBy.length > 0 && (
             <p className="text-muted-foreground" data-testid="shared-by">
               Used by {state.bucket.sharedBy.join(", ")}
@@ -147,55 +157,12 @@ function BucketPage({ bucketId }: { bucketId: string }) {
           onCancel={jobs.cancelJob}
         />
 
-        {(offers.length > 0 || canTick) && (
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            {offers.map((o) => (
-              <Button
-                key={o.location}
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                title="Delete the files here that have an identical copy (size and checksum) on another drive. A file with no copy elsewhere is never deleted."
-                onClick={() =>
-                  dispatch({
-                    type: "delete-originals-clicked",
-                    from: o.location,
-                  })
-                }
-                data-testid="delete-originals"
-              >
-                <CopyX className="w-4 h-4" /> Delete originals on{" "}
-                {labelOf(o.location)} ({o.files}{" "}
-                {o.files === 1 ? "file" : "files"}, {size(o.bytes)})
-              </Button>
-            ))}
-            {canTick && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    state.status !== "complete" ||
-                    state.selected.length === 0 ||
-                    busy
-                  }
-                  title={
-                    state.status !== "complete"
-                      ? "Wait for the listing to finish"
-                      : "Delete the ticked Exported Videos whose Footage is all found. Footage is never deleted."
-                  }
-                  onClick={() => dispatch({ type: "purge-selected-clicked" })}
-                  data-testid="bucket-purge-selected"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete selected Exported Videos
-                </Button>
-                <span className="text-muted-foreground">
-                  {state.selected.length} ticked ({size(selectedBytes(state))})
-                </span>
-              </>
-            )}
-          </div>
-        )}
+        <BucketToolbar
+          state={state}
+          canTick={canTick}
+          labelOf={labelOf}
+          dispatch={dispatch}
+        />
 
         <div className="flex flex-wrap gap-4 text-sm">
           {totals.map((t) => (
@@ -235,13 +202,22 @@ function BucketPage({ bucketId }: { bucketId: string }) {
             ))}
         </div>
 
-        <TrashSection state={state} labelOf={labelOf} dispatch={dispatch} />
-
         <table className="w-full text-sm" data-testid="bucket-files">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
               <th className="py-2 pr-4 font-medium">On</th>
-              {canTick && <th className="py-2 pr-2 w-6" />}
+              {canTick && (
+                <th className="py-2 pr-2 w-6">
+                  <input
+                    type="checkbox"
+                    aria-label="Tick every file that can be deleted"
+                    checked={allTicked(state)}
+                    disabled={busy}
+                    onChange={() => dispatch({ type: "tick-all-clicked" })}
+                    data-testid="bucket-tick-all"
+                  />
+                </th>
+              )}
               <th className="py-2 pr-4 font-medium">File</th>
               <th className="py-2 pr-4 font-medium">Kind</th>
               <th className="py-2 pr-4 font-medium text-right">Size</th>
@@ -263,6 +239,74 @@ function BucketPage({ bucketId }: { bucketId: string }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Above the list: "Delete originals on D:" for each drive that has copies
+ * elsewhere, and "Delete N items" for the ticked files (#2423).
+ */
+function BucketToolbar({
+  state,
+  canTick,
+  labelOf,
+  dispatch,
+}: {
+  state: bucketPageReducer.State;
+  canTick: boolean;
+  labelOf: (location: string) => string;
+  dispatch: (action: bucketPageReducer.Action) => void;
+}) {
+  const offers = originalsOffers(state);
+  const busy = storageActionIsBusy(state.action);
+  if (offers.length === 0 && !canTick) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-4 text-sm">
+      {offers.map((o) => (
+        <Button
+          key={o.location}
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          title="Delete the files here that have an identical copy (size and checksum) on another drive. A file with no copy elsewhere is never deleted."
+          onClick={() =>
+            dispatch({
+              type: "delete-originals-clicked",
+              from: o.location,
+            })
+          }
+          data-testid="delete-originals"
+        >
+          <CopyX className="w-4 h-4" /> Delete originals on{" "}
+          {labelOf(o.location)} ({o.files} {o.files === 1 ? "file" : "files"},{" "}
+          {size(o.bytes)})
+        </Button>
+      ))}
+      {canTick && (
+        <>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={
+              state.status !== "complete" || state.selected.length === 0 || busy
+            }
+            title={
+              state.status !== "complete"
+                ? "Wait for the listing to finish"
+                : "Delete the ticked files for good, after a confirmation"
+            }
+            onClick={() => dispatch({ type: "delete-selected-clicked" })}
+            data-testid="bucket-delete-selected"
+          >
+            <Trash2 className="w-4 h-4" /> Delete {state.selected.length}{" "}
+            {state.selected.length === 1 ? "item" : "items"}
+          </Button>
+          <span className="text-muted-foreground">
+            {size(selectedBytes(state))} ticked. Shift-click ticks a range.
+          </span>
+        </>
+      )}
     </div>
   );
 }
@@ -335,8 +379,13 @@ function FileRow({
               aria-label={`Tick ${file.path}`}
               checked={state.selected.includes(file.path)}
               disabled={busy}
-              onChange={() =>
-                dispatch({ type: "export-checkbox-toggled", path: file.path })
+              readOnly
+              onClick={(event) =>
+                dispatch({
+                  type: "file-ticked",
+                  path: file.path,
+                  shift: event.shiftKey,
+                })
               }
               data-testid="bucket-file-tick"
             />
@@ -387,88 +436,6 @@ function FileRow({
   );
 }
 
-/** The Trash, on Unused Footage's page (ADR 0043): Restore, Empty trash. */
-function TrashSection({
-  state,
-  labelOf,
-  dispatch,
-}: {
-  state: bucketPageReducer.State;
-  labelOf: (location: string) => string;
-  dispatch: (action: bucketPageReducer.Action) => void;
-}) {
-  if (state.trash === null || state.trash.length === 0) return null;
-  const busy = storageActionIsBusy(state.action);
-  return (
-    <section className="space-y-2" data-testid="bucket-trash">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Trash2 className="w-4 h-4" /> Trash ({state.trash.length}{" "}
-          {state.trash.length === 1 ? "file" : "files"},{" "}
-          {size(state.trash.reduce((n, e) => n + e.bytes, 0))})
-        </h2>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => dispatch({ type: "empty-trash-clicked" })}
-          data-testid="bucket-trash-empty"
-        >
-          <Trash2 className="w-4 h-4" /> Empty trash…
-        </Button>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Each file is deleted for good {TRASH_RETENTION_DAYS} days after it was
-        trashed. Restore puts it back where it was, on its own drive.
-      </p>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="py-2 pr-4 font-medium">On</th>
-            <th className="py-2 pr-4 font-medium">File</th>
-            <th className="py-2 pr-4 font-medium text-right">Size</th>
-            <th className="py-2 pr-4 font-medium">Deleted for good</th>
-            <th className="py-2 w-10" />
-          </tr>
-        </thead>
-        <tbody>
-          {state.trash.map((entry) => (
-            <tr
-              key={`${entry.location}:${entry.batch}:${entry.path}`}
-              className="border-b"
-              data-testid="bucket-trash-entry"
-            >
-              <td className="py-2 pr-4">
-                <Badge variant="secondary">{labelOf(entry.location)}</Badge>
-              </td>
-              <td className="py-2 pr-4 break-all">{entry.path}</td>
-              <td className="py-2 pr-4 text-right tabular-nums">
-                {size(entry.bytes)}
-              </td>
-              <td className="py-2 pr-4 whitespace-nowrap">
-                {new Date(entry.expiresAt).toLocaleDateString()}
-              </td>
-              <td className="py-2 text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    dispatch({ type: "restore-clicked", entries: [entry] })
-                  }
-                  data-testid="bucket-trash-restore"
-                >
-                  <RotateCcw className="w-4 h-4" /> Restore
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
 function ListingStatus({
   state,
   fileCount,
@@ -493,7 +460,11 @@ function ListingStatus({
   }
   return (
     <p className="mt-2 text-sm text-muted-foreground">
-      Listing complete: {fileCount} {fileCount === 1 ? "file" : "files"}.
+      {fileCount} {fileCount === 1 ? "file" : "files"}, listed at{" "}
+      {state.fetchedAt === null
+        ? "—"
+        : new Date(state.fetchedAt).toLocaleTimeString()}
+      .
     </p>
   );
 }

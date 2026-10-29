@@ -4,7 +4,8 @@ import {
   planStorageAction,
   startStorageAction,
 } from "./storage-action-effects";
-import { loadTrash } from "./trash-effects";
+import { storageCache } from "./storage-cache";
+import { useWindowRefocus } from "./use-window-refocus";
 import {
   STORAGE_BUCKET_FILES_MESSAGE_TYPES,
   type StorageBucketFilesMessage,
@@ -18,6 +19,7 @@ import {
  * The `listen-to-listing` effect: listens to the bucket's listing while the
  * page is open. Closing the stream (leaving the page, or the reducer stopping
  * the effect once the listing is over) is what stops the walk on the server.
+ * The completion is stamped with the time, for the cache.
  */
 const listenToListing = (
   bucketId: string,
@@ -28,7 +30,12 @@ const listenToListing = (
   );
   for (const type of STORAGE_BUCKET_FILES_MESSAGE_TYPES) {
     source.addEventListener(type, (event) => {
-      dispatch(JSON.parse(event.data) as StorageBucketFilesMessage);
+      const message = JSON.parse(event.data) as StorageBucketFilesMessage;
+      dispatch(
+        message.type === "scan-completed"
+          ? { type: "scan-completed", at: Date.now() }
+          : message
+      );
     });
   }
   // The server's own failure carries a message; a dropped connection does not.
@@ -74,8 +81,9 @@ const revealFile = (
 };
 
 /**
- * The effect runner for `bucketPageReducer`, and the bridge that tells it the
- * page has opened. Remount it for another bucket.
+ * The effect runner for `bucketPageReducer`, and the bridges that tell it
+ * the page has opened (with what the Storage cache holds for the bucket)
+ * and the window has come back into focus. Remount it for another bucket.
  */
 export const useBucketPage = (bucketId: string) => {
   const [state, dispatch] = useEffectReducer(
@@ -84,7 +92,11 @@ export const useBucketPage = (bucketId: string) => {
     {
       "listen-to-listing": (_state, effect, dispatch) =>
         listenToListing(effect.bucketId, dispatch),
-      "load-trash": (_state, _effect, dispatch) => loadTrash(dispatch),
+      "save-listing": (_state, effect) =>
+        storageCache.saveListing(effect.bucketId, effect.listing),
+      "forget-from-scan": (_state, effect) =>
+        storageCache.forgetFromScan(effect.bucketId, effect.removed),
+      "forget-scan": () => storageCache.forgetScan(),
       "reveal-file": (_state, effect, dispatch) => revealFile(effect, dispatch),
       "plan-storage-action": (_state, effect, dispatch) =>
         planStorageAction(effect, dispatch),
@@ -93,7 +105,12 @@ export const useBucketPage = (bucketId: string) => {
     }
   );
   useEffect(() => {
-    dispatch({ type: "page-opened" });
-  }, [dispatch]);
+    dispatch({
+      type: "page-opened",
+      now: Date.now(),
+      cached: storageCache.listing(bucketId),
+    });
+  }, [dispatch, bucketId]);
+  useWindowRefocus(dispatch);
   return [state, dispatch] as const;
 };

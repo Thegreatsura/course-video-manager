@@ -106,7 +106,7 @@ export const STORAGE_BUCKET_FILES_MESSAGE_TYPES = [
  * The only Storage Buckets the Storage page can delete: their files are
  * rebuilt on demand (the Overlay Render Cache, export scratch) or are no
  * Video's current Exported Video. Raw Footage is never deleted outright
- * (Unused Footage goes to the trash first, ADR 0043), and Clip Mockups are
+ * (Unused Footage has its own delete, #2423), and Clip Mockups are
  * only viewed and moved (ADR 0041).
  */
 export const DELETABLE_STORAGE_BUCKETS = [

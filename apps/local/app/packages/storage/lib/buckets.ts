@@ -120,7 +120,7 @@ export type StorageOwnershipInput = {
    * Stored paths no Clip uses that are still never Unused Footage to delete:
    * an AV Calibration's files, a Video's original footage path. They are
    * counted where the scan finds them (Unused Footage, under `raw-footage/`),
-   * but moving them to the trash is refused.
+   * but deleting them is refused.
    */
   readonly keptFootage?: readonly string[];
 };
@@ -139,7 +139,7 @@ export type StorageOwnership = {
    * move asks about before it starts (a running export, a recording).
    */
   readonly videosByBucket: ReadonlyMap<string, ReadonlySet<string>>;
-  /** Root-relative paths that are never moved to the trash (`keptFootage`). */
+  /** Root-relative paths that are never deleted as Unused (`keptFootage`). */
   readonly keptFootage: ReadonlySet<string>;
 };
 

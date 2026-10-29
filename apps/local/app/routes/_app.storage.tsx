@@ -3,6 +3,7 @@ import {
   HardDrive,
   Loader2,
   MoreHorizontal,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { Link } from "react-router";
@@ -36,7 +37,6 @@ import { useStoragePage } from "@/features/storage/use-storage-page";
 import {
   bucketCanBeDeleted,
   STORAGE_MOVE_KIND_LABELS,
-  TRASH_RETENTION_DAYS,
   type StorageFileKind,
 } from "@/packages/storage/client";
 import type { Route } from "./+types/_app.storage";
@@ -45,10 +45,6 @@ export const meta: Route.MetaFunction = () => [{ title: "CVM - Storage" }];
 
 /** Gigabytes as Windows counts them (GiB), to one decimal place. */
 const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-
-/** GB, or MB for what is under one. */
-const size = (bytes: number) =>
-  bytes >= 1024 ** 3 ? gb(bytes) : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 
 const KINDS: { kind: StorageFileKind; heading: string }[] = [
   { kind: "footage", heading: "Footage" },
@@ -83,10 +79,21 @@ export default function StoragePage() {
     <div className="flex-1 overflow-y-auto bg-background text-foreground">
       <div className="p-8 max-w-6xl space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Storage</h1>
-          <p className="text-muted-foreground">
-            Where the space is going, counted fresh on every visit.
-          </p>
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <h1 className="text-3xl font-bold">Storage</h1>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={
+                state.status === "scanning" || storageActionIsBusy(state.action)
+              }
+              onClick={() => dispatch({ type: "refresh-clicked" })}
+              data-testid="storage-refresh"
+            >
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </Button>
+          </div>
+          <p className="text-muted-foreground">Where the space is going.</p>
           <ScanStatus state={state} />
         </div>
 
@@ -181,12 +188,6 @@ export default function StoragePage() {
           ))}
         </section>
 
-        <TrashCard
-          state={state}
-          labelOf={labelOf}
-          onEmpty={() => dispatch({ type: "empty-trash-clicked" })}
-        />
-
         <table className="w-full text-sm" data-testid="storage-table">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
@@ -238,7 +239,15 @@ function ScanStatus({ state }: { state: storagePageReducer.State }) {
       </p>
     );
   }
-  return <p className="mt-2 text-sm text-muted-foreground">Scan complete.</p>;
+  return (
+    <p className="mt-2 text-sm text-muted-foreground">
+      Counted at{" "}
+      {state.fetchedAt === null
+        ? "—"
+        : new Date(state.fetchedAt).toLocaleTimeString()}
+      .
+    </p>
+  );
 }
 
 function BucketRow({
@@ -256,8 +265,9 @@ function BucketRow({
   const moves = rowMoveActions(state, row);
   const canDelete = bucketCanBeDeleted(row.bucket);
   const canPurge = rowCanBePurged(row);
-  const canTrash = row.bucket.kind === "unused-footage";
-  const hasActions = moves.length > 0 || canDelete || canPurge || canTrash;
+  const canDeleteUnused = row.bucket.kind === "unused-footage";
+  const hasActions =
+    moves.length > 0 || canDelete || canPurge || canDeleteUnused;
   return (
     <tr className="border-b align-top" data-testid="storage-row">
       <td className="py-2 pr-4">
@@ -342,11 +352,11 @@ function BucketRow({
                     opensDialog: true,
                     onSelect: () => onChoose({ type: "delete-bucket" }),
                   },
-                  canTrash && {
-                    label: "Move to Trash",
+                  canDeleteUnused && {
+                    label: "Delete All Unused Footage",
                     icon: Trash2,
                     opensDialog: true,
-                    onSelect: () => onChoose({ type: "trash-unused" }),
+                    onSelect: () => onChoose({ type: "delete-unused" }),
                   },
                 ],
               }}
@@ -355,75 +365,5 @@ function BucketRow({
         )}
       </td>
     </tr>
-  );
-}
-
-/**
- * The Trash (ADR 0043): what is in `.cvm-trash/` on each drive, when the
- * oldest goes for good, Empty trash, and where to Restore from.
- */
-function TrashCard({
-  state,
-  labelOf,
-  onEmpty,
-}: {
-  state: storagePageReducer.State;
-  labelOf: (location: string) => string;
-  onEmpty: () => void;
-}) {
-  const entries = state.trash ?? [];
-  if (entries.length === 0 && state.trashFailure === null) return null;
-  const byLocation = new Map<string, number>();
-  for (const e of entries) {
-    byLocation.set(e.location, (byLocation.get(e.location) ?? 0) + e.bytes);
-  }
-  const nextExpiry = entries.map((e) => e.expiresAt).sort()[0];
-  return (
-    <section
-      className="flex items-start justify-between gap-4 rounded-lg border p-4 text-sm"
-      data-testid="storage-trash"
-    >
-      <div className="space-y-1">
-        <div className="flex items-center gap-2 font-semibold">
-          <Trash2 className="w-4 h-4" /> Trash
-        </div>
-        {state.trashFailure !== null ? (
-          <div className="text-destructive">{state.trashFailure}</div>
-        ) : (
-          <>
-            <div>
-              {entries.length} {entries.length === 1 ? "file" : "files"}:{" "}
-              {[...byLocation]
-                .map(
-                  ([location, bytes]) =>
-                    `${size(bytes)} on ${labelOf(location)}`
-                )
-                .join(", ")}
-              .
-            </div>
-            <div className="text-muted-foreground">
-              Each is deleted for good {TRASH_RETENTION_DAYS} days after it was
-              trashed
-              {nextExpiry &&
-                ` (the next on ${new Date(nextExpiry).toLocaleDateString()})`}
-              . Restore files from{" "}
-              <Link to="/storage/unused-footage" className="underline">
-                Unused Footage
-              </Link>
-              .
-            </div>
-          </>
-        )}
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={entries.length === 0 || storageActionIsBusy(state.action)}
-        onClick={onEmpty}
-        data-testid="storage-trash-empty"
-      >
-        <Trash2 className="w-4 h-4" /> Empty trash…
-      </Button>
-    </section>
   );
 }
