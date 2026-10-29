@@ -202,6 +202,9 @@ WRITES
             archive                  pitch, rename it (--name), or soft-delete
                                      it ('archive' works on a standalone OR a
                                      lesson-bound Video; no restore verb)
+            agent-sessions set/clear store or remove the Claude Code session(s)
+                                     on screen in a Video (Agent Sessions),
+                                     read from session .jsonl files
     file    add/delete               attach scratch files to a Video (writer
                                      context); delete is a real unlink, and
                                      these are the only writes that do NOT

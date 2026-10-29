@@ -23,6 +23,10 @@ import type { TranscriptionStatus } from "../features/videos/transcription-statu
 import type { ClipMockupVoiceStatus } from "../features/clip-mockups/voice-status.js";
 import type { ClipOrigin } from "../features/videos/clip-origin.js";
 import type {
+  AgentSessionEntryKind,
+  SkillCallVia,
+} from "../features/agent-sessions/agent-session-entry.js";
+import type {
   RecordingSessionScene,
   RecordingSessionStatus,
   VideoRecorder,
@@ -730,6 +734,93 @@ export const clipTranscriptWords = createTable(
 );
 
 /**
+ * An Agent Session (GLOSSARY.md): one Claude Code session that was on screen
+ * while Clips were filmed. It belongs to no Video: a session is shown by every
+ * Clip its entries are stored on, and every copy of those Clips (a new Draft,
+ * a duplicated Course) shares it rather than copying it.
+ *
+ * `sourceSessionId` is Claude Code's own id for the session, kept only to find
+ * the Agent Session again when the same session is uploaded once more. It is
+ * deliberately NOT unique: it is a lookup key, never an identity, and the
+ * upload refuses when it finds more than one. course.json names a session by
+ * `id`, never by this.
+ *
+ * Deleted once it has no entries left (`cvm video agent-sessions set/clear`).
+ */
+export const agentSessions = createTable(
+  "agent_session",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sourceSessionId: text("source_session_id").notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("agent_session_source_session_id_idx").on(table.sourceSessionId),
+  ]
+);
+
+/**
+ * An Agent Session Entry (GLOSSARY.md): one thing an Agent Session showed on
+ * screen, stored on the Clip that shows it. Its time is `footageTime`, seconds
+ * into the Clip's Footage FILE — not relative to the Clip's in-point — so a
+ * retime of the Clip moves when it shows without touching the row. Its kind
+ * and that kind's text fields are in `features/agent-sessions/
+ * agent-session-entry.ts`; a skill's body and a tool's result are never
+ * stored. `sequence` is the entry's place in its session, for entries written
+ * at the same instant.
+ *
+ * Cascade-deleted with the Clip, and copied with it by every copy of a Clip
+ * (`copyClipChildren`), still pointing at the same Agent Session.
+ */
+export const agentSessionEntries = createTable(
+  "agent_session_entry",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    agentSessionId: varchar("agent_session_id", { length: 255 })
+      .references(() => agentSessions.id, { onDelete: "cascade" })
+      .notNull(),
+    clipId: varchar("clip_id", { length: 255 })
+      .references(() => clips.id, { onDelete: "cascade" })
+      .notNull(),
+    footageTime: doublePrecision("footage_time").notNull(),
+    sequence: integer("sequence").notNull(),
+    kind: text("kind").$type<AgentSessionEntryKind>().notNull(),
+    text: text("text"),
+    skill: text("skill"),
+    via: text("via").$type<SkillCallVia>(),
+    args: text("args"),
+    tool: text("tool"),
+    summary: text("summary"),
+    resultIsError: boolean("result_is_error"),
+  },
+  (table) => [
+    index("agent_session_entry_clip_id_idx").on(table.clipId),
+    index("agent_session_entry_agent_session_id_idx").on(table.agentSessionId),
+    // Mirrors AGENT_SESSION_ENTRY_KINDS (features/agent-sessions).
+    check(
+      "agent_session_entry_kind_valid",
+      sql`${table.kind} IN ('userPrompt', 'assistantText', 'interrupt', 'skillCall', 'toolCall')`
+    ),
+    // Mirrors SKILL_CALL_VIAS (features/agent-sessions).
+    check(
+      "agent_session_entry_via_valid",
+      sql`${table.via} IS NULL OR ${table.via} IN ('toolCall', 'slashCommand')`
+    ),
+  ]
+);
+
+/**
  * An Overlay — a rendered visual layer composited on top of a Video's footage
  * (GLOSSARY.md, "Overlays and transitions").
  *
@@ -1157,6 +1248,7 @@ export const clipsRelations = relations(clips, ({ one, many }) => ({
   webLinks: many(clipWebLinks),
   transcriptWords: many(clipTranscriptWords),
   overlays: many(overlays),
+  agentSessionEntries: many(agentSessionEntries),
   recordingSession: one(recordingSessions, {
     fields: [clips.recordingSessionId],
     references: [recordingSessions.id],
@@ -1202,6 +1294,24 @@ export const clipWebLinksRelations = relations(clipWebLinks, ({ one }) => ({
     references: [clips.id],
   }),
 }));
+
+export const agentSessionsRelations = relations(agentSessions, ({ many }) => ({
+  entries: many(agentSessionEntries),
+}));
+
+export const agentSessionEntriesRelations = relations(
+  agentSessionEntries,
+  ({ one }) => ({
+    agentSession: one(agentSessions, {
+      fields: [agentSessionEntries.agentSessionId],
+      references: [agentSessions.id],
+    }),
+    clip: one(clips, {
+      fields: [agentSessionEntries.clipId],
+      references: [clips.id],
+    }),
+  })
+);
 
 export const clipTranscriptWordsRelations = relations(
   clipTranscriptWords,

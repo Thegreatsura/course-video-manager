@@ -52,6 +52,8 @@ Verbs:
   update <id>          patch a Video's name / body / SEO description / script / format (WRITE)
   archive <id>         soft-delete a Video (WRITE)
   unarchive <id>       restore an archived Video to where it was (WRITE)
+  agent-sessions set|get|clear <id>
+                       the Claude Code session(s) on screen in the Video (Agent Sessions; set/clear WRITE)
 
 Worked example (find a video, then read it):
   cvm video list | jq -r '.id'                     # map name -> id

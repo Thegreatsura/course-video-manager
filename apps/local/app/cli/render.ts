@@ -45,6 +45,10 @@ const EXIT_CODES: Record<string, number> = {
   // A write refused because it targeted a non-Draft (Pending/Published)
   // version — invalid input, like PublishValidationError.
   VersionNotDraftError: 3,
+  // An Agent Session upload broke a content rule (a skill body or tool
+  // result, an absolute path, a secret) or matched several Agent Sessions.
+  // Invalid input: `reasons` says what to fix.
+  AgentSessionUploadRefusedError: 3,
   // Defensive: domain error tags that could leak through a command.
   UnknownDBServiceError: 4,
   // The deployed API rejected the token — unknown, expired or revoked; it

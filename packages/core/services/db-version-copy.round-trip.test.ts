@@ -53,7 +53,10 @@ const NOT_CARRIED: Record<string, string> = {
  * Values the generator must not choose itself: CHECK constraints, and foreign
  * keys that leave the Version tree. Called per row; `i` is the row's index.
  */
-const overrides = (ctx: { snapshotId: string }): Overrides => ({
+const overrides = (ctx: {
+  snapshotId: string;
+  agentSessionId: string;
+}): Overrides => ({
   // CHECK video_format_valid; "short" is the non-default value.
   "video.format": () => "short",
   // A course Video never has a Pitch (moving one into a Lesson clears it).
@@ -86,6 +89,11 @@ const overrides = (ctx: { snapshotId: string }): Overrides => ({
   "recording_session.avCalibrationId": () => null,
   // Diagram Snapshots are shared per Diagram, not owned by a Version.
   "clip.diagramSnapshotId": () => ctx.snapshotId,
+  // An Agent Session is shared by every copy of the Clips its entries are
+  // on, as a Recording Session is. CHECKs on the entry's kind and via.
+  "agent_session_entry.agentSessionId": () => ctx.agentSessionId,
+  "agent_session_entry.kind": () => "skillCall",
+  "agent_session_entry.via": () => "slashCommand",
   // CHECK clip_mockup_comment_one_parent: row 0 on a Clip Mockup, row 1 on
   // a Clip Mockup Chapter.
   "clip_mockup_comment.clipMockupId": (i) => (i % 2 === 0 ? undefined : null),
@@ -124,11 +132,15 @@ async function generateVersionTree() {
     .insert(schema.diagramSnapshots)
     .values({ diagramId: diagram!.id, scene: {}, contentHash: "h" })
     .returning();
+  const [agentSession] = await testDb
+    .insert(schema.agentSessions)
+    .values({ sourceSessionId: "claude-session" })
+    .returning();
   await generateTreeBelow(
     testDb,
     ROOT,
     version!.id,
-    overrides({ snapshotId: snapshot!.id })
+    overrides({ snapshotId: snapshot!.id, agentSessionId: agentSession!.id })
   );
   return { course: course!, version: version! };
 }
@@ -138,7 +150,7 @@ describe("Submit round trip — the new Draft is the old one, row for row", () =
     const real = columnNamesBelow(ROOT);
     for (const name of [
       ...Object.keys(NOT_CARRIED),
-      ...Object.keys(overrides({ snapshotId: "" })),
+      ...Object.keys(overrides({ snapshotId: "", agentSessionId: "" })),
     ]) {
       expect(real.has(name), `stale entry "${name}"`).toBe(true);
     }

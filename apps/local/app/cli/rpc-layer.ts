@@ -1,4 +1,5 @@
 import { Context, Layer } from "effect";
+import { AgentSessionOperationsService } from "@/services/db-agent-session-operations.server";
 import { BeatOperationsService } from "@/services/db-beat-operations.server";
 import { ClipMockupChapterOperationsService } from "@/services/db-clip-mockup-chapter-operations.server";
 import { ClipMockupCommentOperationsService } from "@/services/db-clip-mockup-comment-operations.server";
@@ -338,6 +339,20 @@ const clipMockupChapterService = (client: RpcClient) =>
     ),
   }) satisfies RemoteService<ClipMockupChapterOperationsService>;
 
+const agentSessionService = (client: RpcClient) =>
+  ({
+    _tag: "AgentSessionOperationsService",
+    setVideoAgentSessions: rpcMethod((json) =>
+      client.rpc["agent-session"].setVideoAgentSessions.$post({ json })
+    ),
+    getVideoAgentSessions: rpcMethod((json) =>
+      client.rpc["agent-session"].getVideoAgentSessions.$post({ json })
+    ),
+    clearVideoAgentSessions: rpcMethod((json) =>
+      client.rpc["agent-session"].clearVideoAgentSessions.$post({ json })
+    ),
+  }) satisfies RemoteService<AgentSessionOperationsService>;
+
 const clipMockupCommentService = (client: RpcClient) =>
   ({
     _tag: "ClipMockupCommentOperationsService",
@@ -455,6 +470,7 @@ export type RemoteServices =
   | ClipMockupOperationsService
   | ClipMockupChapterOperationsService
   | ClipMockupCommentOperationsService
+  | AgentSessionOperationsService
   | PitchOperationsService
   | DeliverableOperationsService
   | DiagramOperationsService
@@ -505,6 +521,7 @@ export const makeRemoteLayer = (
       clipMockupCommentService,
       client
     ),
+    remoteLayer(AgentSessionOperationsService, agentSessionService, client),
     remoteLayer(PitchOperationsService, pitchService, client),
     remoteLayer(DeliverableOperationsService, deliverableService, client),
     remoteLayer(DiagramOperationsService, diagramService, client),

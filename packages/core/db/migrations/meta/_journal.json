@@ -309,6 +309,13 @@
       "when": 1793042937591,
       "tag": "0043_clip_origin_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793288020922,
+      "tag": "0044_agent_sessions",
+      "breakpoints": true
     }
   ]
 }
