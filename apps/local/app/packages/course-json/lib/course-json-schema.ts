@@ -24,6 +24,108 @@ const CourseJsonChapter = Schema.Struct({
     "A named marker within a video's timeline that groups related clips.",
 });
 
+const visibleFrom = Schema.Number.pipe(
+  Schema.nonNegative(),
+  Schema.annotations({
+    description:
+      "Seconds into this video at which the entry first appears on screen (accurate to about a second). There is no end: when an entry scrolls off is not recorded.",
+  })
+);
+
+const entryText = (description: string) =>
+  Schema.String.annotations({ description });
+
+const UserPromptEntry = Schema.Struct({
+  kind: Schema.Literal("userPrompt"),
+  visibleFrom,
+  text: entryText(
+    "The prompt in full, as typed or dictated. A slash command is written `/<name> <args>`."
+  ),
+}).annotations({
+  description: "A prompt sent to Claude: typed, dictated or a slash command.",
+});
+
+const AssistantTextEntry = Schema.Struct({
+  kind: Schema.Literal("assistantText"),
+  visibleFrom,
+  text: entryText("The text block's Markdown source, in full."),
+}).annotations({
+  description: "One text block of Claude's reply. Thinking is never included.",
+});
+
+const InterruptEntry = Schema.Struct({
+  kind: Schema.Literal("interrupt"),
+  visibleFrom,
+  text: entryText("Claude Code's `[Request interrupted by user…]` marker."),
+}).annotations({ description: "Claude was interrupted (Escape)." });
+
+const SkillCallEntry = Schema.Struct({
+  kind: Schema.Literal("skillCall"),
+  visibleFrom,
+  skill: entryText("The skill's name."),
+  via: Schema.Literal("toolCall", "slashCommand").annotations({
+    description:
+      "How the skill was loaded: Claude called the Skill tool (`toolCall`), or a slash command was typed (`slashCommand`), in which case it follows its userPrompt.",
+  }),
+  args: Schema.optional(
+    entryText("The arguments the skill was loaded with, when there were any.")
+  ),
+}).annotations({
+  description: "A skill was loaded. Its body is never included.",
+});
+
+const ToolCallEntry = Schema.Struct({
+  kind: Schema.Literal("toolCall"),
+  visibleFrom,
+  tool: entryText("The tool's name, e.g. `Bash`."),
+  summary: Schema.optional(
+    entryText(
+      "One line of the call's input (a Bash description, a file path relative to the project, a URL, a query), at most 160 characters."
+    )
+  ),
+  resultIsError: Schema.optional(
+    Schema.Boolean.annotations({
+      description: "Whether the tool's result was an error, when known.",
+    })
+  ),
+}).annotations({
+  description:
+    "A call to any tool but Skill, as a stub. Its input and its result are never included.",
+});
+
+export const CourseJsonSessionExtract = Schema.Struct({
+  sessions: Schema.Array(
+    Schema.Struct({
+      sessionId: Schema.String.annotations({
+        description:
+          "The Agent Session's stable id, shared by every video and course version that shows it.",
+      }),
+      entries: Schema.Array(
+        Schema.Union(
+          UserPromptEntry,
+          AssistantTextEntry,
+          InterruptEntry,
+          SkillCallEntry,
+          ToolCallEntry
+        ).annotations({
+          description: "One Agent Session Entry, discriminated by `kind`.",
+        })
+      ).annotations({
+        description:
+          "What the session shows in this video, in visibleFrom order. Entries that never appear are left out.",
+      }),
+    }).annotations({
+      description:
+        "One Claude Code session (an Agent Session) seen in this video.",
+    })
+  ).annotations({
+    description: "The sessions shown, in the order they first appear.",
+  }),
+}).annotations({
+  description:
+    "The Claude Code session(s) seen on screen in this video, as entries timed on the video.",
+});
+
 export const CourseJsonVideo = Schema.Struct({
   id: Schema.String.annotations({
     description:
@@ -60,6 +162,12 @@ export const CourseJsonVideo = Schema.Struct({
   chapters: Schema.Array(CourseJsonChapter).annotations({
     description: "The video's chapters, in timeline order.",
   }),
+  sessionExtract: Schema.optional(
+    CourseJsonSessionExtract.annotations({
+      description:
+        "The Claude Code session(s) on screen in this video; absent when none is.",
+    })
+  ),
 }).annotations({
   description:
     "A single producible video output — a container of clips and chapters.",

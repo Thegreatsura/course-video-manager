@@ -111,6 +111,10 @@ const createVersionOperations = (db: Database) => {
                     with: {
                       overlays: overlayExportRelation,
                       recordingSession: clipRecordingSessionRelation,
+                      // What course.json's `sessionExtract` is built from.
+                      agentSessionEntries: {
+                        columns: { id: false, clipId: false },
+                      },
                     },
                   },
                   chapters: {
