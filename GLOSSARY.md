@@ -185,7 +185,7 @@ One Claude Code session that was on screen while **Clips** were filmed, as its *
 _Avoid_: Session (alone; that is a **Recording Session**), Session extract (what course.json carries of it), Transcript (that is the spoken text), Conversation
 
 **Agent Session Entry**:
-One thing an **Agent Session** showed on screen: a prompt, a text block of Claude's reply, an interrupt, a skill being loaded, or a stub of a tool call. It is stored on the **Clip** that shows it, at the moment in that Clip's **Footage** it was written, so it moves with the Clip when the cut is edited; when it shows in a Video (its visibleFrom) is worked out from the current cut. A skill's text and a tool's output are never part of one.
+One thing an **Agent Session** showed on screen: a prompt, a text block of Claude's reply, an interrupt, a skill being loaded, or a stub of a tool call. It is stored on the **Clip** that shows it, at the moment in that Clip's **Footage** it was written, so it moves with the Clip when the cut is edited; when it shows in a Video (its visibleFrom) is worked out from the current cut. A skill's text and a tool's output are never part of one. Its paths are relative to the session's working directory (`.` for the directory itself); any other path is kept, with its home directory written as `~`.
 _Avoid_: Message (one message can hold several entries), Event, Line
 
 ### Video planning

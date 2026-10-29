@@ -12,37 +12,41 @@ import {
  *
  * - No skill body and no tool result, ever: an entry carries only the fields
  *   its kind has (FIELDS_OF_KIND).
- * - No absolute local path: the reader turns paths under the session's
- *   working directory into project-relative ones first, so any left over
- *   point outside the project.
  * - No secret: token-shaped strings, `.env`-style assignments of keys and
- *   passwords, and URLs with credentials in them.
+ *   passwords, and URLs with credentials in them. A kebab-case slug
+ *   (`sk-learn-the-basics`) is not a token.
+ *
+ * A path is never a problem: the reader has already made it project-relative,
+ * or written its home directory as `~`.
  */
 
-/** Token shapes, each with the name a refusal reason gives it. */
+/**
+ * Token shapes, each with the name a refusal reason gives it. A shape whose
+ * secret part is captured is not a token when that part is a kebab-case slug.
+ */
 const TOKEN_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
-  ["an API key (sk-…)", /\bsk-[A-Za-z0-9_-]{20,}/],
-  ["a GitHub token", /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,})/],
-  ["a Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
-  ["an AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
-  ["a Google API key", /\bAIza[0-9A-Za-z_-]{35}/],
-  ["a JWT", /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
-  ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  ["a bearer token", /\bBearer\s+[A-Za-z0-9._~+/-]{20,}/],
-  ["a URL with credentials", /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s/@]+@/i],
+  ["an API key (sk-…)", /\bsk-([A-Za-z0-9_-]{20,})/g],
+  ["a GitHub token", /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,})/g],
+  ["a Slack token", /\bxox[abprs]-([A-Za-z0-9-]{10,})/g],
+  ["an AWS access key", /\bAKIA[0-9A-Z]{16}\b/g],
+  ["a Google API key", /\bAIza[0-9A-Za-z_-]{35}/g],
+  ["a JWT", /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g],
+  ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/g],
+  ["a bearer token", /\bBearer\s+([A-Za-z0-9._~+/-]{20,})/g],
+  ["a URL with credentials", /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s/@]+@/gi],
 ];
+
+/** Lower-case words joined by hyphens: a slug, never a secret. */
+const KEBAB_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
+
+const holdsToken = (pattern: RegExp, value: string) =>
+  [...value.matchAll(pattern)].some(
+    (match) => match[1] === undefined || !KEBAB_SLUG.test(match[1])
+  );
 
 /** `NAME=value` where the name says it holds a secret, as in a `.env` file. */
 const ENV_ASSIGNMENT =
   /^\s*(?:export\s+)?((?=[A-Z])[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|CREDENTIALS?|DATABASE_URL|DSN)[A-Z0-9_]*)\s*=\s*["']?[^\s"']{6,}/m;
-
-/**
- * An absolute path on the author's machine: a POSIX path under a top-level
- * directory a project never lives in relative to, a home-relative one, or a
- * Windows drive path. Not preceded by a URL's host or another path segment.
- */
-const ABSOLUTE_LOCAL_PATH =
-  /(?<![\w.:/~-])(?:\/(?:home|Users|mnt|root|tmp|var|etc|opt|srv|private|usr|Volumes)\/[^\s"'`)\]>]*|~\/[^\s"'`)\]>]*|[A-Za-z]:\\[^\s"'`)\]>]*)/;
 
 const isKind = (value: unknown): value is AgentSessionEntryKind =>
   typeof value === "string" &&
@@ -51,17 +55,11 @@ const isKind = (value: unknown): value is AgentSessionEntryKind =>
 const textProblems = (where: string, value: string): string[] => {
   const problems: string[] = [];
   for (const [name, pattern] of TOKEN_PATTERNS) {
-    if (pattern.test(value)) problems.push(`${where} holds ${name}`);
+    if (holdsToken(pattern, value)) problems.push(`${where} holds ${name}`);
   }
   const env = ENV_ASSIGNMENT.exec(value);
   if (env) {
     problems.push(`${where} holds a .env-style value for ${env[1]}`);
-  }
-  const path = ABSOLUTE_LOCAL_PATH.exec(value);
-  if (path) {
-    problems.push(
-      `${where} holds an absolute path outside the project: ${path[0]}`
-    );
   }
   return problems;
 };
