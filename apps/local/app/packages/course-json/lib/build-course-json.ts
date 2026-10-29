@@ -24,6 +24,10 @@ import {
   deriveVideoRole,
 } from "@/services/lesson-warnings";
 import { buildVideoChaptersFromRows } from "@/services/video-chapters";
+import {
+  sessionExtractOf,
+  type InputAgentSessionEntry,
+} from "./session-extract";
 
 // ── Publish blockers ──────────────────────────────────────────────────────
 
@@ -103,10 +107,16 @@ export class InvalidVideoAssetReceiptError extends Data.TaggedError(
 // ── Input types ─────────────────────────────────────────────────────────
 
 type InputClip = ClipSourceColumns & {
+  id: string;
+  scene: string | null;
   pauseType: string;
   zoomType: string;
   order: string;
   overlays: ExportOverlay[];
+  // The Agent Session Entries stored on this Clip, which the `sessionExtract`
+  // is built from. Optional only because the publish gate's tree
+  // (`collectPublishBlockers`) never reads them; Publish's read loads them.
+  agentSessionEntries?: ReadonlyArray<InputAgentSessionEntry>;
 };
 
 type InputChapter = {
@@ -290,7 +300,8 @@ function toVideoEntry(
   lessonPath: string,
   assetBasePath: string,
   asset: VideoAssetReceipt,
-  storageRoots: readonly string[]
+  storageRoots: readonly string[],
+  sessionExtract: (typeof CourseJsonVideo.Type)["sessionExtract"]
 ): typeof CourseJsonVideo.Type {
   const exportClips = toExportClips(video.clips);
   return {
@@ -302,6 +313,7 @@ function toVideoEntry(
     sha256: asset.sha256,
     bytes: asset.bytes,
     chapters: buildVideoChaptersFromRows(video.clips, video.chapters),
+    ...(sessionExtract ? { sessionExtract } : {}),
   };
 }
 
@@ -365,7 +377,8 @@ export const buildCourseJson = (
         lessonPath,
         input.assetBasePath,
         asset,
-        input.storageRoots
+        input.storageRoots,
+        yield* sessionExtractOf(video.id, video.clips)
       );
     });
 
