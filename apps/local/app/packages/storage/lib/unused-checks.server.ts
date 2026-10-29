@@ -16,45 +16,40 @@ import {
 } from "./delete-safety.server";
 import { holdingStorageWrites } from "./storage-busy";
 import { STORAGE_FOLDERS, type StorageRoots } from "./storage-roots";
-import {
-  trashedAtOf,
-  type StorageTrashRefusalReason,
-  type StorageTrashResult,
-} from "./trash-wire";
+import type {
+  StorageUnusedDeleteResult,
+  StorageUnusedRefusalReason,
+} from "./unused-wire";
 
-/** The checks and helpers every trash operation shares (#2157, ADR 0043). */
+/** The checks and helpers deleting Unused Footage uses (#2157, #2423). */
 
-/** Why a trash operation did not start. Nothing was moved or deleted. */
-export class StorageTrashRefusedError extends Data.TaggedError(
-  "StorageTrashRefusedError"
+/** Why deleting Unused Footage did not start. Nothing was deleted. */
+export class StorageUnusedDeleteRefusedError extends Data.TaggedError(
+  "StorageUnusedDeleteRefusedError"
 )<{
-  readonly reason: StorageTrashRefusalReason;
+  readonly reason: StorageUnusedRefusalReason;
   readonly message: string;
 }> {}
 
 /** Reading the roots or the database failed before anything was touched. */
-export class StorageTrashFailedError extends Data.TaggedError(
-  "StorageTrashFailedError"
+export class StorageUnusedDeleteFailedError extends Data.TaggedError(
+  "StorageUnusedDeleteFailedError"
 )<{ readonly message: string }> {}
 
 /**
- * The Job kinds a trash operation never runs beside: every encode and
+ * The Job kinds deleting Unused Footage never runs beside: every encode and
  * Publish, a Storage move, a delete Job, and transcriptions (which read
  * Footage and write its transcript beside it).
  */
-export const TRASH_BUSY_JOB_KINDS = [
+export const UNUSED_DELETE_BUSY_JOB_KINDS = [
   ...STORAGE_BUSY_JOB_KINDS,
   "transcribe-footage",
   "transcribe-clips",
 ] as const;
 
-/** A file to move to the trash: on which root, at which root-relative path. */
-export type TrashFileRef = { readonly location: string; readonly path: string };
-
-/** A trashed file to put back. */
-export type RestoreFileRef = {
+/** A file to delete: on which root, at which root-relative path. */
+export type UnusedFileRef = {
   readonly location: string;
-  readonly batch: string;
   readonly path: string;
 };
 
@@ -76,8 +71,8 @@ export type Common = {
   readonly alreadyHeld?: boolean;
 };
 
-export const refused = (reason: StorageTrashRefusalReason, message: string) =>
-  new StorageTrashRefusedError({ reason, message });
+export const refused = (reason: StorageUnusedRefusalReason, message: string) =>
+  new StorageUnusedDeleteRefusedError({ reason, message });
 
 /** Every refusal that holds right now, the first one failing. */
 export const checkNotBusy = (opts: Common, needsNoRecording: boolean) =>
@@ -89,13 +84,13 @@ export const checkNotBusy = (opts: Common, needsNoRecording: boolean) =>
           .from(jobs)
           .where(
             and(
-              inArray(jobs.kind, [...TRASH_BUSY_JOB_KINDS]),
+              inArray(jobs.kind, [...UNUSED_DELETE_BUSY_JOB_KINDS]),
               inArray(jobs.status, ["queued", "running"]),
               opts.selfJobId ? ne(jobs.id, opts.selfJobId) : undefined
             )
           ),
       catch: (cause) =>
-        new StorageTrashFailedError({
+        new StorageUnusedDeleteFailedError({
           message: `Could not check for running Jobs: ${messageOf(cause)}`,
         }),
     });
@@ -113,7 +108,7 @@ export const checkNotBusy = (opts: Common, needsNoRecording: boolean) =>
           .from(recordingSessions)
           .where(inArray(recordingSessions.status, ["recording"])),
       catch: (cause) =>
-        new StorageTrashFailedError({
+        new StorageUnusedDeleteFailedError({
           message: `Could not check for a recording: ${messageOf(cause)}`,
         }),
     });
@@ -273,7 +268,7 @@ export const held = <A, E, R>(
   what: string,
   effect: Effect.Effect<A, E, R>,
   alreadyHeld?: boolean
-): Effect.Effect<A, E | StorageTrashRefusedError, R> =>
+): Effect.Effect<A, E | StorageUnusedDeleteRefusedError, R> =>
   alreadyHeld
     ? effect
     : holdingStorageWrites(
@@ -282,39 +277,20 @@ export const held = <A, E, R>(
         effect
       );
 
-/** The batch folders (ours, by name) in a trash folder, oldest first. */
-export const batchesOf = async (trash: string) => {
-  const entries = await nodeFs
-    .readdir(trash, { withFileTypes: true })
-    .catch(() => []);
-  return entries
-    .filter((e) => e.isDirectory())
-    .map((e) => ({
-      name: e.name,
-      dir: path.join(trash, e.name),
-      trashedAt: trashedAtOf(e.name),
-    }))
-    .filter(
-      (b): b is { name: string; dir: string; trashedAt: Date } =>
-        b.trashedAt !== null
-    )
-    .sort((a, b) => a.trashedAt.getTime() - b.trashedAt.getTime());
-};
-
-export function logResult(r: StorageTrashResult) {
+export function logResult(r: StorageUnusedDeleteResult) {
   return r.dryRun
     ? Effect.void
     : Effect.logInfo(
-        `[storage] trash ${r.operation}: ${r.done.reduce((n, d) => n + d.files, 0)} files, ${r.kept.length} kept, ${r.left.length} left`
+        `[storage] deleted unused footage: ${r.done.reduce((n, d) => n + d.files, 0)} files, ${r.kept.length} kept, ${r.left.length} left`
       );
 }
 
-/** The author's Cancel stopped a trash operation. */
-export type TrashCancelled = StorageDeleteCancelledError;
+/** The author's Cancel stopped deleting Unused Footage. */
+export type UnusedDeleteCancelled = StorageDeleteCancelledError;
 
-/** A trash loop's failure: the author's Cancel, or a failure to read. */
-export const trashFailure = (cause: unknown) =>
+/** The delete loop's failure: the author's Cancel, or a failure to read. */
+export const unusedDeleteFailure = (cause: unknown) =>
   cancelledOr(
     cause,
-    () => new StorageTrashFailedError({ message: messageOf(cause) })
+    () => new StorageUnusedDeleteFailedError({ message: messageOf(cause) })
   );

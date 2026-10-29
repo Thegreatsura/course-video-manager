@@ -13,17 +13,11 @@ import {
 import type { StorageRoots } from "../index";
 import { classifyStorageFile } from "../buckets";
 import { loadStorageOwnership } from "../scan";
-import { TRASH_FOLDER, trashDoneFiles } from "../client";
-import {
-  emptyStorageTrash,
-  listStorageTrash,
-  restoreTrashedFootage,
-  trashHasExpired,
-  trashUnusedFootage,
-} from "../trash";
+import { unusedDeletedFiles } from "../client";
+import { deleteUnusedFootage } from "../unused";
 
 /**
- * The trash for Unused Footage (#2157). Storage Roots are real temp
+ * Deleting Unused Footage for good (#2157, #2423). Storage Roots are real temp
  * directories (`d`, `e`) inside `base`; `outside` is a folder beside them
  * that links point at. Nothing outside `base` is ever touched.
  */
@@ -69,18 +63,13 @@ const tree = (dir: string): string[] => {
   return out.sort();
 };
 
-const trashed = (dir: string) =>
-  tree(path.join(dir, TRASH_FOLDER)).map((p) =>
-    p.split("/").slice(1).join("/")
-  );
-
 beforeAll(async () => {
   ({ testDb } = await createTestDb());
 });
 
 beforeEach(async () => {
   await truncateAllTables(testDb);
-  base = fs.mkdtempSync(path.join(os.tmpdir(), "storage-trash-"));
+  base = fs.mkdtempSync(path.join(os.tmpdir(), "storage-unused-"));
   d = path.join(base, "d");
   e = path.join(base, "e");
   outside = path.join(base, "outside");
@@ -160,16 +149,16 @@ const seedJob = async (kind: string, status: "queued" | "running") => {
   return job!.id;
 };
 
-const trash = (opts: Partial<Parameters<typeof trashUnusedFootage>[0]> = {}) =>
+type Opts = Partial<Parameters<typeof deleteUnusedFootage>[0]>;
+
+const del = (opts: Opts = {}) =>
   Effect.runPromise(
-    trashUnusedFootage({ db: db(), roots, now: NOW, batchId: "job1", ...opts })
+    deleteUnusedFootage({ db: db(), roots, now: NOW, ...opts })
   );
 
-const trashExit = (
-  opts: Partial<Parameters<typeof trashUnusedFootage>[0]> = {}
-) =>
+const delExit = (opts: Opts = {}) =>
   Effect.runPromiseExit(
-    trashUnusedFootage({ db: db(), roots, now: NOW, ...opts })
+    deleteUnusedFootage({ db: db(), roots, now: NOW, ...opts })
   );
 
 const failureOf = <A, E>(exit: Exit.Exit<A, E>) => {
@@ -194,17 +183,14 @@ describe("which Footage is Unused", () => {
     put(d, "raw-footage/unused.mkv");
     put(e, "raw-footage/unused-on-e.mkv");
 
-    const result = await trash();
+    const result = await del();
 
     expect(exists(d, "raw-footage/live.mkv")).toBe(true);
     expect(exists(d, "raw-footage/archived.mkv")).toBe(true);
     expect(exists(d, "raw-footage/archived.mkv.transcript.json")).toBe(true);
     expect(exists(d, "raw-footage/unused.mkv")).toBe(false);
     expect(exists(e, "raw-footage/unused-on-e.mkv")).toBe(false);
-    // Into the trash on its OWN root, at its root-relative path.
-    expect(trashed(d)).toEqual(["raw-footage/unused.mkv"]);
-    expect(trashed(e)).toEqual(["raw-footage/unused-on-e.mkv"]);
-    expect(trashDoneFiles(result)).toBe(2);
+    expect(unusedDeletedFiles(result)).toBe(2);
     expect(result.left).toEqual([]);
   });
 
@@ -215,7 +201,7 @@ describe("which Footage is Unused", () => {
     put(d, "raw-footage/unused.mkv");
     put(d, "raw-footage/other-unused.mkv");
 
-    const result = await trash({
+    const result = await del({
       files: [
         { location: d, path: "raw-footage/used.mkv" },
         { location: d, path: "raw-footage/unused.mkv" },
@@ -235,7 +221,7 @@ describe("which Footage is Unused", () => {
     put(d, "raw-footage/today.mkv", { age: new Date(NOW.getTime() - DAY) });
     put(d, "raw-footage/old.mkv");
 
-    const result = await trash();
+    const result = await del();
 
     expect(exists(d, "raw-footage/today.mkv")).toBe(true);
     expect(exists(d, "raw-footage/old.mkv")).toBe(false);
@@ -255,7 +241,7 @@ describe("which Footage is Unused", () => {
     put(d, "raw-footage/rec-young/recorder.log");
     await seedSession({ folder: "raw-footage/rec-old", startedAt: OLD });
 
-    await trash();
+    await del();
 
     expect(tree(path.join(d, "raw-footage/rec-young"))).toEqual([
       "camera.mkv",
@@ -265,7 +251,6 @@ describe("which Footage is Unused", () => {
     ]);
     // Old, stopped, no Clip: Unused.
     expect(exists(d, "raw-footage/rec-old")).toBe(false);
-    expect(trashed(d)).toContain("raw-footage/rec-old/camera.mkv");
   });
 
   it("keeps a Recording Session an archived Clip uses, and everything in its folder", async () => {
@@ -283,7 +268,7 @@ describe("which Footage is Unused", () => {
     });
     put(d, "raw-footage/rec-a/recorder.log");
 
-    await trash();
+    await del();
 
     expect(tree(path.join(d, "raw-footage/rec-a"))).toEqual([
       "camera.mkv",
@@ -291,7 +276,6 @@ describe("which Footage is Unused", () => {
       "recorder.log",
       "screen.mkv",
     ]);
-    expect(trashed(d)).toEqual([]);
   });
 
   it("keeps an AV Calibration's files", async () => {
@@ -310,7 +294,7 @@ describe("which Footage is Unused", () => {
     put(d, `${folder}/calibration-script.json`);
     put(d, `${folder}/camera.mkv`);
 
-    await trash();
+    await del();
 
     expect(tree(path.join(d, folder))).toEqual([
       "calibration-script.json",
@@ -352,7 +336,7 @@ describe("path safety", () => {
     fs.mkdirSync(path.join(d, "raw-footage"), { recursive: true });
     fs.symlinkSync(target, path.join(d, "raw-footage/link.mkv"));
 
-    const result = await trash({
+    const result = await del({
       files: [{ location: d, path: "raw-footage/link.mkv" }],
     });
 
@@ -363,7 +347,6 @@ describe("path safety", () => {
     expect(result.left).toEqual([
       expect.objectContaining({ path: "raw-footage/link.mkv" }),
     ]);
-    expect(trashed(d)).toEqual([]);
   });
 
   it("never walks into a linked folder, even when a file in it is named", async () => {
@@ -371,14 +354,14 @@ describe("path safety", () => {
     fs.mkdirSync(path.join(d, "raw-footage"), { recursive: true });
     fs.symlinkSync(path.join(outside, "sub"), path.join(d, "raw-footage/sub"));
 
-    const all = await trash();
-    const named = await trash({
+    const all = await del();
+    const named = await del({
       files: [{ location: d, path: "raw-footage/sub/precious.mkv" }],
     });
 
     expect(exists(outside, "sub/precious.mkv")).toBe(true);
-    expect(trashDoneFiles(all)).toBe(0);
-    expect(trashDoneFiles(named)).toBe(0);
+    expect(unusedDeletedFiles(all)).toBe(0);
+    expect(unusedDeletedFiles(named)).toBe(0);
     expect(named.left).toHaveLength(1);
   });
 
@@ -386,17 +369,17 @@ describe("path safety", () => {
     put(outside, "footage/precious.mkv");
     fs.symlinkSync(path.join(outside, "footage"), path.join(d, "raw-footage"));
 
-    const result = await trash();
+    const result = await del();
 
     expect(exists(outside, "footage/precious.mkv")).toBe(true);
-    expect(trashDoneFiles(result)).toBe(0);
+    expect(unusedDeletedFiles(result)).toBe(0);
   });
 
   it("refuses a path that climbs out of raw-footage/", async () => {
     put(d, "finished-videos/x.mp4");
     put(d, "raw-footage/a.mkv");
 
-    const result = await trash({
+    const result = await del({
       files: [
         { location: d, path: "raw-footage/../finished-videos/x.mp4" },
         { location: outside, path: "raw-footage/a.mkv" },
@@ -408,28 +391,16 @@ describe("path safety", () => {
     expect(result.left).toHaveLength(2);
   });
 
-  it("refuses to put the trash anywhere but the root itself", async () => {
-    put(d, "raw-footage/a.mkv");
-    fs.mkdirSync(path.join(outside, "trash"));
-    fs.symlinkSync(path.join(outside, "trash"), path.join(d, TRASH_FOLDER));
-
-    const result = await trash();
-
-    expect(exists(d, "raw-footage/a.mkv")).toBe(true);
-    expect(tree(path.join(outside, "trash"))).toEqual([]);
-    expect(result.left).toHaveLength(1);
-  });
-
   it("touches nothing outside a verify run's own folder", async () => {
     put(d, "raw-footage/a.mkv");
-    const result = await trash({ confineTo: outside });
+    const result = await del({ confineTo: outside });
     expect(exists(d, "raw-footage/a.mkv")).toBe(true);
-    expect(trashDoneFiles(result)).toBe(0);
+    expect(unusedDeletedFiles(result)).toBe(0);
   });
 });
 
 describe("refusals", () => {
-  it("refuses while recording, and moves nothing", async () => {
+  it("refuses while recording, and deletes nothing", async () => {
     await seedSession({
       folder: "raw-footage/rec",
       startedAt: NOW,
@@ -437,7 +408,7 @@ describe("refusals", () => {
     });
     put(d, "raw-footage/a.mkv");
 
-    const failure = failureOf(await trashExit());
+    const failure = failureOf(await delExit());
 
     expect(failure).toMatchObject({ reason: "recording-active" });
     expect(exists(d, "raw-footage/a.mkv")).toBe(true);
@@ -453,7 +424,7 @@ describe("refusals", () => {
     await seedJob(kind, "queued");
     put(d, "raw-footage/a.mkv");
 
-    const failure = failureOf(await trashExit());
+    const failure = failureOf(await delExit());
 
     expect(failure).toMatchObject({ reason: "storage-job-running" });
     expect(exists(d, "raw-footage/a.mkv")).toBe(true);
@@ -463,125 +434,35 @@ describe("refusals", () => {
     const jobId = await seedJob("storage-delete", "running");
     put(d, "raw-footage/a.mkv");
 
-    const result = await trash({ selfJobId: jobId });
+    const result = await del({ selfJobId: jobId });
 
-    expect(trashDoneFiles(result)).toBe(1);
+    expect(unusedDeletedFiles(result)).toBe(1);
   });
 
-  it("a dry run moves nothing and says what would go", async () => {
+  it("a dry run deletes nothing and says what would go", async () => {
     put(d, "raw-footage/a.mkv");
-    const result = await trash({ dryRun: true });
-    expect(trashDoneFiles(result)).toBe(1);
+    const result = await del({ dryRun: true });
+    expect(unusedDeletedFiles(result)).toBe(1);
     expect(exists(d, "raw-footage/a.mkv")).toBe(true);
-    expect(exists(d, TRASH_FOLDER)).toBe(false);
   });
 });
 
-describe("restore, empty and expiry", () => {
-  it("restores a trashed file to where it was, on its own root", async () => {
-    put(e, "raw-footage/take/a.mkv");
-    await trash();
-    expect(exists(e, "raw-footage/take/a.mkv")).toBe(false);
-
-    const [entry] = await Effect.runPromise(listStorageTrash({ roots }));
-    expect(entry).toMatchObject({
-      location: e,
-      path: "raw-footage/take/a.mkv",
-      trashedAt: NOW.toISOString(),
-      expiresAt: new Date(NOW.getTime() + 14 * DAY).toISOString(),
-    });
-
-    const result = await Effect.runPromise(
-      restoreTrashedFootage({ db: db(), roots, files: [entry!] })
-    );
-
-    expect(trashDoneFiles(result)).toBe(1);
-    expect(
-      fs.readFileSync(path.join(e, "raw-footage/take/a.mkv"), "utf8")
-    ).toBe("raw-footage/take/a.mkv");
-    expect(trashed(e)).toEqual([]);
-  });
-
-  it("never overwrites: a restore whose place is taken stays in the trash", async () => {
+describe("named files", () => {
+  it("looks at each named file on its own, never walking the rest of raw-footage/", async () => {
     put(d, "raw-footage/a.mkv");
-    await trash();
-    const [entry] = await Effect.runPromise(listStorageTrash({ roots }));
-    put(e, "raw-footage/a.mkv");
-
-    const result = await Effect.runPromise(
-      restoreTrashedFootage({ db: db(), roots, files: [entry!] })
-    );
-
-    expect(trashDoneFiles(result)).toBe(0);
-    expect(result.left).toHaveLength(1);
-    expect(trashed(d)).toEqual(["raw-footage/a.mkv"]);
-  });
-
-  it("refuses to restore a path outside the trash", async () => {
-    put(d, "finished-videos/x.mp4");
-    const result = await Effect.runPromise(
-      restoreTrashedFootage({
-        db: db(),
-        roots,
-        files: [
-          {
-            location: d,
-            batch: "20261013T120000Z-job1",
-            path: "raw-footage/../../finished-videos/x.mp4",
-          },
-          { location: d, batch: "../..", path: "raw-footage/x.mkv" },
-        ],
-      })
-    );
-    expect(result.left).toHaveLength(2);
-    expect(exists(d, "finished-videos/x.mp4")).toBe(true);
-  });
-
-  it("deletes for good only batches over 14 days old; Empty trash deletes all", async () => {
-    put(d, "raw-footage/old.mkv");
-    await trash({ now: new Date(NOW.getTime() - 15 * DAY), batchId: "old" });
-    put(d, "raw-footage/new.mkv");
-    await trash({ batchId: "new" });
-    // Something in the trash folder CVM didn't make is never touched.
-    put(d, `${TRASH_FOLDER}/not-ours/keep.mkv`);
-
-    expect(await Effect.runPromise(trashHasExpired({ roots, now: NOW }))).toBe(
-      true
-    );
-    const expired = await Effect.runPromise(
-      emptyStorageTrash({ db: db(), roots, now: NOW, olderThanRetention: true })
-    );
-    expect(trashDoneFiles(expired)).toBe(1);
-    expect(trashed(d).sort()).toEqual(["keep.mkv", "raw-footage/new.mkv"]);
-    expect(await Effect.runPromise(trashHasExpired({ roots, now: NOW }))).toBe(
-      false
-    );
-
-    const emptied = await Effect.runPromise(
-      emptyStorageTrash({ db: db(), roots, now: NOW })
-    );
-    expect(trashDoneFiles(emptied)).toBe(1);
-    expect(tree(path.join(d, TRASH_FOLDER))).toEqual(["not-ours/keep.mkv"]);
-  });
-
-  it("never follows a link inside the trash when emptying it", async () => {
-    put(d, "raw-footage/a.mkv");
-    await trash();
-    const [entry] = await Effect.runPromise(listStorageTrash({ roots }));
-    const target = put(outside, "precious.mkv");
-    fs.symlinkSync(
-      target,
-      path.join(d, TRASH_FOLDER, entry!.batch, "raw-footage/link.mkv")
-    );
-
-    const result = await Effect.runPromise(
-      emptyStorageTrash({ db: db(), roots, now: NOW })
-    );
-
-    expect(fs.existsSync(target)).toBe(true);
-    expect(trashDoneFiles(result)).toBe(1);
-    expect(result.left).toEqual([
-      expect.objectContaining({ path: "raw-footage/link.mkv" }),
-    ]);
+    put(d, "raw-footage/locked/b.mkv");
+    // A folder that can't be listed: a walk of raw-footage/ would fail here.
+    fs.chmodSync(path.join(d, "raw-footage/locked"), 0o000);
+    try {
+      const result = await del({
+        files: [{ location: d, path: "raw-footage/a.mkv" }],
+      });
+      expect(unusedDeletedFiles(result)).toBe(1);
+      expect(result.left).toEqual([]);
+      expect(exists(d, "raw-footage/a.mkv")).toBe(false);
+    } finally {
+      fs.chmodSync(path.join(d, "raw-footage/locked"), 0o755);
+    }
+    expect(exists(d, "raw-footage/locked/b.mkv")).toBe(true);
   });
 });

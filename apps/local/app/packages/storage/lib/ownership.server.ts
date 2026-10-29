@@ -13,7 +13,7 @@ import {
   type StorageOwnership,
   type StorageOwnershipInput,
 } from "./buckets";
-import { UNUSED_FOOTAGE_MIN_AGE_MS } from "./trash-wire";
+import { UNUSED_FOOTAGE_MIN_AGE_MS } from "./unused-wire";
 
 /** Loading what owns which file failed; the scan cannot start. */
 export class StorageOwnershipLoadError extends Data.TaggedError(

@@ -134,22 +134,10 @@ export const JOB_PARAMS = {
       files: Schema.optional(Schema.NonEmptyArray(FileAtParam)),
     }),
     Schema.Struct({
-      operation: Schema.Literal("trash-unused"),
+      operation: Schema.Literal("delete-unused"),
       /** Per-file: only these files; absent, all Unused Footage. */
       files: Schema.optional(Schema.NonEmptyArray(FileAtParam)),
-    }),
-    Schema.Struct({
-      operation: Schema.Literal("restore-trash"),
-      files: Schema.NonEmptyArray(
-        Schema.Struct({
-          location: StorageRootParam,
-          batch: NonEmptyPath,
-          path: NonEmptyPath,
-        })
-      ),
-    }),
-    Schema.Struct({ operation: Schema.Literal("empty-trash") }),
-    Schema.Struct({ operation: Schema.Literal("expire-trash") })
+    })
   ),
   /**
    * The Clip Mockups one `cvm clip-mockup add` or `update` left with a

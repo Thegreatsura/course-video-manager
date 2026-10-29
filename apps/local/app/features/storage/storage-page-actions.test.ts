@@ -7,8 +7,8 @@ import {
 } from "./storage-page-reducer";
 
 /**
- * The Storage page's row action menus and its following of storage Jobs
- * (#2157). Reducer only: no DOM.
+ * The Storage page's row action menus, its following of storage Jobs
+ * (#2157), and when it counts again (#2423). Reducer only: no DOM.
  */
 
 const D = "/mnt/d";
@@ -22,6 +22,8 @@ const unused: StorageBucket = {
   name: "Unused Footage",
 };
 
+const MIN = 60 * 1000;
+
 const counted = () => {
   const tester = new ReducerTester(
     storagePageReducer,
@@ -29,7 +31,7 @@ const counted = () => {
   );
   vi.mocked(tester.getExec()).mockReturnValue({ stop: () => {} } as never);
   return tester
-    .send({ type: "page-opened" })
+    .send({ type: "page-opened", now: 0, cached: null })
     .send({
       type: "roots-measured",
       roots: [
@@ -78,7 +80,7 @@ const counted = () => {
         },
       ],
     })
-    .send({ type: "scan-completed" })
+    .send({ type: "scan-completed", at: 0 })
     .resetExec();
 };
 
@@ -155,30 +157,33 @@ describe("a Storage page row's action menu", () => {
     expect(t.getEffects().map((e) => e.type)).toEqual(["plan-storage-action"]);
   });
 
-  it("offers the Trash only on Unused Footage, and a Purge only where there are Exported Videos", () => {
+  it("a delete confirms at once with what was counted, no dry run; only where the row offers it", () => {
     const t = counted();
     t.send({
       type: "row-action-clicked",
       bucketId: course.id,
-      choice: { type: "trash-unused" },
+      choice: { type: "delete-unused" },
     }).send({
       type: "row-action-clicked",
       bucketId: unused.id,
       choice: { type: "purge" },
     });
-    expect(t.getEffects()).toEqual([]);
+    expect(t.getState().action).toBeNull();
     t.send({
       type: "row-action-clicked",
       bucketId: unused.id,
-      choice: { type: "trash-unused" },
+      choice: { type: "delete-unused" },
     });
-    expect(t.getEffects()).toEqual([
-      {
-        type: "plan-storage-action",
-        requestId: 1,
-        request: { type: "trash-unused", files: null },
+    expect(t.getEffects()).toEqual([]);
+    expect(t.getState().action).toEqual({
+      status: "confirming",
+      requestId: 1,
+      request: { type: "delete-unused", files: null },
+      plan: {
+        type: "delete",
+        byLocation: [{ location: D, files: 2, bytes: 2 * GB }],
       },
-    ]);
+    });
   });
 
   it("one action at a time", () => {
@@ -190,20 +195,60 @@ describe("a Storage page row's action menu", () => {
     }).send({
       type: "row-action-clicked",
       bucketId: unused.id,
-      choice: { type: "trash-unused" },
+      choice: { type: "delete-unused" },
     });
-    expect(t.getEffects()).toHaveLength(1);
+    expect(t.getState().action?.request.type).toBe("purge");
   });
 
-  it("counts again (and lists the Trash) when a Job it saw running settles", () => {
+  it("a delete that took exactly what was counted is taken off the rows, with no count again", () => {
+    const t = counted();
+    t.send({
+      type: "row-action-clicked",
+      bucketId: course.id,
+      choice: { type: "purge" },
+    })
+      .send({ type: "storage-action-confirmed" })
+      .send({ type: "storage-action-started", requestId: 1, jobId: "j" })
+      .send({ type: "storage-jobs-observed", jobs: [{ id: "j", live: true }] })
+      .resetExec()
+      .send({
+        type: "storage-jobs-observed",
+        jobs: [
+          {
+            id: "j",
+            live: false,
+            deleted: {
+              bucketId: course.id,
+              operation: "purge-exports",
+              location: null,
+              deleted: { files: 1, bytes: GB },
+              kept: { files: 0, bytes: 0 },
+              left: [],
+            },
+          },
+        ],
+      });
+    expect(t.getState().status).toBe("complete");
+    expect(t.getState().totals[course.id]?.[D]).toEqual({
+      footage: 5 * GB,
+      "exported-videos": 0,
+      other: 0,
+    });
+    expect(t.getEffects()).toEqual([
+      { type: "forget-listing", bucketId: course.id },
+      {
+        type: "save-scan",
+        scan: expect.objectContaining({ fetchedAt: 0 }),
+      },
+    ]);
+  });
+
+  it("counts again when a Job it saw running settles and its result can't be taken off the rows", () => {
     const t = counted();
     t.send({ type: "storage-jobs-observed", jobs: [{ id: "j", live: true }] });
     expect(t.getEffects()).toEqual([]);
     t.send({ type: "storage-jobs-observed", jobs: [{ id: "j", live: false }] });
-    expect(t.getEffects()).toEqual([
-      { type: "load-trash" },
-      { type: "listen-to-scan" },
-    ]);
+    expect(t.getEffects()).toEqual([{ type: "listen-to-scan" }]);
     expect(t.getState().status).toBe("scanning");
   });
 
@@ -212,17 +257,70 @@ describe("a Storage page row's action menu", () => {
     t.send({
       type: "row-action-clicked",
       bucketId: unused.id,
-      choice: { type: "trash-unused" },
-    }).send({
-      type: "storage-action-failed",
-      requestId: 1,
-      message: "Not done: a Recording Session is recording",
-    });
+      choice: { type: "delete-unused" },
+    })
+      .send({ type: "storage-action-confirmed" })
+      .send({
+        type: "storage-action-failed",
+        requestId: 1,
+        message: "Not done: a Recording Session is recording",
+      });
     expect(t.getState().action).toMatchObject({
       status: "failed",
       message: "Not done: a Recording Session is recording",
     });
     t.send({ type: "storage-action-dismissed" });
     expect(t.getState().action).toBeNull();
+  });
+});
+
+describe("when the Storage page counts again (#2423)", () => {
+  it("opening it shows a count under five minutes old, and counts again once it is older", () => {
+    const cached = counted().getState();
+    const scan = {
+      fetchedAt: 0,
+      roots: cached.roots,
+      buckets: cached.buckets,
+      totals: cached.totals,
+      counts: cached.counts,
+      unreadableRoots: {},
+    };
+    const fresh = new ReducerTester(
+      storagePageReducer,
+      createInitialStoragePageState()
+    ).send({ type: "page-opened", now: 4 * MIN, cached: scan });
+    expect(fresh.getEffects()).toEqual([]);
+    expect(fresh.getState()).toMatchObject({
+      status: "complete",
+      fetchedAt: 0,
+    });
+
+    const stale = new ReducerTester(
+      storagePageReducer,
+      createInitialStoragePageState()
+    ).send({ type: "page-opened", now: 5 * MIN, cached: scan });
+    expect(stale.getEffects()).toEqual([{ type: "listen-to-scan" }]);
+  });
+
+  it("never counts again on its own; a refocus counts only a stale count; Refresh counts at once", () => {
+    const t = counted();
+    t.send({ type: "window-refocused", now: 4 * MIN });
+    expect(t.getEffects()).toEqual([]);
+    t.send({ type: "window-refocused", now: 6 * MIN });
+    expect(t.getEffects()).toEqual([{ type: "listen-to-scan" }]);
+
+    const r = counted().send({ type: "refresh-clicked" });
+    expect(r.getEffects()).toEqual([{ type: "listen-to-scan" }]);
+  });
+
+  it("a refocus never counts again under an open confirmation", () => {
+    const t = counted().send({
+      type: "row-action-clicked",
+      bucketId: unused.id,
+      choice: { type: "delete-unused" },
+    });
+    t.send({ type: "window-refocused", now: 60 * MIN });
+    expect(t.getEffects()).toEqual([]);
+    expect(t.getState().status).toBe("complete");
   });
 });

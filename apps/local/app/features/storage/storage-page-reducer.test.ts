@@ -29,7 +29,7 @@ const opened = () => {
     createInitialStoragePageState()
   );
   vi.mocked(tester.getExec()).mockReturnValue(listener);
-  return tester.send({ type: "page-opened" }).resetExec();
+  return tester.send({ type: "page-opened", now: 0, cached: null }).resetExec();
 };
 
 const start = () => {
@@ -71,12 +71,12 @@ describe("storagePageReducer", () => {
     );
     expect(tester.getState().scan).toBeNull();
     vi.mocked(tester.getExec()).mockReturnValue(first);
-    tester.send({ type: "page-opened" }).send({ type: "page-opened" });
+    tester
+      .send({ type: "page-opened", now: 0, cached: null })
+      .send({ type: "page-opened", now: 0, cached: null });
 
     expect(tester.getEffects()).toEqual([
-      { type: "load-trash" },
       { type: "listen-to-scan" },
-      { type: "load-trash" },
       { type: "listen-to-scan" },
     ]);
     // The first listener is stopped: only the newest listens.
@@ -165,7 +165,7 @@ describe("storagePageReducer", () => {
           },
         ],
       })
-      .send({ type: "scan-completed" })
+      .send({ type: "scan-completed", at: 1000 })
       // The browser reports the stream the server closed.
       .send({
         type: "scan-failed",
@@ -176,8 +176,15 @@ describe("storagePageReducer", () => {
       status: "complete",
       failure: null,
       scan: null,
+      fetchedAt: 1000,
     });
-    expect(tester.getEffects()).toEqual([]);
+    // What it counted is kept for the next visit.
+    expect(tester.getEffects()).toEqual([
+      {
+        type: "save-scan",
+        scan: expect.objectContaining({ fetchedAt: 1000 }),
+      },
+    ]);
     expect(tester.getExec().stop).toHaveBeenCalledTimes(1);
     expect(names(tester)).toEqual([["Course A", 10]]);
   });

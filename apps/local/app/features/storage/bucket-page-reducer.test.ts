@@ -31,7 +31,7 @@ const start = (bucketId = "course:a") => {
     createInitialBucketPageState(bucketId)
   );
   vi.mocked(tester.getExec()).mockReturnValue(listener);
-  tester.send({ type: "page-opened" });
+  tester.send({ type: "page-opened", now: 0, cached: null });
   const effects = tester.getEffects();
   tester.resetExec();
   tester
@@ -75,7 +75,9 @@ describe("bucketPageReducer", () => {
     );
     expect(tester.getState().listing).toBeNull();
     vi.mocked(tester.getExec()).mockReturnValue(first);
-    tester.send({ type: "page-opened" }).send({ type: "page-opened" });
+    tester
+      .send({ type: "page-opened", now: 0, cached: null })
+      .send({ type: "page-opened", now: 0, cached: null });
 
     expect(tester.getEffects()).toEqual([
       { type: "listen-to-listing", bucketId: "shared-footage" },
@@ -157,7 +159,7 @@ describe("bucketPageReducer", () => {
         type: "files-found",
         files: [footage("raw-footage/a.mkv", D, GB)],
       })
-      .send({ type: "scan-completed" })
+      .send({ type: "scan-completed", at: 0 })
       .send({
         type: "listing-failed",
         message: "The connection to the listing was lost",

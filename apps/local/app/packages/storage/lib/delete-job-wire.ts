@@ -31,19 +31,13 @@ export const STORAGE_DELETE_JOB_KIND = "storage-delete";
  * - `originals`: a bucket's files on one root with an identical copy elsewhere;
  * - `purge-exports`: a bucket's Exported Videos whose Footage is all found;
  * - `delete-bucket`: an Other bucket's files (renders, scratch, orphaned exports);
- * - `trash-unused`: Unused Footage, into the Trash on its own drive;
- * - `restore-trash`: trashed files, back where they were;
- * - `empty-trash`: everything in the Trash, for good;
- * - `expire-trash`: Trash older than 14 days, for good (the Sidecar's sweep).
+ * - `delete-unused`: Unused Footage, for good (#2423; there is no trash).
  */
 export const STORAGE_DELETE_OPERATIONS = [
   "originals",
   "purge-exports",
   "delete-bucket",
-  "trash-unused",
-  "restore-trash",
-  "empty-trash",
-  "expire-trash",
+  "delete-unused",
 ] as const;
 export type StorageDeleteOperation = (typeof STORAGE_DELETE_OPERATIONS)[number];
 
@@ -81,7 +75,7 @@ const whichFiles = (paths: readonly string[] | undefined, what: string) =>
 
 /**
  * The Job's title: "Delete Crash Course originals on D:", "Delete Crash
- * Course Exported Videos", "Move 12 Unused Footage files to the Trash".
+ * Course Exported Videos", "Delete 12 Unused Footage files".
  */
 export const storageDeleteTitle = (opts: {
   readonly operation: StorageDeleteOperation;
@@ -104,16 +98,10 @@ export const storageDeleteTitle = (opts: {
       return one === null
         ? `Delete ${opts.bucketName}`
         : `Delete ${one} (${opts.bucketName})`;
-    case "trash-unused":
+    case "delete-unused":
       return one === null
-        ? "Move Unused Footage to the Trash"
-        : `Move ${one} to the Trash`;
-    case "restore-trash":
-      return `Restore ${one ?? "files"} from the Trash`;
-    case "empty-trash":
-      return "Empty the Trash";
-    case "expire-trash":
-      return "Delete Trash older than 14 days";
+        ? "Delete all Unused Footage"
+        : `Delete ${one} (Unused Footage)`;
   }
 };
 
@@ -132,14 +120,8 @@ export const storageDeleteSummary = (
   },
   label: string
 ) => {
-  const verb =
-    result.operation === "trash-unused"
-      ? "moved to the Trash"
-      : result.operation === "restore-trash"
-        ? "restored"
-        : "deleted";
   const parts = [
-    `${result.deleted.files} ${verb} (${gbOrMb(result.deleted.bytes)})`,
+    `${result.deleted.files} deleted (${gbOrMb(result.deleted.bytes)})`,
   ];
   if (result.left.length > 0) {
     parts.push(

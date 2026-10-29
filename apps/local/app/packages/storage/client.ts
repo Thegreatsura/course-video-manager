@@ -87,13 +87,8 @@ export {
   type StorageMoveStage,
 } from "./lib/move-wire";
 export {
-  TRASH_FOLDER,
-  TRASH_RETENTION_DAYS,
   UNUSED_FOOTAGE_MIN_AGE_DAYS,
-  trashDoneBytes,
-  trashDoneFiles,
-  type StorageTrashEntry,
-  type StorageTrashOperation,
-  type StorageTrashRefusalReason,
-  type StorageTrashResult,
-} from "./lib/trash-wire";
+  unusedDeletedFiles,
+  type StorageUnusedDeleteResult,
+  type StorageUnusedRefusalReason,
+} from "./lib/unused-wire";

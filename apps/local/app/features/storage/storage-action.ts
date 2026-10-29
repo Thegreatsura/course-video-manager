@@ -1,14 +1,8 @@
 import {
-  purgedFiles,
   storageMoveSubject,
-  trashDoneFiles,
   type StorageBucket,
-  type StorageDeleteResult,
   type StorageMoveKind,
   type StorageMovePlan,
-  type StorageOriginalsResult,
-  type StoragePurgeResult,
-  type StorageTrashResult,
 } from "@/packages/storage/client";
 
 /**
@@ -16,12 +10,15 @@ import {
  * from a row's action menu or a file's. Pure, no React; shared by both
  * pages' reducers. See docs/FRONTEND_STATE.md.
  *
- * Click → `plan-storage-action` (the server's dry run: what would be moved
- * or deleted, and every reason not to) → confirming → confirm →
- * `start-storage-action` (the server checks every refusal again and queues
- * the Sidecar Job) → started: the Job's progress, Cancel and result are
- * drawn on the page from the Job's own events. One at a time per page.
- * A late answer for an action the page has left is ignored (`requestId`).
+ * A move: click → `plan-storage-action` (the server's dry run: what would
+ * be copied, the free space, every reason not to) → confirming. A delete
+ * (#2423): click → confirming at once, with the count and size the page
+ * already has (`DeletePlan`); no dry run, so the confirmation opens
+ * instantly. Then confirm → `start-storage-action` (the server checks every
+ * refusal again and queues the Sidecar Job, which checks every file again)
+ * → started: the Job's progress, Cancel and result are drawn on the page
+ * from the Job's own events. One at a time per page. A late answer for an
+ * action the page has left is ignored (`requestId`).
  */
 export namespace storageAction {
   /** A file the per-bucket page listed: where, and its path there. */
@@ -52,19 +49,15 @@ export namespace storageAction {
         from: string;
         paths: readonly string[] | null;
       }
-    | { type: "trash-unused"; files: readonly FileAt[] | null }
-    | {
-        type: "restore-trash";
-        files: readonly (FileAt & { readonly batch: string })[];
-      }
-    | { type: "empty-trash" };
+    | { type: "delete-unused"; files: readonly FileAt[] | null };
 
-  export type Plan =
-    | { type: "move"; plan: StorageMovePlan }
-    | { type: "purge"; result: StoragePurgeResult }
-    | { type: "delete-bucket"; result: StorageDeleteResult }
-    | { type: "originals"; result: StorageOriginalsResult }
-    | { type: "trash"; result: StorageTrashResult };
+  /** What a delete takes, per location, from what the page has listed. */
+  export type DeletePlan = {
+    type: "delete";
+    byLocation: readonly { location: string; files: number; bytes: number }[];
+  };
+
+  export type Plan = { type: "move"; plan: StorageMovePlan } | DeletePlan;
 
   export type State =
     | { status: "planning"; request: Request; requestId: number }
@@ -122,34 +115,36 @@ export const planBlockers = (plan: storageAction.Plan): string[] => {
   switch (plan.type) {
     case "move":
       return plan.plan.refusals.map((r) => r.message);
-    case "purge":
-      return purgedFiles(plan.result) === 0
-        ? ["None of these Exported Videos can be deleted now"]
-        : [];
-    case "delete-bucket":
-      return plan.result.deleted.length === 0
-        ? ["There is nothing to delete"]
-        : [];
-    case "originals":
-      return plan.result.deleted.files === 0
-        ? ["No file here has an identical copy on another drive"]
-        : [];
-    case "trash":
-      return trashDoneFiles(plan.result) === 0 ? ["No file qualifies"] : [];
+    case "delete":
+      return deletePlanFiles(plan) === 0 ? ["There is nothing to delete"] : [];
   }
 };
 
+/** A delete plan's files, every location added up. */
+export const deletePlanFiles = (plan: storageAction.DeletePlan) =>
+  plan.byLocation.reduce((n, l) => n + l.files, 0);
+
+/** A delete plan's bytes, every location added up. */
+export const deletePlanBytes = (plan: storageAction.DeletePlan) =>
+  plan.byLocation.reduce((n, l) => n + l.bytes, 0);
+
 /**
- * Ask the server what `request` would do. Null (refused) while another
- * action is being asked for. `requestId` is the page's next id.
+ * Begin `request`: a move asks the server what it would do; a delete is
+ * confirmed at once from `deletePlan`, what the page has listed (#2423).
+ * Null (refused) while another action is being asked for. `requestId` is
+ * the page's next id.
  */
 export const beginStorageAction = (
   state: State | null,
   request: storageAction.Request,
   requestId: number,
-  exec: Exec
+  exec: Exec,
+  deletePlan: storageAction.DeletePlan | null = null
 ): State | null => {
   if (storageActionIsBusy(state)) return null;
+  if (request.type !== "move" && deletePlan !== null) {
+    return { status: "confirming", request, requestId, plan: deletePlan };
+  }
   exec({ type: "plan-storage-action", requestId, request });
   return { status: "planning", request, requestId };
 };
@@ -220,7 +215,7 @@ export const storageActionLabel = (
       ? all
       : paths.length === 1
         ? paths[0]!.split("/").pop()!
-        : `${paths.length} files`;
+        : `${new Set(paths).size} items`;
   switch (request.type) {
     case "move":
       return `Move ${one(request.paths, storageMoveSubject(request.bucket.name, request.kind))} to ${labelOf(request.target)}`;
@@ -233,14 +228,7 @@ export const storageActionLabel = (
       )}`;
     case "originals":
       return `Delete ${one(request.paths, `${request.bucket.name} originals`)} on ${labelOf(request.from)}`;
-    case "trash-unused":
-      return `Move ${one(request.files?.map((f) => f.path) ?? null, "all Unused Footage")} to the Trash`;
-    case "restore-trash":
-      return `Restore ${one(
-        request.files.map((f) => f.path),
-        ""
-      )} from the Trash`;
-    case "empty-trash":
-      return "Empty the Trash";
+    case "delete-unused":
+      return `Delete ${one(request.files?.map((f) => f.path) ?? null, "all Unused Footage")}`;
   }
 };

@@ -34,12 +34,11 @@ const CANCEL_POLL_MS = 500;
  * it again.
  *
  * The operations (`./storage-delete-ops.ts`): `originals` (#2110),
- * `purge-exports`, `delete-bucket`, the Trash's `trash-unused`,
- * `restore-trash`, `empty-trash` and `expire-trash` (#2157, ADR 0043).
+ * `purge-exports`, `delete-bucket` and `delete-unused` (#2157, #2423).
  *
  * Cancel: a `cancel-requested` Job Event, looked for every half second; the
  * delete stops before its next file (or mid-checksum), and the Job ends
- * `cancelled`. What it deleted (or trashed) stays so.
+ * `cancelled`. What it deleted stays deleted.
  */
 export const storageDeleteJobKind = defineJobKind({
   ...STORAGE_DELETE_POLICY,

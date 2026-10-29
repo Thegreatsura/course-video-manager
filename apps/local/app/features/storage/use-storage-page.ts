@@ -4,7 +4,8 @@ import {
   planStorageAction,
   startStorageAction,
 } from "./storage-action-effects";
-import { loadTrash } from "./trash-effects";
+import { storageCache } from "./storage-cache";
+import { useWindowRefocus } from "./use-window-refocus";
 import {
   STORAGE_SCAN_MESSAGE_TYPES,
   type StorageScanMessage,
@@ -18,6 +19,7 @@ import {
  * The `listen-to-scan` effect: listens to `GET /api/storage/scan` while the
  * page is open. Closing the stream (leaving the page, or the reducer stopping
  * the effect once the scan is over) is what stops the walk on the server.
+ * The completion is stamped with the time, for the cache.
  */
 const listenToScan = (
   dispatch: (action: storagePageReducer.Action) => void
@@ -25,7 +27,12 @@ const listenToScan = (
   const source = new EventSource("/api/storage/scan");
   for (const type of STORAGE_SCAN_MESSAGE_TYPES) {
     source.addEventListener(type, (event) => {
-      dispatch(JSON.parse(event.data) as StorageScanMessage);
+      const message = JSON.parse(event.data) as StorageScanMessage;
+      dispatch(
+        message.type === "scan-completed"
+          ? { type: "scan-completed", at: Date.now() }
+          : message
+      );
     });
   }
   // The server's own failure carries a message; a dropped connection does not.
@@ -48,8 +55,9 @@ const listenToScan = (
 };
 
 /**
- * The effect runner for `storagePageReducer`, and the bridge that tells it
- * the page has opened.
+ * The effect runner for `storagePageReducer`, and the bridges that tell it
+ * the page has opened (with what the Storage cache holds) and the window
+ * has come back into focus.
  */
 export const useStoragePage = () => {
   const [state, dispatch] = useEffectReducer(
@@ -57,7 +65,9 @@ export const useStoragePage = () => {
     createInitialStoragePageState(),
     {
       "listen-to-scan": (_state, _effect, dispatch) => listenToScan(dispatch),
-      "load-trash": (_state, _effect, dispatch) => loadTrash(dispatch),
+      "save-scan": (_state, effect) => storageCache.saveScan(effect.scan),
+      "forget-listing": (_state, effect) =>
+        storageCache.forgetListing(effect.bucketId),
       "plan-storage-action": (_state, effect, dispatch) =>
         planStorageAction(effect, dispatch),
       "start-storage-action": (_state, effect, dispatch) =>
@@ -65,7 +75,12 @@ export const useStoragePage = () => {
     }
   );
   useEffect(() => {
-    dispatch({ type: "page-opened" });
+    dispatch({
+      type: "page-opened",
+      now: Date.now(),
+      cached: storageCache.scan(),
+    });
   }, [dispatch]);
+  useWindowRefocus(dispatch);
   return [state, dispatch] as const;
 };

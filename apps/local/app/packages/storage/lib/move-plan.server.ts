@@ -147,7 +147,7 @@ export const busyRefusals = async (opts: {
     });
   }
 
-  // A delete Job (a Purge, a delete, the trash, "Delete originals") empties
+  // A delete Job (a Purge, a delete, Unused Footage, "Delete originals") empties
   // the very folders a move copies from (#2157).
   const deleting = live.find((j) => j.kind === "storage-delete");
   if (deleting) {

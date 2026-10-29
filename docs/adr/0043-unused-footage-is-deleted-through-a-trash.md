@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # Unused Footage is deleted through a trash
+
+> **Superseded (2026-10-29, #2423).** Matt: "when I want to delete something, I want to delete it." Deleting Unused Footage is now a permanent delete behind a confirmation; the trash, Restore, Empty trash and the 14-day expiry are gone. Decisions 1, 2, 4 and 5 (what counts as Unused, nothing recent, the path safety, every delete a Sidecar Job) still hold. Files already in a `.cvm-trash/` folder were left where they are, for Matt to empty by hand.
 
 Decided by Matt on #2157. Amends decision 3 of [ADR 0041](0041-storage-moves-keep-originals-and-never-delete-footage.md), which said Unused Footage could only be moved.
 
