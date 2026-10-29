@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
@@ -160,49 +161,47 @@ describe("Delete originals runs as a storage-delete Job", () => {
     return row!.id;
   };
 
-  it("starting it checks every refusal, deletes nothing, and enqueues the Job with the count", async () => {
+  it("starting it reads no drive and deletes nothing: the Job walks and verifies (#2429)", async () => {
     const { bucketId } = await seedMovedCourse();
     const before = tree(d);
-    const enqueued: { files: number; bytes: number; name: string }[] = [];
+    // D: gone: a start that walked it would be refused as Offline.
+    const away = `${d}-away`;
+    fs.renameSync(d, away);
+    const enqueued: string[] = [];
     const exit = await Effect.runPromiseExit(
       startDeleteOriginals({
         db: db(),
         roots,
         bucketId,
         from: d,
-        enqueue: (plan) =>
+        enqueue: ({ bucketName }) =>
           Effect.sync(() => {
-            enqueued.push({ ...plan.deleted, name: plan.bucketName });
+            enqueued.push(bucketName);
             return { id: "job-1" };
           }),
       })
     );
+    fs.renameSync(away, d);
     expect(valueOf(exit)).toEqual({ id: "job-1" });
-    expect(enqueued).toEqual([
-      { files: 5, bytes: 12008, name: "Crash Course" },
-    ]);
+    expect(enqueued).toEqual(["Crash Course"]);
     // Nothing is deleted until the Job runs.
     expect(tree(d)).toEqual(before);
   });
 
-  it("starting it is refused when nothing has a copy, or while other work runs, and enqueues nothing", async () => {
+  it("starting it is refused while other work runs, and enqueues nothing", async () => {
     const { bucketId } = await seedMovedCourse();
     let enqueued = 0;
-    const start = (b: string) =>
-      Effect.runPromiseExit(
-        startDeleteOriginals({
-          db: db(),
-          roots,
-          bucketId: b,
-          from: d,
-          enqueue: () => Effect.sync(() => ++enqueued),
-        })
-      );
-    expect(failureOf(await start("unused-footage")).reason).toBe(
-      "nothing-to-delete"
-    );
     await liveJob("storage-delete", { operation: "originals", bucketId });
-    expect(failureOf(await start(bucketId)).reason).toBe("export-running");
+    const exit = await Effect.runPromiseExit(
+      startDeleteOriginals({
+        db: db(),
+        roots,
+        bucketId,
+        from: d,
+        enqueue: () => Effect.sync(() => ++enqueued),
+      })
+    );
+    expect(failureOf(exit).reason).toBe("export-running");
     expect(enqueued).toBe(0);
   });
 

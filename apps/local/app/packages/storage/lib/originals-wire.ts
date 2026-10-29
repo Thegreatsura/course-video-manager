@@ -28,9 +28,7 @@ export type StorageOriginalsRefusalReason =
   /** A Recording Session is writing Footage. */
   | "recording-active"
   /** A Purge, a delete, a move being started or another "Delete originals". */
-  | "storage-busy"
-  /** No file on `from` has a same-size copy on another root. */
-  | "nothing-to-delete";
+  | "storage-busy";
 
 /**
  * What "Delete originals" did, or (`dryRun`) would do, on `from`.
