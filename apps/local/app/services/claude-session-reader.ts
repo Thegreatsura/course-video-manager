@@ -18,9 +18,14 @@ import type { AgentSessionEntryContent } from "@cvm/core/features/agent-sessions
  * and the meta messages a skill's body arrives in are dropped. A skill's body
  * and a tool's result are never read into an entry.
  *
- * PROJECT-RELATIVE PATHS. Every path under the session's working directory is
- * rewritten relative to it. Any absolute path left over is refused at upload
- * (`findAgentSessionContentProblems`), not here.
+ * PATHS NEVER REFUSE. Every path under the session's working directory is
+ * rewritten relative to it, and the working directory itself becomes `.`. A
+ * path outside it is kept, with its home directory (`/home/<user>`,
+ * `/Users/<user>`) written as `~`. A `~/…` path is left as written: it may be
+ * a TS path alias (`~/db`) as easily as a home path.
+ *
+ * PASTED CONTENT. A prompt's `<pasted_content …>` wrappers are dropped and the
+ * text they wrap is kept.
  */
 
 type SessionLine = {
@@ -206,16 +211,62 @@ const summarise = (tool: string, input: Record<string, unknown>) => {
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const relativeTo =
+/** A character a path can go on with. */
+const PATH_CHAR = `[^\\s"'\`)\\]>,;:|]`;
+
+/** A home directory at the start of an absolute path. */
+const HOME_DIR = new RegExp(
+  `(?<![\\w.:/~-])/(?:home|Users)/[^/\\s"'\`)\\]>,;:|]+(?=/|(?!${PATH_CHAR}))`,
+  "g"
+);
+
+/**
+ * Every path in `value` as it may be shown to a learner: project-relative
+ * under `cwd`, `.` for `cwd` itself, and `~` for the home directory of any
+ * other absolute path.
+ */
+export const rewriteSessionPaths =
   (cwd: string | null) =>
   (value: string): string => {
-    if (!cwd || cwd === "/") return value;
-    const root = cwd.replace(/\/+$/, "");
-    return value
-      .split(`${root}/`)
-      .join("")
-      .replace(new RegExp(`${escapeRegExp(root)}(?![\\w./-])`, "g"), ".");
+    const root = cwd?.replace(/\/+$/, "") ?? "";
+    const inProject =
+      root === ""
+        ? value
+        : value
+            // A path under the project: drop the project's prefix.
+            .replace(
+              new RegExp(
+                `(?<![\\w.-])${escapeRegExp(root)}/(?=${PATH_CHAR})`,
+                "g"
+              ),
+              ""
+            )
+            // The project itself, ending a sentence: `./` keeps the full stop
+            // from reading as `..`.
+            .replace(
+              new RegExp(
+                `(?<![\\w.-])${escapeRegExp(root)}/?(?=\\.(?!${PATH_CHAR}))`,
+                "g"
+              ),
+              "./"
+            )
+            // The project itself.
+            .replace(
+              new RegExp(
+                `(?<![\\w.-])${escapeRegExp(root)}/?(?![\\w-]|\\.${PATH_CHAR})`,
+                "g"
+              ),
+              "."
+            );
+    return inProject.replace(HOME_DIR, "~");
   };
+
+/** A prompt's `<pasted_content …>` wrappers, dropped for the text inside. */
+const unwrapPastedContent = (text: string) =>
+  text.replace(
+    /<pasted_content\b[^>]*>\n?([\s\S]*?)\n?<\/pasted_content>/g,
+    "$1"
+  );
 
 type Relative = (value: string) => string;
 
@@ -345,7 +396,11 @@ const userEntries = (
       problem: `a prompt at ${line.timestamp ?? "an unknown time"} is a skill's body, which is never stored`,
     };
   }
-  return { entries: [{ kind: "userPrompt", text: relative(text) }] };
+  return {
+    entries: [
+      { kind: "userPrompt", text: relative(unwrapPastedContent(text)) },
+    ],
+  };
 };
 
 /** Read a session file's text. Never throws: what it can't use is counted. */
@@ -362,7 +417,7 @@ export const readClaudeSession = (jsonl: string): ReadClaudeSession => {
   const sourceSessionId =
     lines.find((l) => typeof l.sessionId === "string")?.sessionId ?? "";
   const cwd = onBranch.find((l) => typeof l.cwd === "string")?.cwd ?? null;
-  const relative = relativeTo(cwd);
+  const relative = rewriteSessionPaths(cwd);
   const problems: string[] =
     sourceSessionId === ""
       ? ["the file names no Claude Code session id: is it a session file?"]

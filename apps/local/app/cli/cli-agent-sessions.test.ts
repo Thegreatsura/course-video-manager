@@ -286,7 +286,7 @@ describe("cvm video agent-sessions", () => {
     const bad = writeSession("bad.jsonl", [
       prompt(12, "Use sk-abcdefghijklmnopqrstuvwxyz123456 for this"),
       prompt(13, "DATABASE_URL=postgres-thing-here"),
-      prompt(14, "Also read /home/dev/other/notes.md"),
+      prompt(14, "Read sk-learn-the-basics-of-typescript, a slug"),
       prompt(15, "Base directory for this skill: /home/dev/.claude/skills/tdd"),
     ]);
     const r = await run([
@@ -306,10 +306,38 @@ describe("cvm video agent-sessions", () => {
     expect(failure.reasons.join("\n")).toMatch(
       /\.env-style value for DATABASE_URL/
     );
-    expect(failure.reasons.join("\n")).toMatch(
-      /absolute path outside the project: \/home\/dev\/other\/notes\.md/
-    );
+    expect(failure.reasons.join("\n")).not.toMatch(/entry 3 /);
+    expect(failure.reasons).toHaveLength(3);
     expect(await getEntries()).toEqual([]);
+  });
+
+  it("rewrites paths, never refusing on one, and unwraps pasted content", async () => {
+    const session = writeSession("paths.jsonl", [
+      prompt(12, `Start in ${CWD}`),
+      prompt(13, `It is checked out at ${CWD}. Next`),
+      prompt(14, "Also read /home/dev/other/notes.md"),
+      prompt(15, "Save it to /tmp/shots/a.png"),
+      prompt(16, "Import from ~/db and ~/modules/*"),
+      prompt(17, '<pasted_content id="ab12">\nStage 3/4\n</pasted_content>'),
+    ]);
+    const r = await run([
+      "video",
+      "agent-sessions",
+      "set",
+      "--session",
+      session,
+      s.lessonVideoId,
+    ]);
+
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect((await getEntries()).map((e) => e.text)).toEqual([
+      "Start in .",
+      "It is checked out at ./. Next",
+      "Also read ~/other/notes.md",
+      "Save it to /tmp/shots/a.png",
+      "Import from ~/db and ~/modules/*",
+      "Stage 3/4",
+    ]);
   });
 
   it("refuses when Claude Code's session id matches more than one Agent Session", async () => {

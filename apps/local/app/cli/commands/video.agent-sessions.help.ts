@@ -37,8 +37,13 @@ Draft (or standalone).
 
 READING. Only the kept branch of each session is read: the newest message's
 chain of parents. Rewound or abandoned branches, thinking, subagent transcripts,
-/clear and system messages are dropped. Every path under the session's working
-directory is made relative to it.
+/clear and system messages are dropped. A prompt's <pasted_content> wrapper is
+dropped and the text inside it kept.
+
+PATHS. Every path under the session's working directory is made relative to it,
+and the working directory itself becomes ".". Any other absolute path is kept,
+with its home directory (/home/<user>) written as "~". A "~/…" path is left as
+written (it may be a TS path alias, like ~/db). A path never refuses an upload.
 
 ANCHORING. Each entry goes to the FIRST screen Clip (any scene but Camera), in
 video order, whose wall-clock end is after the time the entry was written. A
@@ -47,10 +52,9 @@ from its file name plus half a second. Entries written after the last screen
 Clip are dropped.
 
 REFUSALS. The whole upload is refused, and nothing stored, on: a skill's body or
-a tool's result that would be stored; an absolute path that is not under the
-session's working directory; anything that looks like a secret (an API key or
-token, a .env-style KEY=value, a URL with a password); a session id that matches
-more than one Agent Session. Every reason is listed (exit 3).
+a tool's result that would be stored; anything that looks like a secret (an API
+key or token, a .env-style KEY=value, a URL with a password; a kebab-case slug
+is not one); a session id that matches more than one Agent Session. Every reason is listed (exit 3).
 
 SESSIONS. A session already stored (found by Claude Code's session id) is reused;
 otherwise a new Agent Session is made. Every entry already on the Video's Clips
