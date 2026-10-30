@@ -366,7 +366,7 @@ from 6 to 1. All four allowlist entries are gone (`use-state` 5 → 3,
   Clip Mockup, trimmed; edit and delete work from the comment's `…` menu. The
   Write Ledger shows only those tables.
 
-## Batch 7 — Video editor media sync (score 111)
+## Batch 7 — Video editor media sync (score 111) — Done
 
 `features/video-editor/preloadable-clip.tsx` (`preloadState`, overlay time),
 `components/recording-session-panel.tsx` (elapsed timer, focus flags) and
@@ -379,6 +379,51 @@ clock.
 
 - Delete: none render these. `use-audio-boost.test.ts` and
   `use-ensure-obs-profile.test.ts` cover other hooks and stay.
+
+**Done.** By the time this batch started, `use-speech-detector.ts` was gone:
+#2267 made the speech state machine `speech-detector-reducer.ts`, and #2279
+deleted the hook with the OBS Recorder. Two files were left, both over only
+the `effect-sets-state` limit. `use-ensure-obs-profile.test.ts` had gone the
+same way.
+
+`features/video-editor/session-panel-reducer.ts` owns a Recording Session
+panel's header. `session-heard` (on mount and whenever the panel's session
+changes) declares `tick-every-second` when a session starts recording, or
+starts again with a new `startedAt`, and stops it when recording ends; the
+clock comes back as `clock-ticked` with `at` and whether a Diagram is open,
+so the reducer never reads the clock. The two focus trackers report through
+bridges as `diagram-focus-changed` / `browser-focus-changed`. The elapsed
+seconds and which focus indicator shows are selectors
+(`selectElapsedSeconds`, `selectFocusIndicator`); the panel maps the
+indicator to its icon and copy. The runner is
+`hooks/use-session-panel-reducer.ts`.
+`features/video-editor/preloadable-clip-reducer.ts` owns one preloaded
+Clip's `preload` and its Overlay playhead. The rAF loop reports
+`clip-preloaded` when the muted `<video>` reaches the Clip's start, which
+declares `park-video` (pause there, sound back on) and
+`report-preload-complete` once, however many frames report it; the loop,
+`seeked` and `timeupdate` report `playhead-moved`. The runner is
+`hooks/use-preloadable-clip-reducer.ts`, whose `reportPlayhead` dispatches
+only when the time changed, because a dispatch re-renders the Clip and the
+loop reads the `<video>` every frame. The loop still pauses and rewinds
+the `<video>` itself at the Clip's end: that writes no state. Neither file
+has a `useState` left, so both `effect-sets-state` entries are gone (5 → 3).
+
+- Tests: `apps/local` went from 4953 to 4959 (+4 scenarios in
+  `session-panel-reducer.test.ts`, +2 in `preloadable-clip-reducer.test.ts`).
+  No component test rendered either file, so none could be deleted;
+  `use-audio-boost.test.ts` stays.
+- Verified with `verify-cvm` on a test clone with the Tiny Course. The
+  editor's Clip preloads and parks at its start (paused, unmuted, at 0.5 s);
+  played muted, it runs through and stops and rewinds at its end; deleting
+  the Clip shows the Deleted clips panel, and Restore puts it back (the
+  Write Ledger shows only `clip`, `video` and `course_version`). Played
+  unmuted, the headless browser's `<video>` holds at its start, most likely
+  because the audio boost's `AudioContext` is made on mount, before any
+  gesture (a fresh one made after a key press plays unmuted fine); this batch
+  does not touch the audio path. A recording session's timer and focus indicator need
+  a live Recorder, which a clone does not have, so the reducer tests are
+  their only check here.
 
 ## Batch 8 — Command palette (score 102)
 

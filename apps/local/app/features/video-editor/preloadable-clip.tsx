@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { VideoOffIcon } from "lucide-react";
 import { RemountCommand } from "@/components/remount-command";
 import type { FootageNotFound } from "@/services/clip-source-files.server";
@@ -25,6 +25,7 @@ import {
   type ClipOverlay,
 } from "./overlay-preview";
 import { useStillsWaitForVideo } from "./components/queued-still";
+import { usePreloadableClipReducer } from "./hooks/use-preloadable-clip-reducer";
 
 const PRELOAD_PLAY_AMOUNT = 0.1;
 
@@ -51,16 +52,18 @@ export const PreloadableClip = (props: {
    */
   footageNotFound: FootageNotFound | undefined;
 }) => {
-  const [preloadState, setPreloadState] = useState<"preloading" | "finished">(
-    "preloading"
-  );
-  // The overlay preview's own clip-relative playhead. Mirrors what
-  // `onUpdateCurrentTime` below sends up to the reducer's `currentTimeInClip`,
-  // but kept local too: `OverlayPreview` needs it on every frame this Clip is
-  // the one playing, and re-deriving it from context would mean threading
-  // context into an otherwise prop-only component.
-  const [overlayCurrentTime, setOverlayCurrentTime] = useState(0);
   const ref = useRef<HTMLVideoElement>(null);
+  // The overlay preview's own clip-relative playhead (`overlayTime`) mirrors
+  // what `onUpdateCurrentTime` below sends up to the editor's
+  // `currentTimeInClip`, but is kept per Clip too: `OverlayPreview` needs it
+  // on every frame this Clip is the one playing, and re-deriving it from
+  // context would mean threading context into an otherwise prop-only
+  // component.
+  const {
+    state: { preload: preloadState, overlayTime: overlayCurrentTime },
+    dispatch,
+    reportPlayhead,
+  } = usePreloadableClipReducer(ref, props.onPreloadComplete);
   useAudioBoost(ref, PREVIEW_AUDIO_BOOST_DB);
 
   // The `<video>` below is the playback clock: an OBS Clip's Footage, or a
@@ -96,7 +99,7 @@ export const PreloadableClip = (props: {
       return;
     }
 
-    const sync = () => setOverlayCurrentTime(video.currentTime - clockStart);
+    const sync = () => reportPlayhead(video.currentTime - clockStart);
 
     sync();
     video.addEventListener("seeked", sync);
@@ -105,7 +108,13 @@ export const PreloadableClip = (props: {
       video.removeEventListener("seeked", sync);
       video.removeEventListener("timeupdate", sync);
     };
-  }, [ref.current, props.hidden, props.overlays.length, clockStart]);
+  }, [
+    ref.current,
+    props.hidden,
+    props.overlays.length,
+    clockStart,
+    reportPlayhead,
+  ]);
 
   useEffect(() => {
     if (!ref.current) {
@@ -168,11 +177,7 @@ export const PreloadableClip = (props: {
 
       if (preloadState === "preloading") {
         if (currentTime >= preloadTo) {
-          setPreloadState("finished");
-          ref.current?.pause();
-          ref.current!.muted = false;
-          ref.current!.currentTime = preloadTo;
-          props.onPreloadComplete();
+          dispatch({ type: "clip-preloaded", at: preloadTo });
         }
       } else if (currentTime >= modifiedEndTime) {
         ref.current!.pause();
@@ -184,7 +189,7 @@ export const PreloadableClip = (props: {
       const clipRelativeTime = currentTime - clockStart;
       props.onUpdateCurrentTime(clipRelativeTime);
       if (props.overlays.length > 0) {
-        setOverlayCurrentTime(clipRelativeTime);
+        reportPlayhead(clipRelativeTime);
       }
 
       animationId = requestAnimationFrame(checkCurrentTime);
@@ -206,6 +211,8 @@ export const PreloadableClip = (props: {
     preloadTo,
     props.onUpdateCurrentTime,
     props.overlays.length,
+    dispatch,
+    reportPlayhead,
   ]);
 
   // The camera move the Overlay on screen asks for, re-read at this Clip's own
