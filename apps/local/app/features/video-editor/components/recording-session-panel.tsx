@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { isTranscriptionPending } from "@/features/videos/transcription-status";
 import {
   Loader2,
@@ -10,8 +9,6 @@ import {
   PinIcon,
   Link2Icon,
 } from "lucide-react";
-import { getActiveDiagramId } from "@/lib/diagram-window";
-import { browserFocus, diagramFocus } from "@/lib/focus-tracker";
 import { useContextSelector } from "use-context-selector";
 import { VideoEditorContext } from "../video-editor-context";
 import type { SessionPanelData } from "../video-editor-selectors";
@@ -22,6 +19,45 @@ import type {
 import { cn } from "@/lib/utils";
 import { RECORDING_SESSION_PANELS_ID } from "../constants";
 import { formatDuration } from "@/lib/format-duration";
+import { useSessionPanelReducer } from "../hooks/use-session-panel-reducer";
+import {
+  selectElapsedSeconds,
+  selectFocusIndicator,
+  type sessionPanelReducer,
+} from "../session-panel-reducer";
+
+type FocusIndicatorDisplay = {
+  Icon: typeof PinIcon;
+  label: string;
+  title: string;
+  color: string;
+};
+
+const FOCUS_INDICATORS: Record<
+  sessionPanelReducer.FocusIndicator | "none",
+  FocusIndicatorDisplay | null
+> = {
+  "diagram-focused": {
+    Icon: PinIcon,
+    label: "Diagram focused",
+    title: "Diagram is focused — a snapshot will be pinned when this clip ends",
+    color: "text-emerald-600 dark:text-emerald-400",
+  },
+  "url-focused": {
+    Icon: Link2Icon,
+    label: "URL focused",
+    title: "A browser URL is focused — on-screen links will be captured",
+    color: "text-emerald-600 dark:text-emerald-400",
+  },
+  "diagram-not-focused": {
+    Icon: PinIcon,
+    label: "Diagram not focused",
+    title:
+      "Diagram is not focused — focus it before the clip ends to pin a snapshot",
+    color: "text-muted-foreground",
+  },
+  none: null,
+};
 
 /**
  * Renders a single pending clip row within a session panel.
@@ -170,75 +206,12 @@ export const SessionPanel = ({ panel }: { panel: SessionPanelData }) => {
     (ctx) => ctx.isTeleprompterConnected
   );
 
-  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
-    Math.floor((Date.now() - panel.startedAt) / 1000)
-  );
-  const [diagramFocused, setDiagramFocused] = useState(() =>
-    diagramFocus.isFocused()
-  );
-  const [browserFocused, setBrowserFocused] = useState(() =>
-    browserFocus.isFocused()
-  );
-  const [hasActiveDiagram, setHasActiveDiagram] = useState(
-    () => getActiveDiagramId() !== null
-  );
-
-  useEffect(() => {
-    if (!panel.isRecording) return;
-
-    const tick = () => {
-      setElapsedSeconds(Math.floor((Date.now() - panel.startedAt) / 1000));
-      setHasActiveDiagram(getActiveDiagramId() !== null);
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [panel.isRecording, panel.startedAt]);
-
-  useEffect(() => {
-    setDiagramFocused(diagramFocus.isFocused());
-    return diagramFocus.subscribe(setDiagramFocused);
-  }, []);
-
-  useEffect(() => {
-    setBrowserFocused(browserFocus.isFocused());
-    return browserFocus.subscribe(setBrowserFocused);
-  }, []);
+  const sessionState = useSessionPanelReducer(panel);
+  const elapsedSeconds = selectElapsedSeconds(sessionState);
+  const focusIndicator =
+    FOCUS_INDICATORS[selectFocusIndicator(sessionState) ?? "none"];
 
   const hasArchived = panel.archivedClips.length > 0;
-
-  let focusIndicator: {
-    Icon: typeof PinIcon;
-    label: string;
-    title: string;
-    color: string;
-  } | null = null;
-  if (panel.isRecording) {
-    if (diagramFocused) {
-      focusIndicator = {
-        Icon: PinIcon,
-        label: "Diagram focused",
-        title:
-          "Diagram is focused — a snapshot will be pinned when this clip ends",
-        color: "text-emerald-600 dark:text-emerald-400",
-      };
-    } else if (browserFocused) {
-      focusIndicator = {
-        Icon: Link2Icon,
-        label: "URL focused",
-        title: "A browser URL is focused — on-screen links will be captured",
-        color: "text-emerald-600 dark:text-emerald-400",
-      };
-    } else if (hasActiveDiagram) {
-      focusIndicator = {
-        Icon: PinIcon,
-        label: "Diagram not focused",
-        title:
-          "Diagram is not focused — focus it before the clip ends to pin a snapshot",
-        color: "text-muted-foreground",
-      };
-    }
-  }
 
   return (
     <div
