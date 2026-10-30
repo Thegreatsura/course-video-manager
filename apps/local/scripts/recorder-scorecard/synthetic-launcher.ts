@@ -89,9 +89,15 @@ const dropWallclock = (out: string[]) => {
   if (at !== -1 && at >= out.length - 4) out.splice(at, 2);
 };
 
+/**
+ * The stand-in's D3D11 device, on the NVIDIA GPU (vendor 0x10de) as
+ * ddagrab's own device is on the GPU driving the DELL. Never DXGI's default
+ * adapter: that can be the Ryzen iGPU, where NVENC will not open, and every
+ * take's screen recorder exits at Record (#2441).
+ */
 const D3D11 = [
   "-init_hw_device",
-  "d3d11va=scd3d",
+  "d3d11va=scd3d:,vendor_id=0x10de",
   "-filter_hw_device",
   "scd3d",
 ];

@@ -10,7 +10,7 @@ pnpm recorder:scorecard --quick    # 60 s take, 10 cycles, 3 preview kills, ~6 m
   [--only <scenario,…>]  # idle, longTake, previewKill, eventLogFailure, cycles, crash
 ```
 
-The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baseline/`](./baseline/): a full run on 2026-10-23, `f148af49` plus the writer relay fix (#2344). To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
+The command runs under `nice -n 19 taskset -c 6-9`. The baseline is in [`baseline/`](./baseline/): a run on 2026-10-30, `ca63ea73` plus the synthetic screen pinned to the NVIDIA GPU (#2441). It was run in three parts, merged into one report: `--only idle,longTake --long-take 360`, then `--only previewKill,eventLogFailure,crash`, then `--only cycles`. Each part has full-mode cycles and fault repeats, but the long take is 360 s, not 600 s, so that each part fits an agent's 600 s foreground limit. To compare a run with it, diff the two `scorecard.json` files: each metric sits on its own line, in a fixed order. The `ranking` list names the failing metrics, worst first.
 
 ## What it runs
 
