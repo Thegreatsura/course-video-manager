@@ -206,6 +206,11 @@ describe("syntheticFfmpegArgs", () => {
     for (const args of [recorder, preview]) {
       expect(args.join(" ")).not.toContain("ddagrab");
       expect(args).toContain("-filter_hw_device");
+      // On the NVIDIA GPU, as ddagrab's DELL frame is: DXGI's default
+      // adapter can be the Ryzen iGPU, where NVENC will not open (#2441).
+      expect(args[args.indexOf("-init_hw_device") + 1]).toMatch(
+        /^d3d11va=scd3d:,vendor_id=0x10de$/
+      );
     }
     expect(preview).toContain("[scsv]");
     expect(recorder.find((a) => a.startsWith("[0:v]"))).toMatch(
